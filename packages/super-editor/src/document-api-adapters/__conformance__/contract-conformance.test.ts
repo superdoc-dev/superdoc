@@ -165,6 +165,61 @@ import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting
 import * as planWrappers from '../plan-engine/plan-wrappers.js';
 import { trackChangesAcceptWrapper, trackChangesRejectWrapper } from '../plan-engine/track-changes-wrappers.js';
 import * as hyperlinkMutationHelper from '../helpers/hyperlink-mutation-helper.js';
+import * as adapterUtils from '../helpers/adapter-utils.js';
+import {
+  bookmarksInsertWrapper,
+  bookmarksRenameWrapper,
+  bookmarksRemoveWrapper,
+} from '../plan-engine/bookmark-wrappers.js';
+import { linksInsertWrapper, linksUpdateWrapper, linksRemoveWrapper } from '../plan-engine/link-wrappers.js';
+import {
+  footnotesInsertWrapper,
+  footnotesUpdateWrapper,
+  footnotesRemoveWrapper,
+  footnotesConfigureWrapper,
+} from '../plan-engine/footnote-wrappers.js';
+import {
+  crossRefsInsertWrapper,
+  crossRefsRebuildWrapper,
+  crossRefsRemoveWrapper,
+} from '../plan-engine/crossref-wrappers.js';
+import {
+  indexInsertWrapper,
+  indexConfigureWrapper,
+  indexRebuildWrapper,
+  indexRemoveWrapper,
+  indexEntriesInsertWrapper,
+  indexEntriesUpdateWrapper,
+  indexEntriesRemoveWrapper,
+} from '../plan-engine/index-wrappers.js';
+import {
+  captionsInsertWrapper,
+  captionsUpdateWrapper,
+  captionsRemoveWrapper,
+  captionsConfigureWrapper,
+} from '../plan-engine/caption-wrappers.js';
+import { fieldsInsertWrapper, fieldsRebuildWrapper, fieldsRemoveWrapper } from '../plan-engine/field-wrappers.js';
+import {
+  citationsInsertWrapper,
+  citationsUpdateWrapper,
+  citationsRemoveWrapper,
+  citationSourcesInsertWrapper,
+  citationSourcesUpdateWrapper,
+  citationSourcesRemoveWrapper,
+  bibliographyInsertWrapper,
+  bibliographyConfigureWrapper,
+  bibliographyRebuildWrapper,
+  bibliographyRemoveWrapper,
+} from '../plan-engine/citation-wrappers.js';
+import {
+  authoritiesInsertWrapper,
+  authoritiesConfigureWrapper,
+  authoritiesRebuildWrapper,
+  authoritiesRemoveWrapper,
+  authorityEntriesInsertWrapper,
+  authorityEntriesUpdateWrapper,
+  authorityEntriesRemoveWrapper,
+} from '../plan-engine/authority-wrappers.js';
 import { registerBuiltInExecutors } from '../plan-engine/register-executors.js';
 import { getRevision, initRevision } from '../plan-engine/revision-tracker.js';
 import { executePlan } from '../plan-engine/executor.js';
@@ -238,6 +293,157 @@ vi.mock('prosemirror-model', async (importOriginal) => {
   return {
     ...original,
     Fragment: { from: vi.fn((node: unknown) => node) },
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Reference namespace resolver mocks
+// ---------------------------------------------------------------------------
+
+const refResolverMocks = vi.hoisted(() => ({
+  // Bookmark
+  findAllBookmarks: vi.fn(() => []),
+  resolveBookmarkTarget: vi.fn(),
+  extractBookmarkInfo: vi.fn(),
+  buildBookmarkDiscoveryItem: vi.fn(),
+  // Link
+  findAllLinks: vi.fn(() => []),
+  resolveLinkTarget: vi.fn(),
+  extractLinkInfo: vi.fn(),
+  buildLinkDiscoveryItem: vi.fn(),
+  // Footnote
+  findAllFootnotes: vi.fn(() => []),
+  resolveFootnoteTarget: vi.fn(),
+  extractFootnoteInfo: vi.fn(),
+  buildFootnoteDiscoveryItem: vi.fn(),
+  // Cross-ref
+  findAllCrossRefs: vi.fn(() => []),
+  resolveCrossRefTarget: vi.fn(),
+  extractCrossRefInfo: vi.fn(),
+  buildCrossRefDiscoveryItem: vi.fn(),
+  // Index (block + entry)
+  findAllIndexNodes: vi.fn(() => []),
+  resolveIndexTarget: vi.fn(),
+  extractIndexInfo: vi.fn(),
+  buildIndexDiscoveryItem: vi.fn(),
+  findAllIndexEntries: vi.fn(() => []),
+  resolveIndexEntryTarget: vi.fn(),
+  extractIndexEntryInfo: vi.fn(),
+  buildIndexEntryDiscoveryItem: vi.fn(),
+  // Caption
+  findAllCaptions: vi.fn(() => []),
+  resolveCaptionTarget: vi.fn(),
+  extractCaptionInfo: vi.fn(),
+  buildCaptionDiscoveryItem: vi.fn(),
+  // Field
+  findAllFields: vi.fn(() => []),
+  resolveFieldTarget: vi.fn(),
+  extractFieldInfo: vi.fn(),
+  buildFieldDiscoveryItem: vi.fn(),
+  // Citation (inline + bibliography + source)
+  findAllCitations: vi.fn(() => []),
+  resolveCitationTarget: vi.fn(),
+  extractCitationInfo: vi.fn(),
+  buildCitationDiscoveryItem: vi.fn(),
+  findAllBibliographies: vi.fn(() => []),
+  resolveBibliographyTarget: vi.fn(),
+  extractBibliographyInfo: vi.fn(),
+  buildBibliographyDiscoveryItem: vi.fn(),
+  getSourcesFromConverter: vi.fn(() => []),
+  resolveSourceTarget: vi.fn(),
+  // Authority (block + entry)
+  findAllAuthorities: vi.fn(() => []),
+  resolveAuthorityTarget: vi.fn(),
+  extractAuthorityInfo: vi.fn(),
+  buildAuthorityDiscoveryItem: vi.fn(),
+  findAllAuthorityEntries: vi.fn(() => []),
+  resolveAuthorityEntryTarget: vi.fn(),
+  extractAuthorityEntryInfo: vi.fn(),
+  buildAuthorityEntryDiscoveryItem: vi.fn(),
+}));
+
+vi.mock('../helpers/bookmark-resolver.js', () => ({
+  findAllBookmarks: refResolverMocks.findAllBookmarks,
+  resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
+  extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
+  buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
+}));
+
+vi.mock('../helpers/link-resolver.js', () => ({
+  findAllLinks: refResolverMocks.findAllLinks,
+  resolveLinkTarget: refResolverMocks.resolveLinkTarget,
+  extractLinkInfo: refResolverMocks.extractLinkInfo,
+  buildLinkDiscoveryItem: refResolverMocks.buildLinkDiscoveryItem,
+}));
+
+vi.mock('../helpers/footnote-resolver.js', () => ({
+  findAllFootnotes: refResolverMocks.findAllFootnotes,
+  resolveFootnoteTarget: refResolverMocks.resolveFootnoteTarget,
+  extractFootnoteInfo: refResolverMocks.extractFootnoteInfo,
+  buildFootnoteDiscoveryItem: refResolverMocks.buildFootnoteDiscoveryItem,
+}));
+
+vi.mock('../helpers/crossref-resolver.js', () => ({
+  findAllCrossRefs: refResolverMocks.findAllCrossRefs,
+  resolveCrossRefTarget: refResolverMocks.resolveCrossRefTarget,
+  extractCrossRefInfo: refResolverMocks.extractCrossRefInfo,
+  buildCrossRefDiscoveryItem: refResolverMocks.buildCrossRefDiscoveryItem,
+}));
+
+vi.mock('../helpers/index-resolver.js', async (importOriginal) => {
+  const orig = await importOriginal<Record<string, unknown>>();
+  return {
+    findAllIndexNodes: refResolverMocks.findAllIndexNodes,
+    resolveIndexTarget: refResolverMocks.resolveIndexTarget,
+    extractIndexInfo: refResolverMocks.extractIndexInfo,
+    buildIndexDiscoveryItem: refResolverMocks.buildIndexDiscoveryItem,
+    findAllIndexEntries: refResolverMocks.findAllIndexEntries,
+    resolveIndexEntryTarget: refResolverMocks.resolveIndexEntryTarget,
+    extractIndexEntryInfo: refResolverMocks.extractIndexEntryInfo,
+    buildIndexEntryDiscoveryItem: refResolverMocks.buildIndexEntryDiscoveryItem,
+    parseIndexInstruction: orig.parseIndexInstruction,
+  };
+});
+
+vi.mock('../helpers/caption-resolver.js', () => ({
+  findAllCaptions: refResolverMocks.findAllCaptions,
+  resolveCaptionTarget: refResolverMocks.resolveCaptionTarget,
+  extractCaptionInfo: refResolverMocks.extractCaptionInfo,
+  buildCaptionDiscoveryItem: refResolverMocks.buildCaptionDiscoveryItem,
+}));
+
+vi.mock('../helpers/field-resolver.js', () => ({
+  findAllFields: refResolverMocks.findAllFields,
+  resolveFieldTarget: refResolverMocks.resolveFieldTarget,
+  extractFieldInfo: refResolverMocks.extractFieldInfo,
+  buildFieldDiscoveryItem: refResolverMocks.buildFieldDiscoveryItem,
+}));
+
+vi.mock('../helpers/citation-resolver.js', () => ({
+  findAllCitations: refResolverMocks.findAllCitations,
+  resolveCitationTarget: refResolverMocks.resolveCitationTarget,
+  extractCitationInfo: refResolverMocks.extractCitationInfo,
+  buildCitationDiscoveryItem: refResolverMocks.buildCitationDiscoveryItem,
+  findAllBibliographies: refResolverMocks.findAllBibliographies,
+  resolveBibliographyTarget: refResolverMocks.resolveBibliographyTarget,
+  extractBibliographyInfo: refResolverMocks.extractBibliographyInfo,
+  buildBibliographyDiscoveryItem: refResolverMocks.buildBibliographyDiscoveryItem,
+  getSourcesFromConverter: refResolverMocks.getSourcesFromConverter,
+  resolveSourceTarget: refResolverMocks.resolveSourceTarget,
+}));
+
+vi.mock('../helpers/authority-resolver.js', async (importOriginal) => {
+  const orig = await importOriginal<Record<string, unknown>>();
+  return {
+    findAllAuthorities: refResolverMocks.findAllAuthorities,
+    resolveAuthorityTarget: refResolverMocks.resolveAuthorityTarget,
+    extractAuthorityInfo: refResolverMocks.extractAuthorityInfo,
+    buildAuthorityDiscoveryItem: refResolverMocks.buildAuthorityDiscoveryItem,
+    findAllAuthorityEntries: refResolverMocks.findAllAuthorityEntries,
+    resolveAuthorityEntryTarget: refResolverMocks.resolveAuthorityEntryTarget,
+    extractAuthorityEntryInfo: refResolverMocks.extractAuthorityEntryInfo,
+    buildAuthorityEntryDiscoveryItem: refResolverMocks.buildAuthorityEntryDiscoveryItem,
+    parseToaInstruction: orig.parseToaInstruction,
   };
 });
 
@@ -2503,6 +2709,1162 @@ function makeCaptionImageEditor(
     on: () => {},
   } as unknown as Editor;
 }
+
+// ---------------------------------------------------------------------------
+// Reference namespace mock helpers
+// ---------------------------------------------------------------------------
+
+/** Returns a PlanReceipt-shaped object signaling success. */
+const REF_APPLIED_RECEIPT = { steps: [{ effect: 'changed' as const }], revision: 'r1' };
+
+/** Creates a mock editor suitable for reference namespace wrappers. */
+function makeRefEditor(
+  overrides: {
+    commands?: Record<string, unknown>;
+    schemaNodes?: Record<string, unknown>;
+    converter?: Record<string, unknown>;
+  } = {},
+): Editor {
+  const textNode = createNode('text', [], { text: 'Hello' });
+  const paragraph = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [paragraph], { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    addMark: vi.fn().mockReturnThis(),
+    removeMark: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc: { ...doc, resolve: () => ({ marks: () => [] }), content: { size: 10 } },
+  };
+
+  const nodeType = (name: string) => ({
+    create: vi.fn((_attrs?: Record<string, unknown>, _content?: unknown) => createNode(name, [])),
+    createAndFill: vi.fn(() => createNode(name, [])),
+  });
+
+  return {
+    state: { doc, tr, schema: { marks: {}, nodes: {} } },
+    view: { dispatch },
+    dispatch,
+    commands: {
+      insertContent: vi.fn(() => true),
+      insertBookmark: vi.fn(() => true),
+      ...overrides.commands,
+    },
+    schema: {
+      marks: {},
+      nodes: {
+        paragraph: nodeType('paragraph'),
+        bookmarkStart: nodeType('bookmarkStart'),
+        bookmarkEnd: nodeType('bookmarkEnd'),
+        footnoteReference: nodeType('footnoteReference'),
+        endnoteReference: nodeType('endnoteReference'),
+        crossReference: nodeType('crossReference'),
+        documentIndex: nodeType('documentIndex'),
+        indexEntry: nodeType('indexEntry'),
+        sequenceField: nodeType('sequenceField'),
+        citation: nodeType('citation'),
+        bibliography: nodeType('bibliography'),
+        authorityEntry: nodeType('authorityEntry'),
+        tableOfAuthorities: nodeType('tableOfAuthorities'),
+        ...overrides.schemaNodes,
+      },
+    },
+    converter: {
+      convertedXml: { 'word/document.xml': {} },
+      footnotes: { 'fn-1': { content: 'Footnote text' } },
+      endnotes: {},
+      ...overrides.converter,
+    },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
+
+/** Resolved mock for node-based resolvers (bookmarks, footnotes, cross-refs, etc.) */
+function mockResolvedNode(pos: number, nodeId: string, typeName: string, attrs: Record<string, unknown> = {}) {
+  return {
+    pos,
+    nodeId,
+    name: nodeId,
+    noteId: nodeId,
+    type: typeName,
+    endPos: pos + 2,
+    node: createNode(typeName, [], {
+      attrs: { sdBlockId: nodeId, instruction: '', ...attrs },
+      isLeaf: true,
+      nodeSize: 1,
+    }),
+    blockId: nodeId,
+    occurrenceIndex: 0,
+    nestingDepth: 0,
+  };
+}
+
+/** Spies on executeDomainCommand to return an applied receipt, then calls `fn`, then restores. */
+function withAppliedReceipt<T>(fn: () => T): T {
+  const spy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(REF_APPLIED_RECEIPT as any);
+  try {
+    return fn();
+  } finally {
+    spy.mockRestore();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reference namespace mutation vectors (44 operations)
+// ---------------------------------------------------------------------------
+
+const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> = {
+  // ---- Bookmarks ----
+  'bookmarks.insert': {
+    throwCase: () =>
+      bookmarksInsertWrapper(
+        makeRefEditor(),
+        { name: 'bm1', at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      try {
+        return withAppliedReceipt(() =>
+          bookmarksInsertWrapper(
+            makeRefEditor(),
+            { name: 'bm1', at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'bookmarks.rename': {
+    throwCase: () =>
+      bookmarksRenameWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' }, newName: 'bm2' },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
+        mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
+      );
+      return withAppliedReceipt(() =>
+        bookmarksRenameWrapper(
+          makeRefEditor(),
+          { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' }, newName: 'bm2' },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'bookmarks.remove': {
+    throwCase: () =>
+      bookmarksRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
+        mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
+      );
+      return withAppliedReceipt(() =>
+        bookmarksRemoveWrapper(
+          makeRefEditor(),
+          { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Links ----
+  'links.insert': {
+    throwCase: () =>
+      linksInsertWrapper(
+        makeRefEditor(),
+        {
+          at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] },
+          destination: { kind: 'external', href: 'https://example.com' },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const textSpy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 6 });
+      try {
+        return withAppliedReceipt(() =>
+          linksInsertWrapper(
+            makeRefEditor(),
+            {
+              at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] },
+              destination: { kind: 'external', href: 'https://example.com' },
+            },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        textSpy.mockRestore();
+      }
+    },
+  },
+  'links.update': {
+    throwCase: () =>
+      linksUpdateWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'hyperlink',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+          },
+          patch: { destination: { kind: 'external', href: 'https://new.com' } },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveLinkTarget.mockReturnValueOnce({
+        pos: 1,
+        end: 6,
+        mark: { type: { name: 'link' }, attrs: { href: 'https://example.com' } },
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+      });
+      return withAppliedReceipt(() =>
+        linksUpdateWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'hyperlink',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+            },
+            patch: { destination: { kind: 'external', href: 'https://new.com' } },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'links.remove': {
+    throwCase: () =>
+      linksRemoveWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'hyperlink',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+          },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveLinkTarget.mockReturnValueOnce({
+        pos: 1,
+        end: 6,
+        mark: { type: { name: 'link' }, attrs: { href: 'https://example.com' } },
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+      });
+      return withAppliedReceipt(() =>
+        linksRemoveWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'hyperlink',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+            },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Footnotes ----
+  'footnotes.insert': {
+    throwCase: () =>
+      footnotesInsertWrapper(
+        makeRefEditor(),
+        {
+          type: 'footnote',
+          content: 'x',
+          at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      try {
+        return withAppliedReceipt(() =>
+          footnotesInsertWrapper(
+            makeRefEditor(),
+            {
+              type: 'footnote',
+              content: 'x',
+              at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+            },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'footnotes.update': {
+    throwCase: () =>
+      footnotesUpdateWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' }, patch: { content: 'New' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
+        ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
+        noteId: 'fn-1',
+        type: 'footnote',
+      });
+      return footnotesUpdateWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' }, patch: { content: 'New' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'footnotes.remove': {
+    throwCase: () =>
+      footnotesRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
+        ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
+        noteId: 'fn-1',
+        type: 'footnote',
+      });
+      return withAppliedReceipt(() =>
+        footnotesRemoveWrapper(
+          makeRefEditor(),
+          { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'footnotes.configure': {
+    throwCase: () =>
+      footnotesConfigureWrapper(
+        makeRefEditor(),
+        { type: 'footnote', scope: { kind: 'document' }, numbering: { position: 'pageBottom' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () =>
+      footnotesConfigureWrapper(
+        makeRefEditor(),
+        { type: 'footnote', scope: { kind: 'document' }, numbering: { position: 'pageBottom' } },
+        { changeMode: 'direct' },
+      ),
+  },
+
+  // ---- Cross-References ----
+  'crossRefs.insert': {
+    throwCase: () =>
+      crossRefsInsertWrapper(
+        makeRefEditor(),
+        {
+          target: { kind: 'bookmark', name: 'bm1' },
+          at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+          display: 'content',
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      try {
+        return withAppliedReceipt(() =>
+          crossRefsInsertWrapper(
+            makeRefEditor(),
+            {
+              target: { kind: 'bookmark', name: 'bm1' },
+              at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+              display: 'content',
+            },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'crossRefs.rebuild': {
+    throwCase: () =>
+      crossRefsRebuildWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'crossRef',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveCrossRefTarget.mockReturnValueOnce(mockResolvedNode(1, 'cr-1', 'crossReference'));
+      refResolverMocks.extractCrossRefInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'crossRef',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return crossRefsRebuildWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'crossRef',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'crossRefs.remove': {
+    throwCase: () =>
+      crossRefsRemoveWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'crossRef',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveCrossRefTarget.mockReturnValueOnce(mockResolvedNode(1, 'cr-1', 'crossReference'));
+      refResolverMocks.extractCrossRefInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'crossRef',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return withAppliedReceipt(() =>
+        crossRefsRemoveWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'crossRef',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+            },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Index (block) ----
+  'index.insert': {
+    throwCase: () => indexInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'tracked' }),
+    applyCase: () =>
+      withAppliedReceipt(() =>
+        indexInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'direct' }),
+      ),
+  },
+  'index.configure': {
+    throwCase: () =>
+      indexConfigureWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' }, patch: {} },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+      return withAppliedReceipt(() =>
+        indexConfigureWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' }, patch: {} },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'index.rebuild': {
+    throwCase: () =>
+      indexRebuildWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+      return indexRebuildWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'index.remove': {
+    throwCase: () =>
+      indexRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+      return withAppliedReceipt(() =>
+        indexRemoveWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Index entries (inline) ----
+  'index.entries.insert': {
+    throwCase: () =>
+      indexEntriesInsertWrapper(
+        makeRefEditor(),
+        { entry: { text: 'Term' }, at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      try {
+        return withAppliedReceipt(() =>
+          indexEntriesInsertWrapper(
+            makeRefEditor(),
+            {
+              entry: { text: 'Term' },
+              at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+            },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'index.entries.update': {
+    throwCase: () =>
+      indexEntriesUpdateWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'indexEntry',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+          patch: { text: 'New' },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveIndexEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ie-1', 'indexEntry'));
+      refResolverMocks.extractIndexEntryInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'indexEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return withAppliedReceipt(() =>
+        indexEntriesUpdateWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'indexEntry',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+            },
+            patch: { text: 'New' },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'index.entries.remove': {
+    throwCase: () =>
+      indexEntriesRemoveWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'indexEntry',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveIndexEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ie-1', 'indexEntry'));
+      refResolverMocks.extractIndexEntryInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'indexEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return withAppliedReceipt(() =>
+        indexEntriesRemoveWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'indexEntry',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+            },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Captions ----
+  'captions.insert': {
+    throwCase: () =>
+      captionsInsertWrapper(
+        makeRefEditor(),
+        { label: 'Figure', adjacentTo: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }, position: 'below' },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveBlockCreatePosition').mockReturnValueOnce(10);
+      try {
+        return withAppliedReceipt(() =>
+          captionsInsertWrapper(
+            makeRefEditor(),
+            { label: 'Figure', adjacentTo: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }, position: 'below' },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'captions.update': {
+    throwCase: () =>
+      captionsUpdateWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' }, patch: { text: 'New' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveCaptionTarget.mockReturnValueOnce(mockResolvedNode(1, 'cap-1', 'paragraph'));
+      return withAppliedReceipt(() =>
+        captionsUpdateWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' }, patch: { text: 'New' } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'captions.remove': {
+    throwCase: () =>
+      captionsRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveCaptionTarget.mockReturnValueOnce(mockResolvedNode(1, 'cap-1', 'paragraph'));
+      return withAppliedReceipt(() =>
+        captionsRemoveWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'captions.configure': {
+    throwCase: () =>
+      captionsConfigureWrapper(makeRefEditor(), { label: 'Figure', format: 'decimal' }, { changeMode: 'tracked' }),
+    applyCase: () =>
+      withAppliedReceipt(() =>
+        captionsConfigureWrapper(makeRefEditor(), { label: 'Figure', format: 'decimal' }, { changeMode: 'direct' }),
+      ),
+  },
+
+  // ---- Fields ----
+  'fields.insert': {
+    throwCase: () =>
+      fieldsInsertWrapper(
+        makeRefEditor(),
+        {
+          mode: 'raw',
+          instruction: 'DATE',
+          at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      try {
+        return withAppliedReceipt(() =>
+          fieldsInsertWrapper(
+            makeRefEditor(),
+            {
+              mode: 'raw',
+              instruction: 'DATE',
+              at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+            },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'fields.rebuild': {
+    throwCase: () =>
+      fieldsRebuildWrapper(
+        makeRefEditor(),
+        { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveFieldTarget.mockReturnValueOnce({
+        ...mockResolvedNode(1, 'f-1', 'field'),
+        blockId: 'p1',
+        occurrenceIndex: 0,
+        nestingDepth: 0,
+      });
+      return withAppliedReceipt(() =>
+        fieldsRebuildWrapper(
+          makeRefEditor(),
+          { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'fields.remove': {
+    throwCase: () =>
+      fieldsRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 }, mode: 'raw' },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveFieldTarget.mockReturnValueOnce({
+        ...mockResolvedNode(1, 'f-1', 'field'),
+        blockId: 'p1',
+        occurrenceIndex: 0,
+        nestingDepth: 0,
+      });
+      return withAppliedReceipt(() =>
+        fieldsRemoveWrapper(
+          makeRefEditor(),
+          { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 }, mode: 'raw' },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Citations (inline) ----
+  'citations.insert': {
+    throwCase: () =>
+      citationsInsertWrapper(
+        makeRefEditor(),
+        { sourceIds: ['src-1'], at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      try {
+        return withAppliedReceipt(() =>
+          citationsInsertWrapper(
+            makeRefEditor(),
+            { sourceIds: ['src-1'], at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'citations.update': {
+    throwCase: () =>
+      citationsUpdateWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'citation',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+          patch: { sourceIds: ['src-2'] },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveCitationTarget.mockReturnValueOnce(mockResolvedNode(1, 'cit-1', 'citation'));
+      refResolverMocks.extractCitationInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'citation',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return withAppliedReceipt(() =>
+        citationsUpdateWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'citation',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+            },
+            patch: { sourceIds: ['src-2'] },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'citations.remove': {
+    throwCase: () =>
+      citationsRemoveWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'citation',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveCitationTarget.mockReturnValueOnce(mockResolvedNode(1, 'cit-1', 'citation'));
+      refResolverMocks.extractCitationInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'citation',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return withAppliedReceipt(() =>
+        citationsRemoveWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'citation',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+            },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Citation sources (out-of-band) ----
+  'citations.sources.insert': {
+    throwCase: () =>
+      citationSourcesInsertWrapper(makeRefEditor(), { type: 'book', fields: {} }, { changeMode: 'tracked' }),
+    applyCase: () =>
+      citationSourcesInsertWrapper(makeRefEditor(), { type: 'book', fields: {} }, { changeMode: 'direct' }),
+  },
+  'citations.sources.update': {
+    throwCase: () =>
+      citationSourcesUpdateWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' }, patch: { title: 'New' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveSourceTarget.mockReturnValueOnce({
+        tag: 'src-1',
+        type: 'book',
+        fields: { title: 'Old' },
+      });
+      return citationSourcesUpdateWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' }, patch: { title: 'New' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'citations.sources.remove': {
+    throwCase: () =>
+      citationSourcesRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveSourceTarget.mockReturnValueOnce({
+        tag: 'src-1',
+        type: 'book',
+        fields: {},
+      });
+      return citationSourcesRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+
+  // ---- Bibliography (block) ----
+  'citations.bibliography.insert': {
+    throwCase: () =>
+      bibliographyInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'tracked' }),
+    applyCase: () =>
+      withAppliedReceipt(() =>
+        bibliographyInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'direct' }),
+      ),
+  },
+  'citations.bibliography.configure': {
+    throwCase: () => bibliographyConfigureWrapper(makeRefEditor(), { style: 'APA' }, { changeMode: 'tracked' }),
+    applyCase: () => {
+      refResolverMocks.findAllBibliographies.mockReturnValueOnce([{ nodeId: 'bib-1' }]);
+      return withAppliedReceipt(() =>
+        bibliographyConfigureWrapper(makeRefEditor(), { style: 'APA' }, { changeMode: 'direct' }),
+      );
+    },
+  },
+  'citations.bibliography.rebuild': {
+    throwCase: () =>
+      bibliographyRebuildWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+      return bibliographyRebuildWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'citations.bibliography.remove': {
+    throwCase: () =>
+      bibliographyRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+      return withAppliedReceipt(() =>
+        bibliographyRemoveWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Authorities (block) ----
+  'authorities.insert': {
+    throwCase: () =>
+      authoritiesInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'tracked' }),
+    applyCase: () =>
+      withAppliedReceipt(() =>
+        authoritiesInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'direct' }),
+      ),
+  },
+  'authorities.configure': {
+    throwCase: () =>
+      authoritiesConfigureWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' }, patch: { category: 1 } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+      return withAppliedReceipt(() =>
+        authoritiesConfigureWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' }, patch: { category: 1 } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'authorities.rebuild': {
+    throwCase: () =>
+      authoritiesRebuildWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+      return authoritiesRebuildWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'authorities.remove': {
+    throwCase: () =>
+      authoritiesRemoveWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+      return withAppliedReceipt(() =>
+        authoritiesRemoveWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+
+  // ---- Authority entries (inline) ----
+  'authorities.entries.insert': {
+    throwCase: () =>
+      authorityEntriesInsertWrapper(
+        makeRefEditor(),
+        {
+          entry: { longCitation: 'Smith v. Jones', shortCitation: 'Smith', category: 1 },
+          at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      try {
+        return withAppliedReceipt(() =>
+          authorityEntriesInsertWrapper(
+            makeRefEditor(),
+            {
+              entry: { longCitation: 'Smith v. Jones', shortCitation: 'Smith', category: 1 },
+              at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+            },
+            { changeMode: 'direct' },
+          ),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  },
+  'authorities.entries.update': {
+    throwCase: () =>
+      authorityEntriesUpdateWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'authorityEntry',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+          patch: { longCitation: 'New citation' },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveAuthorityEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ae-1', 'authorityEntry'));
+      refResolverMocks.extractAuthorityEntryInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'authorityEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return withAppliedReceipt(() =>
+        authorityEntriesUpdateWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'authorityEntry',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+            },
+            patch: { longCitation: 'New citation' },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+  'authorities.entries.remove': {
+    throwCase: () =>
+      authorityEntriesRemoveWrapper(
+        makeRefEditor(),
+        {
+          target: {
+            kind: 'inline',
+            nodeType: 'authorityEntry',
+            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+          },
+        },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      refResolverMocks.resolveAuthorityEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ae-1', 'authorityEntry'));
+      refResolverMocks.extractAuthorityEntryInfo.mockReturnValueOnce({
+        address: {
+          kind: 'inline',
+          nodeType: 'authorityEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      });
+      return withAppliedReceipt(() =>
+        authorityEntriesRemoveWrapper(
+          makeRefEditor(),
+          {
+            target: {
+              kind: 'inline',
+              nodeType: 'authorityEntry',
+              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+            },
+          },
+          { changeMode: 'direct' },
+        ),
+      );
+    },
+  },
+};
 
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'blocks.delete': {
@@ -6396,6 +7758,12 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return imagesRemoveCaptionWrapper(editor, { imageId: 'img-cap' }, { changeMode: 'direct' });
     },
   },
+
+  // -------------------------------------------------------------------------
+  // Reference namespace mutation vectors
+  // -------------------------------------------------------------------------
+
+  ...refNamespaceMutationVectors,
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -8128,6 +9496,24 @@ beforeEach(() => {
   mockedDeps.listCommentAnchors.mockImplementation(() => []);
   mockedDeps.getTrackChanges.mockReset();
   mockedDeps.getTrackChanges.mockImplementation(() => []);
+  // Reset reference resolver mocks — clears any mockReturnValueOnce residue
+  for (const fn of Object.values(refResolverMocks)) {
+    fn.mockReset();
+  }
+  // Restore list-returning defaults
+  refResolverMocks.findAllBookmarks.mockImplementation(() => []);
+  refResolverMocks.findAllLinks.mockImplementation(() => []);
+  refResolverMocks.findAllFootnotes.mockImplementation(() => []);
+  refResolverMocks.findAllCrossRefs.mockImplementation(() => []);
+  refResolverMocks.findAllIndexNodes.mockImplementation(() => []);
+  refResolverMocks.findAllIndexEntries.mockImplementation(() => []);
+  refResolverMocks.findAllCaptions.mockImplementation(() => []);
+  refResolverMocks.findAllFields.mockImplementation(() => []);
+  refResolverMocks.findAllCitations.mockImplementation(() => []);
+  refResolverMocks.findAllBibliographies.mockImplementation(() => []);
+  refResolverMocks.getSourcesFromConverter.mockImplementation(() => []);
+  refResolverMocks.findAllAuthorities.mockImplementation(() => []);
+  refResolverMocks.findAllAuthorityEntries.mockImplementation(() => []);
 });
 
 describe('document-api adapter conformance', () => {

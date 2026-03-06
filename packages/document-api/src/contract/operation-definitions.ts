@@ -52,7 +52,16 @@ export type ReferenceGroupKey =
   | 'toc'
   | 'images'
   | 'hyperlinks'
-  | 'contentControls';
+  | 'contentControls'
+  | 'footnotes'
+  | 'bookmarks'
+  | 'links'
+  | 'crossRefs'
+  | 'index'
+  | 'captions'
+  | 'fields'
+  | 'citations'
+  | 'authorities';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -194,6 +203,12 @@ const T_SECTION_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 const T_SECTION_SETTINGS_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'] as const;
+
+// Reference-namespace throw-code shorthand arrays
+const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
+const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_REF_MUTATION_REMOVE = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_REF_INSERT = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
 
 type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
 
@@ -4017,6 +4032,1022 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'content-controls/group/ungroup.mdx',
     referenceGroup: 'contentControls',
+  },
+
+  // Bookmarks
+  // -------------------------------------------------------------------------
+
+  'bookmarks.list': {
+    memberPath: 'bookmarks.list',
+    description: 'List all bookmarks in the document.',
+    expectedResult: 'Returns a BookmarksListResult containing discovered bookmarks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'bookmarks/list.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.get': {
+    memberPath: 'bookmarks.get',
+    description: 'Get detailed information about a specific bookmark.',
+    expectedResult: "Returns a BookmarkInfo object with the bookmark's name, range, and optional table-column data.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'bookmarks/get.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.insert': {
+    memberPath: 'bookmarks.insert',
+    description: 'Insert a new named bookmark at a target location.',
+    expectedResult: 'Returns a BookmarkMutationResult indicating success with the bookmark address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'bookmarks/insert.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.rename': {
+    memberPath: 'bookmarks.rename',
+    description: 'Rename an existing bookmark.',
+    expectedResult:
+      'Returns a BookmarkMutationResult indicating success with the updated bookmark address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'bookmarks/rename.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.remove': {
+    memberPath: 'bookmarks.remove',
+    description: 'Remove a bookmark from the document.',
+    expectedResult: 'Returns a BookmarkMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'bookmarks/remove.mdx',
+    referenceGroup: 'bookmarks',
+  },
+
+  // -------------------------------------------------------------------------
+  // Links
+  // -------------------------------------------------------------------------
+
+  'links.list': {
+    memberPath: 'links.list',
+    description: 'List all hyperlinks in the document.',
+    expectedResult: 'Returns a LinksListResult containing discovered hyperlinks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'links/list.mdx',
+    referenceGroup: 'links',
+  },
+  'links.get': {
+    memberPath: 'links.get',
+    description: 'Get detailed information about a specific hyperlink.',
+    expectedResult: "Returns a LinkInfo object with the link's destination, tooltip, and display text.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'links/get.mdx',
+    referenceGroup: 'links',
+  },
+  'links.insert': {
+    memberPath: 'links.insert',
+    description: 'Insert a new hyperlink at a target location.',
+    expectedResult: 'Returns a LinkMutationResult indicating success with the link address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'links/insert.mdx',
+    referenceGroup: 'links',
+  },
+  'links.update': {
+    memberPath: 'links.update',
+    description: "Update an existing hyperlink's destination or properties.",
+    expectedResult: 'Returns a LinkMutationResult indicating success with the updated link address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'links/update.mdx',
+    referenceGroup: 'links',
+  },
+  'links.remove': {
+    memberPath: 'links.remove',
+    description: 'Remove a hyperlink from the document.',
+    expectedResult: 'Returns a LinkMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'links/remove.mdx',
+    referenceGroup: 'links',
+  },
+
+  // -------------------------------------------------------------------------
+  // Footnotes
+  // -------------------------------------------------------------------------
+
+  'footnotes.list': {
+    memberPath: 'footnotes.list',
+    description: 'List all footnotes and endnotes in the document.',
+    expectedResult: 'Returns a FootnotesListResult containing discovered footnotes with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'footnotes/list.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.get': {
+    memberPath: 'footnotes.get',
+    description: 'Get detailed information about a specific footnote or endnote.',
+    expectedResult: "Returns a FootnoteInfo object with the note's type, display number, and content.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'footnotes/get.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.insert': {
+    memberPath: 'footnotes.insert',
+    description: 'Insert a new footnote or endnote at a target location.',
+    expectedResult: 'Returns a FootnoteMutationResult indicating success with the footnote address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'footnotes/insert.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.update': {
+    memberPath: 'footnotes.update',
+    description: 'Update the content of an existing footnote or endnote.',
+    expectedResult:
+      'Returns a FootnoteMutationResult indicating success with the updated footnote address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'footnotes/update.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.remove': {
+    memberPath: 'footnotes.remove',
+    description: 'Remove a footnote or endnote from the document.',
+    expectedResult: 'Returns a FootnoteMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'footnotes/remove.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.configure': {
+    memberPath: 'footnotes.configure',
+    description: 'Configure numbering and placement for footnotes or endnotes.',
+    expectedResult: 'Returns a FootnoteConfigResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'footnotes/configure.mdx',
+    referenceGroup: 'footnotes',
+  },
+
+  // -------------------------------------------------------------------------
+  // Cross-References
+  // -------------------------------------------------------------------------
+
+  'crossRefs.list': {
+    memberPath: 'crossRefs.list',
+    description: 'List all cross-reference fields in the document.',
+    expectedResult:
+      'Returns a CrossRefsListResult containing discovered cross-references with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'cross-refs/list.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.get': {
+    memberPath: 'crossRefs.get',
+    description: 'Get detailed information about a specific cross-reference field.',
+    expectedResult: "Returns a CrossRefInfo object with the cross-reference's target, display, and resolved text.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'cross-refs/get.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.insert': {
+    memberPath: 'crossRefs.insert',
+    description: 'Insert a new cross-reference field at a target location.',
+    expectedResult:
+      'Returns a CrossRefMutationResult indicating success with the cross-reference address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'cross-refs/insert.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.rebuild': {
+    memberPath: 'crossRefs.rebuild',
+    description: 'Rebuild (recalculate) a cross-reference field.',
+    expectedResult: 'Returns a CrossRefMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'cross-refs/rebuild.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.remove': {
+    memberPath: 'crossRefs.remove',
+    description: 'Remove a cross-reference field from the document.',
+    expectedResult: 'Returns a CrossRefMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'cross-refs/remove.mdx',
+    referenceGroup: 'crossRefs',
+  },
+
+  // -------------------------------------------------------------------------
+  // Index
+  // -------------------------------------------------------------------------
+
+  'index.list': {
+    memberPath: 'index.list',
+    description: 'List all index blocks in the document.',
+    expectedResult: 'Returns an IndexListResult containing discovered index blocks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'index/list.mdx',
+    referenceGroup: 'index',
+  },
+  'index.get': {
+    memberPath: 'index.get',
+    description: 'Get detailed information about a specific index block.',
+    expectedResult: "Returns an IndexInfo object with the index's instruction, configuration, and entry count.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'index/get.mdx',
+    referenceGroup: 'index',
+  },
+  'index.insert': {
+    memberPath: 'index.insert',
+    description: 'Insert a new index block at a target location.',
+    expectedResult: 'Returns an IndexMutationResult indicating success with the index address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'index/insert.mdx',
+    referenceGroup: 'index',
+  },
+  'index.configure': {
+    memberPath: 'index.configure',
+    description: 'Update the configuration of an existing index block.',
+    expectedResult: 'Returns an IndexMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'index/configure.mdx',
+    referenceGroup: 'index',
+  },
+  'index.rebuild': {
+    memberPath: 'index.rebuild',
+    description: 'Rebuild (regenerate) an index block from its entries.',
+    expectedResult: 'Returns an IndexMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'index/rebuild.mdx',
+    referenceGroup: 'index',
+  },
+  'index.remove': {
+    memberPath: 'index.remove',
+    description: 'Remove an index block from the document.',
+    expectedResult: 'Returns an IndexMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'index/remove.mdx',
+    referenceGroup: 'index',
+  },
+
+  // -------------------------------------------------------------------------
+  // Index: XE entry management
+  // -------------------------------------------------------------------------
+
+  'index.entries.list': {
+    memberPath: 'index.entries.list',
+    description: 'List all XE (index entry) fields in the document.',
+    expectedResult: 'Returns an IndexEntryListResult containing discovered index entries with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'index/entries-list.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.get': {
+    memberPath: 'index.entries.get',
+    description: 'Get detailed information about a specific XE index entry.',
+    expectedResult: "Returns an IndexEntryInfo object with the entry's text, sub-entry, formatting, and instruction.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'index/entries-get.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.insert': {
+    memberPath: 'index.entries.insert',
+    description: 'Insert a new XE index entry field at a target location.',
+    expectedResult: 'Returns an IndexEntryMutationResult indicating success with the entry address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'index/entries-insert.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.update': {
+    memberPath: 'index.entries.update',
+    description: 'Update the properties of an existing XE index entry.',
+    expectedResult: 'Returns an IndexEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'index/entries-update.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.remove': {
+    memberPath: 'index.entries.remove',
+    description: 'Remove an XE index entry field from the document.',
+    expectedResult: 'Returns an IndexEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'index/entries-remove.mdx',
+    referenceGroup: 'index',
+  },
+
+  // -------------------------------------------------------------------------
+  // Captions
+  // -------------------------------------------------------------------------
+
+  'captions.list': {
+    memberPath: 'captions.list',
+    description: 'List all caption paragraphs in the document.',
+    expectedResult: 'Returns a CaptionsListResult containing discovered captions with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'captions/list.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.get': {
+    memberPath: 'captions.get',
+    description: 'Get detailed information about a specific caption paragraph.',
+    expectedResult: "Returns a CaptionInfo object with the caption's label, number, text, and instruction.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'captions/get.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.insert': {
+    memberPath: 'captions.insert',
+    description: 'Insert a new caption paragraph adjacent to a target block.',
+    expectedResult: 'Returns a CaptionMutationResult indicating success with the caption address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'captions/insert.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.update': {
+    memberPath: 'captions.update',
+    description: 'Update the text of an existing caption paragraph.',
+    expectedResult: 'Returns a CaptionMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'captions/update.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.remove': {
+    memberPath: 'captions.remove',
+    description: 'Remove a caption paragraph from the document.',
+    expectedResult: 'Returns a CaptionMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'captions/remove.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.configure': {
+    memberPath: 'captions.configure',
+    description: 'Configure numbering format for a caption label.',
+    expectedResult: 'Returns a CaptionConfigResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'captions/configure.mdx',
+    referenceGroup: 'captions',
+  },
+
+  // -------------------------------------------------------------------------
+  // Fields
+  // -------------------------------------------------------------------------
+
+  'fields.list': {
+    memberPath: 'fields.list',
+    description: 'List all fields in the document.',
+    expectedResult: 'Returns a FieldsListResult containing discovered fields with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'fields/list.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.get': {
+    memberPath: 'fields.get',
+    description: 'Get detailed information about a specific field.',
+    expectedResult: "Returns a FieldInfo object with the field's instruction, result text, and nesting data.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'fields/get.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.insert': {
+    memberPath: 'fields.insert',
+    description: 'Insert a raw field code at a target location.',
+    expectedResult: 'Returns a FieldMutationResult indicating success with the field address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'fields/insert.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.rebuild': {
+    memberPath: 'fields.rebuild',
+    description: 'Rebuild (recalculate) a field.',
+    expectedResult: 'Returns a FieldMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'fields/rebuild.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.remove': {
+    memberPath: 'fields.remove',
+    description: 'Remove a field from the document.',
+    expectedResult: 'Returns a FieldMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'fields/remove.mdx',
+    referenceGroup: 'fields',
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations
+  // -------------------------------------------------------------------------
+
+  'citations.list': {
+    memberPath: 'citations.list',
+    description: 'List all citation marks in the document.',
+    expectedResult: 'Returns a CitationsListResult containing discovered citation marks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'citations/list.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.get': {
+    memberPath: 'citations.get',
+    description: 'Get detailed information about a specific citation mark.',
+    expectedResult: "Returns a CitationInfo object with the citation's source references and display text.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'citations/get.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.insert': {
+    memberPath: 'citations.insert',
+    description: 'Insert a new citation mark at a target location.',
+    expectedResult: 'Returns a CitationMutationResult indicating success with the citation address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'citations/insert.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.update': {
+    memberPath: 'citations.update',
+    description: "Update an existing citation mark's source references.",
+    expectedResult: 'Returns a CitationMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/update.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.remove': {
+    memberPath: 'citations.remove',
+    description: 'Remove a citation mark from the document.',
+    expectedResult: 'Returns a CitationMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'citations/remove.mdx',
+    referenceGroup: 'citations',
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations: sources
+  // -------------------------------------------------------------------------
+
+  'citations.sources.list': {
+    memberPath: 'citations.sources.list',
+    description: 'List all citation sources in the document store.',
+    expectedResult: 'Returns a CitationSourcesListResult containing discovered sources with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'citations/sources-list.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.get': {
+    memberPath: 'citations.sources.get',
+    description: 'Get detailed information about a specific citation source.',
+    expectedResult: "Returns a CitationSourceInfo object with the source's type, fields, and metadata.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'citations/sources-get.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.insert': {
+    memberPath: 'citations.sources.insert',
+    description: 'Register a new citation source in the document store.',
+    expectedResult: 'Returns a CitationSourceMutationResult indicating success with the source address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'citations/sources-insert.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.update': {
+    memberPath: 'citations.sources.update',
+    description: 'Update the fields of an existing citation source.',
+    expectedResult: 'Returns a CitationSourceMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/sources-update.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.remove': {
+    memberPath: 'citations.sources.remove',
+    description: 'Remove a citation source from the document store.',
+    expectedResult: 'Returns a CitationSourceMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'citations/sources-remove.mdx',
+    referenceGroup: 'citations',
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations: bibliography
+  // -------------------------------------------------------------------------
+
+  'citations.bibliography.get': {
+    memberPath: 'citations.bibliography.get',
+    description: 'Get information about the bibliography block.',
+    expectedResult: "Returns a BibliographyInfo object with the bibliography's address and configuration.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'citations/bibliography-get.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.insert': {
+    memberPath: 'citations.bibliography.insert',
+    description: 'Insert a bibliography block at a target location.',
+    expectedResult:
+      'Returns a BibliographyMutationResult indicating success with the bibliography address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'citations/bibliography-insert.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.rebuild': {
+    memberPath: 'citations.bibliography.rebuild',
+    description: 'Rebuild the bibliography from current sources.',
+    expectedResult: 'Returns a BibliographyMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/bibliography-rebuild.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.configure': {
+    memberPath: 'citations.bibliography.configure',
+    description: 'Configure the bibliography style.',
+    expectedResult: 'Returns a BibliographyMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/bibliography-configure.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.remove': {
+    memberPath: 'citations.bibliography.remove',
+    description: 'Remove the bibliography block from the document.',
+    expectedResult: 'Returns a BibliographyMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'citations/bibliography-remove.mdx',
+    referenceGroup: 'citations',
+  },
+
+  // -------------------------------------------------------------------------
+  // Authorities
+  // -------------------------------------------------------------------------
+
+  'authorities.list': {
+    memberPath: 'authorities.list',
+    description: 'List all table-of-authorities blocks in the document.',
+    expectedResult: 'Returns an AuthoritiesListResult containing discovered TOA blocks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'authorities/list.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.get': {
+    memberPath: 'authorities.get',
+    description: 'Get detailed information about a specific table-of-authorities block.',
+    expectedResult: "Returns an AuthoritiesInfo object with the TOA's category filter and configuration.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'authorities/get.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.insert': {
+    memberPath: 'authorities.insert',
+    description: 'Insert a new table-of-authorities block at a target location.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success with the TOA address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'authorities/insert.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.configure': {
+    memberPath: 'authorities.configure',
+    description: 'Update the configuration of an existing table-of-authorities block.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'authorities/configure.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.rebuild': {
+    memberPath: 'authorities.rebuild',
+    description: 'Rebuild a table-of-authorities block from its entries.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'authorities/rebuild.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.remove': {
+    memberPath: 'authorities.remove',
+    description: 'Remove a table-of-authorities block from the document.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'authorities/remove.mdx',
+    referenceGroup: 'authorities',
+  },
+
+  // -------------------------------------------------------------------------
+  // Authorities: TA entry management
+  // -------------------------------------------------------------------------
+
+  'authorities.entries.list': {
+    memberPath: 'authorities.entries.list',
+    description: 'List all TA (authority entry) fields in the document.',
+    expectedResult: 'Returns an AuthorityEntryListResult containing discovered entries with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'authorities/entries-list.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.get': {
+    memberPath: 'authorities.entries.get',
+    description: 'Get detailed information about a specific TA authority entry.',
+    expectedResult: "Returns an AuthorityEntryInfo object with the entry's citations and category.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'authorities/entries-get.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.insert': {
+    memberPath: 'authorities.entries.insert',
+    description: 'Insert a new TA authority entry field at a target location.',
+    expectedResult: 'Returns an AuthorityEntryMutationResult indicating success with the entry address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'authorities/entries-insert.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.update': {
+    memberPath: 'authorities.entries.update',
+    description: 'Update the properties of an existing TA authority entry.',
+    expectedResult: 'Returns an AuthorityEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'authorities/entries-update.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.remove': {
+    memberPath: 'authorities.entries.remove',
+    description: 'Remove a TA authority entry field from the document.',
+    expectedResult: 'Returns an AuthorityEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'authorities/entries-remove.mdx',
+    referenceGroup: 'authorities',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

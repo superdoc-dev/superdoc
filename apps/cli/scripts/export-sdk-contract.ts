@@ -242,6 +242,93 @@ const INTENT_NAMES = {
   'doc.images.insertCaption': 'insert_image_caption',
   'doc.images.updateCaption': 'update_image_caption',
   'doc.images.removeCaption': 'remove_image_caption',
+
+  // Bookmarks
+  'doc.bookmarks.list': 'list_bookmarks',
+  'doc.bookmarks.get': 'get_bookmark',
+  'doc.bookmarks.insert': 'insert_bookmark',
+  'doc.bookmarks.rename': 'rename_bookmark',
+  'doc.bookmarks.remove': 'remove_bookmark',
+
+  // Links
+  'doc.links.list': 'list_links',
+  'doc.links.get': 'get_link',
+  'doc.links.insert': 'insert_link',
+  'doc.links.update': 'update_link',
+  'doc.links.remove': 'remove_link',
+
+  // Footnotes
+  'doc.footnotes.list': 'list_footnotes',
+  'doc.footnotes.get': 'get_footnote',
+  'doc.footnotes.insert': 'insert_footnote',
+  'doc.footnotes.update': 'update_footnote',
+  'doc.footnotes.remove': 'remove_footnote',
+  'doc.footnotes.configure': 'configure_footnote_numbering',
+
+  // Cross-References
+  'doc.crossRefs.list': 'list_cross_references',
+  'doc.crossRefs.get': 'get_cross_reference',
+  'doc.crossRefs.insert': 'insert_cross_reference',
+  'doc.crossRefs.rebuild': 'rebuild_cross_reference',
+  'doc.crossRefs.remove': 'remove_cross_reference',
+
+  // Index
+  'doc.index.list': 'list_indexes',
+  'doc.index.get': 'get_index',
+  'doc.index.insert': 'insert_index',
+  'doc.index.configure': 'configure_index',
+  'doc.index.rebuild': 'rebuild_index',
+  'doc.index.remove': 'remove_index',
+  'doc.index.entries.list': 'list_index_entries',
+  'doc.index.entries.get': 'get_index_entry',
+  'doc.index.entries.insert': 'insert_index_entry',
+  'doc.index.entries.update': 'update_index_entry',
+  'doc.index.entries.remove': 'remove_index_entry',
+
+  // Captions
+  'doc.captions.list': 'list_captions',
+  'doc.captions.get': 'get_caption',
+  'doc.captions.insert': 'insert_caption',
+  'doc.captions.update': 'update_caption',
+  'doc.captions.remove': 'remove_caption',
+  'doc.captions.configure': 'configure_caption_numbering',
+
+  // Fields
+  'doc.fields.list': 'list_fields',
+  'doc.fields.get': 'get_field',
+  'doc.fields.insert': 'insert_field',
+  'doc.fields.rebuild': 'rebuild_field',
+  'doc.fields.remove': 'remove_field',
+
+  // Citations
+  'doc.citations.list': 'list_citations',
+  'doc.citations.get': 'get_citation',
+  'doc.citations.insert': 'insert_citation',
+  'doc.citations.update': 'update_citation',
+  'doc.citations.remove': 'remove_citation',
+  'doc.citations.sources.list': 'list_citation_sources',
+  'doc.citations.sources.get': 'get_citation_source',
+  'doc.citations.sources.insert': 'insert_citation_source',
+  'doc.citations.sources.update': 'update_citation_source',
+  'doc.citations.sources.remove': 'remove_citation_source',
+  'doc.citations.bibliography.get': 'get_bibliography',
+  'doc.citations.bibliography.insert': 'insert_bibliography',
+  'doc.citations.bibliography.rebuild': 'rebuild_bibliography',
+  'doc.citations.bibliography.configure': 'configure_bibliography',
+  'doc.citations.bibliography.remove': 'remove_bibliography',
+
+  // Authorities (Table of Authorities)
+  'doc.authorities.list': 'list_authorities',
+  'doc.authorities.get': 'get_authority',
+  'doc.authorities.insert': 'insert_authority',
+  'doc.authorities.configure': 'configure_authority',
+  'doc.authorities.rebuild': 'rebuild_authority',
+  'doc.authorities.remove': 'remove_authority',
+  'doc.authorities.entries.list': 'list_authority_entries',
+  'doc.authorities.entries.get': 'get_authority_entry',
+  'doc.authorities.entries.insert': 'insert_authority_entry',
+  'doc.authorities.entries.update': 'update_authority_entry',
+  'doc.authorities.entries.remove': 'remove_authority_entry',
 } as const satisfies Partial<Record<DocBackedCliOpId, string>>;
 
 function deriveDocBackedIntentName(cliOpId: DocBackedCliOpId): string {

@@ -38,6 +38,94 @@ function skippedSuccessScenario(operationId: CliOperationId) {
 
 type SuccessScenarioFactory = (harness: ConformanceHarness) => Promise<ScenarioInvocation>;
 
+function deferredRuntimeScenario(
+  operationId: CliOperationId,
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness: ConformanceHarness): Promise<ScenarioInvocation> => ({
+    stateDir: await harness.createStateDir(`${operationId.replace(/\./g, '-')}-deferred-success`),
+    args: [...commandTokens(operationId)],
+  });
+}
+
+const DEFERRED_NEW_NAMESPACE_OPERATION_IDS = [
+  'doc.bookmarks.list',
+  'doc.bookmarks.get',
+  'doc.bookmarks.insert',
+  'doc.bookmarks.rename',
+  'doc.bookmarks.remove',
+  'doc.links.list',
+  'doc.links.get',
+  'doc.links.insert',
+  'doc.links.update',
+  'doc.links.remove',
+  'doc.footnotes.list',
+  'doc.footnotes.get',
+  'doc.footnotes.insert',
+  'doc.footnotes.update',
+  'doc.footnotes.remove',
+  'doc.footnotes.configure',
+  'doc.crossRefs.list',
+  'doc.crossRefs.get',
+  'doc.crossRefs.insert',
+  'doc.crossRefs.rebuild',
+  'doc.crossRefs.remove',
+  'doc.index.list',
+  'doc.index.get',
+  'doc.index.insert',
+  'doc.index.configure',
+  'doc.index.rebuild',
+  'doc.index.remove',
+  'doc.index.entries.list',
+  'doc.index.entries.get',
+  'doc.index.entries.insert',
+  'doc.index.entries.update',
+  'doc.index.entries.remove',
+  'doc.captions.list',
+  'doc.captions.get',
+  'doc.captions.insert',
+  'doc.captions.update',
+  'doc.captions.remove',
+  'doc.captions.configure',
+  'doc.fields.list',
+  'doc.fields.get',
+  'doc.fields.insert',
+  'doc.fields.rebuild',
+  'doc.fields.remove',
+  'doc.citations.list',
+  'doc.citations.get',
+  'doc.citations.insert',
+  'doc.citations.update',
+  'doc.citations.remove',
+  'doc.citations.sources.list',
+  'doc.citations.sources.get',
+  'doc.citations.sources.insert',
+  'doc.citations.sources.update',
+  'doc.citations.sources.remove',
+  'doc.citations.bibliography.get',
+  'doc.citations.bibliography.insert',
+  'doc.citations.bibliography.rebuild',
+  'doc.citations.bibliography.configure',
+  'doc.citations.bibliography.remove',
+  'doc.authorities.list',
+  'doc.authorities.get',
+  'doc.authorities.insert',
+  'doc.authorities.configure',
+  'doc.authorities.rebuild',
+  'doc.authorities.remove',
+  'doc.authorities.entries.list',
+  'doc.authorities.entries.get',
+  'doc.authorities.entries.insert',
+  'doc.authorities.entries.update',
+  'doc.authorities.entries.remove',
+] as const satisfies readonly CliOperationId[];
+
+const DEFERRED_NEW_NAMESPACE_SUCCESS_SCENARIOS = Object.fromEntries(
+  DEFERRED_NEW_NAMESPACE_OPERATION_IDS.map((operationId) => [operationId, deferredRuntimeScenario(operationId)]),
+) as Record<
+  (typeof DEFERRED_NEW_NAMESPACE_OPERATION_IDS)[number],
+  (harness: ConformanceHarness) => Promise<ScenarioInvocation>
+>;
+
 function extractDiscoveryItems(data: unknown): Record<string, unknown>[] {
   if (!data || typeof data !== 'object') return [];
 
@@ -3009,6 +3097,7 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  ...DEFERRED_NEW_NAMESPACE_SUCCESS_SCENARIOS,
 
   // ---------------------------------------------------------------------------
   // History operations
@@ -3048,6 +3137,8 @@ const EXPLICIT_RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   'doc.images.resetCrop',
   'doc.images.updateCaption',
   'doc.images.removeCaption',
+  // New namespaces are contract-registered; deterministic runtime fixtures will follow.
+  ...DEFERRED_NEW_NAMESPACE_OPERATION_IDS,
 ]);
 
 const CANONICAL_OPERATION_IDS = Object.keys(CLI_OPERATION_COMMAND_KEYS) as CliOperationId[];

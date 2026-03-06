@@ -15,15 +15,23 @@ Use the tables below to see what operations are available and where each one is 
 | Namespace | Canonical ops | Aliases | Total surface | Reference |
 | --- | --- | --- | --- | --- |
 | Blocks | 1 | 0 | 1 | [Reference](/document-api/reference/blocks/index) |
+| Bookmarks | 5 | 0 | 5 | [Reference](/document-api/reference/bookmarks/index) |
 | Capabilities | 1 | 0 | 1 | [Reference](/document-api/reference/capabilities/index) |
+| Captions | 6 | 0 | 6 | [Reference](/document-api/reference/captions/index) |
+| Citations | 15 | 0 | 15 | [Reference](/document-api/reference/citations/index) |
 | Comments | 5 | 0 | 5 | [Reference](/document-api/reference/comments/index) |
 | Content Controls | 55 | 0 | 55 | [Reference](/document-api/reference/content-controls/index) |
 | Core | 13 | 0 | 13 | [Reference](/document-api/reference/core/index) |
 | Create | 6 | 0 | 6 | [Reference](/document-api/reference/create/index) |
+| Cross-References | 5 | 0 | 5 | [Reference](/document-api/reference/cross-refs/index) |
+| Fields | 5 | 0 | 5 | [Reference](/document-api/reference/fields/index) |
+| Footnotes | 6 | 0 | 6 | [Reference](/document-api/reference/footnotes/index) |
 | Format | 44 | 1 | 45 | [Reference](/document-api/reference/format/index) |
 | History | 3 | 0 | 3 | [Reference](/document-api/reference/history/index) |
 | Hyperlinks | 6 | 0 | 6 | [Reference](/document-api/reference/hyperlinks/index) |
 | Images | 27 | 0 | 27 | [Reference](/document-api/reference/images/index) |
+| Index | 11 | 0 | 11 | [Reference](/document-api/reference/index/index) |
+| Links | 5 | 0 | 5 | [Reference](/document-api/reference/links/index) |
 | Lists | 29 | 0 | 29 | [Reference](/document-api/reference/lists/index) |
 | Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
 | Paragraph Formatting | 17 | 0 | 17 | [Reference](/document-api/reference/format/paragraph/index) |
@@ -31,6 +39,7 @@ Use the tables below to see what operations are available and where each one is 
 | Query | 1 | 0 | 1 | [Reference](/document-api/reference/query/index) |
 | Sections | 18 | 0 | 18 | [Reference](/document-api/reference/sections/index) |
 | Styles | 1 | 0 | 1 | [Reference](/document-api/reference/styles/index) |
+| Table of Authorities | 11 | 0 | 11 | [Reference](/document-api/reference/authorities/index) |
 | Table of Contents | 10 | 0 | 10 | [Reference](/document-api/reference/toc/index) |
 | Tables | 42 | 0 | 42 | [Reference](/document-api/reference/tables/index) |
 | Track Changes | 3 | 0 | 3 | [Reference](/document-api/reference/track-changes/index) |
@@ -38,7 +47,33 @@ Use the tables below to see what operations are available and where each one is 
 | Editor method | Operation |
 | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.delete(...)</code></span> | [`blocks.delete`](/document-api/reference/blocks/delete) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.list(...)</code></span> | [`bookmarks.list`](/document-api/reference/bookmarks/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.get(...)</code></span> | [`bookmarks.get`](/document-api/reference/bookmarks/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.insert(...)</code></span> | [`bookmarks.insert`](/document-api/reference/bookmarks/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.rename(...)</code></span> | [`bookmarks.rename`](/document-api/reference/bookmarks/rename) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.bookmarks.remove(...)</code></span> | [`bookmarks.remove`](/document-api/reference/bookmarks/remove) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.capabilities()</code></span> | [`capabilities.get`](/document-api/reference/capabilities/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.captions.list(...)</code></span> | [`captions.list`](/document-api/reference/captions/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.captions.get(...)</code></span> | [`captions.get`](/document-api/reference/captions/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.captions.insert(...)</code></span> | [`captions.insert`](/document-api/reference/captions/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.captions.update(...)</code></span> | [`captions.update`](/document-api/reference/captions/update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.captions.remove(...)</code></span> | [`captions.remove`](/document-api/reference/captions/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.captions.configure(...)</code></span> | [`captions.configure`](/document-api/reference/captions/configure) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.list(...)</code></span> | [`citations.list`](/document-api/reference/citations/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.get(...)</code></span> | [`citations.get`](/document-api/reference/citations/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.insert(...)</code></span> | [`citations.insert`](/document-api/reference/citations/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.update(...)</code></span> | [`citations.update`](/document-api/reference/citations/update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.remove(...)</code></span> | [`citations.remove`](/document-api/reference/citations/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.sources.list(...)</code></span> | [`citations.sources.list`](/document-api/reference/citations/sources-list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.sources.get(...)</code></span> | [`citations.sources.get`](/document-api/reference/citations/sources-get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.sources.insert(...)</code></span> | [`citations.sources.insert`](/document-api/reference/citations/sources-insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.sources.update(...)</code></span> | [`citations.sources.update`](/document-api/reference/citations/sources-update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.sources.remove(...)</code></span> | [`citations.sources.remove`](/document-api/reference/citations/sources-remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.bibliography.get(...)</code></span> | [`citations.bibliography.get`](/document-api/reference/citations/bibliography-get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.bibliography.insert(...)</code></span> | [`citations.bibliography.insert`](/document-api/reference/citations/bibliography-insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.bibliography.rebuild(...)</code></span> | [`citations.bibliography.rebuild`](/document-api/reference/citations/bibliography-rebuild) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.bibliography.configure(...)</code></span> | [`citations.bibliography.configure`](/document-api/reference/citations/bibliography-configure) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.citations.bibliography.remove(...)</code></span> | [`citations.bibliography.remove`](/document-api/reference/citations/bibliography-remove) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.create(...)</code></span> | [`comments.create`](/document-api/reference/comments/create) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.patch(...)</code></span> | [`comments.patch`](/document-api/reference/comments/patch) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.delete(...)</code></span> | [`comments.delete`](/document-api/reference/comments/delete) |
@@ -118,6 +153,22 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.table(...)</code></span> | [`create.table`](/document-api/reference/create/table) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.tableOfContents(...)</code></span> | [`create.tableOfContents`](/document-api/reference/create/table-of-contents) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.image(...)</code></span> | [`create.image`](/document-api/reference/create/image) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.list(...)</code></span> | [`crossRefs.list`](/document-api/reference/cross-refs/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.get(...)</code></span> | [`crossRefs.get`](/document-api/reference/cross-refs/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.insert(...)</code></span> | [`crossRefs.insert`](/document-api/reference/cross-refs/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.rebuild(...)</code></span> | [`crossRefs.rebuild`](/document-api/reference/cross-refs/rebuild) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.crossRefs.remove(...)</code></span> | [`crossRefs.remove`](/document-api/reference/cross-refs/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.fields.list(...)</code></span> | [`fields.list`](/document-api/reference/fields/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.fields.get(...)</code></span> | [`fields.get`](/document-api/reference/fields/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.fields.insert(...)</code></span> | [`fields.insert`](/document-api/reference/fields/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.fields.rebuild(...)</code></span> | [`fields.rebuild`](/document-api/reference/fields/rebuild) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.fields.remove(...)</code></span> | [`fields.remove`](/document-api/reference/fields/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.footnotes.list(...)</code></span> | [`footnotes.list`](/document-api/reference/footnotes/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.footnotes.get(...)</code></span> | [`footnotes.get`](/document-api/reference/footnotes/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.footnotes.insert(...)</code></span> | [`footnotes.insert`](/document-api/reference/footnotes/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.footnotes.update(...)</code></span> | [`footnotes.update`](/document-api/reference/footnotes/update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.footnotes.remove(...)</code></span> | [`footnotes.remove`](/document-api/reference/footnotes/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.footnotes.configure(...)</code></span> | [`footnotes.configure`](/document-api/reference/footnotes/configure) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | [`format.bold`](/document-api/reference/format/bold) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | [`format.italic`](/document-api/reference/format/italic) |
@@ -199,6 +250,22 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.insertCaption(...)</code></span> | [`images.insertCaption`](/document-api/reference/images/insert-caption) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.updateCaption(...)</code></span> | [`images.updateCaption`](/document-api/reference/images/update-caption) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.removeCaption(...)</code></span> | [`images.removeCaption`](/document-api/reference/images/remove-caption) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.list(...)</code></span> | [`index.list`](/document-api/reference/index/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.get(...)</code></span> | [`index.get`](/document-api/reference/index/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.insert(...)</code></span> | [`index.insert`](/document-api/reference/index/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.configure(...)</code></span> | [`index.configure`](/document-api/reference/index/configure) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.rebuild(...)</code></span> | [`index.rebuild`](/document-api/reference/index/rebuild) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.remove(...)</code></span> | [`index.remove`](/document-api/reference/index/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.entries.list(...)</code></span> | [`index.entries.list`](/document-api/reference/index/entries-list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.entries.get(...)</code></span> | [`index.entries.get`](/document-api/reference/index/entries-get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.entries.insert(...)</code></span> | [`index.entries.insert`](/document-api/reference/index/entries-insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.entries.update(...)</code></span> | [`index.entries.update`](/document-api/reference/index/entries-update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.index.entries.remove(...)</code></span> | [`index.entries.remove`](/document-api/reference/index/entries-remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.links.list(...)</code></span> | [`links.list`](/document-api/reference/links/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.links.get(...)</code></span> | [`links.get`](/document-api/reference/links/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.links.insert(...)</code></span> | [`links.insert`](/document-api/reference/links/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.links.update(...)</code></span> | [`links.update`](/document-api/reference/links/update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.links.remove(...)</code></span> | [`links.remove`](/document-api/reference/links/remove) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.list(...)</code></span> | [`lists.list`](/document-api/reference/lists/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.get(...)</code></span> | [`lists.get`](/document-api/reference/lists/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.insert(...)</code></span> | [`lists.insert`](/document-api/reference/lists/insert) |
@@ -269,6 +336,17 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageBorders(...)</code></span> | [`sections.setPageBorders`](/document-api/reference/sections/set-page-borders) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.clearPageBorders(...)</code></span> | [`sections.clearPageBorders`](/document-api/reference/sections/clear-page-borders) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.apply(...)</code></span> | [`styles.apply`](/document-api/reference/styles/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.list(...)</code></span> | [`authorities.list`](/document-api/reference/authorities/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.get(...)</code></span> | [`authorities.get`](/document-api/reference/authorities/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.insert(...)</code></span> | [`authorities.insert`](/document-api/reference/authorities/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.configure(...)</code></span> | [`authorities.configure`](/document-api/reference/authorities/configure) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.rebuild(...)</code></span> | [`authorities.rebuild`](/document-api/reference/authorities/rebuild) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.remove(...)</code></span> | [`authorities.remove`](/document-api/reference/authorities/remove) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.list(...)</code></span> | [`authorities.entries.list`](/document-api/reference/authorities/entries-list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.get(...)</code></span> | [`authorities.entries.get`](/document-api/reference/authorities/entries-get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.insert(...)</code></span> | [`authorities.entries.insert`](/document-api/reference/authorities/entries-insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.update(...)</code></span> | [`authorities.entries.update`](/document-api/reference/authorities/entries-update) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.remove(...)</code></span> | [`authorities.entries.remove`](/document-api/reference/authorities/entries-remove) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.list(...)</code></span> | [`toc.list`](/document-api/reference/toc/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.get(...)</code></span> | [`toc.get`](/document-api/reference/toc/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.configure(...)</code></span> | [`toc.configure`](/document-api/reference/toc/configure) |

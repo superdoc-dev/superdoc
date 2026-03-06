@@ -2,6 +2,8 @@ import type {
   Query,
   TextAddress,
   TextMutationResolution,
+  TextTarget,
+  TocCreateLocation,
   UnknownNodeDiagnostic,
   WriteRequest,
 } from '@superdoc/document-api';
@@ -55,6 +57,42 @@ export function resolveTextTarget(editor: Editor, target: TextAddress): Resolved
   const block = matches[0];
   if (!block) return null;
   return resolveTextRangeInBlock(block.node, block.pos, target.range);
+}
+
+/**
+ * Resolves a {@link TextTarget} to absolute ProseMirror positions for inline insertion.
+ * Extracts the first segment and delegates to {@link resolveTextTarget}.
+ */
+export function resolveInlineInsertPosition(editor: Editor, at: TextTarget, operationName: string): ResolvedTextTarget {
+  const firstSegment = at.segments[0];
+  const textAddress: TextAddress = {
+    kind: 'text',
+    blockId: firstSegment.blockId,
+    range: firstSegment.range,
+  };
+  const resolved = resolveTextTarget(editor, textAddress);
+  if (!resolved) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: target block not found.`, {
+      target: at,
+    });
+  }
+  return resolved;
+}
+
+/**
+ * Resolves a {@link TocCreateLocation} to an absolute block insertion position.
+ */
+export function resolveBlockCreatePosition(editor: Editor, at: TocCreateLocation): number {
+  if (at.kind === 'documentStart') return 0;
+  if (at.kind === 'documentEnd') return editor.state.doc.content.size;
+  const index = getBlockIndex(editor);
+  const candidate = findBlockById(index, at.target);
+  if (!candidate) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block "${at.target.nodeId}" not found.`, {
+      target: at.target,
+    });
+  }
+  return at.kind === 'before' ? candidate.pos : candidate.end;
 }
 
 /**

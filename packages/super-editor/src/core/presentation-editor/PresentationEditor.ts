@@ -284,6 +284,7 @@ export class PresentationEditor extends EventEmitter {
   /** Cache for incremental toFlowBlocks conversion */
   #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #footnoteNumberSignature: string | null = null;
+  #endnoteNumberSignature: string | null = null;
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -3398,10 +3399,39 @@ export class PresentationEditor extends EventEmitter {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
         }
+        // Compute visible endnote numbering (same approach as footnotes).
+        const endnoteNumberById: Record<string, number> = {};
+        const endnoteOrder: string[] = [];
+        try {
+          const seen = new Set<string>();
+          let counter = 1;
+          this.#editor?.state?.doc?.descendants?.((node: any) => {
+            if (node?.type?.name !== 'endnoteReference') return;
+            const rawId = node?.attrs?.id;
+            if (rawId == null) return;
+            const key = String(rawId);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            endnoteNumberById[key] = counter;
+            endnoteOrder.push(key);
+            counter += 1;
+          });
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PresentationEditor] Failed to compute endnote numbering:', e);
+          }
+        }
+        const endnoteSignature = endnoteOrder.join('|');
+        if (endnoteSignature !== this.#endnoteNumberSignature) {
+          this.#flowBlockCache.clear();
+          this.#endnoteNumberSignature = endnoteSignature;
+        }
+
         // Expose numbering to node views and layout adapter.
         try {
           if (converter && typeof converter === 'object') {
             converter['footnoteNumberById'] = footnoteNumberById;
+            converter['endnoteNumberById'] = endnoteNumberById;
           }
         } catch {}
 
@@ -3417,6 +3447,7 @@ export class PresentationEditor extends EventEmitter {
           ? {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
+              ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),

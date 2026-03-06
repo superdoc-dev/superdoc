@@ -2,6 +2,8 @@
  * Engine-agnostic Document API surface.
  */
 
+import { DocumentApiValidationError } from './errors.js';
+
 export * from './types/index.js';
 export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
@@ -534,6 +536,229 @@ import type {
   HyperlinksRemoveInput,
   HyperlinkMutationResult,
 } from './hyperlinks/hyperlinks.types.js';
+import type { BookmarksApi, BookmarksAdapter } from './bookmarks/bookmarks.js';
+import {
+  executeBookmarksList,
+  executeBookmarksGet,
+  executeBookmarksInsert,
+  executeBookmarksRename,
+  executeBookmarksRemove,
+} from './bookmarks/bookmarks.js';
+import type {
+  BookmarkListInput,
+  BookmarksListResult,
+  BookmarkGetInput,
+  BookmarkInfo,
+  BookmarkInsertInput,
+  BookmarkRenameInput,
+  BookmarkRemoveInput,
+  BookmarkMutationResult,
+} from './bookmarks/bookmarks.types.js';
+import type { LinksApi, LinksAdapter } from './links/links.js';
+import {
+  executeLinksList,
+  executeLinksGet,
+  executeLinksInsert,
+  executeLinksUpdate,
+  executeLinksRemove,
+} from './links/links.js';
+import type {
+  LinkListInput,
+  LinksListResult,
+  LinkGetInput,
+  LinkInfo,
+  LinkInsertInput,
+  LinkUpdateInput,
+  LinkRemoveInput,
+  LinkMutationResult,
+} from './links/links.types.js';
+import type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
+import {
+  executeFootnotesList,
+  executeFootnotesGet,
+  executeFootnotesInsert,
+  executeFootnotesUpdate,
+  executeFootnotesRemove,
+  executeFootnotesConfigure,
+} from './footnotes/footnotes.js';
+import type {
+  FootnoteListInput,
+  FootnotesListResult,
+  FootnoteGetInput,
+  FootnoteInfo,
+  FootnoteInsertInput,
+  FootnoteUpdateInput,
+  FootnoteRemoveInput,
+  FootnoteMutationResult,
+  FootnoteConfigureInput,
+  FootnoteConfigResult,
+} from './footnotes/footnotes.types.js';
+import type { CrossRefsApi, CrossRefsAdapter } from './cross-refs/cross-refs.js';
+import {
+  executeCrossRefsList,
+  executeCrossRefsGet,
+  executeCrossRefsInsert,
+  executeCrossRefsRebuild,
+  executeCrossRefsRemove,
+} from './cross-refs/cross-refs.js';
+import type {
+  CrossRefListInput,
+  CrossRefsListResult,
+  CrossRefGetInput,
+  CrossRefInfo,
+  CrossRefInsertInput,
+  CrossRefRebuildInput,
+  CrossRefRemoveInput,
+  CrossRefMutationResult,
+} from './cross-refs/cross-refs.types.js';
+import type { IndexApi, IndexAdapter } from './index/index.js';
+import {
+  executeIndexList,
+  executeIndexGet,
+  executeIndexInsert,
+  executeIndexConfigure,
+  executeIndexRebuild,
+  executeIndexRemove,
+  executeIndexEntryList,
+  executeIndexEntryGet,
+  executeIndexEntryInsert,
+  executeIndexEntryUpdate,
+  executeIndexEntryRemove,
+} from './index/index.js';
+import type {
+  IndexListInput,
+  IndexListResult,
+  IndexGetInput,
+  IndexInfo,
+  IndexInsertInput,
+  IndexConfigureInput,
+  IndexRebuildInput,
+  IndexRemoveInput,
+  IndexMutationResult,
+  IndexEntryListInput,
+  IndexEntryListResult,
+  IndexEntryGetInput,
+  IndexEntryInfo,
+  IndexEntryInsertInput,
+  IndexEntryUpdateInput,
+  IndexEntryRemoveInput,
+  IndexEntryMutationResult,
+} from './index/index.types.js';
+import type { CaptionsApi, CaptionsAdapter } from './captions/captions.js';
+import {
+  executeCaptionsList,
+  executeCaptionsGet,
+  executeCaptionsInsert,
+  executeCaptionsUpdate,
+  executeCaptionsRemove,
+  executeCaptionsConfigure,
+} from './captions/captions.js';
+import type {
+  CaptionListInput,
+  CaptionsListResult,
+  CaptionGetInput,
+  CaptionInfo,
+  CaptionInsertInput,
+  CaptionUpdateInput,
+  CaptionRemoveInput,
+  CaptionMutationResult,
+  CaptionConfigureInput,
+  CaptionConfigResult,
+} from './captions/captions.types.js';
+import type { FieldsApi, FieldsAdapter } from './fields/fields.js';
+import {
+  executeFieldsList,
+  executeFieldsGet,
+  executeFieldsInsert,
+  executeFieldsRebuild,
+  executeFieldsRemove,
+} from './fields/fields.js';
+import type {
+  FieldListInput,
+  FieldsListResult,
+  FieldGetInput,
+  FieldInfo,
+  FieldInsertInput,
+  FieldRebuildInput,
+  FieldRemoveInput,
+  FieldMutationResult,
+} from './fields/fields.types.js';
+import type { CitationsApi, CitationsAdapter } from './citations/citations.js';
+import {
+  executeCitationsList,
+  executeCitationsGet,
+  executeCitationsInsert,
+  executeCitationsUpdate,
+  executeCitationsRemove,
+  executeCitationSourcesList,
+  executeCitationSourcesGet,
+  executeCitationSourcesInsert,
+  executeCitationSourcesUpdate,
+  executeCitationSourcesRemove,
+  executeBibliographyGet,
+  executeBibliographyInsert,
+  executeBibliographyRebuild,
+  executeBibliographyConfigure,
+  executeBibliographyRemove,
+} from './citations/citations.js';
+import type {
+  CitationListInput,
+  CitationsListResult,
+  CitationGetInput,
+  CitationInfo,
+  CitationInsertInput,
+  CitationUpdateInput,
+  CitationRemoveInput,
+  CitationMutationResult,
+  CitationSourceListInput,
+  CitationSourcesListResult,
+  CitationSourceGetInput,
+  CitationSourceInfo,
+  CitationSourceInsertInput,
+  CitationSourceUpdateInput,
+  CitationSourceRemoveInput,
+  CitationSourceMutationResult,
+  BibliographyGetInput,
+  BibliographyInfo,
+  BibliographyInsertInput,
+  BibliographyRebuildInput,
+  BibliographyConfigureInput,
+  BibliographyRemoveInput,
+  BibliographyMutationResult,
+} from './citations/citations.types.js';
+import type { AuthoritiesApi, AuthoritiesAdapter } from './authorities/authorities.js';
+import {
+  executeAuthoritiesList,
+  executeAuthoritiesGet,
+  executeAuthoritiesInsert,
+  executeAuthoritiesConfigure,
+  executeAuthoritiesRebuild,
+  executeAuthoritiesRemove,
+  executeAuthorityEntriesList,
+  executeAuthorityEntriesGet,
+  executeAuthorityEntriesInsert,
+  executeAuthorityEntriesUpdate,
+  executeAuthorityEntriesRemove,
+} from './authorities/authorities.js';
+import type {
+  AuthoritiesListInput,
+  AuthoritiesListResult,
+  AuthoritiesGetInput,
+  AuthoritiesInfo,
+  AuthoritiesInsertInput,
+  AuthoritiesConfigureInput,
+  AuthoritiesRebuildInput,
+  AuthoritiesRemoveInput,
+  AuthoritiesMutationResult,
+  AuthorityEntryListInput,
+  AuthorityEntryListResult,
+  AuthorityEntryGetInput,
+  AuthorityEntryInfo,
+  AuthorityEntryInsertInput,
+  AuthorityEntryUpdateInput,
+  AuthorityEntryRemoveInput,
+  AuthorityEntryMutationResult,
+} from './authorities/authorities.types.js';
 
 export type { GetAdapter } from './get/get.js';
 export type { FindAdapter, FindOptions } from './find/find.js';
@@ -667,6 +892,15 @@ export type {
   RemoveCaptionInput,
 } from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
+export type { BookmarksApi, BookmarksAdapter } from './bookmarks/bookmarks.js';
+export type { LinksApi, LinksAdapter } from './links/links.js';
+export type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
+export type { CrossRefsApi, CrossRefsAdapter } from './cross-refs/cross-refs.js';
+export type { IndexApi, IndexAdapter } from './index/index.js';
+export type { CaptionsApi, CaptionsAdapter } from './captions/captions.js';
+export type { FieldsApi, FieldsAdapter } from './fields/fields.js';
+export type { CitationsApi, CitationsAdapter } from './citations/citations.js';
+export type { AuthoritiesApi, AuthoritiesAdapter } from './authorities/authorities.js';
 export type {
   TocAddress,
   TocSourceConfig,
@@ -819,6 +1053,15 @@ export type {
   HyperlinksPatchInput,
   HyperlinksRemoveInput,
 } from './hyperlinks/hyperlinks.types.js';
+export type * from './bookmarks/bookmarks.types.js';
+export type * from './links/links.types.js';
+export type * from './footnotes/footnotes.types.js';
+export type * from './cross-refs/cross-refs.types.js';
+export type * from './index/index.types.js';
+export type * from './captions/captions.types.js';
+export type * from './fields/fields.types.js';
+export type * from './citations/citations.types.js';
+export type * from './authorities/authorities.types.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type { SectionsAdapter } from './sections/sections.js';
 export type { ParagraphsAdapter, ParagraphFormatApi, ParagraphStylesApi } from './paragraphs/paragraphs.js';
@@ -1198,6 +1441,42 @@ export interface DocumentApi {
    */
   contentControls: ContentControlsApi;
   /**
+   * Bookmark operations.
+   */
+  bookmarks: BookmarksApi;
+  /**
+   * Hyperlink operations.
+   */
+  links: LinksApi;
+  /**
+   * Footnote and endnote operations.
+   */
+  footnotes: FootnotesApi;
+  /**
+   * Cross-reference field operations.
+   */
+  crossRefs: CrossRefsApi;
+  /**
+   * Index (INDEX field) and XE entry operations.
+   */
+  index: IndexApi;
+  /**
+   * Caption paragraph operations.
+   */
+  captions: CaptionsApi;
+  /**
+   * Raw field operations.
+   */
+  fields: FieldsApi;
+  /**
+   * Citation, source, and bibliography operations.
+   */
+  citations: CitationsApi;
+  /**
+   * Table of authorities and TA entry operations.
+   */
+  authorities: AuthoritiesApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -1257,6 +1536,15 @@ export interface DocumentApiAdapters {
   images: ImagesAdapter & CreateImageAdapter;
   hyperlinks: HyperlinksAdapter;
   contentControls: ContentControlsAdapter & ContentControlsCreateAdapter;
+  bookmarks?: BookmarksAdapter;
+  links?: LinksAdapter;
+  footnotes?: FootnotesAdapter;
+  crossRefs?: CrossRefsAdapter;
+  index?: IndexAdapter;
+  captions?: CaptionsAdapter;
+  fields?: FieldsAdapter;
+  citations?: CitationsAdapter;
+  authorities?: AuthoritiesAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -1284,6 +1572,16 @@ export interface DocumentApiAdapters {
  * }
  * ```
  */
+function requireAdapter<T>(adapter: T | undefined, namespace: string): T {
+  if (!adapter) {
+    throw new DocumentApiValidationError(
+      'CAPABILITY_UNAVAILABLE',
+      `The '${namespace}' namespace is not available. The host engine has not provided an adapter for this capability.`,
+    );
+  }
+  return adapter;
+}
+
 function buildFormatInlineAliasApi(adapter: FormatAdapter): FormatInlineAliasApi {
   return Object.fromEntries(
     INLINE_PROPERTY_REGISTRY.map((entry) => {
@@ -1295,8 +1593,36 @@ function buildFormatInlineAliasApi(adapter: FormatAdapter): FormatInlineAliasApi
   ) as FormatInlineAliasApi;
 }
 
+/** Namespace prefixes whose operations are gated on optional adapter presence. */
+const ADAPTER_GATED_PREFIXES = [
+  'bookmarks',
+  'links',
+  'footnotes',
+  'crossRefs',
+  'index',
+  'captions',
+  'fields',
+  'citations',
+  'authorities',
+] as const;
+
 export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
-  const capFn = () => executeCapabilities(adapters.capabilities);
+  const rawCapFn = () => executeCapabilities(adapters.capabilities);
+  const capFn = (): DocumentApiCapabilities => {
+    const caps = rawCapFn();
+    // Gate operations on adapter presence — mark unavailable when namespace adapter is missing.
+    for (const ns of ADAPTER_GATED_PREFIXES) {
+      if (adapters[ns]) continue;
+      const prefix = `${ns}.`;
+      for (const opId of Object.keys(caps.operations)) {
+        if (!opId.startsWith(prefix)) continue;
+        const cap = caps.operations[opId as OperationId];
+        cap.available = false;
+        cap.reasons = [...(cap.reasons ?? []), 'NAMESPACE_UNAVAILABLE'];
+      }
+    }
+    return caps;
+  };
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
   const inlineAliasApi = buildFormatInlineAliasApi(adapters.format);
 
@@ -2139,6 +2465,240 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       group: {
         wrap: (input, options) => executeContentControlsGroupWrap(adapters.contentControls, input, options),
         ungroup: (input, options) => executeContentControlsGroupUngroup(adapters.contentControls, input, options),
+      },
+    },
+
+    bookmarks: {
+      list(query?: BookmarkListInput): BookmarksListResult {
+        return executeBookmarksList(requireAdapter(adapters.bookmarks, 'bookmarks'), query);
+      },
+      get(input: BookmarkGetInput): BookmarkInfo {
+        return executeBookmarksGet(requireAdapter(adapters.bookmarks, 'bookmarks'), input);
+      },
+      insert(input: BookmarkInsertInput, options?: MutationOptions): BookmarkMutationResult {
+        return executeBookmarksInsert(requireAdapter(adapters.bookmarks, 'bookmarks'), input, options);
+      },
+      rename(input: BookmarkRenameInput, options?: MutationOptions): BookmarkMutationResult {
+        return executeBookmarksRename(requireAdapter(adapters.bookmarks, 'bookmarks'), input, options);
+      },
+      remove(input: BookmarkRemoveInput, options?: MutationOptions): BookmarkMutationResult {
+        return executeBookmarksRemove(requireAdapter(adapters.bookmarks, 'bookmarks'), input, options);
+      },
+    },
+    links: {
+      list(query?: LinkListInput): LinksListResult {
+        return executeLinksList(requireAdapter(adapters.links, 'links'), query);
+      },
+      get(input: LinkGetInput): LinkInfo {
+        return executeLinksGet(requireAdapter(adapters.links, 'links'), input);
+      },
+      insert(input: LinkInsertInput, options?: MutationOptions): LinkMutationResult {
+        return executeLinksInsert(requireAdapter(adapters.links, 'links'), input, options);
+      },
+      update(input: LinkUpdateInput, options?: MutationOptions): LinkMutationResult {
+        return executeLinksUpdate(requireAdapter(adapters.links, 'links'), input, options);
+      },
+      remove(input: LinkRemoveInput, options?: MutationOptions): LinkMutationResult {
+        return executeLinksRemove(requireAdapter(adapters.links, 'links'), input, options);
+      },
+    },
+    footnotes: {
+      list(query?: FootnoteListInput): FootnotesListResult {
+        return executeFootnotesList(requireAdapter(adapters.footnotes, 'footnotes'), query);
+      },
+      get(input: FootnoteGetInput): FootnoteInfo {
+        return executeFootnotesGet(requireAdapter(adapters.footnotes, 'footnotes'), input);
+      },
+      insert(input: FootnoteInsertInput, options?: MutationOptions): FootnoteMutationResult {
+        return executeFootnotesInsert(requireAdapter(adapters.footnotes, 'footnotes'), input, options);
+      },
+      update(input: FootnoteUpdateInput, options?: MutationOptions): FootnoteMutationResult {
+        return executeFootnotesUpdate(requireAdapter(adapters.footnotes, 'footnotes'), input, options);
+      },
+      remove(input: FootnoteRemoveInput, options?: MutationOptions): FootnoteMutationResult {
+        return executeFootnotesRemove(requireAdapter(adapters.footnotes, 'footnotes'), input, options);
+      },
+      configure(input: FootnoteConfigureInput, options?: MutationOptions): FootnoteConfigResult {
+        return executeFootnotesConfigure(requireAdapter(adapters.footnotes, 'footnotes'), input, options);
+      },
+    },
+    crossRefs: {
+      list(query?: CrossRefListInput): CrossRefsListResult {
+        return executeCrossRefsList(requireAdapter(adapters.crossRefs, 'crossRefs'), query);
+      },
+      get(input: CrossRefGetInput): CrossRefInfo {
+        return executeCrossRefsGet(requireAdapter(adapters.crossRefs, 'crossRefs'), input);
+      },
+      insert(input: CrossRefInsertInput, options?: MutationOptions): CrossRefMutationResult {
+        return executeCrossRefsInsert(requireAdapter(adapters.crossRefs, 'crossRefs'), input, options);
+      },
+      rebuild(input: CrossRefRebuildInput, options?: MutationOptions): CrossRefMutationResult {
+        return executeCrossRefsRebuild(requireAdapter(adapters.crossRefs, 'crossRefs'), input, options);
+      },
+      remove(input: CrossRefRemoveInput, options?: MutationOptions): CrossRefMutationResult {
+        return executeCrossRefsRemove(requireAdapter(adapters.crossRefs, 'crossRefs'), input, options);
+      },
+    },
+    index: {
+      list(input?: IndexListInput): IndexListResult {
+        return executeIndexList(requireAdapter(adapters.index, 'index'), input);
+      },
+      get(input: IndexGetInput): IndexInfo {
+        return executeIndexGet(requireAdapter(adapters.index, 'index'), input);
+      },
+      insert(input: IndexInsertInput, options?: MutationOptions): IndexMutationResult {
+        return executeIndexInsert(requireAdapter(adapters.index, 'index'), input, options);
+      },
+      configure(input: IndexConfigureInput, options?: MutationOptions): IndexMutationResult {
+        return executeIndexConfigure(requireAdapter(adapters.index, 'index'), input, options);
+      },
+      rebuild(input: IndexRebuildInput, options?: MutationOptions): IndexMutationResult {
+        return executeIndexRebuild(requireAdapter(adapters.index, 'index'), input, options);
+      },
+      remove(input: IndexRemoveInput, options?: MutationOptions): IndexMutationResult {
+        return executeIndexRemove(requireAdapter(adapters.index, 'index'), input, options);
+      },
+      entries: {
+        list(input?: IndexEntryListInput): IndexEntryListResult {
+          return executeIndexEntryList(requireAdapter(adapters.index, 'index'), input);
+        },
+        get(input: IndexEntryGetInput): IndexEntryInfo {
+          return executeIndexEntryGet(requireAdapter(adapters.index, 'index'), input);
+        },
+        insert(input: IndexEntryInsertInput, options?: MutationOptions): IndexEntryMutationResult {
+          return executeIndexEntryInsert(requireAdapter(adapters.index, 'index'), input, options);
+        },
+        update(input: IndexEntryUpdateInput, options?: MutationOptions): IndexEntryMutationResult {
+          return executeIndexEntryUpdate(requireAdapter(adapters.index, 'index'), input, options);
+        },
+        remove(input: IndexEntryRemoveInput, options?: MutationOptions): IndexEntryMutationResult {
+          return executeIndexEntryRemove(requireAdapter(adapters.index, 'index'), input, options);
+        },
+      },
+    },
+    captions: {
+      list(input?: CaptionListInput): CaptionsListResult {
+        return executeCaptionsList(requireAdapter(adapters.captions, 'captions'), input);
+      },
+      get(input: CaptionGetInput): CaptionInfo {
+        return executeCaptionsGet(requireAdapter(adapters.captions, 'captions'), input);
+      },
+      insert(input: CaptionInsertInput, options?: MutationOptions): CaptionMutationResult {
+        return executeCaptionsInsert(requireAdapter(adapters.captions, 'captions'), input, options);
+      },
+      update(input: CaptionUpdateInput, options?: MutationOptions): CaptionMutationResult {
+        return executeCaptionsUpdate(requireAdapter(adapters.captions, 'captions'), input, options);
+      },
+      remove(input: CaptionRemoveInput, options?: MutationOptions): CaptionMutationResult {
+        return executeCaptionsRemove(requireAdapter(adapters.captions, 'captions'), input, options);
+      },
+      configure(input: CaptionConfigureInput, options?: MutationOptions): CaptionConfigResult {
+        return executeCaptionsConfigure(requireAdapter(adapters.captions, 'captions'), input, options);
+      },
+    },
+    fields: {
+      list(query?: FieldListInput): FieldsListResult {
+        return executeFieldsList(requireAdapter(adapters.fields, 'fields'), query);
+      },
+      get(input: FieldGetInput): FieldInfo {
+        return executeFieldsGet(requireAdapter(adapters.fields, 'fields'), input);
+      },
+      insert(input: FieldInsertInput, options?: MutationOptions): FieldMutationResult {
+        return executeFieldsInsert(requireAdapter(adapters.fields, 'fields'), input, options);
+      },
+      rebuild(input: FieldRebuildInput, options?: MutationOptions): FieldMutationResult {
+        return executeFieldsRebuild(requireAdapter(adapters.fields, 'fields'), input, options);
+      },
+      remove(input: FieldRemoveInput, options?: MutationOptions): FieldMutationResult {
+        return executeFieldsRemove(requireAdapter(adapters.fields, 'fields'), input, options);
+      },
+    },
+    citations: {
+      list(query?: CitationListInput): CitationsListResult {
+        return executeCitationsList(requireAdapter(adapters.citations, 'citations'), query);
+      },
+      get(input: CitationGetInput): CitationInfo {
+        return executeCitationsGet(requireAdapter(adapters.citations, 'citations'), input);
+      },
+      insert(input: CitationInsertInput, options?: MutationOptions): CitationMutationResult {
+        return executeCitationsInsert(requireAdapter(adapters.citations, 'citations'), input, options);
+      },
+      update(input: CitationUpdateInput, options?: MutationOptions): CitationMutationResult {
+        return executeCitationsUpdate(requireAdapter(adapters.citations, 'citations'), input, options);
+      },
+      remove(input: CitationRemoveInput, options?: MutationOptions): CitationMutationResult {
+        return executeCitationsRemove(requireAdapter(adapters.citations, 'citations'), input, options);
+      },
+      sources: {
+        list(query?: CitationSourceListInput): CitationSourcesListResult {
+          return executeCitationSourcesList(requireAdapter(adapters.citations, 'citations'), query);
+        },
+        get(input: CitationSourceGetInput): CitationSourceInfo {
+          return executeCitationSourcesGet(requireAdapter(adapters.citations, 'citations'), input);
+        },
+        insert(input: CitationSourceInsertInput, options?: MutationOptions): CitationSourceMutationResult {
+          return executeCitationSourcesInsert(requireAdapter(adapters.citations, 'citations'), input, options);
+        },
+        update(input: CitationSourceUpdateInput, options?: MutationOptions): CitationSourceMutationResult {
+          return executeCitationSourcesUpdate(requireAdapter(adapters.citations, 'citations'), input, options);
+        },
+        remove(input: CitationSourceRemoveInput, options?: MutationOptions): CitationSourceMutationResult {
+          return executeCitationSourcesRemove(requireAdapter(adapters.citations, 'citations'), input, options);
+        },
+      },
+      bibliography: {
+        get(input: BibliographyGetInput): BibliographyInfo {
+          return executeBibliographyGet(requireAdapter(adapters.citations, 'citations'), input);
+        },
+        insert(input: BibliographyInsertInput, options?: MutationOptions): BibliographyMutationResult {
+          return executeBibliographyInsert(requireAdapter(adapters.citations, 'citations'), input, options);
+        },
+        rebuild(input: BibliographyRebuildInput, options?: MutationOptions): BibliographyMutationResult {
+          return executeBibliographyRebuild(requireAdapter(adapters.citations, 'citations'), input, options);
+        },
+        configure(input: BibliographyConfigureInput, options?: MutationOptions): BibliographyMutationResult {
+          return executeBibliographyConfigure(requireAdapter(adapters.citations, 'citations'), input, options);
+        },
+        remove(input: BibliographyRemoveInput, options?: MutationOptions): BibliographyMutationResult {
+          return executeBibliographyRemove(requireAdapter(adapters.citations, 'citations'), input, options);
+        },
+      },
+    },
+    authorities: {
+      list(query?: AuthoritiesListInput): AuthoritiesListResult {
+        return executeAuthoritiesList(requireAdapter(adapters.authorities, 'authorities'), query);
+      },
+      get(input: AuthoritiesGetInput): AuthoritiesInfo {
+        return executeAuthoritiesGet(requireAdapter(adapters.authorities, 'authorities'), input);
+      },
+      insert(input: AuthoritiesInsertInput, options?: MutationOptions): AuthoritiesMutationResult {
+        return executeAuthoritiesInsert(requireAdapter(adapters.authorities, 'authorities'), input, options);
+      },
+      configure(input: AuthoritiesConfigureInput, options?: MutationOptions): AuthoritiesMutationResult {
+        return executeAuthoritiesConfigure(requireAdapter(adapters.authorities, 'authorities'), input, options);
+      },
+      rebuild(input: AuthoritiesRebuildInput, options?: MutationOptions): AuthoritiesMutationResult {
+        return executeAuthoritiesRebuild(requireAdapter(adapters.authorities, 'authorities'), input, options);
+      },
+      remove(input: AuthoritiesRemoveInput, options?: MutationOptions): AuthoritiesMutationResult {
+        return executeAuthoritiesRemove(requireAdapter(adapters.authorities, 'authorities'), input, options);
+      },
+      entries: {
+        list(query?: AuthorityEntryListInput): AuthorityEntryListResult {
+          return executeAuthorityEntriesList(requireAdapter(adapters.authorities, 'authorities'), query);
+        },
+        get(input: AuthorityEntryGetInput): AuthorityEntryInfo {
+          return executeAuthorityEntriesGet(requireAdapter(adapters.authorities, 'authorities'), input);
+        },
+        insert(input: AuthorityEntryInsertInput, options?: MutationOptions): AuthorityEntryMutationResult {
+          return executeAuthorityEntriesInsert(requireAdapter(adapters.authorities, 'authorities'), input, options);
+        },
+        update(input: AuthorityEntryUpdateInput, options?: MutationOptions): AuthorityEntryMutationResult {
+          return executeAuthorityEntriesUpdate(requireAdapter(adapters.authorities, 'authorities'), input, options);
+        },
+        remove(input: AuthorityEntryRemoveInput, options?: MutationOptions): AuthorityEntryMutationResult {
+          return executeAuthorityEntriesRemove(requireAdapter(adapters.authorities, 'authorities'), input, options);
+        },
       },
     },
     query: {

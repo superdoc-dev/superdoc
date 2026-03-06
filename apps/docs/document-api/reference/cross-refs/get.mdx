@@ -1,0 +1,109 @@
+---
+title: crossRefs.get
+sidebarTitle: crossRefs.get
+description: Get detailed information about a specific cross-reference field.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get detailed information about a specific cross-reference field.
+
+- Operation ID: `crossRefs.get`
+- API member path: `editor.doc.crossRefs.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CrossRefInfo object with the cross-reference's target, display, and resolved text.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="inline") | yes |  |
+| `target.anchor` | object | yes |  |
+| `target.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `target.nodeType` | `"crossRef"` | yes | Constant: `"crossRef"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "anchor": {},
+    "kind": "inline",
+    "nodeType": "crossRef"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "type": "object"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "crossRef"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

@@ -210,6 +210,93 @@ import {
   hyperlinksRemoveWrapper,
 } from './plan-engine/hyperlinks-wrappers.js';
 import { createContentControlsAdapter } from './plan-engine/content-controls-wrappers.js';
+import {
+  bookmarksListWrapper,
+  bookmarksGetWrapper,
+  bookmarksInsertWrapper,
+  bookmarksRenameWrapper,
+  bookmarksRemoveWrapper,
+} from './plan-engine/bookmark-wrappers.js';
+import {
+  linksListWrapper,
+  linksGetWrapper,
+  linksInsertWrapper,
+  linksUpdateWrapper,
+  linksRemoveWrapper,
+} from './plan-engine/link-wrappers.js';
+import {
+  footnotesListWrapper,
+  footnotesGetWrapper,
+  footnotesInsertWrapper,
+  footnotesUpdateWrapper,
+  footnotesRemoveWrapper,
+  footnotesConfigureWrapper,
+} from './plan-engine/footnote-wrappers.js';
+import {
+  crossRefsListWrapper,
+  crossRefsGetWrapper,
+  crossRefsInsertWrapper,
+  crossRefsRebuildWrapper,
+  crossRefsRemoveWrapper,
+} from './plan-engine/crossref-wrappers.js';
+import {
+  indexListWrapper,
+  indexGetWrapper,
+  indexInsertWrapper,
+  indexConfigureWrapper,
+  indexRebuildWrapper,
+  indexRemoveWrapper,
+  indexEntriesListWrapper,
+  indexEntriesGetWrapper,
+  indexEntriesInsertWrapper,
+  indexEntriesUpdateWrapper,
+  indexEntriesRemoveWrapper,
+} from './plan-engine/index-wrappers.js';
+import {
+  captionsListWrapper,
+  captionsGetWrapper,
+  captionsInsertWrapper,
+  captionsUpdateWrapper,
+  captionsRemoveWrapper,
+  captionsConfigureWrapper,
+} from './plan-engine/caption-wrappers.js';
+import {
+  fieldsListWrapper,
+  fieldsGetWrapper,
+  fieldsInsertWrapper,
+  fieldsRebuildWrapper,
+  fieldsRemoveWrapper,
+} from './plan-engine/field-wrappers.js';
+import {
+  citationsListWrapper,
+  citationsGetWrapper,
+  citationsInsertWrapper,
+  citationsUpdateWrapper,
+  citationsRemoveWrapper,
+  citationSourcesListWrapper,
+  citationSourcesGetWrapper,
+  citationSourcesInsertWrapper,
+  citationSourcesUpdateWrapper,
+  citationSourcesRemoveWrapper,
+  bibliographyGetWrapper,
+  bibliographyInsertWrapper,
+  bibliographyConfigureWrapper,
+  bibliographyRebuildWrapper,
+  bibliographyRemoveWrapper,
+} from './plan-engine/citation-wrappers.js';
+import {
+  authoritiesListWrapper,
+  authoritiesGetWrapper,
+  authoritiesInsertWrapper,
+  authoritiesConfigureWrapper,
+  authoritiesRebuildWrapper,
+  authoritiesRemoveWrapper,
+  authorityEntriesListWrapper,
+  authorityEntriesGetWrapper,
+  authorityEntriesInsertWrapper,
+  authorityEntriesUpdateWrapper,
+  authorityEntriesRemoveWrapper,
+} from './plan-engine/authority-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -460,6 +547,101 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
     },
     contentControls: ccAdapter,
+    bookmarks: {
+      list: (query) => bookmarksListWrapper(editor, query),
+      get: (input) => bookmarksGetWrapper(editor, input),
+      insert: (input, options) => bookmarksInsertWrapper(editor, input, options),
+      rename: (input, options) => bookmarksRenameWrapper(editor, input, options),
+      remove: (input, options) => bookmarksRemoveWrapper(editor, input, options),
+    },
+    links: {
+      list: (query) => linksListWrapper(editor, query),
+      get: (input) => linksGetWrapper(editor, input),
+      insert: (input, options) => linksInsertWrapper(editor, input, options),
+      update: (input, options) => linksUpdateWrapper(editor, input, options),
+      remove: (input, options) => linksRemoveWrapper(editor, input, options),
+    },
+    footnotes: {
+      list: (query) => footnotesListWrapper(editor, query),
+      get: (input) => footnotesGetWrapper(editor, input),
+      insert: (input, options) => footnotesInsertWrapper(editor, input, options),
+      update: (input, options) => footnotesUpdateWrapper(editor, input, options),
+      remove: (input, options) => footnotesRemoveWrapper(editor, input, options),
+      configure: (input, options) => footnotesConfigureWrapper(editor, input, options),
+    },
+    crossRefs: {
+      list: (query) => crossRefsListWrapper(editor, query),
+      get: (input) => crossRefsGetWrapper(editor, input),
+      insert: (input, options) => crossRefsInsertWrapper(editor, input, options),
+      rebuild: (input, options) => crossRefsRebuildWrapper(editor, input, options),
+      remove: (input, options) => crossRefsRemoveWrapper(editor, input, options),
+    },
+    index: {
+      list: (query) => indexListWrapper(editor, query),
+      get: (input) => indexGetWrapper(editor, input),
+      insert: (input, options) => indexInsertWrapper(editor, input, options),
+      configure: (input, options) => indexConfigureWrapper(editor, input, options),
+      rebuild: (input, options) => indexRebuildWrapper(editor, input, options),
+      remove: (input, options) => indexRemoveWrapper(editor, input, options),
+      entries: {
+        list: (query) => indexEntriesListWrapper(editor, query),
+        get: (input) => indexEntriesGetWrapper(editor, input),
+        insert: (input, options) => indexEntriesInsertWrapper(editor, input, options),
+        update: (input, options) => indexEntriesUpdateWrapper(editor, input, options),
+        remove: (input, options) => indexEntriesRemoveWrapper(editor, input, options),
+      },
+    },
+    captions: {
+      list: (query) => captionsListWrapper(editor, query),
+      get: (input) => captionsGetWrapper(editor, input),
+      insert: (input, options) => captionsInsertWrapper(editor, input, options),
+      update: (input, options) => captionsUpdateWrapper(editor, input, options),
+      remove: (input, options) => captionsRemoveWrapper(editor, input, options),
+      configure: (input, options) => captionsConfigureWrapper(editor, input, options),
+    },
+    fields: {
+      list: (query) => fieldsListWrapper(editor, query),
+      get: (input) => fieldsGetWrapper(editor, input),
+      insert: (input, options) => fieldsInsertWrapper(editor, input, options),
+      rebuild: (input, options) => fieldsRebuildWrapper(editor, input, options),
+      remove: (input, options) => fieldsRemoveWrapper(editor, input, options),
+    },
+    citations: {
+      list: (query) => citationsListWrapper(editor, query),
+      get: (input) => citationsGetWrapper(editor, input),
+      insert: (input, options) => citationsInsertWrapper(editor, input, options),
+      update: (input, options) => citationsUpdateWrapper(editor, input, options),
+      remove: (input, options) => citationsRemoveWrapper(editor, input, options),
+      sources: {
+        list: (query) => citationSourcesListWrapper(editor, query),
+        get: (input) => citationSourcesGetWrapper(editor, input),
+        insert: (input, options) => citationSourcesInsertWrapper(editor, input, options),
+        update: (input, options) => citationSourcesUpdateWrapper(editor, input, options),
+        remove: (input, options) => citationSourcesRemoveWrapper(editor, input, options),
+      },
+      bibliography: {
+        get: (input) => bibliographyGetWrapper(editor, input),
+        insert: (input, options) => bibliographyInsertWrapper(editor, input, options),
+        configure: (input, options) => bibliographyConfigureWrapper(editor, input, options),
+        rebuild: (input, options) => bibliographyRebuildWrapper(editor, input, options),
+        remove: (input, options) => bibliographyRemoveWrapper(editor, input, options),
+      },
+    },
+    authorities: {
+      list: (query) => authoritiesListWrapper(editor, query),
+      get: (input) => authoritiesGetWrapper(editor, input),
+      insert: (input, options) => authoritiesInsertWrapper(editor, input, options),
+      configure: (input, options) => authoritiesConfigureWrapper(editor, input, options),
+      rebuild: (input, options) => authoritiesRebuildWrapper(editor, input, options),
+      remove: (input, options) => authoritiesRemoveWrapper(editor, input, options),
+      entries: {
+        list: (query) => authorityEntriesListWrapper(editor, query),
+        get: (input) => authorityEntriesGetWrapper(editor, input),
+        insert: (input, options) => authorityEntriesInsertWrapper(editor, input, options),
+        update: (input, options) => authorityEntriesUpdateWrapper(editor, input, options),
+        remove: (input, options) => authorityEntriesRemoveWrapper(editor, input, options),
+      },
+    },
     query: {
       match: (input) => queryMatchAdapter(editor, input),
     },

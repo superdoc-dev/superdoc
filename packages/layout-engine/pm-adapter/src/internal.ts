@@ -38,6 +38,8 @@ import {
   handleStructuredContentBlockNode,
   handleDocumentSectionNode,
   handleDocumentPartObjectNode,
+  handleBibliographyNode,
+  handleTableOfAuthoritiesNode,
 } from './sdt/index.js';
 import type {
   PMNode,
@@ -68,6 +70,8 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   documentSection: handleDocumentSectionNode,
   table: handleTableNode,
   documentPartObject: handleDocumentPartObjectNode,
+  bibliography: handleBibliographyNode,
+  tableOfAuthorities: handleTableOfAuthoritiesNode,
   image: handleImageNode,
   vectorShape: handleVectorShapeNode,
   shapeGroup: handleShapeGroupNode,

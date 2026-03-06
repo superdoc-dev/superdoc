@@ -2136,8 +2136,271 @@ function buildContentControlSchemas(): Record<string, OperationSchemaSet> {
     'contentControls.group.ungroup': targetOnlyMutation,
   };
 }
+// Reference namespace schema helpers
+// ---------------------------------------------------------------------------
 
-const operationSchemas = {
+// --- Shared patterns ---
+const refListQuerySchema = objectSchema({
+  limit: { type: 'integer', minimum: 1 },
+  offset: { type: 'integer', minimum: 0 },
+});
+
+const discoveryOutputSchema: JsonSchema = { type: 'object' };
+
+const receiptFailureSchema: JsonSchema = objectSchema(
+  {
+    code: { type: 'string' },
+    message: { type: 'string' },
+    details: {},
+  },
+  ['code', 'message'],
+);
+
+/** Failure branch shared by all reference-namespace mutation results. */
+const refFailureSchema: JsonSchema = objectSchema({ success: { const: false }, failure: receiptFailureSchema }, [
+  'success',
+  'failure',
+]);
+
+/** Creates output, success, and failure schemas for a reference-namespace mutation. */
+function refMutationSchemas(
+  successProperties: Record<string, JsonSchema>,
+  requiredSuccess: string[],
+): { output: JsonSchema; success: JsonSchema; failure: JsonSchema } {
+  const success = objectSchema({ success: { const: true }, ...successProperties }, ['success', ...requiredSuccess]);
+  return {
+    output: { oneOf: [success, refFailureSchema] },
+    success,
+    failure: refFailureSchema,
+  };
+}
+
+/** Creates output, success, and failure schemas for a config-style mutation (no address in success). */
+function refConfigSchemas(): { output: JsonSchema; success: JsonSchema; failure: JsonSchema } {
+  const success = objectSchema({ success: { const: true } }, ['success']);
+  return {
+    output: { oneOf: [success, refFailureSchema] },
+    success,
+    failure: refFailureSchema,
+  };
+}
+
+// --- Bookmark schemas ---
+const bookmarkAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'bookmark' }, name: { type: 'string' } },
+  ['kind', 'entityType', 'name'],
+);
+
+const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
+
+// --- Link schemas ---
+const linkAnchorSchema: JsonSchema = objectSchema({
+  start: { type: 'object' },
+  end: { type: 'object' },
+});
+
+const linkAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'hyperlink' }, anchor: linkAnchorSchema },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const linkDestinationSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'external' }, href: { type: 'string' }, tooltip: { type: 'string' } }, [
+      'kind',
+      'href',
+    ]),
+    objectSchema({ kind: { const: 'internal' }, bookmarkName: { type: 'string' }, tooltip: { type: 'string' } }, [
+      'kind',
+      'bookmarkName',
+    ]),
+  ],
+};
+
+const linkMutation = refMutationSchemas({ link: linkAddressSchema }, ['link']);
+
+// --- Footnote schemas ---
+const footnoteAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'footnote' }, noteId: { type: 'string' } },
+  ['kind', 'entityType', 'noteId'],
+);
+
+const footnoteMutation = refMutationSchemas({ footnote: footnoteAddressSchema }, ['footnote']);
+const footnoteConfig = refConfigSchemas();
+
+// --- CrossRef schemas ---
+const crossRefAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'crossRef' }, anchor: { type: 'object' } },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const crossRefTargetSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'bookmark' }, name: { type: 'string' } }, ['kind', 'name']),
+    objectSchema({ kind: { const: 'heading' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema({ kind: { const: 'note' }, noteId: { type: 'string' } }, ['kind', 'noteId']),
+    objectSchema({ kind: { const: 'caption' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema({ kind: { const: 'numberedItem' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema(
+      { kind: { const: 'styledParagraph' }, styleName: { type: 'string' }, direction: { enum: ['before', 'after'] } },
+      ['kind', 'styleName'],
+    ),
+  ],
+};
+
+const crossRefDisplaySchema: JsonSchema = {
+  enum: [
+    'content',
+    'pageNumber',
+    'noteNumber',
+    'labelAndNumber',
+    'aboveBelow',
+    'numberOnly',
+    'numberFullContext',
+    'styledContent',
+    'styledPageNumber',
+  ],
+};
+
+const crossRefMutation = refMutationSchemas({ crossRef: crossRefAddressSchema }, ['crossRef']);
+
+// --- Index schemas ---
+const indexAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'index' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const indexEntryAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'indexEntry' }, anchor: { type: 'object' } },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const indexConfigSchema: JsonSchema = objectSchema({
+  headingSeparator: { type: 'string' },
+  entryPageSeparator: { type: 'string' },
+  pageRangeSeparator: { type: 'string' },
+  sequenceId: { type: 'string' },
+  columns: { type: 'integer' },
+  entryTypeFilter: { type: 'string' },
+  pageRangeBookmark: { type: 'string' },
+  letterRange: objectSchema({ from: { type: 'string' }, to: { type: 'string' } }, ['from', 'to']),
+  runIn: { type: 'boolean' },
+  accentedSorting: { type: 'boolean' },
+});
+
+const indexEntryDataSchema: JsonSchema = objectSchema(
+  {
+    text: { type: 'string' },
+    subEntry: { type: 'string' },
+    bold: { type: 'boolean' },
+    italic: { type: 'boolean' },
+    crossReference: { type: 'string' },
+    pageRangeBookmark: { type: 'string' },
+    entryType: { type: 'string' },
+    yomi: { type: 'string' },
+  },
+  ['text'],
+);
+
+const indexEntryPatchSchema: JsonSchema = objectSchema({
+  text: { type: 'string' },
+  subEntry: { type: 'string' },
+  bold: { type: 'boolean' },
+  italic: { type: 'boolean' },
+  crossReference: { type: 'string' },
+  pageRangeBookmark: { type: 'string' },
+  entryType: { type: 'string' },
+  yomi: { type: 'string' },
+});
+
+const indexMutation = refMutationSchemas({ index: indexAddressSchema }, ['index']);
+const indexEntryMutation = refMutationSchemas({ entry: indexEntryAddressSchema }, ['entry']);
+
+// --- Caption schemas ---
+const captionAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'paragraph' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const captionMutation = refMutationSchemas({ caption: captionAddressSchema }, ['caption']);
+const captionConfig = refConfigSchemas();
+
+// --- Field schemas ---
+const fieldAddressSchema: JsonSchema = objectSchema(
+  {
+    kind: { const: 'field' },
+    blockId: { type: 'string' },
+    occurrenceIndex: { type: 'integer' },
+    nestingDepth: { type: 'integer' },
+  },
+  ['kind', 'blockId', 'occurrenceIndex'],
+);
+
+const fieldMutation = refMutationSchemas({ field: fieldAddressSchema }, ['field']);
+
+// --- Citation schemas ---
+const citationAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'citation' }, anchor: { type: 'object' } },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const citationSourceAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'citationSource' }, sourceId: { type: 'string' } },
+  ['kind', 'entityType', 'sourceId'],
+);
+
+const bibliographyAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'bibliography' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const citationMutation = refMutationSchemas({ citation: citationAddressSchema }, ['citation']);
+const citationSourceMutation = refMutationSchemas({ source: citationSourceAddressSchema }, ['source']);
+const bibliographyMutation = refMutationSchemas({ bibliography: bibliographyAddressSchema }, ['bibliography']);
+
+// --- Authorities schemas ---
+const authoritiesAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'tableOfAuthorities' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const authorityEntryAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'authorityEntry' }, anchor: { type: 'object' } },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const authoritiesConfigSchema: JsonSchema = objectSchema({
+  category: { type: 'integer' },
+  entryPageSeparator: { type: 'string' },
+  usePassim: { type: 'boolean' },
+  includeHeadings: { type: 'boolean' },
+  tabLeader: { type: 'string' },
+  pageRangeSeparator: { type: 'string' },
+});
+
+const authorityEntryDataSchema: JsonSchema = objectSchema(
+  {
+    longCitation: { type: 'string' },
+    shortCitation: { type: 'string' },
+    category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+    bold: { type: 'boolean' },
+    italic: { type: 'boolean' },
+  },
+  ['longCitation', 'category'],
+);
+
+const authorityEntryPatchSchema: JsonSchema = objectSchema({
+  longCitation: { type: 'string' },
+  shortCitation: { type: 'string' },
+  category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+  bold: { type: 'boolean' },
+  italic: { type: 'boolean' },
+});
+
+const authoritiesMutation = refMutationSchemas({ authorities: authoritiesAddressSchema }, ['authorities']);
+const authorityEntryMutation = refMutationSchemas({ entry: authorityEntryAddressSchema }, ['entry']);
+
+const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   get: {
     input: objectSchema({
       options: objectSchema({
@@ -5065,6 +5328,392 @@ const operationSchemas = {
   // Content Controls (SD-2070) — schemas
   // =========================================================================
   ...buildContentControlSchemas(),
+  // -------------------------------------------------------------------------
+  // Bookmarks
+  // -------------------------------------------------------------------------
+  'bookmarks.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'bookmarks.get': {
+    input: objectSchema({ target: bookmarkAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'bookmarks.insert': {
+    input: objectSchema(
+      {
+        name: { type: 'string' },
+        at: { type: 'object' },
+        tableColumn: objectSchema({ colFirst: { type: 'integer' }, colLast: { type: 'integer' } }, [
+          'colFirst',
+          'colLast',
+        ]),
+      },
+      ['name', 'at'],
+    ),
+    ...bookmarkMutation,
+  },
+  'bookmarks.rename': {
+    input: objectSchema({ target: bookmarkAddressSchema, newName: { type: 'string' } }, ['target', 'newName']),
+    ...bookmarkMutation,
+  },
+  'bookmarks.remove': {
+    input: objectSchema({ target: bookmarkAddressSchema }, ['target']),
+    ...bookmarkMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Links
+  // -------------------------------------------------------------------------
+  'links.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'links.get': {
+    input: objectSchema({ target: linkAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'links.insert': {
+    input: objectSchema({ at: { type: 'object' }, destination: linkDestinationSchema }, ['at', 'destination']),
+    ...linkMutation,
+  },
+  'links.update': {
+    input: objectSchema(
+      {
+        target: linkAddressSchema,
+        patch: objectSchema({ destination: linkDestinationSchema, tooltip: { type: 'string' } }),
+      },
+      ['target', 'patch'],
+    ),
+    ...linkMutation,
+  },
+  'links.remove': {
+    input: objectSchema({ target: linkAddressSchema }, ['target']),
+    ...linkMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Footnotes
+  // -------------------------------------------------------------------------
+  'footnotes.list': {
+    input: objectSchema({
+      type: { enum: ['footnote', 'endnote'] },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'footnotes.get': {
+    input: objectSchema({ target: footnoteAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'footnotes.insert': {
+    input: objectSchema(
+      { at: { type: 'object' }, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } },
+      ['at', 'type', 'content'],
+    ),
+    ...footnoteMutation,
+  },
+  'footnotes.update': {
+    input: objectSchema({ target: footnoteAddressSchema, patch: objectSchema({ content: { type: 'string' } }) }, [
+      'target',
+      'patch',
+    ]),
+    ...footnoteMutation,
+  },
+  'footnotes.remove': {
+    input: objectSchema({ target: footnoteAddressSchema }, ['target']),
+    ...footnoteMutation,
+  },
+  'footnotes.configure': {
+    input: objectSchema(
+      {
+        type: { enum: ['footnote', 'endnote'] },
+        scope: { type: 'object' },
+        numbering: { type: 'object' },
+      },
+      ['type', 'scope'],
+    ),
+    ...footnoteConfig,
+  },
+
+  // -------------------------------------------------------------------------
+  // Cross-References
+  // -------------------------------------------------------------------------
+  'crossRefs.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'crossRefs.get': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'crossRefs.insert': {
+    input: objectSchema({ at: { type: 'object' }, target: crossRefTargetSchema, display: crossRefDisplaySchema }, [
+      'at',
+      'target',
+      'display',
+    ]),
+    ...crossRefMutation,
+  },
+  'crossRefs.rebuild': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    ...crossRefMutation,
+  },
+  'crossRefs.remove': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    ...crossRefMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Index
+  // -------------------------------------------------------------------------
+  'index.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'index.get': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'index.insert': {
+    input: objectSchema({ at: { type: 'object' }, config: indexConfigSchema }, ['at']),
+    ...indexMutation,
+  },
+  'index.configure': {
+    input: objectSchema({ target: indexAddressSchema, patch: indexConfigSchema }, ['target', 'patch']),
+    ...indexMutation,
+  },
+  'index.rebuild': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    ...indexMutation,
+  },
+  'index.remove': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    ...indexMutation,
+  },
+
+  // --- Index entries ---
+  'index.entries.list': {
+    input: objectSchema({ entryType: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'index.entries.get': {
+    input: objectSchema({ target: indexEntryAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'index.entries.insert': {
+    input: objectSchema({ at: { type: 'object' }, entry: indexEntryDataSchema }, ['at', 'entry']),
+    ...indexEntryMutation,
+  },
+  'index.entries.update': {
+    input: objectSchema({ target: indexEntryAddressSchema, patch: indexEntryPatchSchema }, ['target', 'patch']),
+    ...indexEntryMutation,
+  },
+  'index.entries.remove': {
+    input: objectSchema({ target: indexEntryAddressSchema }, ['target']),
+    ...indexEntryMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Captions
+  // -------------------------------------------------------------------------
+  'captions.list': {
+    input: objectSchema({ label: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'captions.get': {
+    input: objectSchema({ target: captionAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'captions.insert': {
+    input: objectSchema(
+      {
+        adjacentTo: { type: 'object' },
+        position: { enum: ['above', 'below'] },
+        label: { type: 'string' },
+        text: { type: 'string' },
+      },
+      ['adjacentTo', 'position', 'label'],
+    ),
+    ...captionMutation,
+  },
+  'captions.update': {
+    input: objectSchema({ target: captionAddressSchema, patch: objectSchema({ text: { type: 'string' } }) }, [
+      'target',
+      'patch',
+    ]),
+    ...captionMutation,
+  },
+  'captions.remove': {
+    input: objectSchema({ target: captionAddressSchema }, ['target']),
+    ...captionMutation,
+  },
+  'captions.configure': {
+    input: objectSchema(
+      {
+        label: { type: 'string' },
+        format: { enum: ['decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter'] },
+        includeChapter: { type: 'boolean' },
+        chapterStyle: { type: 'string' },
+      },
+      ['label'],
+    ),
+    ...captionConfig,
+  },
+
+  // -------------------------------------------------------------------------
+  // Fields
+  // -------------------------------------------------------------------------
+  'fields.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'fields.get': {
+    input: objectSchema({ target: fieldAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'fields.insert': {
+    input: objectSchema({ mode: { const: 'raw' }, at: { type: 'object' }, instruction: { type: 'string' } }, [
+      'mode',
+      'at',
+      'instruction',
+    ]),
+    ...fieldMutation,
+  },
+  'fields.rebuild': {
+    input: objectSchema({ target: fieldAddressSchema }, ['target']),
+    ...fieldMutation,
+  },
+  'fields.remove': {
+    input: objectSchema({ mode: { const: 'raw' }, target: fieldAddressSchema }, ['mode', 'target']),
+    ...fieldMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations
+  // -------------------------------------------------------------------------
+  'citations.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'citations.get': {
+    input: objectSchema({ target: citationAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.insert': {
+    input: objectSchema({ at: { type: 'object' }, sourceIds: { type: 'array', items: { type: 'string' } } }, [
+      'at',
+      'sourceIds',
+    ]),
+    ...citationMutation,
+  },
+  'citations.update': {
+    input: objectSchema({ target: citationAddressSchema, patch: { type: 'object' } }, ['target', 'patch']),
+    ...citationMutation,
+  },
+  'citations.remove': {
+    input: objectSchema({ target: citationAddressSchema }, ['target']),
+    ...citationMutation,
+  },
+
+  // --- Citations: sources ---
+  'citations.sources.list': {
+    input: objectSchema({ type: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'citations.sources.get': {
+    input: objectSchema({ target: citationSourceAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.sources.insert': {
+    input: objectSchema({ type: { type: 'string' }, fields: { type: 'object' } }, ['type', 'fields']),
+    ...citationSourceMutation,
+  },
+  'citations.sources.update': {
+    input: objectSchema({ target: citationSourceAddressSchema, patch: { type: 'object' } }, ['target', 'patch']),
+    ...citationSourceMutation,
+  },
+  'citations.sources.remove': {
+    input: objectSchema({ target: citationSourceAddressSchema }, ['target']),
+    ...citationSourceMutation,
+  },
+
+  // --- Citations: bibliography ---
+  'citations.bibliography.get': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.bibliography.insert': {
+    input: objectSchema({ at: { type: 'object' }, style: { type: 'string' } }, ['at']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.rebuild': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.configure': {
+    input: objectSchema({ style: { type: 'string' } }, ['style']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.remove': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    ...bibliographyMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Authorities
+  // -------------------------------------------------------------------------
+  'authorities.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'authorities.get': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'authorities.insert': {
+    input: objectSchema({ at: { type: 'object' }, config: authoritiesConfigSchema }, ['at']),
+    ...authoritiesMutation,
+  },
+  'authorities.configure': {
+    input: objectSchema({ target: authoritiesAddressSchema, patch: authoritiesConfigSchema }, ['target', 'patch']),
+    ...authoritiesMutation,
+  },
+  'authorities.rebuild': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    ...authoritiesMutation,
+  },
+  'authorities.remove': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    ...authoritiesMutation,
+  },
+
+  // --- Authorities: entries ---
+  'authorities.entries.list': {
+    input: objectSchema({
+      category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'authorities.entries.get': {
+    input: objectSchema({ target: authorityEntryAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'authorities.entries.insert': {
+    input: objectSchema({ at: { type: 'object' }, entry: authorityEntryDataSchema }, ['at', 'entry']),
+    ...authorityEntryMutation,
+  },
+  'authorities.entries.update': {
+    input: objectSchema({ target: authorityEntryAddressSchema, patch: authorityEntryPatchSchema }, ['target', 'patch']),
+    ...authorityEntryMutation,
+  },
+  'authorities.entries.remove': {
+    input: objectSchema({ target: authorityEntryAddressSchema }, ['target']),
+    ...authorityEntryMutation,
+  },
 };
 
 /**

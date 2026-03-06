@@ -1,0 +1,123 @@
+---
+title: links.get
+sidebarTitle: links.get
+description: Get detailed information about a specific hyperlink.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get detailed information about a specific hyperlink.
+
+- Operation ID: `links.get`
+- API member path: `editor.doc.links.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a LinkInfo object with the link's destination, tooltip, and display text.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="inline") | yes |  |
+| `target.anchor` | object | yes |  |
+| `target.anchor.end` | object | no |  |
+| `target.anchor.start` | object | no |  |
+| `target.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `target.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "anchor": {
+      "end": {},
+      "start": {}
+    },
+    "kind": "inline",
+    "nodeType": "hyperlink"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "type": "object"
+            },
+            "start": {
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "hyperlink"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

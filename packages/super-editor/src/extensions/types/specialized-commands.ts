@@ -68,6 +68,8 @@ export interface SpecializedCommandAugmentations {
   insertBookmark: (config: BookmarkConfig) => boolean;
   goToBookmark: (name: string) => boolean;
   insertBookmarkEnd: (id: string) => boolean;
+  renameBookmark: (name: string, newName: string) => boolean;
+  removeBookmark: (name: string) => boolean;
 
   // Search
   goToFirstMatch: () => boolean;

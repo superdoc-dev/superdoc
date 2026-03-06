@@ -1,0 +1,321 @@
+---
+title: links.insert
+sidebarTitle: links.insert
+description: Insert a new hyperlink at a target location.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert a new hyperlink at a target location.
+
+- Operation ID: `links.insert`
+- API member path: `editor.doc.links.insert(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a LinkMutationResult indicating success with the link address or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `at` | object | yes |  |
+| `destination` | object(kind="external") \\| object(kind="internal") | yes | One of: object(kind="external"), object(kind="internal") |
+
+### Example request
+
+```json
+{
+  "at": {},
+  "destination": {
+    "href": "example",
+    "kind": "external",
+    "tooltip": "example"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (link.kind="inline")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `link` | object(kind="inline") | yes |  |
+| `link.anchor` | object | yes |  |
+| `link.anchor.end` | object | no |  |
+| `link.anchor.start` | object | no |  |
+| `link.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `link.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "link": {
+    "anchor": {
+      "end": {},
+      "start": {}
+    },
+    "kind": "inline",
+    "nodeType": "hyperlink"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "at": {
+      "type": "object"
+    },
+    "destination": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "href": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "external"
+            },
+            "tooltip": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "href"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bookmarkName": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "internal"
+            },
+            "tooltip": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "bookmarkName"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "at",
+    "destination"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "link": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "type": "object"
+                },
+                "start": {
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "kind": {
+              "const": "inline"
+            },
+            "nodeType": {
+              "const": "hyperlink"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "anchor"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "link"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "link": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "type": "object"
+            },
+            "start": {
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "hyperlink"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "link"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

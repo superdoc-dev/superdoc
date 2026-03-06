@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 
 // ── Hoisted mock objects (available to vi.mock factories) ─────────────
 const { mockDecoSet, mockPluginKeyInstance } = vi.hoisted(() => {
@@ -69,8 +70,6 @@ import { urlToFile, validateUrlAccessibility } from './handleUrl';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────
-const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
-
 const createImageNode = (attrs) => ({
   type: { name: 'image' },
   attrs,
@@ -240,5 +239,52 @@ describe('registerRelativeImages (via handleBrowserPath)', () => {
       originalSrc: 'word/media/photo.jpg',
     });
     expect(view.dispatch).toHaveBeenCalled();
+  });
+
+  it('skips duplicate relative URL when the first is still being registered', async () => {
+    // Create a deferred promise so the first urlToFile call hangs
+    let resolveFirst;
+    const firstCall = new Promise((r) => (resolveFirst = r));
+    urlToFile.mockReturnValueOnce(firstCall);
+
+    const imageA = { node: createImageNode({ src: 'assets/dup.png' }), pos: 0, id: {} };
+    const imageB = { node: createImageNode({ src: 'assets/dup.png' }), pos: 5, id: {} };
+
+    // Both arrive in the same batch
+    handleBrowserPath([imageA, imageB], editor, view, { tr: createTrStub() });
+    await flushPromises();
+
+    // Only one fetch is initiated — the second is blocked by pendingRelativeRegistrations
+    expect(urlToFile).toHaveBeenCalledTimes(1);
+
+    // Complete the first registration
+    resolveFirst(null);
+    await flushPromises();
+
+    // pendingRelativeRegistrations is cleaned up so a future insert could register again
+    expect(editor.storage.image.pendingRelativeRegistrations.size).toBe(0);
+  });
+
+  it('does not register or dispatch when urlToFile returns null (fetch failure)', async () => {
+    urlToFile.mockResolvedValueOnce(null);
+
+    const foundImages = [{ node: createImageNode({ src: 'assets/missing.png' }), pos: 0, id: {} }];
+
+    handleBrowserPath(foundImages, editor, view, { tr: createTrStub() });
+    await flushPromises();
+
+    expect(urlToFile).toHaveBeenCalledWith('assets/missing.png', 'missing.png');
+
+    // No media stored
+    expect(Object.keys(editor.storage.image.media)).toHaveLength(0);
+
+    // No relationship created
+    expect(addImageRelationship).not.toHaveBeenCalled();
+
+    // No transaction dispatched
+    expect(view.dispatch).not.toHaveBeenCalled();
+
+    // Pending set cleaned up so the src can be retried later
+    expect(editor.storage.image.pendingRelativeRegistrations.has('assets/missing.png')).toBe(false);
   });
 });

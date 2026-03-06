@@ -1,5 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
@@ -229,6 +229,11 @@ import {
 } from '../plan-engine/authority-wrappers.js';
 import { registerBuiltInExecutors } from '../plan-engine/register-executors.js';
 import { getRevision, initRevision } from '../plan-engine/revision-tracker.js';
+import { registerPartDescriptor, clearPartDescriptors } from '../../core/parts/registry/part-registry.js';
+import { numberingPartDescriptor } from '../../core/parts/adapters/numbering-part-descriptor.js';
+import { settingsPartDescriptor } from '../../core/parts/adapters/settings-part-descriptor.js';
+import { stylesPartDescriptor } from '../../core/parts/adapters/styles-part-descriptor.js';
+import { clearInvalidationHandlers } from '../../core/parts/invalidation/part-invalidation-registry.js';
 import { executePlan } from '../plan-engine/executor.js';
 import { toCanonicalTrackedChangeId } from '../helpers/tracked-change-resolver.js';
 import { writeAdapter } from '../write-adapter.js';
@@ -816,16 +821,40 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
   return {
     state: { doc, tr },
     dispatch: vi.fn(),
+    emit: vi.fn(),
     view: { dispatch: vi.fn() },
     commands: {
       ...baseCommands,
       ...commandOverrides,
     },
     converter: {
+      convertedXml: {
+        'word/numbering.xml': {
+          elements: [{ type: 'element', name: 'w:numbering', elements: [] }],
+        },
+      },
       numbering: { definitions: {}, abstracts: {} },
       translatedNumbering: { definitions: {} },
+      documentModified: false,
+      documentGuid: 'test-guid',
     },
   } as unknown as Editor;
+}
+
+/**
+ * Modify `converter.numbering.abstracts` so that `syncNumberingToXmlTree`
+ * produces a detectable diff inside `mutatePart`. Without this, mocks that
+ * return `true` / `{ changed: true }` without touching numbering data cause
+ * `mutatePart` to see no change and return `{ changed: false }`.
+ */
+function injectNumberingChange(editor: unknown): void {
+  const ed = editor as { converter: { numbering: { abstracts: Record<number, unknown> } } };
+  ed.converter.numbering.abstracts[1] = {
+    type: 'element',
+    name: 'w:abstractNum',
+    attributes: { 'w:abstractNumId': '1' },
+    elements: [{ type: 'element', name: 'w:lvl', attributes: { 'w:ilvl': '0' }, elements: [] }],
+  };
 }
 
 function makeBlockDeleteEditor(
@@ -4884,10 +4913,13 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const applySpy = vi
         .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
-        .mockReturnValue({ changed: true, levelsApplied: [0] });
-      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
       const result = listsApplyTemplateWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         template: { version: 1, levels: [{ level: 0, numFmt: 'upperRoman', lvlText: '%1.' }] },
@@ -4915,13 +4947,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const applySpy = vi
-        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
-        .mockReturnValue({ changed: true, levelsApplied: [0] });
       const presetSpy = vi
         .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
         .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
       const result = listsApplyPresetWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         preset: 'decimal',
@@ -4950,13 +4985,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const applySpy = vi
-        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
-        .mockReturnValue({ changed: true, levelsApplied: [0] });
       const presetSpy = vi
         .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
         .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
       const result = listsSetTypeWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         kind: 'ordered',
@@ -4993,8 +5031,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberingFormat').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberingFormat').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelNumberingWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5027,8 +5068,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelBulletMarker').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelBulletMarker').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelBulletWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5060,8 +5104,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelPictureBulletId').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelPictureBulletId').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelPictureBulletWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5093,8 +5140,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelAlignment').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelAlignment').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelAlignmentWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5127,8 +5177,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelIndents').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelIndents').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelIndentsWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5161,8 +5214,13 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelTrailingCharacter').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi
+        .spyOn(LevelFormattingHelpers, 'setLevelTrailingCharacter')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return true;
+        });
       const result = listsSetLevelTrailingCharacterWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5194,8 +5252,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelMarkerFont').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelMarkerFont').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelMarkerFontWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5225,8 +5286,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const hasSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevelOverride').mockReturnValue(true);
-      const clearSpy = vi.spyOn(LevelFormattingHelpers, 'clearLevelOverride').mockImplementation(() => {});
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const clearSpy = vi.spyOn(LevelFormattingHelpers, 'clearLevelOverride').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+      });
       const result = listsClearLevelOverridesWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -8433,6 +8496,9 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'lists.setType': () => {
     const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const presetSpy = vi
+      .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
+      .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetTypeWrapper(
       editor,
@@ -8440,6 +8506,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     abstractSpy.mockRestore();
+    presetSpy.mockRestore();
     return result;
   },
   'lists.setLevelNumbering': () => {
@@ -9666,6 +9733,9 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
 
 beforeEach(() => {
   registerBuiltInExecutors();
+  registerPartDescriptor(numberingPartDescriptor);
+  registerPartDescriptor(settingsPartDescriptor);
+  registerPartDescriptor(stylesPartDescriptor);
   vi.restoreAllMocks();
   mockedDeps.resolveCommentAnchorsById.mockReset();
   mockedDeps.resolveCommentAnchorsById.mockImplementation(() => []);
@@ -9691,6 +9761,11 @@ beforeEach(() => {
   refResolverMocks.getSourcesFromConverter.mockImplementation(() => []);
   refResolverMocks.findAllAuthorities.mockImplementation(() => []);
   refResolverMocks.findAllAuthorityEntries.mockImplementation(() => []);
+});
+
+afterEach(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
 });
 
 describe('document-api adapter conformance', () => {

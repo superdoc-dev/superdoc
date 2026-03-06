@@ -87,6 +87,11 @@ import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
+import { registerPartDescriptor } from '../core/parts/registry/part-registry.js';
+import { stylesPartDescriptor } from '../core/parts/adapters/styles-part-descriptor.js';
+import { settingsPartDescriptor } from '../core/parts/adapters/settings-part-descriptor.js';
+import { relsPartDescriptor } from '../core/parts/adapters/rels-part-descriptor.js';
+import { numberingPartDescriptor } from '../core/parts/adapters/numbering-part-descriptor.js';
 import { createTableWrapper } from './plan-engine/create-table-wrapper.js';
 import {
   createSectionBreakAdapter,
@@ -313,6 +318,10 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   registerBuiltInExecutors();
   initRevision(editor);
   trackRevisions(editor);
+  registerPartDescriptor(stylesPartDescriptor);
+  registerPartDescriptor(settingsPartDescriptor);
+  registerPartDescriptor(relsPartDescriptor);
+  registerPartDescriptor(numberingPartDescriptor);
 
   const ccAdapter = createContentControlsAdapter(editor);
 

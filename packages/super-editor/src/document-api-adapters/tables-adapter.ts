@@ -87,7 +87,8 @@ import {
   removeDefaultTableStyle,
   type ConverterWithDocumentSettings,
 } from './document-settings.js';
-import { executeOutOfBandMutation } from './out-of-band-mutation.js';
+import { mutatePart } from '../core/parts/mutation/mutate-part.js';
+import type { PartId } from '../core/parts/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -97,6 +98,7 @@ const POINTS_TO_PIXELS = 96 / 72;
 const POINTS_TO_TWIPS = 20;
 const PIXELS_TO_TWIPS = 1440 / 96;
 const DEFAULT_TABLE_GRID_WIDTH_TWIPS = 1500;
+const SETTINGS_PART: PartId = 'word/settings.xml';
 
 function generateParaId(): string {
   return Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
@@ -3734,37 +3736,31 @@ export function tablesSetDefaultStyleAdapter(
     );
   }
 
-  return executeOutOfBandMutation<DocumentMutationResult>(
+  const result = mutatePart({
     editor,
-    (dryRun) => {
+    partId: SETTINGS_PART,
+    operation: 'mutate',
+    source: 'tables.setDefaultStyle',
+    dryRun: options?.dryRun === true,
+    expectedRevision: options?.expectedRevision,
+    mutate({ dryRun: isDryRun }) {
       const existingRoot = readSettingsRoot(converter);
       const current = existingRoot ? readDefaultTableStyle(existingRoot) : null;
 
       if (current === input.styleId) {
-        return {
-          changed: false,
-          payload: toDocumentMutationFailure(
-            'NO_OP',
-            'tables.setDefaultStyle did not produce a document settings change.',
-          ),
-        };
+        return toDocumentMutationFailure('NO_OP', 'tables.setDefaultStyle did not produce a document settings change.');
       }
 
-      if (!dryRun) {
+      if (!isDryRun) {
         const settingsRoot = ensureSettingsRoot(converter);
         setDefaultTableStyle(settingsRoot, input.styleId);
       }
 
-      return {
-        changed: true,
-        payload: toDocumentMutationSuccess(),
-      };
+      return toDocumentMutationSuccess();
     },
-    {
-      dryRun: options?.dryRun === true,
-      expectedRevision: options?.expectedRevision,
-    },
-  );
+  });
+
+  return result.result as DocumentMutationResult;
 }
 
 export function tablesClearDefaultStyleAdapter(
@@ -3782,35 +3778,32 @@ export function tablesClearDefaultStyleAdapter(
     );
   }
 
-  return executeOutOfBandMutation<DocumentMutationResult>(
+  const result = mutatePart({
     editor,
-    (dryRun) => {
+    partId: SETTINGS_PART,
+    operation: 'mutate',
+    source: 'tables.clearDefaultStyle',
+    dryRun: options?.dryRun === true,
+    expectedRevision: options?.expectedRevision,
+    mutate({ dryRun: isDryRun }) {
       const existingRoot = readSettingsRoot(converter);
       const current = existingRoot ? readDefaultTableStyle(existingRoot) : null;
 
       if (current === null) {
-        return {
-          changed: false,
-          payload: toDocumentMutationFailure(
-            'NO_OP',
-            'tables.clearDefaultStyle did not produce a document settings change.',
-          ),
-        };
+        return toDocumentMutationFailure(
+          'NO_OP',
+          'tables.clearDefaultStyle did not produce a document settings change.',
+        );
       }
 
-      if (!dryRun) {
+      if (!isDryRun) {
         const settingsRoot = ensureSettingsRoot(converter);
         removeDefaultTableStyle(settingsRoot);
       }
 
-      return {
-        changed: true,
-        payload: toDocumentMutationSuccess(),
-      };
+      return toDocumentMutationSuccess();
     },
-    {
-      dryRun: options?.dryRun === true,
-      expectedRevision: options?.expectedRevision,
-    },
-  );
+  });
+
+  return result.result as DocumentMutationResult;
 }

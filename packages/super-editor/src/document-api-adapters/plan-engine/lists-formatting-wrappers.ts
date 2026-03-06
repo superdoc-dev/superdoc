@@ -31,7 +31,9 @@ import type {
   ReceiptFailureCode,
 } from '@superdoc/document-api';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
-import { executeDomainCommand } from './plan-wrappers.js';
+import { mutatePart } from '../../core/parts/mutation/mutate-part.js';
+import { syncNumberingToXmlTree } from '../../core/parts/adapters/numbering-part-descriptor.js';
+import type { PartId } from '../../core/parts/types.js';
 import { resolveListItem, type ListItemProjection } from '../helpers/list-item-resolver.js';
 import { getAbstractNumId, getContiguousSequence, findAdjacentSequence } from '../helpers/list-sequence-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
@@ -177,11 +179,24 @@ function resolveTargetAbstract(
 // Single-level mutation helper (DRY pattern for all setLevel* operations)
 // ---------------------------------------------------------------------------
 
+const NUMBERING_PART: PartId = 'word/numbering.xml';
+
+function getConverterNumbering(editor: Editor): {
+  abstracts: Record<number, unknown>;
+  definitions: Record<number, unknown>;
+} {
+  return (
+    editor as unknown as {
+      converter?: { numbering: { abstracts: Record<number, unknown>; definitions: Record<number, unknown> } };
+    }
+  ).converter!.numbering;
+}
+
 /**
  * Execute a single-level mutation operation on an abstract definition.
  * Handles: tracked mode rejection, target resolution, level validation,
  * level existence check, dry-run short-circuit, no-op detection, and
- * domain command execution.
+ * mutation via the centralized parts pipeline.
  */
 function executeSingleLevelMutation(
   editor: Editor,
@@ -211,20 +226,26 @@ function executeSingleLevelMutation(
     return { success: true, item: targetResult.resolved.address };
   }
 
-  const receipt = executeDomainCommand(
+  const result = mutatePart({
     editor,
-    () => {
+    partId: NUMBERING_PART,
+    operation: 'mutate',
+    source: operationId,
+    expectedRevision: options?.expectedRevision,
+    mutate({ part }) {
       const changed = mutate(targetResult.abstractNumId, level);
       if (!changed) return false;
-      dispatchEditorTransaction(editor, editor.state.tr);
+      syncNumberingToXmlTree(part, getConverterNumbering(editor));
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (!result.changed) {
     return toListsFailure('NO_OP', `${operationId}: values already match.`, { target });
   }
+
+  // Dispatch empty PM transaction to trigger re-render after numbering change
+  dispatchEditorTransaction(editor, editor.state.tr);
 
   return { success: true, item: targetResult.resolved.address };
 }
@@ -260,32 +281,37 @@ export function listsApplyTemplateWrapper(
 
   let applyError: string | undefined;
 
-  const receipt = executeDomainCommand(
+  const result = mutatePart({
     editor,
-    () => {
-      const result = LevelFormattingHelpers.applyTemplateToAbstract(
+    partId: NUMBERING_PART,
+    operation: 'mutate',
+    source: 'lists.applyTemplate',
+    expectedRevision: options?.expectedRevision,
+    mutate({ part }) {
+      const applyResult = LevelFormattingHelpers.applyTemplateToAbstract(
         editor,
         targetResult.abstractNumId,
         input.template,
         input.levels,
       ) as { changed: boolean; error?: string };
-      if (result.error) {
-        applyError = result.error;
+      if (applyResult.error) {
+        applyError = applyResult.error;
         return false;
       }
-      if (!result.changed) return false;
-      dispatchEditorTransaction(editor, editor.state.tr);
+      if (!applyResult.changed) return false;
+      syncNumberingToXmlTree(part, getConverterNumbering(editor));
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
   if (applyError) {
     return toApplyTemplateError(applyError, input.target);
   }
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (!result.changed) {
     return toListsFailure('NO_OP', 'All template levels already match.', { target: input.target });
   }
+
+  dispatchEditorTransaction(editor, editor.state.tr);
 
   return { success: true, item: targetResult.resolved.address };
 }
@@ -318,32 +344,37 @@ export function listsApplyPresetWrapper(
 
   let applyError: string | undefined;
 
-  const receipt = executeDomainCommand(
+  const result = mutatePart({
     editor,
-    () => {
-      const result = LevelFormattingHelpers.applyTemplateToAbstract(
+    partId: NUMBERING_PART,
+    operation: 'mutate',
+    source: 'lists.applyPreset',
+    expectedRevision: options?.expectedRevision,
+    mutate({ part }) {
+      const applyResult = LevelFormattingHelpers.applyTemplateToAbstract(
         editor,
         targetResult.abstractNumId,
         template,
         input.levels,
       ) as { changed: boolean; error?: string };
-      if (result.error) {
-        applyError = result.error;
+      if (applyResult.error) {
+        applyError = applyResult.error;
         return false;
       }
-      if (!result.changed) return false;
-      dispatchEditorTransaction(editor, editor.state.tr);
+      if (!applyResult.changed) return false;
+      syncNumberingToXmlTree(part, getConverterNumbering(editor));
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
   if (applyError) {
     return toApplyTemplateError(applyError, input.target);
   }
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (!result.changed) {
     return toListsFailure('NO_OP', 'All preset levels already match.', { target: input.target });
   }
+
+  dispatchEditorTransaction(editor, editor.state.tr);
 
   return { success: true, item: targetResult.resolved.address };
 }
@@ -438,13 +469,16 @@ export function listsSetTypeWrapper(
 
   const continuity = input.continuity ?? 'preserve';
   let applyError: string | undefined;
+  let didAnything = false;
 
-  const receipt = executeDomainCommand(
+  // Phase 1: Apply the preset formatting via mutatePart
+  const formatResult = mutatePart({
     editor,
-    () => {
-      let didAnything = false;
-
-      // Phase 1: Apply the preset to change the formatting
+    partId: NUMBERING_PART,
+    operation: 'mutate',
+    source: 'lists.setType',
+    expectedRevision: options?.expectedRevision,
+    mutate({ part }) {
       const result = LevelFormattingHelpers.applyTemplateToAbstract(
         editor,
         targetResult.abstractNumId,
@@ -455,39 +489,43 @@ export function listsSetTypeWrapper(
         applyError = result.error;
         return false;
       }
-      if (result.changed) didAnything = true;
-
-      // Grab a single transaction *once* — all merge mutations must accumulate
-      // on this same tr so they are dispatched together. Accessing editor.state.tr
-      // multiple times creates fresh transactions and drops prior steps.
-      const { tr } = editor.state;
-
-      // Phase 2: Merge adjacent compatible sequences if continuity is 'preserve'.
-      // This runs even when the preset didn't change (items may already be the
-      // target kind but split across separate numIds — the core of SD-2052).
-      if (continuity === 'preserve') {
-        clearIndexCache(editor);
-        const freshTarget = resolveListItem(editor, input.target);
-        if (freshTarget.numId != null) {
-          const merged = mergeAdjacentCompatibleSequences(editor, tr, freshTarget, targetResult.abstractNumId);
-          if (merged) didAnything = true;
-        }
+      if (result.changed) {
+        syncNumberingToXmlTree(part, getConverterNumbering(editor));
       }
-
-      if (!didAnything) return false;
-
-      dispatchEditorTransaction(editor, tr);
-      if (continuity === 'preserve') clearIndexCache(editor);
-      return true;
+      return result.changed;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
   if (applyError) {
     return toApplyTemplateError(applyError, input.target);
   }
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (formatResult.changed) didAnything = true;
+
+  // Phase 2: Merge adjacent compatible sequences via PM transaction.
+  // Cross-boundary operation: mutatePart first, PM transaction second.
+  let mergeDispatched = false;
+  if (continuity === 'preserve') {
+    clearIndexCache(editor);
+    const freshTarget = resolveListItem(editor, input.target);
+    if (freshTarget.numId != null) {
+      const { tr } = editor.state;
+      const merged = mergeAdjacentCompatibleSequences(editor, tr, freshTarget, targetResult.abstractNumId);
+      if (merged) {
+        didAnything = true;
+        mergeDispatched = true;
+        dispatchEditorTransaction(editor, tr);
+        clearIndexCache(editor);
+      }
+    }
+  }
+
+  if (!didAnything) {
     return toListsFailure('NO_OP', 'List type is already the requested kind.', { target: input.target });
+  }
+
+  // Dispatch re-render if formatting changed but no merge transaction was already dispatched
+  if (formatResult.changed && !mergeDispatched) {
+    dispatchEditorTransaction(editor, editor.state.tr);
   }
 
   return { success: true, item: targetResult.resolved.address };
@@ -754,19 +792,24 @@ export function listsClearLevelOverridesWrapper(
     return toListsFailure('NO_OP', 'No override exists for this level.', { target: input.target, level: input.level });
   }
 
-  const receipt = executeDomainCommand(
+  const result = mutatePart({
     editor,
-    () => {
+    partId: NUMBERING_PART,
+    operation: 'mutate',
+    source: 'lists.clearLevelOverrides',
+    expectedRevision: options?.expectedRevision,
+    mutate({ part }) {
       LevelFormattingHelpers.clearLevelOverride(editor, resolved.numId!, input.level);
-      dispatchEditorTransaction(editor, editor.state.tr);
+      syncNumberingToXmlTree(part, getConverterNumbering(editor));
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (!result.changed) {
     return toListsFailure('NO_OP', 'clearLevelOverrides could not be applied.', { target: input.target });
   }
+
+  dispatchEditorTransaction(editor, editor.state.tr);
 
   return { success: true, item: resolved.address };
 }

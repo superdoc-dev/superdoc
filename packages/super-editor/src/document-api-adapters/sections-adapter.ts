@@ -34,7 +34,8 @@ import { checkRevision } from './plan-engine/revision-tracker.js';
 import { resolveBlockInsertionPos } from './plan-engine/create-insertion.js';
 import { clearIndexCache } from './helpers/index-cache.js';
 import { rejectTrackedMode } from './helpers/mutation-helpers.js';
-import { executeOutOfBandMutation } from './out-of-band-mutation.js';
+import { mutatePart } from '../core/parts/mutation/mutate-part.js';
+import type { PartId } from '../core/parts/types.js';
 import {
   ensureSettingsRoot,
   readSettingsRoot,
@@ -347,7 +348,6 @@ function updateGlobalTitlePageFlag(editor: Editor): void {
   converter.headerIds.titlePg = anyTitlePage;
   converter.footerIds.titlePg = anyTitlePage;
 }
-
 export function createSectionBreakAdapter(
   editor: Editor,
   input: CreateSectionBreakInput,
@@ -488,42 +488,40 @@ export function sectionsSetOddEvenHeadersFootersAdapter(
     );
   }
 
-  return executeOutOfBandMutation<DocumentMutationResult>(
+  const SETTINGS_PART: PartId = 'word/settings.xml';
+
+  const result = mutatePart({
     editor,
-    (dryRun) => {
-      // Read-only check first — avoids creating word/settings.xml on dry-run or NO_OP paths.
+    partId: SETTINGS_PART,
+    operation: 'mutate',
+    source: 'sections.setOddEvenHeadersFooters',
+    dryRun: options?.dryRun === true,
+    expectedRevision: options?.expectedRevision,
+    mutate({ dryRun: isDryRun }) {
+      // Read-only check first — avoids modifying settings on dry-run or NO_OP paths.
       const existingRoot = readSettingsRoot(converter);
       const before = existingRoot ? hasOddEvenHeadersFooters(existingRoot) : false;
       const changed = before !== input.enabled;
 
       if (!changed) {
-        return {
-          changed: false,
-          payload: toSectionFailure(
-            'NO_OP',
-            'sections.setOddEvenHeadersFooters did not produce a document settings change.',
-          ),
-        };
+        return toSectionFailure(
+          'NO_OP',
+          'sections.setOddEvenHeadersFooters did not produce a document settings change.',
+        );
       }
 
-      if (!dryRun) {
-        // Only now create the settings part if needed.
+      if (!isDryRun) {
         const settingsRoot = ensureSettingsRoot(converter);
         setOddEvenHeadersInSettings(settingsRoot, input.enabled);
         if (!converter.pageStyles) converter.pageStyles = {};
         converter.pageStyles.alternateHeaders = input.enabled;
       }
 
-      return {
-        changed,
-        payload: toDocumentSuccess(),
-      };
+      return toDocumentSuccess();
     },
-    {
-      dryRun: options?.dryRun === true,
-      expectedRevision: options?.expectedRevision,
-    },
-  );
+  });
+
+  return result.result as DocumentMutationResult;
 }
 
 export function sectionsSetVerticalAlignAdapter(

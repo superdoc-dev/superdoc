@@ -100,7 +100,9 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         const runProperties = firstInlineProps ?? null;
 
         if (segments.length === 1) {
-          if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties)) return;
+          const hadInlineKeys =
+            Array.isArray(runNode.attrs?.runPropertiesInlineKeys) && runNode.attrs.runPropertiesInlineKeys.length > 0;
+          if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties) && hadInlineKeys) return;
           const newInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segments[0])])];
           const newOverrideKeys = overrideKeysFromInlineProps(runProperties);
           tr.setNodeMarkup(

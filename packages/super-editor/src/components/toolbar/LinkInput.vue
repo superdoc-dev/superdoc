@@ -121,7 +121,7 @@ const isAnchor = ref(false);
 // Prepend http if missing
 const url = computed(() => {
   if (!rawUrl.value) return '';
-  if (!rawUrl.value.startsWith('http') && !rawUrl.value.startsWith('#')) return 'http://' + rawUrl.value;
+  if (!rawUrl.value.startsWith('https') && !rawUrl.value.startsWith('#')) return 'https://' + rawUrl.value;
   return rawUrl.value;
 });
 

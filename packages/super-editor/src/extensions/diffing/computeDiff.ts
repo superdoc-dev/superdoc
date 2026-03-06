@@ -1,8 +1,9 @@
 import type { Node as PMNode, Schema } from 'prosemirror-model';
-import type { StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
+import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import { diffComments, type CommentInput, type CommentDiff } from './algorithm/comment-diffing';
 import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing';
 import { diffStyles, type StylesDiff } from './algorithm/styles-diffing';
+import { diffNumbering, type NumberingDiff } from './algorithm/numbering-diffing';
 
 /**
  * Result payload for document diffing.
@@ -14,6 +15,8 @@ export interface DiffResult {
   commentDiffs: CommentDiff[];
   /** Diffs computed from OOXML styles metadata. */
   stylesDiff: StylesDiff | null;
+  /** Diffs computed from OOXML numbering metadata. */
+  numberingDiff: NumberingDiff | null;
 }
 
 /**
@@ -33,7 +36,9 @@ export interface DiffResult {
  * @param newComments Comment list from the new document.
  * @param oldStyles OOXML style snapshot from the old document.
  * @param newStyles OOXML style snapshot from the new document.
- * @returns Object containing document, comment, and style diffs.
+ * @param oldNumbering OOXML numbering snapshot from the old document.
+ * @param newNumbering OOXML numbering snapshot from the new document.
+ * @returns Object containing document, comment, style, and numbering diffs.
  */
 export function computeDiff(
   oldPmDoc: PMNode,
@@ -43,10 +48,13 @@ export function computeDiff(
   newComments: CommentInput[] = [],
   oldStyles: StylesDocumentProperties | null | undefined = null,
   newStyles: StylesDocumentProperties | null | undefined = null,
+  oldNumbering: NumberingProperties | null | undefined = null,
+  newNumbering: NumberingProperties | null | undefined = null,
 ): DiffResult {
   return {
     docDiffs: diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc)),
     commentDiffs: diffComments(oldComments, newComments, schema),
     stylesDiff: diffStyles(oldStyles, newStyles),
+    numberingDiff: diffNumbering(oldNumbering, newNumbering),
   };
 }

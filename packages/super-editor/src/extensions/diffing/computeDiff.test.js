@@ -384,6 +384,7 @@ describe('Diff', () => {
     expect(diff.docDiffs).toHaveLength(0);
     expect(diff.commentDiffs).toHaveLength(0);
     expect(diff.stylesDiff).toBeNull();
+    expect(diff.numberingDiff).toBeNull();
   });
 
   it('includes style diffs when old/new style snapshots differ', async () => {
@@ -409,11 +410,67 @@ describe('Diff', () => {
     expect(diff.docDiffs).toHaveLength(0);
     expect(diff.commentDiffs).toHaveLength(0);
     expect(diff.stylesDiff).not.toBeNull();
+    expect(diff.numberingDiff).toBeNull();
     expect(diff.stylesDiff?.addedStyles).toHaveProperty('Heading1');
     expect(diff.stylesDiff?.removedStyles).toEqual({});
     expect(diff.stylesDiff?.modifiedStyles.Normal.modified.name).toEqual({
       from: 'Normal',
       to: 'Normal Updated',
+    });
+  });
+
+  it('includes numbering diffs when old/new numbering snapshots differ', async () => {
+    const { doc, schema } = await getDocument('diff_before8.docx');
+    const oldNumbering = {
+      abstracts: {
+        1: {
+          abstractNumId: 1,
+          levels: {
+            0: {
+              ilvl: 0,
+              lvlText: '%1.',
+            },
+          },
+        },
+      },
+      definitions: {
+        10: {
+          numId: 10,
+          abstractNumId: 1,
+        },
+      },
+    };
+    const newNumbering = {
+      abstracts: {
+        1: {
+          abstractNumId: 1,
+          levels: {
+            0: {
+              ilvl: 0,
+              lvlText: '%1)',
+            },
+          },
+        },
+      },
+      definitions: {
+        11: {
+          numId: 11,
+          abstractNumId: 1,
+        },
+      },
+    };
+
+    const diff = computeDiff(doc, doc, schema, [], [], null, null, oldNumbering, newNumbering);
+
+    expect(diff.docDiffs).toHaveLength(0);
+    expect(diff.commentDiffs).toHaveLength(0);
+    expect(diff.stylesDiff).toBeNull();
+    expect(diff.numberingDiff).not.toBeNull();
+    expect(diff.numberingDiff?.added).toHaveProperty('definitions.11.numId', 11);
+    expect(diff.numberingDiff?.deleted).toHaveProperty('definitions.10.numId', 10);
+    expect(diff.numberingDiff?.modified['abstracts.1.levels.0.lvlText']).toEqual({
+      from: '%1.',
+      to: '%1)',
     });
   });
 });

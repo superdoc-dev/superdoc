@@ -10,8 +10,10 @@
  * @ooxml w:pPr/w:shd — paragraph shading (background fill)
  * @spec  ECMA-376 §17.3.1.24 (pBdr), §17.3.1.31 (shd)
  */
-import type { ParagraphAttrs, ParagraphBorder } from '@superdoc/contracts';
+import type { ParagraphAttrs, ParagraphBorder, ParagraphBorders } from '@superdoc/contracts';
 import type { BetweenBorderInfo } from './group-analysis.js';
+
+const PX_PER_PT = 96 / 72;
 
 // ─── Border box sizing ─────────────────────────────────────────────
 
@@ -37,6 +39,35 @@ export const getParagraphBorderBox = (
   };
 };
 
+// ─── Border space (padding between border and text) ─────────────────
+
+/**
+ * Computes the outward expansion for the border/shading layers based on
+ * the `space` attribute (OOXML: distance between border and text, in points).
+ *
+ * Within between-border groups, suppressed sides don't expand (the gap
+ * extension handles visual continuity instead).
+ *
+ * @spec ECMA-376 §17.3.1.24 — space attribute on pBdr child elements
+ */
+export const computeBorderSpaceExpansion = (
+  borders?: ParagraphBorders,
+  betweenInfo?: BetweenBorderInfo,
+): { top: number; bottom: number; left: number; right: number } => {
+  if (!borders) return { top: 0, bottom: 0, left: 0, right: 0 };
+
+  const suppressTop = betweenInfo?.suppressTopBorder ?? false;
+  const suppressBottom = betweenInfo?.suppressBottomBorder ?? false;
+  const showBetween = betweenInfo?.showBetweenBorder ?? false;
+
+  return {
+    top: !suppressTop && borders.top?.space ? borders.top.space * PX_PER_PT : 0,
+    bottom: !suppressBottom && !showBetween && borders.bottom?.space ? borders.bottom.space * PX_PER_PT : 0,
+    left: borders.left?.space ? borders.left.space * PX_PER_PT : 0,
+    right: borders.right?.space ? borders.right.space * PX_PER_PT : 0,
+  };
+};
+
 // ─── Decoration layer factory ──────────────────────────────────────
 
 /**
@@ -48,6 +79,9 @@ export const getParagraphBorderBox = (
  *   gap, making left/right borders visually continuous across the group.
  * - `suppressTopBorder` hides the top border for non-first group members.
  * - `showBetweenBorder` replaces the bottom border with the between definition.
+ *
+ * The `space` attribute on each border side expands the layer outward,
+ * creating padding between the border line and the paragraph text.
  */
 export const createParagraphDecorationLayers = (
   doc: Document,
@@ -58,19 +92,22 @@ export const createParagraphDecorationLayers = (
   if (!attrs?.borders && !attrs?.shading) return {};
 
   const borderBox = getParagraphBorderBox(fragmentWidth, attrs.indent);
+  const space = computeBorderSpaceExpansion(attrs.borders, betweenInfo);
 
   // Extend layers into the spacing gap for continuous group borders.
   // Both real between (showBetweenBorder) and nil/none between (suppressBottomBorder)
   // need gap extension to keep left/right borders continuous through the spacing gap.
   const gapExtension = betweenInfo?.showBetweenBorder || betweenInfo?.suppressBottomBorder ? betweenInfo!.gapBelow : 0;
-  const bottomValue = gapExtension > 0 ? `-${gapExtension}px` : '0px';
+  const totalBottomExpansion = gapExtension + space.bottom;
+  const bottomValue = totalBottomExpansion > 0 ? `-${totalBottomExpansion}px` : '0px';
+  const topValue = space.top > 0 ? `-${space.top}px` : '0px';
 
   const baseStyles = {
     position: 'absolute',
-    top: '0px',
+    top: topValue,
     bottom: bottomValue,
-    left: `${borderBox.leftInset}px`,
-    width: `${borderBox.width}px`,
+    left: `${borderBox.leftInset - space.left}px`,
+    width: `${borderBox.width + space.left + space.right}px`,
     pointerEvents: 'none',
     boxSizing: 'border-box',
   } as const;

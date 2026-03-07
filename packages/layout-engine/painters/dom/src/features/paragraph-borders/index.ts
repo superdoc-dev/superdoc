@@ -25,6 +25,7 @@ export {
   applyParagraphShadingStyles,
   getParagraphBorderBox,
   stampBetweenBorderDataset,
+  computeBorderSpaceExpansion,
 } from './border-layer.js';
 
 // Shared types

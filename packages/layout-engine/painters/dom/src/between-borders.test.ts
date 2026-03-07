@@ -5,6 +5,7 @@ import {
   computeBetweenBorderFlags,
   createParagraphDecorationLayers,
   getParagraphBorderBox,
+  computeBorderSpaceExpansion,
   type BlockLookup,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
@@ -881,6 +882,86 @@ describe('getParagraphBorderBox', () => {
   it('treats Infinity indent values as 0', () => {
     const box = getParagraphBorderBox(W, { left: Infinity });
     expect(box).toEqual({ leftInset: 0, width: W });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeBorderSpaceExpansion — border space (padding between border and text)
+// ---------------------------------------------------------------------------
+
+describe('computeBorderSpaceExpansion', () => {
+  const PX_PER_PT = 96 / 72;
+
+  it('returns zero expansion when no borders', () => {
+    expect(computeBorderSpaceExpansion(undefined)).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
+  });
+
+  it('returns zero expansion when borders have no space', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      bottom: { style: 'solid', width: 1 },
+    };
+    expect(computeBorderSpaceExpansion(borders)).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
+  });
+
+  it('expands all sides by space in px', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1, space: 2 },
+      bottom: { style: 'solid', width: 1, space: 3 },
+      left: { style: 'solid', width: 1, space: 1 },
+      right: { style: 'solid', width: 1, space: 4 },
+    };
+    const result = computeBorderSpaceExpansion(borders);
+    expect(result.top).toBeCloseTo(2 * PX_PER_PT);
+    expect(result.bottom).toBeCloseTo(3 * PX_PER_PT);
+    expect(result.left).toBeCloseTo(1 * PX_PER_PT);
+    expect(result.right).toBeCloseTo(4 * PX_PER_PT);
+  });
+
+  it('suppresses top expansion when suppressTopBorder is true', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1, space: 2 },
+      left: { style: 'solid', width: 1, space: 1 },
+    };
+    const info: BetweenBorderInfo = {
+      showBetweenBorder: false,
+      suppressTopBorder: true,
+      suppressBottomBorder: false,
+      gapBelow: 0,
+    };
+    const result = computeBorderSpaceExpansion(borders, info);
+    expect(result.top).toBe(0);
+    expect(result.left).toBeCloseTo(1 * PX_PER_PT);
+  });
+
+  it('suppresses bottom expansion when suppressBottomBorder is true', () => {
+    const borders: ParagraphBorders = {
+      bottom: { style: 'solid', width: 1, space: 2 },
+      right: { style: 'solid', width: 1, space: 1 },
+    };
+    const info: BetweenBorderInfo = {
+      showBetweenBorder: false,
+      suppressTopBorder: false,
+      suppressBottomBorder: true,
+      gapBelow: 10,
+    };
+    const result = computeBorderSpaceExpansion(borders, info);
+    expect(result.bottom).toBe(0);
+    expect(result.right).toBeCloseTo(1 * PX_PER_PT);
+  });
+
+  it('suppresses bottom expansion when showBetweenBorder is true', () => {
+    const borders: ParagraphBorders = {
+      bottom: { style: 'solid', width: 1, space: 2 },
+    };
+    const info: BetweenBorderInfo = {
+      showBetweenBorder: true,
+      suppressTopBorder: false,
+      suppressBottomBorder: false,
+      gapBelow: 8,
+    };
+    const result = computeBorderSpaceExpansion(borders, info);
+    expect(result.bottom).toBe(0);
   });
 });
 

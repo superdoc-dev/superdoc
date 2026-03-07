@@ -3096,6 +3096,218 @@ export const SUCCESS_SCENARIOS = {
   ...DEFERRED_NEW_NAMESPACE_SUCCESS_SCENARIOS,
 
   // ---------------------------------------------------------------------------
+  // Header/footer operations
+  // ---------------------------------------------------------------------------
+
+  'doc.headerFooters.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.list'), docPath, '--limit', '10'],
+    };
+  },
+  'doc.headerFooters.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-get-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-get');
+    const { address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.headerFooters.get');
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'header',
+      variant: 'default',
+    };
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.get'), docPath, '--target-json', JSON.stringify(slotTarget)],
+    };
+  },
+  'doc.headerFooters.resolve': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-resolve-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-resolve');
+    const { address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.headerFooters.resolve');
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'header',
+      variant: 'default',
+    };
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.resolve'), docPath, '--target-json', JSON.stringify(slotTarget)],
+    };
+  },
+  'doc.headerFooters.refs.set': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-refs-set-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-refs-set');
+    const { item, address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.headerFooters.refs.set');
+    const footerRefs = item.footerRefs as Record<string, unknown> | undefined;
+    const refId =
+      (typeof footerRefs?.default === 'string' ? footerRefs.default : undefined) ??
+      (typeof footerRefs?.even === 'string' ? footerRefs.even : undefined);
+    if (!refId) {
+      throw new Error('No footer relationship id available for doc.headerFooters.refs.set.');
+    }
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'footer',
+      variant: 'first',
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.refs.set'),
+        docPath,
+        '--target-json',
+        JSON.stringify(slotTarget),
+        '--ref-id',
+        refId,
+        '--out',
+        harness.createOutputPath('doc-headerFooters-refs-set-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.refs.clear': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-refs-clear-success');
+    const sourceDoc = await harness.copyFixtureDoc('doc-headerFooters-refs-clear');
+    const { item, address } = await resolveFirstSection(
+      harness,
+      stateDir,
+      sourceDoc,
+      'doc.headerFooters.refs.clear:prepare',
+    );
+    const footerRefs = item.footerRefs as Record<string, unknown> | undefined;
+    const refId =
+      (typeof footerRefs?.default === 'string' ? footerRefs.default : undefined) ??
+      (typeof footerRefs?.even === 'string' ? footerRefs.even : undefined);
+    if (!refId) {
+      throw new Error('No footer relationship id available for doc.headerFooters.refs.clear.');
+    }
+
+    // First set a ref on the 'first' variant so we can clear it
+    const preparedDoc = harness.createOutputPath('doc-headerFooters-refs-clear-prepared');
+    const setSlotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'footer',
+      variant: 'first',
+    };
+    const prepared = await harness.runCli(
+      [
+        ...commandTokens('doc.headerFooters.refs.set'),
+        sourceDoc,
+        '--target-json',
+        JSON.stringify(setSlotTarget),
+        '--ref-id',
+        refId,
+        '--out',
+        preparedDoc,
+      ],
+      stateDir,
+    );
+    if (prepared.result.code !== 0 || prepared.envelope.ok !== true) {
+      throw new Error('Failed to prepare explicit header/footer ref for clear scenario.');
+    }
+
+    const clearSlotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'footer',
+      variant: 'first',
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.refs.clear'),
+        preparedDoc,
+        '--target-json',
+        JSON.stringify(clearSlotTarget),
+        '--out',
+        harness.createOutputPath('doc-headerFooters-refs-clear-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.refs.setLinkedToPrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-refs-setLinkedToPrevious-success');
+    const fixture = await createDocWithSecondSection(harness, stateDir, 'doc-headerFooters-refs-setLinkedToPrevious');
+    const secondAddress = requireSectionAddress(fixture.second, 'doc.headerFooters.refs.setLinkedToPrevious');
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: secondAddress,
+      headerFooterKind: 'header',
+      variant: 'default',
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.refs.setLinkedToPrevious'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(slotTarget),
+        '--linked',
+        'false',
+        '--out',
+        harness.createOutputPath('doc-headerFooters-refs-setLinkedToPrevious-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.parts.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-parts-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-parts-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.parts.list'), docPath, '--limit', '10'],
+    };
+  },
+  'doc.headerFooters.parts.create': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-parts-create-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-parts-create');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.parts.create'),
+        docPath,
+        '--kind',
+        'header',
+        '--out',
+        harness.createOutputPath('doc-headerFooters-parts-create-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.parts.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-parts-delete-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-parts-delete');
+    // Create a new part first, then delete it (to avoid deleting a referenced part)
+    const preparedDoc = harness.createOutputPath('doc-headerFooters-parts-delete-prepared');
+    const createResult = await harness.runCli(
+      [...commandTokens('doc.headerFooters.parts.create'), docPath, '--kind', 'header', '--out', preparedDoc],
+      stateDir,
+    );
+    if (createResult.result.code !== 0 || createResult.envelope.ok !== true) {
+      throw new Error('Failed to create header part for delete scenario.');
+    }
+    const createdData = createResult.envelope.data as Record<string, unknown>;
+    const resultPayload = createdData.result as { refId?: string } | undefined;
+    const refId = resultPayload?.refId;
+    if (!refId) {
+      throw new Error('Created part has no refId for delete scenario.');
+    }
+    const partTarget = { kind: 'headerFooterPart', refId };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.parts.delete'),
+        preparedDoc,
+        '--target-json',
+        JSON.stringify(partTarget),
+        '--out',
+        harness.createOutputPath('doc-headerFooters-parts-delete-output'),
+      ],
+    };
+  },
+
+  // ---------------------------------------------------------------------------
   // History operations
   // ---------------------------------------------------------------------------
 

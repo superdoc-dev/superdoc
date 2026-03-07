@@ -378,6 +378,23 @@ import type {
   HyperlinkMutationResult,
 } from '../hyperlinks/hyperlinks.types.js';
 import type {
+  HeaderFootersListQuery,
+  HeaderFootersListResult,
+  HeaderFootersGetInput,
+  HeaderFooterSlotEntry,
+  HeaderFootersResolveInput,
+  HeaderFooterResolveResult,
+  HeaderFootersRefsSetInput,
+  HeaderFootersRefsClearInput,
+  HeaderFootersRefsSetLinkedToPreviousInput,
+  HeaderFootersPartsListQuery,
+  HeaderFootersPartsListResult,
+  HeaderFootersPartsCreateInput,
+  HeaderFootersPartsDeleteInput,
+  HeaderFooterPartsMutationResult,
+  HeaderFooterPartsMutationSuccessResult,
+} from '../header-footers/header-footers.types.js';
+import type {
   ContentControlInfo,
   ContentControlMutationResult,
   ContentControlsListResult,
@@ -912,6 +929,45 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'hyperlinks.insert': { input: HyperlinksInsertInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.patch': { input: HyperlinksPatchInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.remove': { input: HyperlinksRemoveInput; options: MutationOptions; output: HyperlinkMutationResult };
+
+  // --- headerFooters.* ---
+  'headerFooters.list': {
+    input: HeaderFootersListQuery | undefined;
+    options: never;
+    output: HeaderFootersListResult;
+  };
+  'headerFooters.get': { input: HeaderFootersGetInput; options: never; output: HeaderFooterSlotEntry };
+  'headerFooters.resolve': { input: HeaderFootersResolveInput; options: never; output: HeaderFooterResolveResult };
+  'headerFooters.refs.set': {
+    input: HeaderFootersRefsSetInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.refs.clear': {
+    input: HeaderFootersRefsClearInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.refs.setLinkedToPrevious': {
+    input: HeaderFootersRefsSetLinkedToPreviousInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.parts.list': {
+    input: HeaderFootersPartsListQuery | undefined;
+    options: never;
+    output: HeaderFootersPartsListResult;
+  };
+  'headerFooters.parts.create': {
+    input: HeaderFootersPartsCreateInput;
+    options: MutationOptions;
+    output: HeaderFooterPartsMutationSuccessResult;
+  };
+  'headerFooters.parts.delete': {
+    input: HeaderFootersPartsDeleteInput;
+    options: MutationOptions;
+    output: HeaderFooterPartsMutationResult;
+  };
 
   // --- create.contentControl ---
   'create.contentControl': {

@@ -52,9 +52,10 @@ export type ReferenceGroupKey =
   | 'toc'
   | 'images'
   | 'hyperlinks'
+  | 'headerFooters'
   | 'contentControls'
-  | 'footnotes'
   | 'bookmarks'
+  | 'footnotes'
   | 'crossRefs'
   | 'index'
   | 'captions'
@@ -202,6 +203,13 @@ const T_SECTION_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 const T_SECTION_SETTINGS_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'] as const;
+const T_HEADER_FOOTER_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'INVALID_INPUT',
+  'CAPABILITY_UNAVAILABLE',
+  'INTERNAL_ERROR',
+] as const;
 
 // Reference-namespace throw-code shorthand arrays
 const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
@@ -3222,6 +3230,139 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'hyperlinks/remove.mdx',
     referenceGroup: 'hyperlinks',
+  },
+
+  // =========================================================================
+  // headerFooters.*
+  // =========================================================================
+
+  'headerFooters.list': {
+    memberPath: 'headerFooters.list',
+    description: 'List header/footer slot entries across sections.',
+    expectedResult: 'Returns a paginated DiscoveryOutput of HeaderFooterSlotEntry items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['INVALID_INPUT', 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'header-footers/list.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.get': {
+    memberPath: 'headerFooters.get',
+    description: 'Get a single header/footer slot entry by address.',
+    expectedResult: 'Returns a HeaderFooterSlotEntry for the targeted section slot.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/get.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.resolve': {
+    memberPath: 'headerFooters.resolve',
+    description: 'Resolve the effective header/footer reference for a slot, walking the section inheritance chain.',
+    expectedResult:
+      'Returns a HeaderFooterResolveResult indicating explicit, inherited, or none status with the resolved refId.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/resolve.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.set': {
+    memberPath: 'headerFooters.refs.set',
+    description: 'Set an explicit header/footer reference on a section slot.',
+    expectedResult:
+      'Returns a SectionMutationResult receipt; reports NO_OP if the reference already matches, INVALID_TARGET if the relationship does not exist.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/set.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.clear': {
+    memberPath: 'headerFooters.refs.clear',
+    description: 'Clear an explicit header/footer reference from a section slot.',
+    expectedResult: 'Returns a SectionMutationResult receipt; reports NO_OP if no explicit reference existed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/clear.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    memberPath: 'headerFooters.refs.setLinkedToPrevious',
+    description: 'Link or unlink a header/footer slot to/from the previous section.',
+    expectedResult:
+      'Returns a SectionMutationResult receipt; reports NO_OP if the link state already matches, INVALID_TARGET for the first section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/set-linked-to-previous.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.list': {
+    memberPath: 'headerFooters.parts.list',
+    description: 'List unique header/footer part records from document relationships.',
+    expectedResult: 'Returns a paginated DiscoveryOutput of HeaderFooterPartEntry items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/parts/list.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.create': {
+    memberPath: 'headerFooters.parts.create',
+    description: 'Create a new independent header/footer part, optionally cloned from an existing part.',
+    expectedResult: 'Returns a HeaderFooterPartsMutationResult with the new refId and partPath on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: [],
+      throws: ['INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/parts/create.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.delete': {
+    memberPath: 'headerFooters.parts.delete',
+    description: 'Delete a header/footer part and its associated relationship when no section slots reference it.',
+    expectedResult:
+      'Returns a HeaderFooterPartsMutationResult on success; INVALID_TARGET failure if sections still reference the part.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/parts/delete.mdx',
+    referenceGroup: 'headerFooters',
   },
 
   // =========================================================================

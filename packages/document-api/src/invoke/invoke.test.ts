@@ -203,6 +203,32 @@ function makeAdapters() {
     })),
   };
 
+  const headerFootersAdapter = {
+    list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 250, offset: 0, returned: 0 } })),
+    get: vi.fn(() => ({
+      section: { kind: 'section' as const, sectionId: 's0' },
+      sectionIndex: 0,
+      kind: 'header' as const,
+      variant: 'default' as const,
+      refId: null,
+      isExplicit: false,
+    })),
+    resolve: vi.fn(() => ({ status: 'none' as const })),
+    refs: {
+      set: vi.fn(() => ({ success: true as const, section: { kind: 'section' as const, sectionId: 's0' } })),
+      clear: vi.fn(() => ({ success: true as const, section: { kind: 'section' as const, sectionId: 's0' } })),
+      setLinkedToPrevious: vi.fn(() => ({
+        success: true as const,
+        section: { kind: 'section' as const, sectionId: 's0' },
+      })),
+    },
+    parts: {
+      list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 250, offset: 0, returned: 0 } })),
+      create: vi.fn(() => ({ success: true as const, refId: 'rId99', partPath: 'word/header99.xml' })),
+      delete: vi.fn(() => ({ success: true as const, refId: 'rId99', partPath: 'word/header99.xml' })),
+    },
+  };
+
   const adapters: DocumentApiAdapters = {
     find: findAdapter,
     getNode: getNodeAdapter,
@@ -216,6 +242,7 @@ function makeAdapters() {
     trackChanges: trackChangesAdapter,
     create: createAdapter,
     lists: listsAdapter,
+    headerFooters: headerFootersAdapter,
     query: queryAdapter,
     mutations: mutationsAdapter,
   };

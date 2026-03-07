@@ -246,6 +246,14 @@ const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>
   'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.setDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.clearDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  // headerFooters: refs.set and refs.setLinkedToPrevious require converter for relationship validation;
+  // parts.* operations require converter for relationship/part lifecycle management.
+  'headerFooters.refs.set': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.refs.setLinkedToPrevious': (editor) =>
+    Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.list': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.create': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.delete': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   // Picture bullet requires the numbering part to support lvlPicBulletId references.
   'lists.setLevelPictureBullet': (editor) => {
     const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;

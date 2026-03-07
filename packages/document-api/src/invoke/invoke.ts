@@ -302,6 +302,18 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'hyperlinks.patch': (input, options) => api.hyperlinks.patch(input, options),
     'hyperlinks.remove': (input, options) => api.hyperlinks.remove(input, options),
 
+    // --- headerFooters.* ---
+    'headerFooters.list': (input) => api.headerFooters.list(input),
+    'headerFooters.get': (input) => api.headerFooters.get(input),
+    'headerFooters.resolve': (input) => api.headerFooters.resolve(input),
+    'headerFooters.refs.set': (input, options) => api.headerFooters.refs.set(input, options),
+    'headerFooters.refs.clear': (input, options) => api.headerFooters.refs.clear(input, options),
+    'headerFooters.refs.setLinkedToPrevious': (input, options) =>
+      api.headerFooters.refs.setLinkedToPrevious(input, options),
+    'headerFooters.parts.list': (input) => api.headerFooters.parts.list(input),
+    'headerFooters.parts.create': (input, options) => api.headerFooters.parts.create(input, options),
+    'headerFooters.parts.delete': (input, options) => api.headerFooters.parts.delete(input, options),
+
     // --- create.contentControl ---
     'create.contentControl': (input, options) => api.create.contentControl(input, options),
 

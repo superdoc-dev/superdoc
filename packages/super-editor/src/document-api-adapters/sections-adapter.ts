@@ -50,22 +50,19 @@ import {
   sectionsListAdapter as listSectionsFromProjection,
   type SectionProjection,
 } from './helpers/sections-resolver.js';
+import { type ConverterWithHeaderFooterParts } from './helpers/header-footer-parts.js';
 import {
-  createHeaderFooterPart,
-  hasHeaderFooterRelationship,
-  type ConverterWithHeaderFooterParts,
-} from './helpers/header-footer-parts.js';
+  setHeaderFooterRefMutation,
+  clearHeaderFooterRefMutation,
+  setLinkedToPreviousMutation,
+} from './helpers/header-footer-refs-mutation.js';
 import {
-  clearSectPrHeaderFooterRef,
   clearSectPrPageBorders,
   cloneXmlElement,
   createSectPrElement,
   ensureSectPrElement,
-  getSectPrHeaderFooterRef,
-  readSectPrHeaderFooterRefs,
   readSectPrMargins,
   readSectPrPageSetup,
-  setSectPrHeaderFooterRef,
   writeSectPrBreakType,
   writeSectPrColumns,
   writeSectPrDirection,
@@ -351,33 +348,6 @@ function updateGlobalTitlePageFlag(editor: Editor): void {
   converter.footerIds.titlePg = anyTitlePage;
 }
 
-function createExplicitHeaderFooterReference(
-  editor: Editor,
-  input: {
-    kind: SectionsSetLinkToPreviousInput['kind'];
-    variant: SectionsSetLinkToPreviousInput['variant'];
-    sourceRefId?: string;
-  },
-): string | null {
-  const converter = getConverter(editor);
-
-  // Fallback path when no converter is available: reuse an inherited reference if present.
-  if (!converter) {
-    return input.sourceRefId ?? null;
-  }
-
-  try {
-    const { refId } = createHeaderFooterPart(converter, {
-      kind: input.kind,
-      variant: input.variant,
-      sourceRefId: input.sourceRefId,
-    });
-    return refId;
-  } catch {
-    return null;
-  }
-}
-
 export function createSectionBreakAdapter(
   editor: Editor,
   input: CreateSectionBreakInput,
@@ -581,32 +551,24 @@ export function sectionsSetHeaderFooterRefAdapter(
   input: SectionsSetHeaderFooterRefInput,
   options?: MutationOptions,
 ): SectionMutationResult {
-  return sectionMutationBySectPr(editor, input, options, 'sections.setHeaderFooterRef', (sectPr) => {
-    const converter = getConverter(editor);
-    if (!converter) {
-      return toSectionFailure(
-        'CAPABILITY_UNAVAILABLE',
-        'sections.setHeaderFooterRef requires an active document converter to validate relationship references.',
+  return sectionMutationBySectPr(
+    editor,
+    input,
+    options,
+    'sections.setHeaderFooterRef',
+    (sectPr, _projection, _sections, dryRun) => {
+      const converter = getConverter(editor) ?? null;
+      return setHeaderFooterRefMutation(
+        sectPr,
+        input.kind,
+        input.variant,
+        input.refId,
+        converter,
+        'sections.setHeaderFooterRef',
+        dryRun,
       );
-    }
-
-    const relationshipExists = hasHeaderFooterRelationship(converter, {
-      kind: input.kind,
-      refId: input.refId,
-    });
-    if (!relationshipExists) {
-      return toSectionFailure(
-        'INVALID_TARGET',
-        `sections.setHeaderFooterRef could not find ${input.kind} relationship "${input.refId}" in word/_rels/document.xml.rels.`,
-      );
-    }
-
-    const currentRef = getSectPrHeaderFooterRef(sectPr, input.kind, input.variant);
-    if (currentRef === input.refId) {
-      return toSectionFailure('NO_OP', 'sections.setHeaderFooterRef already matches the requested reference.');
-    }
-    setSectPrHeaderFooterRef(sectPr, input.kind, input.variant, input.refId);
-  });
+    },
+  );
 }
 
 export function sectionsClearHeaderFooterRefAdapter(
@@ -614,9 +576,16 @@ export function sectionsClearHeaderFooterRefAdapter(
   input: SectionsClearHeaderFooterRefInput,
   options?: MutationOptions,
 ): SectionMutationResult {
-  return sectionMutationBySectPr(editor, input, options, 'sections.clearHeaderFooterRef', (sectPr) => {
-    clearSectPrHeaderFooterRef(sectPr, input.kind, input.variant);
-  });
+  return sectionMutationBySectPr(
+    editor,
+    input,
+    options,
+    'sections.clearHeaderFooterRef',
+    (sectPr, _projection, _sections, dryRun) => {
+      const converter = getConverter(editor) ?? null;
+      clearHeaderFooterRefMutation(sectPr, input.kind, input.variant, converter, dryRun);
+    },
+  );
 }
 
 export function sectionsSetLinkToPreviousAdapter(
@@ -630,56 +599,17 @@ export function sectionsSetLinkToPreviousAdapter(
     options,
     'sections.setLinkToPrevious',
     (sectPr, projection, sections, dryRun) => {
-      if (projection.range.sectionIndex === 0) {
-        return toSectionFailure('INVALID_TARGET', 'sections.setLinkToPrevious cannot target the first section.');
-      }
-
-      if (input.linked) {
-        const removed = clearSectPrHeaderFooterRef(sectPr, input.kind, input.variant);
-        if (!removed) {
-          return toSectionFailure('NO_OP', 'sections.setLinkToPrevious found no explicit reference to remove.');
-        }
-        return;
-      }
-
-      const existing = getSectPrHeaderFooterRef(sectPr, input.kind, input.variant);
-      if (existing) {
-        return toSectionFailure('NO_OP', 'sections.setLinkToPrevious already has an explicit reference.');
-      }
-
-      const previous = sections.find((entry) => entry.range.sectionIndex === projection.range.sectionIndex - 1);
-      if (!previous) {
-        return toSectionFailure('INVALID_TARGET', 'sections.setLinkToPrevious requires a previous section.');
-      }
-
-      const previousSectPr = readTargetSectPr(editor, previous);
-      if (!previousSectPr) {
-        return toSectionFailure('INVALID_TARGET', 'Previous section has no reference to inherit.');
-      }
-
-      const refs = readSectPrHeaderFooterRefs(previousSectPr, input.kind);
-      const inheritedRef = refs?.[input.variant] ?? refs?.default;
-
-      // During dry-run, skip part allocation to avoid mutating converter state.
-      // Use a sentinel ref ID so the sectPr change is still detected.
-      if (dryRun) {
-        setSectPrHeaderFooterRef(sectPr, input.kind, input.variant, '(dry-run)');
-        return;
-      }
-
-      const explicitRefId = createExplicitHeaderFooterReference(editor, {
-        kind: input.kind,
-        variant: input.variant,
-        sourceRefId: inheritedRef,
-      });
-      if (!explicitRefId) {
-        return toSectionFailure(
-          'CAPABILITY_UNAVAILABLE',
-          'sections.setLinkToPrevious could not allocate an explicit header/footer reference for this section.',
-        );
-      }
-
-      setSectPrHeaderFooterRef(sectPr, input.kind, input.variant, explicitRefId);
+      return setLinkedToPreviousMutation(
+        sectPr,
+        projection,
+        sections,
+        input.kind,
+        input.variant,
+        input.linked,
+        editor,
+        dryRun,
+        'sections.setLinkToPrevious',
+      );
     },
   );
 }

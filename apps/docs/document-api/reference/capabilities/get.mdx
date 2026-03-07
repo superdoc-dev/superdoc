@@ -1227,6 +1227,51 @@ _No fields._
 | `operations.getText.dryRun` | boolean | yes |  |
 | `operations.getText.reasons` | enum[] | no |  |
 | `operations.getText.tracked` | boolean | yes |  |
+| `operations.headerFooters.get` | object | yes |  |
+| `operations.headerFooters.get.available` | boolean | yes |  |
+| `operations.headerFooters.get.dryRun` | boolean | yes |  |
+| `operations.headerFooters.get.reasons` | enum[] | no |  |
+| `operations.headerFooters.get.tracked` | boolean | yes |  |
+| `operations.headerFooters.list` | object | yes |  |
+| `operations.headerFooters.list.available` | boolean | yes |  |
+| `operations.headerFooters.list.dryRun` | boolean | yes |  |
+| `operations.headerFooters.list.reasons` | enum[] | no |  |
+| `operations.headerFooters.list.tracked` | boolean | yes |  |
+| `operations.headerFooters.parts.create` | object | yes |  |
+| `operations.headerFooters.parts.create.available` | boolean | yes |  |
+| `operations.headerFooters.parts.create.dryRun` | boolean | yes |  |
+| `operations.headerFooters.parts.create.reasons` | enum[] | no |  |
+| `operations.headerFooters.parts.create.tracked` | boolean | yes |  |
+| `operations.headerFooters.parts.delete` | object | yes |  |
+| `operations.headerFooters.parts.delete.available` | boolean | yes |  |
+| `operations.headerFooters.parts.delete.dryRun` | boolean | yes |  |
+| `operations.headerFooters.parts.delete.reasons` | enum[] | no |  |
+| `operations.headerFooters.parts.delete.tracked` | boolean | yes |  |
+| `operations.headerFooters.parts.list` | object | yes |  |
+| `operations.headerFooters.parts.list.available` | boolean | yes |  |
+| `operations.headerFooters.parts.list.dryRun` | boolean | yes |  |
+| `operations.headerFooters.parts.list.reasons` | enum[] | no |  |
+| `operations.headerFooters.parts.list.tracked` | boolean | yes |  |
+| `operations.headerFooters.refs.clear` | object | yes |  |
+| `operations.headerFooters.refs.clear.available` | boolean | yes |  |
+| `operations.headerFooters.refs.clear.dryRun` | boolean | yes |  |
+| `operations.headerFooters.refs.clear.reasons` | enum[] | no |  |
+| `operations.headerFooters.refs.clear.tracked` | boolean | yes |  |
+| `operations.headerFooters.refs.set` | object | yes |  |
+| `operations.headerFooters.refs.set.available` | boolean | yes |  |
+| `operations.headerFooters.refs.set.dryRun` | boolean | yes |  |
+| `operations.headerFooters.refs.set.reasons` | enum[] | no |  |
+| `operations.headerFooters.refs.set.tracked` | boolean | yes |  |
+| `operations.headerFooters.refs.setLinkedToPrevious` | object | yes |  |
+| `operations.headerFooters.refs.setLinkedToPrevious.available` | boolean | yes |  |
+| `operations.headerFooters.refs.setLinkedToPrevious.dryRun` | boolean | yes |  |
+| `operations.headerFooters.refs.setLinkedToPrevious.reasons` | enum[] | no |  |
+| `operations.headerFooters.refs.setLinkedToPrevious.tracked` | boolean | yes |  |
+| `operations.headerFooters.resolve` | object | yes |  |
+| `operations.headerFooters.resolve.available` | boolean | yes |  |
+| `operations.headerFooters.resolve.dryRun` | boolean | yes |  |
+| `operations.headerFooters.resolve.reasons` | enum[] | no |  |
+| `operations.headerFooters.resolve.tracked` | boolean | yes |  |
 | `operations.history.get` | object | yes |  |
 | `operations.history.get.available` | boolean | yes |  |
 | `operations.history.get.dryRun` | boolean | yes |  |
@@ -3849,6 +3894,78 @@ _No fields._
       "tracked": true
     },
     "getText": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.parts.create": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.parts.delete": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.parts.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.refs.clear": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.refs.set": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.refs.setLinkedToPrevious": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "headerFooters.resolve": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -13486,6 +13603,321 @@ _No fields._
           ],
           "type": "object"
         },
+        "headerFooters.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.parts.create": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.parts.delete": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.parts.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.refs.clear": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.refs.set": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.refs.setLinkedToPrevious": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "headerFooters.resolve": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "history.get": {
           "additionalProperties": false,
           "properties": {
@@ -19284,6 +19716,15 @@ _No fields._
         "hyperlinks.insert",
         "hyperlinks.patch",
         "hyperlinks.remove",
+        "headerFooters.list",
+        "headerFooters.get",
+        "headerFooters.resolve",
+        "headerFooters.refs.set",
+        "headerFooters.refs.clear",
+        "headerFooters.refs.setLinkedToPrevious",
+        "headerFooters.parts.list",
+        "headerFooters.parts.create",
+        "headerFooters.parts.delete",
         "create.contentControl",
         "contentControls.list",
         "contentControls.get",

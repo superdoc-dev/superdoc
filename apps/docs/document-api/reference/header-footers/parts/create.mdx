@@ -1,0 +1,146 @@
+---
+title: headerFooters.parts.create
+sidebarTitle: headerFooters.parts.create
+description: Create a new independent header/footer part, optionally cloned from an existing part.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Create a new independent header/footer part, optionally cloned from an existing part.
+
+- Operation ID: `headerFooters.parts.create`
+- API member path: `editor.doc.headerFooters.parts.create(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HeaderFooterPartsMutationResult with the new refId and partPath on success.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum | yes | `"header"`, `"footer"` |
+| `sourceRefId` | string | no |  |
+
+### Example request
+
+```json
+{
+  "kind": "header",
+  "sourceRefId": "example"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `partPath` | string | yes |  |
+| `refId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Example response
+
+```json
+{
+  "partPath": "example",
+  "refId": "example",
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "header",
+        "footer"
+      ]
+    },
+    "sourceRefId": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "partPath": {
+      "type": "string"
+    },
+    "refId": {
+      "type": "string"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "refId",
+    "partPath"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "partPath": {
+      "type": "string"
+    },
+    "refId": {
+      "type": "string"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "refId",
+    "partPath"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

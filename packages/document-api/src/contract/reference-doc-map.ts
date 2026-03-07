@@ -116,6 +116,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Hyperlink discovery, creation, and metadata management.',
     pagePath: 'hyperlinks/index.mdx',
   },
+  headerFooters: {
+    title: 'Headers & Footers',
+    description: 'Structure, references, and part lifecycle for document headers and footers.',
+    pagePath: 'header-footers/index.mdx',
+  },
   contentControls: {
     title: 'Content Controls',
     description: 'Content control (SDT) discovery, mutation, typed controls, and Word compatibility.',

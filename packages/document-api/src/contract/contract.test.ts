@@ -175,9 +175,9 @@ describe('document-api contract catalog', () => {
       'toc',
       'images',
       'hyperlinks',
+      'headerFooters',
       'contentControls',
       'bookmarks',
-
       'footnotes',
       'crossRefs',
       'index',
@@ -254,6 +254,7 @@ describe('document-api contract catalog', () => {
     for (const id of historyUnsafeOps) {
       expect(
         id.startsWith('sections.') ||
+          id.startsWith('headerFooters.') ||
           id === 'styles.apply' ||
           id === 'tables.setDefaultStyle' ||
           id === 'tables.clearDefaultStyle',

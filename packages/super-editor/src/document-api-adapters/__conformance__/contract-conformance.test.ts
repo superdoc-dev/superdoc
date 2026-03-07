@@ -132,6 +132,13 @@ import {
 } from '../plan-engine/hyperlinks-wrappers.js';
 import { createContentControlsAdapter } from '../plan-engine/content-controls-wrappers.js';
 import {
+  headerFootersRefsSetAdapter,
+  headerFootersRefsClearAdapter,
+  headerFootersRefsSetLinkedToPreviousAdapter,
+  headerFootersPartsCreateAdapter,
+  headerFootersPartsDeleteAdapter,
+} from '../header-footers-adapter.js';
+import {
   listsInsertWrapper,
   listsIndentWrapper,
   listsOutdentWrapper,
@@ -6703,6 +6710,201 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
   },
+  // SD-2162: Header/footer ref and part lifecycle operations
+  // -------------------------------------------------------------------------
+  'headerFooters.refs.set': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-missing' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          refId: 'rIdHeaderAlt',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          refId: 'rIdHeaderDefault',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          refId: 'rIdHeaderAlt',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'headerFooters.refs.clear': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsClearAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-missing' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsClearAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'even',
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsClearAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetLinkedToPreviousAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-missing' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          linked: true,
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetLinkedToPreviousAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          linked: true,
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const bodyWithoutRefs = clone(BASE_SECTION_BODY_SECT_PR);
+      const filteredBodyElements = ((bodyWithoutRefs.elements ?? []) as Array<{ name?: string }>).filter(
+        (element) => element.name !== 'w:headerReference' && element.name !== 'w:footerReference',
+      );
+      bodyWithoutRefs.elements = filteredBodyElements as unknown as Record<string, unknown>[];
+
+      const editor = makeSectionsEditor({
+        paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
+        bodySectPr: bodyWithoutRefs,
+      });
+      return headerFootersRefsSetLinkedToPreviousAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-1' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          linked: false,
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'headerFooters.parts.create': {
+    throwCase: () => {
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct' });
+    },
+    failureCase: undefined,
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct' });
+    },
+  },
+  'headerFooters.parts.delete': {
+    throwCase: () => {
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return headerFootersPartsDeleteAdapter(
+        editor,
+        { target: { kind: 'headerFooterPart', refId: 'rIdHeaderDefault' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsDeleteAdapter(
+        editor,
+        { target: { kind: 'headerFooterPart', refId: 'rIdHeaderDefault' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsDeleteAdapter(
+        editor,
+        { target: { kind: 'headerFooterPart', refId: 'rIdHeaderAlt' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
   // -------------------------------------------------------------------------
   // Content control operations
   // -------------------------------------------------------------------------
@@ -7946,6 +8148,83 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'headerFooters.refs.set': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = headerFootersRefsSetAdapter(
+      editor,
+      {
+        target: {
+          kind: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+        refId: 'rIdHeaderAlt',
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'headerFooters.refs.clear': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = headerFootersRefsClearAdapter(
+      editor,
+      {
+        target: {
+          kind: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'headerFooters.refs.setLinkedToPrevious': () => {
+    const bodyWithoutRefs = clone(BASE_SECTION_BODY_SECT_PR);
+    bodyWithoutRefs.elements = ((bodyWithoutRefs.elements ?? []) as Array<{ name?: string }>).filter(
+      (element) => element.name !== 'w:headerReference' && element.name !== 'w:footerReference',
+    ) as unknown as Record<string, unknown>[];
+    const editor = makeSectionsEditor({
+      paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
+      bodySectPr: bodyWithoutRefs,
+    });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = headerFootersRefsSetLinkedToPreviousAdapter(
+      editor,
+      {
+        target: {
+          kind: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-1' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+        linked: false,
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'headerFooters.parts.create': () => {
+    const editor = makeSectionsEditor();
+    const result = headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct', dryRun: true });
+    return result;
+  },
+  'headerFooters.parts.delete': () => {
+    const editor = makeSectionsEditor();
+    const result = headerFootersPartsDeleteAdapter(
+      editor,
+      { target: { kind: 'headerFooterPart', refId: 'rIdHeaderAlt' } },
+      { changeMode: 'direct', dryRun: true },
+    );
     return result;
   },
   'lists.insert': () => {
@@ -9421,7 +9700,12 @@ describe('document-api adapter conformance', () => {
         expect(schema.success).toBeDefined();
       }
       // Plan-engine meta-ops (mutations.apply) return PlanReceipt (always success) or throw — no failure schema.
-      if (!PLAN_ENGINE_META_OPS.has(operationId) && !NON_RECEIPT_MUTATION_OPS.has(operationId)) {
+      // Operations with no possibleFailureCodes also have no structured failure path.
+      if (
+        !PLAN_ENGINE_META_OPS.has(operationId) &&
+        !NON_RECEIPT_MUTATION_OPS.has(operationId) &&
+        HAS_STRUCTURED_FAILURE_RESULT(operationId)
+      ) {
         expect(schema.failure).toBeDefined();
       }
     }

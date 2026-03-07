@@ -211,6 +211,17 @@ import {
 } from './plan-engine/hyperlinks-wrappers.js';
 import { createContentControlsAdapter } from './plan-engine/content-controls-wrappers.js';
 import {
+  headerFootersListAdapter,
+  headerFootersGetAdapter,
+  headerFootersResolveAdapter,
+  headerFootersRefsSetAdapter,
+  headerFootersRefsClearAdapter,
+  headerFootersRefsSetLinkedToPreviousAdapter,
+  headerFootersPartsListAdapter,
+  headerFootersPartsCreateAdapter,
+  headerFootersPartsDeleteAdapter,
+} from './header-footers-adapter.js';
+import {
   bookmarksListWrapper,
   bookmarksGetWrapper,
   bookmarksInsertWrapper,
@@ -539,6 +550,21 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       insert: (input, options) => hyperlinksInsertWrapper(editor, input, options),
       patch: (input, options) => hyperlinksPatchWrapper(editor, input, options),
       remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
+    },
+    headerFooters: {
+      list: (query) => headerFootersListAdapter(editor, query),
+      get: (input) => headerFootersGetAdapter(editor, input),
+      resolve: (input) => headerFootersResolveAdapter(editor, input),
+      refs: {
+        set: (input, options) => headerFootersRefsSetAdapter(editor, input, options),
+        clear: (input, options) => headerFootersRefsClearAdapter(editor, input, options),
+        setLinkedToPrevious: (input, options) => headerFootersRefsSetLinkedToPreviousAdapter(editor, input, options),
+      },
+      parts: {
+        list: (query) => headerFootersPartsListAdapter(editor, query),
+        create: (input, options) => headerFootersPartsCreateAdapter(editor, input, options),
+        delete: (input, options) => headerFootersPartsDeleteAdapter(editor, input, options),
+      },
     },
     contentControls: ccAdapter,
     bookmarks: {

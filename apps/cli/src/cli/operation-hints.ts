@@ -520,6 +520,17 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'images.setPosition': 'result',
   'images.setAnchorOptions': 'result',
   'images.setZOrder': 'result',
+
+  // Header/Footer
+  'headerFooters.list': 'result',
+  'headerFooters.get': 'result',
+  'headerFooters.resolve': 'result',
+  'headerFooters.refs.set': 'result',
+  'headerFooters.refs.clear': 'result',
+  'headerFooters.refs.setLinkedToPrevious': 'result',
+  'headerFooters.parts.list': 'result',
+  'headerFooters.parts.create': 'result',
+  'headerFooters.parts.delete': 'result',
 };
 
 // ---------------------------------------------------------------------------

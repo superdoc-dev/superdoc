@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
-import { bootstrapPartSync, resolvePartSyncMode } from './bootstrap.js';
+import { bootstrapPartSync } from './bootstrap.js';
 import { META_MAP_KEY, META_PARTS_CAPABILITY_KEY, PARTS_MAP_KEY } from './constants.js';
 import { encodeEnvelopeToYjs } from './json-crdt.js';
 import { clearPartDescriptors, registerPartDescriptor } from '../../../core/parts/registry/part-registry.js';
@@ -26,7 +26,6 @@ function createMockEditor(opts: Record<string, unknown> = {}) {
   return {
     options: {
       user: { name: 'test' },
-      collaborationPartsSync: false,
       ...opts,
     },
     converter,
@@ -43,29 +42,6 @@ function createMockEditor(opts: Record<string, unknown> = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('resolvePartSyncMode', () => {
-  it('returns "off" when flag is false', () => {
-    const editor = createMockEditor({ collaborationPartsSync: false });
-    expect(resolvePartSyncMode(editor)).toBe('off');
-  });
-
-  it('returns "off" when flag is absent', () => {
-    const editor = createMockEditor({});
-    delete (editor.options as Record<string, unknown>).collaborationPartsSync;
-    expect(resolvePartSyncMode(editor)).toBe('off');
-  });
-
-  it('returns "active" when flag is true', () => {
-    const editor = createMockEditor({ collaborationPartsSync: true });
-    expect(resolvePartSyncMode(editor)).toBe('active');
-  });
-
-  it('returns "passive" when flag is "passive"', () => {
-    const editor = createMockEditor({ collaborationPartsSync: 'passive' });
-    expect(resolvePartSyncMode(editor)).toBe('passive');
-  });
-});
-
 describe('bootstrapPartSync', () => {
   let ydoc: Y.Doc;
 
@@ -81,15 +57,6 @@ describe('bootstrapPartSync', () => {
     clearInvalidationHandlers();
   });
 
-  it('returns noop handle when mode is "off"', () => {
-    const editor = createMockEditor();
-    const handle = bootstrapPartSync(editor, ydoc, 'off');
-
-    expect(handle.publisher).toBeNull();
-    expect(handle.consumer).toBeNull();
-    handle.destroy(); // Should not throw
-  });
-
   it('activates after migration from meta.docx', () => {
     const editor = createMockEditor();
     const metaMap = ydoc.getMap(META_MAP_KEY);
@@ -100,7 +67,7 @@ describe('bootstrapPartSync', () => {
       },
     ]);
 
-    const handle = bootstrapPartSync(editor, ydoc, 'active');
+    const handle = bootstrapPartSync(editor, ydoc);
 
     expect(handle.publisher).not.toBeNull();
     expect(handle.consumer).not.toBeNull();
@@ -108,6 +75,33 @@ describe('bootstrapPartSync', () => {
     // Verify capability was set
     const capability = metaMap.get(META_PARTS_CAPABILITY_KEY) as Record<string, unknown>;
     expect(capability?.version).toBe(1);
+
+    handle.destroy();
+  });
+
+  it('enters degraded mode when migration from meta.docx fails', () => {
+    const editor = createMockEditor();
+    const metaMap = ydoc.getMap(META_MAP_KEY);
+    // meta.docx entry with null content triggers a migration parse error
+    metaMap.set('docx', [{ name: 'word/styles.xml', content: null }]);
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    // Should return noop — degraded mode, NOT seed from local converter
+    expect(handle.publisher).toBeNull();
+    expect(handle.consumer).toBeNull();
+
+    // Should NOT have seeded parts from local converter
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    expect(partsMap.size).toBe(0);
+
+    // Should emit degraded event with migration-failure reason
+    expect(editor.safeEmit).toHaveBeenCalledWith(
+      'parts:degraded',
+      expect.objectContaining({
+        reason: 'migration-failure',
+      }),
+    );
 
     handle.destroy();
   });
@@ -124,7 +118,7 @@ describe('bootstrapPartSync', () => {
     });
     partsMap.set('word/settings.xml', envelope);
 
-    const handle = bootstrapPartSync(editor, ydoc, 'active');
+    const handle = bootstrapPartSync(editor, ydoc);
 
     expect(handle.publisher).not.toBeNull();
 
@@ -136,30 +130,29 @@ describe('bootstrapPartSync', () => {
     handle.destroy();
   });
 
-  it('stays on legacy path when no parts and no meta.docx', () => {
+  it('seeds from local converter when no parts and no meta.docx', () => {
     const editor = createMockEditor();
-    const handle = bootstrapPartSync(editor, ydoc, 'active');
+    // Add a part to the converter so seedPartsFromEditor has something to write
+    editor.converter.convertedXml['word/settings.xml'] = {
+      type: 'element',
+      name: 'doc',
+      elements: [{ type: 'element', name: 'w:settings', elements: [] }],
+    };
 
-    expect(handle.publisher).toBeNull();
-    expect(handle.consumer).toBeNull();
+    const handle = bootstrapPartSync(editor, ydoc);
 
-    handle.destroy();
-  });
-
-  it('passive mode activates publisher but not consumer', () => {
-    const editor = createMockEditor();
-    const metaMap = ydoc.getMap(META_MAP_KEY);
-    metaMap.set('docx', [
-      {
-        name: 'word/styles.xml',
-        content: { type: 'element', name: 'doc', elements: [{ type: 'element', name: 'w:styles', elements: [] }] },
-      },
-    ]);
-
-    const handle = bootstrapPartSync(editor, ydoc, 'passive');
-
+    // Should activate (not noop) after seeding
     expect(handle.publisher).not.toBeNull();
-    expect(handle.consumer).toBeNull();
+    expect(handle.consumer).not.toBeNull();
+
+    // Parts map should have the seeded part
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    expect(partsMap.has('word/settings.xml')).toBe(true);
+
+    // Capability should be set
+    const metaMap = ydoc.getMap(META_MAP_KEY);
+    const capability = metaMap.get(META_PARTS_CAPABILITY_KEY) as Record<string, unknown>;
+    expect(capability?.version).toBe(1);
 
     handle.destroy();
   });
@@ -179,7 +172,7 @@ describe('bootstrapPartSync', () => {
     };
     partsMap.set('word/settings.xml', encodeEnvelopeToYjs({ v: 1, clientId: 0, data: settingsData }));
 
-    const handle = bootstrapPartSync(editor, ydoc, 'active');
+    const handle = bootstrapPartSync(editor, ydoc);
 
     // Settings should be hydrated
     expect(editor.converter.convertedXml['word/settings.xml']).toBeDefined();
@@ -192,7 +185,7 @@ describe('bootstrapPartSync', () => {
     const metaMap = ydoc.getMap(META_MAP_KEY);
     metaMap.set(META_PARTS_CAPABILITY_KEY, { version: 1, enabledAt: '', clientId: 0 });
 
-    const handle = bootstrapPartSync(editor, ydoc, 'active');
+    const handle = bootstrapPartSync(editor, ydoc);
 
     expect(editor.on).toHaveBeenCalledWith('partChanged', expect.any(Function));
 
@@ -201,7 +194,7 @@ describe('bootstrapPartSync', () => {
     expect(editor.off).toHaveBeenCalledWith('partChanged', expect.any(Function));
   });
 
-  it('falls back when critical part is a non-Y.Map entry', () => {
+  it('returns noop and emits degraded event on critical hydration failure', () => {
     const editor = createMockEditor();
     const metaMap = ydoc.getMap(META_MAP_KEY);
     metaMap.set(META_PARTS_CAPABILITY_KEY, { version: 1, enabledAt: '', clientId: 0 });
@@ -210,11 +203,30 @@ describe('bootstrapPartSync', () => {
     const partsMap = ydoc.getMap(PARTS_MAP_KEY);
     partsMap.set('word/styles.xml', 'corrupted-not-a-ymap');
 
-    const handle = bootstrapPartSync(editor, ydoc, 'active');
+    const handle = bootstrapPartSync(editor, ydoc);
 
-    // Should fall back to noop due to critical hydration failure
+    // Should fall back to noop — degraded mode (document sync continues)
     expect(handle.publisher).toBeNull();
     expect(handle.consumer).toBeNull();
+
+    // Should emit degraded event with per-part failure detail
+    expect(editor.safeEmit).toHaveBeenCalledWith(
+      'parts:degraded',
+      expect.objectContaining({
+        reason: 'critical-hydration-failure',
+        failures: expect.arrayContaining([expect.stringContaining('word/styles.xml')]),
+      }),
+    );
+
+    // Should also emit exception for telemetry
+    expect(editor.safeEmit).toHaveBeenCalledWith(
+      'exception',
+      expect.objectContaining({
+        error: expect.objectContaining({
+          message: expect.stringContaining('Degraded'),
+        }),
+      }),
+    );
 
     handle.destroy();
   });

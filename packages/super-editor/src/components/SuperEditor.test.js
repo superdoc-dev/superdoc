@@ -142,15 +142,18 @@ describe('SuperEditor.vue', () => {
     wrapper.unmount();
   });
 
-  it('initializes when collaboration provider syncs remote docx data', async () => {
+  it('initializes when collaboration provider syncs with legacy content', async () => {
     vi.useFakeTimers();
 
     const metaMap = {
       has: vi.fn((key) => key === 'docx'),
-      get: vi.fn((key) => (key === 'docx' ? '<remote />' : undefined)),
+      get: vi.fn(() => undefined),
     };
+    const partsMap = { size: 0 };
+    const fragment = { length: 0 };
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn((name) => (name === 'parts' ? partsMap : metaMap)),
+      getXmlFragment: vi.fn(() => fragment),
     };
 
     const provider = {
@@ -182,12 +185,8 @@ describe('SuperEditor.vue', () => {
 
     expect(ydoc.getMap).toHaveBeenCalledWith('meta');
     expect(metaMap.has).toHaveBeenCalledWith('docx');
-    expect(metaMap.get).toHaveBeenCalledWith('docx');
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
     expect(EditorConstructor.loadXmlData).not.toHaveBeenCalled();
-
-    const options = EditorConstructor.mock.calls[0][0];
-    expect(options.content).toBe('<remote />');
     expect(provider.off).toHaveBeenCalledWith('synced', syncedHandler);
 
     wrapper.unmount();
@@ -202,8 +201,11 @@ describe('SuperEditor.vue', () => {
       has: vi.fn(() => false), // No existing content
       get: vi.fn(() => undefined),
     };
+    const partsMap = { size: 0 };
+    const fragment = { length: 0 };
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn((name) => (name === 'parts' ? partsMap : metaMap)),
+      getXmlFragment: vi.fn(() => fragment),
     };
 
     const provider = {
@@ -233,7 +235,6 @@ describe('SuperEditor.vue', () => {
     vi.runAllTimers();
     await flushPromises();
 
-    expect(metaMap.has).toHaveBeenCalledWith('docx');
     expect(EditorConstructor.loadXmlData).toHaveBeenCalled(); // Should load blank
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
 
@@ -245,10 +246,13 @@ describe('SuperEditor.vue', () => {
 
     const metaMap = {
       has: vi.fn((key) => key === 'docx'),
-      get: vi.fn((key) => (key === 'docx' ? '<already-synced />' : undefined)),
+      get: vi.fn(() => undefined),
     };
+    const partsMap = { size: 0 };
+    const fragment = { length: 0 };
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn((name) => (name === 'parts' ? partsMap : metaMap)),
+      getXmlFragment: vi.fn(() => fragment),
     };
 
     const provider = {
@@ -274,9 +278,6 @@ describe('SuperEditor.vue', () => {
     expect(ydoc.getMap).toHaveBeenCalledWith('meta');
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
 
-    const options = EditorConstructor.mock.calls[0][0];
-    expect(options.content).toBe('<already-synced />');
-
     wrapper.unmount();
   });
 
@@ -285,10 +286,13 @@ describe('SuperEditor.vue', () => {
 
     const metaMap = {
       has: vi.fn((key) => key === 'docx'),
-      get: vi.fn((key) => (key === 'docx' ? '<liveblocks />' : undefined)),
+      get: vi.fn(() => undefined),
     };
+    const partsMap = { size: 0 };
+    const fragment = { length: 0 };
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn((name) => (name === 'parts' ? partsMap : metaMap)),
+      getXmlFragment: vi.fn(() => fragment),
     };
 
     const provider = {

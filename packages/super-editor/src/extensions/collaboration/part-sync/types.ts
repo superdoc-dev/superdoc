@@ -83,8 +83,12 @@ export interface HydrationCriticalFailureTelemetry {
 }
 
 // ---------------------------------------------------------------------------
-// Activation Mode
+// Degraded Mode
 // ---------------------------------------------------------------------------
 
-/** Controls which parts of the part-sync pipeline are active. */
-export type PartSyncMode = 'off' | 'passive' | 'active';
+/** Emitted as `parts:degraded` when part-sync cannot activate. */
+export interface PartSyncDegradedEvent {
+  reason: 'critical-hydration-failure' | 'migration-failure';
+  /** Per-part failure descriptions (e.g., "word/styles.xml: entry is not a Y.Map"). */
+  failures: string[];
+}

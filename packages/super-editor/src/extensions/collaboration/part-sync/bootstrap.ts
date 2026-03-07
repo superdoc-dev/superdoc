@@ -2,9 +2,9 @@
  * Part-sync bootstrap: setup and teardown of publisher + consumer.
  *
  * Manages the lifecycle of part synchronization, including:
- * - Feature flag gating
  * - Room capability check (mixed-version protection)
  * - Migration from `meta.docx` when needed
+ * - Seeding from local converter for new/empty rooms
  * - Initial hydration from Yjs `parts` map
  * - Publisher and consumer activation
  */
@@ -12,11 +12,12 @@
 import * as Y from 'yjs';
 import type { Editor } from '../../../core/Editor.js';
 import type { PartId } from '../../../core/parts/types.js';
-import type { PartSyncMode, PartsCapability } from './types.js';
+import type { PartsCapability } from './types.js';
 import { createPartPublisher, type PartPublisher } from './publisher.js';
 import { createPartConsumer, replacePartData, type PartConsumer } from './consumer.js';
 import { decodeYjsToEnvelope } from './json-crdt.js';
 import { isMigrationNeeded, migrateMetaDocxToParts } from './migration-from-meta-docx.js';
+import { seedPartsFromEditor } from './seed-parts.js';
 import { mutateParts, hasPart } from '../../../core/parts/index.js';
 import {
   PARTS_MAP_KEY,
@@ -49,32 +50,17 @@ export interface PartSyncHandle {
 }
 
 /**
- * Resolve the activation mode from editor options.
- *
- * - `collaborationPartsSync: false` (or absent) → `'off'`
- * - `collaborationPartsSync: 'passive'` → `'passive'` (publisher only)
- * - `collaborationPartsSync: true` → `'active'` (publisher + consumer)
- */
-export function resolvePartSyncMode(editor: Editor): PartSyncMode {
-  const flag = (editor.options as Record<string, unknown>).collaborationPartsSync;
-  if (flag === 'passive') return 'passive';
-  if (flag === true) return 'active';
-  return 'off';
-}
-
-/**
  * Bootstrap part-sync for a collaborative editor session.
  *
- * Follows the room capability gate sequence from §4.4:
- * 1. Check capability marker
- * 2. Run migration if needed
- * 3. Backfill capability if parts exist but marker is missing
- * 4. Hydrate local state from `parts` map
- * 5. Activate publisher/consumer based on mode
+ * Decision tree:
+ * 1. Parts + capability → hydrate
+ * 2. Parts, no capability → backfill capability + hydrate
+ * 3. No parts, meta.docx exists → migrate + hydrate
+ * 4. No parts, no meta.docx → seed from local converter
+ * 5. Hydration/seed succeeded → activate publisher + consumer
+ * 6. Critical hydration failure → emit degraded event, return noop (document sync continues)
  */
-export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMode): PartSyncHandle {
-  if (mode === 'off') return createNoopHandle();
-
+export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
   const metaMap = ydoc.getMap(META_MAP_KEY);
   const partsMap = ydoc.getMap(PARTS_MAP_KEY) as Y.Map<unknown>;
 
@@ -82,14 +68,30 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMod
   const capability = metaMap.get(META_PARTS_CAPABILITY_KEY) as PartsCapability | undefined;
   let capabilityActive = capability != null && capability.version >= 1;
 
-  // Step 2: Migration — pass converter's pre-parsed data so migration
-  // doesn't fail on the XML strings that meta.docx stores after first export.
-  if (!capabilityActive && isMigrationNeeded(ydoc)) {
-    const localParts = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter
-      ?.convertedXml;
-    const result = migrateMetaDocxToParts(ydoc, { localParts });
+  // Step 2: Migration — meta.docx is authoritative for legacy rooms.
+  // If migration was needed but failed, enter degraded mode rather than
+  // falling through to local seeding (which would publish non-authoritative defaults).
+  const migrationNeeded = !capabilityActive && isMigrationNeeded(ydoc);
+  if (migrationNeeded) {
+    const result = migrateMetaDocxToParts(ydoc);
     if (result.migrated) {
       capabilityActive = true;
+    } else if (result.error) {
+      metaMap.set(META_PARTS_FALLBACK_MODE_KEY, true);
+      editor.safeEmit?.('parts:degraded', {
+        reason: 'migration-failure',
+        failures: [result.error],
+      });
+      editor.safeEmit?.('exception', {
+        error: new Error(
+          `[part-sync] Degraded: migration from meta.docx failed.` +
+            ` Parts sync disabled to avoid publishing non-authoritative data.` +
+            ` Error: ${result.error}`,
+        ),
+        editor,
+      });
+      console.error('[part-sync] Migration failed — entering degraded mode:', result.error);
+      return createNoopHandle();
     }
   }
 
@@ -100,10 +102,11 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMod
     console.info('[part-sync] Backfilled partsCapability marker for existing parts data');
   }
 
-  // Step 4: If no capability and no parts, stay on legacy path
+  // Step 4: No parts, no meta.docx — seed from local converter
   if (!capabilityActive) {
-    console.info('[part-sync] No parts capability — staying on legacy meta.docx path');
-    return createNoopHandle();
+    seedPartsFromEditor(editor, ydoc);
+    capabilityActive = true;
+    console.info('[part-sync] Seeded parts from local converter');
   }
 
   // Step 5: Register header/footer descriptors before hydration
@@ -111,17 +114,38 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMod
   registerHeaderFooterDescriptorsFromPartsMap(partsMap, editor);
 
   // Step 6: Hydrate local state from parts map
-  const hydrationOk = hydrateFromPartsMap(editor, ydoc, partsMap, metaMap);
-  if (!hydrationOk) {
-    // Critical failure — fall back to meta.docx
+  const hydration = hydrateFromPartsMap(editor, ydoc, partsMap);
+  if (!hydration.ok) {
+    // Degraded mode: document.xml sync continues via y-prosemirror, but parts
+    // sync is disabled. Style/numbering/rels changes will NOT propagate.
     metaMap.set(META_PARTS_FALLBACK_MODE_KEY, true);
-    console.warn('[part-sync] Hydration failed — falling back to meta.docx');
+    editor.safeEmit?.('parts:degraded', {
+      reason: 'critical-hydration-failure',
+      failures: hydration.failures,
+    });
+    editor.safeEmit?.('exception', {
+      error: new Error(
+        `[part-sync] Degraded: parts sync disabled.` +
+          ` Document sync continues but style/numbering changes will not propagate.` +
+          ` Failed: ${hydration.failures.join(', ')}`,
+      ),
+      editor,
+    });
+    console.error('[part-sync] Degraded mode — publisher/consumer NOT activated:', hydration.failures);
     return createNoopHandle();
   }
 
   metaMap.set(META_PARTS_LAST_HYDRATED_AT_KEY, new Date().toISOString());
 
-  // Step 7: Activate publisher/consumer
+  // Step 7: Activate publisher + consumer
+  return activateSync(editor, ydoc);
+}
+
+// ---------------------------------------------------------------------------
+// Sync Activation
+// ---------------------------------------------------------------------------
+
+function activateSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
   const publisher = createPartPublisher(editor, ydoc);
   const partChangedHandler = (event: import('../../../core/parts/types.js').PartChangedEvent) => {
     publisher.handlePartChanged(event);
@@ -131,10 +155,7 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMod
   // Store publisher on editor for compound mutation coordination
   (editor as unknown as { _partPublisher?: PartPublisher })._partPublisher = publisher;
 
-  let consumer: PartConsumer | null = null;
-  if (mode === 'active') {
-    consumer = createPartConsumer(editor, ydoc);
-  }
+  const consumer = createPartConsumer(editor, ydoc);
 
   return {
     publisher,
@@ -142,7 +163,7 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMod
     destroy() {
       editor.off('partChanged', partChangedHandler);
       publisher.destroy();
-      consumer?.destroy();
+      consumer.destroy();
       delete (editor as unknown as { _partPublisher?: PartPublisher })._partPublisher;
     },
   };
@@ -152,13 +173,18 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMod
 // Hydration
 // ---------------------------------------------------------------------------
 
+interface HydrationResult {
+  ok: boolean;
+  /** Non-empty only when `ok` is false — per-part failure descriptions. */
+  failures: string[];
+}
+
 /**
  * Hydrate local part store from the Yjs `parts` map.
  *
- * During initial hydration, critical parts must all succeed.
- * Non-critical parts are skipped on failure.
+ * Critical parts must all succeed; non-critical parts are skipped on failure.
  */
-function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknown>, metaMap: Y.Map<unknown>): boolean {
+function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknown>): HydrationResult {
   const operations: import('../../../core/parts/types.js').PartOperation[] = [];
   const criticalFailures: string[] = [];
 
@@ -224,17 +250,18 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
   // Abort entirely if any critical part failed
   if (criticalFailures.length > 0) {
     console.error('[part-sync] Critical part hydration failures:', criticalFailures);
-    return false;
+    return { ok: false, failures: criticalFailures };
   }
 
-  if (operations.length === 0) return true;
+  if (operations.length === 0) return { ok: true, failures: [] };
 
   try {
     mutateParts({ editor, source: SOURCE_COLLAB_REMOTE_PARTS, operations });
-    return true;
+    return { ok: true, failures: [] };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error('[part-sync] Hydration mutateParts failed:', err);
-    return false;
+    return { ok: false, failures: [`mutateParts: ${msg}`] };
   }
 }
 
@@ -259,13 +286,8 @@ function hasNonDocumentEntries(partsMap: Y.Map<unknown>): boolean {
 
 /**
  * Register header/footer descriptors for any header/footer parts in the Yjs parts map.
- *
- * Resolves the relationship ID from the Yjs rels data (most current) or falls back
- * to the editor's local converter rels. This ensures descriptors capture the correct
- * rId so `afterCommit` writes PM JSON under the right key in `converter.headers/footers`.
  */
 function registerHeaderFooterDescriptorsFromPartsMap(partsMap: Y.Map<unknown>, editor: Editor): void {
-  // Decode rels from Yjs (most current source for rId resolution)
   const relsEntry = partsMap.get('word/_rels/document.xml.rels');
   const relsData = relsEntry instanceof Y.Map ? (decodeYjsToEnvelope(relsEntry)?.data ?? null) : null;
 

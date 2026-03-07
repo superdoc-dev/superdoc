@@ -507,8 +507,11 @@ const editorOptions = (doc) => {
   const useLayoutEngine = proxy.$superdoc.config.useLayoutEngine !== false;
 
   const ydocFragment = doc.ydoc?.getXmlFragment?.('supereditor');
+  const ydocParts = doc.ydoc?.getMap?.('parts');
   const ydocMeta = doc.ydoc?.getMap?.('meta');
-  const ydocHasContent = (ydocFragment && ydocFragment.length > 0) || (ydocMeta && Boolean(ydocMeta.get('docx')));
+  const legacyContent = ydocMeta?.has('docx');
+  const ydocHasContent =
+    (ydocFragment && ydocFragment.length > 0) || (ydocParts && ydocParts.size > 0) || legacyContent;
   const isNewFile = doc.isNewFile && !ydocHasContent;
 
   const options = {

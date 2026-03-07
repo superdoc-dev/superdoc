@@ -1,10 +1,6 @@
 import { PluginKey } from 'prosemirror-state';
 import { Editor as SuperEditor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import {
-  pushHeaderFooterToYjs,
-  isApplyingRemoteHeaderFooterChanges,
-} from '@extensions/collaboration/collaboration-helpers.js';
 import { isApplyingRemotePartChanges } from '@extensions/collaboration/part-sync/index.js';
 import { exportSubEditorToPart } from '@core/parts/adapters/header-footer-sync.js';
 import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
@@ -307,15 +303,13 @@ export const toggleHeaderFooterEditMode = ({ editor, focusedSectionEditor, isEdi
 
 /**
  * Handle header/footer data updates.
- * Updates converter storage and syncs JSON to Yjs for real-time collaboration.
- * Note: Does NOT call updateYdocDocxData - that is handled by the debounced
- * main document listener to avoid excessive full DOCX broadcasts.
+ * Updates converter storage and syncs to Yjs via the parts publisher.
  */
 export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, sectionId, type) => {
   if (!type || !sectionId) return;
 
   // Skip if we're currently applying remote changes to prevent ping-pong loop
-  if (isApplyingRemoteHeaderFooterChanges() || isApplyingRemotePartChanges()) {
+  if (isApplyingRemotePartChanges()) {
     return;
   }
 
@@ -345,19 +339,9 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, se
     mainEditor.converter.headerFooterModified = true;
   }
 
-  // When parts sync is actually active (publisher bootstrapped), export
-  // sub-editor to OOXML JSON and commit via mutatePart. The publisher picks
-  // up the partChanged event and writes to Yjs automatically.
-  // Check _partPublisher (set by bootstrap) rather than the option flag,
-  // because bootstrap may return noop if capability gate/sync isn't ready.
-  const partSyncActive = !!mainEditor._partPublisher;
-  if (partSyncActive) {
-    const exported = exportSubEditorToPart(mainEditor, editor, sectionId, type);
-    if (exported) return;
-  }
-
-  // Legacy path: push header/footer JSON directly to Yjs
-  pushHeaderFooterToYjs(mainEditor, type, sectionId, updatedData);
+  // Export sub-editor to OOXML JSON and commit via mutatePart. The publisher
+  // picks up the partChanged event and writes to Yjs automatically.
+  exportSubEditorToPart(mainEditor, editor, sectionId, type);
 };
 
 const setEditorToolbar = ({ editor }, mainEditor) => {

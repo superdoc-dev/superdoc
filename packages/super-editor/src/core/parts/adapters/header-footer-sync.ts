@@ -147,8 +147,7 @@ export function resolveHeaderFooterRId(partId: string, relsData: unknown | null,
 /**
  * Export a sub-editor's current state to OOXML JSON and commit via mutatePart.
  *
- * Called on sub-editor blur when collaboration parts sync is active.
- * This replaces `pushHeaderFooterToYjs` — the publisher picks up the
+ * Called on sub-editor blur. The parts publisher picks up the
  * `partChanged` event and writes to Yjs automatically.
  */
 export function exportSubEditorToPart(

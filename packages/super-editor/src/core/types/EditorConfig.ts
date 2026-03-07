@@ -411,14 +411,6 @@ export interface EditorOptions {
   /** Collaboration provider */
   collaborationProvider?: CollaborationProvider | null;
 
-  /**
-   * Enable collaborative part synchronization via Yjs CRDT.
-   * - `false` (default): disabled
-   * - `true`: full sync (publisher + consumer)
-   * - `'passive'`: publisher only (no remote consumption)
-   */
-  collaborationPartsSync?: boolean | 'passive';
-
   /** Whether the collaboration provider finished syncing */
   collaborationIsReady?: boolean;
 

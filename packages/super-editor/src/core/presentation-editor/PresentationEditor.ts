@@ -2785,23 +2785,6 @@ export class PresentationEditor extends EventEmitter {
       handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
 
-    // Handle remote header/footer changes from collaborators
-    const handleRemoteHeaderFooterChanged = (payload: {
-      type: 'header' | 'footer';
-      sectionId: string;
-      content: unknown;
-    }) => {
-      this.#headerFooterSession?.adapter?.invalidate(payload.sectionId);
-      this.#headerFooterSession?.manager?.refresh();
-      this.#pendingDocChange = true;
-      this.#scheduleRerender();
-    };
-    this.#editor.on('remoteHeaderFooterChanged', handleRemoteHeaderFooterChanged);
-    this.#editorListeners.push({
-      event: 'remoteHeaderFooterChanged',
-      handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
-    });
-
     // Listen for comment selection changes to update Layout Engine highlighting
     const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
       if (this.#domPainter?.setActiveComment) {

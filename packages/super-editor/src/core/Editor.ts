@@ -34,9 +34,9 @@ import {
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData, cancelDebouncedDocxUpdate } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
+import { seedPartsFromEditor } from '@extensions/collaboration/part-sync/seed-parts.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
-import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
 import { canRenderFont } from './helpers/canRenderFont.js';
 import {
@@ -360,7 +360,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     ydoc: null,
     collaborationProvider: null,
     collaborationIsReady: false,
-    collaborationPartsSync: false,
     shouldLoadComments: false,
     replacedFile: false,
 
@@ -2127,7 +2126,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     if (!this.options.isNewFile) {
       this.#initComments();
-      updateYdocDocxData(this, this.options.ydoc);
     }
   }
 
@@ -3218,12 +3216,35 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      // Cancel any pending debounced docx update — we are about to do a
-      // fresh export with the new file data. Without cancel, the debounced
-      // export from the previous transaction cycle could fire redundantly.
-      cancelDebouncedDocxUpdate(this);
-      await updateYdocDocxData(this, this.options.ydoc);
-      this.initializeCollaborationData();
+      const provider = this.options.collaborationProvider;
+      const ydoc = this.options.ydoc as import('yjs').Doc;
+
+      const doReplaceFileSync = () => {
+        // 1. Insert new PM doc into Y fragment (must happen first)
+        this.#insertNewFileData();
+
+        // 2. Seed parts from new converter snapshot (prunes stale parts)
+        seedPartsFromEditor(this, ydoc, { replaceExisting: true });
+
+        // 3. Replace media map (prune stale + upsert new)
+        const mediaMap = ydoc.getMap('media');
+        for (const key of mediaMap.keys()) {
+          if (!(key in this.options.mediaFiles)) mediaMap.delete(key);
+        }
+        Object.entries(this.options.mediaFiles).forEach(([key, value]) => {
+          mediaMap.set(key, value);
+        });
+      };
+
+      if (provider.synced) {
+        doReplaceFileSync();
+      } else {
+        const onSynced = () => {
+          provider.off?.('synced', onSynced);
+          doReplaceFileSync();
+        };
+        provider.on?.('synced', onSynced);
+      }
     } else {
       this.#insertNewFileData();
     }

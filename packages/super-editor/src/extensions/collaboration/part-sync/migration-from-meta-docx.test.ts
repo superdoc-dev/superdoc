@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import { isMigrationNeeded, migrateMetaDocxToParts } from './migration-from-meta-docx.js';
 import { decodeYjsToEnvelope } from './json-crdt.js';
+import { parseXmlToJson } from '../../../core/super-converter/v2/docxHelper.js';
 import {
   PARTS_MAP_KEY,
   META_MAP_KEY,
@@ -146,13 +147,13 @@ describe('migration-from-meta-docx', () => {
       expect(partsMap.size).toBe(0);
     });
 
-    it('fails gracefully on string content (unparsed XML)', () => {
+    it('parses string content (XML) from meta.docx', () => {
       seedMetaDocx([{ name: 'word/styles.xml', content: '<w:styles></w:styles>' }]);
 
       const result = migrateMetaDocxToParts(ydoc);
 
-      expect(result.migrated).toBe(false);
-      expect(result.error).toContain('unparsed XML');
+      expect(result.migrated).toBe(true);
+      expect(result.error).toBeNull();
     });
 
     it('is idempotent — skips already-migrated keys', () => {
@@ -199,28 +200,13 @@ describe('migration-from-meta-docx', () => {
       expect(result.error).toContain('No meta.docx entries');
     });
 
-    it('uses localParts for string XML content in meta.docx', () => {
-      // Real-world: meta.docx stores XML strings after first collaboration export
+    it('parses multiple XML string entries from meta.docx', () => {
       seedMetaDocx([
         { name: 'word/styles.xml', content: '<w:styles></w:styles>' },
         { name: 'word/numbering.xml', content: '<w:numbering></w:numbering>' },
       ]);
 
-      // The converter has already parsed these into JSON trees
-      const localParts: Record<string, unknown> = {
-        'word/styles.xml': {
-          type: 'element',
-          name: 'doc',
-          elements: [{ type: 'element', name: 'w:styles', elements: [] }],
-        },
-        'word/numbering.xml': {
-          type: 'element',
-          name: 'doc',
-          elements: [{ type: 'element', name: 'w:numbering', elements: [] }],
-        },
-      };
-
-      const result = migrateMetaDocxToParts(ydoc, { localParts });
+      const result = migrateMetaDocxToParts(ydoc);
 
       expect(result.migrated).toBe(true);
       expect(result.partsMigrated).toBe(2);
@@ -231,13 +217,38 @@ describe('migration-from-meta-docx', () => {
       expect(partsMap.has('word/numbering.xml')).toBe(true);
     });
 
-    it('still fails on string content when localParts not provided', () => {
+    it('parses XML string content into a JSON tree', () => {
       seedMetaDocx([{ name: 'word/styles.xml', content: '<w:styles></w:styles>' }]);
 
       const result = migrateMetaDocxToParts(ydoc);
 
-      expect(result.migrated).toBe(false);
-      expect(result.error).toContain('unparsed XML');
+      expect(result.migrated).toBe(true);
+      expect(result.partsMigrated).toBe(1);
+      expect(result.error).toBeNull();
+
+      const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+      const entry = partsMap.get('word/styles.xml') as Y.Map<unknown>;
+      const envelope = decodeYjsToEnvelope(entry);
+      expect(envelope?.data).toBeDefined();
+      // Verify it's a parsed JSON tree, not a string
+      expect(typeof envelope?.data).toBe('object');
+    });
+
+    it('XML string parsing produces same shape as parseXmlToJson', () => {
+      const xml =
+        '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph"><w:name w:val="Normal"/></w:style></w:styles>';
+      seedMetaDocx([{ name: 'word/styles.xml', content: xml }]);
+
+      const result = migrateMetaDocxToParts(ydoc);
+      expect(result.migrated).toBe(true);
+
+      const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+      const entry = partsMap.get('word/styles.xml') as Y.Map<unknown>;
+      const envelope = decodeYjsToEnvelope(entry);
+
+      // Compare against direct parseXmlToJson — shapes must be identical
+      const expected = parseXmlToJson(xml);
+      expect(envelope?.data).toEqual(expected);
     });
   });
 });

@@ -11,6 +11,7 @@
 import * as Y from 'yjs';
 import type { PartsMigrationMeta, PartsCapability } from './types.js';
 import { encodeEnvelopeToYjs } from './json-crdt.js';
+import { parseXmlToJson } from '../../../core/super-converter/v2/docxHelper.js';
 import {
   PARTS_MAP_KEY,
   META_MAP_KEY,
@@ -75,10 +76,7 @@ export function isMigrationNeeded(ydoc: Y.Doc): boolean {
  * All-or-nothing: parse all candidates first, then write them in a single
  * Yjs transaction. On parse failure, nothing is written.
  */
-export function migrateMetaDocxToParts(
-  ydoc: Y.Doc,
-  options: { force?: boolean; localParts?: Record<string, unknown> } = {},
-): MigrationResult {
+export function migrateMetaDocxToParts(ydoc: Y.Doc, options: { force?: boolean } = {}): MigrationResult {
   const metaMap = ydoc.getMap(META_MAP_KEY);
   const partsMap = ydoc.getMap(PARTS_MAP_KEY) as Y.Map<unknown>;
 
@@ -103,12 +101,11 @@ export function migrateMetaDocxToParts(
   updateMigrationStatus(metaMap, 'in-progress', null, ydoc);
 
   // Parse stage: validate all candidates before writing.
-  // Prefer pre-parsed data from the converter (localParts) over meta.docx
-  // entries, which store raw XML strings after the first collaboration export.
+  // Always parse from meta.docx (authoritative source for legacy rooms).
   const parsed: Array<{ name: string; data: unknown }> = [];
   try {
     for (const entry of candidates) {
-      const data = parsePartContent(entry, options.localParts);
+      const data = parsePartContent(entry);
       parsed.push({ name: entry.name, data });
     }
   } catch (err) {
@@ -169,23 +166,20 @@ function getCandidateEntries(docxEntries: DocxEntry[], partsMap: Y.Map<unknown>)
   return docxEntries.filter((e) => !EXCLUDED_PART_IDS.has(e.name) && !partsMap.has(e.name));
 }
 
-function parsePartContent(entry: DocxEntry, localParts?: Record<string, unknown>): unknown {
-  // Prefer pre-parsed converter data when available. meta.docx stores raw
-  // XML strings after the first collaboration export, but the converter has
-  // already parsed them into JSON trees by the time migration runs.
-  if (localParts && entry.name in localParts) {
-    const local = localParts[entry.name];
-    if (local != null && typeof local === 'object') return local;
-  }
-
+function parsePartContent(entry: DocxEntry): unknown {
   if (entry.content === null || entry.content === undefined) {
     throw new Error(`Part "${entry.name}" has no content`);
   }
 
+  // meta.docx content is authoritative for legacy rooms. It can be:
+  // - An object (JSON tree from the original seeder)
+  // - A string (raw XML from a legacy collaboration export)
   if (typeof entry.content === 'object') return entry.content;
 
   if (typeof entry.content === 'string') {
-    throw new Error(`Part "${entry.name}" contains unparsed XML string — expected JSON tree`);
+    // Parse raw XML to JSON using the same xml-js path the converter uses,
+    // ensuring the JSON tree shape matches converter.convertedXml exactly.
+    return parseXmlToJson(entry.content);
   }
 
   throw new Error(`Part "${entry.name}" has unsupported content type: ${typeof entry.content}`);

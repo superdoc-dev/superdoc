@@ -734,31 +734,6 @@ const handleOverlayHide = () => {
   hideImageResizeOverlay();
 };
 
-let dataPollTimeout;
-
-const stopPolling = () => {
-  clearTimeout(dataPollTimeout);
-};
-
-const pollForMetaMapData = (ydoc, retries = 10, interval = 500) => {
-  const metaMap = ydoc.getMap('meta');
-
-  const checkData = () => {
-    const docx = metaMap.get('docx');
-    if (docx) {
-      stopPolling();
-      initEditor({ content: docx });
-    } else if (retries > 0) {
-      dataPollTimeout = setTimeout(checkData, interval);
-      retries--;
-    } else {
-      console.warn('Failed to load docx data from meta map.');
-    }
-  };
-
-  checkData();
-};
-
 const setDefaultBlankFile = async () => {
   fileSource.value = await getFileObject(BlankDOCX, 'blank.docx', DOCX);
 };
@@ -817,13 +792,23 @@ const initializeData = async () => {
     };
 
     waitForSync().then(async () => {
+      const partsMap = ydoc.getMap('parts');
+      const fragment = ydoc.getXmlFragment('supereditor');
       const metaMap = ydoc.getMap('meta');
 
-      if (metaMap.has('docx')) {
-        // Existing content - poll for it
-        pollForMetaMapData(ydoc);
+      // Three-way room classification:
+      // 1. New-format room: has parts map entries or Y fragment content
+      // 2. Legacy room: has meta.docx but no parts yet (migration pending)
+      // 3. Empty room: first client, nothing in ydoc
+      const hasPartsContent = fragment.length > 0 || partsMap.size > 0;
+      const hasLegacyContent = metaMap.has('docx');
+
+      if (hasPartsContent || hasLegacyContent) {
+        // Existing room — editor will hydrate from Y fragment + parts map
+        // during bootstrap. Legacy rooms will be migrated in bootstrapPartSync.
+        initEditor({});
       } else {
-        // First client - load blank document
+        // First client — load blank document
         props.options.isNewFile = true;
         const fileData = await loadNewFileData();
         if (fileData) initEditor(fileData);
@@ -1092,7 +1077,6 @@ const handleMarginChange = ({ side, value }) => {
 };
 
 onBeforeUnmount(() => {
-  stopPolling();
   clearSelectedImage();
 
   // Clean up zoomChange listener if it exists

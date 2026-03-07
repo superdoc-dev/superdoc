@@ -61,7 +61,15 @@ export const computeBorderSpaceExpansion = (
   const showBetween = betweenInfo?.showBetweenBorder ?? false;
 
   return {
-    top: !suppressTop && borders.top?.space ? borders.top.space * PX_PER_PT : 0,
+    // When top is suppressed (non-first group member), use the between border's space
+    // to extend upward and fill the gap left by the previous paragraph's reduced extension.
+    top: suppressTop
+      ? borders.between?.space
+        ? borders.between.space * PX_PER_PT
+        : 0
+      : borders.top?.space
+        ? borders.top.space * PX_PER_PT
+        : 0,
     bottom: !suppressBottom && !showBetween && borders.bottom?.space ? borders.bottom.space * PX_PER_PT : 0,
     left: borders.left?.space ? borders.left.space * PX_PER_PT : 0,
     right: borders.right?.space ? borders.right.space * PX_PER_PT : 0,
@@ -97,7 +105,14 @@ export const createParagraphDecorationLayers = (
   // Extend layers into the spacing gap for continuous group borders.
   // Both real between (showBetweenBorder) and nil/none between (suppressBottomBorder)
   // need gap extension to keep left/right borders continuous through the spacing gap.
-  const gapExtension = betweenInfo?.showBetweenBorder || betweenInfo?.suppressBottomBorder ? betweenInfo!.gapBelow : 0;
+  //
+  // For showBetweenBorder: reduce extension by between.space so the between border
+  // (drawn as CSS bottom border) sits higher in the gap, creating padding to the next
+  // paragraph. The next paragraph's top expansion fills the remaining gap portion.
+  const betweenSpaceBelow =
+    betweenInfo?.showBetweenBorder && attrs.borders?.between?.space ? attrs.borders.between.space * PX_PER_PT : 0;
+  const rawGap = betweenInfo?.showBetweenBorder || betweenInfo?.suppressBottomBorder ? betweenInfo!.gapBelow : 0;
+  const gapExtension = Math.max(0, rawGap - betweenSpaceBelow);
 
   // Border widths for each rendered side. With box-sizing: border-box, CSS borders are
   // drawn INSIDE the element. To position the border's inner edge at `space` distance

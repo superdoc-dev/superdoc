@@ -59,7 +59,8 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 |------|----------|
 | React integration | `packages/react/src/SuperDocEditor.tsx` |
 | Editing features | `super-editor/src/extensions/` |
-| Presentation mode visuals | `layout-engine/painters/dom/src/renderer.ts` |
+| Presentation mode visuals | `layout-engine/painters/dom/src/features/feature-registry.ts` → feature module |
+| Rendering orchestration | `layout-engine/painters/dom/src/renderer.ts` |
 | DOCX import/export | `super-editor/src/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
 | Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
@@ -79,7 +80,7 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 
 ## When to Modify Which System
 
-- **Visual rendering**: Modify `pm-adapter/` (to feed data) and/or `painters/dom/` (to render it)
+- **Visual rendering**: Check `painters/dom/src/features/feature-registry.ts` to find the feature module, then modify it. If no module exists yet, create one (see layout-engine CLAUDE.md). Feed data via `pm-adapter/`
 - **Style resolution**: Modify `style-engine/` — called by pm-adapter during conversion
 - **Editing commands/behavior**: Modify `super-editor/src/extensions/`
 - **State bridging**: Modify `PresentationEditor.ts`

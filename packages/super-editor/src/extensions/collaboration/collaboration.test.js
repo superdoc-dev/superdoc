@@ -113,11 +113,37 @@ describe('collaboration extension', () => {
       expect.objectContaining({ onFirstRender: expect.any(Function) }),
     );
     expect(provider.on).toHaveBeenCalledWith('synced', expect.any(Function));
+    expect(provider.on).toHaveBeenCalledWith('sync', expect.any(Function));
 
     const mediaObserver = ydoc._maps.media.observe.mock.calls[0][0];
     ydoc._maps.media.get.mockReturnValue({ blob: true });
     mediaObserver({ changes: { keys: new Map([['word/media/image.png', {}]]) } });
     expect(editor.storage.image.media['word/media/image.png']).toEqual({ blob: true });
+  });
+
+  it('emits collaborationReady on sync(true) when provider does not emit synced', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
+    };
+
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
+
+    const syncHandler = provider.on.mock.calls.find(([event]) => event === 'sync')?.[1];
+    expect(syncHandler).toBeTypeOf('function');
+
+    syncHandler(true);
+
+    expect(editor.emit).toHaveBeenCalledWith('collaborationReady', { editor, ydoc });
   });
 
   it('creates sync plugin fragment via helper', () => {

@@ -251,7 +251,7 @@ export function createExplicitHeaderFooterReference(
 
   try {
     // Create part without variant tracking (decoupled per SD-2162 design)
-    const { refId } = createHeaderFooterPart(converter, {
+    const { refId } = createHeaderFooterPart(editor, {
       kind: input.kind,
       variant: 'default', // placeholder — variant tracking is done separately via reconcileVariantPointerOnSet
       sourceRefId: input.sourceRefId,

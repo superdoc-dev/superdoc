@@ -444,7 +444,7 @@ export function headerFootersPartsCreateAdapter(
   }
 
   try {
-    const result = createHeaderFooterPart(converter, {
+    const result = createHeaderFooterPart(editor, {
       kind: input.kind,
       variant: 'default', // placeholder — parts are variant-agnostic
       sourceRefId: input.sourceRefId,

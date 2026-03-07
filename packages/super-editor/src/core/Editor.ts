@@ -36,6 +36,7 @@ import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/
 import DocxZipper from '@core/DocxZipper.js';
 import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
 import { seedPartsFromEditor } from '@extensions/collaboration/part-sync/seed-parts.js';
+import { onCollaborationProviderSynced } from './helpers/collaboration-provider-sync.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
 import { canRenderFont } from './helpers/canRenderFont.js';
@@ -1492,21 +1493,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Initialize data for collaborative editing
-   * If we are replacing data and have a valid provider, listen for synced event
-   * so that we can initialize the data
+   * If we are replacing data and have a valid provider, wait for provider sync
+   * before inserting data into the shared Yjs document.
    */
   initializeCollaborationData(): void {
     if (!this.options.isNewFile || !this.options.collaborationProvider) return;
-    const provider = this.options.collaborationProvider;
-
-    const postSyncInit = () => {
-      provider.off?.('synced', postSyncInit);
+    onCollaborationProviderSynced(this.options.collaborationProvider, () => {
       this.#insertNewFileData();
-    };
-
-    if (provider.synced) this.#insertNewFileData();
-    // If we are not sync'd yet, wait for the event then insert the data
-    else provider.on?.('synced', postSyncInit);
+    });
   }
 
   /**
@@ -3216,10 +3210,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      const provider = this.options.collaborationProvider;
       const ydoc = this.options.ydoc as import('yjs').Doc;
+      const provider = this.options.collaborationProvider;
 
       const doReplaceFileSync = () => {
+        const mediaFiles = this.options.mediaFiles ?? {};
+
         // 1. Insert new PM doc into Y fragment (must happen first)
         this.#insertNewFileData();
 
@@ -3229,22 +3225,23 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // 3. Replace media map (prune stale + upsert new)
         const mediaMap = ydoc.getMap('media');
         for (const key of mediaMap.keys()) {
-          if (!(key in this.options.mediaFiles)) mediaMap.delete(key);
+          if (!(key in mediaFiles)) mediaMap.delete(key);
         }
-        Object.entries(this.options.mediaFiles).forEach(([key, value]) => {
+        Object.entries(mediaFiles).forEach(([key, value]) => {
           mediaMap.set(key, value);
         });
       };
 
-      if (provider.synced) {
-        doReplaceFileSync();
-      } else {
-        const onSynced = () => {
-          provider.off?.('synced', onSynced);
-          doReplaceFileSync();
-        };
-        provider.on?.('synced', onSynced);
-      }
+      await new Promise<void>((resolve, reject) => {
+        onCollaborationProviderSynced(provider, () => {
+          try {
+            doReplaceFileSync();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
     } else {
       this.#insertNewFileData();
     }

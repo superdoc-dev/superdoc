@@ -2762,7 +2762,12 @@ export class PresentationEditor extends EventEmitter {
     // These changes mutate translatedLinkedStyles directly and need a full re-render
     // so the style-engine picks up the updated default properties.
     const handleStylesDefaultsChanged = () => {
+      // Stylesheet default mutations can change block conversion output even
+      // when PM JSON is unchanged (e.g., default run color/font). Cached flow
+      // blocks must be invalidated so toFlowBlocks recomputes with new defaults.
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
       this.#scheduleRerender();
     };
     this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);

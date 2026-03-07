@@ -2,6 +2,10 @@ import { Extension } from '@core/index.js';
 import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
 import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
+import {
+  isCollaborationProviderSynced,
+  onCollaborationProviderSynced,
+} from '../../core/helpers/collaboration-provider-sync.js';
 import { bootstrapPartSync } from './part-sync/index.js';
 import { seedPartsFromEditor } from './part-sync/seed-parts.js';
 
@@ -82,15 +86,10 @@ export const Collaboration = Extension.create({
       };
 
       const provider = editor.options.collaborationProvider;
-      if (!provider || provider.synced) {
+      if (!provider) {
         doBootstrap();
       } else {
-        const onSynced = () => {
-          provider.off('synced', onSynced);
-          doBootstrap();
-        };
-        provider.on('synced', onSynced);
-        cleanupState.partSyncPendingCleanup = () => provider.off('synced', onSynced);
+        cleanupState.partSyncPendingCleanup = onCollaborationProviderSynced(provider, doBootstrap);
       }
     }
 
@@ -183,17 +182,17 @@ const initSyncListener = (ydoc, editor, extension) => {
 
   const emit = () => {
     extension.options.isReady = true;
-    provider.off('synced', emit);
     editor.emit('collaborationReady', { editor, ydoc });
   };
 
-  if (provider.synced) {
+  if (isCollaborationProviderSynced(provider)) {
     setTimeout(() => {
       emit();
     }, 250);
     return;
   }
-  provider.on('synced', emit);
+
+  onCollaborationProviderSynced(provider, emit);
 };
 
 export const generateCollaborationData = async (editor) => {

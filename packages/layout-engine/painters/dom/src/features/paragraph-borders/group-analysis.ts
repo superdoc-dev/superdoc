@@ -29,6 +29,7 @@ import { hashParagraphBorders } from '../../paragraph-hash-utils.js';
 export type BetweenBorderInfo = {
   showBetweenBorder: boolean;
   suppressTopBorder: boolean;
+  suppressBottomBorder: boolean;
   gapBelow: number;
 };
 
@@ -125,6 +126,7 @@ export const computeBetweenBorderFlags = (
 ): Map<number, BetweenBorderInfo> => {
   // Phase 1: determine which consecutive pairs form between-border groups
   const pairFlags = new Set<number>();
+  const noBetweenPairs = new Set<number>();
 
   for (let i = 0; i < fragments.length - 1; i += 1) {
     const frag = fragments[i];
@@ -132,7 +134,9 @@ export const computeBetweenBorderFlags = (
     if (frag.continuesOnNext) continue;
 
     const borders = getFragmentParagraphBorders(frag, blockLookup);
-    if (isBetweenBorderNone(borders)) continue;
+    // Skip if no between element at all (no grouping intent).
+    // between: {style: 'none'} (nil/none) IS allowed — it signals grouping without a separator.
+    if (!borders?.between) continue;
 
     const next = fragments[i + 1];
     if (next.kind !== 'para' && next.kind !== 'list-item') continue;
@@ -147,13 +151,18 @@ export const computeBetweenBorderFlags = (
       continue;
 
     const nextBorders = getFragmentParagraphBorders(next, blockLookup);
-    if (isBetweenBorderNone(nextBorders)) continue;
+    if (!nextBorders?.between) continue;
     if (hashParagraphBorders(borders!) !== hashParagraphBorders(nextBorders!)) continue;
 
     // Skip fragments in different columns (different x positions)
     if (frag.x !== next.x) continue;
 
     pairFlags.add(i);
+
+    // Track nil/none between pairs — these get suppressBottomBorder instead of showBetweenBorder
+    if (isBetweenBorderNone(borders) && isBetweenBorderNone(nextBorders)) {
+      noBetweenPairs.add(i);
+    }
   }
 
   // Phase 2: build per-fragment info with gap distances and top suppression
@@ -164,19 +173,33 @@ export const computeBetweenBorderFlags = (
     const next = fragments[i + 1];
     const fragHeight = getFragmentHeight(frag, blockLookup);
     const gapBelow = Math.max(0, next.y - (frag.y + fragHeight));
+    const isNoBetween = noBetweenPairs.has(i);
 
-    // Current fragment: show between border on bottom, extend into gap
+    // Current fragment: extend into gap.
+    // Real between → showBetweenBorder (replace bottom with between definition).
+    // Nil/none between → suppressBottomBorder (hide bottom, keep left/right continuous).
     if (!result.has(i)) {
-      result.set(i, { showBetweenBorder: true, suppressTopBorder: false, gapBelow });
+      result.set(i, {
+        showBetweenBorder: !isNoBetween,
+        suppressTopBorder: false,
+        suppressBottomBorder: isNoBetween,
+        gapBelow,
+      });
     } else {
       const existing = result.get(i)!;
-      existing.showBetweenBorder = true;
+      existing.showBetweenBorder = !isNoBetween;
+      existing.suppressBottomBorder = isNoBetween;
       existing.gapBelow = gapBelow;
     }
 
     // Next fragment: suppress top border (previous fragment's extended layer covers boundary)
     if (!result.has(i + 1)) {
-      result.set(i + 1, { showBetweenBorder: false, suppressTopBorder: true, gapBelow: 0 });
+      result.set(i + 1, {
+        showBetweenBorder: false,
+        suppressTopBorder: true,
+        suppressBottomBorder: false,
+        gapBelow: 0,
+      });
     } else {
       result.get(i + 1)!.suppressTopBorder = true;
     }

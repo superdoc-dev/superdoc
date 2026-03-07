@@ -59,8 +59,10 @@ export const createParagraphDecorationLayers = (
 
   const borderBox = getParagraphBorderBox(fragmentWidth, attrs.indent);
 
-  // Extend layers into the spacing gap for continuous group borders
-  const gapExtension = betweenInfo?.showBetweenBorder ? betweenInfo.gapBelow : 0;
+  // Extend layers into the spacing gap for continuous group borders.
+  // Both real between (showBetweenBorder) and nil/none between (suppressBottomBorder)
+  // need gap extension to keep left/right borders continuous through the spacing gap.
+  const gapExtension = betweenInfo?.showBetweenBorder || betweenInfo?.suppressBottomBorder ? betweenInfo!.gapBelow : 0;
   const bottomValue = gapExtension > 0 ? `-${gapExtension}px` : '0px';
 
   const baseStyles = {
@@ -113,10 +115,12 @@ export const applyParagraphBorderStyles = (
   if (!borders) return;
   const showBetweenBorder = betweenInfo?.showBetweenBorder ?? false;
   const suppressTopBorder = betweenInfo?.suppressTopBorder ?? false;
+  const suppressBottomBorder = betweenInfo?.suppressBottomBorder ?? false;
 
   element.style.boxSizing = 'border-box';
   BORDER_SIDES.forEach((side) => {
     if (side === 'top' && suppressTopBorder) return;
+    if (side === 'bottom' && suppressBottomBorder) return;
     const border = borders[side];
     if (!border) return;
     setBorderSideStyle(element, side, border);
@@ -157,6 +161,7 @@ export const stampBetweenBorderDataset = (element: HTMLElement, betweenInfo?: Be
   if (!betweenInfo) return;
   if (betweenInfo.showBetweenBorder) element.dataset.betweenBorder = 'true';
   if (betweenInfo.suppressTopBorder) element.dataset.suppressTopBorder = 'true';
+  if (betweenInfo.suppressBottomBorder) element.dataset.suppressBottomBorder = 'true';
   if (betweenInfo.gapBelow) element.dataset.gapBelow = String(betweenInfo.gapBelow);
 };
 

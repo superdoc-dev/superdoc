@@ -334,6 +334,17 @@ export const normalizeParagraphBorders = (value: unknown): ParagraphAttrs['borde
     }
   });
 
+  // Preserve between: {style: 'none'} for nil/none between borders.
+  // normalizeBorderSide drops 'none' sides, but for 'between' we need to keep it
+  // so the grouping logic can distinguish "explicitly nil/none" (group without separator)
+  // from "no between element at all" (don't group).
+  if (!borders.between && source.between) {
+    const style = mapBorderStyle((source.between as Record<string, unknown>).val);
+    if (style === 'none') {
+      borders.between = { style: 'none' };
+    }
+  }
+
   return Object.keys(borders).length > 0 ? borders : undefined;
 };
 

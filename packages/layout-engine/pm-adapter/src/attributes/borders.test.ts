@@ -572,11 +572,13 @@ describe('normalizeParagraphBorders', () => {
       expect(result?.between?.style).toBe('dashed');
     });
 
-    it('should return undefined when between border is nil', () => {
+    it('should preserve between: {style: "none"} when between border is nil', () => {
       const input = {
         between: { val: 'nil' },
       };
-      expect(normalizeParagraphBorders(input)).toBeUndefined();
+      const result = normalizeParagraphBorders(input);
+      expect(result).toBeDefined();
+      expect(result?.between).toEqual({ style: 'none' });
     });
   });
 

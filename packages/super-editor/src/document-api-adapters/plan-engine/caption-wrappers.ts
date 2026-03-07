@@ -55,6 +55,18 @@ function receiptApplied(receipt: ReturnType<typeof executeDomainCommand>): boole
   return receipt.steps[0]?.effect === 'changed';
 }
 
+const CAPTION_PARAGRAPH_STYLE_ID = 'Caption';
+
+function buildCaptionParagraphAttrs(nodeId: string): {
+  sdBlockId: string;
+  paragraphProperties: { styleId: string };
+} {
+  return {
+    sdBlockId: nodeId,
+    paragraphProperties: { styleId: CAPTION_PARAGRAPH_STYLE_ID },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Read operations
 // ---------------------------------------------------------------------------
@@ -108,7 +120,7 @@ export function captionsInsertWrapper(
   const receipt = executeDomainCommand(
     editor,
     () => {
-      const label = input.label ?? 'Figure';
+      const label = input.label;
       const children: import('prosemirror-model').Node[] = [];
       const schema = editor.schema;
 
@@ -133,7 +145,7 @@ export function captionsInsertWrapper(
         children.push(schema.text(`: ${input.text}`));
       }
 
-      const captionParagraph = schema.nodes.paragraph.create({ styleName: 'Caption', sdBlockId: nodeId }, children);
+      const captionParagraph = schema.nodes.paragraph.create(buildCaptionParagraphAttrs(nodeId), children);
 
       const { tr } = editor.state;
       tr.insert(pos, captionParagraph);

@@ -4,6 +4,9 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 type BookmarkConfig = {
   name: string;
   id?: string | null;
+  colFirst?: number | string | null;
+  colLast?: number | string | null;
+  displacedByCustomXml?: string | null;
 };
 
 type SearchMatch = {

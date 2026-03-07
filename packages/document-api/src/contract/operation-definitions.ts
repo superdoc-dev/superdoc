@@ -55,7 +55,6 @@ export type ReferenceGroupKey =
   | 'contentControls'
   | 'footnotes'
   | 'bookmarks'
-  | 'links'
   | 'crossRefs'
   | 'index'
   | 'captions'
@@ -4105,79 +4104,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'bookmarks/remove.mdx',
     referenceGroup: 'bookmarks',
-  },
-
-  // -------------------------------------------------------------------------
-  // Links
-  // -------------------------------------------------------------------------
-
-  'links.list': {
-    memberPath: 'links.list',
-    description: 'List all hyperlinks in the document.',
-    expectedResult: 'Returns a LinksListResult containing discovered hyperlinks with address and domain data.',
-    requiresDocumentContext: true,
-    metadata: readOperation({
-      idempotency: 'idempotent',
-      throws: T_REF_READ_LIST,
-    }),
-    referenceDocPath: 'links/list.mdx',
-    referenceGroup: 'links',
-  },
-  'links.get': {
-    memberPath: 'links.get',
-    description: 'Get detailed information about a specific hyperlink.',
-    expectedResult: "Returns a LinkInfo object with the link's destination, tooltip, and display text.",
-    requiresDocumentContext: true,
-    metadata: readOperation({
-      throws: T_NOT_FOUND_CAPABLE,
-    }),
-    referenceDocPath: 'links/get.mdx',
-    referenceGroup: 'links',
-  },
-  'links.insert': {
-    memberPath: 'links.insert',
-    description: 'Insert a new hyperlink at a target location.',
-    expectedResult: 'Returns a LinkMutationResult indicating success with the link address or a failure.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'non-idempotent',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: NONE_FAILURES,
-      throws: T_REF_INSERT,
-    }),
-    referenceDocPath: 'links/insert.mdx',
-    referenceGroup: 'links',
-  },
-  'links.update': {
-    memberPath: 'links.update',
-    description: "Update an existing hyperlink's destination or properties.",
-    expectedResult: 'Returns a LinkMutationResult indicating success with the updated link address or a failure.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'idempotent',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: NONE_FAILURES,
-      throws: T_REF_MUTATION,
-    }),
-    referenceDocPath: 'links/update.mdx',
-    referenceGroup: 'links',
-  },
-  'links.remove': {
-    memberPath: 'links.remove',
-    description: 'Remove a hyperlink from the document.',
-    expectedResult: 'Returns a LinkMutationResult indicating success or a failure.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'non-idempotent',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: NONE_FAILURES,
-      throws: T_REF_MUTATION_REMOVE,
-    }),
-    referenceDocPath: 'links/remove.mdx',
-    referenceGroup: 'links',
   },
 
   // -------------------------------------------------------------------------

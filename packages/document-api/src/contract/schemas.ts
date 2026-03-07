@@ -1782,7 +1782,9 @@ function ccTargetInput(): JsonSchema {
 }
 
 /** Generates all contentControls.* schemas in one helper to keep the main map DRY. */
-function buildContentControlSchemas(): Record<string, OperationSchemaSet> {
+type ContentControlOperationId = Extract<OperationId, 'create.contentControl' | `contentControls.${string}`>;
+
+function buildContentControlSchemas(): Record<ContentControlOperationId, OperationSchemaSet> {
   const targetOnlyMutation: OperationSchemaSet = {
     input: ccTargetInput(),
     output: ccMutationResultSchema(),
@@ -2192,35 +2194,6 @@ const bookmarkAddressSchema: JsonSchema = objectSchema(
 );
 
 const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
-
-// --- Link schemas ---
-const linkAnchorSchema: JsonSchema = objectSchema(
-  {
-    start: ref('Position'),
-    end: ref('Position'),
-  },
-  ['start', 'end'],
-);
-
-const linkAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'inline' }, nodeType: { const: 'hyperlink' }, anchor: linkAnchorSchema },
-  ['kind', 'nodeType', 'anchor'],
-);
-
-const linkDestinationSchema: JsonSchema = {
-  oneOf: [
-    objectSchema({ kind: { const: 'external' }, href: { type: 'string' }, tooltip: { type: 'string' } }, [
-      'kind',
-      'href',
-    ]),
-    objectSchema({ kind: { const: 'internal' }, bookmarkName: { type: 'string' }, tooltip: { type: 'string' } }, [
-      'kind',
-      'bookmarkName',
-    ]),
-  ],
-};
-
-const linkMutation = refMutationSchemas({ link: linkAddressSchema }, ['link']);
 
 // --- Footnote schemas ---
 const footnoteAddressSchema: JsonSchema = objectSchema(
@@ -5415,36 +5388,6 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'bookmarks.remove': {
     input: objectSchema({ target: bookmarkAddressSchema }, ['target']),
     ...bookmarkMutation,
-  },
-
-  // -------------------------------------------------------------------------
-  // Links
-  // -------------------------------------------------------------------------
-  'links.list': {
-    input: refListQuerySchema,
-    output: discoveryOutputSchema,
-  },
-  'links.get': {
-    input: objectSchema({ target: linkAddressSchema }, ['target']),
-    output: { type: 'object' },
-  },
-  'links.insert': {
-    input: objectSchema({ at: textTargetSchema, destination: linkDestinationSchema }, ['at', 'destination']),
-    ...linkMutation,
-  },
-  'links.update': {
-    input: objectSchema(
-      {
-        target: linkAddressSchema,
-        patch: objectSchema({ destination: linkDestinationSchema, tooltip: { type: 'string' } }),
-      },
-      ['target', 'patch'],
-    ),
-    ...linkMutation,
-  },
-  'links.remove': {
-    input: objectSchema({ target: linkAddressSchema }, ['target']),
-    ...linkMutation,
   },
 
   // -------------------------------------------------------------------------

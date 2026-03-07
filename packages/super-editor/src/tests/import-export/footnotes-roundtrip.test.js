@@ -402,6 +402,35 @@ describe('footnotesExporter unit tests', () => {
       expect(result.attributes['w:id']).toBe('1');
     });
 
+    it('adds superscript formatting to generated w:footnoteRef run', () => {
+      const footnote = {
+        id: '1',
+        type: null,
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inserted from command' }] }],
+      };
+
+      const exportContext = {
+        editor: { schema: {}, extensionService: { extensions: [] } },
+        editorSchema: {},
+        converter: {},
+      };
+
+      const result = createFootnoteElement(footnote, exportContext);
+      expect(result).toBeDefined();
+
+      const paragraph = result.elements?.find((el) => el?.name === 'w:p');
+      const markerRun =
+        paragraph?.elements?.find((el) => el?.name === 'w:r' && hasFootnoteRef(el)) || paragraph?.elements?.[0];
+      const runProps = markerRun?.elements?.find((el) => el?.name === 'w:rPr');
+      expect(runProps).toBeDefined();
+
+      const runStyle = runProps?.elements?.find((el) => el?.name === 'w:rStyle');
+      expect(runStyle?.attributes?.['w:val']).toBe('FootnoteReference');
+
+      const vertAlign = runProps?.elements?.find((el) => el?.name === 'w:vertAlign');
+      expect(vertAlign?.attributes?.['w:val']).toBe('superscript');
+    });
+
     it('does not add w:footnoteRef if original did not have one (custom mark)', () => {
       // Simulate a custom mark footnote - original has no w:footnoteRef
       const originalXmlNoFootnoteRef = {

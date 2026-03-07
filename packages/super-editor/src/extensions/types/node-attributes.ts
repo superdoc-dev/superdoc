@@ -673,6 +673,12 @@ export interface BookmarkStartAttrs extends InlineNodeAttributes {
   name?: string | null;
   /** Unique identifier for the bookmark */
   id?: string | null;
+  /** First column reference */
+  colFirst?: number | string | null;
+  /** Last column reference */
+  colLast?: number | string | null;
+  /** Indicates if bookmark was displaced by custom XML */
+  displacedByCustomXml?: string | null;
 }
 
 /** Bookmark end node attributes */

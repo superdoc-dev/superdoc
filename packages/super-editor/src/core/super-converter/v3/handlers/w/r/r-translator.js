@@ -18,6 +18,42 @@ const XML_NODE_NAME = 'w:r';
 /** @type {import('@translator').SuperDocNodeOrKeyName} */
 const SD_KEY_NAME = 'run';
 
+const REFERENCE_RUN_STYLE_BY_XML_NAME = {
+  'w:footnoteReference': 'FootnoteReference',
+  'w:endnoteReference': 'EndnoteReference',
+};
+
+const hasXmlNodeNamed = (node, targetName) => {
+  if (!node || typeof node !== 'object') return false;
+  if (node.name === targetName) return true;
+  if (!Array.isArray(node.elements)) return false;
+  return node.elements.some((child) => hasXmlNodeNamed(child, targetName));
+};
+
+const ensureReferenceRunFormatting = (runNode, referenceXmlName) => {
+  const styleId = REFERENCE_RUN_STYLE_BY_XML_NAME[referenceXmlName];
+  if (!styleId) return;
+
+  if (!Array.isArray(runNode.elements)) runNode.elements = [];
+  let runProps = runNode.elements.find((el) => el?.name === 'w:rPr');
+  if (!runProps) {
+    runProps = { name: 'w:rPr', elements: [] };
+    runNode.elements.unshift(runProps);
+  }
+
+  if (!Array.isArray(runProps.elements)) runProps.elements = [];
+
+  const hasStyle = runProps.elements.some((el) => el?.name === 'w:rStyle');
+  if (!hasStyle) {
+    runProps.elements.push({ name: 'w:rStyle', attributes: { 'w:val': styleId } });
+  }
+
+  const hasVertAlign = runProps.elements.some((el) => el?.name === 'w:vertAlign');
+  if (!hasVertAlign) {
+    runProps.elements.push({ name: 'w:vertAlign', attributes: { 'w:val': 'superscript' } });
+  }
+};
+
 /*
  * Wraps the provided content in a SuperDoc run node.
  */
@@ -220,6 +256,11 @@ const decode = (params, decodedAttrs = {}) => {
     if (child.name === 'w:r') {
       const clonedRun = cloneXmlNode(child);
       replaceRunProps(clonedRun);
+      if (hasXmlNodeNamed(clonedRun, 'w:footnoteReference')) {
+        ensureReferenceRunFormatting(clonedRun, 'w:footnoteReference');
+      } else if (hasXmlNodeNamed(clonedRun, 'w:endnoteReference')) {
+        ensureReferenceRunFormatting(clonedRun, 'w:endnoteReference');
+      }
       runs.push(clonedRun);
       return;
     }
@@ -261,6 +302,9 @@ const decode = (params, decodedAttrs = {}) => {
     const runWrapper = { name: XML_NODE_NAME, elements: [] };
     applyBaseRunProps(runWrapper);
     if (!Array.isArray(runWrapper.elements)) runWrapper.elements = [];
+    if (child.name === 'w:footnoteReference' || child.name === 'w:endnoteReference') {
+      ensureReferenceRunFormatting(runWrapper, child.name);
+    }
     runWrapper.elements.push(cloneXmlNode(child));
     runs.push(runWrapper);
   });

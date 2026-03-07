@@ -123,12 +123,6 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'bookmarks.insert': ['insertBookmark'],
   'bookmarks.rename': ['insertBookmark'],
   'bookmarks.remove': ['insertBookmark'],
-  // Link operations — reuse hyperlink infrastructure (setLink proves link extension):
-  'links.list': ['setLink'],
-  'links.get': ['setLink'],
-  'links.insert': ['setLink'],
-  'links.update': ['setLink'],
-  'links.remove': ['setLink'],
   // Footnote operations — insertContent proves content insertion capability:
   'footnotes.list': ['insertContent'],
   'footnotes.get': ['insertContent'],

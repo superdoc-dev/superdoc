@@ -160,7 +160,8 @@ export function citationsInsertWrapper(
 
   if (!receiptApplied(receipt)) return citationFailure('NO_OP', 'Insert produced no change.');
 
-  return citationSuccess(computeInlineAddress(editor.state.doc, resolved.from));
+  const insertedAddress = resolveInsertedCitationAddress(editor.state.doc, resolved.from, input.sourceIds);
+  return citationSuccess(insertedAddress);
 }
 
 export function citationsUpdateWrapper(
@@ -517,6 +518,52 @@ function computeInlineAddress(doc: import('prosemirror-model').Node, pos: number
       end: { blockId, offset: offset + node.nodeSize },
     },
   };
+}
+
+function resolveInsertedCitationAddress(
+  doc: import('prosemirror-model').Node,
+  preferredPos: number,
+  sourceIds: string[],
+): CitationAddress {
+  const directNode = doc.nodeAt?.(preferredPos);
+  if (directNode?.type?.name === 'citation') {
+    return computeInlineAddress(doc, preferredPos);
+  }
+
+  const exactSourceIdMatches: number[] = [];
+  const allCitationPositions: number[] = [];
+
+  doc.descendants?.((node, pos) => {
+    if (node.type?.name !== 'citation') return true;
+    allCitationPositions.push(pos);
+
+    const nodeSourceIds = Array.isArray(node.attrs?.sourceIds) ? (node.attrs.sourceIds as string[]) : [];
+    if (sameSourceIds(nodeSourceIds, sourceIds)) {
+      exactSourceIdMatches.push(pos);
+    }
+    return true;
+  });
+
+  const candidates = exactSourceIdMatches.length > 0 ? exactSourceIdMatches : allCitationPositions;
+  if (candidates.length === 0) {
+    return computeInlineAddress(doc, preferredPos);
+  }
+
+  const nearestPos = candidates.reduce((bestPos, candidatePos) => {
+    const bestDistance = Math.abs(bestPos - preferredPos);
+    const candidateDistance = Math.abs(candidatePos - preferredPos);
+    return candidateDistance < bestDistance ? candidatePos : bestPos;
+  });
+
+  return computeInlineAddress(doc, nearestPos);
+}
+
+function sameSourceIds(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
 }
 
 function buildCitationInstruction(sourceIds: string[]): string {

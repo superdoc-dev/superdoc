@@ -27,12 +27,60 @@ export interface ResolvedFootnote {
 interface FootnoteStore {
   footnoteNumberById?: Record<string, number>;
   endnoteNumberById?: Record<string, number>;
-  footnotes?: Record<string, { content?: string }>;
-  endnotes?: Record<string, { content?: string }>;
+  footnotes?: FootnoteCollection;
+  endnotes?: FootnoteCollection;
 }
 
 function getConverterStore(editor: Editor): FootnoteStore {
   return (editor as unknown as { converter?: FootnoteStore }).converter ?? {};
+}
+
+type FootnoteEntry = {
+  id?: string | number;
+  content?: unknown;
+};
+
+type LegacyFootnoteMap = Record<string, { content?: string }>;
+type FootnoteCollection = FootnoteEntry[] | LegacyFootnoteMap;
+
+function isLegacyFootnoteMap(value: unknown): value is LegacyFootnoteMap {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractTextFromNode(node: unknown): string {
+  if (node == null) return '';
+  if (typeof node === 'string') return node;
+  if (typeof node !== 'object') return '';
+
+  const candidate = node as { text?: unknown; content?: unknown[] };
+  if (typeof candidate.text === 'string') return candidate.text;
+  if (!Array.isArray(candidate.content)) return '';
+
+  return candidate.content.map((child) => extractTextFromNode(child)).join('');
+}
+
+function extractTextFromContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((node) => extractTextFromNode(node))
+    .filter((text) => text.length > 0)
+    .join('\n');
+}
+
+function resolveCollectionContent(collection: FootnoteCollection | undefined, noteId: string): string {
+  if (!collection) return '';
+
+  if (Array.isArray(collection)) {
+    const match = collection.find((entry) => String(entry?.id ?? '') === noteId);
+    return extractTextFromContent(match?.content);
+  }
+
+  if (isLegacyFootnoteMap(collection)) {
+    return collection[noteId]?.content ?? '';
+  }
+
+  return '';
 }
 
 // ---------------------------------------------------------------------------
@@ -92,12 +140,8 @@ function resolveDisplayNumber(editor: Editor, resolved: ResolvedFootnote): strin
 
 function resolveContent(editor: Editor, resolved: ResolvedFootnote): string {
   const store = getConverterStore(editor);
-  const contentMap = resolved.type === 'footnote' ? store.footnotes : store.endnotes;
-
-  if (contentMap && contentMap[resolved.noteId]) {
-    return contentMap[resolved.noteId].content ?? '';
-  }
-  return '';
+  const collection = resolved.type === 'footnote' ? store.footnotes : store.endnotes;
+  return resolveCollectionContent(collection, resolved.noteId);
 }
 
 export function extractFootnoteInfo(editor: Editor, resolved: ResolvedFootnote): FootnoteInfo {

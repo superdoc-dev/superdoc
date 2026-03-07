@@ -57,6 +57,94 @@ function receiptApplied(receipt: ReturnType<typeof executeDomainCommand>): boole
   return receipt.steps[0]?.effect === 'changed';
 }
 
+type FootnoteEntry = {
+  id: string;
+  type?: string | null;
+  content: unknown[];
+  originalXml?: unknown;
+};
+
+type LegacyNoteMap = Record<string, { content?: string }>;
+
+interface ConverterNotesStore {
+  footnotes?: FootnoteEntry[] | LegacyNoteMap;
+  endnotes?: FootnoteEntry[] | LegacyNoteMap;
+}
+
+function isLegacyNoteMap(value: unknown): value is LegacyNoteMap {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function textToFootnoteContentNodes(text: string): unknown[] {
+  const lines = text.split(/\r?\n/);
+  return lines.map((line) => ({
+    type: 'paragraph',
+    content: line.length > 0 ? [{ type: 'text', text: line }] : [],
+  }));
+}
+
+function normalizeLegacyNoteMap(map: LegacyNoteMap): FootnoteEntry[] {
+  return Object.entries(map).map(([id, value]) => ({
+    id: String(id),
+    content: textToFootnoteContentNodes(value?.content ?? ''),
+  }));
+}
+
+function ensureNoteEntries(converter: ConverterNotesStore, kind: 'footnotes' | 'endnotes'): FootnoteEntry[] {
+  const current = converter[kind];
+  if (Array.isArray(current)) return current;
+
+  if (isLegacyNoteMap(current)) {
+    const normalized = normalizeLegacyNoteMap(current);
+    converter[kind] = normalized;
+    return normalized;
+  }
+
+  const initialized: FootnoteEntry[] = [];
+  converter[kind] = initialized;
+  return initialized;
+}
+
+function toNonNegativeInteger(value: unknown): number | null {
+  const num = Number(value);
+  if (!Number.isInteger(num) || !Number.isFinite(num) || num < 0) return null;
+  return num;
+}
+
+function allocateNextNoteId(editor: Editor, type: 'footnote' | 'endnote', entries: FootnoteEntry[]): string {
+  let maxId = 0;
+
+  for (const ref of findAllFootnotes(editor.state.doc, type)) {
+    const parsed = toNonNegativeInteger(ref.noteId);
+    if (parsed != null) maxId = Math.max(maxId, parsed);
+  }
+
+  for (const entry of entries) {
+    const parsed = toNonNegativeInteger(entry.id);
+    if (parsed != null) maxId = Math.max(maxId, parsed);
+  }
+
+  return String(maxId + 1);
+}
+
+function upsertNoteEntry(entries: FootnoteEntry[], noteId: string, content: string): void {
+  const existing = entries.find((entry) => String(entry.id) === noteId);
+  if (existing) {
+    existing.content = textToFootnoteContentNodes(content);
+    return;
+  }
+
+  entries.push({
+    id: noteId,
+    content: textToFootnoteContentNodes(content),
+  });
+}
+
+function removeNoteEntry(entries: FootnoteEntry[], noteId: string): void {
+  const index = entries.findIndex((entry) => String(entry.id) === noteId);
+  if (index >= 0) entries.splice(index, 1);
+}
+
 // ---------------------------------------------------------------------------
 // Read operations
 // ---------------------------------------------------------------------------
@@ -94,8 +182,14 @@ export function footnotesInsertWrapper(
 ): FootnoteMutationResult {
   rejectTrackedMode('footnotes.insert', options);
 
-  // Generate a note ID for the new footnote/endnote
-  const noteId = String(Date.now());
+  const converter = (editor as unknown as { converter?: ConverterNotesStore }).converter;
+  if (!converter) {
+    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'footnotes.insert: converter not available.');
+  }
+
+  const noteStoreKey = input.type === 'endnote' ? 'endnotes' : 'footnotes';
+  const noteEntries = ensureNoteEntries(converter, noteStoreKey);
+  const noteId = allocateNextNoteId(editor, input.type, noteEntries);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId };
 
   if (options?.dryRun) {
@@ -122,17 +216,8 @@ export function footnotesInsertWrapper(
       tr.insert(resolved.from, node);
       editor.dispatch(tr);
 
-      // Store the note content in the converter's footnote/endnote store
-      // so it is available for export and for get/update operations.
-      interface NoteStore {
-        footnotes?: Record<string, { content?: string }>;
-        endnotes?: Record<string, { content?: string }>;
-      }
-      const converter = (editor as unknown as { converter?: NoteStore }).converter;
-      if (converter) {
-        const store = input.type === 'endnote' ? (converter.endnotes ??= {}) : (converter.footnotes ??= {});
-        store[noteId] = { content: input.content };
-      }
+      // Keep converter note content in exporter-compatible array form.
+      upsertNoteEntry(noteEntries, noteId, input.content);
 
       clearIndexCache(editor);
       return true;
@@ -163,29 +248,25 @@ export function footnotesUpdateWrapper(
 
   // Footnote content is stored in the converter's footnote/endnote parts.
   // This is an out-of-band mutation since it modifies XML parts, not PM state.
-  interface ConverterNotes {
-    footnotes?: Record<string, { content?: string }>;
-    endnotes?: Record<string, { content?: string }>;
-  }
-
-  const converter = (editor as unknown as { converter?: ConverterNotes }).converter;
+  const converter = (editor as unknown as { converter?: ConverterNotesStore }).converter;
   if (!converter) {
     throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'footnotes.update: converter not available.');
   }
+  const noteStoreKey = resolved.type === 'footnote' ? 'footnotes' : 'endnotes';
+  const noteEntries = ensureNoteEntries(converter, noteStoreKey);
 
-  const payload = executeOutOfBandMutation(
+  executeOutOfBandMutation(
     editor,
     (dryRun) => {
-      const noteStore = resolved.type === 'footnote' ? converter.footnotes : converter.endnotes;
-      if (!noteStore || !noteStore[resolved.noteId]) {
+      if (input.patch.content === undefined) {
         return { changed: false, payload: undefined };
       }
 
-      if (!dryRun && input.patch.content !== undefined) {
-        noteStore[resolved.noteId].content = input.patch.content;
+      if (!dryRun) {
+        upsertNoteEntry(noteEntries, resolved.noteId, input.patch.content);
       }
 
-      return { changed: input.patch.content !== undefined, payload: undefined };
+      return { changed: true, payload: undefined };
     },
     { dryRun: options?.dryRun ?? false, expectedRevision: options?.expectedRevision },
   );
@@ -215,6 +296,17 @@ export function footnotesRemoveWrapper(
       if (node) {
         tr.delete(resolved.pos, resolved.pos + node.nodeSize);
         editor.dispatch(tr);
+        const converter = (editor as unknown as { converter?: ConverterNotesStore }).converter;
+        if (converter) {
+          const noteStoreKey = resolved.type === 'footnote' ? 'footnotes' : 'endnotes';
+          const noteEntries = ensureNoteEntries(converter, noteStoreKey);
+          const stillReferenced = findAllFootnotes(editor.state.doc, resolved.type).some(
+            (f) => f.noteId === resolved.noteId,
+          );
+          if (!stillReferenced) {
+            removeNoteEntry(noteEntries, resolved.noteId);
+          }
+        }
         clearIndexCache(editor);
         return true;
       }

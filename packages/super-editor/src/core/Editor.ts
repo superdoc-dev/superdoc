@@ -2722,6 +2722,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       }
 
+      const bibliographyPartPaths =
+        typeof this.converter.getBibliographyPartExportPaths === 'function'
+          ? this.converter.getBibliographyPartExportPaths()
+          : [];
+
+      for (const path of bibliographyPartPaths) {
+        const partData = this.converter.convertedXml[path];
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
       const zipper = new DocxZipper();
 
       if (getUpdatedDocs) {

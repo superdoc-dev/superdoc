@@ -323,4 +323,24 @@ describe('w:r r-translator (node)', () => {
     expect(result).toBeDefined();
     expect(result.name).toBe('w:sdt');
   });
+
+  it('adds superscript reference run properties when decoding footnote references', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        content: [{ type: 'footnoteReference', attrs: { id: '1' } }],
+      },
+    });
+
+    expect(result?.name).toBe('w:r');
+    const runProperties = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(runProperties).toBeDefined();
+
+    const runStyle = runProperties?.elements?.find((el) => el?.name === 'w:rStyle');
+    expect(runStyle?.attributes?.['w:val']).toBe('FootnoteReference');
+
+    const vertAlign = runProperties?.elements?.find((el) => el?.name === 'w:vertAlign');
+    expect(vertAlign?.attributes?.['w:val']).toBe('superscript');
+  });
 });

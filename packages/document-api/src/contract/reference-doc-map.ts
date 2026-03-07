@@ -126,11 +126,6 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Named bookmark inspection, insertion, renaming, and removal.',
     pagePath: 'bookmarks/index.mdx',
   },
-  links: {
-    title: 'Links',
-    description: 'Hyperlink inspection, insertion, update, and removal.',
-    pagePath: 'links/index.mdx',
-  },
   footnotes: {
     title: 'Footnotes',
     description: 'Footnote and endnote lifecycle and numbering configuration.',

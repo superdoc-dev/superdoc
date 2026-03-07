@@ -60,6 +60,30 @@ export const BookmarkStart = Node.create({
           return {};
         },
       },
+
+      /**
+       * @category Attribute
+       * @param {number|string} [colFirst] - First table column index for table-column bookmarks
+       */
+      colFirst: {
+        default: null,
+      },
+
+      /**
+       * @category Attribute
+       * @param {number|string} [colLast] - Last table column index for table-column bookmarks
+       */
+      colLast: {
+        default: null,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string} [displacedByCustomXml] - Indicates if bookmark was displaced by custom XML
+       */
+      displacedByCustomXml: {
+        default: null,
+      },
     };
   },
 

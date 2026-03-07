@@ -171,7 +171,7 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from '../plan-engine/bookmark-wrappers.js';
-import { linksInsertWrapper, linksUpdateWrapper, linksRemoveWrapper } from '../plan-engine/link-wrappers.js';
+
 import {
   footnotesInsertWrapper,
   footnotesUpdateWrapper,
@@ -367,13 +367,6 @@ vi.mock('../helpers/bookmark-resolver.js', () => ({
   resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
   extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
   buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
-}));
-
-vi.mock('../helpers/link-resolver.js', () => ({
-  findAllLinks: refResolverMocks.findAllLinks,
-  resolveLinkTarget: refResolverMocks.resolveLinkTarget,
-  extractLinkInfo: refResolverMocks.extractLinkInfo,
-  buildLinkDiscoveryItem: refResolverMocks.buildLinkDiscoveryItem,
 }));
 
 vi.mock('../helpers/footnote-resolver.js', () => ({
@@ -2886,108 +2879,6 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         bookmarksRemoveWrapper(
           makeRefEditor(),
           { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' } },
-          { changeMode: 'direct' },
-        ),
-      );
-    },
-  },
-
-  // ---- Links ----
-  'links.insert': {
-    throwCase: () =>
-      linksInsertWrapper(
-        makeRefEditor(),
-        {
-          at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] },
-          destination: { kind: 'external', href: 'https://example.com' },
-        },
-        { changeMode: 'tracked' },
-      ),
-    applyCase: () => {
-      const textSpy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 6 });
-      try {
-        return withAppliedReceipt(() =>
-          linksInsertWrapper(
-            makeRefEditor(),
-            {
-              at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] },
-              destination: { kind: 'external', href: 'https://example.com' },
-            },
-            { changeMode: 'direct' },
-          ),
-        );
-      } finally {
-        textSpy.mockRestore();
-      }
-    },
-  },
-  'links.update': {
-    throwCase: () =>
-      linksUpdateWrapper(
-        makeRefEditor(),
-        {
-          target: {
-            kind: 'inline',
-            nodeType: 'hyperlink',
-            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
-          },
-          patch: { destination: { kind: 'external', href: 'https://new.com' } },
-        },
-        { changeMode: 'tracked' },
-      ),
-    applyCase: () => {
-      refResolverMocks.resolveLinkTarget.mockReturnValueOnce({
-        pos: 1,
-        end: 6,
-        mark: { type: { name: 'link' }, attrs: { href: 'https://example.com' } },
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
-      });
-      return withAppliedReceipt(() =>
-        linksUpdateWrapper(
-          makeRefEditor(),
-          {
-            target: {
-              kind: 'inline',
-              nodeType: 'hyperlink',
-              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
-            },
-            patch: { destination: { kind: 'external', href: 'https://new.com' } },
-          },
-          { changeMode: 'direct' },
-        ),
-      );
-    },
-  },
-  'links.remove': {
-    throwCase: () =>
-      linksRemoveWrapper(
-        makeRefEditor(),
-        {
-          target: {
-            kind: 'inline',
-            nodeType: 'hyperlink',
-            anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
-          },
-        },
-        { changeMode: 'tracked' },
-      ),
-    applyCase: () => {
-      refResolverMocks.resolveLinkTarget.mockReturnValueOnce({
-        pos: 1,
-        end: 6,
-        mark: { type: { name: 'link' }, attrs: { href: 'https://example.com' } },
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
-      });
-      return withAppliedReceipt(() =>
-        linksRemoveWrapper(
-          makeRefEditor(),
-          {
-            target: {
-              kind: 'inline',
-              nodeType: 'hyperlink',
-              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
-            },
-          },
           { changeMode: 'direct' },
         ),
       );

@@ -250,13 +250,6 @@ const INTENT_NAMES = {
   'doc.bookmarks.rename': 'rename_bookmark',
   'doc.bookmarks.remove': 'remove_bookmark',
 
-  // Links
-  'doc.links.list': 'list_links',
-  'doc.links.get': 'get_link',
-  'doc.links.insert': 'insert_link',
-  'doc.links.update': 'update_link',
-  'doc.links.remove': 'remove_link',
-
   // Footnotes
   'doc.footnotes.list': 'list_footnotes',
   'doc.footnotes.get': 'get_footnote',

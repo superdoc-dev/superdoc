@@ -385,20 +385,13 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- contentControls.group.* ---
     'contentControls.group.wrap': (input, options) => api.contentControls.group.wrap(input, options),
     'contentControls.group.ungroup': (input, options) => api.contentControls.group.ungroup(input, options),
-    
+
     // --- bookmarks.* ---
     'bookmarks.list': (input) => api.bookmarks.list(input),
     'bookmarks.get': (input) => api.bookmarks.get(input),
     'bookmarks.insert': (input, options) => api.bookmarks.insert(input, options),
     'bookmarks.rename': (input, options) => api.bookmarks.rename(input, options),
     'bookmarks.remove': (input, options) => api.bookmarks.remove(input, options),
-
-    // --- links.* ---
-    'links.list': (input) => api.links.list(input),
-    'links.get': (input) => api.links.get(input),
-    'links.insert': (input, options) => api.links.insert(input, options),
-    'links.update': (input, options) => api.links.update(input, options),
-    'links.remove': (input, options) => api.links.remove(input, options),
 
     // --- footnotes.* ---
     'footnotes.list': (input) => api.footnotes.list(input),

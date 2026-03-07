@@ -16,6 +16,12 @@ import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
 import {
+  createEmptyBibliographyPart,
+  loadBibliographyPartFromPackage,
+  syncBibliographyPartToPackage,
+  getBibliographyPartExportPaths,
+} from './citation-sources.js';
+import {
   collectReferencedNumIds,
   filterOrphanedNumberingDefinitions,
 } from './export-helpers/strip-orphaned-numbering.js';
@@ -192,6 +198,7 @@ class SuperConverter {
     this.comments = [];
     this.footnotes = [];
     this.footnoteProperties = null;
+    this.bibliographyPart = createEmptyBibliographyPart();
     this.viewSetting = null;
     this.inlineDocumentFonts = [];
     this.commentThreadingProfile = null;
@@ -1085,6 +1092,7 @@ class SuperConverter {
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
       this.importDiagnostics = result.importDiagnostics ?? [];
+      this.bibliographyPart = loadBibliographyPartFromPackage(this.convertedXml);
 
       return result.pmDoc;
     } else {
@@ -1204,6 +1212,9 @@ class SuperConverter {
       this.#pruneCommentRelationships(removedTargets);
     }
 
+    // Persist citation sources to package customXml bibliography part.
+    this.bibliographyPart = syncBibliographyPartToPackage(this.convertedXml, this.bibliographyPart);
+
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
 
@@ -1257,6 +1268,10 @@ class SuperConverter {
     });
 
     return { result, params };
+  }
+
+  getBibliographyPartExportPaths() {
+    return getBibliographyPartExportPaths(this.bibliographyPart);
   }
 
   #exportNumberingFile() {

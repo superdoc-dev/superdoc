@@ -177,7 +177,7 @@ describe('document-api contract catalog', () => {
       'hyperlinks',
       'contentControls',
       'bookmarks',
-      'links',
+
       'footnotes',
       'crossRefs',
       'index',

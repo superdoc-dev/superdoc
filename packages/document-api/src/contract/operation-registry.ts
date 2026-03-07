@@ -208,16 +208,7 @@ import type {
   BookmarkRemoveInput,
   BookmarkMutationResult,
 } from '../bookmarks/bookmarks.types.js';
-import type {
-  LinkListInput,
-  LinksListResult,
-  LinkGetInput,
-  LinkInfo,
-  LinkInsertInput,
-  LinkUpdateInput,
-  LinkRemoveInput,
-  LinkMutationResult,
-} from '../links/links.types.js';
+
 import type {
   FootnoteListInput,
   FootnotesListResult,
@@ -1217,13 +1208,6 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'bookmarks.insert': { input: BookmarkInsertInput; options: MutationOptions; output: BookmarkMutationResult };
   'bookmarks.rename': { input: BookmarkRenameInput; options: MutationOptions; output: BookmarkMutationResult };
   'bookmarks.remove': { input: BookmarkRemoveInput; options: MutationOptions; output: BookmarkMutationResult };
-
-  // --- links.* ---
-  'links.list': { input: LinkListInput | undefined; options: never; output: LinksListResult };
-  'links.get': { input: LinkGetInput; options: never; output: LinkInfo };
-  'links.insert': { input: LinkInsertInput; options: MutationOptions; output: LinkMutationResult };
-  'links.update': { input: LinkUpdateInput; options: MutationOptions; output: LinkMutationResult };
-  'links.remove': { input: LinkRemoveInput; options: MutationOptions; output: LinkMutationResult };
 
   // --- footnotes.* ---
   'footnotes.list': { input: FootnoteListInput | undefined; options: never; output: FootnotesListResult };

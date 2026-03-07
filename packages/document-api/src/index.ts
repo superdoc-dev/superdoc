@@ -554,24 +554,7 @@ import type {
   BookmarkRemoveInput,
   BookmarkMutationResult,
 } from './bookmarks/bookmarks.types.js';
-import type { LinksApi, LinksAdapter } from './links/links.js';
-import {
-  executeLinksList,
-  executeLinksGet,
-  executeLinksInsert,
-  executeLinksUpdate,
-  executeLinksRemove,
-} from './links/links.js';
-import type {
-  LinkListInput,
-  LinksListResult,
-  LinkGetInput,
-  LinkInfo,
-  LinkInsertInput,
-  LinkUpdateInput,
-  LinkRemoveInput,
-  LinkMutationResult,
-} from './links/links.types.js';
+
 import type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
 import {
   executeFootnotesList,
@@ -893,7 +876,7 @@ export type {
 } from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type { BookmarksApi, BookmarksAdapter } from './bookmarks/bookmarks.js';
-export type { LinksApi, LinksAdapter } from './links/links.js';
+
 export type { FootnotesApi, FootnotesAdapter } from './footnotes/footnotes.js';
 export type { CrossRefsApi, CrossRefsAdapter } from './cross-refs/cross-refs.js';
 export type { IndexApi, IndexAdapter } from './index/index.js';
@@ -1054,7 +1037,7 @@ export type {
   HyperlinksRemoveInput,
 } from './hyperlinks/hyperlinks.types.js';
 export type * from './bookmarks/bookmarks.types.js';
-export type * from './links/links.types.js';
+
 export type * from './footnotes/footnotes.types.js';
 export type * from './cross-refs/cross-refs.types.js';
 export type * from './index/index.types.js';
@@ -1445,10 +1428,6 @@ export interface DocumentApi {
    */
   bookmarks: BookmarksApi;
   /**
-   * Hyperlink operations.
-   */
-  links: LinksApi;
-  /**
    * Footnote and endnote operations.
    */
   footnotes: FootnotesApi;
@@ -1537,7 +1516,7 @@ export interface DocumentApiAdapters {
   hyperlinks: HyperlinksAdapter;
   contentControls: ContentControlsAdapter & ContentControlsCreateAdapter;
   bookmarks?: BookmarksAdapter;
-  links?: LinksAdapter;
+
   footnotes?: FootnotesAdapter;
   crossRefs?: CrossRefsAdapter;
   index?: IndexAdapter;
@@ -1596,7 +1575,6 @@ function buildFormatInlineAliasApi(adapter: FormatAdapter): FormatInlineAliasApi
 /** Namespace prefixes whose operations are gated on optional adapter presence. */
 const ADAPTER_GATED_PREFIXES = [
   'bookmarks',
-  'links',
   'footnotes',
   'crossRefs',
   'index',
@@ -2483,23 +2461,6 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       remove(input: BookmarkRemoveInput, options?: MutationOptions): BookmarkMutationResult {
         return executeBookmarksRemove(requireAdapter(adapters.bookmarks, 'bookmarks'), input, options);
-      },
-    },
-    links: {
-      list(query?: LinkListInput): LinksListResult {
-        return executeLinksList(requireAdapter(adapters.links, 'links'), query);
-      },
-      get(input: LinkGetInput): LinkInfo {
-        return executeLinksGet(requireAdapter(adapters.links, 'links'), input);
-      },
-      insert(input: LinkInsertInput, options?: MutationOptions): LinkMutationResult {
-        return executeLinksInsert(requireAdapter(adapters.links, 'links'), input, options);
-      },
-      update(input: LinkUpdateInput, options?: MutationOptions): LinkMutationResult {
-        return executeLinksUpdate(requireAdapter(adapters.links, 'links'), input, options);
-      },
-      remove(input: LinkRemoveInput, options?: MutationOptions): LinkMutationResult {
-        return executeLinksRemove(requireAdapter(adapters.links, 'links'), input, options);
       },
     },
     footnotes: {

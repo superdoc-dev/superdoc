@@ -53,11 +53,7 @@ const DEFERRED_NEW_NAMESPACE_OPERATION_IDS = [
   'doc.bookmarks.insert',
   'doc.bookmarks.rename',
   'doc.bookmarks.remove',
-  'doc.links.list',
-  'doc.links.get',
-  'doc.links.insert',
-  'doc.links.update',
-  'doc.links.remove',
+
   'doc.footnotes.list',
   'doc.footnotes.get',
   'doc.footnotes.insert',

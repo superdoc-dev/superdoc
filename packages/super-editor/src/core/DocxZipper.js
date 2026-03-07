@@ -10,6 +10,7 @@ const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', '
 
 /** Map file extensions to correct MIME sub-types where they differ. */
 const MIME_TYPE_FOR_EXT = { tif: 'tiff', jpg: 'jpeg' };
+const CUSTOM_XML_ITEM_PROPS_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
 
 /**
  * Class to handle unzipping and zipping of docx files
@@ -223,6 +224,14 @@ class DocxZipper {
         Object.keys(docx.files).forEach((key) => partNames.add(key));
       }
     }
+
+    partNames.forEach((name) => {
+      if (!/^customXml\/itemProps\d+\.xml$/i.test(name)) return;
+      if (!hasFile(name)) return;
+      const partName = `/${name}`;
+      if (hasPartOverride(partName)) return;
+      typesString += `<Override PartName="${partName}" ContentType="${CUSTOM_XML_ITEM_PROPS_CONTENT_TYPE}" />`;
+    });
 
     partNames.forEach((name) => {
       if (name.includes('.rels')) return;

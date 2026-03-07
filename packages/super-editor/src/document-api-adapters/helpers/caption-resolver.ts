@@ -32,11 +32,22 @@ export interface ResolvedCaption {
 
 const CAPTION_STYLE_NAMES = new Set(['Caption', 'caption']);
 
+function hasCaptionStyle(node: ProseMirrorNode): boolean {
+  const paragraphProperties =
+    (node.attrs?.paragraphProperties as { styleName?: string; styleId?: string } | undefined) ?? {};
+  const styleCandidates = [
+    node.attrs?.styleName,
+    node.attrs?.styleId,
+    paragraphProperties.styleName,
+    paragraphProperties.styleId,
+  ];
+
+  return styleCandidates.some((candidate) => typeof candidate === 'string' && CAPTION_STYLE_NAMES.has(candidate));
+}
+
 function isCaptionParagraph(node: ProseMirrorNode): boolean {
   if (node.type.name !== 'paragraph') return false;
-  const styleName = (node.attrs?.styleName as string) ?? '';
-  const styleId = (node.attrs?.styleId as string) ?? '';
-  if (CAPTION_STYLE_NAMES.has(styleName) || CAPTION_STYLE_NAMES.has(styleId)) return true;
+  if (hasCaptionStyle(node)) return true;
 
   // Fallback for schemas/configurations that drop style attrs:
   // treat paragraphs containing a SEQ field as captions.

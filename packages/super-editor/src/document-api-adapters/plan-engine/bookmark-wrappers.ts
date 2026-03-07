@@ -28,7 +28,6 @@ import { getRevision } from './revision-tracker.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { TextSelection } from 'prosemirror-state';
 import { DocumentApiAdapterError } from '../errors.js';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +44,25 @@ function bookmarkFailure(code: ReceiptFailureCode, message: string): BookmarkMut
 
 function receiptApplied(receipt: ReturnType<typeof executeDomainCommand>): boolean {
   return receipt.steps[0]?.effect === 'changed';
+}
+
+function parseBookmarkId(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
+  if (typeof raw !== 'string' || raw.trim().length === 0) return null;
+  if (!/^\d+$/.test(raw)) return null;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function allocateBookmarkId(doc: import('prosemirror-model').Node): string {
+  let maxId = -1;
+  doc.descendants((node) => {
+    if (node.type.name !== 'bookmarkStart' && node.type.name !== 'bookmarkEnd') return true;
+    const id = parseBookmarkId(node.attrs?.id);
+    if (id !== null && id > maxId) maxId = id;
+    return true;
+  });
+  return String(maxId + 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,25 +114,40 @@ export function bookmarksInsertWrapper(
     return bookmarkSuccess(address);
   }
 
+  const bookmarkStartType = editor.schema.nodes.bookmarkStart;
+  const bookmarkEndType = editor.schema.nodes.bookmarkEnd;
+  if (!bookmarkStartType || !bookmarkEndType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'bookmarks.insert requires bookmarkStart and bookmarkEnd node types in the schema.',
+    );
+  }
+
   const resolved = resolveInlineInsertPosition(editor, input.at, 'bookmarks.insert');
 
   const receipt = executeDomainCommand(
     editor,
     () => {
-      // Set selection to the target range before inserting
-      const { tr: selTr } = editor.state;
-      selTr.setSelection(TextSelection.create(selTr.doc, resolved.from, resolved.to));
-      editor.dispatch(selTr);
-
-      const result = editor.commands.insertBookmark({
+      const bookmarkId = allocateBookmarkId(editor.state.doc);
+      const startAttrs: Record<string, unknown> = {
         name: input.name,
-        ...(input.tableColumn && {
-          colFirst: input.tableColumn.colFirst,
-          colLast: input.tableColumn.colLast,
-        }),
-      });
-      if (result) clearIndexCache(editor);
-      return result;
+        id: bookmarkId,
+      };
+      if (input.tableColumn) {
+        startAttrs.colFirst = input.tableColumn.colFirst;
+        startAttrs.colLast = input.tableColumn.colLast;
+      }
+
+      const startNode = bookmarkStartType.create(startAttrs);
+      const endNode = bookmarkEndType.create({ id: bookmarkId });
+
+      // Insert end first so range bookmarks survive index shifts.
+      const { tr } = editor.state;
+      tr.insert(resolved.to, endNode);
+      tr.insert(resolved.from, startNode);
+      editor.dispatch(tr);
+      clearIndexCache(editor);
+      return true;
     },
     { expectedRevision: options?.expectedRevision },
   );

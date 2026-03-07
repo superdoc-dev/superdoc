@@ -130,12 +130,12 @@ export function resolveIndexEntryTarget(doc: ProseMirrorNode, target: IndexEntry
 }
 
 export function extractIndexEntryInfo(doc: ProseMirrorNode, resolved: ResolvedIndexEntry): IndexEntryInfo {
-  const tokens = (resolved.node.attrs?.instructionTokens as string[]) ?? [];
+  const subEntry = (resolved.node.attrs?.subEntry as string) || undefined;
   return {
     address: buildEntryAddress(doc, resolved),
     instruction: resolved.instruction,
-    text: tokens[0] ?? '',
-    subEntry: (resolved.node.attrs?.subEntry as string) || undefined,
+    text: extractPrimaryEntryText(resolved.node.attrs?.instructionTokens, resolved.instruction, subEntry),
+    subEntry,
     bold: (resolved.node.attrs?.bold as boolean) ?? false,
     italic: (resolved.node.attrs?.italic as boolean) ?? false,
     crossReference: (resolved.node.attrs?.crossReference as string) || undefined,
@@ -149,13 +149,13 @@ export function buildIndexEntryDiscoveryItem(
   resolved: ResolvedIndexEntry,
   evaluatedRevision: string,
 ): DiscoveryItem<IndexEntryDomain> {
-  const tokens = (resolved.node.attrs?.instructionTokens as string[]) ?? [];
+  const subEntry = (resolved.node.attrs?.subEntry as string) || undefined;
   const address = buildEntryAddress(doc, resolved);
   const domain: IndexEntryDomain = {
     address,
     instruction: resolved.instruction,
-    text: tokens[0] ?? '',
-    subEntry: (resolved.node.attrs?.subEntry as string) || undefined,
+    text: extractPrimaryEntryText(resolved.node.attrs?.instructionTokens, resolved.instruction, subEntry),
+    subEntry,
     bold: (resolved.node.attrs?.bold as boolean) ?? false,
     italic: (resolved.node.attrs?.italic as boolean) ?? false,
   };
@@ -191,6 +191,45 @@ function buildEntryAddress(doc: ProseMirrorNode, resolved: ResolvedIndexEntry): 
       end: { blockId: resolved.blockId, offset: offset + resolved.node.nodeSize },
     },
   };
+}
+
+function extractPrimaryEntryText(instructionTokens: unknown, instruction: string, subEntry?: string): string {
+  if (Array.isArray(instructionTokens) && instructionTokens.length > 0) {
+    const rawTokenText = instructionTokens
+      .map((token) => readInstructionTokenText(token))
+      .filter((text): text is string => text.length > 0)
+      .join('');
+
+    if (rawTokenText) {
+      const parsedFromTokens = parseXeInstructionEntryText(rawTokenText);
+      const candidate = parsedFromTokens || rawTokenText;
+      return removeTrailingSubEntry(candidate, subEntry);
+    }
+  }
+
+  const parsedFromInstruction = parseXeInstructionEntryText(instruction);
+  return removeTrailingSubEntry(parsedFromInstruction, subEntry);
+}
+
+function readInstructionTokenText(token: unknown): string {
+  if (typeof token === 'string') return token;
+  if (!token || typeof token !== 'object') return '';
+  const tokenObject = token as { type?: unknown; text?: unknown };
+  if (tokenObject.type === 'tab') return '\t';
+  return typeof tokenObject.text === 'string' ? tokenObject.text : '';
+}
+
+function parseXeInstructionEntryText(instruction: string): string {
+  const xeMatch = instruction.match(/^\s*XE\s+"([^"]*)"/);
+  if (!xeMatch) return '';
+  return xeMatch[1] ?? '';
+}
+
+function removeTrailingSubEntry(text: string, subEntry?: string): string {
+  if (!subEntry) return text;
+  const suffix = `:${subEntry}`;
+  if (!text.endsWith(suffix)) return text;
+  return text.slice(0, -suffix.length);
 }
 
 // ---------------------------------------------------------------------------

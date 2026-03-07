@@ -281,14 +281,14 @@ export function indexEntriesInsertWrapper(
   }
 
   const resolved = resolveInlineInsertPosition(editor, input.at, 'index.entries.insert');
+  const instruction = buildXeInstruction(input.entry);
 
   const receipt = executeDomainCommand(
     editor,
     (): boolean => {
-      const instruction = buildXeInstruction(input.entry);
       const node = entryType.create({
         instruction,
-        instructionTokens: [input.entry.text ?? ''],
+        instructionTokens: null,
         bold: input.entry.bold ?? false,
         italic: input.entry.italic ?? false,
         subEntry: input.entry.subEntry ?? '',
@@ -308,7 +308,8 @@ export function indexEntriesInsertWrapper(
 
   if (!receiptApplied(receipt)) return entryFailure('NO_OP', 'Insert produced no change.');
 
-  return entrySuccess(computeInlineEntryAddress(editor.state.doc, resolved.from));
+  const insertedAddress = resolveInsertedIndexEntryAddress(editor.state.doc, resolved.from, instruction);
+  return entrySuccess(insertedAddress);
 }
 
 export function indexEntriesUpdateWrapper(
@@ -328,7 +329,7 @@ export function indexEntriesUpdateWrapper(
     () => {
       const { tr } = editor.state;
       const newAttrs = { ...resolved.node.attrs };
-      if (input.patch?.text !== undefined) newAttrs.instructionTokens = [input.patch.text];
+      if (input.patch?.text !== undefined) newAttrs.instructionTokens = null;
       if (input.patch?.subEntry !== undefined) newAttrs.subEntry = input.patch.subEntry;
       if (input.patch?.bold !== undefined) newAttrs.bold = input.patch.bold;
       if (input.patch?.italic !== undefined) newAttrs.italic = input.patch.italic;
@@ -337,6 +338,7 @@ export function indexEntriesUpdateWrapper(
       if (input.patch?.entryType !== undefined) newAttrs.entryType = input.patch.entryType;
       if (input.patch?.yomi !== undefined) newAttrs.yomi = input.patch.yomi;
       newAttrs.instruction = buildXeInstructionFromAttrs(newAttrs);
+      newAttrs.instructionTokens = null;
       tr.setNodeMarkup(resolved.pos, undefined, newAttrs);
       editor.dispatch(tr);
       clearIndexCache(editor);
@@ -410,6 +412,43 @@ function computeInlineEntryAddress(doc: import('prosemirror-model').Node, pos: n
   };
 }
 
+function resolveInsertedIndexEntryAddress(
+  doc: import('prosemirror-model').Node,
+  preferredPos: number,
+  instruction: string,
+): IndexEntryAddress {
+  const directNode = doc.nodeAt?.(preferredPos);
+  if (directNode?.type?.name === 'indexEntry') {
+    return computeInlineEntryAddress(doc, preferredPos);
+  }
+
+  const instructionMatchedPositions: number[] = [];
+  const allEntryPositions: number[] = [];
+
+  doc.descendants?.((node, pos) => {
+    if (node.type?.name !== 'indexEntry') return true;
+    allEntryPositions.push(pos);
+    const nodeInstruction = (node.attrs?.instruction as string) ?? '';
+    if (nodeInstruction === instruction) {
+      instructionMatchedPositions.push(pos);
+    }
+    return true;
+  });
+
+  const candidates = instructionMatchedPositions.length > 0 ? instructionMatchedPositions : allEntryPositions;
+  if (candidates.length === 0) {
+    return computeInlineEntryAddress(doc, preferredPos);
+  }
+
+  const nearestPos = candidates.reduce((bestPos, candidatePos) => {
+    const bestDistance = Math.abs(bestPos - preferredPos);
+    const candidateDistance = Math.abs(candidatePos - preferredPos);
+    return candidateDistance < bestDistance ? candidatePos : bestPos;
+  });
+
+  return computeInlineEntryAddress(doc, nearestPos);
+}
+
 function buildXeInstruction(entry: import('@superdoc/document-api').IndexEntryData): string {
   let text = entry.text ?? '';
   if (entry.subEntry) text += `:${entry.subEntry}`;
@@ -424,9 +463,11 @@ function buildXeInstruction(entry: import('@superdoc/document-api').IndexEntryDa
 }
 
 function buildXeInstructionFromAttrs(attrs: Record<string, unknown>): string {
-  const tokens = (attrs.instructionTokens as string[]) ?? [];
-  let text = tokens[0] ?? '';
+  let text = extractPrimaryEntryText(attrs);
   const subEntry = (attrs.subEntry as string) ?? '';
+  if (subEntry && text.endsWith(`:${subEntry}`)) {
+    text = text.slice(0, -(subEntry.length + 1));
+  }
   if (subEntry) text += `:${subEntry}`;
   const parts = [`XE "${text}"`];
   if (attrs.bold) parts.push('\\b');
@@ -440,6 +481,37 @@ function buildXeInstructionFromAttrs(attrs: Record<string, unknown>): string {
   const yomi = (attrs.yomi as string) ?? '';
   if (yomi) parts.push(`\\y "${yomi}"`);
   return parts.join(' ');
+}
+
+function extractPrimaryEntryText(attrs: Record<string, unknown>): string {
+  const instructionTokens = attrs.instructionTokens;
+  if (Array.isArray(instructionTokens) && instructionTokens.length > 0) {
+    const rawTokenText = instructionTokens
+      .map((token) => readInstructionTokenText(token))
+      .filter((text): text is string => text.length > 0)
+      .join('');
+    if (rawTokenText) {
+      const parsedFromTokens = parseXeInstructionEntryText(rawTokenText);
+      if (parsedFromTokens) return parsedFromTokens;
+      return rawTokenText;
+    }
+  }
+
+  return parseXeInstructionEntryText((attrs.instruction as string) ?? '');
+}
+
+function readInstructionTokenText(token: unknown): string {
+  if (typeof token === 'string') return token;
+  if (!token || typeof token !== 'object') return '';
+  const tokenObject = token as { type?: unknown; text?: unknown };
+  if (tokenObject.type === 'tab') return '\t';
+  return typeof tokenObject.text === 'string' ? tokenObject.text : '';
+}
+
+function parseXeInstructionEntryText(instruction: string): string {
+  const xeMatch = instruction.match(/^\s*XE\s+"([^"]*)"/);
+  if (!xeMatch) return '';
+  return xeMatch[1] ?? '';
 }
 
 function buildIndexInstruction(config?: import('@superdoc/document-api').IndexConfig): string {

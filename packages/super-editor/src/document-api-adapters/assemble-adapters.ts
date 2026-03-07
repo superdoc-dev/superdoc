@@ -217,13 +217,7 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from './plan-engine/bookmark-wrappers.js';
-import {
-  linksListWrapper,
-  linksGetWrapper,
-  linksInsertWrapper,
-  linksUpdateWrapper,
-  linksRemoveWrapper,
-} from './plan-engine/link-wrappers.js';
+
 import {
   footnotesListWrapper,
   footnotesGetWrapper,
@@ -553,13 +547,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       insert: (input, options) => bookmarksInsertWrapper(editor, input, options),
       rename: (input, options) => bookmarksRenameWrapper(editor, input, options),
       remove: (input, options) => bookmarksRemoveWrapper(editor, input, options),
-    },
-    links: {
-      list: (query) => linksListWrapper(editor, query),
-      get: (input) => linksGetWrapper(editor, input),
-      insert: (input, options) => linksInsertWrapper(editor, input, options),
-      update: (input, options) => linksUpdateWrapper(editor, input, options),
-      remove: (input, options) => linksRemoveWrapper(editor, input, options),
     },
     footnotes: {
       list: (query) => footnotesListWrapper(editor, query),

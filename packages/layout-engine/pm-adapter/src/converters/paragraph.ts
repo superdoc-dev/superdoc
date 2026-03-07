@@ -52,6 +52,7 @@ import {
   shapeTextboxNodeToDrawingBlock,
   vectorShapeNodeToDrawingBlock,
 } from './shapes.js';
+import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
 
 // ============================================================================
@@ -594,6 +595,7 @@ const SHAPE_CONVERTERS_REGISTRY: Record<
   shapeGroup: shapeGroupNodeToDrawingBlock,
   shapeContainer: shapeContainerNodeToDrawingBlock,
   shapeTextbox: shapeTextboxNodeToDrawingBlock,
+  chart: chartNodeToDrawingBlock,
 };
 
 /**

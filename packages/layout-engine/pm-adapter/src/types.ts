@@ -16,6 +16,7 @@ import type {
   shapeTextboxNodeToDrawingBlock,
   vectorShapeNodeToDrawingBlock,
 } from './converters/shapes.js';
+import type { chartNodeToDrawingBlock } from './converters/chart.js';
 export type { ConverterContext } from './converter-context.js';
 export type StyleContext = StyleEngineContext;
 export type { ComputedParagraphStyle };
@@ -395,6 +396,7 @@ export type NestedConverters = {
   shapeGroupNodeToDrawingBlock: typeof shapeGroupNodeToDrawingBlock;
   shapeContainerNodeToDrawingBlock: typeof shapeContainerNodeToDrawingBlock;
   shapeTextboxNodeToDrawingBlock: typeof shapeTextboxNodeToDrawingBlock;
+  chartNodeToDrawingBlock: typeof chartNodeToDrawingBlock;
 };
 
 /**

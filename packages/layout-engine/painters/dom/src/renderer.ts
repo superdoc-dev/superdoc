@@ -1,4 +1,5 @@
 import type {
+  ChartDrawing,
   CustomGeometryData,
   DrawingBlock,
   DrawingFragment,
@@ -51,6 +52,7 @@ import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
+import { createChartElement as renderChartToElement } from './chart-renderer.js';
 import {
   getRunBooleanProp,
   getRunNumberProp,
@@ -3335,6 +3337,9 @@ export class DomPainter {
     if (block.drawingKind === 'shapeGroup') {
       return this.createShapeGroupElement(block, context);
     }
+    if (block.drawingKind === 'chart') {
+      return this.createChartElement(block);
+    }
     return this.createDrawingPlaceholder();
   }
 
@@ -4081,6 +4086,18 @@ export class DomPainter {
     return placeholder;
   }
 
+  // ============================================================================
+  // Chart Rendering
+  // ============================================================================
+
+  /**
+   * Create an SVG chart element from a ChartDrawing block.
+   * Delegates to the chart-renderer module for clean separation.
+   */
+  private createChartElement(block: ChartDrawing): HTMLElement {
+    return renderChartToElement(this.doc!, block.chartData, block.geometry);
+  }
+
   private renderTableFragment(
     fragment: TableFragment,
     context: FragmentRenderContext,
@@ -4144,6 +4161,9 @@ export class DomPainter {
       if (block.drawingKind === 'vectorShape') {
         // For vectorShapes in table cells, render without geometry transforms
         return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
+      }
+      if (block.drawingKind === 'chart') {
+        return this.createChartElement(block);
       }
       return this.createDrawingPlaceholder();
     };
@@ -6626,6 +6646,16 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         group.geometry.height,
         group.groupTransform ? JSON.stringify(group.groupTransform) : '',
         childSignature,
+      ].join('|');
+    }
+    if (block.drawingKind === 'chart') {
+      return [
+        'drawing:chart',
+        block.chartData?.chartType ?? '',
+        block.chartData?.series?.length ?? 0,
+        block.geometry.width,
+        block.geometry.height,
+        block.chartRelId ?? '',
       ].join('|');
     }
     // Exhaustiveness check: if a new drawingKind is added, TypeScript will error here

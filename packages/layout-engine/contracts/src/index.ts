@@ -575,7 +575,7 @@ export type ImageBlock = {
   flipV?: boolean; // Vertical flip
 };
 
-export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup';
+export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
 
 export type DrawingContentSnapshot = {
   name: string;
@@ -816,7 +816,63 @@ export type ImageDrawing = DrawingBlockBase &
     drawingKind: 'image';
   };
 
-export type DrawingBlock = VectorShapeDrawing | ShapeGroupDrawing | ImageDrawing;
+// ============================================================================
+// Chart Drawing Types
+// ============================================================================
+
+/** A single data series in a chart (e.g., one set of bars in a bar chart). */
+export type ChartSeriesData = {
+  /** Display name for the series (from c:tx). */
+  name: string;
+  /** Category labels (from c:cat / c:strCache). */
+  categories: string[];
+  /** Numeric values (from c:val / c:numCache). */
+  values: number[];
+  /** Optional X-axis values for XY charts (scatter/bubble). */
+  xValues?: number[];
+  /** Optional bubble radius/size values for bubble charts. */
+  bubbleSizes?: number[];
+};
+
+/** Axis configuration extracted from c:catAx / c:valAx. */
+export type ChartAxisConfig = {
+  title?: string;
+  orientation?: 'minMax' | 'maxMin';
+};
+
+/** Normalized chart data model parsed from OOXML chart XML. */
+export type ChartModel = {
+  /** OOXML chart element name (e.g., 'barChart', 'lineChart', 'pieChart'). */
+  chartType: string;
+  /** Sub-type qualifier (e.g., 'clustered', 'stacked', 'percentStacked'). */
+  subType?: string;
+  /** Bar direction — 'col' for vertical columns, 'bar' for horizontal bars. */
+  barDirection?: 'col' | 'bar';
+  /** Data series in the chart. */
+  series: ChartSeriesData[];
+  /** Category axis config. */
+  categoryAxis?: ChartAxisConfig;
+  /** Value axis config. */
+  valueAxis?: ChartAxisConfig;
+  /** Legend position (e.g., 'r', 'b', 't', 'l'). */
+  legendPosition?: string;
+  /** OOXML chart style ID. */
+  styleId?: number;
+};
+
+/** Chart drawing block. */
+export type ChartDrawing = DrawingBlockBase & {
+  drawingKind: 'chart';
+  geometry: DrawingGeometry;
+  /** Parsed chart data for rendering. */
+  chartData: ChartModel;
+  /** Relationship ID for the chart part in the docx package. */
+  chartRelId?: string;
+  /** Path to the chart XML part (e.g., 'word/charts/chart1.xml'). */
+  chartPartPath?: string;
+};
+
+export type DrawingBlock = VectorShapeDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
 
 /**
  * Vertical alignment of content within a section/page.

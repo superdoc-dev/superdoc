@@ -32,6 +32,7 @@ import {
   hydrateImageBlocks,
   handleParagraphNode,
 } from './converters/index.js';
+import { chartNodeToDrawingBlock, handleChartNode } from './converters/chart.js';
 import {
   handleTableOfContentsNode,
   handleIndexNode,
@@ -73,6 +74,7 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   shapeGroup: handleShapeGroupNode,
   shapeContainer: handleShapeContainerNode,
   shapeTextbox: handleShapeTextboxNode,
+  chart: handleChartNode,
 };
 
 const converters: NestedConverters = {
@@ -82,6 +84,7 @@ const converters: NestedConverters = {
   shapeGroupNodeToDrawingBlock,
   shapeContainerNodeToDrawingBlock,
   shapeTextboxNodeToDrawingBlock,
+  chartNodeToDrawingBlock,
   tableNodeToBlock,
   paragraphToFlowBlocks,
 };

@@ -47,6 +47,7 @@ import { TableOfContents, TocPageNumber } from './table-of-contents/index.js';
 import { DocumentIndex } from './document-index/index.js';
 import { VectorShape } from './vector-shape/index.js';
 import { ShapeGroup } from './shape-group/index.js';
+import { Chart } from './chart/index.js';
 import { PassthroughBlock, PassthroughInline } from '@extensions/passthrough/index.js';
 import { IndexEntry } from './index-entry/index.js';
 import { TableOfContentsEntry } from './table-of-contents-entry/index.js';
@@ -197,6 +198,7 @@ const getStarterExtensions = () => {
     TextTransform,
     VectorShape,
     ShapeGroup,
+    Chart,
     PermStart,
     PermEnd,
     PermStartBlock,
@@ -277,6 +279,7 @@ export {
   TextTransform,
   VectorShape,
   ShapeGroup,
+  Chart,
   PassthroughInline,
   PassthroughBlock,
   PermissionRanges,

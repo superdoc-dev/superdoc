@@ -230,10 +230,37 @@ describe('chart-helpers', () => {
         },
         {
           name: 'c:style',
-          attributes: { val: '102' },
+          attributes: { val: '2' },
         },
       ],
     });
+
+    const makeBarChartXmlWithAlternateContentStyle = ({ choiceStyle, fallbackStyle }) => {
+      const xml = makeBarChartXml();
+      xml.elements = xml.elements.filter((el) => el.name !== 'c:style');
+
+      const altContent = {
+        name: 'mc:AlternateContent',
+        elements: [
+          {
+            name: 'mc:Choice',
+            attributes: { Requires: 'c14' },
+            elements: choiceStyle != null ? [{ name: 'c14:style', attributes: { val: String(choiceStyle) } }] : [],
+          },
+          ...(fallbackStyle != null
+            ? [
+                {
+                  name: 'mc:Fallback',
+                  elements: [{ name: 'c:style', attributes: { val: String(fallbackStyle) } }],
+                },
+              ]
+            : []),
+        ],
+      };
+
+      xml.elements.unshift(altContent);
+      return xml;
+    };
 
     it('parses a bar chart with series, categories, and values', () => {
       const result = parseChartXml(makeBarChartXml());
@@ -257,7 +284,17 @@ describe('chart-helpers', () => {
 
     it('parses style ID', () => {
       const result = parseChartXml(makeBarChartXml());
+      expect(result.styleId).toBe(2);
+    });
+
+    it('prefers c14 style in mc:AlternateContent when present', () => {
+      const result = parseChartXml(makeBarChartXmlWithAlternateContentStyle({ choiceStyle: 102, fallbackStyle: 2 }));
       expect(result.styleId).toBe(102);
+    });
+
+    it('falls back to mc:Fallback c:style when c14 style is missing', () => {
+      const result = parseChartXml(makeBarChartXmlWithAlternateContentStyle({ choiceStyle: null, fallbackStyle: 3 }));
+      expect(result.styleId).toBe(3);
     });
 
     it('parses category axis orientation', () => {

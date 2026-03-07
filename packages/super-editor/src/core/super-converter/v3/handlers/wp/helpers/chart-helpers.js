@@ -158,7 +158,7 @@ export function parseChartXml(chartXml) {
 
   const { element: chartTypeEl, chartType } = chartTypeEntry;
 
-  const subType = getAttr(chartTypeEl, 'val') || extractGrouping(chartTypeEl);
+  const subType = extractGrouping(chartTypeEl);
   const barDirection = extractBarDirection(chartTypeEl);
   const series = parseSeries(chartTypeEl, chartType);
   const categoryAxis = parseAxis(plotArea, 'c:catAx');
@@ -398,7 +398,7 @@ function parseLegendPosition(chart) {
 
 /**
  * Parse chart style ID from chartSpace.
- * Checks mc:AlternateContent for c14:style, then falls back to c:style.
+ * Checks mc:AlternateContent for c14:style, then mc:Fallback c:style, then direct c:style.
  * @param {Object} chartSpace - c:chartSpace element
  * @returns {number|undefined}
  */
@@ -410,6 +410,12 @@ function parseStyleId(chartSpace) {
     const c14Style = findChild(choice, 'c14:style');
     const val = getAttr(c14Style, 'val');
     if (val != null) return Number(val);
+
+    // Fallback branch for consumers that do not support c14
+    const fallback = findChild(altContent, 'mc:Fallback');
+    const fallbackStyle = findChild(fallback, 'c:style');
+    const fallbackVal = getAttr(fallbackStyle, 'val');
+    if (fallbackVal != null) return Number(fallbackVal);
   }
 
   // Fallback to c:style

@@ -60,6 +60,7 @@ import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 import type { DocumentApi } from '@superdoc/document-api';
 import { createDocumentApi } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
+import { initPartsRuntime } from './parts/init-parts-runtime.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -839,6 +840,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       // Create converter
       this.#createConverter();
+      initPartsRuntime(this);
 
       // Initialize media
       this.#initMedia();
@@ -981,6 +983,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#createCommandService();
     this.#createSchema();
     this.#createConverter();
+    initPartsRuntime(this);
     this.#initMedia();
 
     this.on('beforeCreate', this.options.onBeforeCreate!);
@@ -1521,6 +1524,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     this.#createConverter();
+    initPartsRuntime(this);
     this.#initMedia();
 
     const doc = this.#generatePmData();
@@ -3208,6 +3212,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.options.replacedFile = true;
 
     this.#createConverter();
+    initPartsRuntime(this);
     this.#initMedia();
     this.initDefaultStyles();
 

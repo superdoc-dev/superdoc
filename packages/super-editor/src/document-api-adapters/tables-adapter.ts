@@ -74,11 +74,7 @@ import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/tra
 import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { twipsToPixels } from '../core/super-converter/helpers.js';
-import {
-  resolvePreferredNewTableStyleId,
-  isKnownTableStyleId,
-  type StylesDocumentProperties,
-} from '@superdoc/style-engine/ooxml';
+import { resolvePreferredNewTableStyleId, isKnownTableStyleId } from '@superdoc/style-engine/ooxml';
 import {
   readSettingsRoot,
   ensureSettingsRoot,
@@ -87,6 +83,7 @@ import {
   removeDefaultTableStyle,
   type ConverterWithDocumentSettings,
 } from './document-settings.js';
+import { readTranslatedLinkedStyles } from '../core/parts/adapters/styles-read.js';
 import { mutatePart } from '../core/parts/mutation/mutate-part.js';
 import type { PartId } from '../core/parts/types.js';
 
@@ -3645,9 +3642,7 @@ export function tablesGetPropertiesAdapter(editor: Editor, input: TablesGetPrope
 // Document-level table style operations
 // ---------------------------------------------------------------------------
 
-interface ConverterForTableStyles extends ConverterWithDocumentSettings {
-  translatedLinkedStyles?: StylesDocumentProperties | null;
-}
+type ConverterForTableStyles = ConverterWithDocumentSettings;
 
 function getConverterForStyles(editor: Editor): ConverterForTableStyles | undefined {
   return (editor as unknown as { converter?: ConverterForTableStyles }).converter;
@@ -3675,7 +3670,7 @@ export function tablesGetStylesAdapter(editor: Editor, _input?: TablesGetStylesI
     };
   }
 
-  const translatedLinkedStyles = converter.translatedLinkedStyles ?? null;
+  const translatedLinkedStyles = readTranslatedLinkedStyles(editor);
   const allStyles = translatedLinkedStyles?.styles ?? {};
 
   // Collect table styles
@@ -3729,7 +3724,7 @@ export function tablesSetDefaultStyleAdapter(
   }
 
   // Validate styleId
-  if (!isKnownTableStyleId(input.styleId, converter.translatedLinkedStyles)) {
+  if (!isKnownTableStyleId(input.styleId, readTranslatedLinkedStyles(editor))) {
     throw new DocumentApiAdapterError(
       'INVALID_INPUT',
       `tables.setDefaultStyle: "${input.styleId}" is not a known table style.`,
@@ -3743,7 +3738,7 @@ export function tablesSetDefaultStyleAdapter(
     source: 'tables.setDefaultStyle',
     dryRun: options?.dryRun === true,
     expectedRevision: options?.expectedRevision,
-    mutate({ dryRun: isDryRun }) {
+    mutate({ part, dryRun: isDryRun }) {
       const existingRoot = readSettingsRoot(converter);
       const current = existingRoot ? readDefaultTableStyle(existingRoot) : null;
 
@@ -3752,7 +3747,7 @@ export function tablesSetDefaultStyleAdapter(
       }
 
       if (!isDryRun) {
-        const settingsRoot = ensureSettingsRoot(converter);
+        const settingsRoot = ensureSettingsRoot(part as Parameters<typeof ensureSettingsRoot>[0]);
         setDefaultTableStyle(settingsRoot, input.styleId);
       }
 
@@ -3785,7 +3780,7 @@ export function tablesClearDefaultStyleAdapter(
     source: 'tables.clearDefaultStyle',
     dryRun: options?.dryRun === true,
     expectedRevision: options?.expectedRevision,
-    mutate({ dryRun: isDryRun }) {
+    mutate({ part, dryRun: isDryRun }) {
       const existingRoot = readSettingsRoot(converter);
       const current = existingRoot ? readDefaultTableStyle(existingRoot) : null;
 
@@ -3797,7 +3792,7 @@ export function tablesClearDefaultStyleAdapter(
       }
 
       if (!isDryRun) {
-        const settingsRoot = ensureSettingsRoot(converter);
+        const settingsRoot = ensureSettingsRoot(part as Parameters<typeof ensureSettingsRoot>[0]);
         removeDefaultTableStyle(settingsRoot);
       }
 

@@ -497,7 +497,7 @@ export function sectionsSetOddEvenHeadersFootersAdapter(
     source: 'sections.setOddEvenHeadersFooters',
     dryRun: options?.dryRun === true,
     expectedRevision: options?.expectedRevision,
-    mutate({ dryRun: isDryRun }) {
+    mutate({ part, dryRun: isDryRun }) {
       // Read-only check first — avoids modifying settings on dry-run or NO_OP paths.
       const existingRoot = readSettingsRoot(converter);
       const before = existingRoot ? hasOddEvenHeadersFooters(existingRoot) : false;
@@ -511,7 +511,7 @@ export function sectionsSetOddEvenHeadersFootersAdapter(
       }
 
       if (!isDryRun) {
-        const settingsRoot = ensureSettingsRoot(converter);
+        const settingsRoot = ensureSettingsRoot(part as Parameters<typeof ensureSettingsRoot>[0]);
         setOddEvenHeadersInSettings(settingsRoot, input.enabled);
         if (!converter.pageStyles) converter.pageStyles = {};
         converter.pageStyles.alternateHeaders = input.enabled;

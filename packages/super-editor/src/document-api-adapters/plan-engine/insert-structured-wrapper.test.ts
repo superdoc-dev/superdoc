@@ -8,6 +8,7 @@ import { registerBuiltInExecutors } from './register-executors.js';
 import { clearExecutorRegistry } from './executor-registry.js';
 import { resolveTextTarget } from '../helpers/adapter-utils.js';
 import { nodeAllowsSdBlockIdAttr } from '../../extensions/block-node/block-node.js';
+import { getRevision } from './revision-tracker.js';
 
 let docData: Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -307,6 +308,9 @@ describe('insertStructuredWrapper — list numbering rollback', () => {
     // Capture numbering state before the insert attempt.
     const numberingBefore = JSON.stringify(converter?.numbering ?? {});
     const translatedBefore = JSON.stringify(converter?.translatedNumbering ?? {});
+    const numberingXmlBefore = JSON.stringify(converter?.convertedXml?.['word/numbering.xml'] ?? {});
+    const revisionBefore = getRevision(editor);
+    const documentModifiedBefore = converter?.documentModified;
 
     // Shadow both view.dispatch and editor.dispatch with undefined so that
     // CommandService's #dispatchWithFallback returns false (no dispatch
@@ -331,6 +335,12 @@ describe('insertStructuredWrapper — list numbering rollback', () => {
       // have restored converter state to the pre-insert snapshot.
       expect(JSON.stringify(converter?.numbering ?? {})).toBe(numberingBefore);
       expect(JSON.stringify(converter?.translatedNumbering ?? {})).toBe(translatedBefore);
+      expect(JSON.stringify(converter?.convertedXml?.['word/numbering.xml'] ?? {})).toBe(numberingXmlBefore);
+
+      // Revision and dirty flags must also be restored — mutatePart commits
+      // during markdown parsing advance these, but the overall insert failed.
+      expect(getRevision(editor)).toBe(revisionBefore);
+      expect(converter?.documentModified).toBe(documentModifiedBefore);
     } finally {
       // Remove own-property shadows to restore prototype methods.
       if (view) delete view.dispatch;

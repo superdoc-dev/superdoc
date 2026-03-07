@@ -13,6 +13,7 @@ import type { Editor } from '../../Editor.js';
 import type { PartDescriptor } from '../types.js';
 import { translator as wAbstractNumTranslator } from '../../super-converter/v3/handlers/w/abstractNum/index.js';
 import { translator as wNumTranslator } from '../../super-converter/v3/handlers/w/num/index.js';
+import { isPartCacheStale, clearPartCacheStale } from '../cache-staleness.js';
 
 const NUMBERING_PART_ID = 'word/numbering.xml' as const;
 
@@ -54,14 +55,24 @@ function getConverter(editor: Editor): ConverterForNumbering | undefined {
  * Call this inside `mutatePart` callbacks after helper functions modify `converter.numbering`.
  */
 export function syncNumberingToXmlTree(part: unknown, numbering: NumberingIndex): void {
-  const root = part as { elements?: Array<{ elements?: unknown[] }> };
+  const root = part as { elements?: Array<{ elements?: Array<{ name?: string }> }> };
   const numberingEl = root?.elements?.[0];
   if (!numberingEl) return;
 
   const abstracts = Object.values(numbering.abstracts);
   const definitions = Object.values(numbering.definitions);
 
-  numberingEl.elements = [...abstracts, ...definitions];
+  // Preserve children that are neither abstracts nor definitions
+  // (e.g., w:numPicBullet, w:numIdMacAtCleanup).
+  // Uses both reference identity (for shared model references) and element
+  // name (for independently parsed XML) to correctly identify abstract/definition
+  // entries regardless of whether elements carry a `name` property.
+  const modelEntries = new Set<unknown>([...abstracts, ...definitions]);
+  const preserved = (numberingEl.elements ?? []).filter(
+    (el) => !modelEntries.has(el) && el.name !== 'w:abstractNum' && el.name !== 'w:num',
+  );
+
+  numberingEl.elements = [...preserved, ...abstracts, ...definitions];
 }
 
 // ---------------------------------------------------------------------------
@@ -147,5 +158,35 @@ export const numberingPartDescriptor: PartDescriptor = {
     // converter.numbering shares element references with the canonical XML tree,
     // so it already reflects the committed changes.
     converter.translatedNumbering = rebuildTranslatedNumbering(converter.numbering);
+
+    // Clear stale flag on successful rebuild (self-healing from prior failures)
+    clearPartCacheStale(editor, NUMBERING_PART_ID);
+
+    // Emit list-definitions-change for backward compatibility (section 3.3).
+    // Consumers: numberingPlugin, Editor.ts, SuperDoc.vue, child-editor.js.
+    // child-editor.js depends on the `{ editor, numbering }` payload shape.
+    editor.emit('list-definitions-change', { editor, numbering: converter.numbering });
   },
 };
+
+/**
+ * Attempt lazy recovery of translatedNumbering when the last afterCommit failed.
+ *
+ * Call this before reading `converter.translatedNumbering` to ensure it
+ * reflects the current `converter.numbering`. If the rebuild fails again,
+ * the stale flag remains set and the next access will retry.
+ */
+export function ensureTranslatedNumberingFresh(editor: Editor): void {
+  if (!isPartCacheStale(editor, NUMBERING_PART_ID)) return;
+
+  const converter = getConverter(editor);
+  if (!converter) return;
+
+  try {
+    converter.translatedNumbering = rebuildTranslatedNumbering(converter.numbering);
+    clearPartCacheStale(editor, NUMBERING_PART_ID);
+    editor.emit('list-definitions-change', { editor, numbering: converter.numbering });
+  } catch {
+    // Still stale — will retry on next access
+  }
+}

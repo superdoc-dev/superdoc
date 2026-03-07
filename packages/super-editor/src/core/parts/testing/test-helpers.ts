@@ -92,3 +92,39 @@ export function cleanupParts(): void {
   clearPartDescriptors();
   clearInvalidationHandlers();
 }
+
+/**
+ * Patch an existing mock editor to work with the parts system.
+ *
+ * Adds `convertedXml`, `documentModified`, `documentGuid`, and `safeEmit`
+ * if missing. Also populates `convertedXml['word/numbering.xml']` from
+ * the mock's `converter.numbering` if present.
+ */
+export function patchMockForParts(mockEditor: any): void {
+  const converter = mockEditor.converter;
+  if (!converter) return;
+
+  if (!converter.convertedXml) converter.convertedXml = {};
+  if (!('documentModified' in converter)) converter.documentModified = false;
+  if (!('documentGuid' in converter)) converter.documentGuid = null;
+
+  // Populate numbering XML from the live numbering model
+  if (converter.numbering && !converter.convertedXml['word/numbering.xml']) {
+    const abstracts = Object.values(converter.numbering.abstracts ?? {});
+    const definitions = Object.values(converter.numbering.definitions ?? {});
+    converter.convertedXml['word/numbering.xml'] = {
+      elements: [{ type: 'element', name: 'w:numbering', elements: [...abstracts, ...definitions] }],
+    };
+  }
+
+  if (!mockEditor.safeEmit) {
+    mockEditor.safeEmit = (...args: any[]) => {
+      try {
+        mockEditor.emit?.(...args);
+      } catch {
+        // ignore in tests
+      }
+      return [];
+    };
+  }
+}

@@ -51,7 +51,7 @@ export interface PaginationPayload {
  * Payload for list definitions change
  */
 export interface ListDefinitionsPayload {
-  change: unknown;
+  change?: unknown;
   numbering?: unknown;
   editor?: unknown;
 }

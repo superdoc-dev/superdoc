@@ -53,7 +53,7 @@ export interface PartDescriptor<TPart = unknown> {
   id: PartId;
   ensurePart: (editor: Editor, sectionId?: string) => TPart;
   validatePart?: (part: unknown) => asserts part is TPart;
-  normalizePart?: (part: TPart) => TPart;
+  normalizePart?: (part: TPart) => TPart | void;
   afterCommit?: (ctx: CommitContext<TPart>) => void;
   onDelete?: (ctx: DeleteContext) => void;
 }

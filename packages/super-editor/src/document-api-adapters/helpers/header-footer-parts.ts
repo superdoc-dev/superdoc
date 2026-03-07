@@ -2,6 +2,7 @@ import type { SectionHeaderFooterKind, SectionHeaderFooterVariant } from '@super
 import type { Editor } from '../../core/Editor.js';
 import type { PartId, PartOperation } from '../../core/parts/types.js';
 import { mutateParts } from '../../core/parts/mutation/mutate-part.js';
+import { registerHeaderFooterInvalidation } from '../../core/parts/invalidation/invalidation-handlers.js';
 import type { XmlElement } from './sections-xml.js';
 
 const DOCUMENT_RELS_PATH = 'word/_rels/document.xml.rels';
@@ -361,16 +362,16 @@ export function createHeaderFooterPart(
 
   mutateParts({ editor, source: 'createHeaderFooterPart', operations });
 
-  // Derived cache updates (will move to afterCommit in Phase 4 sub-step 4)
-  const collection = getCollection(converter, input.kind);
-  collection[newRefId] = sourceSnapshot.jsonPart ?? createEmptyJsonPart();
+  // Register invalidation handler for the newly created part
+  registerHeaderFooterInvalidation(newPartPath);
 
-  const variantIds = getVariantIds(converter, input.kind);
-  if (!Array.isArray(variantIds.ids)) variantIds.ids = [];
-  if (!variantIds.ids.includes(newRefId)) variantIds.ids.push(newRefId);
-
-  converter.headerFooterModified = true;
-  // Note: converter.documentModified is set by mutateParts
+  // The rels afterCommit hook automatically initializes the new refId in
+  // converter.headers/footers (with an empty JSON part), updates variantIds,
+  // and sets headerFooterModified. Override with cloned source content if available.
+  if (sourceSnapshot.jsonPart) {
+    const collection = getCollection(converter, input.kind);
+    collection[newRefId] = sourceSnapshot.jsonPart;
+  }
 
   return {
     refId: newRefId,

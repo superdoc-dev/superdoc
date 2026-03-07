@@ -36,6 +36,7 @@ import { getPart, hasPart, setPart, removePart, clonePart } from '../store/part-
 import { diffPartPaths } from './diff-part-paths.js';
 import { checkRevision, incrementRevision } from '../../../document-api-adapters/plan-engine/revision-tracker.js';
 import { applyPartInvalidation } from '../invalidation/part-invalidation-registry.js';
+import { markPartCacheStale } from '../cache-staleness.js';
 
 // ---------------------------------------------------------------------------
 // Converter shape (minimal interface to avoid importing SuperConverter)
@@ -256,6 +257,7 @@ function runPostCommitSideEffects(
       });
     } catch (err) {
       degraded = true;
+      markPartCacheStale(editor, outcome.partId);
       console.error(`[parts] afterCommit hook failed for "${outcome.partId}":`, err);
     }
   }

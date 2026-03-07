@@ -1,5 +1,5 @@
 // @ts-check
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LevelFormattingHelpers } from './list-level-formatting-helpers.js';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -161,7 +161,6 @@ describe('setLevelNumberingFormat', () => {
     });
 
     expect(changed).toBe(true);
-    expect(editor.emit).toHaveBeenCalled();
 
     const lvl = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 0);
     expect(lvl.elements.find((e) => e.name === 'w:numFmt').attributes['w:val']).toBe('lowerRoman');
@@ -178,7 +177,6 @@ describe('setLevelNumberingFormat', () => {
     });
 
     expect(changed).toBe(false);
-    expect(editor.emit).not.toHaveBeenCalled();
   });
 
   it('omits start when not provided', () => {
@@ -214,12 +212,10 @@ describe('setLevelBulletMarker', () => {
     const editor = makeEditor();
     // First set to bullet
     LevelFormattingHelpers.setLevelBulletMarker(editor, 1, 0, '\u2022');
-    editor.emit.mockClear();
 
     // Set again with same values
     const changed = LevelFormattingHelpers.setLevelBulletMarker(editor, 1, 0, '\u2022');
     expect(changed).toBe(false);
-    expect(editor.emit).not.toHaveBeenCalled();
   });
 });
 
@@ -241,7 +237,6 @@ describe('setLevelPictureBulletId', () => {
   it('returns false when the same ID is already set', () => {
     const editor = makeEditor();
     LevelFormattingHelpers.setLevelPictureBulletId(editor, 1, 0, 42);
-    editor.emit.mockClear();
 
     const changed = LevelFormattingHelpers.setLevelPictureBulletId(editor, 1, 0, 42);
     expect(changed).toBe(false);
@@ -335,7 +330,6 @@ describe('setLevelTrailingCharacter', () => {
   it('returns false when suffix already matches', () => {
     const editor = makeEditor();
     LevelFormattingHelpers.setLevelTrailingCharacter(editor, 1, 0, 'space');
-    editor.emit.mockClear();
 
     const changed = LevelFormattingHelpers.setLevelTrailingCharacter(editor, 1, 0, 'space');
     expect(changed).toBe(false);
@@ -365,7 +359,6 @@ describe('setLevelMarkerFont', () => {
   it('updates existing rFonts', () => {
     const editor = makeEditor();
     LevelFormattingHelpers.setLevelMarkerFont(editor, 1, 0, 'Symbol');
-    editor.emit.mockClear();
 
     const changed = LevelFormattingHelpers.setLevelMarkerFont(editor, 1, 0, 'Wingdings');
     expect(changed).toBe(true);
@@ -378,11 +371,9 @@ describe('setLevelMarkerFont', () => {
   it('returns false when font already matches', () => {
     const editor = makeEditor();
     LevelFormattingHelpers.setLevelMarkerFont(editor, 1, 0, 'Symbol');
-    editor.emit.mockClear();
 
     const changed = LevelFormattingHelpers.setLevelMarkerFont(editor, 1, 0, 'Symbol');
     expect(changed).toBe(false);
-    expect(editor.emit).not.toHaveBeenCalled();
   });
 });
 
@@ -466,7 +457,6 @@ describe('applyTemplateToAbstract', () => {
     const result = LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template);
 
     expect(result.changed).toBe(true);
-    expect(editor.emit).toHaveBeenCalled();
 
     // Verify level 0
     const lvl0 = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 0);
@@ -510,7 +500,6 @@ describe('applyTemplateToAbstract', () => {
 
     expect(result.changed).toBe(false);
     expect(result.error).toBe('LEVEL_NOT_IN_TEMPLATE');
-    expect(editor.emit).not.toHaveBeenCalled();
   });
 
   it('returns no-op when all values already match', () => {
@@ -523,7 +512,6 @@ describe('applyTemplateToAbstract', () => {
     const result = LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template);
 
     expect(result.changed).toBe(false);
-    expect(editor.emit).not.toHaveBeenCalled();
   });
 
   it('is atomic: no changes when any level is missing from abstract', () => {
@@ -608,39 +596,28 @@ describe('preset catalog', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Sync behavior
+// Pure mutation behavior (no transaction side effects)
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe('sync and emit', () => {
-  it('emits list-definitions-change for all numIds sharing the abstract', () => {
-    const editor = makeEditor(1, 10);
-    // Add a second numId pointing to the same abstract
-    editor.converter.numbering.definitions[20] = {
-      type: 'element',
-      name: 'w:num',
-      attributes: { 'w:numId': '20' },
-      elements: [{ name: 'w:abstractNumId', attributes: { 'w:val': '1' } }],
-    };
-
+describe('pure mutation behavior', () => {
+  it('mutates converter.numbering in-place without emitting events', () => {
+    const editor = makeEditor();
     LevelFormattingHelpers.setLevelAlignment(editor, 1, 0, 'right');
 
-    // Should emit for both numId 10 and numId 20
-    expect(editor.emit).toHaveBeenCalledTimes(2);
-    expect(editor.emit).toHaveBeenCalledWith('list-definitions-change', expect.any(Object));
-  });
+    // Verify in-place mutation happened
+    const lvl = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 0);
+    expect(lvl.elements.find((e) => e.name === 'w:lvlJc').attributes['w:val']).toBe('right');
 
-  it('does not emit when no change is made', () => {
-    const editor = makeEditor();
-    LevelFormattingHelpers.setLevelAlignment(editor, 1, 0, 'left'); // already 'left'
+    // No transaction/emit — callers are responsible for wrapping in mutatePart
     expect(editor.emit).not.toHaveBeenCalled();
   });
 
-  it('updates translatedNumbering on change', () => {
+  it('does not modify translatedNumbering (callers handle cache rebuild)', () => {
     const editor = makeEditor();
+    const translatedBefore = editor.converter.translatedNumbering;
     LevelFormattingHelpers.setLevelAlignment(editor, 1, 0, 'center');
 
-    // translatedNumbering should have been updated (we can't fully verify the
-    // encoded shape without the real translator, but the key should exist)
-    expect(editor.converter.translatedNumbering.abstracts[1]).toBeDefined();
+    // translatedNumbering is NOT updated — afterCommit in mutatePart handles that
+    expect(editor.converter.translatedNumbering).toBe(translatedBefore);
   });
 });

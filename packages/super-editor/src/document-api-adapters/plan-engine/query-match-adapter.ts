@@ -45,6 +45,7 @@ import {
   type CascadeContext,
 } from './match-style-helpers.js';
 import type { OoxmlResolverParams, ParagraphProperties } from '@superdoc/style-engine/ooxml';
+import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
 
 // ---------------------------------------------------------------------------
 // V3 ref encoding (D6)
@@ -361,14 +362,15 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
   // Build style-engine resolver params from converter context (if available).
   // When translatedLinkedStyles.styles exists, resolveRunProperties can perform
   // full cascade resolution for 'clear' properties (defaults → style chain → inline).
-  const converter = (editor as unknown as { converter?: Partial<OoxmlResolverParams> }).converter;
-  const translatedLinkedStyles = converter?.translatedLinkedStyles;
-  const translatedNumbering = converter?.translatedNumbering;
+  const translatedLinkedStyles = readTranslatedLinkedStyles(editor);
+  const converter = (
+    editor as unknown as { converter?: { translatedNumbering?: OoxmlResolverParams['translatedNumbering'] } }
+  ).converter;
   const hasStyleCascade = translatedLinkedStyles?.styles != null;
   const resolverParams: OoxmlResolverParams | null = hasStyleCascade
     ? {
         translatedLinkedStyles,
-        translatedNumbering,
+        translatedNumbering: converter?.translatedNumbering,
       }
     : null;
 

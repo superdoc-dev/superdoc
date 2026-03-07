@@ -42,7 +42,6 @@ import { rejectTrackedMode } from './helpers/mutation-helpers.js';
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_PAGE_SIZE = 250;
 const VARIANT_ORDER: HeaderFooterVariant[] = ['default', 'first', 'even'];
 const KIND_ORDER: HeaderFooterKind[] = ['header', 'footer'];
 
@@ -69,9 +68,8 @@ function requireConverter(editor: Editor, operationName: string): ConverterWithH
 // Helpers
 // ---------------------------------------------------------------------------
 
-function clampLimit(limit: number | undefined, total: number): number {
-  const raw = limit ?? total;
-  return Math.min(raw, MAX_PAGE_SIZE);
+function effectiveLimitOf(limit: number | undefined, total: number): number {
+  return limit ?? total;
 }
 
 function buildSlotEntries(
@@ -118,7 +116,7 @@ export function headerFootersListAdapter(editor: Editor, query?: HeaderFootersLi
   const allEntries = buildSlotEntries(editor, sections, query?.kind, query?.section);
 
   const offset = query?.offset ?? 0;
-  const effectiveLimit = clampLimit(query?.limit, allEntries.length);
+  const effectiveLimit = effectiveLimitOf(query?.limit, allEntries.length);
   const { total, items: paged } = paginate(allEntries, offset, effectiveLimit);
   const evaluatedRevision = getRevision(editor);
 
@@ -389,7 +387,7 @@ export function headerFootersPartsListAdapter(
   });
 
   const offset = query?.offset ?? 0;
-  const effectiveLimit = clampLimit(query?.limit, allEntries.length);
+  const effectiveLimit = effectiveLimitOf(query?.limit, allEntries.length);
   const { total, items: paged } = paginate(allEntries, offset, effectiveLimit);
   const evaluatedRevision = getRevision(editor);
 

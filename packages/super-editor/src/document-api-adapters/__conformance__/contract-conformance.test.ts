@@ -6873,7 +6873,14 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeSectionsEditor({ includeConverter: false });
       return headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct' });
     },
-    failureCase: undefined,
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsCreateAdapter(
+        editor,
+        { kind: 'header', sourceRefId: 'rIdNonExistent' },
+        { changeMode: 'direct' },
+      );
+    },
     applyCase: () => {
       const editor = makeSectionsEditor();
       return headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct' });

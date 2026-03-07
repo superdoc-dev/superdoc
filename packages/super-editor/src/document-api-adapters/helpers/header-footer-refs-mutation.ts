@@ -212,6 +212,13 @@ export function setLinkedToPreviousMutation(
     sourceRefId: resolved?.refId,
   });
   if (!explicitRefId) {
+    // Fall back to reusing the inherited ref when the converter is unavailable
+    // (e.g. non-converter editor sessions). This preserves the prior behavior
+    // where unlinking a section reused the resolved reference directly.
+    if (resolved?.refId) {
+      setSectPrHeaderFooterRef(sectPr, kind, variant, resolved.refId);
+      return;
+    }
     return {
       success: false,
       failure: {

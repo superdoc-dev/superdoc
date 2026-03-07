@@ -13,6 +13,11 @@ import type { FailedPartEntry } from './types.js';
 import { decodeYjsToEnvelope } from './json-crdt.js';
 import { PARTS_MAP_KEY, EXCLUDED_PART_IDS, SOURCE_COLLAB_REMOTE_PARTS } from './constants.js';
 import { hasPart, mutateParts } from '../../../core/parts/index.js';
+import {
+  isHeaderFooterPartId,
+  ensureHeaderFooterDescriptor,
+} from '../../../core/parts/adapters/header-footer-part-descriptor.js';
+import { resolveHeaderFooterRId } from '../../../core/parts/adapters/header-footer-sync.js';
 
 // ---------------------------------------------------------------------------
 // Consumer State
@@ -47,10 +52,17 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
 
     const operations: PartOperation[] = [];
 
+    // Decode rels from Yjs for header/footer rId resolution
+    const relsYjsEntry = partsMap.get('word/_rels/document.xml.rels');
+    const relsData = relsYjsEntry instanceof Y.Map ? (decodeYjsToEnvelope(relsYjsEntry)?.data ?? null) : null;
+
     event.changes.keys.forEach((change, key) => {
       if (EXCLUDED_PART_IDS.has(key)) return;
 
       const partId = key as PartId;
+
+      // For header/footer parts, ensure descriptor is registered with correct rId
+      const sectionId = ensureHeaderFooterSectionId(partId, relsData, editor);
 
       try {
         if (change.action === 'delete') {
@@ -58,6 +70,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
             operations.push({
               editor,
               partId,
+              sectionId,
               operation: 'delete',
               source: SOURCE_COLLAB_REMOTE_PARTS,
             });
@@ -87,6 +100,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
           operations.push({
             editor,
             partId,
+            sectionId,
             operation: 'mutate',
             source: SOURCE_COLLAB_REMOTE_PARTS,
             mutate: ({ part }) => {
@@ -98,6 +112,7 @@ export function createPartConsumer(editor: Editor, ydoc: Y.Doc): PartConsumer {
           operations.push({
             editor,
             partId,
+            sectionId,
             operation: 'create',
             source: SOURCE_COLLAB_REMOTE_PARTS,
             initial: envelope.data,
@@ -156,6 +171,22 @@ export function replacePartData(target: unknown, source: unknown): void {
   for (const [key, value] of Object.entries(src)) {
     tgt[key] = value;
   }
+}
+
+/**
+ * For header/footer parts, resolve the relationship ID and ensure a descriptor
+ * is registered so that `afterCommit` correctly populates `converter.headers/footers`.
+ *
+ * Returns the sectionId (rId) to set on the operation, or undefined for
+ * non-header/footer parts.
+ */
+function ensureHeaderFooterSectionId(partId: PartId, relsData: unknown | null, editor: Editor): string | undefined {
+  if (!isHeaderFooterPartId(partId)) return undefined;
+
+  const rId = resolveHeaderFooterRId(partId, relsData, editor);
+  const sectionId = rId ?? partId;
+  ensureHeaderFooterDescriptor(partId, sectionId);
+  return sectionId;
 }
 
 function trackFailure(failedParts: Map<string, FailedPartEntry>, key: string, partsMap: Y.Map<unknown>): void {

@@ -29,7 +29,10 @@ import {
   PARTS_SCHEMA_VERSION,
   SOURCE_COLLAB_REMOTE_PARTS,
 } from './constants.js';
-import { registerExistingHeaderFooterDescriptors } from '../../../core/parts/adapters/header-footer-sync.js';
+import {
+  registerExistingHeaderFooterDescriptors,
+  resolveHeaderFooterRId,
+} from '../../../core/parts/adapters/header-footer-sync.js';
 import {
   ensureHeaderFooterDescriptor,
   isHeaderFooterPartId,
@@ -105,7 +108,7 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc, mode: PartSyncMod
 
   // Step 5: Register header/footer descriptors before hydration
   registerExistingHeaderFooterDescriptors(editor);
-  registerHeaderFooterDescriptorsFromPartsMap(partsMap);
+  registerHeaderFooterDescriptorsFromPartsMap(partsMap, editor);
 
   // Step 6: Hydrate local state from parts map
   const hydrationOk = hydrateFromPartsMap(editor, ydoc, partsMap, metaMap);
@@ -159,6 +162,10 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
   const operations: import('../../../core/parts/types.js').PartOperation[] = [];
   const criticalFailures: string[] = [];
 
+  // Decode rels from Yjs for header/footer sectionId resolution
+  const relsEntry = partsMap.get('word/_rels/document.xml.rels');
+  const relsData = relsEntry instanceof Y.Map ? (decodeYjsToEnvelope(relsEntry)?.data ?? null) : null;
+
   for (const [key, value] of partsMap.entries()) {
     if (EXCLUDED_PART_IDS.has(key)) continue;
 
@@ -173,6 +180,10 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
 
     const partId = key as PartId;
 
+    // Resolve sectionId (rId) for header/footer parts so afterCommit
+    // writes PM JSON under the correct key in converter.headers/footers
+    const sectionId = isHeaderFooterPartId(key) ? (resolveHeaderFooterRId(key, relsData, editor) ?? key) : undefined;
+
     try {
       const envelope = decodeYjsToEnvelope(value as Y.Map<unknown>);
       if (!envelope || envelope.data === undefined || envelope.data === null) {
@@ -184,6 +195,7 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
         operations.push({
           editor,
           partId,
+          sectionId,
           operation: 'mutate',
           source: SOURCE_COLLAB_REMOTE_PARTS,
           mutate: createReplacer(envelope.data),
@@ -192,6 +204,7 @@ function hydrateFromPartsMap(editor: Editor, ydoc: Y.Doc, partsMap: Y.Map<unknow
         operations.push({
           editor,
           partId,
+          sectionId,
           operation: 'create',
           source: SOURCE_COLLAB_REMOTE_PARTS,
           initial: envelope.data,
@@ -246,14 +259,20 @@ function hasNonDocumentEntries(partsMap: Y.Map<unknown>): boolean {
 
 /**
  * Register header/footer descriptors for any header/footer parts in the Yjs parts map.
- * Uses a placeholder sectionId — the actual sectionId will be resolved at commit time.
+ *
+ * Resolves the relationship ID from the Yjs rels data (most current) or falls back
+ * to the editor's local converter rels. This ensures descriptors capture the correct
+ * rId so `afterCommit` writes PM JSON under the right key in `converter.headers/footers`.
  */
-function registerHeaderFooterDescriptorsFromPartsMap(partsMap: Y.Map<unknown>): void {
+function registerHeaderFooterDescriptorsFromPartsMap(partsMap: Y.Map<unknown>, editor: Editor): void {
+  // Decode rels from Yjs (most current source for rId resolution)
+  const relsEntry = partsMap.get('word/_rels/document.xml.rels');
+  const relsData = relsEntry instanceof Y.Map ? (decodeYjsToEnvelope(relsEntry)?.data ?? null) : null;
+
   for (const key of partsMap.keys()) {
     if (isHeaderFooterPartId(key)) {
-      // Use the part filename as a temporary sectionId; the descriptor's
-      // afterCommit receives the real sectionId from the operation context.
-      ensureHeaderFooterDescriptor(key as PartId, key);
+      const rId = resolveHeaderFooterRId(key, relsData, editor);
+      ensureHeaderFooterDescriptor(key as PartId, rId ?? key);
     }
   }
 }

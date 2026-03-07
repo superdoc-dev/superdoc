@@ -92,6 +92,54 @@ export function resolvePartIdFromSectionId(editor: Editor, sectionId: string): P
   return null;
 }
 
+/**
+ * Resolve a part path (e.g., 'word/header1.xml') to its relationship ID (e.g., 'rId7')
+ * by scanning a rels XML JSON structure.
+ *
+ * This is the reverse of `resolvePartIdFromSectionId`.
+ */
+export function resolveRIdFromRelsData(relsData: unknown, partId: string): string | null {
+  const target = partId.replace(/^word\//, '');
+  const relsEl = relsData as XmlElement | undefined;
+  const relsRoot = relsEl?.elements?.find((el) => el.name === 'Relationships');
+  if (!relsRoot?.elements) return null;
+
+  for (const el of relsRoot.elements) {
+    if (el.name !== 'Relationship') continue;
+    if (el.attributes?.Target !== target) continue;
+
+    const type = el.attributes?.Type;
+    if (type !== HEADER_REL_TYPE && type !== FOOTER_REL_TYPE) continue;
+
+    return el.attributes?.Id ?? null;
+  }
+
+  return null;
+}
+
+/**
+ * Resolve the relationship ID for a header/footer part, trying multiple sources.
+ *
+ * 1. `relsData` — pre-decoded rels XML JSON (e.g., from a Yjs parts map envelope)
+ * 2. Editor's converter `convertedXml` (local cache)
+ *
+ * Returns null if no matching relationship is found in either source.
+ */
+export function resolveHeaderFooterRId(partId: string, relsData: unknown | null, editor?: Editor): string | null {
+  if (relsData) {
+    const rId = resolveRIdFromRelsData(relsData, partId);
+    if (rId) return rId;
+  }
+
+  if (editor) {
+    const converter = getConverter(editor);
+    const localRels = converter?.convertedXml?.['word/_rels/document.xml.rels'];
+    if (localRels) return resolveRIdFromRelsData(localRels, partId);
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Export: Sub-Editor PM JSON → OOXML JSON → mutatePart
 // ---------------------------------------------------------------------------

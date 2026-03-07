@@ -360,6 +360,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     ydoc: null,
     collaborationProvider: null,
     collaborationIsReady: false,
+    collaborationPartsSync: false,
     shouldLoadComments: false,
     replacedFile: false,
 

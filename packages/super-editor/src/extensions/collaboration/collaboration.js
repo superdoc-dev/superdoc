@@ -3,6 +3,7 @@ import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
 import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
 import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/collaboration/collaboration-helpers.js';
+import { bootstrapPartSync, resolvePartSyncMode, SOURCE_COLLAB_REMOTE_PREFIX } from './part-sync/index.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
@@ -74,15 +75,45 @@ export const Collaboration = Extension.create({
     };
     headerFooterMap.observe(headerFooterMapObserver);
 
+    // Bootstrap part-sync (publisher + consumer) gated by feature flag.
+    // Requires a full editor with event emitter — skip for minimal test mocks.
+    // Deferred until provider is synced so Yjs state is available for
+    // capability detection and migration.
+    const partSyncMode = typeof this.editor.on === 'function' ? resolvePartSyncMode(this.editor) : 'off';
+
     // Store cleanup references in a non-reactive WeakMap (NOT this.options)
     // to avoid Vue's deep traverse hitting circular references in Y.js Maps.
-    collaborationCleanupByEditor.set(this.editor, {
+    const cleanupState = {
       metaMap,
       metaMapObserver,
       headerFooterMap,
       headerFooterMapObserver,
       documentListenerCleanup,
-    });
+      partSyncHandle: null,
+      partSyncPendingCleanup: null,
+    };
+    collaborationCleanupByEditor.set(this.editor, cleanupState);
+
+    if (partSyncMode !== 'off') {
+      const editor = this.editor;
+      const ydoc = this.options.ydoc;
+      const doBootstrap = () => {
+        if (editor.isDestroyed) return;
+        cleanupState.partSyncHandle = bootstrapPartSync(editor, ydoc, partSyncMode);
+      };
+
+      const provider = editor.options.collaborationProvider;
+      if (!provider || provider.synced) {
+        doBootstrap();
+      } else {
+        const onSynced = () => {
+          provider.off('synced', onSynced);
+          doBootstrap();
+        };
+        provider.on('synced', onSynced);
+        cleanupState.partSyncPendingCleanup = () => provider.off('synced', onSynced);
+      }
+    }
 
     // Headless editors don't create an EditorView, so wire Y.js binding lifecycle here.
     // Doing this in addPmPlugins ensures sync hooks are active before the first local transaction.
@@ -109,6 +140,10 @@ export const Collaboration = Extension.create({
     // Clean up Y.js map observers to prevent memory leaks
     cleanup.metaMap.unobserve(cleanup.metaMapObserver);
     cleanup.headerFooterMap.unobserve(cleanup.headerFooterMapObserver);
+
+    // Clean up part-sync publisher/consumer (or pending sync listener)
+    cleanup.partSyncHandle?.destroy();
+    cleanup.partSyncPendingCleanup?.();
 
     // Clean up ydoc afterTransaction listener and debounce timer
     cleanup.documentListenerCleanup();
@@ -213,9 +248,19 @@ const initDocumentListener = ({ ydoc, editor }) => {
 
   ydoc.on('afterTransaction', afterTransactionHandler);
 
+  // Wire partChanged as an additional trigger for meta.docx refresh.
+  // Only local-origin mutations trigger the update — remote applies already
+  // reflect the authoritative state and don't need to be re-exported.
+  const partChangedHandler = (event) => {
+    if (event.source?.startsWith(SOURCE_COLLAB_REMOTE_PREFIX)) return;
+    debouncedUpdate(editor);
+  };
+  if (typeof editor.on === 'function') editor.on('partChanged', partChangedHandler);
+
   // Return cleanup function
   return () => {
     ydoc.off('afterTransaction', afterTransactionHandler);
+    if (typeof editor.off === 'function') editor.off('partChanged', partChangedHandler);
     debouncedUpdate.cancel();
     debouncedDocxUpdateByEditor.delete(editor);
   };

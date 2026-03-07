@@ -96,6 +96,42 @@ function rebuildTranslatedNumbering(numbering: NumberingIndex): TranslatedNumber
 }
 
 // ---------------------------------------------------------------------------
+// Numbering index rebuild from part (for remote full-replace)
+// ---------------------------------------------------------------------------
+
+interface NumberingElement {
+  name?: string;
+  attributes?: Record<string, string>;
+}
+
+/**
+ * Rebuild `converter.numbering` (abstracts + definitions) from the OOXML JSON tree.
+ *
+ * Called after a remote full-replace so that the numbering index references the
+ * new XML elements instead of stale pre-replace references.
+ */
+function rebuildNumberingIndexFromPart(converter: ConverterForNumbering, part: unknown): void {
+  const root = part as { elements?: Array<{ elements?: NumberingElement[] }> };
+  const numberingEl = root?.elements?.[0];
+  if (!numberingEl?.elements) return;
+
+  const abstracts: Record<number, unknown> = {};
+  const definitions: Record<number, unknown> = {};
+
+  for (const el of numberingEl.elements) {
+    if (el.name === 'w:abstractNum') {
+      const id = Number(el.attributes?.['w:abstractNumId'] ?? -1);
+      if (id >= 0) abstracts[id] = el;
+    } else if (el.name === 'w:num') {
+      const id = Number(el.attributes?.['w:numId'] ?? -1);
+      if (id >= 0) definitions[id] = el;
+    }
+  }
+
+  converter.numbering = { abstracts, definitions };
+}
+
+// ---------------------------------------------------------------------------
 // Descriptor
 // ---------------------------------------------------------------------------
 
@@ -150,9 +186,15 @@ export const numberingPartDescriptor: PartDescriptor = {
     numberingEl.elements = [...other, ...abstracts, ...definitions];
   },
 
-  afterCommit({ editor }) {
+  afterCommit({ editor, part, source }) {
     const converter = getConverter(editor);
     if (!converter) return;
+
+    // For remote full-part replacements, converter.numbering has stale
+    // references to the old XML tree. Rebuild from the committed part.
+    if (source.startsWith('collab:remote:')) {
+      rebuildNumberingIndexFromPart(converter, part);
+    }
 
     // Rebuild translatedNumbering from converter.numbering.
     // converter.numbering shares element references with the canonical XML tree,

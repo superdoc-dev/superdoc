@@ -127,16 +127,34 @@ export interface CompoundMutationResult {
   success: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Compound depth tracking for publisher buffering
+// ---------------------------------------------------------------------------
+
+interface EditorWithCompoundState {
+  _compoundDepth?: number;
+  _partPublisher?: { flush(): void; drop(): void };
+}
+
+function getCompoundState(editor: Editor): EditorWithCompoundState {
+  return editor as unknown as EditorWithCompoundState;
+}
+
 /**
  * Execute parts mutations and a PM dispatch as one atomic unit.
  *
- * 1. Snapshot affected parts + converter metadata
- * 2. Run `execute()` (which calls mutatePart + PM dispatch internally)
- * 3. On failure (returns false or throws): restore snapshot
- * 4. On success: return
+ * 1. Increment compound depth (publisher buffers instead of publishing)
+ * 2. Snapshot affected parts + converter metadata
+ * 3. Run `execute()` (which calls mutatePart + PM dispatch internally)
+ * 4. On failure (returns false or throws): restore snapshot, drop buffer
+ * 5. On success at depth 0: flush buffered events to Yjs
  */
 export function compoundMutation(request: CompoundMutationRequest): CompoundMutationResult {
   const { editor, execute, affectedParts = [] } = request;
+  const state = getCompoundState(editor);
+
+  // Track nesting depth for publisher buffering
+  state._compoundDepth = (state._compoundDepth ?? 0) + 1;
 
   const snapshot = takeSnapshot(editor, new Set(affectedParts));
 
@@ -144,12 +162,19 @@ export function compoundMutation(request: CompoundMutationRequest): CompoundMuta
   try {
     success = execute();
   } catch (err) {
+    state._compoundDepth = (state._compoundDepth ?? 1) - 1;
     restoreFromSnapshot(editor, snapshot);
+    if (state._compoundDepth === 0) state._partPublisher?.drop();
     throw err;
   }
 
+  state._compoundDepth = (state._compoundDepth ?? 1) - 1;
+
   if (!success) {
     restoreFromSnapshot(editor, snapshot);
+    if (state._compoundDepth === 0) state._partPublisher?.drop();
+  } else if (state._compoundDepth === 0) {
+    state._partPublisher?.flush();
   }
 
   return { success };

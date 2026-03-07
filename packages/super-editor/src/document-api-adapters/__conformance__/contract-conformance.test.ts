@@ -130,6 +130,7 @@ import {
   hyperlinksPatchWrapper,
   hyperlinksRemoveWrapper,
 } from '../plan-engine/hyperlinks-wrappers.js';
+import { createContentControlsAdapter } from '../plan-engine/content-controls-wrappers.js';
 import {
   listsInsertWrapper,
   listsIndentWrapper,
@@ -1264,6 +1265,33 @@ const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
  */
 const PLAN_ENGINE_META_OPS: ReadonlySet<OperationId> = new Set(['mutations.apply'] as OperationId[]);
 const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set(['history.undo', 'history.redo'] as OperationId[]);
+
+/**
+ * Content-control operations whose handlers always return `true` because they
+ * build and dispatch their own ProseMirror transaction directly (via
+ * `editor.view!.dispatch(tr)`) rather than delegating to an editor command whose
+ * boolean result propagates to the domain-command executor.
+ *
+ * Because the handler always returns `true`, the `domain.command` executor marks
+ * the step effect as `'changed'` and `executeSdtMutation` returns success.
+ * There is no code path that produces the `NO_OP` structured failure for these
+ * operations, so they are excluded from the failureCase conformance check.
+ */
+const CC_DIRECT_DISPATCH_OPS: ReadonlySet<OperationId> = new Set([
+  'contentControls.wrap',
+  'contentControls.unwrap',
+  'contentControls.copy',
+  'contentControls.move',
+  'contentControls.insertBefore',
+  'contentControls.insertAfter',
+  'contentControls.group.wrap',
+  'contentControls.group.ungroup',
+  'contentControls.repeatingSection.insertItemBefore',
+  'contentControls.repeatingSection.insertItemAfter',
+  'contentControls.repeatingSection.cloneItem',
+  'contentControls.repeatingSection.deleteItem',
+] as OperationId[]);
+
 const HAS_STRUCTURED_FAILURE_RESULT = (operationId: OperationId): boolean =>
   COMMAND_CATALOG[operationId].possibleFailureCodes.length > 0;
 
@@ -2168,6 +2196,215 @@ function makeHyperlinkEditor(
     schema: { marks: { link: linkMarkType } },
     options: { mode: 'html' },
     on: () => {},
+  } as unknown as Editor;
+}
+
+// ---------------------------------------------------------------------------
+// Content-controls mock helpers
+// ---------------------------------------------------------------------------
+
+const SDT_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: 'sdt-1' };
+const MISSING_SDT_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: 'nonexistent' };
+const RS_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: 'rs-1' };
+
+/** Create an SDT editor whose commands return false — triggers NO_OP failure. */
+function makeNoOpSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
+  const editor = makeSdtEditor(overrideAttrs);
+  (editor.commands as any).updateStructuredContentById = vi.fn(() => false);
+  (editor.commands as any).deleteStructuredContentById = vi.fn(() => false);
+  (editor.commands as any).insertStructuredContentBlock = vi.fn(() => false);
+  (editor.commands as any).insertStructuredContentInline = vi.fn(() => false);
+  return editor;
+}
+
+function makeNoOpSdtEditorWithRepeatingSectionItems(): Editor {
+  const editor = makeSdtEditorWithRepeatingSectionItems();
+  (editor.commands as any).updateStructuredContentById = vi.fn(() => false);
+  (editor.commands as any).deleteStructuredContentById = vi.fn(() => false);
+  (editor.commands as any).insertStructuredContentBlock = vi.fn(() => false);
+  (editor.commands as any).insertStructuredContentInline = vi.fn(() => false);
+  return editor;
+}
+
+function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
+  const sdtAttrs = {
+    id: 'sdt-1',
+    tag: 'test-tag',
+    alias: 'Test Alias',
+    lockMode: 'unlocked',
+    controlType: 'text',
+    type: 'text',
+    sdtPr: { elements: [] },
+    ...overrideAttrs,
+  };
+
+  const textNode = createNode('text', [], { text: 'SDT content' });
+  const innerParagraph = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'inner-p' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const sdtNode = createNode('structuredContentBlock', [innerParagraph], {
+    attrs: sdtAttrs,
+    isBlock: true,
+  });
+  const doc = createNode('doc', [sdtNode], { isBlock: false });
+
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    addMark: vi.fn().mockReturnThis(),
+    removeMark: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    doc,
+    steps: [{ type: 'replaceStep' }],
+  };
+
+  const dispatch = vi.fn();
+
+  const editor = {
+    state: {
+      doc,
+      tr,
+      schema: {
+        marks: {},
+        text: (t: string) => createNode('text', [], { text: t }),
+        nodes: {
+          paragraph: {
+            create: vi.fn(() => innerParagraph),
+            createAndFill: vi.fn(() => innerParagraph),
+          },
+          structuredContentBlock: {
+            create: vi.fn((attrs: unknown, content: unknown) =>
+              createNode('structuredContentBlock', [], { attrs: attrs as Record<string, unknown>, isBlock: true }),
+            ),
+          },
+        },
+      },
+      selection: { from: 0, to: doc.nodeSize },
+    },
+    schema: {
+      marks: {},
+      text: (t: string) => createNode('text', [], { text: t }),
+      nodes: {
+        paragraph: {
+          create: vi.fn(() => innerParagraph),
+          createAndFill: vi.fn(() => innerParagraph),
+        },
+        structuredContentBlock: {
+          create: vi.fn((attrs: unknown, content: unknown) =>
+            createNode('structuredContentBlock', [], { attrs: attrs as Record<string, unknown>, isBlock: true }),
+          ),
+        },
+      },
+    },
+    dispatch,
+    view: { dispatch },
+    commands: {
+      updateStructuredContentById: vi.fn(() => true),
+      deleteStructuredContentById: vi.fn(() => true),
+      insertStructuredContentBlock: vi.fn(() => true),
+      insertStructuredContentInline: vi.fn(() => true),
+    },
+  } as unknown as Editor;
+
+  return editor;
+}
+
+function makeSdtEditorWithRepeatingSectionItems(): Editor {
+  const textNode = createNode('text', [], { text: 'Item content' });
+  const itemParagraph = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'item-p' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const rsiNode = createNode('structuredContentBlock', [itemParagraph], {
+    attrs: {
+      id: 'rsi-1',
+      controlType: 'repeatingSectionItem',
+      type: 'repeatingSectionItem',
+      lockMode: 'unlocked',
+      sdtPr: { elements: [] },
+    },
+    isBlock: true,
+  });
+  const rsNode = createNode('structuredContentBlock', [rsiNode], {
+    attrs: {
+      id: 'rs-1',
+      controlType: 'repeatingSection',
+      type: 'repeatingSection',
+      lockMode: 'unlocked',
+      sdtPr: { elements: [] },
+    },
+    isBlock: true,
+  });
+  const doc = createNode('doc', [rsNode], { isBlock: false });
+
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    addMark: vi.fn().mockReturnThis(),
+    removeMark: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    doc,
+    steps: [{ type: 'replaceStep' }],
+  };
+
+  const dispatch = vi.fn();
+  const itemParagraphNode = createNode('paragraph', [], { isBlock: true, inlineContent: true });
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        marks: {},
+        text: (t: string) => createNode('text', [], { text: t }),
+        nodes: {
+          paragraph: { create: vi.fn(() => itemParagraphNode), createAndFill: vi.fn(() => itemParagraphNode) },
+          structuredContentBlock: {
+            create: vi.fn((attrs: unknown, content: unknown) =>
+              createNode('structuredContentBlock', [content as ProseMirrorNode].flat().filter(Boolean), {
+                attrs: attrs as Record<string, unknown>,
+                isBlock: true,
+              }),
+            ),
+          },
+        },
+      },
+      selection: { from: 0, to: doc.nodeSize },
+    },
+    schema: {
+      marks: {},
+      text: (t: string) => createNode('text', [], { text: t }),
+      nodes: {
+        paragraph: { create: vi.fn(() => itemParagraphNode), createAndFill: vi.fn(() => itemParagraphNode) },
+        structuredContentBlock: {
+          create: vi.fn((attrs: unknown, content: unknown) =>
+            createNode('structuredContentBlock', [content as ProseMirrorNode].flat().filter(Boolean), {
+              attrs: attrs as Record<string, unknown>,
+              isBlock: true,
+            }),
+          ),
+        },
+      },
+    },
+    dispatch,
+    view: { dispatch },
+    commands: {
+      updateStructuredContentById: vi.fn(() => true),
+      deleteStructuredContentById: vi.fn(() => true),
+      insertStructuredContentBlock: vi.fn(() => true),
+      insertStructuredContentInline: vi.fn(() => true),
+    },
   } as unknown as Editor;
 }
 
@@ -5213,6 +5450,723 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
   },
+  // -------------------------------------------------------------------------
+  // Content control operations
+  // -------------------------------------------------------------------------
+  'contentControls.appendContent': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.appendContent({ target: MISSING_SDT_TARGET, content: 'appended' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.appendContent({ target: SDT_TARGET, content: 'appended' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.appendContent({ target: SDT_TARGET, content: 'appended' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.checkbox.setState': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.setState({ target: MISSING_SDT_TARGET, checked: true }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeNoOpSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.setState({ target: SDT_TARGET, checked: true }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.setState({ target: SDT_TARGET, checked: true }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.checkbox.toggle': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.toggle({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeNoOpSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.toggle({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.toggle({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.checkbox.setSymbolPair': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.setSymbolPair(
+        {
+          target: MISSING_SDT_TARGET,
+          checkedSymbol: { font: 'Wingdings', char: '00FE' },
+          uncheckedSymbol: { font: 'Wingdings', char: '00A8' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeNoOpSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.setSymbolPair(
+        {
+          target: SDT_TARGET,
+          checkedSymbol: { font: 'Wingdings', char: '00FE' },
+          uncheckedSymbol: { font: 'Wingdings', char: '00A8' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'checkbox',
+          type: 'checkbox',
+          sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+        }),
+      );
+      return adapter.checkbox.setSymbolPair(
+        {
+          target: SDT_TARGET,
+          checkedSymbol: { font: 'Wingdings', char: '00FE' },
+          uncheckedSymbol: { font: 'Wingdings', char: '00A8' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'contentControls.choiceList.setItems': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'comboBox',
+          type: 'comboBox',
+          sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+        }),
+      );
+      return adapter.choiceList.setItems(
+        { target: MISSING_SDT_TARGET, items: [{ displayText: 'A', value: 'a' }] },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeNoOpSdtEditor({
+          controlType: 'comboBox',
+          type: 'comboBox',
+          sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+        }),
+      );
+      return adapter.choiceList.setItems(
+        { target: SDT_TARGET, items: [{ displayText: 'A', value: 'a' }] },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'comboBox',
+          type: 'comboBox',
+          sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+        }),
+      );
+      return adapter.choiceList.setItems(
+        { target: SDT_TARGET, items: [{ displayText: 'A', value: 'a' }] },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'contentControls.choiceList.setSelected': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'comboBox',
+          type: 'comboBox',
+          sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+        }),
+      );
+      return adapter.choiceList.setSelected({ target: MISSING_SDT_TARGET, value: 'a' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeNoOpSdtEditor({
+          controlType: 'comboBox',
+          type: 'comboBox',
+          sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+        }),
+      );
+      return adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'a' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({
+          controlType: 'comboBox',
+          type: 'comboBox',
+          sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+        }),
+      );
+      return adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'a' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.clearBinding': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.clearBinding({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.clearBinding({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.clearBinding({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.clearContent': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.clearContent({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.copy': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.copy({ target: MISSING_SDT_TARGET, destination: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.copy({ target: SDT_TARGET, destination: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.date.clearValue': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.clearValue({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.clearValue({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.clearValue({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.date.setCalendar': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setCalendar({ target: MISSING_SDT_TARGET, calendar: 'gregorian' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setCalendar({ target: SDT_TARGET, calendar: 'gregorian' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setCalendar({ target: SDT_TARGET, calendar: 'gregorian' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.date.setDisplayFormat': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setDisplayFormat(
+        { target: MISSING_SDT_TARGET, format: 'yyyy-MM-dd' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setDisplayFormat({ target: SDT_TARGET, format: 'yyyy-MM-dd' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setDisplayFormat({ target: SDT_TARGET, format: 'yyyy-MM-dd' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.date.setDisplayLocale': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setDisplayLocale({ target: MISSING_SDT_TARGET, locale: 'en-US' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setDisplayLocale({ target: SDT_TARGET, locale: 'en-US' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setDisplayLocale({ target: SDT_TARGET, locale: 'en-US' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.date.setStorageFormat': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setStorageFormat(
+        { target: MISSING_SDT_TARGET, format: 'xsd:dateTime' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setStorageFormat({ target: SDT_TARGET, format: 'xsd:dateTime' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setStorageFormat({ target: SDT_TARGET, format: 'xsd:dateTime' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.date.setValue': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setValue({ target: MISSING_SDT_TARGET, value: '2024-01-01' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setValue({ target: SDT_TARGET, value: '2024-01-01' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+      return adapter.date.setValue({ target: SDT_TARGET, value: '2024-01-01' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.delete': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.delete({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.delete({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.delete({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.group.ungroup': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'group', type: 'group' }));
+      return adapter.group.ungroup({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'group', type: 'group' }));
+      return adapter.group.ungroup({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.group.wrap': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.group.wrap({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.group.wrap({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.insertAfter': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.insertAfter({ target: MISSING_SDT_TARGET, content: 'after' }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.insertAfter({ target: SDT_TARGET, content: 'after' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.insertBefore': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.insertBefore({ target: MISSING_SDT_TARGET, content: 'before' }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.insertBefore({ target: SDT_TARGET, content: 'before' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.move': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.move({ target: MISSING_SDT_TARGET, destination: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.move({ target: SDT_TARGET, destination: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.normalizeTagPayload': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.normalizeTagPayload({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      // Tag is already valid JSON — returns NO_OP
+      const adapter = createContentControlsAdapter(makeSdtEditor({ tag: '{"key":"value"}' }));
+      return adapter.normalizeTagPayload({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.normalizeTagPayload({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.normalizeWordCompatibility': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.normalizeWordCompatibility({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      // ID is already numeric — returns NO_OP
+      const numericId = '12345';
+      const adapter = createContentControlsAdapter(makeSdtEditor({ id: numericId }));
+      return adapter.normalizeWordCompatibility(
+        { target: { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: numericId } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ id: 'not-a-number-id' }));
+      return adapter.normalizeWordCompatibility(
+        { target: { kind: 'block', nodeType: 'sdt', nodeId: 'not-a-number-id' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'contentControls.patch': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.patch({ target: MISSING_SDT_TARGET, alias: 'New' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.patch({ target: SDT_TARGET, alias: 'New Alias' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.patch({ target: SDT_TARGET, alias: 'New Alias' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.patchRawProperties': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.patchRawProperties(
+        { target: MISSING_SDT_TARGET, patches: [{ op: 'set', name: 'w:tag', element: { val: 'x' } }] },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.patchRawProperties(
+        { target: SDT_TARGET, patches: [{ op: 'set', name: 'w:tag', element: { val: 'x' } }] },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.patchRawProperties(
+        { target: SDT_TARGET, patches: [{ op: 'set', name: 'w:tag', element: { val: 'x' } }] },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'contentControls.prependContent': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.prependContent({ target: MISSING_SDT_TARGET, content: 'prepended' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.prependContent({ target: SDT_TARGET, content: 'prepended' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.prependContent({ target: SDT_TARGET, content: 'prepended' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.repeatingSection.cloneItem': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.cloneItem({ target: MISSING_SDT_TARGET, index: 0 }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.cloneItem({ target: RS_TARGET, index: 0 }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.repeatingSection.deleteItem': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.deleteItem({ target: MISSING_SDT_TARGET, index: 0 }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.deleteItem({ target: RS_TARGET, index: 0 }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.repeatingSection.insertItemAfter': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.insertItemAfter(
+        { target: MISSING_SDT_TARGET, index: 0 },
+        { changeMode: 'direct' },
+      );
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.insertItemAfter({ target: RS_TARGET, index: 0 }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.repeatingSection.insertItemBefore': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.insertItemBefore(
+        { target: MISSING_SDT_TARGET, index: 0 },
+        { changeMode: 'direct' },
+      );
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+      return adapter.repeatingSection.insertItemBefore({ target: RS_TARGET, index: 0 }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.repeatingSection.setAllowInsertDelete': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({ controlType: 'repeatingSection', type: 'repeatingSection' }),
+      );
+      return adapter.repeatingSection.setAllowInsertDelete(
+        { target: MISSING_SDT_TARGET, allow: true },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeNoOpSdtEditor({ controlType: 'repeatingSection', type: 'repeatingSection' }),
+      );
+      return adapter.repeatingSection.setAllowInsertDelete(
+        { target: SDT_TARGET, allow: true },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(
+        makeSdtEditor({ controlType: 'repeatingSection', type: 'repeatingSection' }),
+      );
+      return adapter.repeatingSection.setAllowInsertDelete(
+        { target: SDT_TARGET, allow: true },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'contentControls.replaceContent': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.replaceContent({ target: MISSING_SDT_TARGET, content: 'replaced' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.replaceContent({ target: SDT_TARGET, content: 'replaced' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.replaceContent({ target: SDT_TARGET, content: 'replaced' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.setBinding': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.setBinding(
+        { target: MISSING_SDT_TARGET, storeItemId: 'store-1', xpath: '/root' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.setBinding(
+        { target: SDT_TARGET, storeItemId: 'store-1', xpath: '/root' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.setBinding(
+        { target: SDT_TARGET, storeItemId: 'store-1', xpath: '/root' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'contentControls.setLockMode': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.setLockMode({ target: MISSING_SDT_TARGET, lockMode: 'locked' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.setLockMode({ target: SDT_TARGET, lockMode: 'locked' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.setLockMode({ target: SDT_TARGET, lockMode: 'locked' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.setType': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.setType({ target: MISSING_SDT_TARGET, controlType: 'date' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.setType({ target: SDT_TARGET, controlType: 'date' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.setType({ target: SDT_TARGET, controlType: 'date' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.text.clearValue': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.clearValue({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.clearValue({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.clearValue({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.text.setMultiline': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.setMultiline({ target: MISSING_SDT_TARGET, multiline: true }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.setMultiline({ target: SDT_TARGET, multiline: true }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.setMultiline({ target: SDT_TARGET, multiline: true }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.text.setValue': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.setValue({ target: MISSING_SDT_TARGET, value: 'hello' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.setValue({ target: SDT_TARGET, value: 'hello' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+      return adapter.text.setValue({ target: SDT_TARGET, value: 'hello' }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.unwrap': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.unwrap({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.unwrap({ target: SDT_TARGET }, { changeMode: 'direct' });
+    },
+  },
+  'contentControls.wrap': {
+    throwCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.wrap({ target: MISSING_SDT_TARGET, kind: 'block' }, { changeMode: 'direct' });
+    },
+    // failureCase omitted — CC_DIRECT_DISPATCH_OPS: handler always returns true
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.wrap({ target: SDT_TARGET, kind: 'block' }, { changeMode: 'direct' });
+    },
+  },
+  'create.contentControl': {
+    throwCase: () => {
+      const editor = makeSdtEditor();
+      (editor.commands as any).insertStructuredContentBlock = undefined;
+      const adapter = createContentControlsAdapter(editor);
+      return adapter.create({ kind: 'block' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      return adapter.create({ kind: 'block' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.create({ kind: 'block' }, { changeMode: 'direct' });
+    },
+  },
   // SD-2100: Image geometry, content, semantic & caption operations
   // -------------------------------------------------------------------------
   'images.scale': {
@@ -6769,6 +7723,246 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
 
   // -------------------------------------------------------------------------
+  // Content control operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'contentControls.appendContent': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.appendContent({ target: SDT_TARGET, content: 'appended' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.checkbox.setState': () => {
+    const adapter = createContentControlsAdapter(
+      makeSdtEditor({
+        controlType: 'checkbox',
+        type: 'checkbox',
+        sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+      }),
+    );
+    return adapter.checkbox.setState({ target: SDT_TARGET, checked: true }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.checkbox.toggle': () => {
+    const adapter = createContentControlsAdapter(
+      makeSdtEditor({
+        controlType: 'checkbox',
+        type: 'checkbox',
+        sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+      }),
+    );
+    return adapter.checkbox.toggle({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.checkbox.setSymbolPair': () => {
+    const adapter = createContentControlsAdapter(
+      makeSdtEditor({
+        controlType: 'checkbox',
+        type: 'checkbox',
+        sdtPr: { elements: [], 'w14:checkbox': { 'w14:checked': '0' } },
+      }),
+    );
+    return adapter.checkbox.setSymbolPair(
+      {
+        target: SDT_TARGET,
+        checkedSymbol: { font: 'Wingdings', char: '00FE' },
+        uncheckedSymbol: { font: 'Wingdings', char: '00A8' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.choiceList.setItems': () => {
+    const adapter = createContentControlsAdapter(
+      makeSdtEditor({
+        controlType: 'comboBox',
+        type: 'comboBox',
+        sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+      }),
+    );
+    return adapter.choiceList.setItems(
+      { target: SDT_TARGET, items: [{ displayText: 'A', value: 'a' }] },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.choiceList.setSelected': () => {
+    const adapter = createContentControlsAdapter(
+      makeSdtEditor({
+        controlType: 'comboBox',
+        type: 'comboBox',
+        sdtPr: { elements: [], 'w:comboBox': { 'w:listItem': [] } },
+      }),
+    );
+    return adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'a' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.clearBinding': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.clearBinding({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.clearContent': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.copy': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.copy({ target: SDT_TARGET, destination: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.date.clearValue': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+    return adapter.date.clearValue({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.date.setCalendar': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+    return adapter.date.setCalendar(
+      { target: SDT_TARGET, calendar: 'gregorian' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.date.setDisplayFormat': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+    return adapter.date.setDisplayFormat(
+      { target: SDT_TARGET, format: 'yyyy-MM-dd' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.date.setDisplayLocale': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+    return adapter.date.setDisplayLocale(
+      { target: SDT_TARGET, locale: 'en-US' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.date.setStorageFormat': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+    return adapter.date.setStorageFormat(
+      { target: SDT_TARGET, format: 'xsd:dateTime' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.date.setValue': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'date', type: 'date' }));
+    return adapter.date.setValue({ target: SDT_TARGET, value: '2024-01-01' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.delete': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.delete({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.group.ungroup': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'group', type: 'group' }));
+    return adapter.group.ungroup({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.group.wrap': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.group.wrap({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.insertAfter': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.insertAfter({ target: SDT_TARGET, content: 'after' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.insertBefore': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.insertBefore({ target: SDT_TARGET, content: 'before' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.move': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.move({ target: SDT_TARGET, destination: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.normalizeTagPayload': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.normalizeTagPayload({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.normalizeWordCompatibility': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ id: 'not-a-number-id' }));
+    return adapter.normalizeWordCompatibility(
+      { target: { kind: 'block', nodeType: 'sdt', nodeId: 'not-a-number-id' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.patch': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.patch({ target: SDT_TARGET, alias: 'New Alias' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.patchRawProperties': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.patchRawProperties(
+      { target: SDT_TARGET, patches: [{ op: 'set', name: 'w:tag', element: { val: 'x' } }] },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.prependContent': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.prependContent({ target: SDT_TARGET, content: 'prepended' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.repeatingSection.cloneItem': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+    return adapter.repeatingSection.cloneItem({ target: RS_TARGET, index: 0 }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.repeatingSection.deleteItem': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+    return adapter.repeatingSection.deleteItem({ target: RS_TARGET, index: 0 }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.repeatingSection.insertItemAfter': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+    return adapter.repeatingSection.insertItemAfter(
+      { target: RS_TARGET, index: 0 },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.repeatingSection.insertItemBefore': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditorWithRepeatingSectionItems());
+    return adapter.repeatingSection.insertItemBefore(
+      { target: RS_TARGET, index: 0 },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.repeatingSection.setAllowInsertDelete': () => {
+    const adapter = createContentControlsAdapter(
+      makeSdtEditor({ controlType: 'repeatingSection', type: 'repeatingSection' }),
+    );
+    return adapter.repeatingSection.setAllowInsertDelete(
+      { target: SDT_TARGET, allow: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.replaceContent': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.replaceContent({ target: SDT_TARGET, content: 'replaced' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.setBinding': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.setBinding(
+      { target: SDT_TARGET, storeItemId: 'store-1', xpath: '/root' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'contentControls.setLockMode': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.setLockMode({ target: SDT_TARGET, lockMode: 'locked' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.setType': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.setType({ target: SDT_TARGET, controlType: 'date' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.text.clearValue': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+    return adapter.text.clearValue({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.text.setMultiline': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+    return adapter.text.setMultiline({ target: SDT_TARGET, multiline: true }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.text.setValue': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }));
+    return adapter.text.setValue({ target: SDT_TARGET, value: 'hello' }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.unwrap': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.unwrap({ target: SDT_TARGET }, { changeMode: 'direct', dryRun: true });
+  },
+  'contentControls.wrap': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.wrap({ target: SDT_TARGET, kind: 'block' }, { changeMode: 'direct', dryRun: true });
+  },
+  'create.contentControl': () => {
+    const adapter = createContentControlsAdapter(makeSdtEditor());
+    return adapter.create({ kind: 'block' }, { changeMode: 'direct', dryRun: true });
+  },
+
+  // -------------------------------------------------------------------------
   // SD-2100: Image geometry, content, semantic & caption — dryRun vectors
   // -------------------------------------------------------------------------
   'images.scale': () => {
@@ -6967,7 +8161,7 @@ describe('document-api adapter conformance', () => {
       const vector = mutationVectors[operationId];
       expect(typeof vector?.throwCase, `${operationId} is missing throwCase`).toBe('function');
       expect(typeof vector?.applyCase, `${operationId} is missing applyCase`).toBe('function');
-      if (HAS_STRUCTURED_FAILURE_RESULT(operationId)) {
+      if (HAS_STRUCTURED_FAILURE_RESULT(operationId) && !CC_DIRECT_DISPATCH_OPS.has(operationId)) {
         expect(typeof vector?.failureCase, `${operationId} is missing failureCase`).toBe('function');
       }
     }
@@ -7008,6 +8202,7 @@ describe('document-api adapter conformance', () => {
         !STUB_TABLE_OPS.has(id) &&
         !PLAN_ENGINE_META_OPS.has(id) &&
         !NON_RECEIPT_MUTATION_OPS.has(id) &&
+        !CC_DIRECT_DISPATCH_OPS.has(id) &&
         HAS_STRUCTURED_FAILURE_RESULT(id),
     );
     for (const operationId of implementedMutatingOps) {

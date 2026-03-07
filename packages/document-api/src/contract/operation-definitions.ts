@@ -51,7 +51,8 @@ export type ReferenceGroupKey =
   | 'history'
   | 'toc'
   | 'images'
-  | 'hyperlinks';
+  | 'hyperlinks'
+  | 'contentControls';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -158,6 +159,21 @@ const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
 
 // Image operations can throw AMBIGUOUS_TARGET when multiple images share an sdImageId.
 const T_IMAGE_COMMAND = ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
+
+// Content controls throw-code families
+const T_CC_READ = ['TARGET_NOT_FOUND', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_CC_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'AMBIGUOUS_TARGET',
+  'INVALID_INPUT',
+  'LOCK_VIOLATION',
+  'REVISION_MISMATCH',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
+const T_CC_TYPED = [...T_CC_MUTATION, 'TYPE_MISMATCH'] as const;
+const T_CC_TYPED_READ = [...T_CC_READ, 'TYPE_MISMATCH'] as const;
+const T_CC_RAW = ['TARGET_NOT_FOUND', 'INVALID_INPUT', 'REVISION_MISMATCH', 'CAPABILITY_UNAVAILABLE'] as const;
 
 const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
 const T_SECTION_CREATE = [
@@ -3192,6 +3208,815 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'hyperlinks/remove.mdx',
     referenceGroup: 'hyperlinks',
+  },
+
+  // =========================================================================
+  // Content Controls (SD-2070)
+  // =========================================================================
+
+  // --- A. Core CRUD + Discovery ---
+
+  'create.contentControl': {
+    memberPath: 'create.contentControl',
+    description: 'Create a new content control (SDT) in the document.',
+    expectedResult: 'Returns a ContentControlMutationResult with the created content control target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/create.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.list': {
+    memberPath: 'contentControls.list',
+    description: 'List all content controls in the document with optional type/tag filtering.',
+    expectedResult: 'Returns a ContentControlsListResult with items and total count.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/list.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.get': {
+    memberPath: 'contentControls.get',
+    description: 'Retrieve a single content control by target.',
+    expectedResult: 'Returns a ContentControlInfo with full properties.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.listInRange': {
+    memberPath: 'contentControls.listInRange',
+    description: 'List content controls within a block range.',
+    expectedResult: 'Returns a ContentControlsListResult scoped to the range.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/list-in-range.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.selectByTag': {
+    memberPath: 'contentControls.selectByTag',
+    description: 'Select content controls matching a specific tag value.',
+    expectedResult: 'Returns a ContentControlsListResult with matching items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/select-by-tag.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.selectByTitle': {
+    memberPath: 'contentControls.selectByTitle',
+    description: 'Select content controls matching a specific title (alias) value.',
+    expectedResult: 'Returns a ContentControlsListResult with matching items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/select-by-title.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.listChildren': {
+    memberPath: 'contentControls.listChildren',
+    description: 'List direct child content controls nested inside the target.',
+    expectedResult: 'Returns a ContentControlsListResult with child items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/list-children.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.getParent': {
+    memberPath: 'contentControls.getParent',
+    description: 'Get the parent content control of the target, if any.',
+    expectedResult: 'Returns a ContentControlInfo for the parent, or null if no parent SDT exists.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-parent.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.wrap': {
+    memberPath: 'contentControls.wrap',
+    description: 'Wrap existing content with a new content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the wrapper target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/wrap.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.unwrap': {
+    memberPath: 'contentControls.unwrap',
+    description: 'Remove the content control wrapper, preserving its content in place.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already unwrapped.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/unwrap.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.delete': {
+    memberPath: 'contentControls.delete',
+    description: 'Delete a content control and its content from the document.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already removed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/delete.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.copy': {
+    memberPath: 'contentControls.copy',
+    description: 'Copy a content control to a destination position. Copied SDTs receive new IDs.',
+    expectedResult: 'Returns a ContentControlMutationResult with the copied content control target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/copy.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.move': {
+    memberPath: 'contentControls.move',
+    description: 'Move a content control to a new position. Preserves original IDs.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target position.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/move.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.patch': {
+    memberPath: 'contentControls.patch',
+    description: 'Patch metadata properties on a content control (tag, alias, appearance, color, etc.).',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if no fields changed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/patch.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.setLockMode': {
+    memberPath: 'contentControls.setLockMode',
+    description: 'Set the lock mode on a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if lock mode unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/set-lock-mode.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.setType': {
+    memberPath: 'contentControls.setType',
+    description:
+      'Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if type unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/set-type.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.getContent': {
+    memberPath: 'contentControls.getContent',
+    description: 'Get the text content of a content control.',
+    expectedResult: 'Returns a ContentControlsGetContentResult with the content string and format.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.replaceContent': {
+    memberPath: 'contentControls.replaceContent',
+    description: 'Replace the entire content of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/replace-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.clearContent': {
+    memberPath: 'contentControls.clearContent',
+    description: 'Clear all content inside a content control, leaving it empty.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/clear-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.appendContent': {
+    memberPath: 'contentControls.appendContent',
+    description: 'Append content to the end of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/append-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.prependContent': {
+    memberPath: 'contentControls.prependContent',
+    description: 'Prepend content to the beginning of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/prepend-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.insertBefore': {
+    memberPath: 'contentControls.insertBefore',
+    description: 'Insert content immediately before a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/insert-before.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.insertAfter': {
+    memberPath: 'contentControls.insertAfter',
+    description: 'Insert content immediately after a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/insert-after.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  // --- B. Data Binding + Raw/Compatibility ---
+
+  'contentControls.getBinding': {
+    memberPath: 'contentControls.getBinding',
+    description: 'Get the data binding metadata (w:dataBinding) of a content control.',
+    expectedResult: 'Returns the ContentControlBinding or null if no binding is set.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-binding.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.setBinding': {
+    memberPath: 'contentControls.setBinding',
+    description: 'Set data binding metadata on a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if binding unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/set-binding.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.clearBinding': {
+    memberPath: 'contentControls.clearBinding',
+    description: 'Remove data binding metadata from a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if no binding existed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/clear-binding.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.getRawProperties': {
+    memberPath: 'contentControls.getRawProperties',
+    description: 'Get the raw sdtPr properties of a content control as a passthrough hash.',
+    expectedResult: 'Returns a ContentControlsGetRawPropertiesResult with the raw properties.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-raw-properties.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.patchRawProperties': {
+    memberPath: 'contentControls.patchRawProperties',
+    description: 'Apply raw XML-level patches to the sdtPr subtree of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if no effective changes.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_RAW,
+    }),
+    referenceDocPath: 'content-controls/patch-raw-properties.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.validateWordCompatibility': {
+    memberPath: 'contentControls.validateWordCompatibility',
+    description: 'Validate a content control for Word compatibility issues.',
+    expectedResult: 'Returns a compatibility result with diagnostics.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/validate-word-compatibility.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.normalizeWordCompatibility': {
+    memberPath: 'contentControls.normalizeWordCompatibility',
+    description: 'Normalize a content control to resolve Word compatibility issues.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already compatible.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_RAW,
+    }),
+    referenceDocPath: 'content-controls/normalize-word-compatibility.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.normalizeTagPayload': {
+    memberPath: 'contentControls.normalizeTagPayload',
+    description: 'Normalize a content control tag between plain-string and JSON-encoded formats.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already normalized.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_RAW,
+    }),
+    referenceDocPath: 'content-controls/normalize-tag-payload.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  // --- C. Typed Controls ---
+
+  'contentControls.text.setMultiline': {
+    memberPath: 'contentControls.text.setMultiline',
+    description: 'Set or clear the multiline attribute on a plain-text content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/text/set-multiline.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.text.setValue': {
+    memberPath: 'contentControls.text.setValue',
+    description: 'Set the text value of a plain-text content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/text/set-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.text.clearValue': {
+    memberPath: 'contentControls.text.clearValue',
+    description: 'Clear the text value of a plain-text content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/text/clear-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setValue': {
+    memberPath: 'contentControls.date.setValue',
+    description: 'Set the date value of a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.clearValue': {
+    memberPath: 'contentControls.date.clearValue',
+    description: 'Clear the date value of a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/clear-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setDisplayFormat': {
+    memberPath: 'contentControls.date.setDisplayFormat',
+    description: 'Set the display format string for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-display-format.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setDisplayLocale': {
+    memberPath: 'contentControls.date.setDisplayLocale',
+    description: 'Set the display locale for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-display-locale.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setStorageFormat': {
+    memberPath: 'contentControls.date.setStorageFormat',
+    description: 'Set the XML storage format for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-storage-format.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setCalendar': {
+    memberPath: 'contentControls.date.setCalendar',
+    description: 'Set the calendar type for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-calendar.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.getState': {
+    memberPath: 'contentControls.checkbox.getState',
+    description: 'Get the checked state of a checkbox content control.',
+    expectedResult: 'Returns a CheckboxGetStateResult with the checked boolean.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_TYPED_READ }),
+    referenceDocPath: 'content-controls/checkbox/get-state.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.setState': {
+    memberPath: 'contentControls.checkbox.setState',
+    description: 'Set the checked state of a checkbox content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/checkbox/set-state.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.toggle': {
+    memberPath: 'contentControls.checkbox.toggle',
+    description: 'Toggle the checked state of a checkbox content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated state.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/checkbox/toggle.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.setSymbolPair': {
+    memberPath: 'contentControls.checkbox.setSymbolPair',
+    description: 'Set the checked and unchecked symbol glyphs for a checkbox content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if symbols unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/checkbox/set-symbol-pair.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.choiceList.getItems': {
+    memberPath: 'contentControls.choiceList.getItems',
+    description: 'Get the list items and selected value of a comboBox or dropDownList content control.',
+    expectedResult: 'Returns a ChoiceListGetItemsResult with items and selectedValue.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_TYPED_READ }),
+    referenceDocPath: 'content-controls/choice-list/get-items.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.choiceList.setItems': {
+    memberPath: 'contentControls.choiceList.setItems',
+    description: 'Replace the list items of a comboBox or dropDownList content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if items unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/choice-list/set-items.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.choiceList.setSelected': {
+    memberPath: 'contentControls.choiceList.setSelected',
+    description: 'Set the selected value of a comboBox or dropDownList content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if selection unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/choice-list/set-selected.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  // --- D. Repeating Section + Group ---
+
+  'contentControls.repeatingSection.listItems': {
+    memberPath: 'contentControls.repeatingSection.listItems',
+    description: 'List the repeating section items inside a repeating section content control.',
+    expectedResult: 'Returns a RepeatingSectionListItemsResult with child item info.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_TYPED_READ }),
+    referenceDocPath: 'content-controls/repeating-section/list-items.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.insertItemBefore': {
+    memberPath: 'contentControls.repeatingSection.insertItemBefore',
+    description: 'Insert a new item before a specific index in a repeating section.',
+    expectedResult: 'Returns a ContentControlMutationResult with the new item target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/insert-item-before.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.insertItemAfter': {
+    memberPath: 'contentControls.repeatingSection.insertItemAfter',
+    description: 'Insert a new item after a specific index in a repeating section.',
+    expectedResult: 'Returns a ContentControlMutationResult with the new item target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/insert-item-after.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.cloneItem': {
+    memberPath: 'contentControls.repeatingSection.cloneItem',
+    description: 'Clone a repeating section item at the given index. Cloned SDTs receive new IDs.',
+    expectedResult: 'Returns a ContentControlMutationResult with the cloned item target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/clone-item.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.deleteItem': {
+    memberPath: 'contentControls.repeatingSection.deleteItem',
+    description: 'Delete a repeating section item at the given index.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if item does not exist.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/delete-item.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.setAllowInsertDelete': {
+    memberPath: 'contentControls.repeatingSection.setAllowInsertDelete',
+    description: 'Set the allowInsertDelete flag on a repeating section.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/set-allow-insert-delete.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.group.wrap': {
+    memberPath: 'contentControls.group.wrap',
+    description: 'Wrap a content control inside a new group content control. Always nests; not idempotent.',
+    expectedResult: 'Returns a ContentControlMutationResult with the new group wrapper target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: [],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/group/wrap.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.group.ungroup': {
+    memberPath: 'contentControls.group.ungroup',
+    description: 'Remove the group designation from a group content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if not a group.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/group/ungroup.mdx',
+    referenceGroup: 'contentControls',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

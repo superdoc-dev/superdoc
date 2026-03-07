@@ -209,6 +209,7 @@ import {
   hyperlinksPatchWrapper,
   hyperlinksRemoveWrapper,
 } from './plan-engine/hyperlinks-wrappers.js';
+import { createContentControlsAdapter } from './plan-engine/content-controls-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -220,6 +221,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   registerBuiltInExecutors();
   initRevision(editor);
   trackRevisions(editor);
+
+  const ccAdapter = createContentControlsAdapter(editor);
 
   return {
     get: {
@@ -305,6 +308,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       sectionBreak: (input, options) => createSectionBreakAdapter(editor, input, options),
       tableOfContents: (input, options) => createTableOfContentsWrapper(editor, input, options),
       image: (input, options) => createImageWrapper(editor, input, options),
+      contentControl: (input, options) => ccAdapter.create(input, options),
     },
     lists: {
       list: (query) => listsListWrapper(editor, query),
@@ -455,6 +459,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       patch: (input, options) => hyperlinksPatchWrapper(editor, input, options),
       remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
     },
+    contentControls: ccAdapter,
     query: {
       match: (input) => queryMatchAdapter(editor, input),
     },

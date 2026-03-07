@@ -37,6 +37,9 @@ export const PRE_APPLY_THROW_CODES = [
   'RAW_MODE_REQUIRED',
   'PRESERVE_ONLY_VIOLATION',
   'CAPABILITY_UNSUPPORTED',
+  // SD-2070 content controls throw codes
+  'LOCK_VIOLATION',
+  'TYPE_MISMATCH',
 ] as const;
 
 export type PreApplyThrowCode = (typeof PRE_APPLY_THROW_CODES)[number];

@@ -146,14 +146,21 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
       }
     }
 
-    const knownKeys = new Set(Object.keys(schema.properties));
-    for (const key of Object.keys(value)) {
-      if (!knownKeys.has(key)) {
-        throw new CliError('VALIDATION_ERROR', `${path}.${key} is not allowed by schema.`);
+    const propertyEntries = Object.entries(schema.properties);
+    const shouldRestrictUnknownKeys = propertyEntries.length > 0 || required.length > 0;
+
+    // If no object fields are declared, treat it as an unconstrained JSON object.
+    // This keeps input validation aligned with generated schemas like `{ type: 'object' }`.
+    if (shouldRestrictUnknownKeys) {
+      const knownKeys = new Set(propertyEntries.map(([key]) => key));
+      for (const key of Object.keys(value)) {
+        if (!knownKeys.has(key)) {
+          throw new CliError('VALIDATION_ERROR', `${path}.${key} is not allowed by schema.`);
+        }
       }
     }
 
-    for (const [key, propSchema] of Object.entries(schema.properties)) {
+    for (const [key, propSchema] of propertyEntries) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
       validateValueAgainstTypeSpec(value[key], propSchema, `${path}.${key}`);
     }

@@ -47,7 +47,10 @@ export type ReceiptFailureCode =
   | 'DUPLICATE_ID'
   | 'INVALID_CONTEXT'
   | 'RAW_MODE_REQUIRED'
-  | 'PRESERVE_ONLY_VIOLATION';
+  | 'PRESERVE_ONLY_VIOLATION'
+  // SD-2070 content controls failure codes
+  | 'LOCK_VIOLATION'
+  | 'TYPE_MISMATCH';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

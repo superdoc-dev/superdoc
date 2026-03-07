@@ -458,6 +458,72 @@ import {
   executeHyperlinksRemove,
 } from './hyperlinks/hyperlinks.js';
 import type {
+  ContentControlsApi,
+  ContentControlsAdapter,
+  ContentControlsCreateAdapter,
+} from './content-controls/content-controls.js';
+import type {
+  CreateContentControlInput,
+  ContentControlMutationResult,
+} from './content-controls/content-controls.types.js';
+import {
+  executeContentControlsList,
+  executeContentControlsGet,
+  executeContentControlsListInRange,
+  executeContentControlsSelectByTag,
+  executeContentControlsSelectByTitle,
+  executeContentControlsListChildren,
+  executeContentControlsGetParent,
+  executeContentControlsWrap,
+  executeContentControlsUnwrap,
+  executeContentControlsDelete,
+  executeContentControlsCopy,
+  executeContentControlsMove,
+  executeContentControlsPatch,
+  executeContentControlsSetLockMode,
+  executeContentControlsSetType,
+  executeContentControlsGetContent,
+  executeContentControlsReplaceContent,
+  executeContentControlsClearContent,
+  executeContentControlsAppendContent,
+  executeContentControlsPrependContent,
+  executeContentControlsInsertBefore,
+  executeContentControlsInsertAfter,
+  executeContentControlsGetBinding,
+  executeContentControlsSetBinding,
+  executeContentControlsClearBinding,
+  executeContentControlsGetRawProperties,
+  executeContentControlsPatchRawProperties,
+  executeContentControlsValidateWordCompatibility,
+  executeContentControlsNormalizeWordCompatibility,
+  executeContentControlsNormalizeTagPayload,
+  executeContentControlsTextSetMultiline,
+  executeContentControlsTextSetValue,
+  executeContentControlsTextClearValue,
+  executeContentControlsDateSetValue,
+  executeContentControlsDateClearValue,
+  executeContentControlsDateSetDisplayFormat,
+  executeContentControlsDateSetDisplayLocale,
+  executeContentControlsDateSetStorageFormat,
+  executeContentControlsDateSetCalendar,
+  executeContentControlsCheckboxGetState,
+  executeContentControlsCheckboxSetState,
+  executeContentControlsCheckboxToggle,
+  executeContentControlsCheckboxSetSymbolPair,
+  executeContentControlsChoiceListGetItems,
+  executeContentControlsChoiceListSetItems,
+  executeContentControlsChoiceListSetSelected,
+  executeContentControlsRepeatingSectionListItems,
+  executeContentControlsRepeatingSectionInsertItemBefore,
+  executeContentControlsRepeatingSectionInsertItemAfter,
+  executeContentControlsRepeatingSectionCloneItem,
+  executeContentControlsRepeatingSectionDeleteItem,
+  executeContentControlsRepeatingSectionSetAllowInsertDelete,
+  executeContentControlsGroupWrap,
+  executeContentControlsGroupUngroup,
+  executeCreateContentControl,
+} from './content-controls/content-controls.js';
+import type {
   HyperlinksListQuery,
   HyperlinksListResult,
   HyperlinksGetInput,
@@ -641,6 +707,99 @@ export type {
   TocEntryProperties,
 } from './toc/toc.types.js';
 export type { HyperlinksApi, HyperlinksAdapter } from './hyperlinks/hyperlinks.js';
+export type {
+  ContentControlsApi,
+  ContentControlsAdapter,
+  ContentControlsCreateAdapter,
+} from './content-controls/content-controls.js';
+export type {
+  ContentControlMutationResult,
+  ContentControlMutationSuccess,
+  ContentControlMutationFailure,
+  ContentControlsListResult,
+  ContentControlsListQuery,
+  ContentControlTarget,
+  ContentControlType,
+  ContentControlProperties,
+  ContentControlBinding,
+  ContentControlSymbol,
+  ContentControlListItem,
+  ContentControlAppearance,
+  LockMode,
+  CreateContentControlInput,
+  ContentControlsGetInput,
+  ContentControlsWrapInput,
+  ContentControlsUnwrapInput,
+  ContentControlsDeleteInput,
+  ContentControlsCopyInput,
+  ContentControlsMoveInput,
+  ContentControlsPatchInput,
+  ContentControlsSetLockModeInput,
+  ContentControlsSetTypeInput,
+  ContentControlsGetContentInput,
+  ContentControlsGetContentResult,
+  ContentControlsReplaceContentInput,
+  ContentControlsClearContentInput,
+  ContentControlsAppendContentInput,
+  ContentControlsPrependContentInput,
+  ContentControlsInsertBeforeInput,
+  ContentControlsInsertAfterInput,
+  ContentControlsGetBindingInput,
+  ContentControlsSetBindingInput,
+  ContentControlsClearBindingInput,
+  ContentControlsGetRawPropertiesInput,
+  ContentControlsGetRawPropertiesResult,
+  ContentControlsPatchRawPropertiesInput,
+  RawPatchOp,
+  ContentControlsValidateWordCompatibilityInput,
+  ContentControlsValidateWordCompatibilityResult,
+  WordCompatibilityDiagnostic,
+  ContentControlsNormalizeWordCompatibilityInput,
+  ContentControlsNormalizeTagPayloadInput,
+  ContentControlsListInRangeInput,
+  ContentControlsSelectByTagInput,
+  ContentControlsSelectByTitleInput,
+  ContentControlsListChildrenInput,
+  ContentControlsGetParentInput,
+  ContentControlsTextSetMultilineInput,
+  ContentControlsTextSetValueInput,
+  ContentControlsTextClearValueInput,
+  ContentControlsDateSetValueInput,
+  ContentControlsDateClearValueInput,
+  ContentControlsDateSetDisplayFormatInput,
+  ContentControlsDateSetDisplayLocaleInput,
+  ContentControlsDateSetStorageFormatInput,
+  ContentControlsDateSetCalendarInput,
+  ContentControlsCheckboxGetStateInput,
+  ContentControlsCheckboxGetStateResult,
+  ContentControlsCheckboxSetStateInput,
+  ContentControlsCheckboxToggleInput,
+  ContentControlsCheckboxSetSymbolPairInput,
+  ContentControlsChoiceListGetItemsInput,
+  ContentControlsChoiceListGetItemsResult,
+  ContentControlsChoiceListSetItemsInput,
+  ContentControlsChoiceListSetSelectedInput,
+  ContentControlsRepeatingSectionListItemsInput,
+  ContentControlsRepeatingSectionListItemsResult,
+  ContentControlsRepeatingSectionInsertItemBeforeInput,
+  ContentControlsRepeatingSectionInsertItemAfterInput,
+  ContentControlsRepeatingSectionCloneItemInput,
+  ContentControlsRepeatingSectionDeleteItemInput,
+  ContentControlsRepeatingSectionSetAllowInsertDeleteInput,
+  ContentControlsGroupWrapInput,
+  ContentControlsGroupUngroupInput,
+  ContentControlsPaginationOptions,
+  TextControlProperties,
+  DateControlProperties,
+  CheckboxControlProperties,
+  ChoiceControlProperties,
+  RepeatingSectionControlProperties,
+} from './content-controls/content-controls.types.js';
+export {
+  CONTENT_CONTROL_TYPES,
+  LOCK_MODES,
+  CONTENT_CONTROL_APPEARANCES,
+} from './content-controls/content-controls.types.js';
 export type {
   HyperlinkTarget,
   HyperlinkDestination,
@@ -1035,6 +1194,10 @@ export interface DocumentApi {
    */
   hyperlinks: HyperlinksApi;
   /**
+   * Content control (SDT) discovery, mutation, and typed-control operations.
+   */
+  contentControls: ContentControlsApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -1093,6 +1256,7 @@ export interface DocumentApiAdapters {
   toc: TocAdapter;
   images: ImagesAdapter & CreateImageAdapter;
   hyperlinks: HyperlinksAdapter;
+  contentControls: ContentControlsAdapter & ContentControlsCreateAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -1305,6 +1469,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       image(input: CreateImageInput, options?: MutationOptions): CreateImageResult {
         return executeCreateImage(adapters.images, input, options);
+      },
+      contentControl(input: CreateContentControlInput, options?: MutationOptions): ContentControlMutationResult {
+        return executeCreateContentControl(adapters.contentControls, input, options);
       },
     },
     capabilities,
@@ -1885,6 +2052,93 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       remove(input: HyperlinksRemoveInput, options?: MutationOptions): HyperlinkMutationResult {
         return executeHyperlinksRemove(adapters.hyperlinks, input, options);
+      },
+    },
+    contentControls: {
+      list: (query) => executeContentControlsList(adapters.contentControls, query),
+      get: (input) => executeContentControlsGet(adapters.contentControls, input),
+      listInRange: (input) => executeContentControlsListInRange(adapters.contentControls, input),
+      selectByTag: (input) => executeContentControlsSelectByTag(adapters.contentControls, input),
+      selectByTitle: (input) => executeContentControlsSelectByTitle(adapters.contentControls, input),
+      listChildren: (input) => executeContentControlsListChildren(adapters.contentControls, input),
+      getParent: (input) => executeContentControlsGetParent(adapters.contentControls, input),
+      wrap: (input, options) => executeContentControlsWrap(adapters.contentControls, input, options),
+      unwrap: (input, options) => executeContentControlsUnwrap(adapters.contentControls, input, options),
+      delete: (input, options) => executeContentControlsDelete(adapters.contentControls, input, options),
+      copy: (input, options) => executeContentControlsCopy(adapters.contentControls, input, options),
+      move: (input, options) => executeContentControlsMove(adapters.contentControls, input, options),
+      patch: (input, options) => executeContentControlsPatch(adapters.contentControls, input, options),
+      setLockMode: (input, options) => executeContentControlsSetLockMode(adapters.contentControls, input, options),
+      setType: (input, options) => executeContentControlsSetType(adapters.contentControls, input, options),
+      getContent: (input) => executeContentControlsGetContent(adapters.contentControls, input),
+      replaceContent: (input, options) =>
+        executeContentControlsReplaceContent(adapters.contentControls, input, options),
+      clearContent: (input, options) => executeContentControlsClearContent(adapters.contentControls, input, options),
+      appendContent: (input, options) => executeContentControlsAppendContent(adapters.contentControls, input, options),
+      prependContent: (input, options) =>
+        executeContentControlsPrependContent(adapters.contentControls, input, options),
+      insertBefore: (input, options) => executeContentControlsInsertBefore(adapters.contentControls, input, options),
+      insertAfter: (input, options) => executeContentControlsInsertAfter(adapters.contentControls, input, options),
+      getBinding: (input) => executeContentControlsGetBinding(adapters.contentControls, input),
+      setBinding: (input, options) => executeContentControlsSetBinding(adapters.contentControls, input, options),
+      clearBinding: (input, options) => executeContentControlsClearBinding(adapters.contentControls, input, options),
+      getRawProperties: (input) => executeContentControlsGetRawProperties(adapters.contentControls, input),
+      patchRawProperties: (input, options) =>
+        executeContentControlsPatchRawProperties(adapters.contentControls, input, options),
+      validateWordCompatibility: (input) =>
+        executeContentControlsValidateWordCompatibility(adapters.contentControls, input),
+      normalizeWordCompatibility: (input, options) =>
+        executeContentControlsNormalizeWordCompatibility(adapters.contentControls, input, options),
+      normalizeTagPayload: (input, options) =>
+        executeContentControlsNormalizeTagPayload(adapters.contentControls, input, options),
+      text: {
+        setMultiline: (input, options) =>
+          executeContentControlsTextSetMultiline(adapters.contentControls, input, options),
+        setValue: (input, options) => executeContentControlsTextSetValue(adapters.contentControls, input, options),
+        clearValue: (input, options) => executeContentControlsTextClearValue(adapters.contentControls, input, options),
+      },
+      date: {
+        setValue: (input, options) => executeContentControlsDateSetValue(adapters.contentControls, input, options),
+        clearValue: (input, options) => executeContentControlsDateClearValue(adapters.contentControls, input, options),
+        setDisplayFormat: (input, options) =>
+          executeContentControlsDateSetDisplayFormat(adapters.contentControls, input, options),
+        setDisplayLocale: (input, options) =>
+          executeContentControlsDateSetDisplayLocale(adapters.contentControls, input, options),
+        setStorageFormat: (input, options) =>
+          executeContentControlsDateSetStorageFormat(adapters.contentControls, input, options),
+        setCalendar: (input, options) =>
+          executeContentControlsDateSetCalendar(adapters.contentControls, input, options),
+      },
+      checkbox: {
+        getState: (input) => executeContentControlsCheckboxGetState(adapters.contentControls, input),
+        setState: (input, options) => executeContentControlsCheckboxSetState(adapters.contentControls, input, options),
+        toggle: (input, options) => executeContentControlsCheckboxToggle(adapters.contentControls, input, options),
+        setSymbolPair: (input, options) =>
+          executeContentControlsCheckboxSetSymbolPair(adapters.contentControls, input, options),
+      },
+      choiceList: {
+        getItems: (input) => executeContentControlsChoiceListGetItems(adapters.contentControls, input),
+        setItems: (input, options) =>
+          executeContentControlsChoiceListSetItems(adapters.contentControls, input, options),
+        setSelected: (input, options) =>
+          executeContentControlsChoiceListSetSelected(adapters.contentControls, input, options),
+      },
+      repeatingSection: {
+        listItems: (input) => executeContentControlsRepeatingSectionListItems(adapters.contentControls, input),
+        insertItemBefore: (input, options) =>
+          executeContentControlsRepeatingSectionInsertItemBefore(adapters.contentControls, input, options),
+        insertItemAfter: (input, options) =>
+          executeContentControlsRepeatingSectionInsertItemAfter(adapters.contentControls, input, options),
+        cloneItem: (input, options) =>
+          executeContentControlsRepeatingSectionCloneItem(adapters.contentControls, input, options),
+        deleteItem: (input, options) =>
+          executeContentControlsRepeatingSectionDeleteItem(adapters.contentControls, input, options),
+        setAllowInsertDelete: (input, options) =>
+          executeContentControlsRepeatingSectionSetAllowInsertDelete(adapters.contentControls, input, options),
+      },
+      group: {
+        wrap: (input, options) => executeContentControlsGroupWrap(adapters.contentControls, input, options),
+        ungroup: (input, options) => executeContentControlsGroupUngroup(adapters.contentControls, input, options),
       },
     },
     query: {

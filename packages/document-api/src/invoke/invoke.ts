@@ -301,5 +301,89 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'hyperlinks.insert': (input, options) => api.hyperlinks.insert(input, options),
     'hyperlinks.patch': (input, options) => api.hyperlinks.patch(input, options),
     'hyperlinks.remove': (input, options) => api.hyperlinks.remove(input, options),
+
+    // --- create.contentControl ---
+    'create.contentControl': (input, options) => api.create.contentControl(input, options),
+
+    // --- contentControls.* core CRUD + discovery ---
+    'contentControls.list': (input) => api.contentControls.list(input),
+    'contentControls.get': (input) => api.contentControls.get(input),
+    'contentControls.listInRange': (input) => api.contentControls.listInRange(input),
+    'contentControls.selectByTag': (input) => api.contentControls.selectByTag(input),
+    'contentControls.selectByTitle': (input) => api.contentControls.selectByTitle(input),
+    'contentControls.listChildren': (input) => api.contentControls.listChildren(input),
+    'contentControls.getParent': (input) => api.contentControls.getParent(input),
+    'contentControls.wrap': (input, options) => api.contentControls.wrap(input, options),
+    'contentControls.unwrap': (input, options) => api.contentControls.unwrap(input, options),
+    'contentControls.delete': (input, options) => api.contentControls.delete(input, options),
+    'contentControls.copy': (input, options) => api.contentControls.copy(input, options),
+    'contentControls.move': (input, options) => api.contentControls.move(input, options),
+    'contentControls.patch': (input, options) => api.contentControls.patch(input, options),
+    'contentControls.setLockMode': (input, options) => api.contentControls.setLockMode(input, options),
+    'contentControls.setType': (input, options) => api.contentControls.setType(input, options),
+    'contentControls.getContent': (input) => api.contentControls.getContent(input),
+    'contentControls.replaceContent': (input, options) => api.contentControls.replaceContent(input, options),
+    'contentControls.clearContent': (input, options) => api.contentControls.clearContent(input, options),
+    'contentControls.appendContent': (input, options) => api.contentControls.appendContent(input, options),
+    'contentControls.prependContent': (input, options) => api.contentControls.prependContent(input, options),
+    'contentControls.insertBefore': (input, options) => api.contentControls.insertBefore(input, options),
+    'contentControls.insertAfter': (input, options) => api.contentControls.insertAfter(input, options),
+
+    // --- contentControls.* data binding + raw ---
+    'contentControls.getBinding': (input) => api.contentControls.getBinding(input),
+    'contentControls.setBinding': (input, options) => api.contentControls.setBinding(input, options),
+    'contentControls.clearBinding': (input, options) => api.contentControls.clearBinding(input, options),
+    'contentControls.getRawProperties': (input) => api.contentControls.getRawProperties(input),
+    'contentControls.patchRawProperties': (input, options) => api.contentControls.patchRawProperties(input, options),
+    'contentControls.validateWordCompatibility': (input) => api.contentControls.validateWordCompatibility(input),
+    'contentControls.normalizeWordCompatibility': (input, options) =>
+      api.contentControls.normalizeWordCompatibility(input, options),
+    'contentControls.normalizeTagPayload': (input, options) => api.contentControls.normalizeTagPayload(input, options),
+
+    // --- contentControls.text.* ---
+    'contentControls.text.setMultiline': (input, options) => api.contentControls.text.setMultiline(input, options),
+    'contentControls.text.setValue': (input, options) => api.contentControls.text.setValue(input, options),
+    'contentControls.text.clearValue': (input, options) => api.contentControls.text.clearValue(input, options),
+
+    // --- contentControls.date.* ---
+    'contentControls.date.setValue': (input, options) => api.contentControls.date.setValue(input, options),
+    'contentControls.date.clearValue': (input, options) => api.contentControls.date.clearValue(input, options),
+    'contentControls.date.setDisplayFormat': (input, options) =>
+      api.contentControls.date.setDisplayFormat(input, options),
+    'contentControls.date.setDisplayLocale': (input, options) =>
+      api.contentControls.date.setDisplayLocale(input, options),
+    'contentControls.date.setStorageFormat': (input, options) =>
+      api.contentControls.date.setStorageFormat(input, options),
+    'contentControls.date.setCalendar': (input, options) => api.contentControls.date.setCalendar(input, options),
+
+    // --- contentControls.checkbox.* ---
+    'contentControls.checkbox.getState': (input) => api.contentControls.checkbox.getState(input),
+    'contentControls.checkbox.setState': (input, options) => api.contentControls.checkbox.setState(input, options),
+    'contentControls.checkbox.toggle': (input, options) => api.contentControls.checkbox.toggle(input, options),
+    'contentControls.checkbox.setSymbolPair': (input, options) =>
+      api.contentControls.checkbox.setSymbolPair(input, options),
+
+    // --- contentControls.choiceList.* ---
+    'contentControls.choiceList.getItems': (input) => api.contentControls.choiceList.getItems(input),
+    'contentControls.choiceList.setItems': (input, options) => api.contentControls.choiceList.setItems(input, options),
+    'contentControls.choiceList.setSelected': (input, options) =>
+      api.contentControls.choiceList.setSelected(input, options),
+
+    // --- contentControls.repeatingSection.* ---
+    'contentControls.repeatingSection.listItems': (input) => api.contentControls.repeatingSection.listItems(input),
+    'contentControls.repeatingSection.insertItemBefore': (input, options) =>
+      api.contentControls.repeatingSection.insertItemBefore(input, options),
+    'contentControls.repeatingSection.insertItemAfter': (input, options) =>
+      api.contentControls.repeatingSection.insertItemAfter(input, options),
+    'contentControls.repeatingSection.cloneItem': (input, options) =>
+      api.contentControls.repeatingSection.cloneItem(input, options),
+    'contentControls.repeatingSection.deleteItem': (input, options) =>
+      api.contentControls.repeatingSection.deleteItem(input, options),
+    'contentControls.repeatingSection.setAllowInsertDelete': (input, options) =>
+      api.contentControls.repeatingSection.setAllowInsertDelete(input, options),
+
+    // --- contentControls.group.* ---
+    'contentControls.group.wrap': (input, options) => api.contentControls.group.wrap(input, options),
+    'contentControls.group.ungroup': (input, options) => api.contentControls.group.ungroup(input, options),
   };
 }

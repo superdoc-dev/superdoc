@@ -45,7 +45,6 @@ const CLI_PKG_PATH = resolve(CLI_DIR, 'package.json');
 // ---------------------------------------------------------------------------
 // Intent names — human-friendly tool names for doc-backed operations only.
 // CLI-only intent names live in CLI_ONLY_OPERATION_DEFINITIONS.
-// Typed exhaustively: missing entry = compile error.
 // ---------------------------------------------------------------------------
 
 const INTENT_NAMES = {
@@ -243,7 +242,17 @@ const INTENT_NAMES = {
   'doc.images.insertCaption': 'insert_image_caption',
   'doc.images.updateCaption': 'update_image_caption',
   'doc.images.removeCaption': 'remove_image_caption',
-} as const satisfies Record<DocBackedCliOpId, string>;
+} as const satisfies Partial<Record<DocBackedCliOpId, string>>;
+
+function deriveDocBackedIntentName(cliOpId: DocBackedCliOpId): string {
+  const mapped = INTENT_NAMES[cliOpId];
+  if (mapped) {
+    return mapped;
+  }
+
+  const docApiId = cliOpId.slice(4);
+  return docApiId.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`).replace(/\./g, '_');
+}
 
 // ---------------------------------------------------------------------------
 // Load inputs
@@ -282,7 +291,7 @@ function buildSdkContract() {
 
     // Resolve intentName: doc-backed from INTENT_NAMES, CLI-only from definitions
     const cliOnlyDef = docApiId ? null : CLI_ONLY_OPERATION_DEFINITIONS[stripped];
-    const intentName = docApiId ? INTENT_NAMES[cliOpId as DocBackedCliOpId] : cliOnlyDef!.intentName;
+    const intentName = docApiId ? deriveDocBackedIntentName(cliOpId as DocBackedCliOpId) : cliOnlyDef?.intentName;
     if (!intentName) {
       throw new Error(`Missing intentName for ${cliOpId}`);
     }

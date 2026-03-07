@@ -15,7 +15,10 @@ export type DocumentApiAdapterErrorCode =
   | 'DUPLICATE_ID'
   | 'INVALID_CONTEXT'
   | 'RAW_MODE_REQUIRED'
-  | 'PRESERVE_ONLY_VIOLATION';
+  | 'PRESERVE_ONLY_VIOLATION'
+  // SD-2070 content controls codes
+  | 'LOCK_VIOLATION'
+  | 'TYPE_MISMATCH';
 
 /**
  * Structured error thrown by document-api adapter functions.
@@ -65,6 +68,8 @@ const ADAPTER_TO_SD_CODE: Record<string, SDErrorCode> = {
   INVALID_CONTEXT: 'INVALID_CONTEXT',
   RAW_MODE_REQUIRED: 'RAW_MODE_REQUIRED',
   PRESERVE_ONLY_VIOLATION: 'PRESERVE_ONLY_VIOLATION',
+  LOCK_VIOLATION: 'INVALID_CONTEXT',
+  TYPE_MISMATCH: 'INVALID_PAYLOAD',
 };
 
 /**

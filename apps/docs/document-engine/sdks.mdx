@@ -390,6 +390,61 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.hyperlinks.insert` | `hyperlinks insert` | Insert new linked text at a target position. |
 | `doc.hyperlinks.patch` | `hyperlinks patch` | Update hyperlink metadata (destination, tooltip, target, rel) without changing display text. |
 | `doc.hyperlinks.remove` | `hyperlinks remove` | Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely. |
+| `doc.create.contentControl` | `create content-control` | Create a new content control (SDT) in the document. |
+| `doc.contentControls.list` | `content-controls list` | List all content controls in the document with optional type/tag filtering. |
+| `doc.contentControls.get` | `content-controls get` | Retrieve a single content control by target. |
+| `doc.contentControls.listInRange` | `content-controls list-in-range` | List content controls within a block range. |
+| `doc.contentControls.selectByTag` | `content-controls select-by-tag` | Select content controls matching a specific tag value. |
+| `doc.contentControls.selectByTitle` | `content-controls select-by-title` | Select content controls matching a specific title (alias) value. |
+| `doc.contentControls.listChildren` | `content-controls list-children` | List direct child content controls nested inside the target. |
+| `doc.contentControls.getParent` | `content-controls get-parent` | Get the parent content control of the target, if any. |
+| `doc.contentControls.wrap` | `content-controls wrap` | Wrap existing content with a new content control. |
+| `doc.contentControls.unwrap` | `content-controls unwrap` | Remove the content control wrapper, preserving its content in place. |
+| `doc.contentControls.delete` | `content-controls delete` | Delete a content control and its content from the document. |
+| `doc.contentControls.copy` | `content-controls copy` | Copy a content control to a destination position. Copied SDTs receive new IDs. |
+| `doc.contentControls.move` | `content-controls move` | Move a content control to a new position. Preserves original IDs. |
+| `doc.contentControls.patch` | `content-controls patch` | Patch metadata properties on a content control (tag, alias, appearance, color, etc.). |
+| `doc.contentControls.setLockMode` | `content-controls set-lock-mode` | Set the lock mode on a content control. |
+| `doc.contentControls.setType` | `content-controls set-type` | Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite. |
+| `doc.contentControls.getContent` | `content-controls get-content` | Get the text content of a content control. |
+| `doc.contentControls.replaceContent` | `content-controls replace-content` | Replace the entire content of a content control. |
+| `doc.contentControls.clearContent` | `content-controls clear-content` | Clear all content inside a content control, leaving it empty. |
+| `doc.contentControls.appendContent` | `content-controls append-content` | Append content to the end of a content control. |
+| `doc.contentControls.prependContent` | `content-controls prepend-content` | Prepend content to the beginning of a content control. |
+| `doc.contentControls.insertBefore` | `content-controls insert-before` | Insert content immediately before a content control. |
+| `doc.contentControls.insertAfter` | `content-controls insert-after` | Insert content immediately after a content control. |
+| `doc.contentControls.getBinding` | `content-controls get-binding` | Get the data binding metadata (w:dataBinding) of a content control. |
+| `doc.contentControls.setBinding` | `content-controls set-binding` | Set data binding metadata on a content control. |
+| `doc.contentControls.clearBinding` | `content-controls clear-binding` | Remove data binding metadata from a content control. |
+| `doc.contentControls.getRawProperties` | `content-controls get-raw-properties` | Get the raw sdtPr properties of a content control as a passthrough hash. |
+| `doc.contentControls.patchRawProperties` | `content-controls patch-raw-properties` | Apply raw XML-level patches to the sdtPr subtree of a content control. |
+| `doc.contentControls.validateWordCompatibility` | `content-controls validate-word-compatibility` | Validate a content control for Word compatibility issues. |
+| `doc.contentControls.normalizeWordCompatibility` | `content-controls normalize-word-compatibility` | Normalize a content control to resolve Word compatibility issues. |
+| `doc.contentControls.normalizeTagPayload` | `content-controls normalize-tag-payload` | Normalize a content control tag between plain-string and JSON-encoded formats. |
+| `doc.contentControls.text.setMultiline` | `content-controls text set-multiline` | Set or clear the multiline attribute on a plain-text content control. |
+| `doc.contentControls.text.setValue` | `content-controls text set-value` | Set the text value of a plain-text content control. |
+| `doc.contentControls.text.clearValue` | `content-controls text clear-value` | Clear the text value of a plain-text content control. |
+| `doc.contentControls.date.setValue` | `content-controls date set-value` | Set the date value of a date content control. |
+| `doc.contentControls.date.clearValue` | `content-controls date clear-value` | Clear the date value of a date content control. |
+| `doc.contentControls.date.setDisplayFormat` | `content-controls date set-display-format` | Set the display format string for a date content control. |
+| `doc.contentControls.date.setDisplayLocale` | `content-controls date set-display-locale` | Set the display locale for a date content control. |
+| `doc.contentControls.date.setStorageFormat` | `content-controls date set-storage-format` | Set the XML storage format for a date content control. |
+| `doc.contentControls.date.setCalendar` | `content-controls date set-calendar` | Set the calendar type for a date content control. |
+| `doc.contentControls.checkbox.getState` | `content-controls checkbox get-state` | Get the checked state of a checkbox content control. |
+| `doc.contentControls.checkbox.setState` | `content-controls checkbox set-state` | Set the checked state of a checkbox content control. |
+| `doc.contentControls.checkbox.toggle` | `content-controls checkbox toggle` | Toggle the checked state of a checkbox content control. |
+| `doc.contentControls.checkbox.setSymbolPair` | `content-controls checkbox set-symbol-pair` | Set the checked and unchecked symbol glyphs for a checkbox content control. |
+| `doc.contentControls.choiceList.getItems` | `content-controls choice-list get-items` | Get the list items and selected value of a comboBox or dropDownList content control. |
+| `doc.contentControls.choiceList.setItems` | `content-controls choice-list set-items` | Replace the list items of a comboBox or dropDownList content control. |
+| `doc.contentControls.choiceList.setSelected` | `content-controls choice-list set-selected` | Set the selected value of a comboBox or dropDownList content control. |
+| `doc.contentControls.repeatingSection.listItems` | `content-controls repeating-section list-items` | List the repeating section items inside a repeating section content control. |
+| `doc.contentControls.repeatingSection.insertItemBefore` | `content-controls repeating-section insert-item-before` | Insert a new item before a specific index in a repeating section. |
+| `doc.contentControls.repeatingSection.insertItemAfter` | `content-controls repeating-section insert-item-after` | Insert a new item after a specific index in a repeating section. |
+| `doc.contentControls.repeatingSection.cloneItem` | `content-controls repeating-section clone-item` | Clone a repeating section item at the given index. Cloned SDTs receive new IDs. |
+| `doc.contentControls.repeatingSection.deleteItem` | `content-controls repeating-section delete-item` | Delete a repeating section item at the given index. |
+| `doc.contentControls.repeatingSection.setAllowInsertDelete` | `content-controls repeating-section set-allow-insert-delete` | Set the allowInsertDelete flag on a repeating section. |
+| `doc.contentControls.group.wrap` | `content-controls group wrap` | Wrap a content control inside a new group content control. Always nests; not idempotent. |
+| `doc.contentControls.group.ungroup` | `content-controls group ungroup` | Remove the group designation from a group content control. |
 
 #### Format
 
@@ -694,6 +749,61 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.hyperlinks.insert` | `hyperlinks insert` | Insert new linked text at a target position. |
 | `doc.hyperlinks.patch` | `hyperlinks patch` | Update hyperlink metadata (destination, tooltip, target, rel) without changing display text. |
 | `doc.hyperlinks.remove` | `hyperlinks remove` | Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely. |
+| `doc.create.content_control` | `create content-control` | Create a new content control (SDT) in the document. |
+| `doc.content_controls.list` | `content-controls list` | List all content controls in the document with optional type/tag filtering. |
+| `doc.content_controls.get` | `content-controls get` | Retrieve a single content control by target. |
+| `doc.content_controls.list_in_range` | `content-controls list-in-range` | List content controls within a block range. |
+| `doc.content_controls.select_by_tag` | `content-controls select-by-tag` | Select content controls matching a specific tag value. |
+| `doc.content_controls.select_by_title` | `content-controls select-by-title` | Select content controls matching a specific title (alias) value. |
+| `doc.content_controls.list_children` | `content-controls list-children` | List direct child content controls nested inside the target. |
+| `doc.content_controls.get_parent` | `content-controls get-parent` | Get the parent content control of the target, if any. |
+| `doc.content_controls.wrap` | `content-controls wrap` | Wrap existing content with a new content control. |
+| `doc.content_controls.unwrap` | `content-controls unwrap` | Remove the content control wrapper, preserving its content in place. |
+| `doc.content_controls.delete` | `content-controls delete` | Delete a content control and its content from the document. |
+| `doc.content_controls.copy` | `content-controls copy` | Copy a content control to a destination position. Copied SDTs receive new IDs. |
+| `doc.content_controls.move` | `content-controls move` | Move a content control to a new position. Preserves original IDs. |
+| `doc.content_controls.patch` | `content-controls patch` | Patch metadata properties on a content control (tag, alias, appearance, color, etc.). |
+| `doc.content_controls.set_lock_mode` | `content-controls set-lock-mode` | Set the lock mode on a content control. |
+| `doc.content_controls.set_type` | `content-controls set-type` | Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite. |
+| `doc.content_controls.get_content` | `content-controls get-content` | Get the text content of a content control. |
+| `doc.content_controls.replace_content` | `content-controls replace-content` | Replace the entire content of a content control. |
+| `doc.content_controls.clear_content` | `content-controls clear-content` | Clear all content inside a content control, leaving it empty. |
+| `doc.content_controls.append_content` | `content-controls append-content` | Append content to the end of a content control. |
+| `doc.content_controls.prepend_content` | `content-controls prepend-content` | Prepend content to the beginning of a content control. |
+| `doc.content_controls.insert_before` | `content-controls insert-before` | Insert content immediately before a content control. |
+| `doc.content_controls.insert_after` | `content-controls insert-after` | Insert content immediately after a content control. |
+| `doc.content_controls.get_binding` | `content-controls get-binding` | Get the data binding metadata (w:dataBinding) of a content control. |
+| `doc.content_controls.set_binding` | `content-controls set-binding` | Set data binding metadata on a content control. |
+| `doc.content_controls.clear_binding` | `content-controls clear-binding` | Remove data binding metadata from a content control. |
+| `doc.content_controls.get_raw_properties` | `content-controls get-raw-properties` | Get the raw sdtPr properties of a content control as a passthrough hash. |
+| `doc.content_controls.patch_raw_properties` | `content-controls patch-raw-properties` | Apply raw XML-level patches to the sdtPr subtree of a content control. |
+| `doc.content_controls.validate_word_compatibility` | `content-controls validate-word-compatibility` | Validate a content control for Word compatibility issues. |
+| `doc.content_controls.normalize_word_compatibility` | `content-controls normalize-word-compatibility` | Normalize a content control to resolve Word compatibility issues. |
+| `doc.content_controls.normalize_tag_payload` | `content-controls normalize-tag-payload` | Normalize a content control tag between plain-string and JSON-encoded formats. |
+| `doc.content_controls.text.set_multiline` | `content-controls text set-multiline` | Set or clear the multiline attribute on a plain-text content control. |
+| `doc.content_controls.text.set_value` | `content-controls text set-value` | Set the text value of a plain-text content control. |
+| `doc.content_controls.text.clear_value` | `content-controls text clear-value` | Clear the text value of a plain-text content control. |
+| `doc.content_controls.date.set_value` | `content-controls date set-value` | Set the date value of a date content control. |
+| `doc.content_controls.date.clear_value` | `content-controls date clear-value` | Clear the date value of a date content control. |
+| `doc.content_controls.date.set_display_format` | `content-controls date set-display-format` | Set the display format string for a date content control. |
+| `doc.content_controls.date.set_display_locale` | `content-controls date set-display-locale` | Set the display locale for a date content control. |
+| `doc.content_controls.date.set_storage_format` | `content-controls date set-storage-format` | Set the XML storage format for a date content control. |
+| `doc.content_controls.date.set_calendar` | `content-controls date set-calendar` | Set the calendar type for a date content control. |
+| `doc.content_controls.checkbox.get_state` | `content-controls checkbox get-state` | Get the checked state of a checkbox content control. |
+| `doc.content_controls.checkbox.set_state` | `content-controls checkbox set-state` | Set the checked state of a checkbox content control. |
+| `doc.content_controls.checkbox.toggle` | `content-controls checkbox toggle` | Toggle the checked state of a checkbox content control. |
+| `doc.content_controls.checkbox.set_symbol_pair` | `content-controls checkbox set-symbol-pair` | Set the checked and unchecked symbol glyphs for a checkbox content control. |
+| `doc.content_controls.choice_list.get_items` | `content-controls choice-list get-items` | Get the list items and selected value of a comboBox or dropDownList content control. |
+| `doc.content_controls.choice_list.set_items` | `content-controls choice-list set-items` | Replace the list items of a comboBox or dropDownList content control. |
+| `doc.content_controls.choice_list.set_selected` | `content-controls choice-list set-selected` | Set the selected value of a comboBox or dropDownList content control. |
+| `doc.content_controls.repeating_section.list_items` | `content-controls repeating-section list-items` | List the repeating section items inside a repeating section content control. |
+| `doc.content_controls.repeating_section.insert_item_before` | `content-controls repeating-section insert-item-before` | Insert a new item before a specific index in a repeating section. |
+| `doc.content_controls.repeating_section.insert_item_after` | `content-controls repeating-section insert-item-after` | Insert a new item after a specific index in a repeating section. |
+| `doc.content_controls.repeating_section.clone_item` | `content-controls repeating-section clone-item` | Clone a repeating section item at the given index. Cloned SDTs receive new IDs. |
+| `doc.content_controls.repeating_section.delete_item` | `content-controls repeating-section delete-item` | Delete a repeating section item at the given index. |
+| `doc.content_controls.repeating_section.set_allow_insert_delete` | `content-controls repeating-section set-allow-insert-delete` | Set the allowInsertDelete flag on a repeating section. |
+| `doc.content_controls.group.wrap` | `content-controls group wrap` | Wrap a content control inside a new group content control. Always nests; not idempotent. |
+| `doc.content_controls.group.ungroup` | `content-controls group ungroup` | Remove the group designation from a group content control. |
 
 #### Format
 

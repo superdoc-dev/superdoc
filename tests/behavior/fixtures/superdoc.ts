@@ -50,7 +50,26 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
 }
 
 async function waitForReady(page: Page, timeout = 30_000): Promise<void> {
-  await page.waitForFunction(() => (window as any).superdocReady === true, null, { polling: 100, timeout });
+  // Vite may trigger a dep-optimization reload on WebKit after the initial load event,
+  // which destroys the execution context and resets `superdocReady`. Retry across
+  // navigations until the flag is set or the overall deadline is reached.
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try {
+      const remaining = Math.max(deadline - Date.now(), 1000);
+      await page.waitForFunction(() => (window as any).superdocReady === true, null, {
+        polling: 100,
+        timeout: remaining,
+      });
+      return;
+    } catch {
+      // If the page navigated (context destroyed) and we still have budget, retry
+      // after the new page finishes loading.
+      if (Date.now() >= deadline) break;
+      await page.waitForLoadState('load').catch(() => {});
+    }
+  }
+  throw new Error(`waitForReady: superdocReady was not set within ${timeout}ms`);
 }
 
 async function waitForStable(page: Page, ms?: number): Promise<void> {
@@ -1023,15 +1042,17 @@ export const test = base.extend<{ superdoc: SuperDocFixture } & SuperDocOptions>
   superdoc: async ({ page, config }, use) => {
     const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
 
-    // Navigate to harness
+    // Navigate to harness — use 'networkidle' so Vite finishes serving all
+    // assets (and any dep-optimization reloads) before we check app state.
+    // WebKit is particularly sensitive to mid-load reloads in parallel workers.
     const url = buildHarnessUrl({ layout: true, ...config });
-    await page.goto(url);
+    await page.goto(url, { waitUntil: 'networkidle' });
     await waitForReady(page);
 
     // Focus the editor — use .focus() not .click() because in layout mode
     // the ProseMirror contenteditable is positioned off-screen (DomPainter renders visuals).
     const editor = page.locator('[contenteditable="true"]').first();
-    await editor.waitFor({ state: 'visible', timeout: 10_000 });
+    await editor.waitFor({ state: 'visible', timeout: 15_000 });
     await editor.focus();
 
     await use(createFixture(page, editor, modKey));

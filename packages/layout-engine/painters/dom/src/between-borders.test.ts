@@ -3,6 +3,7 @@ import {
   applyParagraphBorderStyles,
   getFragmentParagraphBorders,
   computeBetweenBorderFlags,
+  createParagraphDecorationLayers,
   type BlockLookup,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
@@ -246,6 +247,65 @@ describe('applyParagraphBorderStyles — between borders', () => {
     const e = el();
     applyParagraphBorderStyles(e, undefined, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('');
+  });
+
+  // --- suppressTopBorder ---
+  it('skips top border when suppressTopBorder is true', () => {
+    const e = el();
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 2, color: '#F00' },
+      left: { style: 'solid', width: 1, color: '#000' },
+      right: { style: 'solid', width: 1, color: '#000' },
+    };
+    const info: BetweenBorderInfo = { showBetweenBorder: false, suppressTopBorder: true, gapBelow: 0 };
+    applyParagraphBorderStyles(e, borders, info);
+    expect(e.style.getPropertyValue('border-top-style')).toBe('');
+    expect(e.style.getPropertyValue('border-left-style')).toBe('solid');
+    expect(e.style.getPropertyValue('border-right-style')).toBe('solid');
+  });
+
+  it('applies top border normally when suppressTopBorder is false', () => {
+    const e = el();
+    const borders: ParagraphBorders = {
+      top: { style: 'dashed', width: 3, color: '#0F0' },
+    };
+    applyParagraphBorderStyles(e, borders, betweenOff);
+    expect(e.style.getPropertyValue('border-top-style')).toBe('dashed');
+    expect(e.style.getPropertyValue('border-top-width')).toBe('3px');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createParagraphDecorationLayers — gap extension
+// ---------------------------------------------------------------------------
+
+describe('createParagraphDecorationLayers — gap extension', () => {
+  it('sets bottom to negative gapBelow when showBetweenBorder is true', () => {
+    const attrs = { borders: { top: { style: 'solid' as const, width: 1 } }, shading: { fill: '#EEE' } };
+    const info: BetweenBorderInfo = { showBetweenBorder: true, suppressTopBorder: false, gapBelow: 8 };
+    const { borderLayer, shadingLayer } = createParagraphDecorationLayers(document, 400, attrs, info);
+    expect(borderLayer!.style.bottom).toBe('-8px');
+    expect(shadingLayer!.style.bottom).toBe('-8px');
+  });
+
+  it('sets bottom to 0px when gapBelow is 0', () => {
+    const attrs = { borders: { top: { style: 'solid' as const, width: 1 } } };
+    const info: BetweenBorderInfo = { showBetweenBorder: true, suppressTopBorder: false, gapBelow: 0 };
+    const { borderLayer } = createParagraphDecorationLayers(document, 400, attrs, info);
+    expect(borderLayer!.style.bottom).toBe('0px');
+  });
+
+  it('sets bottom to 0px when betweenInfo is undefined', () => {
+    const attrs = { borders: { top: { style: 'solid' as const, width: 1 } } };
+    const { borderLayer } = createParagraphDecorationLayers(document, 400, attrs);
+    expect(borderLayer!.style.bottom).toBe('0px');
+  });
+
+  it('sets bottom to 0px when showBetweenBorder is false even with gapBelow', () => {
+    const attrs = { borders: { top: { style: 'solid' as const, width: 1 } } };
+    const info: BetweenBorderInfo = { showBetweenBorder: false, suppressTopBorder: true, gapBelow: 12 };
+    const { borderLayer } = createParagraphDecorationLayers(document, 400, attrs, info);
+    expect(borderLayer!.style.bottom).toBe('0px');
   });
 });
 
@@ -540,6 +600,34 @@ describe('computeBetweenBorderFlags', () => {
 
     const flags = computeBetweenBorderFlags(fragments, lookup);
     expect(flags.has(0)).toBe(false);
+  });
+
+  it('does not group fragments in different columns (different x positions)', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      between: { style: 'solid', width: 1 },
+    };
+    const b1 = makeParagraphBlock('b1', borders);
+    const b2 = makeParagraphBlock('b2', borders);
+    const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
+    const fragments: Fragment[] = [paraFragment('b1', { y: 100, x: 0 }), paraFragment('b2', { y: 0, x: 300 })];
+
+    const flags = computeBetweenBorderFlags(fragments, lookup);
+    expect(flags.size).toBe(0);
+  });
+
+  it('still groups fragments in the same column (same x positions)', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      between: { style: 'solid', width: 1 },
+    };
+    const b1 = makeParagraphBlock('b1', borders);
+    const b2 = makeParagraphBlock('b2', borders);
+    const lookup = buildLookup([{ block: b1 }, { block: b2 }]);
+    const fragments: Fragment[] = [paraFragment('b1', { y: 0, x: 50 }), paraFragment('b2', { y: 16, x: 50 })];
+
+    const flags = computeBetweenBorderFlags(fragments, lookup);
+    expect(flags.size).toBe(2);
   });
 });
 

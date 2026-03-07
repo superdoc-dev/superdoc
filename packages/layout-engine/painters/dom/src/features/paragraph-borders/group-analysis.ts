@@ -60,7 +60,7 @@ export const getFragmentParagraphBorders = (
  * Computes the height of a fragment from its measured line heights.
  * Used to calculate the spacing gap between consecutive fragments.
  */
-const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number => {
+export const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number => {
   if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
     return fragment.height;
   }
@@ -149,6 +149,9 @@ export const computeBetweenBorderFlags = (
     const nextBorders = getFragmentParagraphBorders(next, blockLookup);
     if (isBetweenBorderNone(nextBorders)) continue;
     if (hashParagraphBorders(borders!) !== hashParagraphBorders(nextBorders!)) continue;
+
+    // Skip fragments in different columns (different x positions)
+    if (frag.x !== next.x) continue;
 
     pairFlags.add(i);
   }

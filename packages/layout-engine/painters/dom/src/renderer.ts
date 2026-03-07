@@ -38,9 +38,6 @@ import type {
   ShapeTextContent,
   SolidFillWithAlpha,
   TableAttrs,
-  ListItemFragment,
-  ListBlock,
-  ListMeasure,
   TableBlock,
   TableCellAttrs,
   TableFragment,
@@ -99,10 +96,12 @@ import { SdtGroupedHover } from './utils/sdt-hover.js';
 import {
   computeBetweenBorderFlags,
   getFragmentParagraphBorders,
+  getFragmentHeight,
   createParagraphDecorationLayers,
   applyParagraphBorderStyles,
   applyParagraphShadingStyles,
   getParagraphBorderBox,
+  stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
 
@@ -344,20 +343,9 @@ type PainterOptions = {
   ruler?: RulerOptions;
 };
 
-type BlockLookupEntry = {
-  block: FlowBlock;
-  measure: Measure;
-  version: string;
-};
-
-/**
- * Map of block IDs to their corresponding block data and measurements.
- * Used by the renderer to efficiently look up block information during fragment rendering.
- * Each entry contains the block definition, its layout measurements, and a version string for cache invalidation.
- *
- * @typedef {Map<string, BlockLookupEntry>} BlockLookup
- */
-export type BlockLookup = Map<string, BlockLookupEntry>;
+// BlockLookup lives in the shared types module (single source of truth)
+import type { BlockLookupEntry, BlockLookup } from './features/paragraph-borders/types.js';
+export type { BlockLookup, BlockLookupEntry };
 
 type FragmentDomState = {
   key: string;
@@ -2640,11 +2628,7 @@ export class DomPainter {
       if (borderLayer) {
         fragmentEl.appendChild(borderLayer);
       }
-      if (betweenInfo) {
-        if (betweenInfo.showBetweenBorder) fragmentEl.dataset.betweenBorder = 'true';
-        if (betweenInfo.suppressTopBorder) fragmentEl.dataset.suppressTopBorder = 'true';
-        if (betweenInfo.gapBelow) fragmentEl.dataset.gapBelow = String(betweenInfo.gapBelow);
-      }
+      stampBetweenBorderDataset(fragmentEl, betweenInfo);
       if (block.attrs?.styleId) {
         fragmentEl.dataset.styleId = block.attrs.styleId;
         fragmentEl.setAttribute('styleid', block.attrs.styleId);
@@ -3144,11 +3128,7 @@ export class DomPainter {
       if (borderLayer) {
         contentEl.appendChild(borderLayer);
       }
-      if (betweenInfo) {
-        if (betweenInfo.showBetweenBorder) fragmentEl.dataset.betweenBorder = 'true';
-        if (betweenInfo.suppressTopBorder) fragmentEl.dataset.suppressTopBorder = 'true';
-        if (betweenInfo.gapBelow) fragmentEl.dataset.gapBelow = String(betweenInfo.gapBelow);
-      }
+      stampBetweenBorderDataset(fragmentEl, betweenInfo);
       // INTENTIONAL DIVERGENCE: Force list content to left alignment
       // Microsoft Word DOES justify list paragraphs when alignment is 'justify',
       // but we intentionally keep lists left-aligned to match user expectations
@@ -6230,41 +6210,6 @@ const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup
   }
 
   return null;
-};
-
-const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number => {
-  if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
-    return fragment.height;
-  }
-
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return 0;
-
-  if (fragment.kind === 'para' && lookup.measure.kind === 'paragraph') {
-    const measure = lookup.measure;
-    const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
-    if (lines.length === 0) return 0;
-    let totalHeight = 0;
-    for (const line of lines) {
-      totalHeight += line.lineHeight ?? 0;
-    }
-    return totalHeight;
-  }
-
-  if (fragment.kind === 'list-item' && lookup.measure.kind === 'list') {
-    const listMeasure = lookup.measure as ListMeasure;
-    const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
-    if (!item) return 0;
-    const lines = item.paragraph.lines.slice(fragment.fromLine, fragment.toLine);
-    if (lines.length === 0) return 0;
-    let totalHeight = 0;
-    for (const line of lines) {
-      totalHeight += line.lineHeight ?? 0;
-    }
-    return totalHeight;
-  }
-
-  return 0;
 };
 
 const computeSdtBoundaries = (

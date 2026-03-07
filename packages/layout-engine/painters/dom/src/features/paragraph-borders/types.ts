@@ -1,12 +1,11 @@
 /**
- * Shared types for paragraph border rendering features.
+ * Shared types for the DomPainter rendering pipeline.
+ *
+ * BlockLookup is the canonical definition — renderer.ts and feature modules
+ * both import from here to avoid circular dependencies.
  */
 import type { FlowBlock, Measure } from '@superdoc/contracts';
 
-/**
- * Entry in the block lookup map. Re-exported here to avoid
- * a direct import from the monolithic renderer.
- */
 export type BlockLookupEntry = {
   block: FlowBlock;
   measure: Measure;

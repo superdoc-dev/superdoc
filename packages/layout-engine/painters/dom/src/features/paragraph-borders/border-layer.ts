@@ -147,6 +147,19 @@ const setBorderSideStyle = (element: HTMLElement, side: CssBorderSide, border: P
   element.style.setProperty(`border-${side}-color`, border.color ?? '#000');
 };
 
+// ─── Dataset stamping ─────────────────────────────────────────────
+
+/**
+ * Stamps between-border info onto an element's dataset for debugging
+ * and incremental update cache invalidation.
+ */
+export const stampBetweenBorderDataset = (element: HTMLElement, betweenInfo?: BetweenBorderInfo): void => {
+  if (!betweenInfo) return;
+  if (betweenInfo.showBetweenBorder) element.dataset.betweenBorder = 'true';
+  if (betweenInfo.suppressTopBorder) element.dataset.suppressTopBorder = 'true';
+  if (betweenInfo.gapBelow) element.dataset.gapBelow = String(betweenInfo.gapBelow);
+};
+
 // ─── Shading CSS application ───────────────────────────────────────
 
 /**

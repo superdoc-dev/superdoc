@@ -98,16 +98,18 @@ export const createParagraphDecorationLayers = (
   // Both real between (showBetweenBorder) and nil/none between (suppressBottomBorder)
   // need gap extension to keep left/right borders continuous through the spacing gap.
   const gapExtension = betweenInfo?.showBetweenBorder || betweenInfo?.suppressBottomBorder ? betweenInfo!.gapBelow : 0;
-  const totalBottomExpansion = gapExtension + space.bottom;
-  const bottomValue = totalBottomExpansion > 0 ? `-${totalBottomExpansion}px` : '0px';
-  const topValue = space.top > 0 ? `-${space.top}px` : '0px';
 
-  const baseStyles = {
+  // Border widths for each rendered side. With box-sizing: border-box, CSS borders are
+  // drawn INSIDE the element. To position the border's inner edge at `space` distance
+  // from the text, the border layer must be expanded by space + borderWidth.
+  // The shading layer only needs space (it has no CSS borders).
+  const bw = computeRenderedBorderWidths(attrs.borders, betweenInfo);
+
+  const shadingBottom = gapExtension + space.bottom;
+  const borderBottom = gapExtension + space.bottom + bw.bottom;
+
+  const commonStyles = {
     position: 'absolute',
-    top: topValue,
-    bottom: bottomValue,
-    left: `${borderBox.leftInset - space.left}px`,
-    width: `${borderBox.width + space.left + space.right}px`,
     pointerEvents: 'none',
     boxSizing: 'border-box',
   } as const;
@@ -116,7 +118,11 @@ export const createParagraphDecorationLayers = (
   if (attrs.shading) {
     shadingLayer = doc.createElement('div');
     shadingLayer.classList.add('superdoc-paragraph-shading');
-    Object.assign(shadingLayer.style, baseStyles);
+    Object.assign(shadingLayer.style, commonStyles);
+    shadingLayer.style.top = space.top > 0 ? `-${space.top}px` : '0px';
+    shadingLayer.style.bottom = shadingBottom > 0 ? `-${shadingBottom}px` : '0px';
+    shadingLayer.style.left = `${borderBox.leftInset - space.left}px`;
+    shadingLayer.style.width = `${borderBox.width + space.left + space.right}px`;
     applyParagraphShadingStyles(shadingLayer, attrs.shading);
   }
 
@@ -124,12 +130,37 @@ export const createParagraphDecorationLayers = (
   if (attrs.borders) {
     borderLayer = doc.createElement('div');
     borderLayer.classList.add('superdoc-paragraph-border');
-    Object.assign(borderLayer.style, baseStyles);
+    Object.assign(borderLayer.style, commonStyles);
+    borderLayer.style.top = space.top + bw.top > 0 ? `-${space.top + bw.top}px` : '0px';
+    borderLayer.style.bottom = borderBottom > 0 ? `-${borderBottom}px` : '0px';
+    borderLayer.style.left = `${borderBox.leftInset - space.left - bw.left}px`;
+    borderLayer.style.width = `${borderBox.width + space.left + bw.left + space.right + bw.right}px`;
     borderLayer.style.zIndex = '1';
     applyParagraphBorderStyles(borderLayer, attrs.borders, betweenInfo);
   }
 
   return { shadingLayer, borderLayer };
+};
+
+/**
+ * Computes the rendered CSS border widths per side, accounting for suppressed sides.
+ * Used to expand the border layer so the inner edge is at the correct `space` offset.
+ */
+const computeRenderedBorderWidths = (
+  borders?: ParagraphBorders,
+  betweenInfo?: BetweenBorderInfo,
+): { top: number; bottom: number; left: number; right: number } => {
+  if (!borders) return { top: 0, bottom: 0, left: 0, right: 0 };
+  const suppressTop = betweenInfo?.suppressTopBorder ?? false;
+  const suppressBottom = betweenInfo?.suppressBottomBorder ?? false;
+  const showBetween = betweenInfo?.showBetweenBorder ?? false;
+
+  return {
+    top: !suppressTop ? (borders.top?.width ?? 0) : 0,
+    bottom: showBetween ? (borders.between?.width ?? 0) : !suppressBottom ? (borders.bottom?.width ?? 0) : 0,
+    left: borders.left?.width ?? 0,
+    right: borders.right?.width ?? 0,
+  };
 };
 
 // ─── Border CSS application ────────────────────────────────────────

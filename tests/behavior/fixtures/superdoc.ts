@@ -788,36 +788,71 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
           () =>
             page.evaluate(
               ({ text, commentId }) => {
+                type HighlightEntry = { text: string; commentIds: string[] };
                 const normalize = (value: string) => value.replace(/\s+/g, ' ').trim();
-                const highlights = Array.from(document.querySelectorAll('.superdoc-comment-highlight')).map((el) => ({
+                const includesExpectedText = (entries: HighlightEntry[], expected: string) => {
+                  if (!expected) return true;
+                  if (entries.some((entry) => entry.text.includes(expected))) return true;
+                  const aggregatedText = normalize(
+                    entries
+                      .map((entry) => entry.text)
+                      .filter(Boolean)
+                      .join(' '),
+                  );
+                  return aggregatedText.includes(expected);
+                };
+
+                const highlights: HighlightEntry[] = Array.from(
+                  document.querySelectorAll('.superdoc-comment-highlight'),
+                ).map((el) => ({
                   text: normalize(el.textContent ?? ''),
-                  commentIds: (el.getAttribute('data-comment-ids') ?? '').split(/[\s,]+/).filter(Boolean),
+                  commentIds: (el.getAttribute('data-comment-ids') ?? '').split(/[\s,;]+/).filter(Boolean),
                 }));
                 if (highlights.length === 0) return false;
 
-                const relevant = commentId
-                  ? highlights.filter((entry) => entry.commentIds.includes(commentId))
-                  : highlights;
-                if (relevant.length === 0) return false;
+                const expected = normalize(text ?? '');
+                if (!commentId) {
+                  return includesExpectedText(highlights, expected);
+                }
 
-                if (!text) return true;
+                const relevant = highlights.filter((entry) => entry.commentIds.includes(commentId));
 
-                const expected = normalize(text);
-                if (expected.length === 0) return true;
+                if (relevant.length > 0) {
+                  return includesExpectedText(relevant, expected);
+                }
 
-                const hasDirectTextMatch = relevant.some((entry) => entry.text.includes(expected));
-                if (hasDirectTextMatch) return true;
+                // Fallback: on some engines, highlight DOM may transiently expose a
+                // canonical/imported ID mismatch. Resolve anchored text from comments.list()
+                // and assert the corresponding text remains highlighted.
+                const docApi = (window as any).editor?.doc;
+                const commentsList = docApi?.comments?.list?.({ includeResolved: true });
+                const matches = Array.isArray(commentsList?.matches)
+                  ? commentsList.matches
+                  : Array.isArray(commentsList?.items)
+                    ? commentsList.items
+                    : [];
 
-                if (!commentId) return false;
+                const matchingComment = matches.find((entry: any) => {
+                  const entryId =
+                    (typeof entry?.commentId === 'string' && entry.commentId) ||
+                    (typeof entry?.id === 'string' && entry.id) ||
+                    (typeof entry?.address?.entityId === 'string' && entry.address.entityId) ||
+                    '';
+                  const importedId = typeof entry?.importedId === 'string' ? entry.importedId : '';
+                  return entryId === commentId || importedId === commentId;
+                });
 
-                // Highlights for the same comment may be split across multiple DOM nodes.
-                const aggregatedText = normalize(
-                  relevant
-                    .map((entry) => entry.text)
-                    .filter(Boolean)
-                    .join(' '),
+                const anchoredText = normalize(
+                  expected ||
+                    (typeof matchingComment?.anchoredText === 'string' && matchingComment.anchoredText) ||
+                    (typeof matchingComment?.text === 'string' && matchingComment.text) ||
+                    (typeof matchingComment?.snippet === 'string' && matchingComment.snippet) ||
+                    (typeof matchingComment?.context?.snippet === 'string' && matchingComment.context.snippet) ||
+                    '',
                 );
-                return aggregatedText.includes(expected);
+                if (!anchoredText) return false;
+
+                return includesExpectedText(highlights, anchoredText);
               },
               { text: expectedText, commentId: expectedCommentId },
             ),

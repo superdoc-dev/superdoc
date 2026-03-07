@@ -4,6 +4,7 @@ import {
   getFragmentParagraphBorders,
   computeBetweenBorderFlags,
   createParagraphDecorationLayers,
+  getParagraphBorderBox,
   type BlockLookup,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
@@ -628,6 +629,99 @@ describe('computeBetweenBorderFlags', () => {
 
     const flags = computeBetweenBorderFlags(fragments, lookup);
     expect(flags.size).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getParagraphBorderBox — indent-aware sizing
+// ---------------------------------------------------------------------------
+
+describe('getParagraphBorderBox', () => {
+  const W = 600;
+
+  it('returns full width with no indent', () => {
+    const box = getParagraphBorderBox(W);
+    expect(box).toEqual({ leftInset: 0, width: W });
+  });
+
+  it('returns full width when indent is undefined', () => {
+    const box = getParagraphBorderBox(W, undefined);
+    expect(box).toEqual({ leftInset: 0, width: W });
+  });
+
+  it('insets by left indent', () => {
+    const box = getParagraphBorderBox(W, { left: 40 });
+    expect(box.leftInset).toBe(40);
+    expect(box.width).toBe(W - 40);
+  });
+
+  it('insets by right indent', () => {
+    const box = getParagraphBorderBox(W, { right: 30 });
+    expect(box.leftInset).toBe(0);
+    expect(box.width).toBe(W - 30);
+  });
+
+  it('insets by both left and right', () => {
+    const box = getParagraphBorderBox(W, { left: 40, right: 30 });
+    expect(box.leftInset).toBe(40);
+    expect(box.width).toBe(W - 40 - 30);
+  });
+
+  it('uses smaller of left and left+firstLine for leftInset', () => {
+    // firstLine=20 → leftInset = min(50, 50+20) = 50, width uses leftInset=50
+    const box = getParagraphBorderBox(W, { left: 50, firstLine: 20 });
+    expect(box.leftInset).toBe(50);
+    expect(box.width).toBe(W - 50);
+  });
+
+  it('reduces leftInset when hanging exceeds left indent', () => {
+    // hanging=60 → firstLineOffset = 0 - 60 = -60 → minLeft = min(50, 50-60) = -10 → clamped to 0
+    const box = getParagraphBorderBox(W, { left: 50, hanging: 60 });
+    expect(box.leftInset).toBe(0);
+    expect(box.width).toBe(W);
+  });
+
+  it('handles hanging smaller than left indent', () => {
+    // hanging=20 → firstLineOffset = 0 - 20 = -20 → minLeft = min(50, 50-20) = 30
+    const box = getParagraphBorderBox(W, { left: 50, hanging: 20 });
+    expect(box.leftInset).toBe(30);
+    expect(box.width).toBe(W - 30);
+  });
+
+  it('clamps negative leftInset to 0', () => {
+    // left=0, hanging=30 → firstLineOffset = -30 → minLeft = min(0, -30) = -30 → clamped to 0
+    const box = getParagraphBorderBox(W, { hanging: 30 });
+    expect(box.leftInset).toBe(0);
+    expect(box.width).toBe(W);
+  });
+
+  it('clamps negative rightInset to 0', () => {
+    const box = getParagraphBorderBox(W, { right: -10 });
+    expect(box.leftInset).toBe(0);
+    expect(box.width).toBe(W);
+  });
+
+  it('clamps width to 0 when indents exceed fragment width', () => {
+    const box = getParagraphBorderBox(100, { left: 60, right: 60 });
+    expect(box.width).toBe(0);
+  });
+
+  it('handles all indent properties together', () => {
+    // left=40, right=30, firstLine=10, hanging=0
+    // firstLineOffset = 10 - 0 = 10, minLeft = min(40, 50) = 40
+    const box = getParagraphBorderBox(W, { left: 40, right: 30, firstLine: 10, hanging: 0 });
+    expect(box.leftInset).toBe(40);
+    expect(box.width).toBe(W - 40 - 30);
+  });
+
+  it('treats NaN indent values as 0', () => {
+    const box = getParagraphBorderBox(W, { left: NaN, right: NaN });
+    expect(box).toEqual({ leftInset: 0, width: W });
+  });
+
+  it('treats Infinity indent values as 0', () => {
+    const box = getParagraphBorderBox(W, { left: Infinity });
+    expect(box).toEqual({ leftInset: 0, width: W });
   });
 });
 

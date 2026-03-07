@@ -3334,13 +3334,14 @@ export const OPERATION_DEFINITIONS = {
   'headerFooters.parts.create': {
     memberPath: 'headerFooters.parts.create',
     description: 'Create a new independent header/footer part, optionally cloned from an existing part.',
-    expectedResult: 'Returns a HeaderFooterPartsMutationResult with the new refId and partPath on success.',
+    expectedResult:
+      'Returns a HeaderFooterPartsMutationResult with the new refId/partPath on success, INVALID_TARGET failure when sourceRefId is invalid or mismatched.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: [],
+      possibleFailureCodes: ['INVALID_TARGET'],
       throws: ['INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'],
       historyUnsafe: true,
     }),

@@ -5524,17 +5524,34 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['kind'],
     ),
-    output: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
-      'success',
-      'refId',
-      'partPath',
-    ]),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+          'success',
+          'refId',
+          'partPath',
+        ]),
+        objectSchema(
+          {
+            success: { const: false },
+            failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+          },
+          ['success', 'failure'],
+        ),
+      ],
+    },
     success: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
       'success',
       'refId',
       'partPath',
     ]),
-    failure: undefined,
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+      },
+      ['success', 'failure'],
+    ),
   },
   'headerFooters.parts.delete': {
     input: objectSchema(

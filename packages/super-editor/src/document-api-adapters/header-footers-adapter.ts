@@ -16,7 +16,6 @@ import type {
   HeaderFootersPartsCreateInput,
   HeaderFootersPartsDeleteInput,
   HeaderFooterPartsMutationResult,
-  HeaderFooterPartsMutationSuccessResult,
   SectionAddress,
   SectionMutationResult,
   MutationOptions,
@@ -416,7 +415,7 @@ export function headerFootersPartsCreateAdapter(
   editor: Editor,
   input: HeaderFootersPartsCreateInput,
   options?: MutationOptions,
-): HeaderFooterPartsMutationSuccessResult {
+): HeaderFooterPartsMutationResult {
   rejectTrackedMode('headerFooters.parts.create', options);
   checkRevision(editor, options?.expectedRevision);
 
@@ -427,7 +426,7 @@ export function headerFootersPartsCreateAdapter(
     const relationships = readRelationshipElements(converter);
     const sourceRel = relationships.find((rel) => String(rel.attributes?.Id ?? '') === input.sourceRefId);
     if (!sourceRel) {
-      throw new DocumentApiAdapterError(
+      return toPartsMutationFailure(
         'INVALID_TARGET',
         `sourceRefId '${input.sourceRefId}' does not reference an existing header/footer relationship`,
       );
@@ -435,7 +434,7 @@ export function headerFootersPartsCreateAdapter(
     const sourceType = String(sourceRel.attributes?.Type ?? '');
     const sourceKind = kindFromRelationshipType(sourceType);
     if (sourceKind !== input.kind) {
-      throw new DocumentApiAdapterError(
+      return toPartsMutationFailure(
         'INVALID_TARGET',
         `sourceRefId '${input.sourceRefId}' is a ${sourceKind ?? 'unknown'}, not a ${input.kind}`,
       );

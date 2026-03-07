@@ -392,7 +392,6 @@ import type {
   HeaderFootersPartsCreateInput,
   HeaderFootersPartsDeleteInput,
   HeaderFooterPartsMutationResult,
-  HeaderFooterPartsMutationSuccessResult,
 } from '../header-footers/header-footers.types.js';
 import type {
   ContentControlInfo,
@@ -961,7 +960,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'headerFooters.parts.create': {
     input: HeaderFootersPartsCreateInput;
     options: MutationOptions;
-    output: HeaderFooterPartsMutationSuccessResult;
+    output: HeaderFooterPartsMutationResult;
   };
   'headerFooters.parts.delete': {
     input: HeaderFootersPartsDeleteInput;

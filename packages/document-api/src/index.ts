@@ -325,7 +325,6 @@ import type {
   HeaderFootersPartsCreateInput,
   HeaderFootersPartsDeleteInput,
   HeaderFooterPartsMutationResult,
-  HeaderFooterPartsMutationSuccessResult,
 } from './header-footers/header-footers.js';
 import {
   executeHeaderFootersList,
@@ -2423,10 +2422,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         list(query?: HeaderFootersPartsListQuery): HeaderFootersPartsListResult {
           return executeHeaderFootersPartsList(adapters.headerFooters, query);
         },
-        create(
-          input: HeaderFootersPartsCreateInput,
-          options?: MutationOptions,
-        ): HeaderFooterPartsMutationSuccessResult {
+        create(input: HeaderFootersPartsCreateInput, options?: MutationOptions): HeaderFooterPartsMutationResult {
           return executeHeaderFootersPartsCreate(adapters.headerFooters, input, options);
         },
         delete(input: HeaderFootersPartsDeleteInput, options?: MutationOptions): HeaderFooterPartsMutationResult {

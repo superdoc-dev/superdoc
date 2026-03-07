@@ -22,7 +22,7 @@ Create a new independent header/footer part, optionally cloned from an existing 
 
 ## Expected result
 
-Returns a HeaderFooterPartsMutationResult with the new refId and partPath on success.
+Returns a HeaderFooterPartsMutationResult with the new refId/partPath on success, INVALID_TARGET failure when sourceRefId is invalid or mismatched.
 
 ## Input fields
 
@@ -42,11 +42,23 @@ Returns a HeaderFooterPartsMutationResult with the new refId and partPath on suc
 
 ## Output fields
 
+### Variant 1 (success=true)
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `partPath` | string | yes |  |
 | `refId` | string | yes |  |
 | `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
@@ -67,7 +79,7 @@ Returns a HeaderFooterPartsMutationResult with the new refId and partPath on suc
 
 ## Non-applied failure codes
 
-- None
+- `INVALID_TARGET`
 
 ## Raw schemas
 
@@ -98,24 +110,60 @@ Returns a HeaderFooterPartsMutationResult with the new refId and partPath on suc
 <Accordion title="Raw output schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "partPath": {
-      "type": "string"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "partPath": {
+          "type": "string"
+        },
+        "refId": {
+          "type": "string"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "refId",
+        "partPath"
+      ],
+      "type": "object"
     },
-    "refId": {
-      "type": "string"
-    },
-    "success": {
-      "const": true
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "success",
-    "refId",
-    "partPath"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>
@@ -139,6 +187,43 @@ Returns a HeaderFooterPartsMutationResult with the new refId and partPath on suc
     "success",
     "refId",
     "partPath"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
   ],
   "type": "object"
 }

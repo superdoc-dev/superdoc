@@ -22,7 +22,6 @@ import type {
   HeaderFootersPartsCreateInput,
   HeaderFootersPartsDeleteInput,
   HeaderFooterPartsMutationResult,
-  HeaderFooterPartsMutationSuccessResult,
 } from './header-footers.types.js';
 
 export type {
@@ -77,7 +76,7 @@ export interface HeaderFootersAdapter {
   };
   parts: {
     list(query?: HeaderFootersPartsListQuery): HeaderFootersPartsListResult;
-    create(input: HeaderFootersPartsCreateInput, options?: MutationOptions): HeaderFooterPartsMutationSuccessResult;
+    create(input: HeaderFootersPartsCreateInput, options?: MutationOptions): HeaderFooterPartsMutationResult;
     delete(input: HeaderFootersPartsDeleteInput, options?: MutationOptions): HeaderFooterPartsMutationResult;
   };
 }
@@ -265,7 +264,7 @@ export function executeHeaderFootersPartsCreate(
   adapter: HeaderFootersAdapter,
   input: HeaderFootersPartsCreateInput,
   options?: MutationOptions,
-): HeaderFooterPartsMutationSuccessResult {
+): HeaderFooterPartsMutationResult {
   assertOneOf(input?.kind, 'headerFooters.parts.create.kind', HEADER_FOOTER_KINDS);
   if (input.sourceRefId !== undefined) {
     assertNonEmptyString(input.sourceRefId, 'headerFooters.parts.create.sourceRefId');

@@ -8,6 +8,11 @@ export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
+export type {
+  MarkdownToFragmentInput,
+  MarkdownToFragmentAdapter,
+} from './markdown-to-fragment/markdown-to-fragment.js';
+export { executeMarkdownToFragment } from './markdown-to-fragment/markdown-to-fragment.js';
 export type { HistoryState, HistoryActionResult } from './history/history.types.js';
 
 import type {
@@ -27,6 +32,7 @@ import type {
   Receipt,
   Selector,
   TextMutationReceipt,
+  SDMutationReceipt,
   TrackChangeInfo,
   TrackChangesListResult,
 } from './types/index.js';
@@ -47,7 +53,8 @@ import {
   executeListComments,
 } from './comments/comments.js';
 import type { DeleteInput } from './delete/delete.js';
-import { executeFind, type FindAdapter, type FindOptions } from './find/find.js';
+import { executeFind, type FindAdapter } from './find/find.js';
+import type { SDFindInput, SDFindResult, SDGetInput, SDNodeResult } from './types/sd-envelope.js';
 import type {
   FormatAdapter,
   FormatApi,
@@ -68,9 +75,17 @@ import type {
 import { executeStylesApply } from './styles/index.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
+import { executeGet, type GetAdapter } from './get/get.js';
+import type { SDDocument } from './types/fragment.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
 import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
 import { executeGetHtml, type GetHtmlAdapter, type GetHtmlInput } from './get-html/get-html.js';
+import {
+  executeMarkdownToFragment,
+  type MarkdownToFragmentAdapter,
+  type MarkdownToFragmentInput,
+} from './markdown-to-fragment/markdown-to-fragment.js';
+import type { SDMarkdownToFragmentResult } from './types/sd-contract.js';
 import { executeInfo, type InfoAdapter, type InfoInput } from './info/info.js';
 import {
   executeClearContent,
@@ -443,6 +458,72 @@ import {
   executeHyperlinksRemove,
 } from './hyperlinks/hyperlinks.js';
 import type {
+  ContentControlsApi,
+  ContentControlsAdapter,
+  ContentControlsCreateAdapter,
+} from './content-controls/content-controls.js';
+import type {
+  CreateContentControlInput,
+  ContentControlMutationResult,
+} from './content-controls/content-controls.types.js';
+import {
+  executeContentControlsList,
+  executeContentControlsGet,
+  executeContentControlsListInRange,
+  executeContentControlsSelectByTag,
+  executeContentControlsSelectByTitle,
+  executeContentControlsListChildren,
+  executeContentControlsGetParent,
+  executeContentControlsWrap,
+  executeContentControlsUnwrap,
+  executeContentControlsDelete,
+  executeContentControlsCopy,
+  executeContentControlsMove,
+  executeContentControlsPatch,
+  executeContentControlsSetLockMode,
+  executeContentControlsSetType,
+  executeContentControlsGetContent,
+  executeContentControlsReplaceContent,
+  executeContentControlsClearContent,
+  executeContentControlsAppendContent,
+  executeContentControlsPrependContent,
+  executeContentControlsInsertBefore,
+  executeContentControlsInsertAfter,
+  executeContentControlsGetBinding,
+  executeContentControlsSetBinding,
+  executeContentControlsClearBinding,
+  executeContentControlsGetRawProperties,
+  executeContentControlsPatchRawProperties,
+  executeContentControlsValidateWordCompatibility,
+  executeContentControlsNormalizeWordCompatibility,
+  executeContentControlsNormalizeTagPayload,
+  executeContentControlsTextSetMultiline,
+  executeContentControlsTextSetValue,
+  executeContentControlsTextClearValue,
+  executeContentControlsDateSetValue,
+  executeContentControlsDateClearValue,
+  executeContentControlsDateSetDisplayFormat,
+  executeContentControlsDateSetDisplayLocale,
+  executeContentControlsDateSetStorageFormat,
+  executeContentControlsDateSetCalendar,
+  executeContentControlsCheckboxGetState,
+  executeContentControlsCheckboxSetState,
+  executeContentControlsCheckboxToggle,
+  executeContentControlsCheckboxSetSymbolPair,
+  executeContentControlsChoiceListGetItems,
+  executeContentControlsChoiceListSetItems,
+  executeContentControlsChoiceListSetSelected,
+  executeContentControlsRepeatingSectionListItems,
+  executeContentControlsRepeatingSectionInsertItemBefore,
+  executeContentControlsRepeatingSectionInsertItemAfter,
+  executeContentControlsRepeatingSectionCloneItem,
+  executeContentControlsRepeatingSectionDeleteItem,
+  executeContentControlsRepeatingSectionSetAllowInsertDelete,
+  executeContentControlsGroupWrap,
+  executeContentControlsGroupUngroup,
+  executeCreateContentControl,
+} from './content-controls/content-controls.js';
+import type {
   HyperlinksListQuery,
   HyperlinksListResult,
   HyperlinksGetInput,
@@ -454,6 +535,7 @@ import type {
   HyperlinkMutationResult,
 } from './hyperlinks/hyperlinks.types.js';
 
+export type { GetAdapter } from './get/get.js';
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
@@ -625,6 +707,99 @@ export type {
   TocEntryProperties,
 } from './toc/toc.types.js';
 export type { HyperlinksApi, HyperlinksAdapter } from './hyperlinks/hyperlinks.js';
+export type {
+  ContentControlsApi,
+  ContentControlsAdapter,
+  ContentControlsCreateAdapter,
+} from './content-controls/content-controls.js';
+export type {
+  ContentControlMutationResult,
+  ContentControlMutationSuccess,
+  ContentControlMutationFailure,
+  ContentControlsListResult,
+  ContentControlsListQuery,
+  ContentControlTarget,
+  ContentControlType,
+  ContentControlProperties,
+  ContentControlBinding,
+  ContentControlSymbol,
+  ContentControlListItem,
+  ContentControlAppearance,
+  LockMode,
+  CreateContentControlInput,
+  ContentControlsGetInput,
+  ContentControlsWrapInput,
+  ContentControlsUnwrapInput,
+  ContentControlsDeleteInput,
+  ContentControlsCopyInput,
+  ContentControlsMoveInput,
+  ContentControlsPatchInput,
+  ContentControlsSetLockModeInput,
+  ContentControlsSetTypeInput,
+  ContentControlsGetContentInput,
+  ContentControlsGetContentResult,
+  ContentControlsReplaceContentInput,
+  ContentControlsClearContentInput,
+  ContentControlsAppendContentInput,
+  ContentControlsPrependContentInput,
+  ContentControlsInsertBeforeInput,
+  ContentControlsInsertAfterInput,
+  ContentControlsGetBindingInput,
+  ContentControlsSetBindingInput,
+  ContentControlsClearBindingInput,
+  ContentControlsGetRawPropertiesInput,
+  ContentControlsGetRawPropertiesResult,
+  ContentControlsPatchRawPropertiesInput,
+  RawPatchOp,
+  ContentControlsValidateWordCompatibilityInput,
+  ContentControlsValidateWordCompatibilityResult,
+  WordCompatibilityDiagnostic,
+  ContentControlsNormalizeWordCompatibilityInput,
+  ContentControlsNormalizeTagPayloadInput,
+  ContentControlsListInRangeInput,
+  ContentControlsSelectByTagInput,
+  ContentControlsSelectByTitleInput,
+  ContentControlsListChildrenInput,
+  ContentControlsGetParentInput,
+  ContentControlsTextSetMultilineInput,
+  ContentControlsTextSetValueInput,
+  ContentControlsTextClearValueInput,
+  ContentControlsDateSetValueInput,
+  ContentControlsDateClearValueInput,
+  ContentControlsDateSetDisplayFormatInput,
+  ContentControlsDateSetDisplayLocaleInput,
+  ContentControlsDateSetStorageFormatInput,
+  ContentControlsDateSetCalendarInput,
+  ContentControlsCheckboxGetStateInput,
+  ContentControlsCheckboxGetStateResult,
+  ContentControlsCheckboxSetStateInput,
+  ContentControlsCheckboxToggleInput,
+  ContentControlsCheckboxSetSymbolPairInput,
+  ContentControlsChoiceListGetItemsInput,
+  ContentControlsChoiceListGetItemsResult,
+  ContentControlsChoiceListSetItemsInput,
+  ContentControlsChoiceListSetSelectedInput,
+  ContentControlsRepeatingSectionListItemsInput,
+  ContentControlsRepeatingSectionListItemsResult,
+  ContentControlsRepeatingSectionInsertItemBeforeInput,
+  ContentControlsRepeatingSectionInsertItemAfterInput,
+  ContentControlsRepeatingSectionCloneItemInput,
+  ContentControlsRepeatingSectionDeleteItemInput,
+  ContentControlsRepeatingSectionSetAllowInsertDeleteInput,
+  ContentControlsGroupWrapInput,
+  ContentControlsGroupUngroupInput,
+  ContentControlsPaginationOptions,
+  TextControlProperties,
+  DateControlProperties,
+  CheckboxControlProperties,
+  ChoiceControlProperties,
+  RepeatingSectionControlProperties,
+} from './content-controls/content-controls.types.js';
+export {
+  CONTENT_CONTROL_TYPES,
+  LOCK_MODES,
+  CONTENT_CONTROL_APPEARANCES,
+} from './content-controls/content-controls.types.js';
 export type {
   HyperlinkTarget,
   HyperlinkDestination,
@@ -820,9 +995,14 @@ export type {
   SetCommentActiveInput,
 } from './comments/comments.js';
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
-export { DocumentApiValidationError } from './errors.js';
-export type { InsertInput, InsertContentType } from './insert/insert.js';
-export type { ReplaceInput } from './replace/replace.js';
+export { DocumentApiValidationError, toSDError } from './errors.js';
+export { textReceiptToSDReceipt } from './receipt-bridge.js';
+export { isSDAddress, isValidTarget } from './validation-primitives.js';
+export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
+export { isStructuralInsertInput } from './insert/insert.js';
+export type { ReplaceInput, LegacyReplaceInput } from './replace/replace.js';
+export { isStructuralReplaceInput } from './replace/replace.js';
+export { validateDocumentFragment, validateSDFragment } from './validation/fragment-validator.js';
 export type { DeleteInput } from './delete/delete.js';
 
 export interface TablesApi {
@@ -905,30 +1085,29 @@ export interface MutationsAdapter {
  */
 export interface DocumentApi {
   /**
-   * Find nodes in the document matching a query.
-   * @param query - A full query object specifying selection criteria.
-   * @returns The query result containing matches and metadata.
+   * Read the full document as an SDDocument structure.
+   * @param input - Get input with optional read options.
+   * @returns An SDDocument with body content projected into SDM/1 canonical shapes.
    */
-  find(query: Query): FindOutput;
+  get(input: SDGetInput): SDDocument;
   /**
-   * Find nodes in the document matching a selector with optional options.
-   * @param selector - A selector specifying what to find.
-   * @param options - Optional find options (limit, offset, within, etc.).
-   * @returns The query result containing matches and metadata.
+   * Find nodes in the document matching an SDFindInput.
+   * @param input - The find input with selector, pagination, and scope.
+   * @returns An SDFindResult with matching SDNodeResult items.
    */
-  find(selector: Selector, options?: FindOptions): FindOutput;
+  find(input: SDFindInput): SDFindResult;
   /**
-   * Get detailed information about a specific node by its address.
+   * Get a node by its address as an SDNodeResult.
    * @param address - The node address to resolve.
-   * @returns Full node information including typed properties.
+   * @returns SDNodeResult with the projected node and its address.
    */
-  getNode(address: NodeAddress): NodeInfo;
+  getNode(address: NodeAddress): SDNodeResult;
   /**
-   * Get detailed information about a block node by its ID.
+   * Get a block node by its ID as an SDNodeResult.
    * @param input - The node-id input payload.
-   * @returns Full node information including typed properties.
+   * @returns SDNodeResult with the projected node and its address.
    */
-  getNodeById(input: GetNodeByIdInput): NodeInfo;
+  getNodeById(input: GetNodeByIdInput): SDNodeResult;
   /**
    * Return the full document text content.
    */
@@ -941,6 +1120,10 @@ export interface DocumentApi {
    * Return the full document content as an HTML string.
    */
   getHtml(input: GetHtmlInput): string;
+  /**
+   * Convert a Markdown string into an SDM/1 structural fragment.
+   */
+  markdownToFragment(input: MarkdownToFragmentInput): SDMarkdownToFragmentResult;
   /**
    * Return document summary info used by `doc.info`.
    */
@@ -957,11 +1140,11 @@ export interface DocumentApi {
    * Insert content at a target location.
    * If target is omitted, inserts at the end of the document.
    */
-  insert(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
+  insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt;
   /**
    * Replace text at a target range.
    */
-  replace(input: ReplaceInput, options?: MutationOptions): TextMutationReceipt;
+  replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt;
   /**
    * Delete text at a target range.
    */
@@ -1011,6 +1194,10 @@ export interface DocumentApi {
    */
   hyperlinks: HyperlinksApi;
   /**
+   * Content control (SDT) discovery, mutation, and typed-control operations.
+   */
+  contentControls: ContentControlsApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -1045,11 +1232,13 @@ export interface DocumentApi {
 }
 
 export interface DocumentApiAdapters {
+  get: GetAdapter;
   find: FindAdapter;
   getNode: GetNodeAdapter;
   getText: GetTextAdapter;
   getMarkdown: GetMarkdownAdapter;
   getHtml: GetHtmlAdapter;
+  markdownToFragment: MarkdownToFragmentAdapter;
   info: InfoAdapter;
   clearContent: ClearContentAdapter;
   capabilities: CapabilitiesAdapter;
@@ -1067,6 +1256,7 @@ export interface DocumentApiAdapters {
   toc: TocAdapter;
   images: ImagesAdapter & CreateImageAdapter;
   hyperlinks: HyperlinksAdapter;
+  contentControls: ContentControlsAdapter & ContentControlsCreateAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -1081,10 +1271,16 @@ export interface DocumentApiAdapters {
  * @example
  * ```ts
  * const api = createDocumentApi(adapters);
- * const result = api.find({ nodeType: 'heading' });
- * for (const item of result.items) {
- *   const node = api.getNode(item.address);
- *   console.log(node.properties);
+ *
+ * const match = api.query.match({
+ *   select: { type: 'node', nodeType: 'heading' },
+ *   require: 'first',
+ * });
+ *
+ * const address = match.items?.[0]?.address;
+ * if (address) {
+ *   const nodeResult = api.getNode(address);
+ *   console.log(nodeResult.node.kind);
  * }
  * ```
  */
@@ -1105,13 +1301,16 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const inlineAliasApi = buildFormatInlineAliasApi(adapters.format);
 
   const api: DocumentApi = {
-    find(selectorOrQuery: Selector | Query, options?: FindOptions): FindOutput {
-      return executeFind(adapters.find, selectorOrQuery, options);
+    get(input: SDGetInput): SDDocument {
+      return executeGet(adapters.get, input);
     },
-    getNode(address: NodeAddress): NodeInfo {
+    find(input: SDFindInput): SDFindResult {
+      return executeFind(adapters.find, input);
+    },
+    getNode(address: NodeAddress): SDNodeResult {
       return executeGetNode(adapters.getNode, address);
     },
-    getNodeById(input: GetNodeByIdInput): NodeInfo {
+    getNodeById(input: GetNodeByIdInput): SDNodeResult {
       return executeGetNodeById(adapters.getNode, input);
     },
     getText(input: GetTextInput): string {
@@ -1122,6 +1321,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     getHtml(input: GetHtmlInput): string {
       return executeGetHtml(adapters.getHtml, input);
+    },
+    markdownToFragment(input: MarkdownToFragmentInput): SDMarkdownToFragmentResult {
+      return executeMarkdownToFragment(adapters.markdownToFragment, input);
     },
     info(input: InfoInput): DocumentInfo {
       return executeInfo(adapters.info, input);
@@ -1146,10 +1348,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeListComments(adapters.comments, query);
       },
     },
-    insert(input: InsertInput, options?: MutationOptions): TextMutationReceipt {
+    insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt {
       return executeInsert(adapters.write, input, options);
     },
-    replace(input: ReplaceInput, options?: MutationOptions): TextMutationReceipt {
+    replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
       return executeReplace(adapters.write, input, options);
     },
     delete(input: DeleteInput, options?: MutationOptions): TextMutationReceipt {
@@ -1267,6 +1469,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       image(input: CreateImageInput, options?: MutationOptions): CreateImageResult {
         return executeCreateImage(adapters.images, input, options);
+      },
+      contentControl(input: CreateContentControlInput, options?: MutationOptions): ContentControlMutationResult {
+        return executeCreateContentControl(adapters.contentControls, input, options);
       },
     },
     capabilities,
@@ -1847,6 +2052,93 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       remove(input: HyperlinksRemoveInput, options?: MutationOptions): HyperlinkMutationResult {
         return executeHyperlinksRemove(adapters.hyperlinks, input, options);
+      },
+    },
+    contentControls: {
+      list: (query) => executeContentControlsList(adapters.contentControls, query),
+      get: (input) => executeContentControlsGet(adapters.contentControls, input),
+      listInRange: (input) => executeContentControlsListInRange(adapters.contentControls, input),
+      selectByTag: (input) => executeContentControlsSelectByTag(adapters.contentControls, input),
+      selectByTitle: (input) => executeContentControlsSelectByTitle(adapters.contentControls, input),
+      listChildren: (input) => executeContentControlsListChildren(adapters.contentControls, input),
+      getParent: (input) => executeContentControlsGetParent(adapters.contentControls, input),
+      wrap: (input, options) => executeContentControlsWrap(adapters.contentControls, input, options),
+      unwrap: (input, options) => executeContentControlsUnwrap(adapters.contentControls, input, options),
+      delete: (input, options) => executeContentControlsDelete(adapters.contentControls, input, options),
+      copy: (input, options) => executeContentControlsCopy(adapters.contentControls, input, options),
+      move: (input, options) => executeContentControlsMove(adapters.contentControls, input, options),
+      patch: (input, options) => executeContentControlsPatch(adapters.contentControls, input, options),
+      setLockMode: (input, options) => executeContentControlsSetLockMode(adapters.contentControls, input, options),
+      setType: (input, options) => executeContentControlsSetType(adapters.contentControls, input, options),
+      getContent: (input) => executeContentControlsGetContent(adapters.contentControls, input),
+      replaceContent: (input, options) =>
+        executeContentControlsReplaceContent(adapters.contentControls, input, options),
+      clearContent: (input, options) => executeContentControlsClearContent(adapters.contentControls, input, options),
+      appendContent: (input, options) => executeContentControlsAppendContent(adapters.contentControls, input, options),
+      prependContent: (input, options) =>
+        executeContentControlsPrependContent(adapters.contentControls, input, options),
+      insertBefore: (input, options) => executeContentControlsInsertBefore(adapters.contentControls, input, options),
+      insertAfter: (input, options) => executeContentControlsInsertAfter(adapters.contentControls, input, options),
+      getBinding: (input) => executeContentControlsGetBinding(adapters.contentControls, input),
+      setBinding: (input, options) => executeContentControlsSetBinding(adapters.contentControls, input, options),
+      clearBinding: (input, options) => executeContentControlsClearBinding(adapters.contentControls, input, options),
+      getRawProperties: (input) => executeContentControlsGetRawProperties(adapters.contentControls, input),
+      patchRawProperties: (input, options) =>
+        executeContentControlsPatchRawProperties(adapters.contentControls, input, options),
+      validateWordCompatibility: (input) =>
+        executeContentControlsValidateWordCompatibility(adapters.contentControls, input),
+      normalizeWordCompatibility: (input, options) =>
+        executeContentControlsNormalizeWordCompatibility(adapters.contentControls, input, options),
+      normalizeTagPayload: (input, options) =>
+        executeContentControlsNormalizeTagPayload(adapters.contentControls, input, options),
+      text: {
+        setMultiline: (input, options) =>
+          executeContentControlsTextSetMultiline(adapters.contentControls, input, options),
+        setValue: (input, options) => executeContentControlsTextSetValue(adapters.contentControls, input, options),
+        clearValue: (input, options) => executeContentControlsTextClearValue(adapters.contentControls, input, options),
+      },
+      date: {
+        setValue: (input, options) => executeContentControlsDateSetValue(adapters.contentControls, input, options),
+        clearValue: (input, options) => executeContentControlsDateClearValue(adapters.contentControls, input, options),
+        setDisplayFormat: (input, options) =>
+          executeContentControlsDateSetDisplayFormat(adapters.contentControls, input, options),
+        setDisplayLocale: (input, options) =>
+          executeContentControlsDateSetDisplayLocale(adapters.contentControls, input, options),
+        setStorageFormat: (input, options) =>
+          executeContentControlsDateSetStorageFormat(adapters.contentControls, input, options),
+        setCalendar: (input, options) =>
+          executeContentControlsDateSetCalendar(adapters.contentControls, input, options),
+      },
+      checkbox: {
+        getState: (input) => executeContentControlsCheckboxGetState(adapters.contentControls, input),
+        setState: (input, options) => executeContentControlsCheckboxSetState(adapters.contentControls, input, options),
+        toggle: (input, options) => executeContentControlsCheckboxToggle(adapters.contentControls, input, options),
+        setSymbolPair: (input, options) =>
+          executeContentControlsCheckboxSetSymbolPair(adapters.contentControls, input, options),
+      },
+      choiceList: {
+        getItems: (input) => executeContentControlsChoiceListGetItems(adapters.contentControls, input),
+        setItems: (input, options) =>
+          executeContentControlsChoiceListSetItems(adapters.contentControls, input, options),
+        setSelected: (input, options) =>
+          executeContentControlsChoiceListSetSelected(adapters.contentControls, input, options),
+      },
+      repeatingSection: {
+        listItems: (input) => executeContentControlsRepeatingSectionListItems(adapters.contentControls, input),
+        insertItemBefore: (input, options) =>
+          executeContentControlsRepeatingSectionInsertItemBefore(adapters.contentControls, input, options),
+        insertItemAfter: (input, options) =>
+          executeContentControlsRepeatingSectionInsertItemAfter(adapters.contentControls, input, options),
+        cloneItem: (input, options) =>
+          executeContentControlsRepeatingSectionCloneItem(adapters.contentControls, input, options),
+        deleteItem: (input, options) =>
+          executeContentControlsRepeatingSectionDeleteItem(adapters.contentControls, input, options),
+        setAllowInsertDelete: (input, options) =>
+          executeContentControlsRepeatingSectionSetAllowInsertDelete(adapters.contentControls, input, options),
+      },
+      group: {
+        wrap: (input, options) => executeContentControlsGroupWrap(adapters.contentControls, input, options),
+        ungroup: (input, options) => executeContentControlsGroupUngroup(adapters.contentControls, input, options),
       },
     },
     query: {

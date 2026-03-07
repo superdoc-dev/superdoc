@@ -346,17 +346,19 @@ function validateQuerySelect(value: unknown, path: string): Query['select'] {
   }
 
   if (type === 'node') {
-    expectOnlyKeys(obj, ['type', 'nodeType', 'kind'], path);
-    const nodeType = obj.nodeType != null ? validateNodeType(obj.nodeType, `${path}.nodeType`) : undefined;
+    expectOnlyKeys(obj, ['type', 'nodeKind', 'kind', 'nodeType'], path);
+    // Accept both SDM/1 nodeKind and legacy nodeType
+    const rawNodeKind = obj.nodeKind ?? obj.nodeType;
+    const nodeKind = rawNodeKind != null ? String(rawNodeKind) : undefined;
 
-    if (obj.kind != null && !NODE_KINDS.has(obj.kind as NodeKind)) {
-      throw new CliError('VALIDATION_ERROR', `${path}.kind must be "block" or "inline".`);
+    if (obj.kind != null && obj.kind !== 'content' && obj.kind !== 'inline' && !NODE_KINDS.has(obj.kind as NodeKind)) {
+      throw new CliError('VALIDATION_ERROR', `${path}.kind must be "content", "inline", "block", or "inline".`);
     }
 
     return {
       type: 'node',
-      nodeType,
-      kind: obj.kind as NodeKind | undefined,
+      nodeKind,
+      kind: obj.kind as string | undefined,
     };
   }
 
@@ -368,20 +370,26 @@ function validateQuerySelect(value: unknown, path: string): Query['select'] {
 
   return {
     type: 'node',
-    nodeType: type as NodeType,
+    nodeKind: type as string,
   };
 }
 
 export function validateQuery(value: unknown, path = 'query'): Query {
   const obj = expectRecord(value, path);
-  expectOnlyKeys(obj, ['select', 'within', 'limit', 'offset', 'includeNodes', 'includeUnknown'], path);
+  expectOnlyKeys(obj, ['select', 'within', 'limit', 'offset', 'options'], path);
 
   const query: Query = {
     select: validateQuerySelect(obj.select, `${path}.select`),
   };
 
   if (obj.within != null) {
-    query.within = validateNodeAddress(obj.within, `${path}.within`);
+    // Accept SDAddress format for within scope
+    const within = expectRecord(obj.within, `${path}.within`);
+    if (within.kind === 'content' && typeof within.nodeId === 'string') {
+      query.within = within as unknown as Query['within'];
+    } else {
+      query.within = validateNodeAddress(obj.within, `${path}.within`) as unknown as Query['within'];
+    }
   }
 
   if (obj.limit != null) {
@@ -390,20 +398,6 @@ export function validateQuery(value: unknown, path = 'query'): Query {
 
   if (obj.offset != null) {
     query.offset = expectNonNegativeInteger(obj.offset, `${path}.offset`);
-  }
-
-  if (obj.includeNodes != null) {
-    if (typeof obj.includeNodes !== 'boolean') {
-      throw new CliError('VALIDATION_ERROR', `${path}.includeNodes must be a boolean.`);
-    }
-    query.includeNodes = obj.includeNodes;
-  }
-
-  if (obj.includeUnknown != null) {
-    if (typeof obj.includeUnknown !== 'boolean') {
-      throw new CliError('VALIDATION_ERROR', `${path}.includeUnknown must be a boolean.`);
-    }
-    query.includeUnknown = obj.includeUnknown;
   }
 
   return query;

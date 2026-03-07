@@ -208,6 +208,7 @@ superdoc info ./contract.docx --pretty
 - `--session <id>`
 - `--timeout-ms <n>`
 - `--help`
+- `--version`, `-v`
 
 ## Input payload flags
 

@@ -1,3 +1,5 @@
+import type { SDError, SDErrorCode } from '@superdoc/document-api';
+
 /** Error codes used by {@link DocumentApiAdapterError} to classify adapter failures. */
 export type DocumentApiAdapterErrorCode =
   | 'TARGET_NOT_FOUND'
@@ -5,7 +7,18 @@ export type DocumentApiAdapterErrorCode =
   | 'AMBIGUOUS_TARGET'
   | 'CAPABILITY_UNAVAILABLE'
   | 'INVALID_INPUT'
-  | 'INTERNAL_ERROR';
+  | 'INVALID_NESTING'
+  | 'INVALID_PLACEMENT'
+  | 'INTERNAL_ERROR'
+  // SDM/1 structural codes
+  | 'ADDRESS_STALE'
+  | 'DUPLICATE_ID'
+  | 'INVALID_CONTEXT'
+  | 'RAW_MODE_REQUIRED'
+  | 'PRESERVE_ONLY_VIOLATION'
+  // SD-2070 content controls codes
+  | 'LOCK_VIOLATION'
+  | 'TYPE_MISMATCH';
 
 /**
  * Structured error thrown by document-api adapter functions.
@@ -35,4 +48,41 @@ export class DocumentApiAdapterError extends Error {
  */
 export function isDocumentApiAdapterError(error: unknown): error is DocumentApiAdapterError {
   return error instanceof DocumentApiAdapterError;
+}
+
+// ---------------------------------------------------------------------------
+// SDErrorCode crosswalk — maps adapter codes to SDM/1 error vocabulary
+// ---------------------------------------------------------------------------
+
+const ADAPTER_TO_SD_CODE: Record<string, SDErrorCode> = {
+  TARGET_NOT_FOUND: 'TARGET_NOT_FOUND',
+  INVALID_TARGET: 'INVALID_TARGET',
+  AMBIGUOUS_TARGET: 'INVALID_TARGET',
+  CAPABILITY_UNAVAILABLE: 'CAPABILITY_UNSUPPORTED',
+  INVALID_INPUT: 'INVALID_PAYLOAD',
+  INVALID_NESTING: 'INVALID_NESTING',
+  INVALID_PLACEMENT: 'INVALID_PLACEMENT',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  ADDRESS_STALE: 'ADDRESS_STALE',
+  DUPLICATE_ID: 'DUPLICATE_ID',
+  INVALID_CONTEXT: 'INVALID_CONTEXT',
+  RAW_MODE_REQUIRED: 'RAW_MODE_REQUIRED',
+  PRESERVE_ONLY_VIOLATION: 'PRESERVE_ONLY_VIOLATION',
+  LOCK_VIOLATION: 'INVALID_CONTEXT',
+  TYPE_MISMATCH: 'INVALID_PAYLOAD',
+};
+
+/**
+ * Converts a {@link DocumentApiAdapterError} to an {@link SDError}.
+ *
+ * Maps adapter error codes to the normative SDErrorCode vocabulary.
+ * Unknown codes fall through as `INTERNAL_ERROR`.
+ */
+export function adapterErrorToSDError(error: DocumentApiAdapterError): SDError {
+  const sdCode = ADAPTER_TO_SD_CODE[error.code] ?? 'INTERNAL_ERROR';
+  return {
+    code: sdCode,
+    message: error.message,
+    ...(error.details != null ? { details: error.details as Record<string, unknown> } : {}),
+  };
 }

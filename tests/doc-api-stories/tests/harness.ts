@@ -27,27 +27,29 @@ function resolveInvocation(cliBin: string): CliInvocation {
 }
 
 function parseJsonEnvelope(stdout: string, stderr: string): any {
-  const source = stdout.trim() || stderr.trim();
-  if (!source) {
+  const sources = [stdout.trim(), stderr.trim()].filter((source) => source.length > 0);
+  if (sources.length === 0) {
     throw new Error('No CLI JSON envelope output found.');
   }
 
-  try {
-    return JSON.parse(source);
-  } catch {
-    const lines = source.split(/\r?\n/);
-    for (let index = 0; index < lines.length; index += 1) {
-      const candidate = lines.slice(index).join('\n').trim();
-      if (!candidate.startsWith('{')) continue;
-      try {
-        return JSON.parse(candidate);
-      } catch {
-        // continue scanning
+  for (const source of sources) {
+    try {
+      return JSON.parse(source);
+    } catch {
+      const lines = source.split(/\r?\n/);
+      for (let index = 0; index < lines.length; index += 1) {
+        const candidate = lines.slice(index).join('\n').trim();
+        if (!candidate.startsWith('{')) continue;
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          // continue scanning
+        }
       }
     }
   }
 
-  throw new Error(`Failed to parse CLI JSON envelope:\n${source}`);
+  throw new Error(`Failed to parse CLI JSON envelope:\n${sources.join('\n')}`);
 }
 
 /** Resolve a test-corpus relative path to its absolute location. */
@@ -67,7 +69,7 @@ export interface StoryContext {
   /** Return a path inside the results dir. */
   outPath(name: string): string;
   /** Run a raw CLI command with the story's state dir and parse the JSON envelope. */
-  runCli(args: string[]): Promise<any>;
+  runCli(args: string[], options?: { allowError?: boolean }): Promise<any>;
 }
 
 export interface StoryHarnessOptions {
@@ -131,19 +133,30 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
         return dest;
       },
       outPath: (name) => path.join(resultsDir, name),
-      runCli: async (args) => {
+      runCli: async (args, options = {}) => {
         const invocation = resolveInvocation(cliBin);
         const argv = [...invocation.prefixArgs, ...args, '--output', 'json'];
-        const { stdout, stderr } = await execFileAsync(invocation.command, argv, {
-          cwd: REPO_ROOT,
-          env: {
-            ...process.env,
-            SUPERDOC_CLI_STATE_DIR: stateDir,
-          },
-        });
+        let stdout = '';
+        let stderr = '';
+
+        try {
+          const executed = await execFileAsync(invocation.command, argv, {
+            cwd: REPO_ROOT,
+            env: {
+              ...process.env,
+              SUPERDOC_CLI_STATE_DIR: stateDir,
+            },
+          });
+          stdout = executed.stdout;
+          stderr = executed.stderr;
+        } catch (error) {
+          const failed = error as { stdout?: string; stderr?: string };
+          stdout = failed.stdout ?? '';
+          stderr = failed.stderr ?? '';
+        }
 
         const envelope = parseJsonEnvelope(stdout, stderr);
-        if (envelope?.ok === false) {
+        if (envelope?.ok === false && options.allowError !== true) {
           const code = envelope.error?.code ?? 'UNKNOWN';
           const message = envelope.error?.message ?? 'Unknown CLI error';
           throw new Error(`${code}: ${message}`);
@@ -177,7 +190,7 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
     client: clientProxy,
     copyDoc: (source: string, name?: string) => requireCtx().copyDoc(source, name),
     outPath: (name: string) => requireCtx().outPath(name),
-    runCli: (args: string[]) => requireCtx().runCli(args),
+    runCli: (args: string[], options?: { allowError?: boolean }) => requireCtx().runCli(args, options),
   } as StoryContext;
 
   Object.defineProperty(api, 'resultsDir', {

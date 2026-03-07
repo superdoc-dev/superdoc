@@ -265,6 +265,14 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['success'],
   ),
+  ReceiptFailure: objectSchema(
+    {
+      code: { type: 'string' },
+      message: { type: 'string' },
+      details: {},
+    },
+    ['code', 'message'],
+  ),
   TextMutationRange: objectSchema(
     {
       from: { type: 'integer' },
@@ -642,7 +650,7 @@ function listsMutateItemResultSchemaFor(operationId: OperationId): JsonSchema {
   };
 }
 
-function listsExitResultSchemaFor(operationId: OperationId): JsonSchema {
+function _listsExitResultSchemaFor(operationId: OperationId): JsonSchema {
   return {
     oneOf: [listsExitSuccessSchema, listsFailureSchemaFor(operationId)],
   };
@@ -718,35 +726,120 @@ const selectSchema: JsonSchema = {
   anyOf: [textSelectorSchema, nodeSelectorSchema, selectorShorthandSchema],
 };
 
-const findInputSchema = objectSchema(
+// -- SDFindInput / SDFindResult schemas (SDM/1) --
+
+const sdTextSelectorSchema = objectSchema(
   {
-    select: selectSchema,
-    within: nodeAddressSchema,
+    type: { const: 'text' },
+    pattern: { type: 'string' },
+    mode: { enum: ['contains', 'regex'] },
+    caseSensitive: { type: 'boolean' },
+  },
+  ['type', 'pattern'],
+);
+
+const sdNodeSelectorSchema = objectSchema(
+  {
+    type: { const: 'node' },
+    kind: { enum: ['content', 'inline'] },
+    nodeKind: { type: 'string' },
+  },
+  ['type'],
+);
+
+const sdSelectorSchema: JsonSchema = {
+  oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
+};
+
+const sdAddressSchema = objectSchema(
+  {
+    kind: { enum: ['content', 'inline', 'annotation', 'section'] },
+    stability: { enum: ['stable', 'ephemeral'] },
+    nodeId: { type: 'string' },
+    anchor: objectSchema({
+      start: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
+      end: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
+    }),
+    evaluatedRevision: { type: 'string' },
+    path: arraySchema({ oneOf: [{ type: 'string' }, { type: 'integer' }] }),
+  },
+  ['kind', 'stability'],
+);
+
+const sdReadOptionsSchema = objectSchema({
+  includeResolved: { type: 'boolean' },
+  includeProvenance: { type: 'boolean' },
+  includeContext: { type: 'boolean' },
+});
+
+const sdFindInputSchema = objectSchema(
+  {
+    select: sdSelectorSchema,
+    within: sdAddressSchema,
     limit: { type: 'integer' },
     offset: { type: 'integer' },
-    require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
-    includeNodes: { type: 'boolean' },
-    includeUnknown: { type: 'boolean' },
+    options: sdReadOptionsSchema,
   },
   ['select'],
 );
 
-const findItemDomainSchema = discoveryItemSchema(
+const sdNodeResultSchema = objectSchema(
   {
-    address: nodeAddressSchema,
-    node: nodeInfoSchema,
-    context: matchContextSchema,
+    node: { type: 'object' },
+    address: sdAddressSchema,
+    context: { type: 'object' },
   },
-  ['address'],
+  ['node', 'address'],
 );
 
-const findOutputSchema: JsonSchema = {
-  ...discoveryResultSchema(findItemDomainSchema),
-  properties: {
-    ...(discoveryResultSchema(findItemDomainSchema) as { properties: Record<string, JsonSchema> }).properties,
-    diagnostics: arraySchema(unknownNodeDiagnosticSchema),
+const sdFindResultSchema = objectSchema(
+  {
+    total: { type: 'integer', minimum: 0 },
+    limit: { type: 'integer', minimum: 0 },
+    offset: { type: 'integer', minimum: 0 },
+    items: arraySchema(sdNodeResultSchema),
   },
-};
+  ['total', 'limit', 'offset', 'items'],
+);
+
+// ---------------------------------------------------------------------------
+// SDMutationReceipt schemas (for insert/replace in SDM/1 format)
+// ---------------------------------------------------------------------------
+
+const sdMutationResolutionSchema = objectSchema(
+  {
+    requestedTarget: sdAddressSchema,
+    target: sdAddressSchema,
+  },
+  ['target'],
+);
+
+const sdMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    resolution: sdMutationResolutionSchema,
+    evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+  },
+  ['success'],
+);
+
+function sdMutationFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+      resolution: sdMutationResolutionSchema,
+      evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+    },
+    ['success', 'failure'],
+  );
+}
+
+function sdMutationResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [sdMutationSuccessSchema, sdMutationFailureSchemaFor(operationId)],
+  };
+}
 
 const documentInfoCountsSchema = objectSchema(
   {
@@ -1643,14 +1736,431 @@ const hyperlinkInfoSchema: JsonSchema = objectSchema(
   ['address', 'properties'],
 );
 
-const operationSchemas: Record<OperationId, OperationSchemaSet> = {
+// ---------------------------------------------------------------------------
+// Content Controls shared schemas
+// ---------------------------------------------------------------------------
+
+const contentControlTargetSchema = objectSchema(
+  {
+    kind: { enum: ['block', 'inline'] },
+    nodeType: { const: 'sdt' },
+    nodeId: { type: 'string' },
+  },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const contentControlMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    contentControl: contentControlTargetSchema,
+    updatedRef: contentControlTargetSchema,
+  },
+  ['success', 'contentControl'],
+);
+
+const contentControlMutationFailureSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: { $ref: '#/$defs/ReceiptFailure' },
+  },
+  ['success', 'failure'],
+);
+
+function ccMutationResultSchema(): JsonSchema {
+  return { oneOf: [contentControlMutationSuccessSchema, contentControlMutationFailureSchema] };
+}
+
+const ccListResultSchema = objectSchema(
+  { items: { type: 'array', items: { type: 'object' } }, total: { type: 'integer' } },
+  ['items', 'total'],
+);
+
+const ccInfoSchema: JsonSchema = { type: 'object', description: 'ContentControlInfo' };
+
+function ccTargetInput(): JsonSchema {
+  return objectSchema({ target: contentControlTargetSchema }, ['target']);
+}
+
+/** Generates all contentControls.* schemas in one helper to keep the main map DRY. */
+function buildContentControlSchemas(): Record<string, OperationSchemaSet> {
+  const targetOnlyMutation: OperationSchemaSet = {
+    input: ccTargetInput(),
+    output: ccMutationResultSchema(),
+    success: contentControlMutationSuccessSchema,
+    failure: contentControlMutationFailureSchema,
+  };
+
+  const targetOnlyRead: OperationSchemaSet = {
+    input: ccTargetInput(),
+    output: ccInfoSchema,
+  };
+
+  const ccContentMutation: OperationSchemaSet = {
+    input: objectSchema(
+      { target: contentControlTargetSchema, content: { type: 'string' }, format: { enum: ['text', 'html'] } },
+      ['target', 'content'],
+    ),
+    output: ccMutationResultSchema(),
+    success: contentControlMutationSuccessSchema,
+    failure: contentControlMutationFailureSchema,
+  };
+
+  return {
+    'create.contentControl': {
+      input: objectSchema(
+        {
+          kind: { enum: ['block', 'inline'] },
+          controlType: { type: 'string' },
+          target: contentControlTargetSchema,
+          tag: { type: 'string' },
+          alias: { type: 'string' },
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+          content: { type: 'string' },
+        },
+        ['kind'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.list': {
+      input: objectSchema({
+        controlType: { type: 'string' },
+        tag: { type: 'string' },
+        offset: { type: 'integer' },
+        limit: { type: 'integer' },
+      }),
+      output: ccListResultSchema,
+    },
+    'contentControls.get': targetOnlyRead,
+    'contentControls.listInRange': {
+      input: objectSchema(
+        {
+          startBlockId: { type: 'string' },
+          endBlockId: { type: 'string' },
+          offset: { type: 'integer' },
+          limit: { type: 'integer' },
+        },
+        ['startBlockId', 'endBlockId'],
+      ),
+      output: ccListResultSchema,
+    },
+    'contentControls.selectByTag': {
+      input: objectSchema({ tag: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } }, [
+        'tag',
+      ]),
+      output: ccListResultSchema,
+    },
+    'contentControls.selectByTitle': {
+      input: objectSchema({ title: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } }, [
+        'title',
+      ]),
+      output: ccListResultSchema,
+    },
+    'contentControls.listChildren': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, offset: { type: 'integer' }, limit: { type: 'integer' } },
+        ['target'],
+      ),
+      output: ccListResultSchema,
+    },
+    'contentControls.getParent': { input: ccTargetInput(), output: { oneOf: [ccInfoSchema, { type: 'null' }] } },
+    'contentControls.wrap': {
+      input: objectSchema(
+        {
+          kind: { enum: ['block', 'inline'] },
+          target: contentControlTargetSchema,
+          tag: { type: 'string' },
+          alias: { type: 'string' },
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+        },
+        ['kind', 'target'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.unwrap': targetOnlyMutation,
+    'contentControls.delete': targetOnlyMutation,
+    'contentControls.copy': {
+      input: objectSchema({ target: contentControlTargetSchema, destination: contentControlTargetSchema }, [
+        'target',
+        'destination',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.move': {
+      input: objectSchema({ target: contentControlTargetSchema, destination: contentControlTargetSchema }, [
+        'target',
+        'destination',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.patch': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          alias: {},
+          tag: {},
+          appearance: { enum: ['boundingBox', 'tags', 'hidden'] },
+          color: { type: 'string' },
+          placeholder: { type: 'string' },
+          showingPlaceholder: { type: 'boolean' },
+          temporary: { type: 'boolean' },
+          tabIndex: { type: 'integer' },
+        },
+        ['target'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.setLockMode': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+        },
+        ['target', 'lockMode'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.setType': {
+      input: objectSchema({ target: contentControlTargetSchema, controlType: { type: 'string' } }, [
+        'target',
+        'controlType',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.getContent': {
+      input: ccTargetInput(),
+      output: objectSchema({ content: { type: 'string' }, format: { enum: ['text', 'html'] } }, ['content', 'format']),
+    },
+    'contentControls.replaceContent': ccContentMutation,
+    'contentControls.clearContent': targetOnlyMutation,
+    'contentControls.appendContent': ccContentMutation,
+    'contentControls.prependContent': ccContentMutation,
+    'contentControls.insertBefore': ccContentMutation,
+    'contentControls.insertAfter': ccContentMutation,
+
+    // Binding
+    'contentControls.getBinding': {
+      input: ccTargetInput(),
+      output: {
+        oneOf: [
+          objectSchema(
+            { storeItemId: { type: 'string' }, xpath: { type: 'string' }, prefixMappings: { type: 'string' } },
+            ['storeItemId', 'xpath'],
+          ),
+          { type: 'null' },
+        ],
+      },
+    },
+    'contentControls.setBinding': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          storeItemId: { type: 'string' },
+          xpath: { type: 'string' },
+          prefixMappings: { type: 'string' },
+        },
+        ['target', 'storeItemId', 'xpath'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.clearBinding': targetOnlyMutation,
+    'contentControls.getRawProperties': {
+      input: ccTargetInput(),
+      output: objectSchema({ properties: { type: 'object' } }, ['properties']),
+    },
+    'contentControls.patchRawProperties': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, patches: { type: 'array', items: { type: 'object' } } },
+        ['target', 'patches'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.validateWordCompatibility': {
+      input: ccTargetInput(),
+      output: objectSchema(
+        { compatible: { type: 'boolean' }, diagnostics: { type: 'array', items: { type: 'object' } } },
+        ['compatible', 'diagnostics'],
+      ),
+    },
+    'contentControls.normalizeWordCompatibility': targetOnlyMutation,
+    'contentControls.normalizeTagPayload': targetOnlyMutation,
+
+    // Text
+    'contentControls.text.setMultiline': {
+      input: objectSchema({ target: contentControlTargetSchema, multiline: { type: 'boolean' } }, [
+        'target',
+        'multiline',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.text.setValue': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.text.clearValue': targetOnlyMutation,
+
+    // Date
+    'contentControls.date.setValue': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.clearValue': targetOnlyMutation,
+    'contentControls.date.setDisplayFormat': {
+      input: objectSchema({ target: contentControlTargetSchema, format: { type: 'string' } }, ['target', 'format']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setDisplayLocale': {
+      input: objectSchema({ target: contentControlTargetSchema, locale: { type: 'string' } }, ['target', 'locale']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setStorageFormat': {
+      input: objectSchema({ target: contentControlTargetSchema, format: { type: 'string' } }, ['target', 'format']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setCalendar': {
+      input: objectSchema({ target: contentControlTargetSchema, calendar: { type: 'string' } }, ['target', 'calendar']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Checkbox
+    'contentControls.checkbox.getState': {
+      input: ccTargetInput(),
+      output: objectSchema({ checked: { type: 'boolean' } }, ['checked']),
+    },
+    'contentControls.checkbox.setState': {
+      input: objectSchema({ target: contentControlTargetSchema, checked: { type: 'boolean' } }, ['target', 'checked']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.checkbox.toggle': targetOnlyMutation,
+    'contentControls.checkbox.setSymbolPair': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, checkedSymbol: { type: 'object' }, uncheckedSymbol: { type: 'object' } },
+        ['target', 'checkedSymbol', 'uncheckedSymbol'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Choice list
+    'contentControls.choiceList.getItems': {
+      input: ccTargetInput(),
+      output: objectSchema({ items: { type: 'array', items: { type: 'object' } }, selectedValue: { type: 'string' } }, [
+        'items',
+      ]),
+    },
+    'contentControls.choiceList.setItems': {
+      input: objectSchema({ target: contentControlTargetSchema, items: { type: 'array', items: { type: 'object' } } }, [
+        'target',
+        'items',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.choiceList.setSelected': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Repeating section
+    'contentControls.repeatingSection.listItems': { input: ccTargetInput(), output: ccListResultSchema },
+    'contentControls.repeatingSection.insertItemBefore': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.insertItemAfter': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.cloneItem': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.deleteItem': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.setAllowInsertDelete': {
+      input: objectSchema({ target: contentControlTargetSchema, allow: { type: 'boolean' } }, ['target', 'allow']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Group
+    'contentControls.group.wrap': targetOnlyMutation,
+    'contentControls.group.ungroup': targetOnlyMutation,
+  };
+}
+
+const operationSchemas = {
+  get: {
+    input: objectSchema({
+      options: objectSchema({
+        includeResolved: { type: 'boolean' },
+        includeProvenance: { type: 'boolean' },
+        includeContext: { type: 'boolean' },
+      }),
+    }),
+    output: objectSchema(
+      {
+        modelVersion: { const: 'sdm/1' },
+        body: { type: 'array' },
+      },
+      ['modelVersion', 'body'],
+    ),
+  },
   find: {
-    input: findInputSchema,
-    output: findOutputSchema,
+    input: sdFindInputSchema,
+    output: sdFindResultSchema,
   },
   getNode: {
     input: nodeAddressSchema,
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getNodeById: {
     input: objectSchema(
@@ -1660,7 +2170,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['nodeId'],
     ),
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getText: {
     input: strictEmptyObjectSchema,
@@ -1676,6 +2186,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     }),
     output: { type: 'string' },
   },
+  markdownToFragment: {
+    input: objectSchema({ markdown: { type: 'string' } }, ['markdown']),
+    output: objectSchema(
+      {
+        fragment: {},
+        lossy: { type: 'boolean' },
+        diagnostics: arraySchema(
+          objectSchema(
+            {
+              code: { type: 'string' },
+              severity: { type: 'string', enum: ['error', 'warning', 'info'] },
+              message: { type: 'string' },
+              path: arraySchema({ type: 'string' }),
+            },
+            ['code', 'severity', 'message'],
+          ),
+        ),
+      },
+      ['fragment', 'lossy', 'diagnostics'],
+    ),
+  },
   info: {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
@@ -1688,9 +2219,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   insert: {
     input: insertInputSchema,
-    output: textMutationResultSchemaFor('insert'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('insert'),
+    output: sdMutationResultSchemaFor('insert'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('insert'),
   },
   replace: {
     input: objectSchema(
@@ -1700,9 +2231,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['target', 'text'],
     ),
-    output: textMutationResultSchemaFor('replace'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('replace'),
+    output: sdMutationResultSchemaFor('replace'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('replace'),
   },
   delete: {
     input: objectSchema(
@@ -4529,6 +5060,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: hyperlinkMutationSuccessSchema,
     failure: hyperlinkMutationFailureSchema,
   },
+
+  // =========================================================================
+  // Content Controls (SD-2070) — schemas
+  // =========================================================================
+  ...buildContentControlSchemas(),
 };
 
 /**
@@ -4541,7 +5077,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
  * @throws {Error} If any operation is missing a schema or an unknown operation is found.
  */
 export function buildInternalContractSchemas(): InternalContractSchemas {
-  const operations = { ...operationSchemas };
+  // Cast is safe — the runtime loops below verify completeness against OPERATION_IDS.
+  const operations = { ...operationSchemas } as unknown as Record<OperationId, OperationSchemaSet>;
 
   for (const operationId of OPERATION_IDS) {
     if (!operations[operationId]) {

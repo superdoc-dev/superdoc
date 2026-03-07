@@ -10,6 +10,8 @@ import type { TextAddress, TrackedChangeAddress } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
 import type { InlineRunPatch } from '../format/inline-run-patch.js';
+import type { SDFragment } from './fragment.js';
+import type { Placement, NestingPolicy } from './placement.js';
 
 // ---------------------------------------------------------------------------
 // Universal targeting model
@@ -125,6 +127,27 @@ export type AssertStep = {
   };
 };
 
+export type StructuralInsertStep = {
+  id: string;
+  op: 'structural.insert';
+  where: StepWhere;
+  args: {
+    content: SDFragment;
+    placement?: Placement;
+    nestingPolicy?: NestingPolicy;
+  };
+};
+
+export type StructuralReplaceStep = {
+  id: string;
+  op: 'structural.replace';
+  where: StepWhere;
+  args: {
+    content: SDFragment;
+    nestingPolicy?: NestingPolicy;
+  };
+};
+
 export type DomainStep = {
   id: string;
   op: string;
@@ -132,7 +155,15 @@ export type DomainStep = {
   args: Record<string, unknown>;
 };
 
-export type MutationStep = TextRewriteStep | TextInsertStep | TextDeleteStep | StyleApplyStep | AssertStep | DomainStep;
+export type MutationStep =
+  | TextRewriteStep
+  | TextInsertStep
+  | TextDeleteStep
+  | StyleApplyStep
+  | StructuralInsertStep
+  | StructuralReplaceStep
+  | AssertStep
+  | DomainStep;
 
 // ---------------------------------------------------------------------------
 // Plan input
@@ -210,7 +241,12 @@ export type TableStepData = {
   affectedColumns?: number[];
 };
 
-export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData;
+export type StructuralStepData = {
+  domain: 'structural';
+  insertedBlockIds?: string[];
+};
+
+export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData | StructuralStepData;
 
 export type StepOutcome = {
   stepId: string;

@@ -2,19 +2,19 @@ import type { Query, FindOutput, FindItemDomain } from '@superdoc/document-api';
 import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../core/Editor.js';
-import { findAdapter } from './find-adapter.js';
+import { findLegacyAdapter } from './find-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 
 vi.mock('./find-adapter.js', () => ({
-  findAdapter: vi.fn(),
+  findLegacyAdapter: vi.fn(),
 }));
 
 vi.mock('./get-text-adapter.js', () => ({
   getTextAdapter: vi.fn(),
 }));
 
-const findAdapterMock = vi.mocked(findAdapter);
+const findLegacyAdapterMock = vi.mocked(findLegacyAdapter);
 const getTextAdapterMock = vi.mocked(getTextAdapter);
 
 function makeFindOutput(
@@ -116,13 +116,13 @@ function resolveFindResult(query: Query): FindOutput {
 
 describe('infoAdapter', () => {
   beforeEach(() => {
-    findAdapterMock.mockReset();
+    findLegacyAdapterMock.mockReset();
     getTextAdapterMock.mockReset();
   });
 
   it('computes counts and outline from find/get-text adapters', () => {
     getTextAdapterMock.mockReturnValue('hello world from info adapter');
-    findAdapterMock.mockImplementation((editor: Editor, query: Query) => resolveFindResult(query));
+    findLegacyAdapterMock.mockImplementation((editor: Editor, query: Query) => resolveFindResult(query));
 
     const result = infoAdapter({} as Editor, {});
 
@@ -148,7 +148,7 @@ describe('infoAdapter', () => {
 
   it('falls back to total comment count when includeNodes does not return comment nodes', () => {
     getTextAdapterMock.mockReturnValue('');
-    findAdapterMock.mockImplementation((editor: Editor, query: Query) => {
+    findLegacyAdapterMock.mockImplementation((editor: Editor, query: Query) => {
       if (query.select.type === 'text') return makeFindOutput({});
       if (query.select.nodeType === 'comment') {
         return makeFindOutput({ total: 7 });

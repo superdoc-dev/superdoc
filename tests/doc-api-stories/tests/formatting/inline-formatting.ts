@@ -41,15 +41,19 @@ describe('document-api story: inline formatting', () => {
     const insertResult = unwrap<any>(await client.doc.insert({ sessionId, value: text }));
     expect(insertResult.receipt?.success).toBe(true);
 
-    // The receipt's hoisted target contains the paragraph's stable blockId.
-    const blockId = insertResult.target?.blockId;
+    // Prefer SDM/1 receipt resolution target; keep legacy fallback for compatibility.
+    const resolutionTarget = insertResult?.receipt?.resolution?.target;
+    const blockId =
+      insertResult?.target?.blockId ?? resolutionTarget?.anchor?.start?.blockId ?? resolutionTarget?.nodeId;
     if (!blockId) throw new Error('Insert did not return a target blockId.');
+    const startOffset =
+      typeof resolutionTarget?.anchor?.start?.offset === 'number' ? resolutionTarget.anchor.start.offset : 0;
 
     // Build a target spanning the full inserted text
     return {
       kind: 'text' as const,
       blockId,
-      range: { start: 0, end: text.length },
+      range: { start: startOffset, end: startOffset + text.length },
     };
   }
 

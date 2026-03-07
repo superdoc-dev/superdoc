@@ -71,6 +71,8 @@ export function orchestrationKind(opId: CliExposedOperationId): 'read' | 'mutati
 
 /** Past-tense verb for success messages. */
 export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
+  get: 'retrieved document',
+  markdownToFragment: 'converted markdown to fragment',
   find: 'completed search',
   getNode: 'resolved node',
   getNodeById: 'resolved node',
@@ -234,6 +236,8 @@ export type OutputFormat =
   | 'void';
 
 export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
+  get: 'plain',
+  markdownToFragment: 'plain',
   find: 'queryResult',
   getNode: 'nodeInfo',
   getNodeById: 'nodeInfo',
@@ -381,6 +385,8 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
  * `null` means the result is spread across multiple top-level keys (e.g. info).
  */
 export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null> = {
+  get: 'result',
+  markdownToFragment: 'result',
   find: 'result',
   getNode: 'node',
   getNodeById: 'node',
@@ -557,6 +563,8 @@ export type OperationFamily =
   | 'general';
 
 export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = {
+  get: 'query',
+  markdownToFragment: 'general',
   find: 'query',
   getNode: 'query',
   getNodeById: 'query',

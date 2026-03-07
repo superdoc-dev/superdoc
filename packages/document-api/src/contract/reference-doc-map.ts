@@ -116,6 +116,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Hyperlink discovery, creation, and metadata management.',
     pagePath: 'hyperlinks/index.mdx',
   },
+  contentControls: {
+    title: 'Content Controls',
+    description: 'Content control (SDT) discovery, mutation, typed controls, and Word compatibility.',
+    pagePath: 'content-controls/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

@@ -1107,6 +1107,7 @@ class SuperConverter {
     editor,
     exportJsonOnly = false,
     fieldsHighlightColor,
+    preserveSdtWrappers = false,
   ) {
     // Reset export warnings for this export cycle
     this.exportWarnings = [];
@@ -1127,6 +1128,7 @@ class SuperConverter {
       isFinalDoc,
       editor,
       fieldsHighlightColor,
+      preserveSdtWrappers,
     });
 
     // Keep convertedXml's document part in sync with the current export tree
@@ -1231,6 +1233,7 @@ class SuperConverter {
     editor,
     isHeaderFooter = false,
     fieldsHighlightColor = null,
+    preserveSdtWrappers = false,
   }) {
     const bodyNode = this.savedTagsToRestore.find((el) => el.name === 'w:body');
 
@@ -1250,6 +1253,7 @@ class SuperConverter {
       editor,
       isHeaderFooter,
       fieldsHighlightColor,
+      preserveSdtWrappers,
     });
 
     return { result, params };

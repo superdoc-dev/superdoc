@@ -77,10 +77,8 @@ export const BLOCK_NODE_TYPES = [
 /**
  * Block node types that `blocks.delete` can target in this release.
  * Excludes `tableRow` and `tableCell` (row/column semantics are out of scope).
- * Excludes `image` — the ProseMirror image node is inline, so the adapter
- * cannot resolve block-level image targets.
  */
-export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'image' | 'tableOfContents'>;
+export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'tableOfContents' | 'image'>;
 
 export const DELETABLE_BLOCK_NODE_TYPES = [
   'paragraph',

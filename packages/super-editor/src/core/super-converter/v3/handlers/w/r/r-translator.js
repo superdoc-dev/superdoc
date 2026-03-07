@@ -250,6 +250,14 @@ const decode = (params, decodedAttrs = {}) => {
       return;
     }
 
+    // Run-level SDTs are paragraph siblings in OOXML (not children of w:r).
+    // Emit them directly so Word does not need to normalize invalid nesting.
+    if (child.name === 'w:sdt') {
+      const sdtClone = cloneXmlNode(child);
+      runs.push(sdtClone);
+      return;
+    }
+
     const runWrapper = { name: XML_NODE_NAME, elements: [] };
     applyBaseRunProps(runWrapper);
     if (!Array.isArray(runWrapper.elements)) runWrapper.elements = [];

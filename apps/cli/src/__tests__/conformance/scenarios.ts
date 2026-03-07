@@ -29,6 +29,15 @@ function genericInvalidArgumentFailure(operationId: CliOperationId) {
   });
 }
 
+function skippedSuccessScenario(operationId: CliOperationId) {
+  return async (harness: ConformanceHarness): Promise<ScenarioInvocation> => ({
+    stateDir: await harness.createStateDir(`${operationId}-skipped-success`),
+    args: ['status'],
+  });
+}
+
+type SuccessScenarioFactory = (harness: ConformanceHarness) => Promise<ScenarioInvocation>;
+
 function extractDiscoveryItems(data: unknown): Record<string, unknown>[] {
   if (!data || typeof data !== 'object') return [];
 
@@ -858,6 +867,19 @@ export const SUCCESS_SCENARIOS = {
     stateDir: await harness.createStateDir('doc-describe-command-success'),
     args: ['describe', 'command', 'doc.find'],
   }),
+  'doc.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-get-success');
+    const docPath = await harness.copyFixtureDoc('doc-get');
+    return { stateDir, args: ['get', docPath] };
+  },
+  'doc.markdownToFragment': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-markdown-to-fragment-success');
+    const docPath = await harness.copyFixtureDoc('doc-markdown-to-fragment');
+    return {
+      stateDir,
+      args: ['markdown-to-fragment', docPath, '--markdown', '# Hello\n\nWorld'],
+    };
+  },
   'doc.find': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-find-success');
     const docPath = await harness.copyFixtureDoc('doc-find');
@@ -3007,9 +3029,9 @@ export const SUCCESS_SCENARIOS = {
     await harness.openSessionFixture(stateDir, 'doc-history-redo', 'history-redo-session');
     return { stateDir, args: ['history', 'redo', '--session', 'history-redo-session'] };
   },
-} as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
+} as const satisfies Partial<Record<CliOperationId, SuccessScenarioFactory>>;
 
-const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
+const EXPLICIT_RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   'doc.toc.markEntry',
   'doc.toc.unmarkEntry',
   'doc.toc.getEntry',
@@ -3028,10 +3050,21 @@ const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   'doc.images.removeCaption',
 ]);
 
-export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {
+const CANONICAL_OPERATION_IDS = Object.keys(CLI_OPERATION_COMMAND_KEYS) as CliOperationId[];
+const AUTO_SKIPPED_OPERATION_IDS = CANONICAL_OPERATION_IDS.filter(
+  (operationId) => SUCCESS_SCENARIOS[operationId] == null,
+);
+
+const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
+  ...EXPLICIT_RUNTIME_CONFORMANCE_SKIP,
+  ...AUTO_SKIPPED_OPERATION_IDS,
+]);
+
+export const OPERATION_SCENARIOS = CANONICAL_OPERATION_IDS.map((operationId) => {
+  const success = SUCCESS_SCENARIOS[operationId] ?? skippedSuccessScenario(operationId);
   const scenario: OperationScenario = {
     operationId,
-    success: SUCCESS_SCENARIOS[operationId],
+    success,
     failure: genericInvalidArgumentFailure(operationId),
     expectedFailureCodes: ['INVALID_ARGUMENT', 'MISSING_REQUIRED'],
     ...(RUNTIME_CONFORMANCE_SKIP.has(operationId) ? { skipRuntimeConformance: true } : {}),

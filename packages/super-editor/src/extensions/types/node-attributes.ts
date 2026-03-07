@@ -1030,6 +1030,16 @@ export interface StructuredContentBlockAttrs extends BlockNodeAttributes {
   tag?: string | null;
   /** Display name/alias */
   alias?: string | null;
+  /** Lock mode (ECMA-376 w:lock). */
+  lockMode?: string | null;
+  /** Semantic control type (text, date, checkbox, etc.). */
+  controlType?: string | null;
+  /** Legacy type field (fallback for controlType). */
+  type?: string | null;
+  /** Visual appearance (boundingBox, tags, hidden). */
+  appearance?: string | null;
+  /** Placeholder text. */
+  placeholder?: string | null;
   /** @internal Structured document tag properties */
   sdtPr?: unknown;
 }

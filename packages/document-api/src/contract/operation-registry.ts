@@ -8,9 +8,12 @@
 
 import type { OperationId } from './types.js';
 
-import type { NodeAddress, NodeInfo, FindOutput, Selector, Query } from '../types/index.js';
+import type { NodeAddress } from '../types/index.js';
+import type { SDNodeResult, SDFindInput, SDFindResult, SDGetInput } from '../types/sd-envelope.js';
 import type { TextMutationReceipt, Receipt } from '../types/receipt.js';
+import type { SDMutationReceipt, SDMarkdownToFragmentResult } from '../types/sd-contract.js';
 import type { DocumentInfo } from '../types/info.types.js';
+import type { SDDocument } from '../types/fragment.js';
 import type {
   CreateParagraphInput,
   CreateParagraphResult,
@@ -19,11 +22,11 @@ import type {
 } from '../types/create.types.js';
 import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
 
-import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
 import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
 import type { GetHtmlInput } from '../get-html/get-html.js';
+import type { MarkdownToFragmentInput } from '../markdown-to-fragment/markdown-to-fragment.js';
 import type { InfoInput } from '../info/info.js';
 import type { ClearContentInput } from '../clear-content/clear-content.js';
 import type { InsertInput } from '../insert/insert.js';
@@ -256,6 +259,73 @@ import type {
   HyperlinksRemoveInput,
   HyperlinkMutationResult,
 } from '../hyperlinks/hyperlinks.types.js';
+import type {
+  ContentControlInfo,
+  ContentControlMutationResult,
+  ContentControlsListResult,
+  ContentControlsListQuery,
+  ContentControlsGetInput,
+  ContentControlsListInRangeInput,
+  ContentControlsSelectByTagInput,
+  ContentControlsSelectByTitleInput,
+  ContentControlsListChildrenInput,
+  ContentControlsGetParentInput,
+  ContentControlsWrapInput,
+  ContentControlsUnwrapInput,
+  ContentControlsDeleteInput,
+  ContentControlsCopyInput,
+  ContentControlsMoveInput,
+  ContentControlsPatchInput,
+  ContentControlsSetLockModeInput,
+  ContentControlsSetTypeInput,
+  ContentControlsGetContentInput,
+  ContentControlsGetContentResult,
+  ContentControlsReplaceContentInput,
+  ContentControlsClearContentInput,
+  ContentControlsAppendContentInput,
+  ContentControlsPrependContentInput,
+  ContentControlsInsertBeforeInput,
+  ContentControlsInsertAfterInput,
+  ContentControlsGetBindingInput,
+  ContentControlBinding,
+  ContentControlsSetBindingInput,
+  ContentControlsClearBindingInput,
+  ContentControlsGetRawPropertiesInput,
+  ContentControlsGetRawPropertiesResult,
+  ContentControlsPatchRawPropertiesInput,
+  ContentControlsValidateWordCompatibilityInput,
+  ContentControlsValidateWordCompatibilityResult,
+  ContentControlsNormalizeWordCompatibilityInput,
+  ContentControlsNormalizeTagPayloadInput,
+  ContentControlsTextSetMultilineInput,
+  ContentControlsTextSetValueInput,
+  ContentControlsTextClearValueInput,
+  ContentControlsDateSetValueInput,
+  ContentControlsDateClearValueInput,
+  ContentControlsDateSetDisplayFormatInput,
+  ContentControlsDateSetDisplayLocaleInput,
+  ContentControlsDateSetStorageFormatInput,
+  ContentControlsDateSetCalendarInput,
+  ContentControlsCheckboxGetStateInput,
+  ContentControlsCheckboxGetStateResult,
+  ContentControlsCheckboxSetStateInput,
+  ContentControlsCheckboxToggleInput,
+  ContentControlsCheckboxSetSymbolPairInput,
+  ContentControlsChoiceListGetItemsInput,
+  ContentControlsChoiceListGetItemsResult,
+  ContentControlsChoiceListSetItemsInput,
+  ContentControlsChoiceListSetSelectedInput,
+  ContentControlsRepeatingSectionListItemsInput,
+  ContentControlsRepeatingSectionListItemsResult,
+  ContentControlsRepeatingSectionInsertItemBeforeInput,
+  ContentControlsRepeatingSectionInsertItemAfterInput,
+  ContentControlsRepeatingSectionCloneItemInput,
+  ContentControlsRepeatingSectionDeleteItemInput,
+  ContentControlsRepeatingSectionSetAllowInsertDeleteInput,
+  ContentControlsGroupWrapInput,
+  ContentControlsGroupUngroupInput,
+  CreateContentControlInput,
+} from '../content-controls/content-controls.types.js';
 
 type FormatInlineAliasOperationRegistry = {
   [K in InlineRunPatchKey as `format.${K}`]: {
@@ -267,18 +337,20 @@ type FormatInlineAliasOperationRegistry = {
 
 export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- Singleton reads ---
-  find: { input: Selector | Query; options: FindOptions; output: FindOutput };
-  getNode: { input: NodeAddress; options: never; output: NodeInfo };
-  getNodeById: { input: GetNodeByIdInput; options: never; output: NodeInfo };
+  get: { input: SDGetInput; options: never; output: SDDocument };
+  find: { input: SDFindInput; options: never; output: SDFindResult };
+  getNode: { input: NodeAddress; options: never; output: SDNodeResult };
+  getNodeById: { input: GetNodeByIdInput; options: never; output: SDNodeResult };
   getText: { input: GetTextInput; options: never; output: string };
   getMarkdown: { input: GetMarkdownInput; options: never; output: string };
   getHtml: { input: GetHtmlInput; options: never; output: string };
+  markdownToFragment: { input: MarkdownToFragmentInput; options: never; output: SDMarkdownToFragmentResult };
   info: { input: InfoInput; options: never; output: DocumentInfo };
 
   // --- Singleton mutations ---
   clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };
-  insert: { input: InsertInput; options: MutationOptions; output: TextMutationReceipt };
-  replace: { input: ReplaceInput; options: MutationOptions; output: TextMutationReceipt };
+  insert: { input: InsertInput; options: MutationOptions; output: SDMutationReceipt };
+  replace: { input: ReplaceInput; options: MutationOptions; output: SDMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- blocks.* ---
@@ -722,6 +794,295 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'hyperlinks.insert': { input: HyperlinksInsertInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.patch': { input: HyperlinksPatchInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.remove': { input: HyperlinksRemoveInput; options: MutationOptions; output: HyperlinkMutationResult };
+
+  // --- create.contentControl ---
+  'create.contentControl': {
+    input: CreateContentControlInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.* core CRUD + discovery ---
+  'contentControls.list': {
+    input: ContentControlsListQuery | undefined;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.get': { input: ContentControlsGetInput; options: never; output: ContentControlInfo };
+  'contentControls.listInRange': {
+    input: ContentControlsListInRangeInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.selectByTag': {
+    input: ContentControlsSelectByTagInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.selectByTitle': {
+    input: ContentControlsSelectByTitleInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.listChildren': {
+    input: ContentControlsListChildrenInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.getParent': {
+    input: ContentControlsGetParentInput;
+    options: never;
+    output: ContentControlInfo | null;
+  };
+  'contentControls.wrap': {
+    input: ContentControlsWrapInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.unwrap': {
+    input: ContentControlsUnwrapInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.delete': {
+    input: ContentControlsDeleteInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.copy': {
+    input: ContentControlsCopyInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.move': {
+    input: ContentControlsMoveInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.patch': {
+    input: ContentControlsPatchInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.setLockMode': {
+    input: ContentControlsSetLockModeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.setType': {
+    input: ContentControlsSetTypeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.getContent': {
+    input: ContentControlsGetContentInput;
+    options: never;
+    output: ContentControlsGetContentResult;
+  };
+  'contentControls.replaceContent': {
+    input: ContentControlsReplaceContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.clearContent': {
+    input: ContentControlsClearContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.appendContent': {
+    input: ContentControlsAppendContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.prependContent': {
+    input: ContentControlsPrependContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.insertBefore': {
+    input: ContentControlsInsertBeforeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.insertAfter': {
+    input: ContentControlsInsertAfterInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.* data binding + raw ---
+  'contentControls.getBinding': {
+    input: ContentControlsGetBindingInput;
+    options: never;
+    output: ContentControlBinding | null;
+  };
+  'contentControls.setBinding': {
+    input: ContentControlsSetBindingInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.clearBinding': {
+    input: ContentControlsClearBindingInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.getRawProperties': {
+    input: ContentControlsGetRawPropertiesInput;
+    options: never;
+    output: ContentControlsGetRawPropertiesResult;
+  };
+  'contentControls.patchRawProperties': {
+    input: ContentControlsPatchRawPropertiesInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.validateWordCompatibility': {
+    input: ContentControlsValidateWordCompatibilityInput;
+    options: never;
+    output: ContentControlsValidateWordCompatibilityResult;
+  };
+  'contentControls.normalizeWordCompatibility': {
+    input: ContentControlsNormalizeWordCompatibilityInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.normalizeTagPayload': {
+    input: ContentControlsNormalizeTagPayloadInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.text.* ---
+  'contentControls.text.setMultiline': {
+    input: ContentControlsTextSetMultilineInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.text.setValue': {
+    input: ContentControlsTextSetValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.text.clearValue': {
+    input: ContentControlsTextClearValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.date.* ---
+  'contentControls.date.setValue': {
+    input: ContentControlsDateSetValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.clearValue': {
+    input: ContentControlsDateClearValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setDisplayFormat': {
+    input: ContentControlsDateSetDisplayFormatInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setDisplayLocale': {
+    input: ContentControlsDateSetDisplayLocaleInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setStorageFormat': {
+    input: ContentControlsDateSetStorageFormatInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setCalendar': {
+    input: ContentControlsDateSetCalendarInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.checkbox.* ---
+  'contentControls.checkbox.getState': {
+    input: ContentControlsCheckboxGetStateInput;
+    options: never;
+    output: ContentControlsCheckboxGetStateResult;
+  };
+  'contentControls.checkbox.setState': {
+    input: ContentControlsCheckboxSetStateInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.checkbox.toggle': {
+    input: ContentControlsCheckboxToggleInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.checkbox.setSymbolPair': {
+    input: ContentControlsCheckboxSetSymbolPairInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.choiceList.* ---
+  'contentControls.choiceList.getItems': {
+    input: ContentControlsChoiceListGetItemsInput;
+    options: never;
+    output: ContentControlsChoiceListGetItemsResult;
+  };
+  'contentControls.choiceList.setItems': {
+    input: ContentControlsChoiceListSetItemsInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.choiceList.setSelected': {
+    input: ContentControlsChoiceListSetSelectedInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.repeatingSection.* ---
+  'contentControls.repeatingSection.listItems': {
+    input: ContentControlsRepeatingSectionListItemsInput;
+    options: never;
+    output: ContentControlsRepeatingSectionListItemsResult;
+  };
+  'contentControls.repeatingSection.insertItemBefore': {
+    input: ContentControlsRepeatingSectionInsertItemBeforeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.insertItemAfter': {
+    input: ContentControlsRepeatingSectionInsertItemAfterInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.cloneItem': {
+    input: ContentControlsRepeatingSectionCloneItemInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.deleteItem': {
+    input: ContentControlsRepeatingSectionDeleteItemInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.setAllowInsertDelete': {
+    input: ContentControlsRepeatingSectionSetAllowInsertDeleteInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.group.* ---
+  'contentControls.group.wrap': {
+    input: ContentControlsGroupWrapInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.group.ungroup': {
+    input: ContentControlsGroupUngroupInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
 }
 
 // --- Bidirectional completeness checks ---

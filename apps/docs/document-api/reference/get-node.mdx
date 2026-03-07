@@ -22,7 +22,7 @@ Retrieve a single node by target position.
 
 ## Expected result
 
-Returns a NodeInfo object with the node type, address, content, and typed properties.
+Returns an SDNodeResult envelope with the projected SDM/1 node and canonical address.
 
 ## Input fields
 
@@ -62,34 +62,50 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `bodyNodes` | object[] | no |  |
-| `bodyText` | string | no |  |
-| `kind` | enum | yes | `"block"`, `"inline"` |
-| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
-| `nodes` | object[] | no |  |
-| `properties` | object | no |  |
-| `summary` | object | no |  |
-| `summary.label` | string | no |  |
-| `summary.text` | string | no |  |
-| `text` | string | no |  |
+| `address` | object | yes |  |
+| `address.anchor` | object | no |  |
+| `address.anchor.end` | object | no |  |
+| `address.anchor.end.blockId` | string | no |  |
+| `address.anchor.end.offset` | integer | no |  |
+| `address.anchor.start` | object | no |  |
+| `address.anchor.start.blockId` | string | no |  |
+| `address.anchor.start.offset` | integer | no |  |
+| `address.evaluatedRevision` | string | no |  |
+| `address.kind` | enum | yes | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `address.nodeId` | string | no |  |
+| `address.path` | string \\| integer[] | no |  |
+| `address.stability` | enum | yes | `"stable"`, `"ephemeral"` |
+| `context` | object | no |  |
+| `node` | object | yes |  |
 
 ### Example response
 
 ```json
 {
-  "kind": "block",
-  "nodeType": "paragraph",
-  "summary": {
-    "label": "Paragraph 1",
-    "text": "Hello, world."
+  "address": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "content",
+    "nodeId": "node-def456",
+    "stability": "stable"
   },
-  "text": "Hello, world."
+  "context": {},
+  "node": {}
 }
 ```
 
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
+- `ADDRESS_STALE`
 
 ## Non-applied failure codes
 
@@ -110,69 +126,97 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 {
   "additionalProperties": false,
   "properties": {
-    "bodyNodes": {
-      "items": {
-        "type": "object"
-      },
-      "type": "array"
-    },
-    "bodyText": {
-      "type": "string"
-    },
-    "kind": {
-      "enum": [
-        "block",
-        "inline"
-      ]
-    },
-    "nodes": {
-      "items": {
-        "type": "object"
-      },
-      "type": "array"
-    },
-    "nodeType": {
-      "enum": [
-        "paragraph",
-        "heading",
-        "listItem",
-        "table",
-        "tableRow",
-        "tableCell",
-        "tableOfContents",
-        "image",
-        "sdt",
-        "run",
-        "bookmark",
-        "comment",
-        "hyperlink",
-        "footnoteRef",
-        "tab",
-        "lineBreak"
-      ]
-    },
-    "properties": {
-      "type": "object"
-    },
-    "summary": {
+    "address": {
       "additionalProperties": false,
       "properties": {
-        "label": {
+        "anchor": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "blockId",
+                "offset"
+              ],
+              "type": "object"
+            },
+            "start": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "blockId",
+                "offset"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "evaluatedRevision": {
           "type": "string"
         },
-        "text": {
+        "kind": {
+          "enum": [
+            "content",
+            "inline",
+            "annotation",
+            "section"
+          ]
+        },
+        "nodeId": {
           "type": "string"
+        },
+        "path": {
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "stability": {
+          "enum": [
+            "stable",
+            "ephemeral"
+          ]
         }
       },
+      "required": [
+        "kind",
+        "stability"
+      ],
       "type": "object"
     },
-    "text": {
-      "type": "string"
+    "context": {
+      "type": "object"
+    },
+    "node": {
+      "type": "object"
     }
   },
   "required": [
-    "nodeType",
-    "kind"
+    "node",
+    "address"
   ],
   "type": "object"
 }

@@ -1,0 +1,138 @@
+---
+title: contentControls.repeatingSection.listItems
+sidebarTitle: contentControls.repeatingSection.listItems
+description: List the repeating section items inside a repeating section content control.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List the repeating section items inside a repeating section content control.
+
+- Operation ID: `contentControls.repeatingSection.listItems`
+- API member path: `editor.doc.contentControls.repeatingSection.listItems(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a RepeatingSectionListItemsResult with child item info.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(nodeType="sdt") | yes |  |
+| `target.kind` | enum | yes | `"block"`, `"inline"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"sdt"` | yes | Constant: `"sdt"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "sdt"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | object[] | yes |  |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "items": [
+    {}
+  ],
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `TYPE_MISMATCH`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block",
+            "inline"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "sdt"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "total": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -53,6 +53,7 @@ type StructuredContentUpdateOptions = {
   html?: string;
   json?: ProseMirrorJSON;
   attrs?: Record<string, unknown>;
+  keepTextNodeStyles?: boolean;
 };
 
 type StructuredContentTableAppendOptions = {

@@ -19,7 +19,9 @@ Document API is in <strong>alpha</strong> and subject to breaking changes while 
 
 ## Node addressing
 
-Every block in a document has a `nodeId` — a string that uniquely identifies it. When you call `find` or `getNodeById`, addresses use this ID:
+Every block in a document has a `nodeId` — a string that uniquely identifies it.
+
+For mutation targeting and `getNode(...)`, use `NodeAddress`:
 
 ```json
 {
@@ -28,6 +30,8 @@ Every block in a document has a `nodeId` — a string that uniquely identifies i
   "nodeId": "3A2B1C0D"
 }
 ```
+
+`find(...)` returns SDM/1 `SDAddress` values (for example `kind: "content"`), while `query.match(...)` returns `NodeAddress` values (`kind: "block"` / `kind: "inline"`). Use `query.match(...)` when you need deterministic mutation-ready refs and node addresses.
 
 ### Stable IDs across loads
 
@@ -41,7 +45,7 @@ For nodes created at runtime (not imported from DOCX), `nodeId` falls back to `s
 | `sdBlockId` (runtime) | No (session-scoped) | Nodes created programmatically before first export |
 
 <Tip>
-If you need to reference blocks across separate editor sessions, use `editor.doc.find()` to get addresses — don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content.
+If you need to reference blocks across separate editor sessions, use `editor.doc.query.match()` (or persist `nodeId` and reconstruct a `NodeAddress`) — don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content.
 </Tip>
 
 <Warning>

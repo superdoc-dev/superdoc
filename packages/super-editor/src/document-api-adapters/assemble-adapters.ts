@@ -1,14 +1,21 @@
 import type { DocumentApiAdapters } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
-import { findAdapter } from './find-adapter.js';
+import { getAdapter } from './get-adapter.js';
+import { sdFindAdapter, findLegacyAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { getMarkdownAdapter } from './get-markdown-adapter.js';
 import { getHtmlAdapter } from './get-html-adapter.js';
+import { markdownToFragmentAdapter } from './markdown-to-fragment-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
-import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
+import {
+  writeWrapper,
+  insertStructuredWrapper,
+  replaceStructuredWrapper,
+  styleApplyWrapper,
+} from './plan-engine/plan-wrappers.js';
 import { clearContentWrapper } from './plan-engine/clear-content-wrapper.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import {
@@ -202,6 +209,7 @@ import {
   hyperlinksPatchWrapper,
   hyperlinksRemoveWrapper,
 } from './plan-engine/hyperlinks-wrappers.js';
+import { createContentControlsAdapter } from './plan-engine/content-controls-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -214,9 +222,15 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   initRevision(editor);
   trackRevisions(editor);
 
+  const ccAdapter = createContentControlsAdapter(editor);
+
   return {
+    get: {
+      get: (input) => getAdapter(editor, input),
+    },
     find: {
-      find: (query) => findAdapter(editor, query),
+      find: (input) => sdFindAdapter(editor, input),
+      findLegacy: (query) => findLegacyAdapter(editor, query),
     },
     getNode: {
       getNode: (address) => getNodeAdapter(editor, address),
@@ -231,6 +245,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     getHtml: {
       getHtml: (input) => getHtmlAdapter(editor, input),
     },
+    markdownToFragment: {
+      markdownToFragment: (input) => markdownToFragmentAdapter(editor, input),
+    },
     info: {
       info: (input) => infoAdapter(editor, input),
     },
@@ -244,6 +261,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     write: {
       write: (request, options) => writeWrapper(editor, request, options),
       insertStructured: (input, options) => insertStructuredWrapper(editor, input, options),
+      replaceStructured: (input, options) => replaceStructuredWrapper(editor, input, options),
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),
@@ -290,6 +308,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       sectionBreak: (input, options) => createSectionBreakAdapter(editor, input, options),
       tableOfContents: (input, options) => createTableOfContentsWrapper(editor, input, options),
       image: (input, options) => createImageWrapper(editor, input, options),
+      contentControl: (input, options) => ccAdapter.create(input, options),
     },
     lists: {
       list: (query) => listsListWrapper(editor, query),
@@ -440,6 +459,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       patch: (input, options) => hyperlinksPatchWrapper(editor, input, options),
       remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
     },
+    contentControls: ccAdapter,
     query: {
       match: (input) => queryMatchAdapter(editor, input),
     },

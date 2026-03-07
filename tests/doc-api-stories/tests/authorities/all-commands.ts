@@ -283,9 +283,12 @@ describe('document-api story: all authorities commands', () => {
         const f = requireFixture('authorities.configure', fixture);
         if (!f.authoritiesTarget) throw new Error('authorities.configure requires an authorities target fixture.');
 
+        const beforeList = await callDocOperation<any>('authorities.list', { sessionId });
+        const currentTarget = extractAuthoritiesAddress(beforeList?.items?.[0]) ?? f.authoritiesTarget;
+
         const configureResult = await callDocOperation<any>('authorities.configure', {
           sessionId,
-          target: f.authoritiesTarget,
+          target: currentTarget,
           patch: {
             includeHeadings: true,
             usePassim: true,
@@ -293,9 +296,11 @@ describe('document-api story: all authorities commands', () => {
           },
         });
 
+        const afterList = await callDocOperation<any>('authorities.list', { sessionId });
+        const resolvedTarget = extractAuthoritiesAddress(afterList?.items?.[0]) ?? currentTarget;
         const info = await callDocOperation<any>('authorities.get', {
           sessionId,
-          target: f.authoritiesTarget,
+          target: resolvedTarget,
         });
         expect(info?.config?.includeHeadings).toBe(true);
 

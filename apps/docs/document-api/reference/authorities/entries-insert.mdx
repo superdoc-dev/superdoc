@@ -28,7 +28,9 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `at` | object | yes |  |
+| `at` | TextTarget | yes | TextTarget |
+| `at.kind` | `"text"` | yes | Constant: `"text"` |
+| `at.segments` | TextSegment[] | yes |  |
 | `entry` | object | yes |  |
 | `entry.bold` | boolean | no |  |
 | `entry.category` | string \\| integer | yes | One of: string, integer |
@@ -40,7 +42,18 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
 
 ```json
 {
-  "at": {},
+  "at": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
   "entry": {
     "bold": true,
     "category": "example",
@@ -57,7 +70,13 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `entry` | object(kind="inline") | yes |  |
-| `entry.anchor` | object | yes |  |
+| `entry.anchor` | InlineAnchor | yes | InlineAnchor |
+| `entry.anchor.end` | Position | yes | Position |
+| `entry.anchor.end.blockId` | string | yes |  |
+| `entry.anchor.end.offset` | integer | yes |  |
+| `entry.anchor.start` | Position | yes | Position |
+| `entry.anchor.start.blockId` | string | yes |  |
+| `entry.anchor.start.offset` | integer | yes |  |
 | `entry.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `entry.nodeType` | `"authorityEntry"` | yes | Constant: `"authorityEntry"` |
 | `success` | `true` | yes | Constant: `true` |
@@ -77,7 +96,16 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
 ```json
 {
   "entry": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "authorityEntry"
   },
@@ -104,7 +132,7 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
   "additionalProperties": false,
   "properties": {
     "at": {
-      "type": "object"
+      "$ref": "#/$defs/TextTarget"
     },
     "entry": {
       "additionalProperties": false,
@@ -159,7 +187,7 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
           "additionalProperties": false,
           "properties": {
             "anchor": {
-              "type": "object"
+              "$ref": "#/$defs/InlineAnchor"
             },
             "kind": {
               "const": "inline"
@@ -229,7 +257,7 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"

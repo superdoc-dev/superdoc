@@ -28,14 +28,16 @@ Returns a BibliographyMutationResult indicating success with the bibliography ad
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `at` | object | yes |  |
+| `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | yes | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
 | `style` | string | no |  |
 
 ### Example request
 
 ```json
 {
-  "at": {},
+  "at": {
+    "kind": "documentStart"
+  },
   "style": "example"
 }
 ```
@@ -94,7 +96,64 @@ Returns a BibliographyMutationResult indicating success with the bibliography ad
   "additionalProperties": false,
   "properties": {
     "at": {
-      "type": "object"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentStart"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentEnd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "before"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "after"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "style": {
       "type": "string"

@@ -151,7 +151,7 @@ export function citationsInsertWrapper(
       });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -185,7 +185,7 @@ export function citationsUpdateWrapper(
         newAttrs.instruction = buildCitationInstruction((newAttrs.sourceIds as string[]) ?? []);
       }
       tr.setNodeMarkup(resolved.pos, undefined, newAttrs);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -213,7 +213,7 @@ export function citationsRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -389,7 +389,7 @@ export function bibliographyInsertWrapper(
       );
       const { tr } = editor.state;
       tr.insert(pos, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -432,7 +432,7 @@ export function bibliographyConfigureWrapper(
       });
 
       if (!changed) return false;
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -475,7 +475,7 @@ export function bibliographyRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },

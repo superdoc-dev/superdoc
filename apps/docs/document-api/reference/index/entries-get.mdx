@@ -29,7 +29,13 @@ Returns an IndexEntryInfo object with the entry's text, sub-entry, formatting, a
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | object(kind="inline") | yes |  |
-| `target.anchor` | object | yes |  |
+| `target.anchor` | InlineAnchor | yes | InlineAnchor |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
 | `target.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `target.nodeType` | `"indexEntry"` | yes | Constant: `"indexEntry"` |
 
@@ -38,7 +44,16 @@ Returns an IndexEntryInfo object with the entry's text, sub-entry, formatting, a
 ```json
 {
   "target": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "indexEntry"
   }
@@ -75,7 +90,7 @@ _No fields._
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"

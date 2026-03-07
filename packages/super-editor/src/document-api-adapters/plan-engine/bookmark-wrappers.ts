@@ -104,7 +104,7 @@ export function bookmarksInsertWrapper(
       // Set selection to the target range before inserting
       const { tr: selTr } = editor.state;
       selTr.setSelection(TextSelection.create(selTr.doc, resolved.from, resolved.to));
-      editor.view!.dispatch(selTr);
+      editor.dispatch(selTr);
 
       const result = editor.commands.insertBookmark({
         name: input.name,
@@ -162,7 +162,7 @@ export function bookmarksRenameWrapper(
         ...resolved.node.attrs,
         name: input.newName,
       });
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -209,7 +209,7 @@ export function bookmarksRemoveWrapper(
         tr.delete(resolved.pos, resolved.pos + startNode.nodeSize);
       }
 
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },

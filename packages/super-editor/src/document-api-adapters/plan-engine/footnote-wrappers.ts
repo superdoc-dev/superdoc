@@ -120,7 +120,7 @@ export function footnotesInsertWrapper(
       const node = nodeType.create({ id: noteId });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
 
       // Store the note content in the converter's footnote/endnote store
       // so it is available for export and for get/update operations.
@@ -214,7 +214,7 @@ export function footnotesRemoveWrapper(
       const node = tr.doc.nodeAt(resolved.pos);
       if (node) {
         tr.delete(resolved.pos, resolved.pos + node.nodeSize);
-        editor.view!.dispatch(tr);
+        editor.dispatch(tr);
         clearIndexCache(editor);
         return true;
       }

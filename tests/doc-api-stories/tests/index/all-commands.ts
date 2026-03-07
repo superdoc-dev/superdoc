@@ -277,18 +277,23 @@ describe('document-api story: all index commands', () => {
         const f = requireFixture('index.configure', fixture);
         if (!f.indexTarget) throw new Error('index.configure requires an index target fixture.');
 
+        const beforeList = await callDocOperation<any>('index.list', { sessionId });
+        const currentTarget = extractIndexAddress(beforeList?.items?.[0]) ?? f.indexTarget;
+
         const configureResult = await callDocOperation<any>('index.configure', {
           sessionId,
-          target: f.indexTarget,
+          target: currentTarget,
           patch: {
             entryPageSeparator: ' :: ',
             pageRangeSeparator: ' to ',
           },
         });
 
+        const afterList = await callDocOperation<any>('index.list', { sessionId });
+        const resolvedTarget = extractIndexAddress(afterList?.items?.[0]) ?? currentTarget;
         const info = await callDocOperation<any>('index.get', {
           sessionId,
-          target: f.indexTarget,
+          target: resolvedTarget,
         });
         expect(info?.instruction).toContain('::');
 

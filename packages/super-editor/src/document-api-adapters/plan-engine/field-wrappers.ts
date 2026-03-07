@@ -120,7 +120,7 @@ export function fieldsInsertWrapper(
       });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -161,7 +161,7 @@ export function fieldsRebuildWrapper(
         ...node.attrs,
         resolvedNumber: '', // clear cached result to force re-evaluation
       });
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -200,7 +200,7 @@ export function fieldsRemoveWrapper(
       const node = tr.doc.nodeAt(resolved.pos);
       if (!node) return false;
       tr.delete(resolved.pos, resolved.pos + node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },

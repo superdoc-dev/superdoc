@@ -33,8 +33,12 @@ Returns a LinkMutationResult indicating success with the updated link address or
 | `patch.tooltip` | string | no |  |
 | `target` | object(kind="inline") | yes |  |
 | `target.anchor` | object | yes |  |
-| `target.anchor.end` | object | no |  |
-| `target.anchor.start` | object | no |  |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
 | `target.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `target.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
 
@@ -52,8 +56,14 @@ Returns a LinkMutationResult indicating success with the updated link address or
   },
   "target": {
     "anchor": {
-      "end": {},
-      "start": {}
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
     },
     "kind": "inline",
     "nodeType": "hyperlink"
@@ -69,8 +79,12 @@ Returns a LinkMutationResult indicating success with the updated link address or
 | --- | --- | --- | --- |
 | `link` | object(kind="inline") | yes |  |
 | `link.anchor` | object | yes |  |
-| `link.anchor.end` | object | no |  |
-| `link.anchor.start` | object | no |  |
+| `link.anchor.end` | Position | yes | Position |
+| `link.anchor.end.blockId` | string | yes |  |
+| `link.anchor.end.offset` | integer | yes |  |
+| `link.anchor.start` | Position | yes | Position |
+| `link.anchor.start.blockId` | string | yes |  |
+| `link.anchor.start.offset` | integer | yes |  |
 | `link.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `link.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
 | `success` | `true` | yes | Constant: `true` |
@@ -91,8 +105,14 @@ Returns a LinkMutationResult indicating success with the updated link address or
 {
   "link": {
     "anchor": {
-      "end": {},
-      "start": {}
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
     },
     "kind": "inline",
     "nodeType": "hyperlink"
@@ -177,12 +197,16 @@ Returns a LinkMutationResult indicating success with the updated link address or
           "additionalProperties": false,
           "properties": {
             "end": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             },
             "start": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             }
           },
+          "required": [
+            "start",
+            "end"
+          ],
           "type": "object"
         },
         "kind": {
@@ -223,12 +247,16 @@ Returns a LinkMutationResult indicating success with the updated link address or
               "additionalProperties": false,
               "properties": {
                 "end": {
-                  "type": "object"
+                  "$ref": "#/$defs/Position"
                 },
                 "start": {
-                  "type": "object"
+                  "$ref": "#/$defs/Position"
                 }
               },
+              "required": [
+                "start",
+                "end"
+              ],
               "type": "object"
             },
             "kind": {
@@ -302,12 +330,16 @@ Returns a LinkMutationResult indicating success with the updated link address or
           "additionalProperties": false,
           "properties": {
             "end": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             },
             "start": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             }
           },
+          "required": [
+            "start",
+            "end"
+          ],
           "type": "object"
         },
         "kind": {

@@ -115,7 +115,7 @@ export function crossRefsInsertWrapper(
       });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -160,7 +160,7 @@ export function crossRefsRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },

@@ -29,14 +29,40 @@ Returns a CitationSourceMutationResult indicating success with the source addres
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `fields` | object | yes |  |
-| `type` | string | yes |  |
+| `fields.authors` | object[] | no |  |
+| `fields.city` | string | no |  |
+| `fields.doi` | string | no |  |
+| `fields.edition` | string | no |  |
+| `fields.editor` | object[] | no |  |
+| `fields.issue` | string | no |  |
+| `fields.journalName` | string | no |  |
+| `fields.medium` | string | no |  |
+| `fields.pages` | string | no |  |
+| `fields.publisher` | string | no |  |
+| `fields.shortTitle` | string | no |  |
+| `fields.standardNumber` | string | no |  |
+| `fields.title` | string | no |  |
+| `fields.translator` | object[] | no |  |
+| `fields.url` | string | no |  |
+| `fields.volume` | string | no |  |
+| `fields.year` | string | no |  |
+| `type` | enum | yes | `"book"`, `"journalArticle"`, `"conferenceProceedings"`, `"report"`, `"website"`, `"patent"`, `"case"`, `"statute"`, `"thesis"`, `"film"`, `"interview"`, `"misc"` |
 
 ### Example request
 
 ```json
 {
-  "fields": {},
-  "type": "example"
+  "fields": {
+    "authors": [
+      {
+        "first": "example",
+        "last": "example",
+        "middle": "example"
+      }
+    ],
+    "title": "example"
+  },
+  "type": "book"
 }
 ```
 
@@ -94,10 +120,131 @@ Returns a CitationSourceMutationResult indicating success with the source addres
   "additionalProperties": false,
   "properties": {
     "fields": {
+      "additionalProperties": false,
+      "properties": {
+        "authors": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "city": {
+          "type": "string"
+        },
+        "doi": {
+          "type": "string"
+        },
+        "edition": {
+          "type": "string"
+        },
+        "editor": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "issue": {
+          "type": "string"
+        },
+        "journalName": {
+          "type": "string"
+        },
+        "medium": {
+          "type": "string"
+        },
+        "pages": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "shortTitle": {
+          "type": "string"
+        },
+        "standardNumber": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "translator": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "url": {
+          "type": "string"
+        },
+        "volume": {
+          "type": "string"
+        },
+        "year": {
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "type": {
-      "type": "string"
+      "enum": [
+        "book",
+        "journalArticle",
+        "conferenceProceedings",
+        "report",
+        "website",
+        "patent",
+        "case",
+        "statute",
+        "thesis",
+        "film",
+        "interview",
+        "misc"
+      ]
     }
   },
   "required": [

@@ -29,7 +29,13 @@ Returns a CitationMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | object(kind="inline") | yes |  |
-| `target.anchor` | object | yes |  |
+| `target.anchor` | InlineAnchor | yes | InlineAnchor |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
 | `target.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `target.nodeType` | `"citation"` | yes | Constant: `"citation"` |
 
@@ -38,7 +44,16 @@ Returns a CitationMutationResult indicating success or a failure.
 ```json
 {
   "target": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "citation"
   }
@@ -52,7 +67,13 @@ Returns a CitationMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `citation` | object(kind="inline") | yes |  |
-| `citation.anchor` | object | yes |  |
+| `citation.anchor` | InlineAnchor | yes | InlineAnchor |
+| `citation.anchor.end` | Position | yes | Position |
+| `citation.anchor.end.blockId` | string | yes |  |
+| `citation.anchor.end.offset` | integer | yes |  |
+| `citation.anchor.start` | Position | yes | Position |
+| `citation.anchor.start.blockId` | string | yes |  |
+| `citation.anchor.start.offset` | integer | yes |  |
 | `citation.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `citation.nodeType` | `"citation"` | yes | Constant: `"citation"` |
 | `success` | `true` | yes | Constant: `true` |
@@ -72,7 +93,16 @@ Returns a CitationMutationResult indicating success or a failure.
 ```json
 {
   "citation": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "citation"
   },
@@ -101,7 +131,7 @@ Returns a CitationMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"
@@ -137,7 +167,7 @@ Returns a CitationMutationResult indicating success or a failure.
           "additionalProperties": false,
           "properties": {
             "anchor": {
-              "type": "object"
+              "$ref": "#/$defs/InlineAnchor"
             },
             "kind": {
               "const": "inline"
@@ -207,7 +237,7 @@ Returns a CitationMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"

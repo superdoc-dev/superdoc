@@ -106,10 +106,10 @@ export function indexInsertWrapper(
 ): IndexMutationResult {
   rejectTrackedMode('index.insert', options);
 
-  const nodeId = `index-${Date.now()}`;
-  const address: IndexAddress = { kind: 'block', nodeType: 'index', nodeId };
+  const requestedNodeId = `index-${Date.now()}`;
+  const dryRunAddress: IndexAddress = { kind: 'block', nodeType: 'index', nodeId: requestedNodeId };
 
-  if (options?.dryRun) return indexSuccess(address);
+  if (options?.dryRun) return indexSuccess(dryRunAddress);
 
   const indexType = editor.schema.nodes.documentIndex ?? editor.schema.nodes.index;
   if (!indexType) {
@@ -122,10 +122,13 @@ export function indexInsertWrapper(
     editor,
     () => {
       const instruction = buildIndexInstruction(input.config);
-      const node = indexType.create({ instruction, sdBlockId: nodeId }, editor.schema.nodes.paragraph.create());
+      const node = indexType.create(
+        { instruction, sdBlockId: requestedNodeId },
+        editor.schema.nodes.paragraph.create(),
+      );
       const { tr } = editor.state;
       tr.insert(pos, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -133,7 +136,9 @@ export function indexInsertWrapper(
   );
 
   if (!receiptApplied(receipt)) return indexFailure('NO_OP', 'Insert produced no change.');
-  return indexSuccess(address);
+  const insertedNode = editor.state.doc.nodeAt(pos);
+  const resolvedNodeId = (insertedNode?.attrs?.sdBlockId as string) ?? `index-${pos}`;
+  return indexSuccess({ kind: 'block', nodeType: 'index', nodeId: resolvedNodeId });
 }
 
 export function indexConfigureWrapper(
@@ -167,7 +172,7 @@ export function indexConfigureWrapper(
       const { tr } = editor.state;
       const newAttrs = { ...resolved.node.attrs, instruction: newInstruction };
       tr.setNodeMarkup(resolved.pos, undefined, newAttrs);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -211,7 +216,7 @@ export function indexRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -294,7 +299,7 @@ export function indexEntriesInsertWrapper(
       });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -333,7 +338,7 @@ export function indexEntriesUpdateWrapper(
       if (input.patch?.yomi !== undefined) newAttrs.yomi = input.patch.yomi;
       newAttrs.instruction = buildXeInstructionFromAttrs(newAttrs);
       tr.setNodeMarkup(resolved.pos, undefined, newAttrs);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -361,7 +366,7 @@ export function indexEntriesRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },

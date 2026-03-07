@@ -2194,10 +2194,13 @@ const bookmarkAddressSchema: JsonSchema = objectSchema(
 const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
 
 // --- Link schemas ---
-const linkAnchorSchema: JsonSchema = objectSchema({
-  start: { type: 'object' },
-  end: { type: 'object' },
-});
+const linkAnchorSchema: JsonSchema = objectSchema(
+  {
+    start: ref('Position'),
+    end: ref('Position'),
+  },
+  ['start', 'end'],
+);
 
 const linkAddressSchema: JsonSchema = objectSchema(
   { kind: { const: 'inline' }, nodeType: { const: 'hyperlink' }, anchor: linkAnchorSchema },
@@ -2225,12 +2228,26 @@ const footnoteAddressSchema: JsonSchema = objectSchema(
   ['kind', 'entityType', 'noteId'],
 );
 
+const footnoteConfigScopeSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'document' } }, ['kind']),
+    objectSchema({ kind: { const: 'section' }, sectionId: { type: 'string' } }, ['kind', 'sectionId']),
+  ],
+};
+
+const footnoteNumberingSchema: JsonSchema = objectSchema({
+  format: { enum: ['decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter', 'symbol'] },
+  start: { type: 'integer' },
+  restartPolicy: { enum: ['continuous', 'eachSection', 'eachPage'] },
+  position: { enum: ['pageBottom', 'beneathText', 'sectionEnd', 'documentEnd'] },
+});
+
 const footnoteMutation = refMutationSchemas({ footnote: footnoteAddressSchema }, ['footnote']);
 const footnoteConfig = refConfigSchemas();
 
 // --- CrossRef schemas ---
 const crossRefAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'inline' }, nodeType: { const: 'crossRef' }, anchor: { type: 'object' } },
+  { kind: { const: 'inline' }, nodeType: { const: 'crossRef' }, anchor: ref('InlineAnchor') },
   ['kind', 'nodeType', 'anchor'],
 );
 
@@ -2271,7 +2288,7 @@ const indexAddressSchema: JsonSchema = objectSchema(
 );
 
 const indexEntryAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'inline' }, nodeType: { const: 'indexEntry' }, anchor: { type: 'object' } },
+  { kind: { const: 'inline' }, nodeType: { const: 'indexEntry' }, anchor: ref('InlineAnchor') },
   ['kind', 'nodeType', 'anchor'],
 );
 
@@ -2340,7 +2357,7 @@ const fieldMutation = refMutationSchemas({ field: fieldAddressSchema }, ['field'
 
 // --- Citation schemas ---
 const citationAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'inline' }, nodeType: { const: 'citation' }, anchor: { type: 'object' } },
+  { kind: { const: 'inline' }, nodeType: { const: 'citation' }, anchor: ref('InlineAnchor') },
   ['kind', 'nodeType', 'anchor'],
 );
 
@@ -2358,6 +2375,44 @@ const citationMutation = refMutationSchemas({ citation: citationAddressSchema },
 const citationSourceMutation = refMutationSchemas({ source: citationSourceAddressSchema }, ['source']);
 const bibliographyMutation = refMutationSchemas({ bibliography: bibliographyAddressSchema }, ['bibliography']);
 
+const citationPersonSchema: JsonSchema = objectSchema(
+  {
+    first: { type: 'string' },
+    middle: { type: 'string' },
+    last: { type: 'string' },
+  },
+  ['last'],
+);
+
+const citationSourceFieldsSchema: JsonSchema = objectSchema({
+  title: { type: 'string' },
+  authors: arraySchema(citationPersonSchema),
+  year: { type: 'string' },
+  publisher: { type: 'string' },
+  city: { type: 'string' },
+  journalName: { type: 'string' },
+  volume: { type: 'string' },
+  issue: { type: 'string' },
+  pages: { type: 'string' },
+  url: { type: 'string' },
+  doi: { type: 'string' },
+  edition: { type: 'string' },
+  editor: arraySchema(citationPersonSchema),
+  translator: arraySchema(citationPersonSchema),
+  medium: { type: 'string' },
+  shortTitle: { type: 'string' },
+  standardNumber: { type: 'string' },
+});
+
+const tocCreateLocationSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+    objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+    objectSchema({ kind: { const: 'before' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+    objectSchema({ kind: { const: 'after' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+  ],
+};
+
 // --- Authorities schemas ---
 const authoritiesAddressSchema: JsonSchema = objectSchema(
   { kind: { const: 'block' }, nodeType: { const: 'tableOfAuthorities' }, nodeId: { type: 'string' } },
@@ -2365,7 +2420,7 @@ const authoritiesAddressSchema: JsonSchema = objectSchema(
 );
 
 const authorityEntryAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'inline' }, nodeType: { const: 'authorityEntry' }, anchor: { type: 'object' } },
+  { kind: { const: 'inline' }, nodeType: { const: 'authorityEntry' }, anchor: ref('InlineAnchor') },
   ['kind', 'nodeType', 'anchor'],
 );
 
@@ -5343,7 +5398,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         name: { type: 'string' },
-        at: { type: 'object' },
+        at: textTargetSchema,
         tableColumn: objectSchema({ colFirst: { type: 'integer' }, colLast: { type: 'integer' } }, [
           'colFirst',
           'colLast',
@@ -5374,7 +5429,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'links.insert': {
-    input: objectSchema({ at: { type: 'object' }, destination: linkDestinationSchema }, ['at', 'destination']),
+    input: objectSchema({ at: textTargetSchema, destination: linkDestinationSchema }, ['at', 'destination']),
     ...linkMutation,
   },
   'links.update': {
@@ -5409,7 +5464,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'footnotes.insert': {
     input: objectSchema(
-      { at: { type: 'object' }, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } },
+      { at: textTargetSchema, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } },
       ['at', 'type', 'content'],
     ),
     ...footnoteMutation,
@@ -5429,8 +5484,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         type: { enum: ['footnote', 'endnote'] },
-        scope: { type: 'object' },
-        numbering: { type: 'object' },
+        scope: footnoteConfigScopeSchema,
+        numbering: footnoteNumberingSchema,
       },
       ['type', 'scope'],
     ),
@@ -5449,7 +5504,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'crossRefs.insert': {
-    input: objectSchema({ at: { type: 'object' }, target: crossRefTargetSchema, display: crossRefDisplaySchema }, [
+    input: objectSchema({ at: textTargetSchema, target: crossRefTargetSchema, display: crossRefDisplaySchema }, [
       'at',
       'target',
       'display',
@@ -5477,7 +5532,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'index.insert': {
-    input: objectSchema({ at: { type: 'object' }, config: indexConfigSchema }, ['at']),
+    input: objectSchema({ at: tocCreateLocationSchema, config: indexConfigSchema }, ['at']),
     ...indexMutation,
   },
   'index.configure': {
@@ -5503,7 +5558,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'index.entries.insert': {
-    input: objectSchema({ at: { type: 'object' }, entry: indexEntryDataSchema }, ['at', 'entry']),
+    input: objectSchema({ at: textTargetSchema, entry: indexEntryDataSchema }, ['at', 'entry']),
     ...indexEntryMutation,
   },
   'index.entries.update': {
@@ -5529,7 +5584,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'captions.insert': {
     input: objectSchema(
       {
-        adjacentTo: { type: 'object' },
+        adjacentTo: blockNodeAddressSchema,
         position: { enum: ['above', 'below'] },
         label: { type: 'string' },
         text: { type: 'string' },
@@ -5574,7 +5629,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'fields.insert': {
-    input: objectSchema({ mode: { const: 'raw' }, at: { type: 'object' }, instruction: { type: 'string' } }, [
+    input: objectSchema({ mode: { const: 'raw' }, at: textTargetSchema, instruction: { type: 'string' } }, [
       'mode',
       'at',
       'instruction',
@@ -5602,14 +5657,20 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'citations.insert': {
-    input: objectSchema({ at: { type: 'object' }, sourceIds: { type: 'array', items: { type: 'string' } } }, [
+    input: objectSchema({ at: textTargetSchema, sourceIds: { type: 'array', items: { type: 'string' } } }, [
       'at',
       'sourceIds',
     ]),
     ...citationMutation,
   },
   'citations.update': {
-    input: objectSchema({ target: citationAddressSchema, patch: { type: 'object' } }, ['target', 'patch']),
+    input: objectSchema(
+      {
+        target: citationAddressSchema,
+        patch: objectSchema({ sourceIds: { type: 'array', items: { type: 'string' } } }),
+      },
+      ['target', 'patch'],
+    ),
     ...citationMutation,
   },
   'citations.remove': {
@@ -5627,11 +5688,35 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'citations.sources.insert': {
-    input: objectSchema({ type: { type: 'string' }, fields: { type: 'object' } }, ['type', 'fields']),
+    input: objectSchema(
+      {
+        type: {
+          enum: [
+            'book',
+            'journalArticle',
+            'conferenceProceedings',
+            'report',
+            'website',
+            'patent',
+            'case',
+            'statute',
+            'thesis',
+            'film',
+            'interview',
+            'misc',
+          ],
+        },
+        fields: citationSourceFieldsSchema,
+      },
+      ['type', 'fields'],
+    ),
     ...citationSourceMutation,
   },
   'citations.sources.update': {
-    input: objectSchema({ target: citationSourceAddressSchema, patch: { type: 'object' } }, ['target', 'patch']),
+    input: objectSchema({ target: citationSourceAddressSchema, patch: citationSourceFieldsSchema }, [
+      'target',
+      'patch',
+    ]),
     ...citationSourceMutation,
   },
   'citations.sources.remove': {
@@ -5645,7 +5730,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'citations.bibliography.insert': {
-    input: objectSchema({ at: { type: 'object' }, style: { type: 'string' } }, ['at']),
+    input: objectSchema({ at: tocCreateLocationSchema, style: { type: 'string' } }, ['at']),
     ...bibliographyMutation,
   },
   'citations.bibliography.rebuild': {
@@ -5673,7 +5758,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'authorities.insert': {
-    input: objectSchema({ at: { type: 'object' }, config: authoritiesConfigSchema }, ['at']),
+    input: objectSchema({ at: tocCreateLocationSchema, config: authoritiesConfigSchema }, ['at']),
     ...authoritiesMutation,
   },
   'authorities.configure': {
@@ -5703,7 +5788,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
   },
   'authorities.entries.insert': {
-    input: objectSchema({ at: { type: 'object' }, entry: authorityEntryDataSchema }, ['at', 'entry']),
+    input: objectSchema({ at: textTargetSchema, entry: authorityEntryDataSchema }, ['at', 'entry']),
     ...authorityEntryMutation,
   },
   'authorities.entries.update': {

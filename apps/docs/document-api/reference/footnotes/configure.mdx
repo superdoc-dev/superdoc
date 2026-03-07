@@ -29,15 +29,24 @@ Returns a FootnoteConfigResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `numbering` | object | no |  |
-| `scope` | object | yes |  |
+| `numbering.format` | enum | no | `"decimal"`, `"lowerRoman"`, `"upperRoman"`, `"lowerLetter"`, `"upperLetter"`, `"symbol"` |
+| `numbering.position` | enum | no | `"pageBottom"`, `"beneathText"`, `"sectionEnd"`, `"documentEnd"` |
+| `numbering.restartPolicy` | enum | no | `"continuous"`, `"eachSection"`, `"eachPage"` |
+| `numbering.start` | integer | no |  |
+| `scope` | object(kind="document") \\| object(kind="section") | yes | One of: object(kind="document"), object(kind="section") |
 | `type` | enum | yes | `"footnote"`, `"endnote"` |
 
 ### Example request
 
 ```json
 {
-  "numbering": {},
-  "scope": {},
+  "numbering": {
+    "format": "decimal",
+    "start": 0
+  },
+  "scope": {
+    "kind": "document"
+  },
   "type": "footnote"
 }
 ```
@@ -87,10 +96,70 @@ Returns a FootnoteConfigResult indicating success or a failure.
   "additionalProperties": false,
   "properties": {
     "numbering": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "decimal",
+            "lowerRoman",
+            "upperRoman",
+            "lowerLetter",
+            "upperLetter",
+            "symbol"
+          ]
+        },
+        "position": {
+          "enum": [
+            "pageBottom",
+            "beneathText",
+            "sectionEnd",
+            "documentEnd"
+          ]
+        },
+        "restartPolicy": {
+          "enum": [
+            "continuous",
+            "eachSection",
+            "eachPage"
+          ]
+        },
+        "start": {
+          "type": "integer"
+        }
+      },
       "type": "object"
     },
     "scope": {
-      "type": "object"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "document"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "section"
+            },
+            "sectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sectionId"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "type": {
       "enum": [

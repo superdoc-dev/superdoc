@@ -36,7 +36,14 @@ function isCaptionParagraph(node: ProseMirrorNode): boolean {
   if (node.type.name !== 'paragraph') return false;
   const styleName = (node.attrs?.styleName as string) ?? '';
   const styleId = (node.attrs?.styleId as string) ?? '';
-  return CAPTION_STYLE_NAMES.has(styleName) || CAPTION_STYLE_NAMES.has(styleId);
+  if (CAPTION_STYLE_NAMES.has(styleName) || CAPTION_STYLE_NAMES.has(styleId)) return true;
+
+  // Fallback for schemas/configurations that drop style attrs:
+  // treat paragraphs containing a SEQ field as captions.
+  const seqField = findSeqField(node);
+  if (!seqField) return false;
+  const instruction = (seqField.attrs?.instruction as string) ?? '';
+  return instruction.trim().startsWith('SEQ ');
 }
 
 function findSeqField(node: ProseMirrorNode): ProseMirrorNode | null {

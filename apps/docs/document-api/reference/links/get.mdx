@@ -30,8 +30,12 @@ Returns a LinkInfo object with the link's destination, tooltip, and display text
 | --- | --- | --- | --- |
 | `target` | object(kind="inline") | yes |  |
 | `target.anchor` | object | yes |  |
-| `target.anchor.end` | object | no |  |
-| `target.anchor.start` | object | no |  |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
 | `target.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `target.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
 
@@ -41,8 +45,14 @@ Returns a LinkInfo object with the link's destination, tooltip, and display text
 {
   "target": {
     "anchor": {
-      "end": {},
-      "start": {}
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
     },
     "kind": "inline",
     "nodeType": "hyperlink"
@@ -83,12 +93,16 @@ _No fields._
           "additionalProperties": false,
           "properties": {
             "end": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             },
             "start": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             }
           },
+          "required": [
+            "start",
+            "end"
+          ],
           "type": "object"
         },
         "kind": {

@@ -28,7 +28,7 @@ Returns an AuthoritiesMutationResult indicating success with the TOA address or 
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `at` | object | yes |  |
+| `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | yes | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
 | `config` | object | no |  |
 | `config.category` | integer | no |  |
 | `config.entryPageSeparator` | string | no |  |
@@ -41,7 +41,9 @@ Returns an AuthoritiesMutationResult indicating success with the TOA address or 
 
 ```json
 {
-  "at": {},
+  "at": {
+    "kind": "documentStart"
+  },
   "config": {
     "category": 1,
     "entryPageSeparator": "example"
@@ -103,7 +105,64 @@ Returns an AuthoritiesMutationResult indicating success with the TOA address or 
   "additionalProperties": false,
   "properties": {
     "at": {
-      "type": "object"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentStart"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentEnd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "before"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "after"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "config": {
       "additionalProperties": false,

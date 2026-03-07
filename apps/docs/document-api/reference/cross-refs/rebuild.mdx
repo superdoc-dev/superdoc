@@ -29,7 +29,13 @@ Returns a CrossRefMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | object(kind="inline") | yes |  |
-| `target.anchor` | object | yes |  |
+| `target.anchor` | InlineAnchor | yes | InlineAnchor |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
 | `target.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `target.nodeType` | `"crossRef"` | yes | Constant: `"crossRef"` |
 
@@ -38,7 +44,16 @@ Returns a CrossRefMutationResult indicating success or a failure.
 ```json
 {
   "target": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "crossRef"
   }
@@ -52,7 +67,13 @@ Returns a CrossRefMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `crossRef` | object(kind="inline") | yes |  |
-| `crossRef.anchor` | object | yes |  |
+| `crossRef.anchor` | InlineAnchor | yes | InlineAnchor |
+| `crossRef.anchor.end` | Position | yes | Position |
+| `crossRef.anchor.end.blockId` | string | yes |  |
+| `crossRef.anchor.end.offset` | integer | yes |  |
+| `crossRef.anchor.start` | Position | yes | Position |
+| `crossRef.anchor.start.blockId` | string | yes |  |
+| `crossRef.anchor.start.offset` | integer | yes |  |
 | `crossRef.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `crossRef.nodeType` | `"crossRef"` | yes | Constant: `"crossRef"` |
 | `success` | `true` | yes | Constant: `true` |
@@ -72,7 +93,16 @@ Returns a CrossRefMutationResult indicating success or a failure.
 ```json
 {
   "crossRef": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "crossRef"
   },
@@ -102,7 +132,7 @@ Returns a CrossRefMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"
@@ -138,7 +168,7 @@ Returns a CrossRefMutationResult indicating success or a failure.
           "additionalProperties": false,
           "properties": {
             "anchor": {
-              "type": "object"
+              "$ref": "#/$defs/InlineAnchor"
             },
             "kind": {
               "const": "inline"
@@ -208,7 +238,7 @@ Returns a CrossRefMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"

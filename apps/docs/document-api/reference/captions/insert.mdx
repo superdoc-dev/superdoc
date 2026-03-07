@@ -28,7 +28,10 @@ Returns a CaptionMutationResult indicating success with the caption address or a
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `adjacentTo` | object | yes |  |
+| `adjacentTo` | BlockNodeAddress | yes | BlockNodeAddress |
+| `adjacentTo.kind` | `"block"` | yes | Constant: `"block"` |
+| `adjacentTo.nodeId` | string | yes |  |
+| `adjacentTo.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 | `label` | string | yes |  |
 | `position` | enum | yes | `"above"`, `"below"` |
 | `text` | string | no |  |
@@ -37,7 +40,11 @@ Returns a CaptionMutationResult indicating success with the caption address or a
 
 ```json
 {
-  "adjacentTo": {},
+  "adjacentTo": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
   "label": "Paragraph 1",
   "position": "above",
   "text": "Hello, world."
@@ -98,7 +105,7 @@ Returns a CaptionMutationResult indicating success with the caption address or a
   "additionalProperties": false,
   "properties": {
     "adjacentTo": {
-      "type": "object"
+      "$ref": "#/$defs/BlockNodeAddress"
     },
     "label": {
       "type": "string"

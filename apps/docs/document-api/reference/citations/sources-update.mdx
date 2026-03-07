@@ -29,6 +29,23 @@ Returns a CitationSourceMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `patch` | object | yes |  |
+| `patch.authors` | object[] | no |  |
+| `patch.city` | string | no |  |
+| `patch.doi` | string | no |  |
+| `patch.edition` | string | no |  |
+| `patch.editor` | object[] | no |  |
+| `patch.issue` | string | no |  |
+| `patch.journalName` | string | no |  |
+| `patch.medium` | string | no |  |
+| `patch.pages` | string | no |  |
+| `patch.publisher` | string | no |  |
+| `patch.shortTitle` | string | no |  |
+| `patch.standardNumber` | string | no |  |
+| `patch.title` | string | no |  |
+| `patch.translator` | object[] | no |  |
+| `patch.url` | string | no |  |
+| `patch.volume` | string | no |  |
+| `patch.year` | string | no |  |
 | `target` | object(kind="entity") | yes |  |
 | `target.entityType` | `"citationSource"` | yes | Constant: `"citationSource"` |
 | `target.kind` | `"entity"` | yes | Constant: `"entity"` |
@@ -38,7 +55,16 @@ Returns a CitationSourceMutationResult indicating success or a failure.
 
 ```json
 {
-  "patch": {},
+  "patch": {
+    "authors": [
+      {
+        "first": "example",
+        "last": "example",
+        "middle": "example"
+      }
+    ],
+    "title": "example"
+  },
   "target": {
     "entityType": "citationSource",
     "kind": "entity",
@@ -101,6 +127,114 @@ Returns a CitationSourceMutationResult indicating success or a failure.
   "additionalProperties": false,
   "properties": {
     "patch": {
+      "additionalProperties": false,
+      "properties": {
+        "authors": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "city": {
+          "type": "string"
+        },
+        "doi": {
+          "type": "string"
+        },
+        "edition": {
+          "type": "string"
+        },
+        "editor": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "issue": {
+          "type": "string"
+        },
+        "journalName": {
+          "type": "string"
+        },
+        "medium": {
+          "type": "string"
+        },
+        "pages": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "shortTitle": {
+          "type": "string"
+        },
+        "standardNumber": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "translator": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "url": {
+          "type": "string"
+        },
+        "volume": {
+          "type": "string"
+        },
+        "year": {
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "target": {

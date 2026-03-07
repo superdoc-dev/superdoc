@@ -35,7 +35,13 @@ Returns an AuthorityEntryMutationResult indicating success or a failure.
 | `patch.longCitation` | string | no |  |
 | `patch.shortCitation` | string | no |  |
 | `target` | object(kind="inline") | yes |  |
-| `target.anchor` | object | yes |  |
+| `target.anchor` | InlineAnchor | yes | InlineAnchor |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
 | `target.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `target.nodeType` | `"authorityEntry"` | yes | Constant: `"authorityEntry"` |
 
@@ -48,7 +54,16 @@ Returns an AuthorityEntryMutationResult indicating success or a failure.
     "shortCitation": "example"
   },
   "target": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "authorityEntry"
   }
@@ -62,7 +77,13 @@ Returns an AuthorityEntryMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `entry` | object(kind="inline") | yes |  |
-| `entry.anchor` | object | yes |  |
+| `entry.anchor` | InlineAnchor | yes | InlineAnchor |
+| `entry.anchor.end` | Position | yes | Position |
+| `entry.anchor.end.blockId` | string | yes |  |
+| `entry.anchor.end.offset` | integer | yes |  |
+| `entry.anchor.start` | Position | yes | Position |
+| `entry.anchor.start.blockId` | string | yes |  |
+| `entry.anchor.start.offset` | integer | yes |  |
 | `entry.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `entry.nodeType` | `"authorityEntry"` | yes | Constant: `"authorityEntry"` |
 | `success` | `true` | yes | Constant: `true` |
@@ -82,7 +103,16 @@ Returns an AuthorityEntryMutationResult indicating success or a failure.
 ```json
 {
   "entry": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "authorityEntry"
   },
@@ -140,7 +170,7 @@ Returns an AuthorityEntryMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"
@@ -177,7 +207,7 @@ Returns an AuthorityEntryMutationResult indicating success or a failure.
           "additionalProperties": false,
           "properties": {
             "anchor": {
-              "type": "object"
+              "$ref": "#/$defs/InlineAnchor"
             },
             "kind": {
               "const": "inline"
@@ -247,7 +277,7 @@ Returns an AuthorityEntryMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"

@@ -28,14 +28,27 @@ Returns a LinkMutationResult indicating success with the link address or a failu
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `at` | object | yes |  |
+| `at` | TextTarget | yes | TextTarget |
+| `at.kind` | `"text"` | yes | Constant: `"text"` |
+| `at.segments` | TextSegment[] | yes |  |
 | `destination` | object(kind="external") \\| object(kind="internal") | yes | One of: object(kind="external"), object(kind="internal") |
 
 ### Example request
 
 ```json
 {
-  "at": {},
+  "at": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
   "destination": {
     "href": "example",
     "kind": "external",
@@ -52,8 +65,12 @@ Returns a LinkMutationResult indicating success with the link address or a failu
 | --- | --- | --- | --- |
 | `link` | object(kind="inline") | yes |  |
 | `link.anchor` | object | yes |  |
-| `link.anchor.end` | object | no |  |
-| `link.anchor.start` | object | no |  |
+| `link.anchor.end` | Position | yes | Position |
+| `link.anchor.end.blockId` | string | yes |  |
+| `link.anchor.end.offset` | integer | yes |  |
+| `link.anchor.start` | Position | yes | Position |
+| `link.anchor.start.blockId` | string | yes |  |
+| `link.anchor.start.offset` | integer | yes |  |
 | `link.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `link.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
 | `success` | `true` | yes | Constant: `true` |
@@ -74,8 +91,14 @@ Returns a LinkMutationResult indicating success with the link address or a failu
 {
   "link": {
     "anchor": {
-      "end": {},
-      "start": {}
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
     },
     "kind": "inline",
     "nodeType": "hyperlink"
@@ -103,7 +126,7 @@ Returns a LinkMutationResult indicating success with the link address or a failu
   "additionalProperties": false,
   "properties": {
     "at": {
-      "type": "object"
+      "$ref": "#/$defs/TextTarget"
     },
     "destination": {
       "oneOf": [
@@ -171,12 +194,16 @@ Returns a LinkMutationResult indicating success with the link address or a failu
               "additionalProperties": false,
               "properties": {
                 "end": {
-                  "type": "object"
+                  "$ref": "#/$defs/Position"
                 },
                 "start": {
-                  "type": "object"
+                  "$ref": "#/$defs/Position"
                 }
               },
+              "required": [
+                "start",
+                "end"
+              ],
               "type": "object"
             },
             "kind": {
@@ -250,12 +277,16 @@ Returns a LinkMutationResult indicating success with the link address or a failu
           "additionalProperties": false,
           "properties": {
             "end": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             },
             "start": {
-              "type": "object"
+              "$ref": "#/$defs/Position"
             }
           },
+          "required": [
+            "start",
+            "end"
+          ],
           "type": "object"
         },
         "kind": {

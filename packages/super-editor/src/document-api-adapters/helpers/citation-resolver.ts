@@ -186,7 +186,10 @@ interface BibliographyPartState {
 
 export function getSourcesFromConverter(editor: Editor): CitationSourceRecord[] {
   const converter = (editor as unknown as { converter?: { bibliographyPart?: BibliographyPartState } }).converter;
-  return converter?.bibliographyPart?.sources ?? [];
+  if (!converter) return [];
+  converter.bibliographyPart ??= {};
+  converter.bibliographyPart.sources ??= [];
+  return converter.bibliographyPart.sources;
 }
 
 export function resolveSourceTarget(editor: Editor, target: CitationSourceAddress): CitationSourceRecord {

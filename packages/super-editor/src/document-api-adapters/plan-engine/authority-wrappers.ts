@@ -106,10 +106,14 @@ export function authoritiesInsertWrapper(
 ): AuthoritiesMutationResult {
   rejectTrackedMode('authorities.insert', options);
 
-  const nodeId = `toa-${Date.now()}`;
-  const address: AuthoritiesAddress = { kind: 'block', nodeType: 'tableOfAuthorities', nodeId };
+  const requestedNodeId = `toa-${Date.now()}`;
+  const dryRunAddress: AuthoritiesAddress = {
+    kind: 'block',
+    nodeType: 'tableOfAuthorities',
+    nodeId: requestedNodeId,
+  };
 
-  if (options?.dryRun) return toaSuccess(address);
+  if (options?.dryRun) return toaSuccess(dryRunAddress);
 
   const toaType = editor.schema.nodes.tableOfAuthorities;
   if (!toaType) {
@@ -125,12 +129,12 @@ export function authoritiesInsertWrapper(
     editor,
     () => {
       const instruction = buildToaInstruction(input.config);
-      const attrs: Record<string, unknown> = { instruction, sdBlockId: nodeId };
+      const attrs: Record<string, unknown> = { instruction, sdBlockId: requestedNodeId };
       if (input.config?.category !== undefined) attrs.category = input.config.category;
       const node = toaType.create(attrs, editor.schema.nodes.paragraph.create());
       const { tr } = editor.state;
       tr.insert(pos, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -138,7 +142,9 @@ export function authoritiesInsertWrapper(
   );
 
   if (!receiptApplied(receipt)) return toaFailure('NO_OP', 'Insert produced no change.');
-  return toaSuccess(address);
+  const insertedNode = editor.state.doc.nodeAt(pos);
+  const resolvedNodeId = (insertedNode?.attrs?.sdBlockId as string) ?? `toa-${pos}`;
+  return toaSuccess({ kind: 'block', nodeType: 'tableOfAuthorities', nodeId: resolvedNodeId });
 }
 
 export function authoritiesConfigureWrapper(
@@ -176,7 +182,7 @@ export function authoritiesConfigureWrapper(
       const newAttrs: Record<string, unknown> = { ...resolved.node.attrs, instruction: newInstruction };
       if (input.patch.category !== undefined) newAttrs.category = input.patch.category;
       tr.setNodeMarkup(resolved.pos, undefined, newAttrs);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -218,7 +224,7 @@ export function authoritiesRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -298,7 +304,7 @@ export function authorityEntriesInsertWrapper(
       });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -334,7 +340,7 @@ export function authorityEntriesUpdateWrapper(
       if (input.patch.italic !== undefined) newAttrs.italic = input.patch.italic;
       newAttrs.instruction = buildTaInstructionFromAttrs(newAttrs);
       tr.setNodeMarkup(resolved.pos, undefined, newAttrs);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -362,7 +368,7 @@ export function authorityEntriesRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },

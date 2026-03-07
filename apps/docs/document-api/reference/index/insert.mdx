@@ -28,7 +28,7 @@ Returns an IndexMutationResult indicating success with the index address or a fa
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `at` | object | yes |  |
+| `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | yes | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
 | `config` | object | no |  |
 | `config.accentedSorting` | boolean | no |  |
 | `config.columns` | integer | no |  |
@@ -47,7 +47,9 @@ Returns an IndexMutationResult indicating success with the index address or a fa
 
 ```json
 {
-  "at": {},
+  "at": {
+    "kind": "documentStart"
+  },
   "config": {
     "entryPageSeparator": "example",
     "headingSeparator": "example"
@@ -109,7 +111,64 @@ Returns an IndexMutationResult indicating success with the index address or a fa
   "additionalProperties": false,
   "properties": {
     "at": {
-      "type": "object"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentStart"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentEnd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "before"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "after"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "config": {
       "additionalProperties": false,

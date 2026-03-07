@@ -28,7 +28,9 @@ Returns a FieldMutationResult indicating success with the field address or a fai
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `at` | object | yes |  |
+| `at` | TextTarget | yes | TextTarget |
+| `at.kind` | `"text"` | yes | Constant: `"text"` |
+| `at.segments` | TextSegment[] | yes |  |
 | `instruction` | string | yes |  |
 | `mode` | `"raw"` | yes | Constant: `"raw"` |
 
@@ -36,7 +38,18 @@ Returns a FieldMutationResult indicating success with the field address or a fai
 
 ```json
 {
-  "at": {},
+  "at": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
   "instruction": "example",
   "mode": "raw"
 }
@@ -98,7 +111,7 @@ Returns a FieldMutationResult indicating success with the field address or a fai
   "additionalProperties": false,
   "properties": {
     "at": {
-      "type": "object"
+      "$ref": "#/$defs/TextTarget"
     },
     "instruction": {
       "type": "string"

@@ -137,7 +137,7 @@ export function captionsInsertWrapper(
 
       const { tr } = editor.state;
       tr.insert(pos, captionParagraph);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -188,7 +188,7 @@ export function captionsUpdateWrapper(
         tr.delete(trailingTextStart, contentEnd);
       }
 
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -216,7 +216,7 @@ export function captionsRemoveWrapper(
     () => {
       const { tr } = editor.state;
       tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },
@@ -260,7 +260,7 @@ export function captionsConfigureWrapper(
       });
 
       if (!changed) return false;
-      editor.view!.dispatch(tr);
+      editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
     },

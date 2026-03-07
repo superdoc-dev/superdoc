@@ -29,7 +29,13 @@ Returns an IndexEntryMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | object(kind="inline") | yes |  |
-| `target.anchor` | object | yes |  |
+| `target.anchor` | InlineAnchor | yes | InlineAnchor |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
 | `target.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `target.nodeType` | `"indexEntry"` | yes | Constant: `"indexEntry"` |
 
@@ -38,7 +44,16 @@ Returns an IndexEntryMutationResult indicating success or a failure.
 ```json
 {
   "target": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "indexEntry"
   }
@@ -52,7 +67,13 @@ Returns an IndexEntryMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `entry` | object(kind="inline") | yes |  |
-| `entry.anchor` | object | yes |  |
+| `entry.anchor` | InlineAnchor | yes | InlineAnchor |
+| `entry.anchor.end` | Position | yes | Position |
+| `entry.anchor.end.blockId` | string | yes |  |
+| `entry.anchor.end.offset` | integer | yes |  |
+| `entry.anchor.start` | Position | yes | Position |
+| `entry.anchor.start.blockId` | string | yes |  |
+| `entry.anchor.start.offset` | integer | yes |  |
 | `entry.kind` | `"inline"` | yes | Constant: `"inline"` |
 | `entry.nodeType` | `"indexEntry"` | yes | Constant: `"indexEntry"` |
 | `success` | `true` | yes | Constant: `true` |
@@ -72,7 +93,16 @@ Returns an IndexEntryMutationResult indicating success or a failure.
 ```json
 {
   "entry": {
-    "anchor": {},
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
     "kind": "inline",
     "nodeType": "indexEntry"
   },
@@ -101,7 +131,7 @@ Returns an IndexEntryMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"
@@ -137,7 +167,7 @@ Returns an IndexEntryMutationResult indicating success or a failure.
           "additionalProperties": false,
           "properties": {
             "anchor": {
-              "type": "object"
+              "$ref": "#/$defs/InlineAnchor"
             },
             "kind": {
               "const": "inline"
@@ -207,7 +237,7 @@ Returns an IndexEntryMutationResult indicating success or a failure.
       "additionalProperties": false,
       "properties": {
         "anchor": {
-          "type": "object"
+          "$ref": "#/$defs/InlineAnchor"
         },
         "kind": {
           "const": "inline"

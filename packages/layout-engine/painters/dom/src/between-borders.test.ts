@@ -4,7 +4,12 @@ import {
   getFragmentParagraphBorders,
   computeBetweenBorderFlags,
   type BlockLookup,
-} from './renderer.js';
+  type BetweenBorderInfo,
+} from './features/paragraph-borders/index.js';
+
+/** Helper to create BetweenBorderInfo for tests that previously passed a boolean. */
+const betweenOn: BetweenBorderInfo = { showBetweenBorder: true, suppressTopBorder: false, gapBelow: 0 };
+const betweenOff: BetweenBorderInfo = { showBetweenBorder: false, suppressTopBorder: false, gapBelow: 0 };
 import { createDomPainter } from './index.js';
 import type {
   ParagraphBorders,
@@ -123,7 +128,7 @@ describe('applyParagraphBorderStyles — between borders', () => {
       top: { style: 'solid', width: 1, color: '#000' },
       between: { style: 'solid', width: 2, color: '#FF0000' },
     };
-    applyParagraphBorderStyles(e, borders, false);
+    applyParagraphBorderStyles(e, borders, betweenOff);
     expect(e.style.getPropertyValue('border-top-style')).toBe('solid');
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('');
   });
@@ -136,7 +141,7 @@ describe('applyParagraphBorderStyles — between borders', () => {
 
   it('applies between border as bottom border when showBetweenBorder is true', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { style: 'dashed', width: 3, color: '#0F0' } }, true);
+    applyParagraphBorderStyles(e, { between: { style: 'dashed', width: 3, color: '#0F0' } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('dashed');
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('3px');
     expect(e.style.getPropertyValue('border-bottom-color')).toBe('#0F0');
@@ -148,7 +153,7 @@ describe('applyParagraphBorderStyles — between borders', () => {
     applyParagraphBorderStyles(
       e,
       { bottom: { style: 'solid', width: 1, color: '#000' }, between: { style: 'double', width: 4, color: '#F00' } },
-      true,
+      betweenOn,
     );
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('double');
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('4px');
@@ -160,7 +165,7 @@ describe('applyParagraphBorderStyles — between borders', () => {
     applyParagraphBorderStyles(
       e,
       { bottom: { style: 'solid', width: 1, color: '#000' }, between: { style: 'double', width: 4, color: '#F00' } },
-      false,
+      betweenOff,
     );
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('solid');
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('1px');
@@ -176,7 +181,7 @@ describe('applyParagraphBorderStyles — between borders', () => {
       left: { style: 'solid', width: 1, color: '#000' },
       between: { style: 'dashed', width: 2, color: '#F00' },
     };
-    applyParagraphBorderStyles(e, borders, true);
+    applyParagraphBorderStyles(e, borders, betweenOn);
     expect(e.style.getPropertyValue('border-top-style')).toBe('solid');
     expect(e.style.getPropertyValue('border-right-style')).toBe('solid');
     expect(e.style.getPropertyValue('border-left-style')).toBe('solid');
@@ -187,32 +192,32 @@ describe('applyParagraphBorderStyles — between borders', () => {
   // --- partial / degenerate border specs ---
   it('handles between border with none style', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { style: 'none', width: 0, color: '#000' } }, true);
+    applyParagraphBorderStyles(e, { between: { style: 'none', width: 0, color: '#000' } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('none');
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('0px');
   });
 
   it('defaults width to 1px when between border has no width', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { style: 'solid', color: '#F00' } }, true);
+    applyParagraphBorderStyles(e, { between: { style: 'solid', color: '#F00' } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('1px');
   });
 
   it('defaults color to #000 when between border has no color', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { style: 'solid', width: 2 } }, true);
+    applyParagraphBorderStyles(e, { between: { style: 'solid', width: 2 } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-color')).toBe('#000');
   });
 
   it('defaults style to solid when between border has no style', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { width: 2, color: '#F00' } }, true);
+    applyParagraphBorderStyles(e, { between: { width: 2, color: '#F00' } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('solid');
   });
 
   it('handles between border with only width', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { width: 5 } }, true);
+    applyParagraphBorderStyles(e, { between: { width: 5 } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('solid');
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('5px');
     expect(e.style.getPropertyValue('border-bottom-color')).toBe('#000');
@@ -220,26 +225,26 @@ describe('applyParagraphBorderStyles — between borders', () => {
 
   it('clamps negative width to 0px', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { style: 'solid', width: -3 } }, true);
+    applyParagraphBorderStyles(e, { between: { style: 'solid', width: -3 } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('0px');
   });
 
   it('handles width=0 (renders as zero-width border)', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { between: { style: 'solid', width: 0 } }, true);
+    applyParagraphBorderStyles(e, { between: { style: 'solid', width: 0 } }, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-width')).toBe('0px');
   });
 
   it('no-ops when showBetweenBorder=true but borders.between is undefined', () => {
     const e = el();
-    applyParagraphBorderStyles(e, { top: { style: 'solid', width: 1 } }, true);
+    applyParagraphBorderStyles(e, { top: { style: 'solid', width: 1 } }, betweenOn);
     // Should not crash, and no bottom border should appear
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('');
   });
 
   it('no-ops when borders is undefined', () => {
     const e = el();
-    applyParagraphBorderStyles(e, undefined, true);
+    applyParagraphBorderStyles(e, undefined, betweenOn);
     expect(e.style.getPropertyValue('border-bottom-style')).toBe('');
   });
 });
@@ -308,7 +313,11 @@ describe('computeBetweenBorderFlags', () => {
 
     const flags = computeBetweenBorderFlags(fragments, lookup);
     expect(flags.has(0)).toBe(true);
-    expect(flags.size).toBe(1);
+    expect(flags.get(0)?.showBetweenBorder).toBe(true);
+    // Fragment 1 also gets an entry (suppressTopBorder)
+    expect(flags.has(1)).toBe(true);
+    expect(flags.get(1)?.suppressTopBorder).toBe(true);
+    expect(flags.size).toBe(2);
   });
 
   it('does not flag when between border is not defined', () => {
@@ -436,8 +445,14 @@ describe('computeBetweenBorderFlags', () => {
 
     const flags = computeBetweenBorderFlags(fragments, lookup);
     expect(flags.has(0)).toBe(true);
+    expect(flags.get(0)?.showBetweenBorder).toBe(true);
     expect(flags.has(1)).toBe(true);
-    expect(flags.size).toBe(2);
+    expect(flags.get(1)?.showBetweenBorder).toBe(true);
+    expect(flags.get(1)?.suppressTopBorder).toBe(true);
+    expect(flags.has(2)).toBe(true);
+    expect(flags.get(2)?.suppressTopBorder).toBe(true);
+    expect(flags.get(2)?.showBetweenBorder).toBe(false);
+    expect(flags.size).toBe(3);
   });
 
   it('breaks chain when middle paragraph has different borders', () => {

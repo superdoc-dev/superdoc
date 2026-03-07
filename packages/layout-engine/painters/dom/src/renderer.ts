@@ -38,6 +38,9 @@ import type {
   ShapeTextContent,
   SolidFillWithAlpha,
   TableAttrs,
+  ListItemFragment,
+  ListBlock,
+  ListMeasure,
   TableBlock,
   TableCellAttrs,
   TableFragment,
@@ -93,6 +96,15 @@ import {
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
+import {
+  computeBetweenBorderFlags,
+  getFragmentParagraphBorders,
+  createParagraphDecorationLayers,
+  applyParagraphBorderStyles,
+  applyParagraphShadingStyles,
+  getParagraphBorderBox,
+  type BetweenBorderInfo,
+} from './features/paragraph-borders/index.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -1976,7 +1988,7 @@ export class DomPainter {
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.has(index)));
+      el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index)));
     });
     this.renderDecorationsForPage(el, page, pageIndex);
     return el;
@@ -2193,7 +2205,7 @@ export class DomPainter {
     // By inserting at the beginning and using z-index: 0, they render below body content
     // which also has z-index values but comes later in DOM order.
     behindDocFragments.forEach(({ fragment, originalIndex }) => {
-      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.has(originalIndex));
+      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
       const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
       // Page-relative anchors already carry absolute page Y coordinates. Adding decoration
       // container offsets would shift them twice and can push header art into body content.
@@ -2210,7 +2222,7 @@ export class DomPainter {
 
     // Render normal fragments in the header/footer container
     normalFragments.forEach(({ fragment, originalIndex }) => {
-      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.has(originalIndex));
+      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
       const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
       if (isPageRelativeVertical) {
         // Convert absolute page Y back to decoration-container local coordinates.
@@ -2335,12 +2347,16 @@ export class DomPainter {
       const key = fragmentKey(fragment);
       const current = existing.get(key);
       const sdtBoundary = sdtBoundaries.get(index);
-      const showBetweenBorder = betweenBorderFlags.has(index);
+      const betweenInfo = betweenBorderFlags.get(index);
 
       if (current) {
         existing.delete(key);
         const sdtBoundaryMismatch = shouldRebuildForSdtBoundary(current.element, sdtBoundary);
-        const betweenBorderMismatch = (current.element.dataset.betweenBorder === 'true') !== showBetweenBorder;
+        // Detect mismatch in any between-border property
+        const betweenBorderMismatch =
+          (current.element.dataset.betweenBorder === 'true') !== (betweenInfo?.showBetweenBorder ?? false) ||
+          (current.element.dataset.suppressTopBorder === 'true') !== (betweenInfo?.suppressTopBorder ?? false) ||
+          (current.element.dataset.gapBelow ?? '') !== (betweenInfo?.gapBelow ? String(betweenInfo.gapBelow) : '');
         // Verify the position mapping is reliable: if mapping the old pmStart doesn't produce
         // the expected new pmStart, the mapping is degenerate (e.g. full-document paste) and
         // we must rebuild to get correct span position attributes.
@@ -2358,7 +2374,7 @@ export class DomPainter {
           mappingUnreliable;
 
         if (needsRebuild) {
-          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, showBetweenBorder);
+          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
           current.signature = fragmentSignature(fragment, this.blockLookup);
@@ -2379,7 +2395,7 @@ export class DomPainter {
         return;
       }
 
-      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, showBetweenBorder);
+      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
       pageEl.insertBefore(fresh, pageEl.children[index] ?? null);
       nextFragments.push({
         key,
@@ -2477,7 +2493,7 @@ export class DomPainter {
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.has(index));
+      const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index));
       el.appendChild(fragmentEl);
       return {
         key: fragmentKey(fragment),
@@ -2523,13 +2539,13 @@ export class DomPainter {
     fragment: Fragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
-    showBetweenBorder?: boolean,
+    betweenInfo?: BetweenBorderInfo,
   ): HTMLElement {
     if (fragment.kind === 'para') {
-      return this.renderParagraphFragment(fragment, context, sdtBoundary, showBetweenBorder);
+      return this.renderParagraphFragment(fragment, context, sdtBoundary, betweenInfo);
     }
     if (fragment.kind === 'list-item') {
-      return this.renderListItemFragment(fragment, context, sdtBoundary, showBetweenBorder);
+      return this.renderListItemFragment(fragment, context, sdtBoundary, betweenInfo);
     }
     if (fragment.kind === 'image') {
       return this.renderImageFragment(fragment, context);
@@ -2556,7 +2572,7 @@ export class DomPainter {
     fragment: ParaFragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
-    showBetweenBorder?: boolean,
+    betweenInfo?: BetweenBorderInfo,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -2616,7 +2632,7 @@ export class DomPainter {
         this.doc,
         fragment.width,
         block.attrs,
-        showBetweenBorder,
+        betweenInfo,
       );
       if (shadingLayer) {
         fragmentEl.appendChild(shadingLayer);
@@ -2624,8 +2640,10 @@ export class DomPainter {
       if (borderLayer) {
         fragmentEl.appendChild(borderLayer);
       }
-      if (showBetweenBorder) {
-        fragmentEl.dataset.betweenBorder = 'true';
+      if (betweenInfo) {
+        if (betweenInfo.showBetweenBorder) fragmentEl.dataset.betweenBorder = 'true';
+        if (betweenInfo.suppressTopBorder) fragmentEl.dataset.suppressTopBorder = 'true';
+        if (betweenInfo.gapBelow) fragmentEl.dataset.gapBelow = String(betweenInfo.gapBelow);
       }
       if (block.attrs?.styleId) {
         fragmentEl.dataset.styleId = block.attrs.styleId;
@@ -3022,7 +3040,7 @@ export class DomPainter {
     fragment: ListItemFragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
-    showBetweenBorder?: boolean,
+    betweenInfo?: BetweenBorderInfo,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -3118,7 +3136,7 @@ export class DomPainter {
         this.doc,
         fragment.width,
         contentAttrs,
-        showBetweenBorder,
+        betweenInfo,
       );
       if (shadingLayer) {
         contentEl.appendChild(shadingLayer);
@@ -3126,8 +3144,10 @@ export class DomPainter {
       if (borderLayer) {
         contentEl.appendChild(borderLayer);
       }
-      if (showBetweenBorder) {
-        fragmentEl.dataset.betweenBorder = 'true';
+      if (betweenInfo) {
+        if (betweenInfo.showBetweenBorder) fragmentEl.dataset.betweenBorder = 'true';
+        if (betweenInfo.suppressTopBorder) fragmentEl.dataset.suppressTopBorder = 'true';
+        if (betweenInfo.gapBelow) fragmentEl.dataset.gapBelow = String(betweenInfo.gapBelow);
       }
       // INTENTIONAL DIVERGENCE: Force list content to left alignment
       // Microsoft Word DOES justify list paragraphs when alignment is 'justify',
@@ -6310,83 +6330,7 @@ const computeSdtBoundaries = (
   return boundaries;
 };
 
-/**
- * Extracts paragraph borders from a fragment's block data.
- * Works for both 'para' and 'list-item' fragment kinds.
- */
-export const getFragmentParagraphBorders = (
-  fragment: Fragment,
-  blockLookup: BlockLookup,
-): ParagraphAttrs['borders'] | undefined => {
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return undefined;
-
-  if (fragment.kind === 'para' && lookup.block.kind === 'paragraph') {
-    return (lookup.block as ParagraphBlock).attrs?.borders;
-  }
-
-  if (fragment.kind === 'list-item' && lookup.block.kind === 'list') {
-    const block = lookup.block as ListBlock;
-    const item = block.items.find((entry) => entry.id === fragment.itemId);
-    return item?.paragraph.attrs?.borders;
-  }
-
-  return undefined;
-};
-
-/**
- * Pre-computes which fragment indices should render a between-border.
- * A between-border renders as a bottom border on fragment `i` when:
- * 1. Fragment `i` is a para or list-item with a `between` border defined
- * 2. Fragment `i` does not continue on the next page (not a page-split)
- * 3. Fragment `i+1` exists, is also para or list-item, and represents a
- *    different logical paragraph (different block, or different list item)
- * 4. Fragment `i+1` is not a continuation from a previous page
- * 5. Fragment `i+1` has matching border definitions (same border group)
- */
-export const computeBetweenBorderFlags = (fragments: readonly Fragment[], blockLookup: BlockLookup): Set<number> => {
-  const flags = new Set<number>();
-
-  for (let i = 0; i < fragments.length - 1; i += 1) {
-    const frag = fragments[i];
-
-    // Only para and list-item fragments can have between borders
-    if (frag.kind !== 'para' && frag.kind !== 'list-item') continue;
-
-    // Skip page-split continuations — the visual break is a page boundary, not a paragraph boundary
-    if (frag.continuesOnNext) continue;
-
-    const borders = getFragmentParagraphBorders(frag, blockLookup);
-    if (!borders?.between) continue;
-
-    const next = fragments[i + 1];
-    if (next.kind !== 'para' && next.kind !== 'list-item') continue;
-
-    // Next fragment continuing from a previous page is a split, not a paragraph boundary
-    if (next.continuesFromPrev) continue;
-
-    // Same paragraph split across lines — not a paragraph boundary
-    if (next.blockId === frag.blockId && next.kind === 'para') continue;
-    // Same list item split across lines — not a paragraph boundary
-    if (
-      next.blockId === frag.blockId &&
-      next.kind === 'list-item' &&
-      frag.kind === 'list-item' &&
-      (next as ListItemFragment).itemId === (frag as ListItemFragment).itemId
-    )
-      continue;
-
-    const nextBorders = getFragmentParagraphBorders(next, blockLookup);
-    if (!nextBorders?.between) continue;
-
-    // Border definitions must match for both fragments to be in the same border group
-    if (hashParagraphBorders(borders) !== hashParagraphBorders(nextBorders)) continue;
-
-    flags.add(i);
-  }
-
-  return flags;
-};
+// getFragmentParagraphBorders, computeBetweenBorderFlags — moved to features/paragraph-borders/
 
 const fragmentKey = (fragment: Fragment): string => {
   if (fragment.kind === 'para') {
@@ -7125,129 +7069,8 @@ const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs)
   }
 };
 
-const getParagraphBorderBox = (
-  fragmentWidth: number,
-  indent?: ParagraphAttrs['indent'],
-): { leftInset: number; width: number } => {
-  const indentLeft = Number.isFinite(indent?.left) ? indent!.left! : 0;
-  const indentRight = Number.isFinite(indent?.right) ? indent!.right! : 0;
-  const firstLine = Number.isFinite(indent?.firstLine) ? indent!.firstLine! : 0;
-  const hanging = Number.isFinite(indent?.hanging) ? indent!.hanging! : 0;
-  const firstLineOffset = firstLine - hanging;
-  const minLeftInset = Math.min(indentLeft, indentLeft + firstLineOffset);
-  const leftInset = Math.max(0, minLeftInset);
-  const rightInset = Math.max(0, indentRight);
-  return {
-    leftInset,
-    width: Math.max(0, fragmentWidth - leftInset - rightInset),
-  };
-};
-
-/**
- * Builds overlay elements for paragraph shading and borders with indent-aware sizing.
- * Returns layers in the order they should be appended (shading below borders).
- */
-const createParagraphDecorationLayers = (
-  doc: Document,
-  fragmentWidth: number,
-  attrs?: ParagraphAttrs,
-  showBetweenBorder?: boolean,
-): { shadingLayer?: HTMLElement; borderLayer?: HTMLElement } => {
-  if (!attrs?.borders && !attrs?.shading) return {};
-  const borderBox = getParagraphBorderBox(fragmentWidth, attrs.indent);
-  const baseStyles = {
-    position: 'absolute',
-    top: '0px',
-    bottom: '0px',
-    left: `${borderBox.leftInset}px`,
-    width: `${borderBox.width}px`,
-    pointerEvents: 'none',
-    boxSizing: 'border-box',
-  } as const;
-
-  let shadingLayer: HTMLElement | undefined;
-  if (attrs.shading) {
-    shadingLayer = doc.createElement('div');
-    shadingLayer.classList.add('superdoc-paragraph-shading');
-    Object.assign(shadingLayer.style, baseStyles);
-    applyParagraphShadingStyles(shadingLayer, attrs.shading);
-  }
-
-  let borderLayer: HTMLElement | undefined;
-  if (attrs.borders) {
-    borderLayer = doc.createElement('div');
-    borderLayer.classList.add('superdoc-paragraph-border');
-    Object.assign(borderLayer.style, baseStyles);
-    borderLayer.style.zIndex = '1';
-    applyParagraphBorderStyles(borderLayer, attrs.borders, showBetweenBorder);
-  }
-
-  return { shadingLayer, borderLayer };
-};
-
-type CssBorderSide = 'top' | 'right' | 'bottom' | 'left';
-const BORDER_SIDES: CssBorderSide[] = ['top', 'right', 'bottom', 'left'];
-
-/**
- * Applies paragraph border styles to an HTML element.
- * Sets CSS border properties (width, style, color) for each side specified in the borders object.
- *
- * @param {HTMLElement} element - The HTML element to apply border styles to
- * @param {ParagraphAttrs['borders']} borders - Optional borders object containing border definitions for top, right, bottom, and left sides
- *
- * @remarks
- * - Sets box-sizing to 'border-box' to ensure borders are included in element dimensions
- * - Each side's border is processed independently - only specified sides receive border styles
- * - Border width defaults to 1px if not specified, and negative widths are clamped to 0px
- * - Border style defaults to 'solid' if not specified or if style is not 'none'
- * - Border color defaults to '#000' (black) if not specified
- * - Border style 'none' is handled specially to ensure no visible border
- *
- * @example
- * ```typescript
- * applyParagraphBorderStyles(paraElement, {
- *   top: { width: 2, style: 'solid', color: '#FF0000' },
- *   bottom: { width: 1, style: 'dashed', color: '#0000FF' }
- * });
- * ```
- */
-export const applyParagraphBorderStyles = (
-  element: HTMLElement,
-  borders?: ParagraphAttrs['borders'],
-  showBetweenBorder?: boolean,
-): void => {
-  if (!borders) return;
-  element.style.boxSizing = 'border-box';
-  BORDER_SIDES.forEach((side) => {
-    const border = borders[side];
-    if (!border) return;
-    setBorderSideStyle(element, side, border);
-  });
-  // Between border renders as a bottom border, overwriting any normal bottom border
-  // when the fragment is within a border group (consecutive paragraphs with matching borders)
-  if (showBetweenBorder && borders.between) {
-    setBorderSideStyle(element, 'bottom', borders.between);
-  }
-};
-
-const setBorderSideStyle = (element: HTMLElement, side: CssBorderSide, border: ParagraphBorder): void => {
-  const cssSide = side;
-  const resolvedStyle =
-    border.style && border.style !== 'none' ? border.style : border.style === 'none' ? 'none' : 'solid';
-  if (resolvedStyle === 'none') {
-    element.style.setProperty(`border-${cssSide}-style`, 'none');
-    element.style.setProperty(`border-${cssSide}-width`, '0px');
-    if (border.color) {
-      element.style.setProperty(`border-${cssSide}-color`, border.color);
-    }
-    return;
-  }
-
-  const width = border.width != null ? Math.max(0, border.width) : undefined;
-  element.style.setProperty(`border-${cssSide}-style`, resolvedStyle);
-  element.style.setProperty(`border-${cssSide}-width`, `${width ?? 1}px`);
-  element.style.setProperty(`border-${cssSide}-color`, border.color ?? '#000');
-};
+// getParagraphBorderBox, createParagraphDecorationLayers, applyParagraphBorderStyles,
+// setBorderSideStyle, applyParagraphShadingStyles — moved to features/paragraph-borders/
 
 const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => {
   if (!attrs?.indent || attrs.indent.left == null) {
@@ -7262,30 +7085,7 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
   };
 };
 
-/**
- * Applies paragraph shading (background color) styles to an HTML element.
- * Sets the CSS background-color property based on the shading fill value.
- *
- * @param {HTMLElement} element - The HTML element to apply shading styles to
- * @param {ParagraphAttrs['shading']} shading - Optional shading object containing fill color definition
- *
- * @remarks
- * - Only applies background color if shading.fill is defined
- * - Currently only supports the `fill` property for solid color backgrounds
- * - Theme-based shading properties (themeColor, themeTint, themeShade) are not yet supported
- * - The fill value should be a valid CSS color string (hex, rgb, named color, etc.)
- *
- * @example
- * ```typescript
- * applyParagraphShadingStyles(paraElement, {
- *   fill: '#FFFF00'
- * });
- * ```
- */
-export const applyParagraphShadingStyles = (element: HTMLElement, shading?: ParagraphAttrs['shading']): void => {
-  if (!shading?.fill) return;
-  element.style.backgroundColor = shading.fill;
-};
+// applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
 
 /**
  * Extracts and slices text runs that belong to a specific line within a paragraph block.

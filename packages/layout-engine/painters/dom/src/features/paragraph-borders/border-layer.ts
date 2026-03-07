@@ -1,0 +1,158 @@
+/**
+ * Paragraph border DOM layer creation and CSS styling.
+ *
+ * Creates absolutely-positioned overlay elements for paragraph borders
+ * and shading, with indent-aware sizing and between-border group support.
+ *
+ * @ooxml w:pPr/w:pBdr — paragraph border properties
+ * @ooxml w:pPr/w:pBdr/w:top, w:bottom, w:left, w:right — side borders
+ * @ooxml w:pPr/w:pBdr/w:between — between border (rendered as bottom within groups)
+ * @ooxml w:pPr/w:shd — paragraph shading (background fill)
+ * @spec  ECMA-376 §17.3.1.24 (pBdr), §17.3.1.31 (shd)
+ */
+import type { ParagraphAttrs, ParagraphBorder } from '@superdoc/contracts';
+import type { BetweenBorderInfo } from './group-analysis.js';
+
+// ─── Border box sizing ─────────────────────────────────────────────
+
+/**
+ * Computes the indent-aware bounding box for paragraph border/shading layers.
+ * Borders hug the paragraph content, inset by left/right/firstLine/hanging indents.
+ */
+export const getParagraphBorderBox = (
+  fragmentWidth: number,
+  indent?: ParagraphAttrs['indent'],
+): { leftInset: number; width: number } => {
+  const indentLeft = Number.isFinite(indent?.left) ? indent!.left! : 0;
+  const indentRight = Number.isFinite(indent?.right) ? indent!.right! : 0;
+  const firstLine = Number.isFinite(indent?.firstLine) ? indent!.firstLine! : 0;
+  const hanging = Number.isFinite(indent?.hanging) ? indent!.hanging! : 0;
+  const firstLineOffset = firstLine - hanging;
+  const minLeftInset = Math.min(indentLeft, indentLeft + firstLineOffset);
+  const leftInset = Math.max(0, minLeftInset);
+  const rightInset = Math.max(0, indentRight);
+  return {
+    leftInset,
+    width: Math.max(0, fragmentWidth - leftInset - rightInset),
+  };
+};
+
+// ─── Decoration layer factory ──────────────────────────────────────
+
+/**
+ * Builds overlay elements for paragraph shading and borders.
+ * Returns layers in the order they should be appended (shading below borders).
+ *
+ * When `betweenInfo` indicates this fragment is in a border group:
+ * - The border layer extends downward by `gapBelow` px into the paragraph-spacing
+ *   gap, making left/right borders visually continuous across the group.
+ * - `suppressTopBorder` hides the top border for non-first group members.
+ * - `showBetweenBorder` replaces the bottom border with the between definition.
+ */
+export const createParagraphDecorationLayers = (
+  doc: Document,
+  fragmentWidth: number,
+  attrs?: ParagraphAttrs,
+  betweenInfo?: BetweenBorderInfo,
+): { shadingLayer?: HTMLElement; borderLayer?: HTMLElement } => {
+  if (!attrs?.borders && !attrs?.shading) return {};
+
+  const borderBox = getParagraphBorderBox(fragmentWidth, attrs.indent);
+
+  // Extend layers into the spacing gap for continuous group borders
+  const gapExtension = betweenInfo?.showBetweenBorder ? betweenInfo.gapBelow : 0;
+  const bottomValue = gapExtension > 0 ? `-${gapExtension}px` : '0px';
+
+  const baseStyles = {
+    position: 'absolute',
+    top: '0px',
+    bottom: bottomValue,
+    left: `${borderBox.leftInset}px`,
+    width: `${borderBox.width}px`,
+    pointerEvents: 'none',
+    boxSizing: 'border-box',
+  } as const;
+
+  let shadingLayer: HTMLElement | undefined;
+  if (attrs.shading) {
+    shadingLayer = doc.createElement('div');
+    shadingLayer.classList.add('superdoc-paragraph-shading');
+    Object.assign(shadingLayer.style, baseStyles);
+    applyParagraphShadingStyles(shadingLayer, attrs.shading);
+  }
+
+  let borderLayer: HTMLElement | undefined;
+  if (attrs.borders) {
+    borderLayer = doc.createElement('div');
+    borderLayer.classList.add('superdoc-paragraph-border');
+    Object.assign(borderLayer.style, baseStyles);
+    borderLayer.style.zIndex = '1';
+    applyParagraphBorderStyles(borderLayer, attrs.borders, betweenInfo);
+  }
+
+  return { shadingLayer, borderLayer };
+};
+
+// ─── Border CSS application ────────────────────────────────────────
+
+type CssBorderSide = 'top' | 'right' | 'bottom' | 'left';
+const BORDER_SIDES: CssBorderSide[] = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * Applies paragraph border styles to an HTML element.
+ *
+ * Handles between-border groups:
+ * - `suppressTopBorder`: skips top border for non-first group members
+ * - `showBetweenBorder`: replaces bottom with the between border definition
+ */
+export const applyParagraphBorderStyles = (
+  element: HTMLElement,
+  borders?: ParagraphAttrs['borders'],
+  betweenInfo?: BetweenBorderInfo,
+): void => {
+  if (!borders) return;
+  const showBetweenBorder = betweenInfo?.showBetweenBorder ?? false;
+  const suppressTopBorder = betweenInfo?.suppressTopBorder ?? false;
+
+  element.style.boxSizing = 'border-box';
+  BORDER_SIDES.forEach((side) => {
+    if (side === 'top' && suppressTopBorder) return;
+    const border = borders[side];
+    if (!border) return;
+    setBorderSideStyle(element, side, border);
+  });
+
+  // Between border renders as a bottom border, overwriting any normal bottom border
+  // when the fragment is within a border group (consecutive paragraphs with matching borders)
+  if (showBetweenBorder && borders.between) {
+    setBorderSideStyle(element, 'bottom', borders.between);
+  }
+};
+
+const setBorderSideStyle = (element: HTMLElement, side: CssBorderSide, border: ParagraphBorder): void => {
+  const resolvedStyle =
+    border.style && border.style !== 'none' ? border.style : border.style === 'none' ? 'none' : 'solid';
+  if (resolvedStyle === 'none') {
+    element.style.setProperty(`border-${side}-style`, 'none');
+    element.style.setProperty(`border-${side}-width`, '0px');
+    if (border.color) {
+      element.style.setProperty(`border-${side}-color`, border.color);
+    }
+    return;
+  }
+
+  const width = border.width != null ? Math.max(0, border.width) : undefined;
+  element.style.setProperty(`border-${side}-style`, resolvedStyle);
+  element.style.setProperty(`border-${side}-width`, `${width ?? 1}px`);
+  element.style.setProperty(`border-${side}-color`, border.color ?? '#000');
+};
+
+// ─── Shading CSS application ───────────────────────────────────────
+
+/**
+ * Applies paragraph shading (background color) to an HTML element.
+ */
+export const applyParagraphShadingStyles = (element: HTMLElement, shading?: ParagraphAttrs['shading']): void => {
+  if (!shading?.fill) return;
+  element.style.backgroundColor = shading.fill;
+};

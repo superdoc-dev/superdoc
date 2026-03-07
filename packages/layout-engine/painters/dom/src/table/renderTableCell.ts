@@ -22,8 +22,12 @@ import { effectiveTableCellSpacing } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { rescaleColumnWidths } from '@superdoc/layout-engine';
 import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
-import type { BlockLookup, FragmentRenderContext } from '../renderer.js';
-import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
+import type { FragmentRenderContext } from '../renderer.js';
+import {
+  applyParagraphBorderStyles,
+  applyParagraphShadingStyles,
+  type BlockLookup,
+} from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
 import {

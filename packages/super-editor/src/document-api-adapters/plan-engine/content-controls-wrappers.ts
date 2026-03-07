@@ -14,6 +14,7 @@
 
 import { Fragment, type Node as ProseMirrorNode, type Schema } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
+import type { ProseMirrorJSON } from '../../core/types/EditorTypes.js';
 import type {
   ContentControlInfo,
   ContentControlMutationResult,
@@ -125,6 +126,13 @@ import { buildBlockIndex, findBlockByNodeIdOnly } from '../helpers/node-address-
 
 function generateSdtId(): string {
   return String(Math.floor(Math.random() * 2147483647));
+}
+
+/** Check whether an ID string is a valid signed 32-bit integer (Word `w:id` requirement). */
+function isValidWordSdtId(id: string): boolean {
+  if (!/^-?\d+$/.test(id)) return false;
+  const n = Number(id);
+  return n >= -2147483648 && n <= 2147483647;
 }
 
 /** Names that are forbidden from patchRawProperties per §10 of the plan. */
@@ -500,6 +508,210 @@ const CONTROL_TYPE_SDT_PR_ELEMENTS: Record<string, string> = {
   group: 'w:group',
 };
 
+const DEFAULT_CHECKBOX_SYMBOL_FONT = 'MS Gothic';
+const DEFAULT_CHECKBOX_CHECKED_HEX = '2612';
+const DEFAULT_CHECKBOX_UNCHECKED_HEX = '2610';
+
+type CheckboxVisualSymbol = {
+  char: string;
+  font: string;
+};
+
+type DateControlDefaults = {
+  displayText: string;
+  fullDate: string;
+  dateFormat: string;
+  locale: string;
+  storageFormat: string;
+  calendar: string;
+};
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function buildDateControlDefaults(now: Date = new Date()): DateControlDefaults {
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  return {
+    // Match Word's common default date format for en-US date controls.
+    displayText: `${month}/${day}/${year}`,
+    fullDate: `${year}-${pad2(month)}-${pad2(day)}T00:00:00Z`,
+    dateFormat: 'M/d/yyyy',
+    locale: 'en-US',
+    storageFormat: 'dateTime',
+    calendar: 'gregorian',
+  };
+}
+
+function upsertChildElement(
+  elements: SdtPrElement[],
+  childName: string,
+  attrs: Record<string, unknown>,
+): SdtPrElement[] {
+  const idx = elements.findIndex((el) => el.name === childName);
+  const next = [...elements];
+  const value = { name: childName, type: 'element', attributes: attrs };
+  if (idx >= 0) {
+    next[idx] = value;
+  } else {
+    next.push(value);
+  }
+  return next;
+}
+
+function applyDateDefaultsToSdtPr(
+  sdtPr: SdtPrElement | undefined,
+  defaults: DateControlDefaults,
+): SdtPrElement | undefined {
+  if (!sdtPr) return sdtPr;
+  const dateEl = findSdtPrChild(sdtPr, 'w:date');
+  if (!dateEl) return sdtPr;
+
+  let dateChildren = [...(dateEl.elements ?? [])];
+  dateChildren = upsertChildElement(dateChildren, 'w:dateFormat', { 'w:val': defaults.dateFormat });
+  dateChildren = upsertChildElement(dateChildren, 'w:lid', { 'w:val': defaults.locale });
+  dateChildren = upsertChildElement(dateChildren, 'w:storeMappedDataAs', { 'w:val': defaults.storageFormat });
+  dateChildren = upsertChildElement(dateChildren, 'w:calendar', { 'w:val': defaults.calendar });
+
+  const dateNext: SdtPrElement = {
+    ...dateEl,
+    name: 'w:date',
+    type: 'element',
+    attributes: { ...(dateEl.attributes ?? {}), 'w:fullDate': defaults.fullDate },
+    elements: dateChildren,
+  };
+  const elements = [...(sdtPr.elements ?? [])];
+  const idx = elements.findIndex((el) => el.name === 'w:date');
+  if (idx >= 0) {
+    elements[idx] = dateNext;
+  } else {
+    elements.push(dateNext);
+  }
+  return { ...sdtPr, elements };
+}
+
+function parseCheckboxSymbolCodePoint(raw: unknown, fallbackHex: string): number {
+  const fallback = Number.parseInt(fallbackHex, 16);
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/^0x/i, '');
+  if (!normalized) return fallback;
+
+  if (/^[0-9A-Fa-f]+$/.test(normalized)) {
+    const parsedHex = Number.parseInt(normalized, 16);
+    if (Number.isInteger(parsedHex) && parsedHex >= 0 && parsedHex <= 0x10ffff) {
+      return parsedHex;
+    }
+  }
+
+  if (/^\d+$/.test(normalized)) {
+    const parsedDec = Number.parseInt(normalized, 10);
+    if (Number.isInteger(parsedDec) && parsedDec >= 0 && parsedDec <= 0x10ffff) {
+      return parsedDec;
+    }
+  }
+
+  return fallback;
+}
+
+function resolveCheckboxVisualSymbol(sdtPr: SdtPrElement | undefined, checked: boolean): CheckboxVisualSymbol {
+  const checkboxEl = findSdtPrChild(sdtPr, 'w14:checkbox') ?? findSdtPrChild(sdtPr, 'w:checkbox');
+  const stateName = checked ? 'w14:checkedState' : 'w14:uncheckedState';
+  const legacyStateName = checked ? 'w:checkedState' : 'w:uncheckedState';
+  const stateEl = checkboxEl?.elements?.find((e) => e.name === stateName || e.name === legacyStateName);
+  const fallbackHex = checked ? DEFAULT_CHECKBOX_CHECKED_HEX : DEFAULT_CHECKBOX_UNCHECKED_HEX;
+  const codePoint = parseCheckboxSymbolCodePoint(
+    stateEl?.attributes?.['w14:val'] ?? stateEl?.attributes?.['w:val'],
+    fallbackHex,
+  );
+  const font = String(
+    stateEl?.attributes?.['w14:font'] ?? stateEl?.attributes?.['w:font'] ?? DEFAULT_CHECKBOX_SYMBOL_FONT,
+  );
+  return { char: String.fromCodePoint(codePoint), font };
+}
+
+function buildCheckboxTextJson(symbol: CheckboxVisualSymbol): ProseMirrorJSON {
+  return {
+    type: 'text',
+    text: symbol.char,
+    marks: [{ type: 'textStyle', attrs: { fontFamily: symbol.font } }],
+  };
+}
+
+function createTextWithOptionalFont(editor: Editor, text: string, fontFamily?: string): ProseMirrorNode {
+  if (fontFamily) {
+    const textStyleMark = editor.schema.marks?.textStyle;
+    if (textStyleMark) {
+      return editor.schema.text(text, [textStyleMark.create({ fontFamily })]);
+    }
+  }
+  return editor.schema.text(text);
+}
+
+/**
+ * Build a default type-specific sdtPr child element for newly created controls.
+ * These defaults keep exported OOXML Word-friendly from the first save.
+ */
+function buildDefaultTypeSdtPrElement(controlType: string | undefined): SdtPrElement | undefined {
+  switch (controlType) {
+    case 'text':
+      return { name: 'w:text', type: 'element' };
+    case 'date':
+      return {
+        name: 'w:date',
+        type: 'element',
+        elements: [
+          { name: 'w:dateFormat', type: 'element', attributes: { 'w:val': 'M/d/yyyy' } },
+          { name: 'w:lid', type: 'element', attributes: { 'w:val': 'en-US' } },
+          { name: 'w:storeMappedDataAs', type: 'element', attributes: { 'w:val': 'dateTime' } },
+          { name: 'w:calendar', type: 'element', attributes: { 'w:val': 'gregorian' } },
+        ],
+      };
+    case 'checkbox':
+      return {
+        name: 'w14:checkbox',
+        type: 'element',
+        elements: [
+          { name: 'w14:checked', type: 'element', attributes: { 'w14:val': '0' } },
+          {
+            name: 'w14:checkedState',
+            type: 'element',
+            attributes: { 'w14:font': DEFAULT_CHECKBOX_SYMBOL_FONT, 'w14:val': DEFAULT_CHECKBOX_CHECKED_HEX },
+          },
+          {
+            name: 'w14:uncheckedState',
+            type: 'element',
+            attributes: { 'w14:font': DEFAULT_CHECKBOX_SYMBOL_FONT, 'w14:val': DEFAULT_CHECKBOX_UNCHECKED_HEX },
+          },
+        ],
+      };
+    case 'comboBox':
+      return { name: 'w:comboBox', type: 'element', elements: [] };
+    case 'dropDownList':
+      return { name: 'w:dropDownList', type: 'element', elements: [] };
+    case 'repeatingSection':
+      return {
+        name: 'w15:repeatingSection',
+        type: 'element',
+        elements: [{ name: 'w15:allowInsertDeleteSection', type: 'element', attributes: { 'w15:val': '1' } }],
+      };
+    case 'repeatingSectionItem':
+      return { name: 'w15:repeatingSectionItem', type: 'element' };
+    case 'group':
+      return { name: 'w:group', type: 'element' };
+    default:
+      return undefined;
+  }
+}
+
+function buildDefaultSdtPr(controlType: string | undefined): SdtPrElement | undefined {
+  const typeElement = buildDefaultTypeSdtPrElement(controlType);
+  if (!typeElement) return undefined;
+  return { name: 'w:sdtPr', type: 'element', elements: [typeElement] };
+}
+
 function setTypeWrapper(
   editor: Editor,
   input: ContentControlsSetTypeInput,
@@ -525,11 +737,12 @@ function setTypeWrapper(
     // Add the new type-specific element to sdtPr (if applicable)
     const newElementName = CONTROL_TYPE_SDT_PR_ELEMENTS[input.controlType];
     if (newElementName) {
+      const defaultTypeElement = buildDefaultTypeSdtPrElement(input.controlType);
       updateSdtPrChild(
         editor,
         input.target,
         newElementName,
-        (existing) => existing ?? { name: newElementName, type: 'element' },
+        (existing) => existing ?? defaultTypeElement ?? { name: newElementName, type: 'element' },
       );
     }
 
@@ -804,7 +1017,7 @@ function validateWordCompatibilityWrapper(
   const diagnostics: ContentControlsValidateWordCompatibilityResult['diagnostics'] = [];
   const id = String(attrs.id ?? '');
 
-  if (!/^-?\d+$/.test(id)) {
+  if (!isValidWordSdtId(id)) {
     diagnostics.push({
       code: 'INVALID_ID_FORMAT',
       severity: 'error',
@@ -824,7 +1037,7 @@ function normalizeWordCompatibilityWrapper(
   const target = buildTarget(sdt);
   const id = String(sdt.node.attrs.id ?? '');
 
-  if (/^-?\d+$/.test(id)) {
+  if (isValidWordSdtId(id)) {
     return buildMutationFailure('NO_OP', 'Content control ID is already Word-compatible.');
   }
 
@@ -1039,9 +1252,10 @@ function checkboxSetStateWrapper(
   assertControlType(sdt, 'checkbox', 'checkbox.setState');
   assertNotSdtLocked(sdt, 'checkbox.setState');
   const target = buildTarget(sdt);
+  const symbol = resolveCheckboxVisualSymbol(sdt.node.attrs.sdtPr as SdtPrElement | undefined, input.checked);
 
   return executeSdtMutation(editor, target, options, () => {
-    return updateSdtPrSubElementAttr(
+    const checkboxUpdated = updateSdtPrSubElementAttr(
       editor,
       input.target,
       'w14:checkbox',
@@ -1049,6 +1263,19 @@ function checkboxSetStateWrapper(
       'w14:val',
       input.checked ? '1' : '0',
     );
+    if (!checkboxUpdated) return false;
+
+    if (sdt.kind === 'inline') {
+      const updateCmd = editor.commands?.updateStructuredContentById;
+      if (typeof updateCmd === 'function') {
+        const visualUpdated =
+          Boolean(updateCmd(input.target.nodeId, { json: buildCheckboxTextJson(symbol) })) ||
+          Boolean(updateCmd(input.target.nodeId, { text: symbol.char, keepTextNodeStyles: true }));
+        return visualUpdated || checkboxUpdated;
+      }
+    }
+
+    return checkboxUpdated;
   });
 }
 
@@ -1070,9 +1297,20 @@ function checkboxSetSymbolPairWrapper(
   assertControlType(sdt, 'checkbox', 'checkbox.setSymbolPair');
   assertNotSdtLocked(sdt, 'checkbox.setSymbolPair');
   const target = buildTarget(sdt);
+  const checked = readCheckboxChecked(sdt.node.attrs.sdtPr as SdtPrElement | undefined);
+  const symbolFromInput = checked ? input.checkedSymbol : input.uncheckedSymbol;
+  const symbol: CheckboxVisualSymbol = {
+    char: String.fromCodePoint(
+      parseCheckboxSymbolCodePoint(
+        symbolFromInput.char,
+        checked ? DEFAULT_CHECKBOX_CHECKED_HEX : DEFAULT_CHECKBOX_UNCHECKED_HEX,
+      ),
+    ),
+    font: symbolFromInput.font || DEFAULT_CHECKBOX_SYMBOL_FONT,
+  };
 
   return executeSdtMutation(editor, target, options, () => {
-    return updateSdtPrChild(editor, input.target, 'w14:checkbox', (existing) => {
+    const pairUpdated = updateSdtPrChild(editor, input.target, 'w14:checkbox', (existing) => {
       const el: SdtPrElement = existing ?? { name: 'w14:checkbox', type: 'element', elements: [] };
       const elements = (el.elements ?? []).filter(
         (e) => e.name !== 'w14:checkedState' && e.name !== 'w14:uncheckedState',
@@ -1089,6 +1327,19 @@ function checkboxSetSymbolPairWrapper(
       });
       return { ...el, elements };
     });
+    if (!pairUpdated) return false;
+
+    if (sdt.kind === 'inline') {
+      const updateCmd = editor.commands?.updateStructuredContentById;
+      if (typeof updateCmd === 'function') {
+        const visualUpdated =
+          Boolean(updateCmd(input.target.nodeId, { json: buildCheckboxTextJson(symbol) })) ||
+          Boolean(updateCmd(input.target.nodeId, { text: symbol.char, keepTextNodeStyles: true }));
+        return visualUpdated || pairUpdated;
+      }
+    }
+
+    return pairUpdated;
   });
 }
 
@@ -1138,15 +1389,31 @@ function choiceListSetSelectedWrapper(
   assertControlType(sdt, ['comboBox', 'dropDownList'], 'choiceList.setSelected');
   assertNotSdtLocked(sdt, 'choiceList.setSelected');
   const target = buildTarget(sdt);
-  const ct = resolveControlType(sdt.node.attrs as Record<string, unknown>);
+  const ct = resolveControlType(sdt.node.attrs as Record<string, unknown>) as 'comboBox' | 'dropDownList';
+  const currentSdtPr = sdt.node.attrs.sdtPr as SdtPrElement | undefined;
+  const { items } = readChoiceListData(currentSdtPr, ct);
+  const selectedItem = items.find((item) => item.value === input.value);
+  const selectedDisplayText = selectedItem?.displayText ?? input.value;
 
   return executeSdtMutation(editor, target, options, () => {
-    return updateSdtPrChild(editor, input.target, `w:${ct}`, (existing) => ({
+    const selectedUpdated = updateSdtPrChild(editor, input.target, `w:${ct}`, (existing) => ({
       name: `w:${ct}`,
       type: 'element',
       ...existing,
       attributes: { ...(existing?.attributes ?? {}), 'w:lastValue': input.value },
     }));
+    if (!selectedUpdated) return false;
+
+    // Keep the SDT body text in sync so the selected option is visible in-editor and after export.
+    const updateCmd = editor.commands?.updateStructuredContentById;
+    if (typeof updateCmd === 'function') {
+      const visualUpdated = Boolean(
+        updateCmd(input.target.nodeId, { text: selectedDisplayText, keepTextNodeStyles: true }),
+      );
+      return visualUpdated || selectedUpdated;
+    }
+
+    return selectedUpdated;
   });
 }
 
@@ -1403,6 +1670,19 @@ function createWrapper(
       controlType: input.controlType ?? 'unknown',
       type: input.controlType ?? 'unknown',
     };
+    const defaultSdtPr = buildDefaultSdtPr(input.controlType ?? 'unknown');
+    const isDateCreate = input.controlType === 'date' && input.content == null;
+    const dateDefaults = isDateCreate ? buildDateControlDefaults() : null;
+    const sdtPrWithDateDefaults = dateDefaults ? applyDateDefaultsToSdtPr(defaultSdtPr, dateDefaults) : defaultSdtPr;
+    if (sdtPrWithDateDefaults) {
+      attrs.sdtPr = sdtPrWithDateDefaults;
+    }
+    const isCheckboxCreate = input.controlType === 'checkbox' && input.content == null;
+    const checkboxSymbol = isCheckboxCreate
+      ? resolveCheckboxVisualSymbol(defaultSdtPr, false)
+      : ({ char: '', font: DEFAULT_CHECKBOX_SYMBOL_FONT } as CheckboxVisualSymbol);
+    const contentText =
+      input.content ?? (isCheckboxCreate ? checkboxSymbol.char : isDateCreate ? dateDefaults?.displayText : undefined);
 
     // When a target is provided, insert adjacent to it for deterministic placement.
     if (input.target) {
@@ -1412,10 +1692,16 @@ function createWrapper(
       if (!nodeType) return false;
 
       let content;
-      if (input.content) {
-        content = editor.schema.text(input.content);
+      if (contentText !== undefined) {
+        const textNode = createTextWithOptionalFont(
+          editor,
+          contentText,
+          isCheckboxCreate ? checkboxSymbol.font : undefined,
+        );
         if (input.kind === 'block') {
-          content = editor.schema.nodes.paragraph.create(null, content);
+          content = editor.schema.nodes.paragraph.create(null, textNode);
+        } else {
+          content = textNode;
         }
       } else if (input.kind === 'block') {
         content = editor.schema.nodes.paragraph.create();
@@ -1430,8 +1716,27 @@ function createWrapper(
     }
 
     // Default: delegate to the editor command (inserts at current selection).
-    if (input.content) {
-      return Boolean(insertCmd({ attrs, text: input.content }));
+    if (contentText !== undefined) {
+      if (input.kind === 'block') {
+        if (isCheckboxCreate) {
+          return Boolean(
+            insertCmd({
+              attrs,
+              json: { type: 'paragraph', content: [buildCheckboxTextJson(checkboxSymbol)] },
+            }),
+          );
+        }
+        return Boolean(
+          insertCmd({
+            attrs,
+            json: { type: 'paragraph', content: [{ type: 'text', text: contentText }] },
+          }),
+        );
+      }
+      if (isCheckboxCreate) {
+        return Boolean(insertCmd({ attrs, json: buildCheckboxTextJson(checkboxSymbol) }));
+      }
+      return Boolean(insertCmd({ attrs, text: contentText }));
     }
     return Boolean(insertCmd({ attrs }));
   });

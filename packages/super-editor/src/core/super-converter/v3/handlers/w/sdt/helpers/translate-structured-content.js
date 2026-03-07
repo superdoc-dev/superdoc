@@ -49,6 +49,62 @@ const CONTROL_TYPE_ELEMENT_MAP = {
   group: 'w:group',
 };
 
+const DEFAULT_CHECKBOX_SYMBOL_FONT = 'MS Gothic';
+const DEFAULT_CHECKBOX_CHECKED_HEX = '2612';
+const DEFAULT_CHECKBOX_UNCHECKED_HEX = '2610';
+
+function buildDefaultTypeElement(controlType) {
+  const typeElementName = controlType && CONTROL_TYPE_ELEMENT_MAP[controlType];
+  if (!typeElementName) return null;
+
+  if (controlType === 'checkbox') {
+    return {
+      name: typeElementName,
+      type: 'element',
+      elements: [
+        { name: 'w14:checked', type: 'element', attributes: { 'w14:val': '0' } },
+        {
+          name: 'w14:checkedState',
+          type: 'element',
+          attributes: { 'w14:font': DEFAULT_CHECKBOX_SYMBOL_FONT, 'w14:val': DEFAULT_CHECKBOX_CHECKED_HEX },
+        },
+        {
+          name: 'w14:uncheckedState',
+          type: 'element',
+          attributes: { 'w14:font': DEFAULT_CHECKBOX_SYMBOL_FONT, 'w14:val': DEFAULT_CHECKBOX_UNCHECKED_HEX },
+        },
+      ],
+    };
+  }
+
+  if (controlType === 'comboBox' || controlType === 'dropDownList') {
+    return { name: typeElementName, type: 'element', elements: [] };
+  }
+
+  if (controlType === 'repeatingSection') {
+    return {
+      name: typeElementName,
+      type: 'element',
+      elements: [{ name: 'w15:allowInsertDeleteSection', type: 'element', attributes: { 'w15:val': '1' } }],
+    };
+  }
+
+  if (controlType === 'date') {
+    return {
+      name: typeElementName,
+      type: 'element',
+      elements: [
+        { name: 'w:dateFormat', type: 'element', attributes: { 'w:val': 'M/d/yyyy' } },
+        { name: 'w:lid', type: 'element', attributes: { 'w:val': 'en-US' } },
+        { name: 'w:storeMappedDataAs', type: 'element', attributes: { 'w:val': 'dateTime' } },
+        { name: 'w:calendar', type: 'element', attributes: { 'w:val': 'gregorian' } },
+      ],
+    };
+  }
+
+  return { name: typeElementName, type: 'element' };
+}
+
 function generateSdtPrTagForStructuredContent({ node }) {
   const { attrs = {} } = node;
 
@@ -94,9 +150,9 @@ function generateSdtPrTagForStructuredContent({ node }) {
   // When sdtPr is absent (newly created controls), emit the type-specific
   // element from attrs.controlType so the OOXML is semantically correct.
   const controlType = attrs.controlType || attrs.type;
-  const typeElementName = controlType && CONTROL_TYPE_ELEMENT_MAP[controlType];
-  if (typeElementName) {
-    resultElements.push({ name: typeElementName, type: 'element' });
+  const typeElement = buildDefaultTypeElement(controlType);
+  if (typeElement) {
+    resultElements.push(typeElement);
   }
 
   const result = {

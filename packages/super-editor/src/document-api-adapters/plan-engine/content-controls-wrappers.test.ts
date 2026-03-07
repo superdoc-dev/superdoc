@@ -715,3 +715,151 @@ describe('buildContentControlInfoFromAttrs completeness', () => {
     expect(info.properties.tabIndex).toBeUndefined();
   });
 });
+
+describe('choiceList.setSelected visual text sync', () => {
+  it('updates visible content text to the selected item displayText', () => {
+    const editor = makeSdtEditor({
+      controlType: 'dropDownList',
+      type: 'dropDownList',
+      sdtPr: {
+        name: 'w:sdtPr',
+        elements: [
+          {
+            name: 'w:dropDownList',
+            type: 'element',
+            elements: [
+              { name: 'w:listItem', type: 'element', attributes: { 'w:displayText': 'Acme Corp', 'w:value': 'acme' } },
+              { name: 'w:listItem', type: 'element', attributes: { 'w:displayText': 'Globex', 'w:value': 'globex' } },
+            ],
+          },
+        ],
+      },
+    });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'acme' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const textCall = updateCmd.mock.calls.find((call) => call[1]?.text === 'Acme Corp');
+    expect(textCall).toBeDefined();
+  });
+
+  it('falls back to the selected value when no matching item is found', () => {
+    const editor = makeSdtEditor({
+      controlType: 'dropDownList',
+      type: 'dropDownList',
+      sdtPr: {
+        name: 'w:sdtPr',
+        elements: [
+          {
+            name: 'w:dropDownList',
+            type: 'element',
+            elements: [
+              { name: 'w:listItem', type: 'element', attributes: { 'w:displayText': 'Acme Corp', 'w:value': 'acme' } },
+            ],
+          },
+        ],
+      },
+    });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'unknown' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const textCall = updateCmd.mock.calls.find((call) => call[1]?.text === 'unknown');
+    expect(textCall).toBeDefined();
+  });
+});
+
+describe('create.contentControl default sdtPr seeding', () => {
+  it('seeds checkbox controls with checked state + symbol pair defaults', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.create({ kind: 'inline', controlType: 'checkbox' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    expect(insertInline).toHaveBeenCalledTimes(1);
+    expect(insertInline.mock.calls[0][0].json?.text).toBe(String.fromCodePoint(0x2610));
+    expect(insertInline.mock.calls[0][0].json?.marks?.[0]?.attrs?.fontFamily).toBe('MS Gothic');
+    const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string; elements?: Array<{ name: string }> }> };
+    const checkbox = sdtPr.elements?.find((el) => el.name === 'w14:checkbox');
+    expect(checkbox).toBeDefined();
+    expect(checkbox?.elements?.some((el) => el.name === 'w14:checked')).toBe(true);
+    expect(checkbox?.elements?.some((el) => el.name === 'w14:checkedState')).toBe(true);
+    expect(checkbox?.elements?.some((el) => el.name === 'w14:uncheckedState')).toBe(true);
+  });
+
+  it.each([
+    ['text', 'w:text'],
+    ['comboBox', 'w:comboBox'],
+    ['dropDownList', 'w:dropDownList'],
+  ] as const)('seeds %s controls with %s in sdtPr', (controlType, xmlName) => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.create({ kind: 'inline', controlType }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
+    expect(sdtPr.elements?.some((el) => el.name === xmlName)).toBe(true);
+  });
+
+  it('seeds date controls with today text and Word-compatible date metadata', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.create({ kind: 'inline', controlType: 'date' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    expect(insertInline.mock.calls[0][0].text).toMatch(/^\d{1,2}\/\d{1,2}\/\d{4}$/);
+
+    const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
+    const sdtPr = attrs.sdtPr as {
+      elements?: Array<{ name: string; attributes?: Record<string, string>; elements?: Array<{ name: string }> }>;
+    };
+    const dateEl = sdtPr.elements?.find((el) => el.name === 'w:date');
+    expect(dateEl).toBeDefined();
+    expect(String(dateEl?.attributes?.['w:fullDate'] ?? '')).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00Z$/);
+    expect(dateEl?.elements?.some((el) => el.name === 'w:dateFormat')).toBe(true);
+    expect(dateEl?.elements?.some((el) => el.name === 'w:lid')).toBe(true);
+    expect(dateEl?.elements?.some((el) => el.name === 'w:storeMappedDataAs')).toBe(true);
+    expect(dateEl?.elements?.some((el) => el.name === 'w:calendar')).toBe(true);
+  });
+});
+
+describe('contentControls.setType default sdtPr seeding', () => {
+  it('adds Word-visible checkbox defaults when switching to checkbox type', () => {
+    const editor = makeSdtEditor({
+      controlType: 'text',
+      type: 'text',
+      sdtPr: {
+        name: 'w:sdtPr',
+        elements: [{ name: 'w:text', type: 'element' }],
+      },
+    });
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.setType({ target: SDT_TARGET, controlType: 'checkbox' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const checkboxWrite = updateCmd.mock.calls.find((call) =>
+      Boolean(call[1]?.attrs?.sdtPr?.elements?.find((el: { name: string }) => el.name === 'w14:checkbox')),
+    );
+    expect(checkboxWrite).toBeDefined();
+    const checkbox = checkboxWrite?.[1]?.attrs?.sdtPr?.elements?.find(
+      (el: { name: string; elements?: Array<{ name: string }> }) => el.name === 'w14:checkbox',
+    );
+    expect(checkbox?.elements?.some((el: { name: string }) => el.name === 'w14:checked')).toBe(true);
+    expect(checkbox?.elements?.some((el: { name: string }) => el.name === 'w14:checkedState')).toBe(true);
+    expect(checkbox?.elements?.some((el: { name: string }) => el.name === 'w14:uncheckedState')).toBe(true);
+  });
+});

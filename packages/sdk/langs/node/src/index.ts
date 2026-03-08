@@ -40,5 +40,12 @@ export {
   resolveToolOperation,
 } from './tools.js';
 export { SuperDocCliError } from './runtime/errors.js';
+export { formatToolError, formatToolResult, mergeDiscoveredTools, sanitizeToolSchemas } from './helpers/platform.js';
 export type { InvokeOptions, OperationSpec, OperationParamSpec, SuperDocClientOptions } from './runtime/process.js';
 export type { ToolChooserInput, ToolChooserMode, ToolGroup, ToolProvider } from './tools.js';
+export type {
+  FormatToolResultOptions,
+  MergeDiscoveredToolsOptions,
+  PlatformTarget,
+  ResultTarget,
+} from './helpers/platform.js';

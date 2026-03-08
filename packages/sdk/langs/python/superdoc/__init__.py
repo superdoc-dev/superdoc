@@ -1,6 +1,12 @@
 from .client import AsyncSuperDocClient, SuperDocClient
 from .errors import SuperDocError
 from .skill_api import get_skill, install_skill, list_skills
+from .helpers.platform import (
+    format_tool_error,
+    format_tool_result,
+    merge_discovered_tools,
+    sanitize_tool_schemas,
+)
 from .tools_api import (
     choose_tools,
     dispatch_superdoc_tool,
@@ -25,4 +31,8 @@ __all__ = [
     "choose_tools",
     "dispatch_superdoc_tool",
     "dispatch_superdoc_tool_async",
+    "format_tool_result",
+    "format_tool_error",
+    "merge_discovered_tools",
+    "sanitize_tool_schemas",
 ]

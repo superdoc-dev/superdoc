@@ -27,8 +27,8 @@ async function main() {
   await client.connect();
   await client.doc.open({ doc: inputPath });
 
-  // 2. Get tools in Vercel AI format
-  const { tools: sdTools } = await chooseTools({ provider: 'vercel' });
+  // 2. Get tools in Vercel AI format (all tools — no discover_tools since the framework manages a fixed tool set)
+  const { tools: sdTools } = await chooseTools({ provider: 'vercel', mode: 'all' });
 
   // Convert SuperDoc tool definitions to Vercel AI `tool()` objects
   const vercelTools: Record<string, ReturnType<typeof tool>> = {};

@@ -74,11 +74,14 @@ def main():
             print(f"  Tool: {name}")
 
             try:
-                result = dispatch_superdoc_tool(client, name, tool_use.get("input", {}))
-
-                # discover_tools returns new tools — merge them
                 if name == "discover_tools":
-                    merge_discovered_tools(tool_config, result, provider="anthropic", target="bedrock")
+                    # discover_tools is a meta-tool — handle client-side via choose_tools
+                    groups = tool_use.get("input", {}).get("groups")
+                    discovered = choose_tools(provider="anthropic", groups=groups)
+                    merge_discovered_tools(tool_config, discovered, provider="anthropic", target="bedrock")
+                    result = discovered
+                else:
+                    result = dispatch_superdoc_tool(client, name, tool_use.get("input", {}))
 
                 tool_results.append(
                     format_tool_result(result, target="bedrock", tool_use_id=tool_use["toolUseId"])

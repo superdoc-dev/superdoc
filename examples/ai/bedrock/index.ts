@@ -73,11 +73,16 @@ async function main() {
       const { name, input, toolUseId } = block.toolUse!;
       console.log(`  Tool: ${name}`);
       try {
-        const result = await dispatchSuperDocTool(client, name!, (input ?? {}) as Record<string, unknown>);
+        let result: unknown;
 
-        // discover_tools returns new tools — merge them into toolConfig
         if (name === 'discover_tools') {
-          mergeDiscoveredTools(toolConfig, result, { provider: 'anthropic', target: 'bedrock' });
+          // discover_tools is a meta-tool — handle client-side via chooseTools
+          const groups = ((input ?? {}) as Record<string, unknown>).groups as string[] | undefined;
+          const discovered = await chooseTools({ provider: 'anthropic', groups });
+          mergeDiscoveredTools(toolConfig, discovered, { provider: 'anthropic', target: 'bedrock' });
+          result = discovered;
+        } else {
+          result = await dispatchSuperDocTool(client, name!, (input ?? {}) as Record<string, unknown>);
         }
 
         results.push(formatToolResult(result, { target: 'bedrock', toolUseId }) as ContentBlock);

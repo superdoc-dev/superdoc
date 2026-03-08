@@ -79,11 +79,16 @@ async function main() {
       const { name, args } = part.functionCall!;
       console.log(`  Tool: ${name}`);
       try {
-        const result = await dispatchSuperDocTool(client, name, (args ?? {}) as Record<string, unknown>);
+        let result: unknown;
 
-        // discover_tools returns new tools — merge them
         if (name === 'discover_tools') {
-          mergeDiscoveredTools(vertexTools, result, { provider: 'generic', target: 'vertex' });
+          // discover_tools is a meta-tool — handle client-side via chooseTools
+          const groups = ((args ?? {}) as Record<string, unknown>).groups as string[] | undefined;
+          const discovered = await chooseTools({ provider: 'generic', groups });
+          mergeDiscoveredTools(vertexTools, discovered, { provider: 'generic', target: 'vertex' });
+          result = discovered;
+        } else {
+          result = await dispatchSuperDocTool(client, name, (args ?? {}) as Record<string, unknown>);
         }
 
         functionResponses.push({

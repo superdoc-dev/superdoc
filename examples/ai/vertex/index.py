@@ -81,11 +81,12 @@ def main():
             print(f"  Tool: {name}")
 
             try:
-                result = dispatch_superdoc_tool(client, name, args)
-
-                # discover_tools returns new tools — merge them
-                if name == "discover_tools" and "tools" in result:
-                    sanitized = sanitize_tool_schemas(result["tools"], "vertex")
+                if name == "discover_tools":
+                    # discover_tools is a meta-tool — handle client-side via choose_tools
+                    groups = args.get("groups")
+                    discovered = choose_tools(provider="generic", groups=groups)
+                    new_tools = discovered.get("tools", [])
+                    sanitized = sanitize_tool_schemas(new_tools, "vertex")
                     for t in sanitized:
                         vertex_tools[0].function_declarations.append(
                             FunctionDeclaration(
@@ -94,6 +95,9 @@ def main():
                                 parameters=t["parameters"],
                             )
                         )
+                    result = discovered
+                else:
+                    result = dispatch_superdoc_tool(client, name, args)
 
                 function_responses.append(
                     Part.from_function_response(name=name, response=result)

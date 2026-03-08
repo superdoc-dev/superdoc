@@ -409,18 +409,24 @@ The SDK ships pre-formatted tools for each integration. The conversion is minima
 
 All provider examples above use **essential mode** (default) — 5 core tools plus `discover_tools`. When the model needs more tools (comments, formatting, tables, etc.), it calls `discover_tools` to load them dynamically.
 
-Handle this in your agentic loop by merging new tools into the conversation:
+Handle this in your agentic loop. Since `discover_tools` is a meta-tool (not a document operation), intercept it before dispatching:
 
 ```typescript
-import { mergeDiscoveredTools } from '@superdoc-dev/sdk';
-
-const result = await dispatchSuperDocTool(client, name, args);
+import { chooseTools, mergeDiscoveredTools } from '@superdoc-dev/sdk';
 
 if (name === 'discover_tools') {
-  // Merge newly discovered tools — handles format conversion and deduplication
-  mergeDiscoveredTools(toolConfig, result, { provider: 'anthropic', target: 'bedrock' });
+  // discover_tools is a meta-tool — handle client-side via chooseTools
+  const discovered = await chooseTools({ provider: 'anthropic', groups: args.groups });
+  mergeDiscoveredTools(toolConfig, discovered, { provider: 'anthropic', target: 'bedrock' });
+  result = discovered;
+} else {
+  result = await dispatchSuperDocTool(client, name, args);
 }
 ```
+
+<Note>
+Framework-managed examples (Vercel AI, LangChain) use `mode: 'all'` instead, since they can't inject new tools mid-conversation.
+</Note>
 
 See the [LLM Tools guide](/document-engine/ai-agents/llm-tools#the-discover_tools-pattern) for details.
 

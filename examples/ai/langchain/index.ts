@@ -28,8 +28,8 @@ async function main() {
   await client.connect();
   await client.doc.open({ doc: inputPath });
 
-  // 2. Get tools in generic format and wrap as LangChain tools
-  const { tools: sdTools } = await chooseTools({ provider: 'generic' });
+  // 2. Get tools in generic format and wrap as LangChain tools (all tools — no discover_tools since the framework manages a fixed tool set)
+  const { tools: sdTools } = await chooseTools({ provider: 'generic', mode: 'all' });
 
   const langchainTools = (
     sdTools as Array<{ name: string; description: string; parameters: Record<string, unknown> }>

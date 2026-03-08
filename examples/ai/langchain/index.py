@@ -23,15 +23,16 @@ from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
 def make_superdoc_tool(client, tool_def):
     """Wrap a SuperDoc tool definition as a LangChain StructuredTool."""
 
-    def invoke(args: dict) -> str:
+    def invoke(**kwargs) -> str:
         print(f"  Tool: {tool_def['name']}")
-        result = dispatch_superdoc_tool(client, tool_def["name"], args)
+        result = dispatch_superdoc_tool(client, tool_def["name"], kwargs)
         return json.dumps(result)
 
     return StructuredTool.from_function(
         func=invoke,
         name=tool_def["name"],
         description=tool_def["description"],
+        infer_schema=False,
     )
 
 
@@ -46,7 +47,8 @@ def main():
     client.doc.open(doc=input_path)
 
     # 2. Get tools in generic format and wrap as LangChain tools
-    result = choose_tools(provider="generic")
+    # Use mode="all" — no discover_tools since the framework manages a fixed tool set
+    result = choose_tools(provider="generic", mode="all")
     tools = [make_superdoc_tool(client, t) for t in result["tools"]]
 
     # 3. Create a ReAct agent

@@ -22,7 +22,6 @@ import type {
 import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { DocumentApiAdapterError } from './errors.js';
-import { isCollaborationActive } from './collaboration-detection.js';
 import { mutatePart } from '../core/parts/mutation/mutate-part.js';
 import { syncDocDefaultsToConvertedXml, type DocDefaultsTranslator } from './styles-xml-sync.js';
 import { translator as docDefaultsTranslator } from '../core/super-converter/v3/handlers/w/docDefaults/docDefaults-translator.js';
@@ -309,14 +308,6 @@ export function stylesApplyAdapter(
       'CAPABILITY_UNAVAILABLE',
       'styles.apply requires word/styles.xml to be present in the document package.',
       { reason: 'styles_part_missing' },
-    );
-  }
-
-  if (isCollaborationActive(editor)) {
-    throw new DocumentApiAdapterError(
-      'CAPABILITY_UNAVAILABLE',
-      'styles.apply is unavailable during active collaboration. Stylesheet mutations cannot be synced via Yjs.',
-      { reason: 'collaboration_active' },
     );
   }
 

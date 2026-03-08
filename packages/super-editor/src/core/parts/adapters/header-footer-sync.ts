@@ -10,7 +10,11 @@ import type { Editor } from '../../Editor.js';
 import type { PartId } from '../types.js';
 import { mutatePart } from '../mutation/mutate-part.js';
 import { hasPart } from '../store/part-store.js';
-import { ensureHeaderFooterDescriptor, isHeaderFooterPartId } from './header-footer-part-descriptor.js';
+import {
+  ensureHeaderFooterDescriptor,
+  isHeaderFooterPartId,
+  SOURCE_HEADER_FOOTER_LOCAL,
+} from './header-footer-part-descriptor.js';
 
 // ---------------------------------------------------------------------------
 // Converter shape
@@ -200,7 +204,7 @@ export function exportSubEditorToPart(
         partId,
         sectionId,
         operation: 'mutate',
-        source: 'header-footer-sync:local',
+        source: SOURCE_HEADER_FOOTER_LOCAL,
         mutate: ({ part }) => {
           const p = part as XmlElement;
           if (p?.elements?.[0]) {
@@ -215,7 +219,7 @@ export function exportSubEditorToPart(
         partId,
         sectionId,
         operation: 'create',
-        source: 'header-footer-sync:local',
+        source: SOURCE_HEADER_FOOTER_LOCAL,
         initial: {
           type: 'element',
           name: 'document',

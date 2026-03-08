@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Doc as YDoc } from 'yjs';
 import { Editor } from './Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
@@ -51,6 +51,10 @@ describe('Editor.replaceFile', () => {
     replacementBuffer = await getTestDataAsFileBuffer('Hello docx world.docx');
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('applies replacement when provider emits sync(true) without synced event', async () => {
     const provider = createProviderStub();
     const ydoc = new YDoc();
@@ -93,6 +97,50 @@ describe('Editor.replaceFile', () => {
       }
       editor.destroy();
       expectedEditor.destroy();
+    }
+  });
+
+  it('rejects with timeout when provider never syncs', async () => {
+    const provider = createProviderStub();
+    const ydoc = new YDoc();
+
+    const editor = createTestEditor({
+      ydoc,
+      collaborationProvider: provider,
+    });
+
+    // Mock loadXmlData to return instantly — avoids JSZip's internal
+    // setTimeout usage which conflicts with fake timers.
+    const loadSpy = vi
+      .spyOn(Editor, 'loadXmlData')
+      .mockResolvedValue([blankDocData.docx as any, {} as any, blankDocData.mediaFiles as any, {} as any]);
+
+    try {
+      await editor.open(undefined, {
+        mode: 'docx',
+        content: blankDocData.docx as any,
+        mediaFiles: blankDocData.mediaFiles as any,
+        fonts: blankDocData.fonts as any,
+      });
+
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+      const replacePromise = editor.replaceFile(replacementBuffer);
+
+      // Attach rejection handler BEFORE advancing timers to avoid unhandled rejection
+      const expectRejected = expect(replacePromise).rejects.toThrow(/did not sync within/);
+
+      // Advance past the 10s sync timeout
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await expectRejected;
+    } finally {
+      loadSpy.mockRestore();
+      vi.useRealTimers();
+      if (editor.lifecycleState === 'ready') {
+        editor.close();
+      }
+      editor.destroy();
     }
   });
 

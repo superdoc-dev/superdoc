@@ -128,14 +128,13 @@ describe('styles adapter: capability gates', () => {
     );
   });
 
-  it('throws CAPABILITY_UNAVAILABLE when collaboration is active', () => {
+  it('allows mutation when collaboration provider is synced', () => {
     const editor = createMockEditor({
       stylesXml: makeStylesXml(),
       collaborationProvider: { synced: true },
     });
-    expect(() => stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS)).toThrow(
-      DocumentApiAdapterError,
-    );
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
+    expect(result.success).toBe(true);
   });
 
   it('allows mutation when collaboration provider is not synced', () => {

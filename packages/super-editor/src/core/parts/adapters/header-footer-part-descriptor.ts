@@ -32,7 +32,7 @@ interface ConverterForHeaderFooter {
   headerFooterModified?: boolean;
   convertedXml?: Record<string, unknown>;
   /** Re-import a single header/footer part from OOXML JSON to PM JSON. */
-  reimportHeaderFooterPart?: (partId: string, sectionId: string) => unknown;
+  reimportHeaderFooterPart?: (partId: string) => unknown;
 }
 
 function getConverter(editor: Editor): ConverterForHeaderFooter | undefined {
@@ -42,6 +42,9 @@ function getConverter(editor: Editor): ConverterForHeaderFooter | undefined {
 // ---------------------------------------------------------------------------
 // Part ID Parsing
 // ---------------------------------------------------------------------------
+
+/** Mutation source tag for local header/footer sub-editor edits. */
+export const SOURCE_HEADER_FOOTER_LOCAL = 'header-footer-sync:local';
 
 const HEADER_PATTERN = /^word\/header\d+\.xml$/;
 const FOOTER_PATTERN = /^word\/footer\d+\.xml$/;
@@ -122,10 +125,16 @@ export function ensureHeaderFooterDescriptor(partId: PartId, sectionId: string):
 
       const resolvedSectionId = ctx.sectionId ?? sectionId;
 
-      // If converter supports per-part re-import, use it to rebuild PM JSON
-      if (typeof converter.reimportHeaderFooterPart === 'function') {
+      // Local edits (header-footer-sync:local) already update the PM cache
+      // and refresh other sub-editors in onHeaderFooterDataUpdate. Running
+      // refreshActiveSubEditors here would re-replace the originating editor,
+      // causing a redundant update cycle with cursor churn.
+      const isLocalSync = ctx.source === SOURCE_HEADER_FOOTER_LOCAL;
+
+      // For remote applies, rebuild the PM JSON from the updated OOXML
+      if (!isLocalSync && typeof converter.reimportHeaderFooterPart === 'function') {
         try {
-          const pmJson = converter.reimportHeaderFooterPart(ctx.partId, resolvedSectionId);
+          const pmJson = converter.reimportHeaderFooterPart(ctx.partId);
           if (pmJson) {
             const collection = type === 'header' ? (converter.headers ??= {}) : (converter.footers ??= {});
             collection[resolvedSectionId] = pmJson;
@@ -137,8 +146,12 @@ export function ensureHeaderFooterDescriptor(partId: PartId, sectionId: string):
 
       converter.headerFooterModified = true;
 
-      // Refresh active sub-editors with the new PM JSON
-      refreshActiveSubEditors(converter, type, resolvedSectionId);
+      // Only refresh sub-editors for remote updates — local sync already
+      // handled this in onHeaderFooterDataUpdate (which correctly skips
+      // the originating editor).
+      if (!isLocalSync) {
+        refreshActiveSubEditors(converter, type, resolvedSectionId);
+      }
     },
 
     onDelete(ctx: DeleteContext) {

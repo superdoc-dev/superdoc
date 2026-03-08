@@ -102,8 +102,30 @@ export function bootstrapPartSync(editor: Editor, ydoc: Y.Doc): PartSyncHandle {
     console.info('[part-sync] Backfilled partsCapability marker for existing parts data');
   }
 
-  // Step 4: No parts, no meta.docx — seed from local converter
+  // Step 4: No parts, no meta.docx — seed from local converter.
+  // Guard: if the Y fragment has content AND the Yjs doc contains state from
+  // remote clients, this is a late-joiner to a legacy room. Their converter
+  // holds blank-template data (not the real shared document), so seeding
+  // would overwrite authoritative shared state with local defaults.
+  // When only the local client has written (first-client or replaceFile),
+  // seeding is safe — the converter was loaded from the actual file.
   if (!capabilityActive) {
+    const fragment = ydoc.getXmlFragment('supereditor');
+    const hasRemoteState = Array.from(ydoc.store.clients.keys()).some((id) => id !== ydoc.clientID);
+
+    if (fragment.length > 0 && hasRemoteState) {
+      metaMap.set(META_PARTS_FALLBACK_MODE_KEY, true);
+      editor.safeEmit?.('parts:degraded', {
+        reason: 'existing-room-no-parts',
+        failures: ['Room has shared document content from remote clients but no parts data — cannot seed safely'],
+      });
+      console.warn(
+        '[part-sync] Degraded: room has Y fragment content with remote client state but no parts/meta.docx.' +
+          ' Skipping local seed to avoid publishing non-authoritative data.',
+      );
+      return createNoopHandle();
+    }
+
     seedPartsFromEditor(editor, ydoc);
     capabilityActive = true;
     console.info('[part-sync] Seeded parts from local converter');

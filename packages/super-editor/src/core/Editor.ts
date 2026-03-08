@@ -3232,8 +3232,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
         });
       };
 
+      const SYNC_TIMEOUT_MS = 10_000;
+
       await new Promise<void>((resolve, reject) => {
-        onCollaborationProviderSynced(provider, () => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let settled = false;
+
+        const cleanup = onCollaborationProviderSynced(provider, () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           try {
             doReplaceFileSync();
             resolve();
@@ -3241,6 +3249,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
             reject(error);
           }
         });
+
+        if (!settled) {
+          timer = setTimeout(() => {
+            settled = true;
+            cleanup();
+            reject(
+              new Error(
+                `replaceFile(): collaboration provider did not sync within ${SYNC_TIMEOUT_MS}ms. ` +
+                  `The provider exposes on/off but never emitted sync(true) or synced.`,
+              ),
+            );
+          }, SYNC_TIMEOUT_MS);
+        }
       });
     } else {
       this.#insertNewFileData();

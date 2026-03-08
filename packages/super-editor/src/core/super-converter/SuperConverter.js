@@ -2,7 +2,15 @@
 import * as xmljs from 'xml-js';
 import { v4 as uuidv4 } from 'uuid';
 import { DocxExporter, exportSchemaToJson } from './exporter';
-import { createDocumentJson, addDefaultStylesIfMissing } from './v2/importer/docxImporter.js';
+import {
+  createDocumentJson,
+  addDefaultStylesIfMissing,
+  defaultNodeListHandler,
+  filterOutRootInlineNodes,
+} from './v2/importer/docxImporter.js';
+import { normalizeDuplicateBlockIdentitiesInContent } from './v2/importer/normalizeDuplicateBlockIdentitiesInContent.js';
+import { preProcessPageFieldsOnly } from './field-references/preProcessPageFieldsOnly.js';
+import { carbonCopy } from '../utilities/carbonCopy.js';
 import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
@@ -1505,6 +1513,42 @@ class SuperConverter {
     this.addedMedia = {
       ...processedData,
     };
+  }
+
+  /**
+   * Re-import a single header/footer part from OOXML JSON to PM JSON.
+   *
+   * Used by the part-sync afterCommit hook to rebuild the PM JSON cache
+   * after a remote collaborator updates a header/footer part.
+   *
+   * @param {string} partId - OOXML zip path (e.g. 'word/header1.xml')
+   * @returns {object|null} PM JSON document, or null on failure
+   */
+  reimportHeaderFooterPart(partId) {
+    const xmlJson = this.convertedXml?.[partId];
+    if (!xmlJson?.elements?.[0]?.elements) return null;
+
+    const rootElements = carbonCopy(xmlJson.elements[0].elements);
+    const { processedNodes } = preProcessPageFieldsOnly(rootElements);
+
+    const nodeListHandler = defaultNodeListHandler();
+    let schema = nodeListHandler.handler({
+      nodes: processedNodes,
+      nodeListHandler,
+      docx: this.convertedXml,
+      converter: this,
+      numbering: this.numbering,
+      translatedNumbering: this.translatedNumbering,
+      translatedLinkedStyles: this.translatedLinkedStyles,
+      editor: {},
+      filename: partId.split('/').pop(),
+      path: [],
+    });
+
+    schema = filterOutRootInlineNodes(schema);
+    schema = normalizeDuplicateBlockIdentitiesInContent(schema);
+
+    return { type: 'doc', content: [...schema] };
   }
 
   /**

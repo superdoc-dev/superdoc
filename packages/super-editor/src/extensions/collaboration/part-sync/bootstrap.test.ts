@@ -194,6 +194,69 @@ describe('bootstrapPartSync', () => {
     expect(editor.off).toHaveBeenCalledWith('partChanged', expect.any(Function));
   });
 
+  it('seeds when fragment has content but only local client has written (first-client)', () => {
+    const editor = createMockEditor();
+    editor.converter.convertedXml['word/styles.xml'] = {
+      type: 'element',
+      name: 'doc',
+      elements: [{ type: 'element', name: 'w:styles', elements: [] }],
+    };
+
+    // Fragment has content from local y-prosemirror push (only our clientID)
+    const fragment = ydoc.getXmlFragment('supereditor');
+    const el = new Y.XmlElement('paragraph');
+    el.insert(0, [new Y.XmlText('loaded content')]);
+    fragment.insert(0, [el]);
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    // Should activate — no remote state, seeding is safe
+    expect(handle.publisher).not.toBeNull();
+    expect(handle.consumer).not.toBeNull();
+
+    // Parts should be seeded
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    expect(partsMap.has('word/styles.xml')).toBe(true);
+
+    handle.destroy();
+  });
+
+  it('enters degraded mode when room has remote client state but no parts', () => {
+    const editor = createMockEditor();
+
+    // Simulate a legacy room: fragment has content from a REMOTE client
+    const remoteDoc = new Y.Doc();
+    const remoteFragment = remoteDoc.getXmlFragment('supereditor');
+    const el = new Y.XmlElement('paragraph');
+    el.insert(0, [new Y.XmlText('shared content')]);
+    remoteFragment.insert(0, [el]);
+
+    // Merge remote state into our ydoc so it has another clientID
+    const remoteUpdate = Y.encodeStateAsUpdate(remoteDoc);
+    Y.applyUpdate(ydoc, remoteUpdate);
+    remoteDoc.destroy();
+
+    const handle = bootstrapPartSync(editor, ydoc);
+
+    // Should return noop — remote state present, cannot seed safely
+    expect(handle.publisher).toBeNull();
+    expect(handle.consumer).toBeNull();
+
+    // Should NOT have seeded parts from local converter
+    const partsMap = ydoc.getMap(PARTS_MAP_KEY);
+    expect(partsMap.size).toBe(0);
+
+    // Should emit degraded event
+    expect(editor.safeEmit).toHaveBeenCalledWith(
+      'parts:degraded',
+      expect.objectContaining({
+        reason: 'existing-room-no-parts',
+      }),
+    );
+
+    handle.destroy();
+  });
+
   it('returns noop and emits degraded event on critical hydration failure', () => {
     const editor = createMockEditor();
     const metaMap = ydoc.getMap(META_MAP_KEY);

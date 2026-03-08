@@ -1,0 +1,511 @@
+---
+title: Integrations
+sidebarTitle: Integrations
+tag: NEW
+description: Connect SuperDoc tools to AWS Bedrock, Google Vertex AI, Vercel AI SDK, LangChain, and more
+keywords: "ai integrations, ai providers, agent frameworks, aws bedrock, google vertex, vercel ai, langchain, openai, anthropic, tool use, function calling, superdoc sdk"
+---
+
+SuperDoc tools work with any LLM provider or agent framework that supports tool use. The SDK ships tool definitions in multiple formats — pick the one that matches your stack, write a conversation loop (or let the framework handle it), and dispatch tool calls through the SDK.
+
+Each example below opens a document, gives the model SuperDoc tools, and lets it review and edit the content.
+
+<Info>
+LLM tools are in <strong>alpha</strong>. Tool names and schemas may change between releases.
+</Info>
+
+## Cloud platforms
+
+Use SuperDoc tools with cloud AI platforms. You write the agentic loop and control the conversation directly.
+
+<Tabs>
+  <Tab title="AWS Bedrock">
+    <Tabs>
+      <Tab title="Node.js">
+        ```bash
+        npm install @superdoc-dev/sdk @aws-sdk/client-bedrock-runtime
+        ```
+
+        ```typescript
+        import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+        import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+        const client = createSuperDocClient();
+        await client.connect();
+        await client.doc.open({ doc: './contract.docx' });
+
+        // Anthropic format → Bedrock toolSpec (3-line conversion)
+        const { tools } = await chooseTools({ provider: 'anthropic' });
+        const toolConfig = {
+          tools: tools.map((t) => ({
+            toolSpec: {
+              name: t.name,
+              description: t.description,
+              inputSchema: { json: t.input_schema },
+            },
+          })),
+        };
+
+        const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' });
+        const messages = [
+          { role: 'user', content: [{ text: 'Review this contract.' }] },
+        ];
+
+        while (true) {
+          const res = await bedrock.send(new ConverseCommand({
+            modelId: 'amazon.nova-pro-v1:0',
+            messages,
+            system: [{ text: 'You edit .docx files using SuperDoc tools.' }],
+            toolConfig,
+          }));
+
+          const output = res.output?.message;
+          if (!output) break;
+          messages.push(output);
+
+          const toolUses = output.content?.filter((b) => b.toolUse) ?? [];
+          if (!toolUses.length) break;
+
+          const results = [];
+          for (const block of toolUses) {
+            const { name, input, toolUseId } = block.toolUse;
+            const result = await dispatchSuperDocTool(client, name, input ?? {});
+            // Bedrock requires json to be a plain object — wrap if needed
+        const json = (typeof result === 'object' && result !== null && !Array.isArray(result))
+          ? result : { result };
+        results.push({ toolResult: { toolUseId, content: [{ json }] } });
+          }
+          messages.push({ role: 'user', content: results });
+        }
+
+        await client.doc.save({ inPlace: true });
+        await client.dispose();
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```bash
+        pip install superdoc-sdk boto3
+        ```
+
+        ```python
+        import boto3
+        from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+
+        client = SuperDocClient()
+        client.connect()
+        client.doc.open(doc="./contract.docx")
+
+        # Anthropic format → Bedrock toolSpec
+        result = choose_tools(provider="anthropic")
+        tool_config = {
+            "tools": [
+                {"toolSpec": {"name": t["name"], "description": t["description"],
+                              "inputSchema": {"json": t["input_schema"]}}}
+                for t in result["tools"]
+            ]
+        }
+
+        bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+        messages = [{"role": "user", "content": [{"text": "Review this contract."}]}]
+
+        while True:
+            response = bedrock.converse(
+                modelId="amazon.nova-pro-v1:0",
+                messages=messages,
+                system=[{"text": "You edit .docx files using SuperDoc tools."}],
+                toolConfig=tool_config,
+            )
+
+            output = response["output"]["message"]
+            messages.append(output)
+
+            tool_uses = [b for b in output.get("content", []) if "toolUse" in b]
+            if not tool_uses:
+                break
+
+            tool_results = []
+            for block in tool_uses:
+                tu = block["toolUse"]
+                result = dispatch_superdoc_tool(client, tu["name"], tu.get("input", {}))
+                tool_results.append(
+                    {"toolResult": {"toolUseId": tu["toolUseId"], "content": [{"json": result}]}}
+                )
+            messages.append({"role": "user", "content": tool_results})
+
+        client.doc.save(in_place=True)
+        client.dispose()
+        ```
+      </Tab>
+    </Tabs>
+
+    **Auth**: AWS credentials via `aws configure`, env vars, or IAM role. No API key needed.
+  </Tab>
+
+  <Tab title="Google Vertex AI">
+    <Tabs>
+      <Tab title="Node.js">
+        ```bash
+        npm install @superdoc-dev/sdk @google-cloud/vertexai
+        ```
+
+        ```typescript
+        import { VertexAI } from '@google-cloud/vertexai';
+        import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+        const client = createSuperDocClient();
+        await client.connect();
+        await client.doc.open({ doc: './contract.docx' });
+
+        // Vertex doesn't support all JSON Schema keywords — strip unsupported ones
+        function sanitizeSchema(obj) {
+          if (Array.isArray(obj)) return obj.map(sanitizeSchema);
+          if (typeof obj !== 'object' || obj === null) return obj;
+          const result = {};
+          for (const [k, v] of Object.entries(obj)) {
+            if (k === 'const') continue;
+            result[k] = sanitizeSchema(v);
+          }
+          return result;
+        }
+
+        // Generic format → Vertex function declarations
+        const { tools } = await chooseTools({ provider: 'generic' });
+        const vertexTools = [{
+          functionDeclarations: tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: sanitizeSchema(t.parameters),
+          })),
+        }];
+
+        const vertexAI = new VertexAI({ project: 'your-project', location: 'us-central1' });
+        const model = vertexAI.getGenerativeModel({
+          model: 'gemini-2.5-pro',
+          tools: vertexTools,
+          systemInstruction: { role: 'system', parts: [{ text: 'You edit .docx files using SuperDoc tools.' }] },
+        });
+
+        const chat = model.startChat();
+        let response = await chat.sendMessage([{ text: 'Review this contract.' }]);
+
+        while (true) {
+          const parts = response.response.candidates?.[0]?.content.parts ?? [];
+          const calls = parts.filter((p) => p.functionCall);
+          if (!calls.length) break;
+
+          const results = [];
+          for (const part of calls) {
+            const { name, args } = part.functionCall;
+            const result = await dispatchSuperDocTool(client, name, args ?? {});
+            results.push({ functionResponse: { name, response: result } });
+          }
+          response = await chat.sendMessage(results);
+        }
+
+        await client.doc.save({ inPlace: true });
+        await client.dispose();
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```bash
+        pip install superdoc-sdk google-cloud-aiplatform
+        ```
+
+        ```python
+        import vertexai
+        from vertexai.generative_models import GenerativeModel, Tool, FunctionDeclaration, Part
+        from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+
+        client = SuperDocClient()
+        client.connect()
+        client.doc.open(doc="./contract.docx")
+
+        # Vertex doesn't support all JSON Schema keywords — strip unsupported ones
+        def sanitize_schema(obj):
+            if isinstance(obj, list): return [sanitize_schema(i) for i in obj]
+            if isinstance(obj, dict): return {k: sanitize_schema(v) for k, v in obj.items() if k != "const"}
+            return obj
+
+        # Generic format → Vertex function declarations
+        result = choose_tools(provider="generic")
+        vertex_tools = [Tool(function_declarations=[
+            FunctionDeclaration(name=t["name"], description=t["description"], parameters=sanitize_schema(t["parameters"]))
+            for t in result["tools"]
+        ])]
+
+        vertexai.init(project="your-project", location="us-central1")
+        model = GenerativeModel(
+            "gemini-2.5-pro",
+            tools=vertex_tools,
+            system_instruction="You edit .docx files using SuperDoc tools.",
+        )
+        chat = model.start_chat()
+        response = chat.send_message("Review this contract.")
+
+        while True:
+            calls = [p for p in response.candidates[0].content.parts if p.function_call.name]
+            if not calls:
+                break
+
+            responses = []
+            for part in calls:
+                name = part.function_call.name
+                args = dict(part.function_call.args) if part.function_call.args else {}
+                result = dispatch_superdoc_tool(client, name, args)
+                responses.append(Part.from_function_response(name=name, response=result))
+            response = chat.send_message(responses)
+
+        client.doc.save(in_place=True)
+        client.dispose()
+        ```
+      </Tab>
+    </Tabs>
+
+    **Auth**: `gcloud auth application-default login` or a service account key.
+  </Tab>
+</Tabs>
+
+## Agent frameworks
+
+Use SuperDoc tools with agent frameworks. The framework manages the agentic loop — you configure tools and let it run.
+
+<Tabs>
+  <Tab title="Vercel AI SDK">
+    ```bash
+    npm install @superdoc-dev/sdk ai @ai-sdk/openai zod
+    ```
+
+    ```typescript
+    import { generateText, tool } from 'ai';
+    import { openai } from '@ai-sdk/openai';
+    import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+    import { z } from 'zod';
+
+    const client = createSuperDocClient();
+    await client.connect();
+    await client.doc.open({ doc: './contract.docx' });
+
+    const { tools: sdTools } = await chooseTools({ provider: 'vercel' });
+
+    // Wrap as Vercel AI tool() objects
+    const tools = {};
+    for (const t of sdTools) {
+      tools[t.function.name] = tool({
+        description: t.function.description,
+        parameters: z.object({}).passthrough(),
+        execute: async (args) =>
+          dispatchSuperDocTool(client, t.function.name, args),
+      });
+    }
+
+    // generateText handles the agentic loop automatically
+    const result = await generateText({
+      model: openai('gpt-4o'),
+      system: 'You edit .docx files using SuperDoc tools.',
+      prompt: 'Review this contract.',
+      tools,
+      maxSteps: 20,
+    });
+
+    console.log(result.text);
+    await client.doc.save({ inPlace: true });
+    await client.dispose();
+    ```
+
+    **Auth**: `OPENAI_API_KEY` env var. Swap `openai(...)` for `anthropic(...)`, `google(...)`, etc.
+  </Tab>
+
+  <Tab title="LangChain">
+    <Tabs>
+      <Tab title="Node.js">
+        ```bash
+        npm install @superdoc-dev/sdk @langchain/openai @langchain/core @langchain/langgraph zod
+        ```
+
+        ```typescript
+        import { ChatOpenAI } from '@langchain/openai';
+        import { DynamicStructuredTool } from '@langchain/core/tools';
+        import { createReactAgent } from '@langchain/langgraph/prebuilt';
+        import { HumanMessage } from '@langchain/core/messages';
+        import { z } from 'zod';
+        import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+        const client = createSuperDocClient();
+        await client.connect();
+        await client.doc.open({ doc: './contract.docx' });
+
+        const { tools: sdTools } = await chooseTools({ provider: 'generic' });
+
+        // Wrap as LangChain DynamicStructuredTool objects
+        const tools = sdTools.map(
+          (t) => new DynamicStructuredTool({
+            name: t.name,
+            description: t.description,
+            schema: z.object({}).passthrough(),
+            func: async (args) => {
+              const result = await dispatchSuperDocTool(client, t.name, args);
+              return JSON.stringify(result);
+            },
+          }),
+        );
+
+        const agent = createReactAgent({
+          llm: new ChatOpenAI({ model: 'gpt-4o' }),
+          tools,
+          prompt: 'You edit .docx files using SuperDoc tools.',
+        });
+
+        const result = await agent.invoke({
+          messages: [new HumanMessage('Review this contract.')],
+        });
+
+        console.log(result.messages.at(-1).content);
+        await client.doc.save({ inPlace: true });
+        await client.dispose();
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```bash
+        pip install superdoc-sdk langchain-openai langgraph
+        ```
+
+        ```python
+        import json
+        from langchain_openai import ChatOpenAI
+        from langchain_core.tools import StructuredTool
+        from langgraph.prebuilt import create_react_agent
+        from langchain_core.messages import HumanMessage
+        from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+
+        client = SuperDocClient()
+        client.connect()
+        client.doc.open(doc="./contract.docx")
+
+        result = choose_tools(provider="generic")
+
+        # Wrap as LangChain StructuredTool objects
+        def make_tool(t):
+            def invoke(args: dict) -> str:
+                return json.dumps(dispatch_superdoc_tool(client, t["name"], args))
+            return StructuredTool.from_function(
+                func=invoke, name=t["name"], description=t["description"],
+            )
+
+        tools = [make_tool(t) for t in result["tools"]]
+
+        agent = create_react_agent(
+            model=ChatOpenAI(model="gpt-4o"),
+            tools=tools,
+            prompt="You edit .docx files using SuperDoc tools.",
+        )
+
+        result = agent.invoke(
+            {"messages": [HumanMessage(content="Review this contract.")]}
+        )
+        print(result["messages"][-1].content)
+
+        client.doc.save(in_place=True)
+        client.dispose()
+        ```
+      </Tab>
+    </Tabs>
+
+    **Auth**: `OPENAI_API_KEY` env var. Swap `ChatOpenAI` for `ChatAnthropic`, `ChatGoogleGenerativeAI`, etc.
+  </Tab>
+</Tabs>
+
+## Tool format reference
+
+The SDK ships pre-formatted tools for each integration. The conversion is minimal:
+
+| Integration | Type | SDK format | Native shape |
+|-------------|------|-----------|--------------|
+| AWS Bedrock | Cloud platform | `anthropic` | Wrap in `{ toolSpec: { name, description, inputSchema: { json } } }` |
+| Google Vertex AI | Cloud platform | `generic` | Use `{ name, description, parameters }` as `functionDeclarations` |
+| Vercel AI SDK | Framework | `vercel` | Wrap in Vercel `tool()` with `z.object({}).passthrough()` |
+| LangChain | Framework | `generic` | Wrap in `DynamicStructuredTool` |
+| OpenAI | Direct API | `openai` | Pass directly — already in OpenAI format |
+| Anthropic | Direct API | `anthropic` | Pass directly — already in Anthropic format |
+
+## The discover_tools pattern
+
+All provider examples above use **essential mode** (default) — 5 core tools plus `discover_tools`. When the model needs more tools (comments, formatting, tables, etc.), it calls `discover_tools` to load them dynamically.
+
+Handle this in your agentic loop by merging new tools into the conversation:
+
+```typescript
+const result = await dispatchSuperDocTool(client, name, args);
+
+if (name === 'discover_tools' && result.tools) {
+  // Merge newly discovered tools into your provider's tool config
+  for (const t of result.tools) {
+    // ... add to your tools array in the provider's format
+  }
+}
+```
+
+See the [LLM Tools guide](/document-engine/ai-agents/llm-tools#the-discover_tools-pattern) for details.
+
+## Tracked changes
+
+For contract review workflows, you typically want all edits to appear as tracked changes so a human can accept or reject them. Two approaches:
+
+### Instruct the model
+
+Tell the model to use `changeMode: "tracked"` in its `apply_mutations` calls:
+
+```markdown
+## System prompt
+All edits must use changeMode: "tracked" so they appear as
+tracked changes for human review.
+```
+
+### Use the headless editor
+
+If you don't need agentic tool use — just want the model to suggest edits — use the headless editor with `documentMode: 'suggesting'`:
+
+```typescript
+import { Editor } from 'superdoc/super-editor';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const docx = await readFile('./contract.docx');
+const editor = await Editor.open(docx, { documentMode: 'suggesting' });
+
+// Get suggestions from your LLM (structured output, no tool use)
+const suggestions = await getSuggestions(editor.state.doc.textContent);
+
+// Apply each suggestion as a tracked change
+for (const s of suggestions) {
+  const matches = editor.commands.search(s.find, { highlight: false });
+  if (!matches.length) continue;
+
+  editor.commands.insertTrackedChange({
+    from: matches[0].from,
+    to: matches[0].to,
+    text: s.replace,
+    user: { name: 'AI Reviewer', email: 'ai@example.com' },
+  });
+}
+
+const result = await editor.exportDocx();
+await writeFile('./reviewed.docx', Buffer.from(result));
+editor.destroy();
+```
+
+## Best practices
+
+- **Start with essential mode.** Load 5 tools + `discover_tools`. The model loads more groups when needed. This keeps token usage low.
+- **Use `apply_mutations` for text edits.** It batches multiple rewrites in one call, reducing round trips.
+- **Feed errors back.** When a tool call fails, return the error as a tool result. Most models self-correct on the next turn.
+- **Pin your model version.** Use a specific model ID rather than an alias to avoid behavior changes between releases.
+
+## Example repository
+
+Complete, runnable examples for all cloud platforms and frameworks (Node.js and Python) are available at [`examples/ai/`](https://github.com/superdoc-dev/superdoc/tree/main/examples/ai).
+
+## Related
+
+- [LLM Tools](/document-engine/ai-agents/llm-tools) — tool selection, dispatch, and the full API
+- [Skills](/document-engine/ai-agents/skills) — reusable prompt templates
+- [MCP Server](/document-engine/ai-agents/mcp-server) — Model Context Protocol integration
+- [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers

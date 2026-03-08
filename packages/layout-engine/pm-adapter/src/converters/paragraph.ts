@@ -588,6 +588,7 @@ export function paragraphToFlowBlocks({
     );
     const isGhostTrackedListArtifact =
       trackedChangesConfig.enabled &&
+      trackedChangesConfig.mode !== 'off' &&
       Boolean(paragraphAttrs.numberingProperties) &&
       Boolean(paragraphMarkTrackedChange) &&
       filteredRuns.length > 0 &&

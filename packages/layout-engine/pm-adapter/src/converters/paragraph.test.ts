@@ -2180,6 +2180,61 @@ describe('paragraph converters', () => {
         expect(blocks).toHaveLength(0);
       });
 
+      it('should preserve tracked empty list paragraph artifacts when tracked changes mode is off', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                trackInsert: {
+                  id: 'ins-1',
+                  author: 'Test Author',
+                  date: '2026-03-01T12:00:00Z',
+                },
+              },
+            },
+          },
+        };
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'off',
+          enabled: true,
+        };
+
+        const filteredRuns: Run[] = [
+          {
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ];
+
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+          },
+          resolvedParagraphProperties: {},
+        });
+        vi.mocked(collectTrackedChangeFromMarks).mockReturnValue({
+          kind: 'insert',
+          id: 'ins-1',
+        });
+        vi.mocked(applyTrackedChangesModeToRuns).mockReturnValue(filteredRuns);
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          attrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+            trackedChangesMode: 'off',
+            trackedChangesEnabled: true,
+          },
+        });
+      });
+
       it('should not apply tracked changes mode when config not provided', () => {
         const para: PMNode = {
           type: 'paragraph',

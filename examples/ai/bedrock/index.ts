@@ -20,6 +20,9 @@ import {
   createSuperDocClient,
   chooseTools,
   dispatchSuperDocTool,
+  formatToolResult,
+  formatToolError,
+  mergeDiscoveredTools,
 } from '@superdoc-dev/sdk';
 
 const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'amazon.nova-pro-v1:0';
@@ -33,19 +36,10 @@ async function main() {
   await client.connect();
   await client.doc.open({ doc: inputPath });
 
-  // 2. Get tools in Anthropic format (Bedrock-compatible) and convert to toolSpec shape
+  // 2. Get tools in Anthropic format and convert to Bedrock toolSpec shape
   const { tools: sdTools } = await chooseTools({ provider: 'anthropic' });
-  const toolConfig = {
-    tools: (sdTools as Array<{ name: string; description: string; input_schema: Record<string, unknown> }>).map(
-      (t): Tool => ({
-        toolSpec: {
-          name: t.name,
-          description: t.description,
-          inputSchema: { json: t.input_schema },
-        },
-      }),
-    ),
-  };
+  const toolConfig = { tools: [] as Tool[] };
+  mergeDiscoveredTools(toolConfig, { tools: sdTools }, { provider: 'anthropic', target: 'bedrock' });
 
   // 3. Agentic loop
   const bedrock = new BedrockRuntimeClient({ region: REGION });
@@ -83,18 +77,12 @@ async function main() {
 
         // discover_tools returns new tools — merge them into toolConfig
         if (name === 'discover_tools') {
-          for (const t of (result as { tools?: any[] }).tools ?? []) {
-            toolConfig.tools.push({ toolSpec: { name: t.name, description: t.description, inputSchema: { json: t.input_schema } } });
-          }
+          mergeDiscoveredTools(toolConfig, result, { provider: 'anthropic', target: 'bedrock' });
         }
 
-        // Bedrock requires json content to be a plain object
-        const jsonResult = (typeof result === 'object' && result !== null && !Array.isArray(result))
-          ? result as Record<string, unknown>
-          : { result };
-        results.push({ toolResult: { toolUseId, content: [{ json: jsonResult }] } } as ContentBlock);
+        results.push(formatToolResult(result, { target: 'bedrock', toolUseId }) as ContentBlock);
       } catch (err) {
-        results.push({ toolResult: { toolUseId, content: [{ text: `Error: ${(err as Error).message}` }], status: 'error' } } as ContentBlock);
+        results.push(formatToolError(err, { target: 'bedrock', toolUseId }) as ContentBlock);
       }
     }
     messages.push({ role: 'user', content: results });

@@ -13,42 +13,19 @@ import {
   VertexAI,
   type FunctionDeclaration,
   type Tool as VertexTool,
-  type Content,
   type Part,
 } from '@google-cloud/vertexai';
 import {
   createSuperDocClient,
   chooseTools,
   dispatchSuperDocTool,
+  sanitizeToolSchemas,
+  mergeDiscoveredTools,
 } from '@superdoc-dev/sdk';
 
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT ?? 'your-project-id';
 const LOCATION = process.env.GOOGLE_CLOUD_LOCATION ?? 'us-central1';
 const MODEL = process.env.VERTEX_MODEL ?? 'gemini-2.5-pro';
-
-/** Recursively strip JSON Schema keywords unsupported by Vertex AI (e.g. `const`). */
-function sanitizeSchema(obj: unknown): unknown {
-  if (Array.isArray(obj)) return obj.map(sanitizeSchema);
-  if (typeof obj !== 'object' || obj === null) return obj;
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-    if (key === 'const') continue;
-    result[key] = sanitizeSchema(value);
-  }
-  return result;
-}
-
-/** Convert SuperDoc generic-format tools to Vertex AI function declarations. */
-function toVertexTools(
-  sdTools: Array<{ name: string; description: string; parameters: Record<string, unknown> }>,
-): VertexTool[] {
-  const declarations: FunctionDeclaration[] = sdTools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    parameters: sanitizeSchema(t.parameters) as FunctionDeclaration['parameters'],
-  }));
-  return [{ functionDeclarations: declarations }];
-}
 
 async function main() {
   const [inputPath = 'contract.docx', outputPath = 'reviewed.docx'] = process.argv.slice(2);
@@ -58,11 +35,16 @@ async function main() {
   await client.connect();
   await client.doc.open({ doc: inputPath });
 
-  // 2. Get tools in generic format and convert to Vertex shape
+  // 2. Get tools in generic format, sanitize for Vertex, and build declarations
   const { tools: sdTools } = await chooseTools({ provider: 'generic' });
-  const vertexTools = toVertexTools(
-    sdTools as Array<{ name: string; description: string; parameters: Record<string, unknown> }>,
-  );
+  const sanitized = sanitizeToolSchemas(sdTools, 'vertex') as Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
+  const vertexTools: VertexTool[] = [{
+    functionDeclarations: sanitized.map((t): FunctionDeclaration => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters as FunctionDeclaration['parameters'],
+    })),
+  }];
 
   // 3. Set up Vertex AI
   const vertexAI = new VertexAI({ project: PROJECT, location: LOCATION });
@@ -101,14 +83,7 @@ async function main() {
 
         // discover_tools returns new tools — merge them
         if (name === 'discover_tools') {
-          const newTools = (result as { tools?: any[] }).tools ?? [];
-          vertexTools[0].functionDeclarations!.push(
-            ...newTools.map((t: any) => ({
-              name: t.name,
-              description: t.description,
-              parameters: sanitizeSchema(t.parameters),
-            })),
-          );
+          mergeDiscoveredTools(vertexTools, result, { provider: 'generic', target: 'vertex' });
         }
 
         functionResponses.push({

@@ -28,23 +28,19 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
 
         ```typescript
         import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-        import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+        import {
+          createSuperDocClient, chooseTools, dispatchSuperDocTool,
+          formatToolResult, mergeDiscoveredTools,
+        } from '@superdoc-dev/sdk';
 
         const client = createSuperDocClient();
         await client.connect();
         await client.doc.open({ doc: './contract.docx' });
 
-        // Anthropic format → Bedrock toolSpec (3-line conversion)
+        // Anthropic format → Bedrock toolSpec shape
         const { tools } = await chooseTools({ provider: 'anthropic' });
-        const toolConfig = {
-          tools: tools.map((t) => ({
-            toolSpec: {
-              name: t.name,
-              description: t.description,
-              inputSchema: { json: t.input_schema },
-            },
-          })),
-        };
+        const toolConfig = { tools: [] };
+        mergeDiscoveredTools(toolConfig, { tools }, { provider: 'anthropic', target: 'bedrock' });
 
         const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' });
         const messages = [
@@ -70,10 +66,7 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
           for (const block of toolUses) {
             const { name, input, toolUseId } = block.toolUse;
             const result = await dispatchSuperDocTool(client, name, input ?? {});
-            // Bedrock requires json to be a plain object — wrap if needed
-        const json = (typeof result === 'object' && result !== null && !Array.isArray(result))
-          ? result : { result };
-        results.push({ toolResult: { toolUseId, content: [{ json }] } });
+            results.push(formatToolResult(result, { target: 'bedrock', toolUseId }));
           }
           messages.push({ role: 'user', content: results });
         }
@@ -89,21 +82,19 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
 
         ```python
         import boto3
-        from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+        from superdoc import (
+            SuperDocClient, choose_tools, dispatch_superdoc_tool,
+            format_tool_result, merge_discovered_tools,
+        )
 
         client = SuperDocClient()
         client.connect()
         client.doc.open(doc="./contract.docx")
 
-        # Anthropic format → Bedrock toolSpec
-        result = choose_tools(provider="anthropic")
-        tool_config = {
-            "tools": [
-                {"toolSpec": {"name": t["name"], "description": t["description"],
-                              "inputSchema": {"json": t["input_schema"]}}}
-                for t in result["tools"]
-            ]
-        }
+        # Anthropic format → Bedrock toolSpec shape
+        sd_tools = choose_tools(provider="anthropic")
+        tool_config = {"tools": []}
+        merge_discovered_tools(tool_config, sd_tools, provider="anthropic", target="bedrock")
 
         bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
         messages = [{"role": "user", "content": [{"text": "Review this contract."}]}]
@@ -128,7 +119,7 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
                 tu = block["toolUse"]
                 result = dispatch_superdoc_tool(client, tu["name"], tu.get("input", {}))
                 tool_results.append(
-                    {"toolResult": {"toolUseId": tu["toolUseId"], "content": [{"json": result}]}}
+                    format_tool_result(result, target="bedrock", tool_use_id=tu["toolUseId"])
                 )
             messages.append({"role": "user", "content": tool_results})
 
@@ -150,31 +141,23 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
 
         ```typescript
         import { VertexAI } from '@google-cloud/vertexai';
-        import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+        import {
+          createSuperDocClient, chooseTools, dispatchSuperDocTool,
+          sanitizeToolSchemas,
+        } from '@superdoc-dev/sdk';
 
         const client = createSuperDocClient();
         await client.connect();
         await client.doc.open({ doc: './contract.docx' });
 
-        // Vertex doesn't support all JSON Schema keywords — strip unsupported ones
-        function sanitizeSchema(obj) {
-          if (Array.isArray(obj)) return obj.map(sanitizeSchema);
-          if (typeof obj !== 'object' || obj === null) return obj;
-          const result = {};
-          for (const [k, v] of Object.entries(obj)) {
-            if (k === 'const') continue;
-            result[k] = sanitizeSchema(v);
-          }
-          return result;
-        }
-
-        // Generic format → Vertex function declarations
+        // Generic format → Vertex function declarations (sanitized for Vertex compatibility)
         const { tools } = await chooseTools({ provider: 'generic' });
+        const sanitized = sanitizeToolSchemas(tools, 'vertex');
         const vertexTools = [{
-          functionDeclarations: tools.map((t) => ({
+          functionDeclarations: sanitized.map((t) => ({
             name: t.name,
             description: t.description,
-            parameters: sanitizeSchema(t.parameters),
+            parameters: t.parameters,
           })),
         }];
 
@@ -214,23 +197,18 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
         ```python
         import vertexai
         from vertexai.generative_models import GenerativeModel, Tool, FunctionDeclaration, Part
-        from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+        from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool, sanitize_tool_schemas
 
         client = SuperDocClient()
         client.connect()
         client.doc.open(doc="./contract.docx")
 
-        # Vertex doesn't support all JSON Schema keywords — strip unsupported ones
-        def sanitize_schema(obj):
-            if isinstance(obj, list): return [sanitize_schema(i) for i in obj]
-            if isinstance(obj, dict): return {k: sanitize_schema(v) for k, v in obj.items() if k != "const"}
-            return obj
-
-        # Generic format → Vertex function declarations
+        # Generic format → Vertex function declarations (sanitized for Vertex compatibility)
         result = choose_tools(provider="generic")
+        sanitized = sanitize_tool_schemas(result["tools"], "vertex")
         vertex_tools = [Tool(function_declarations=[
-            FunctionDeclaration(name=t["name"], description=t["description"], parameters=sanitize_schema(t["parameters"]))
-            for t in result["tools"]
+            FunctionDeclaration(name=t["name"], description=t["description"], parameters=t["parameters"])
+            for t in sanitized
         ])]
 
         vertexai.init(project="your-project", location="us-central1")
@@ -418,14 +396,14 @@ Use SuperDoc tools with agent frameworks. The framework manages the agentic loop
 
 The SDK ships pre-formatted tools for each integration. The conversion is minimal:
 
-| Integration | Type | SDK format | Native shape |
-|-------------|------|-----------|--------------|
-| AWS Bedrock | Cloud platform | `anthropic` | Wrap in `{ toolSpec: { name, description, inputSchema: { json } } }` |
-| Google Vertex AI | Cloud platform | `generic` | Use `{ name, description, parameters }` as `functionDeclarations` |
-| Vercel AI SDK | Framework | `vercel` | Wrap in Vercel `tool()` with `z.object({}).passthrough()` |
-| LangChain | Framework | `generic` | Wrap in `DynamicStructuredTool` |
-| OpenAI | Direct API | `openai` | Pass directly — already in OpenAI format |
-| Anthropic | Direct API | `anthropic` | Pass directly — already in Anthropic format |
+| Integration | Type | SDK format | SDK helpers | Native shape |
+|-------------|------|-----------|-------------|--------------|
+| AWS Bedrock | Cloud platform | `anthropic` | `mergeDiscoveredTools`, `formatToolResult`, `formatToolError` | `{ toolSpec: { name, description, inputSchema: { json } } }` |
+| Google Vertex AI | Cloud platform | `generic` | `sanitizeToolSchemas`, `mergeDiscoveredTools` | `{ functionDeclarations: [...] }` |
+| Vercel AI SDK | Framework | `vercel` | — | Wrap in Vercel `tool()` with `z.object({}).passthrough()` |
+| LangChain | Framework | `generic` | — | Wrap in `DynamicStructuredTool` |
+| OpenAI | Direct API | `openai` | `formatToolResult` | Pass directly |
+| Anthropic | Direct API | `anthropic` | `formatToolResult` | Pass directly |
 
 ## The discover_tools pattern
 
@@ -434,13 +412,13 @@ All provider examples above use **essential mode** (default) — 5 core tools pl
 Handle this in your agentic loop by merging new tools into the conversation:
 
 ```typescript
+import { mergeDiscoveredTools } from '@superdoc-dev/sdk';
+
 const result = await dispatchSuperDocTool(client, name, args);
 
-if (name === 'discover_tools' && result.tools) {
-  // Merge newly discovered tools into your provider's tool config
-  for (const t of result.tools) {
-    // ... add to your tools array in the provider's format
-  }
+if (name === 'discover_tools') {
+  // Merge newly discovered tools — handles format conversion and deduplication
+  mergeDiscoveredTools(toolConfig, result, { provider: 'anthropic', target: 'bedrock' });
 }
 ```
 

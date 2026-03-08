@@ -274,7 +274,7 @@ function collectExistingNames(toolConfig: unknown, target?: PlatformTarget): Set
 }
 
 /** Convert a discovered tool to the platform-native shape and push into config. */
-function formatToolForConfig(tool: unknown, provider: ToolProvider, target?: PlatformTarget): unknown {
+function formatToolForConfig(tool: unknown, _provider: ToolProvider, target?: PlatformTarget): unknown {
   const obj = tool as Record<string, unknown>;
 
   if (target === 'bedrock') {

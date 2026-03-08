@@ -15,31 +15,23 @@ import sys
 import os
 from vertexai.generative_models import GenerativeModel, Tool, FunctionDeclaration, Part
 import vertexai
-from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool, sanitize_tool_schemas
 
 PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "your-project-id")
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
 MODEL = os.environ.get("VERTEX_MODEL", "gemini-2.5-pro")
 
 
-def sanitize_schema(obj):
-    """Recursively strip JSON Schema keywords unsupported by Vertex AI (e.g. `const`)."""
-    if isinstance(obj, list):
-        return [sanitize_schema(item) for item in obj]
-    if isinstance(obj, dict):
-        return {k: sanitize_schema(v) for k, v in obj.items() if k != "const"}
-    return obj
-
-
 def to_vertex_tools(generic_tools):
     """Convert SuperDoc generic-format tools to Vertex AI function declarations."""
+    sanitized = sanitize_tool_schemas(generic_tools, "vertex")
     declarations = [
         FunctionDeclaration(
             name=t["name"],
             description=t["description"],
-            parameters=sanitize_schema(t["parameters"]),
+            parameters=t["parameters"],
         )
-        for t in generic_tools
+        for t in sanitized
     ]
     return [Tool(function_declarations=declarations)]
 
@@ -93,12 +85,13 @@ def main():
 
                 # discover_tools returns new tools — merge them
                 if name == "discover_tools" and "tools" in result:
-                    for t in result["tools"]:
+                    sanitized = sanitize_tool_schemas(result["tools"], "vertex")
+                    for t in sanitized:
                         vertex_tools[0].function_declarations.append(
                             FunctionDeclaration(
                                 name=t["name"],
                                 description=t["description"],
-                                parameters=sanitize_schema(t["parameters"]),
+                                parameters=t["parameters"],
                             )
                         )
 

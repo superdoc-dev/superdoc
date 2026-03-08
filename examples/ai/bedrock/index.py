@@ -13,26 +13,18 @@ Requires:
 
 import sys
 import os
-import json
 import boto3
-from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+from superdoc import (
+    SuperDocClient,
+    choose_tools,
+    dispatch_superdoc_tool,
+    format_tool_result,
+    format_tool_error,
+    merge_discovered_tools,
+)
 
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-pro-v1:0")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
-
-
-def to_bedrock_tools(anthropic_tools):
-    """Convert SuperDoc Anthropic-format tools to Bedrock toolSpec shape."""
-    return [
-        {
-            "toolSpec": {
-                "name": t["name"],
-                "description": t["description"],
-                "inputSchema": {"json": t["input_schema"]},
-            }
-        }
-        for t in anthropic_tools
-    ]
 
 
 def main():
@@ -45,9 +37,10 @@ def main():
     client.connect()
     client.doc.open(doc=input_path)
 
-    # 2. Get tools in Anthropic format (Bedrock-compatible)
-    result = choose_tools(provider="anthropic")
-    tool_config = {"tools": to_bedrock_tools(result["tools"])}
+    # 2. Get tools in Anthropic format and convert to Bedrock toolSpec shape
+    sd_tools = choose_tools(provider="anthropic")
+    tool_config = {"tools": []}
+    merge_discovered_tools(tool_config, sd_tools, provider="anthropic", target="bedrock")
 
     # 3. Agentic loop
     bedrock = boto3.client("bedrock-runtime", region_name=REGION)
@@ -84,17 +77,15 @@ def main():
                 result = dispatch_superdoc_tool(client, name, tool_use.get("input", {}))
 
                 # discover_tools returns new tools — merge them
-                if name == "discover_tools" and "tools" in result:
-                    tool_config["tools"].extend(to_bedrock_tools(result["tools"]))
+                if name == "discover_tools":
+                    merge_discovered_tools(tool_config, result, provider="anthropic", target="bedrock")
 
-                # Bedrock requires json content to be a plain dict
-                json_result = result if isinstance(result, dict) else {"result": result}
                 tool_results.append(
-                    {"toolResult": {"toolUseId": tool_use["toolUseId"], "content": [{"json": json_result}]}}
+                    format_tool_result(result, target="bedrock", tool_use_id=tool_use["toolUseId"])
                 )
             except Exception as e:
                 tool_results.append(
-                    {"toolResult": {"toolUseId": tool_use["toolUseId"], "content": [{"text": f"Error: {e}"}], "status": "error"}}
+                    format_tool_error(e, target="bedrock", tool_use_id=tool_use["toolUseId"])
                 )
 
         messages.append({"role": "user", "content": tool_results})

@@ -21,6 +21,7 @@ npx tsx index.ts contract.docx reviewed.docx
 ### Python
 
 ```bash
+python -m venv venv && source venv/bin/activate
 pip install superdoc-sdk boto3
 python index.py contract.docx reviewed.docx
 ```
@@ -30,7 +31,7 @@ python index.py contract.docx reviewed.docx
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AWS_REGION` | `us-east-1` | AWS region with Bedrock access |
-| `BEDROCK_MODEL_ID` | `amazon.nova-pro-v1:0` | Any Bedrock model that supports tool use |
+| `BEDROCK_MODEL_ID` | `us.anthropic.claude-sonnet-4-6` | Any Bedrock model that supports tool use |
 
 ## How it works
 

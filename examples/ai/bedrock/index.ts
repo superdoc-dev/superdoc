@@ -28,7 +28,7 @@ import {
   type ToolGroup,
 } from '@superdoc-dev/sdk';
 
-const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'amazon.nova-pro-v1:0';
+const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'us.anthropic.claude-sonnet-4-6';
 const REGION = process.env.AWS_REGION ?? 'us-east-1';
 
 async function main() {

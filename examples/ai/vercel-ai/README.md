@@ -26,7 +26,7 @@ model: openai('gpt-4o')
 
 // Anthropic
 import { anthropic } from '@ai-sdk/anthropic';
-model: anthropic('claude-sonnet-4-6-20250514')
+model: anthropic('claude-sonnet-4-6-20250725')
 
 // Google
 import { google } from '@ai-sdk/google';

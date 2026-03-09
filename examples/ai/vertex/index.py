@@ -47,10 +47,10 @@ def main():
     shutil.copy2(input_path, output_path)
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc=output_path)
+    client.doc.open({"doc": output_path})
 
     # 2. Get tools in generic format and convert to Vertex shape
-    result = choose_tools(provider="generic")
+    result = choose_tools({"provider": "generic"})
     vertex_tools = to_vertex_tools(result["tools"])
 
     # 3. Set up Vertex AI
@@ -87,7 +87,7 @@ def main():
                 if name == "discover_tools":
                     # discover_tools is a meta-tool — handle client-side via choose_tools
                     groups = args.get("groups")
-                    discovered = choose_tools(provider="generic", groups=groups)
+                    discovered = choose_tools({"provider": "generic", "groups": groups})
                     new_tools = discovered.get("tools", [])
                     sanitized = sanitize_tool_schemas(new_tools, "vertex")
                     for t in sanitized:

@@ -21,6 +21,7 @@ GOOGLE_CLOUD_PROJECT=your-project npx tsx index.ts contract.docx reviewed.docx
 ### Python
 
 ```bash
+python -m venv venv && source venv/bin/activate
 pip install superdoc-sdk google-cloud-aiplatform
 GOOGLE_CLOUD_PROJECT=your-project python index.py contract.docx reviewed.docx
 ```

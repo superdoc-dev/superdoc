@@ -49,7 +49,7 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
 
         while (true) {
           const res = await bedrock.send(new ConverseCommand({
-            modelId: 'amazon.nova-pro-v1:0',
+            modelId: 'us.anthropic.claude-sonnet-4-6',
             messages,
             system: [{ text: 'You edit .docx files using SuperDoc tools.' }],
             toolConfig,
@@ -101,7 +101,7 @@ Use SuperDoc tools with cloud AI platforms. You write the agentic loop and contr
 
         while True:
             response = bedrock.converse(
-                modelId="amazon.nova-pro-v1:0",
+                modelId="us.anthropic.claude-sonnet-4-6",
                 messages=messages,
                 system=[{"text": "You edit .docx files using SuperDoc tools."}],
                 toolConfig=tool_config,

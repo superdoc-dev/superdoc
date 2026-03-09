@@ -20,6 +20,7 @@ OPENAI_API_KEY=sk-... npx tsx index.ts contract.docx reviewed.docx
 ### Python
 
 ```bash
+python -m venv venv && source venv/bin/activate
 pip install superdoc-sdk langchain-openai langgraph
 OPENAI_API_KEY=sk-... python index.py contract.docx reviewed.docx
 ```
@@ -35,7 +36,7 @@ model = ChatOpenAI(model="gpt-4o")
 
 # Anthropic
 from langchain_anthropic import ChatAnthropic
-model = ChatAnthropic(model="claude-sonnet-4-6-20250514")
+model = ChatAnthropic(model="claude-sonnet-4-6-20250725")
 
 # Google
 from langchain_google_genai import ChatGoogleGenerativeAI

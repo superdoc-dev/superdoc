@@ -47,11 +47,11 @@ def main():
     shutil.copy2(input_path, output_path)
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc=output_path)
+    client.doc.open({"doc": output_path})
 
     # 2. Get tools in generic format and wrap as LangChain tools
     # Use mode="all" — no discover_tools since the framework manages a fixed tool set
-    result = choose_tools(provider="generic", mode="all")
+    result = choose_tools({"provider": "generic", "mode": "all"})
     tools = [make_superdoc_tool(client, t) for t in result["tools"]]
 
     # 3. Create a ReAct agent

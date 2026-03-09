@@ -25,7 +25,7 @@ from superdoc import (
     merge_discovered_tools,
 )
 
-MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-pro-v1:0")
+MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 
@@ -38,10 +38,10 @@ def main():
     shutil.copy2(input_path, output_path)
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc=output_path)
+    client.doc.open({"doc": output_path})
 
     # 2. Get tools in Anthropic format and convert to Bedrock toolSpec shape
-    sd_tools = choose_tools(provider="anthropic")
+    sd_tools = choose_tools({"provider": "anthropic"})
     tool_config = {"tools": []}
     merge_discovered_tools(tool_config, sd_tools, provider="anthropic", target="bedrock")
 
@@ -80,7 +80,7 @@ def main():
                 if name == "discover_tools":
                     # discover_tools is a meta-tool — handle client-side via choose_tools
                     groups = tool_use.get("input", {}).get("groups")
-                    discovered = choose_tools(provider="anthropic", groups=groups)
+                    discovered = choose_tools({"provider": "anthropic", "groups": groups})
                     merge_discovered_tools(tool_config, discovered, provider="anthropic", target="bedrock")
                     result = discovered
                 else:

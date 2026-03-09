@@ -6,9 +6,7 @@ description: Connect SuperDoc tools to AWS Bedrock and other LLM providers
 keywords: "ai integrations, ai providers, aws bedrock, openai, anthropic, tool use, function calling, superdoc sdk"
 ---
 
-SuperDoc tools work with any LLM provider or agent framework that supports tool use. The SDK ships tool definitions in multiple formats — pick the one that matches your stack, write a conversation loop (or let the framework handle it), and dispatch tool calls through the SDK.
-
-Each example below opens a document, gives the model SuperDoc tools, and lets it review and edit the content.
+SuperDoc tools work with any LLM provider or agent framework that supports tool use. The SDK provides tool definitions, schema formatting, and a dispatch function — you write the conversation loop.
 
 <Info>
 LLM tools are in <strong>alpha</strong>. Tool names and schemas may change between releases.
@@ -33,7 +31,7 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
     await client.connect();
     await client.doc.open({ doc: './contract.docx' });
 
-    // Anthropic format → Bedrock toolSpec shape
+    // Get tools in Bedrock format
     const { tools } = await chooseTools({ provider: 'anthropic' });
     const toolConfig = { tools: [] };
     mergeDiscoveredTools(toolConfig, { tools }, { provider: 'anthropic', target: 'bedrock' });
@@ -47,7 +45,7 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
       const res = await bedrock.send(new ConverseCommand({
         modelId: 'us.anthropic.claude-sonnet-4-6',
         messages,
-        system: [{ text: 'You edit .docx files using SuperDoc tools.' }],
+        system: [{ text: 'You edit .docx files using SuperDoc tools. Use tracked changes for all edits.' }],
         toolConfig,
       }));
 
@@ -87,7 +85,7 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
     client.connect()
     client.doc.open(doc="./contract.docx")
 
-    # Anthropic format → Bedrock toolSpec shape
+    # Get tools in Bedrock format
     sd_tools = choose_tools(provider="anthropic")
     tool_config = {"tools": []}
     merge_discovered_tools(tool_config, sd_tools, provider="anthropic", target="bedrock")
@@ -99,7 +97,7 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
         response = bedrock.converse(
             modelId="us.anthropic.claude-sonnet-4-6",
             messages=messages,
-            system=[{"text": "You edit .docx files using SuperDoc tools."}],
+            system=[{"text": "You edit .docx files using SuperDoc tools. Use tracked changes for all edits."}],
             toolConfig=tool_config,
         )
 
@@ -127,79 +125,11 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
 
 **Auth**: AWS credentials via `aws configure`, env vars, or IAM role. No API key needed.
 
-## The discover_tools pattern
-
-All provider examples above use **essential mode** (default) — 5 core tools plus `discover_tools`. When the model needs more tools (comments, formatting, tables, etc.), it calls `discover_tools` to load them dynamically.
-
-Handle this in your agentic loop. Since `discover_tools` is a meta-tool (not a document operation), intercept it before dispatching:
-
-```typescript
-import { chooseTools, mergeDiscoveredTools } from '@superdoc-dev/sdk';
-
-if (name === 'discover_tools') {
-  // discover_tools is a meta-tool — handle client-side via chooseTools
-  const discovered = await chooseTools({ provider: 'anthropic', groups: args.groups });
-  mergeDiscoveredTools(toolConfig, discovered, { provider: 'anthropic', target: 'bedrock' });
-  result = discovered;
-} else {
-  result = await dispatchSuperDocTool(client, name, args);
-}
-```
-
-See the [LLM Tools guide](/document-engine/ai-agents/llm-tools#the-discover_tools-pattern) for details.
-
-## Tracked changes
-
-For contract review workflows, you typically want all edits to appear as tracked changes so a human can accept or reject them. Two approaches:
-
-### Instruct the model
-
-Tell the model to use `changeMode: "tracked"` in its `apply_mutations` calls:
-
-```markdown
-## System prompt
-All edits must use changeMode: "tracked" so they appear as
-tracked changes for human review.
-```
-
-### Use the headless editor
-
-If you don't need agentic tool use — just want the model to suggest edits — use the headless editor with `documentMode: 'suggesting'`:
-
-```typescript
-import { Editor } from 'superdoc/super-editor';
-import { readFile, writeFile } from 'node:fs/promises';
-
-const docx = await readFile('./contract.docx');
-const editor = await Editor.open(docx, { documentMode: 'suggesting' });
-
-// Get suggestions from your LLM (structured output, no tool use)
-const suggestions = await getSuggestions(editor.state.doc.textContent);
-
-// Apply each suggestion as a tracked change
-for (const s of suggestions) {
-  const matches = editor.commands.search(s.find, { highlight: false });
-  if (!matches.length) continue;
-
-  editor.commands.insertTrackedChange({
-    from: matches[0].from,
-    to: matches[0].to,
-    text: s.replace,
-    user: { name: 'AI Reviewer', email: 'ai@example.com' },
-  });
-}
-
-const result = await editor.exportDocx();
-await writeFile('./reviewed.docx', Buffer.from(result));
-editor.destroy();
-```
-
 ## Best practices
 
-- **Start with essential mode.** Load 5 tools + `discover_tools`. The model loads more groups when needed. This keeps token usage low.
-- **Use `apply_mutations` for text edits.** It batches multiple rewrites in one call, reducing round trips.
 - **Feed errors back.** When a tool call fails, return the error as a tool result. Most models self-correct on the next turn.
-- **Pin your model version.** Use a specific model ID rather than an alias to avoid behavior changes between releases.
+- **Pin your model version.** Use a specific model ID (e.g. `us.anthropic.claude-sonnet-4-6`) rather than an alias to avoid behavior changes between releases.
+- **Use tracked changes for review workflows.** Add "Use tracked changes for all edits" to the system prompt so a human can accept or reject each change.
 
 ## Example repository
 

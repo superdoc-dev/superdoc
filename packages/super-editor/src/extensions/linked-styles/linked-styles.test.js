@@ -65,6 +65,21 @@ describe('LinkedStyles Extension', () => {
         const firstParagraph = findParagraphInfo(editor.state.doc, 0);
         expect(getParagraphProps(firstParagraph.node).styleId).toBe('Heading1');
       });
+
+      it('clears carried formatting marks when applying a new linked style on an empty cursor selection', () => {
+        const alternateStyle = editor.helpers.linkedStyles.getStyleById('Heading2');
+        const { bold } = editor.schema.marks;
+
+        setParagraphCursor(editor.view, 0);
+        editor.view.dispatch(editor.state.tr.setStoredMarks([bold.create()]));
+
+        const result = editor.commands.setLinkedStyle(alternateStyle);
+
+        expect(result).toBe(true);
+        const firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(firstParagraph.node).styleId).toBe('Heading2');
+        expect((editor.state.storedMarks || []).map((mark) => mark.type.name)).not.toContain('bold');
+      });
     });
 
     describe('toggleLinkedStyle', () => {

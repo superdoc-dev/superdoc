@@ -392,6 +392,37 @@ describe('splitRunToParagraph with style marks', () => {
     expect(storedMarkTypes).not.toContain('bold');
   });
 
+  it('does not inherit linked paragraph styles onto the new paragraph when splitting', () => {
+    const linkedStyleConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {},
+      linkedStyles: [{ id: 'Heading1', type: 'paragraph' }],
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = linkedStyleConverter;
+    loadDoc(STYLED_PARAGRAPH_DOC);
+
+    const start = findTextPos('Heading Text');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 7);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    const paragraphs = [];
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph') paragraphs.push(node);
+    });
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].attrs?.paragraphProperties?.styleId).toBe('Heading1');
+    expect(paragraphs[1].attrs?.paragraphProperties?.styleId).toBeUndefined();
+  });
+
   it('handles missing converter gracefully during split', () => {
     const mockConverter = {
       convertedXml: {},

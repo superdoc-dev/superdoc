@@ -2,6 +2,7 @@ import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '../helpers/defaultBlockAt.js';
 import { Attribute } from '../Attribute.js';
+import { clearInheritedLinkedStyleId } from './linkedStyleSplitHelpers.js';
 
 const isHeadingStyleId = (styleId) => typeof styleId === 'string' && /^heading\s*[1-6]$/i.test(styleId.trim());
 
@@ -46,6 +47,7 @@ export const splitBlock =
 
     const extensionAttrs = editor.extensionService.attributes;
     let newAttrs = Attribute.getSplittedAttributes(extensionAttrs, $from.node().type.name, $from.node().attrs);
+    newAttrs = clearInheritedLinkedStyleId(newAttrs, editor);
 
     // Remove any overridden attributes
     if (attrsToRemoveOverride.length > 0) {

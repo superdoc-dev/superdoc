@@ -2,6 +2,7 @@
 import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
+import { clearInheritedLinkedStyleId } from '@core/commands/linkedStyleSplitHelpers.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
 
@@ -96,6 +97,7 @@ export function splitBlockPatch(state, dispatch, editor) {
           paraId: null,
           textId: null,
         });
+        paragraphAttrs = clearInheritedLinkedStyleId(paragraphAttrs, editor);
         types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
         splitDepth = d;
       } else if (node.type.name === 'tableCell') {

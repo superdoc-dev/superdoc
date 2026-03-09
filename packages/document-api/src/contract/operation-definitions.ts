@@ -576,6 +576,22 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'create/section-break.mdx',
     referenceGroup: 'create',
   },
+  'create.list': {
+    memberPath: 'create.list',
+    description:
+      'Create a new list from scratch. Creates a paragraph with optional text and converts it to a bullet or ordered list in one step.',
+    expectedResult: 'Returns a CreateListResult with the new list ID and first item address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+    }),
+    referenceDocPath: 'create/list.mdx',
+    referenceGroup: 'create',
+  },
 
   'sections.list': {
     memberPath: 'sections.list',

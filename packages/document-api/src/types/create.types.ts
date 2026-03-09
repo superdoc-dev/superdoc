@@ -50,3 +50,24 @@ export interface CreateHeadingFailureResult {
 }
 
 export type CreateHeadingResult = CreateHeadingSuccessResult | CreateHeadingFailureResult;
+
+export type ListCreateLocation = ParagraphCreateLocation;
+
+export interface CreateListInput {
+  text?: string;
+  kind?: 'bullet' | 'ordered';
+  at?: ListCreateLocation;
+}
+
+export interface CreateListSuccessResult {
+  success: true;
+  listId: string;
+  item: BlockNodeAddress;
+}
+
+export interface CreateListFailureResult {
+  success: false;
+  failure: ReceiptFailure;
+}
+
+export type CreateListResult = CreateListSuccessResult | CreateListFailureResult;

@@ -92,14 +92,61 @@ export function normalizeFindQuery(selectorOrQuery: Selector | Query, options?: 
 }
 
 /**
+ * Normalizes an SDFindInput, handling:
+ * - Flat selectors (no `select` wrapper): `{ type: 'node', nodeKind: 'table' }` → `{ select: { type: 'node', nodeKind: 'table' } }`
+ * - `nodeType` alias for `nodeKind` in node selectors
+ */
+function normalizeSDFindInput(input: Record<string, unknown>): SDFindInput {
+  // If no `select` wrapper, treat the input itself as a flat selector + pagination
+  let select: Record<string, unknown>;
+  let rest: Record<string, unknown>;
+
+  if ('select' in input && input.select != null && typeof input.select === 'object') {
+    select = input.select as Record<string, unknown>;
+    rest = input;
+  } else if ('type' in input) {
+    // Flat selector — extract selector fields from the top-level input
+    const { type, nodeKind, nodeType, kind, pattern, mode, caseSensitive, ...pagination } = input as Record<
+      string,
+      unknown
+    >;
+    select = { type };
+    if (nodeKind != null) select.nodeKind = nodeKind;
+    if (nodeType != null) select.nodeKind ??= nodeType;
+    if (kind != null) select.kind = kind;
+    if (pattern != null) select.pattern = pattern;
+    if (mode != null) select.mode = mode;
+    if (caseSensitive != null) select.caseSensitive = caseSensitive;
+    rest = { ...pagination, select };
+  } else {
+    return input as SDFindInput;
+  }
+
+  // Accept `nodeType` as alias for `nodeKind` in node selectors
+  if (select.type === 'node' && select.nodeType != null && select.nodeKind == null) {
+    select.nodeKind = select.nodeType;
+    delete select.nodeType;
+  }
+
+  if (rest.select !== select) {
+    return { ...rest, select } as unknown as SDFindInput;
+  }
+  return rest as unknown as SDFindInput;
+}
+
+/**
  * Executes an SDM/1 find operation via the adapter.
  *
+ * Normalizes the input to accept:
+ * - Flat selectors without a `select` wrapper
+ * - `nodeType` as an alias for `nodeKind`
+ *
  * @param adapter - The engine-specific find adapter.
- * @param input - The SDFindInput to execute.
+ * @param input - The SDFindInput to execute (or a flat selector).
  * @returns An SDFindResult envelope.
  */
 export function executeFind(adapter: FindAdapter, input: SDFindInput): SDFindResult {
-  return adapter.find(input);
+  return adapter.find(normalizeSDFindInput(input as unknown as Record<string, unknown>));
 }
 
 /**

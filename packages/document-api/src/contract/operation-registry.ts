@@ -19,6 +19,8 @@ import type {
   CreateParagraphResult,
   CreateHeadingInput,
   CreateHeadingResult,
+  CreateListInput,
+  CreateListResult,
 } from '../types/create.types.js';
 import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
 
@@ -598,6 +600,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
   'create.heading': { input: CreateHeadingInput; options: MutationOptions; output: CreateHeadingResult };
   'create.sectionBreak': { input: CreateSectionBreakInput; options: MutationOptions; output: CreateSectionBreakResult };
+  'create.list': { input: CreateListInput; options: MutationOptions; output: CreateListResult };
 
   // --- lists.* ---
   'lists.list': { input: ListsListQuery | undefined; options: never; output: ListsListResult };

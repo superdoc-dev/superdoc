@@ -111,6 +111,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'create.paragraph': (input, options) => api.create.paragraph(input, options),
     'create.heading': (input, options) => api.create.heading(input, options),
     'create.sectionBreak': (input, options) => api.create.sectionBreak(input, options),
+    'create.list': (input, options) => api.create.list(input, options),
 
     // --- lists.* ---
     'lists.list': (input) => api.lists.list(input),

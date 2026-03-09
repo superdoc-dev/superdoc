@@ -7,6 +7,8 @@ import type {
   CreateHeadingInput,
   CreateHeadingResult,
   HeadingCreateLocation,
+  CreateListInput,
+  CreateListResult,
 } from '../types/create.types.js';
 import type { CreateTableInput, CreateTableResult, TableCreateLocation } from '../types/table-operations.types.js';
 import type {
@@ -22,6 +24,8 @@ import type {
   ContentControlMutationResult,
 } from '../content-controls/content-controls.types.js';
 import { DocumentApiValidationError } from '../errors.js';
+import type { ListsAdapter } from '../lists/lists.js';
+import { executeListsCreate } from '../lists/lists.js';
 
 export interface CreateApi {
   paragraph(input: CreateParagraphInput, options?: MutationOptions): CreateParagraphResult;
@@ -31,9 +35,10 @@ export interface CreateApi {
   tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult;
   image(input: CreateImageInput, options?: MutationOptions): CreateImageResult;
   contentControl(input: CreateContentControlInput, options?: MutationOptions): ContentControlMutationResult;
+  list(input: CreateListInput, options?: MutationOptions): CreateListResult;
 }
 
-export type CreateAdapter = CreateApi;
+export type CreateAdapter = Omit<CreateApi, 'list'>;
 
 /**
  * Validates target-only create locations (paragraph, heading, section break)
@@ -248,4 +253,43 @@ export function executeCreateTableOfContents(
 
   validateTargetOnlyCreateLocation(at, 'create.tableOfContents');
   return adapter.tableOfContents(normalized, normalizeMutationOptions(options));
+}
+
+/**
+ * Compound operation: creates a paragraph and converts it to a list.
+ *
+ * This avoids the two-step dance consumers otherwise need:
+ * 1. `create.paragraph` → grab the address
+ * 2. `lists.create` with `mode: 'fromParagraphs'`
+ */
+export function executeCreateList(
+  createAdapter: CreateAdapter,
+  listsAdapter: ListsAdapter,
+  input: CreateListInput,
+  options?: MutationOptions,
+): CreateListResult {
+  const normalizedOptions = normalizeMutationOptions(options);
+
+  // Step 1: Create a paragraph
+  const paragraphResult = executeCreateParagraph(
+    createAdapter,
+    { text: input.text ?? '', at: input.at },
+    normalizedOptions,
+  );
+  if (!paragraphResult.success) {
+    return { success: false, failure: paragraphResult.failure };
+  }
+
+  // Step 2: Convert the paragraph to a list
+  const listResult = executeListsCreate(
+    listsAdapter,
+    {
+      mode: 'fromParagraphs',
+      target: paragraphResult.paragraph,
+      kind: input.kind ?? 'bullet',
+    },
+    normalizedOptions,
+  );
+
+  return listResult as CreateListResult;
 }

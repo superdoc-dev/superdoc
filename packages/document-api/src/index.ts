@@ -181,11 +181,17 @@ import {
   executeCreateTable,
   executeCreateSectionBreak,
   executeCreateTableOfContents,
+  executeCreateList,
 } from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
 import { executeBlocksDelete } from './blocks/blocks.js';
 import type { BlocksDeleteInput, BlocksDeleteResult } from './types/blocks.types.js';
-import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
+import type {
+  CreateHeadingInput,
+  CreateHeadingResult,
+  CreateListInput,
+  CreateListResult,
+} from './types/create.types.js';
 import type {
   CreateTableInput,
   CreateTableResult,
@@ -1812,6 +1818,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       contentControl(input: CreateContentControlInput, options?: MutationOptions): ContentControlMutationResult {
         return executeCreateContentControl(adapters.contentControls, input, options);
+      },
+      list(input: CreateListInput, options?: MutationOptions): CreateListResult {
+        return executeCreateList(adapters.create, adapters.lists, input, options);
       },
     },
     capabilities,

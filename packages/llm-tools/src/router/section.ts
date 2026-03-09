@@ -33,7 +33,8 @@ export async function routeSection(params: Record<string, unknown>, execute: Exe
     }
     case 'list_headers_footers':
       return execute('headerFooters.list', { section: target, kind: params.kind });
-    case 'get_header_footer':
+    case 'get_header_footer': {
+      if (!params.kind) throw new Error('get_header_footer requires "kind" (header or footer).');
       return execute('headerFooters.get', {
         target: {
           kind: 'headerFooterSlot',
@@ -42,8 +43,7 @@ export async function routeSection(params: Record<string, unknown>, execute: Exe
           variant: params.slot ?? 'default',
         },
       });
-    case 'set_header_footer':
-      return execute('headerFooters.parts.create', { kind: params.kind });
+    }
     default:
       throw new Error(`Unknown section action: "${action}".`);
   }

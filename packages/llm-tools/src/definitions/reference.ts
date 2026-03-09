@@ -27,7 +27,8 @@ export const referenceTool: ToolDefinition = {
       },
       target: { type: 'string', description: 'JSON address for insertions.' },
       url: { type: 'string', description: 'URL for hyperlink actions.' },
-      text: { type: 'string', description: 'Display text for links or footnote content.' },
+      text: { type: 'string', description: 'Display text for insert_link, or footnote content for insert_footnote.' },
+      tooltip: { type: 'string', description: 'Tooltip text for update_link.' },
       name: { type: 'string', description: 'Bookmark name.' },
       id: {
         type: 'string',

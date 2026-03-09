@@ -537,14 +537,18 @@ describe('routeReference', () => {
     expect(calls[0].input.patch).toEqual({ href: 'https://new.com' });
   });
 
-  test('routes update_link maps text to tooltip', async () => {
+  test('routes update_link with tooltip field', async () => {
     const id = JSON.stringify({
       kind: 'inline',
       nodeType: 'hyperlink',
       anchor: { start: { blockId: 'b1', offset: 0 }, end: { blockId: 'b1', offset: 5 } },
     });
     const { execute, calls } = mockExecutor();
-    await dispatch('superdoc_reference', { action: 'update_link', id, url: 'https://new.com', text: 'Tip' }, execute);
+    await dispatch(
+      'superdoc_reference',
+      { action: 'update_link', id, url: 'https://new.com', tooltip: 'Tip' },
+      execute,
+    );
     expect(calls[0].input.patch).toEqual({ href: 'https://new.com', tooltip: 'Tip' });
   });
 
@@ -649,5 +653,153 @@ describe('routeControl', () => {
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_control', { action: 'wrap', target }, execute);
     expect(calls[0].input.kind).toBe('block');
+  });
+});
+
+describe('parseTarget error handling', () => {
+  test('throws on malformed JSON target', async () => {
+    const { execute } = mockExecutor();
+    await expect(
+      dispatch('superdoc_edit', { action: 'insert', target: '{ broken json', text: 'hi' }, execute),
+    ).rejects.toThrow('Invalid JSON in "target"');
+  });
+
+  test('throws on malformed JSON id', async () => {
+    const { execute } = mockExecutor();
+    await expect(dispatch('superdoc_reference', { action: 'remove_link', id: 'not json' }, execute)).rejects.toThrow(
+      'Invalid JSON in "id"',
+    );
+  });
+});
+
+describe('routeCreate (additional branches)', () => {
+  test('routes image creation', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_create', { type: 'image', src: 'https://example.com/img.png' }, execute);
+    expect(calls[0].operationId).toBe('create.image');
+    expect(calls[0].input.src).toBe('https://example.com/img.png');
+  });
+
+  test('routes section_break creation', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_create', { type: 'section_break' }, execute);
+    expect(calls[0].operationId).toBe('create.sectionBreak');
+  });
+
+  test('routes toc creation', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_create', { type: 'toc' }, execute);
+    expect(calls[0].operationId).toBe('create.tableOfContents');
+  });
+
+  test('passes at parameter when provided', async () => {
+    const at = JSON.stringify({ kind: 'block', nodeId: 'p1' });
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_create', { type: 'image', src: 'img.png', at }, execute);
+    expect(calls[0].input.at).toEqual({ kind: 'block', nodeId: 'p1' });
+  });
+});
+
+describe('routeFormat (additional branches)', () => {
+  const target = JSON.stringify({ kind: 'text', blockId: 'abc' });
+
+  test('routes bold:false as off', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_format', { target, bold: false }, execute);
+    expect(calls[0].operationId).toBe('format.apply');
+    expect(calls[0].input.inline).toEqual({ bold: 'off' });
+  });
+
+  test('routes line_spacing to line field', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_format', { target, line_spacing: 1.5 }, execute);
+    expect(calls[0].operationId).toBe('format.paragraph.setSpacing');
+    expect(calls[0].input.line).toBe(1.5);
+  });
+
+  test('routes indentation', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_format', { target, indent_left: 36, indent_right: 18 }, execute);
+    expect(calls[0].operationId).toBe('format.paragraph.setIndentation');
+    expect(calls[0].input.left).toBe(36);
+    expect(calls[0].input.right).toBe(18);
+  });
+});
+
+describe('routeSection (additional branches)', () => {
+  const target = JSON.stringify({ kind: 'section', sectionId: 's1' });
+
+  test('routes set_orientation', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_section', { action: 'set_orientation', target, orientation: 'landscape' }, execute);
+    expect(calls[0].operationId).toBe('sections.setPageSetup');
+    expect(calls[0].input.orientation).toBe('landscape');
+  });
+
+  test('routes set_size', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_section', { action: 'set_size', target, width: 612, height: 792 }, execute);
+    expect(calls[0].operationId).toBe('sections.setPageSetup');
+    expect(calls[0].input.width).toBe(612);
+    expect(calls[0].input.height).toBe(792);
+  });
+
+  test('get_header_footer throws without kind', async () => {
+    const { execute } = mockExecutor();
+    await expect(dispatch('superdoc_section', { action: 'get_header_footer', target }, execute)).rejects.toThrow(
+      'requires "kind"',
+    );
+  });
+});
+
+describe('routeTable (additional branches)', () => {
+  const target = JSON.stringify({ kind: 'block', nodeId: 'tbl1' });
+
+  test('routes delete_column with tableTarget and columnIndex', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_table', { action: 'delete_column', target, column_index: 1 }, execute);
+    expect(calls[0].operationId).toBe('tables.deleteColumn');
+    expect(calls[0].input.tableTarget).toEqual({ kind: 'block', nodeId: 'tbl1' });
+    expect(calls[0].input.columnIndex).toBe(1);
+  });
+});
+
+describe('routeReference (additional branches)', () => {
+  test('routes list_bookmarks', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_reference', { action: 'list_bookmarks' }, execute);
+    expect(calls[0].operationId).toBe('bookmarks.list');
+  });
+
+  test('routes list_footnotes', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_reference', { action: 'list_footnotes' }, execute);
+    expect(calls[0].operationId).toBe('footnotes.list');
+  });
+
+  test('insert_bookmark throws without target', async () => {
+    const { execute } = mockExecutor();
+    await expect(dispatch('superdoc_reference', { action: 'insert_bookmark', name: 'bk' }, execute)).rejects.toThrow(
+      'requires a "target"',
+    );
+  });
+
+  test('insert_footnote throws without target', async () => {
+    const { execute } = mockExecutor();
+    await expect(dispatch('superdoc_reference', { action: 'insert_footnote', text: 'note' }, execute)).rejects.toThrow(
+      'requires a "target"',
+    );
+  });
+
+  test('update_link only includes href when url is provided', async () => {
+    const id = JSON.stringify({
+      kind: 'inline',
+      nodeType: 'hyperlink',
+      anchor: { start: { blockId: 'b1', offset: 0 }, end: { blockId: 'b1', offset: 5 } },
+    });
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_reference', { action: 'update_link', id, tooltip: 'New tip' }, execute);
+    expect(calls[0].input.patch).toEqual({ tooltip: 'New tip' });
+    expect(calls[0].input.patch).not.toHaveProperty('href');
   });
 });

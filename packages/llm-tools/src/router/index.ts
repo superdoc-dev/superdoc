@@ -13,6 +13,22 @@ import { routeSection } from './section.js';
 import { routeReference } from './reference.js';
 import { routeControl } from './control.js';
 
+export {
+  routeRead,
+  routeFind,
+  routeEdit,
+  routeCreate,
+  routeFormat,
+  routeTable,
+  routeList,
+  routeImage,
+  routeComment,
+  routeReview,
+  routeSection,
+  routeReference,
+  routeControl,
+};
+
 /** Map of tool name → router function. */
 export const ROUTERS: Record<string, ToolRouter> = {
   superdoc_read: routeRead,
@@ -28,20 +44,4 @@ export const ROUTERS: Record<string, ToolRouter> = {
   superdoc_section: routeSection,
   superdoc_reference: routeReference,
   superdoc_control: routeControl,
-};
-
-export {
-  routeRead,
-  routeFind,
-  routeEdit,
-  routeCreate,
-  routeFormat,
-  routeTable,
-  routeList,
-  routeImage,
-  routeComment,
-  routeReview,
-  routeSection,
-  routeReference,
-  routeControl,
 };

@@ -20,11 +20,6 @@ export const controlTool: ToolDefinition = {
         description:
           'Value to set. Accepts text string, true/false for checkboxes, or selection value for dropdowns. For action "fill".',
       },
-      type: {
-        type: 'string',
-        enum: ['text', 'checkbox', 'dropdown', 'date', 'repeating_section'],
-        description: 'Control type. For action "fill" auto-detection hint (optional).',
-      },
       kind: {
         type: 'string',
         enum: ['block', 'inline'],

@@ -3,16 +3,11 @@ import type { Executor } from '../types.js';
 export async function routeFind(params: Record<string, unknown>, execute: Executor) {
   const input: Record<string, unknown> = {};
 
-  if (params.pattern && params.type) {
-    // Both: text search filtered by node type
+  if (params.pattern) {
     input.type = 'text';
     input.pattern = params.pattern;
     input.mode = 'contains';
-    input.nodeType = params.type;
-  } else if (params.pattern) {
-    input.type = 'text';
-    input.pattern = params.pattern;
-    input.mode = 'contains';
+    if (params.type) input.nodeType = params.type;
   } else if (params.type) {
     input.type = 'node';
     input.nodeType = params.type;

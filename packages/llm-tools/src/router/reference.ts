@@ -17,10 +17,10 @@ export async function routeReference(params: Record<string, unknown>, execute: E
       });
     case 'update_link': {
       const linkTarget = parseTarget(params, 'id');
-      return execute('hyperlinks.patch', {
-        target: linkTarget,
-        patch: { href: params.url, ...(params.text != null ? { tooltip: params.text } : {}) },
-      });
+      const patch: Record<string, unknown> = {};
+      if (params.url != null) patch.href = params.url;
+      if (params.tooltip != null) patch.tooltip = params.tooltip;
+      return execute('hyperlinks.patch', { target: linkTarget, patch });
     }
     case 'remove_link': {
       const linkTarget = parseTarget(params, 'id');
@@ -30,6 +30,7 @@ export async function routeReference(params: Record<string, unknown>, execute: E
     case 'list_bookmarks':
       return execute('bookmarks.list', {});
     case 'insert_bookmark':
+      if (!target) throw new Error('insert_bookmark requires a "target" address. Use superdoc_find first.');
       return execute('bookmarks.insert', { at: target, name: params.name });
     case 'remove_bookmark': {
       const bookmarkTarget = parseTarget(params, 'id');
@@ -39,6 +40,7 @@ export async function routeReference(params: Record<string, unknown>, execute: E
     case 'list_footnotes':
       return execute('footnotes.list', {});
     case 'insert_footnote':
+      if (!target) throw new Error('insert_footnote requires a "target" address. Use superdoc_find first.');
       return execute('footnotes.insert', {
         at: target,
         type: params.note_type ?? 'footnote',

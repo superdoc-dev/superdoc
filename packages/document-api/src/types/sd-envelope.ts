@@ -8,6 +8,7 @@
  *   SDReadOptions — projection options for reads
  */
 
+import type { NodeAddress } from './base.js';
 import type { SDContentNode, SDInlineNode } from './sd-nodes.js';
 
 // ---------------------------------------------------------------------------
@@ -20,6 +21,13 @@ export interface SDPoint {
   offset: number;
 }
 
+/**
+ * Legacy SDM/1 address type.
+ *
+ * @deprecated Prefer `NodeAddress` from `./base.js`. `find` results now return
+ * `NodeAddress` directly. This type is retained for backward-compatible inputs
+ * (`within`, `getNode`).
+ */
 export interface SDAddress {
   kind: 'content' | 'inline' | 'annotation' | 'section';
   stability: 'stable' | 'ephemeral';
@@ -83,7 +91,7 @@ export type SDSelector = SDTextSelector | SDNodeSelector;
 
 export interface SDFindInput {
   select: SDSelector;
-  within?: SDAddress;
+  within?: SDAddress | NodeAddress;
   limit?: number;
   offset?: number;
   options?: SDReadOptions;
@@ -95,7 +103,7 @@ export interface SDFindInput {
 
 export interface SDNodeResult {
   node: SDContentNode | SDInlineNode;
-  address: SDAddress;
+  address: NodeAddress;
   context?: SDNodeContext;
 }
 

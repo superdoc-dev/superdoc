@@ -1,5 +1,5 @@
 import type { Editor } from '../core/Editor.js';
-import type { BlockNodeType, GetNodeByIdInput, NodeAddress, SDNodeResult, SDAddress } from '@superdoc/document-api';
+import type { BlockNodeType, GetNodeByIdInput, NodeAddress, SDNodeResult } from '@superdoc/document-api';
 import type { BlockCandidate, BlockIndex } from './helpers/node-address-resolver.js';
 import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
@@ -16,23 +16,20 @@ function findBlocksByTypeAndId(blockIndex: BlockIndex, nodeType: BlockNodeType, 
   return blockIndex.candidates.filter((candidate) => candidate.nodeType === nodeType && candidate.nodeId === nodeId);
 }
 
-function buildBlockAddress(nodeId: string): SDAddress {
-  return {
-    kind: 'content',
-    stability: 'stable',
-    nodeId,
-  };
+/**
+ * Returns the input block address as-is (it's already a NodeAddress).
+ * Previously converted to SDAddress; now passes through directly.
+ */
+function buildBlockAddress(address: NodeAddress & { kind: 'block' }): NodeAddress {
+  return address;
 }
 
-function buildInlineAddress(address: NodeAddress & { kind: 'inline' }): SDAddress {
-  return {
-    kind: 'inline',
-    stability: 'ephemeral',
-    anchor: {
-      start: { blockId: address.anchor.start.blockId, offset: address.anchor.start.offset },
-      end: { blockId: address.anchor.end.blockId, offset: address.anchor.end.offset },
-    },
-  };
+/**
+ * Returns the input inline address as-is (it's already a NodeAddress).
+ * Previously converted to SDAddress; now passes through directly.
+ */
+function buildInlineAddress(address: NodeAddress & { kind: 'inline' }): NodeAddress {
+  return address;
 }
 
 /**
@@ -60,7 +57,7 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResu
     const candidate = matches[0]!;
     return {
       node: projectContentNode(candidate.node),
-      address: buildBlockAddress(address.nodeId),
+      address: buildBlockAddress(address),
     };
   }
 
@@ -137,9 +134,9 @@ function resolveBlockById(
  */
 export function getNodeByIdAdapter(editor: Editor, input: GetNodeByIdInput): SDNodeResult {
   const { nodeId, nodeType } = input;
-  const { candidate } = resolveBlockById(editor, nodeId, nodeType);
+  const { candidate, resolvedType } = resolveBlockById(editor, nodeId, nodeType);
   return {
     node: projectContentNode(candidate.node),
-    address: buildBlockAddress(nodeId),
+    address: { kind: 'block', nodeType: resolvedType, nodeId } as NodeAddress,
   };
 }

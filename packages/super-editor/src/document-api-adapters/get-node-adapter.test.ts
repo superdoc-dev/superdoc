@@ -204,7 +204,7 @@ describe('getNodeByIdAdapter', () => {
     const result = getNodeByIdAdapter(editor, { nodeId: 'p1' });
 
     expect(result.node.kind).toBe('paragraph');
-    expect(result.address.kind).toBe('content');
+    expect(result.address.kind).toBe('block');
   });
 
   it('resolves a block node by id with nodeType', () => {

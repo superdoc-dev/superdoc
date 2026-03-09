@@ -553,6 +553,53 @@ describe('overview.mdx examples', () => {
 });
 
 // ---------------------------------------------------------------------------
+// common-workflows.mdx — "Find text and insert at position"
+// ---------------------------------------------------------------------------
+
+describe('common-workflows.mdx: Find text and insert at position', () => {
+  it('query.match → create.paragraph with at: after', () => {
+    const doc = makeApi();
+
+    // Step 1: Find the heading by text content
+    const match = doc.query.match({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+    });
+
+    const address = match.items?.[0]?.address;
+    if (!address) return;
+
+    // Step 2: Insert a paragraph after the heading
+    const result = doc.create.paragraph({
+      at: { kind: 'after', target: address },
+      text: 'New section content goes here.',
+    });
+
+    expect(address.kind).toBe('block');
+    expect(result.success).toBe(true);
+  });
+
+  it('query.match → create.paragraph with tracked changes', () => {
+    const doc = makeApi();
+
+    const match = doc.query.match({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+    });
+
+    const address = match.items?.[0]?.address;
+    if (!address) return;
+
+    const result = doc.create.paragraph(
+      { at: { kind: 'after', target: address }, text: 'Suggested addition.' },
+      { changeMode: 'tracked' },
+    );
+
+    expect(result.success).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // src/README.md — "Workflow:" examples
 // ---------------------------------------------------------------------------
 

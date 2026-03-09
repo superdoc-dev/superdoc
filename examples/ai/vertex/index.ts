@@ -9,6 +9,8 @@
  * Requires: Google Cloud credentials configured (gcloud auth application-default login).
  */
 
+import path from 'node:path';
+import { copyFileSync } from 'node:fs';
 import {
   VertexAI,
   type FunctionDeclaration,
@@ -21,6 +23,7 @@ import {
   dispatchSuperDocTool,
   sanitizeToolSchemas,
   mergeDiscoveredTools,
+  type ToolGroup,
 } from '@superdoc-dev/sdk';
 
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT ?? 'your-project-id';
@@ -28,12 +31,15 @@ const LOCATION = process.env.GOOGLE_CLOUD_LOCATION ?? 'us-central1';
 const MODEL = process.env.VERTEX_MODEL ?? 'gemini-2.5-pro';
 
 async function main() {
-  const [inputPath = 'contract.docx', outputPath = 'reviewed.docx'] = process.argv.slice(2);
+  const [rawInput = 'contract.docx', rawOutput = 'reviewed.docx'] = process.argv.slice(2);
+  const inputPath = path.resolve(rawInput);
+  const outputPath = path.resolve(rawOutput);
 
-  // 1. Connect to SuperDoc
+  // 1. Connect to SuperDoc — copy to output path so the original is preserved
+  copyFileSync(inputPath, outputPath);
   const client = createSuperDocClient();
   await client.connect();
-  await client.doc.open({ doc: inputPath });
+  await client.doc.open({ doc: outputPath });
 
   // 2. Get tools in generic format, sanitize for Vertex, and build declarations
   const { tools: sdTools } = await chooseTools({ provider: 'generic' });
@@ -83,7 +89,7 @@ async function main() {
 
         if (name === 'discover_tools') {
           // discover_tools is a meta-tool — handle client-side via chooseTools
-          const groups = ((args ?? {}) as Record<string, unknown>).groups as string[] | undefined;
+          const groups = ((args ?? {}) as Record<string, unknown>).groups as ToolGroup[] | undefined;
           const discovered = await chooseTools({ provider: 'generic', groups });
           mergeDiscoveredTools(vertexTools, discovered, { provider: 'generic', target: 'vertex' });
           result = discovered;
@@ -104,8 +110,8 @@ async function main() {
     response = await chat.sendMessage(functionResponses);
   }
 
-  // 5. Save
-  await client.doc.save({ doc: outputPath });
+  // 5. Save (in-place to the copy)
+  await client.doc.save();
   await client.dispose();
   console.log(`\nSaved to ${outputPath}`);
 }

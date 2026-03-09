@@ -13,6 +13,8 @@ Requires:
 
 import sys
 import os
+import shutil
+from pathlib import Path
 import boto3
 from superdoc import (
     SuperDocClient,
@@ -29,13 +31,14 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 def main():
     args = sys.argv[1:]
-    input_path = args[0] if args else "contract.docx"
-    output_path = args[1] if len(args) > 1 else "reviewed.docx"
+    input_path = str(Path(args[0] if args else "contract.docx").resolve())
+    output_path = str(Path(args[1] if len(args) > 1 else "reviewed.docx").resolve())
 
-    # 1. Connect to SuperDoc
+    # 1. Connect to SuperDoc — copy to output path so the original is preserved
+    shutil.copy2(input_path, output_path)
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc=input_path)
+    client.doc.open(doc=output_path)
 
     # 2. Get tools in Anthropic format and convert to Bedrock toolSpec shape
     sd_tools = choose_tools(provider="anthropic")
@@ -93,8 +96,8 @@ def main():
 
         messages.append({"role": "user", "content": tool_results})
 
-    # 4. Save
-    client.doc.save(doc=output_path)
+    # 4. Save (in-place to the copy)
+    client.doc.save()
     client.dispose()
     print(f"\nSaved to {output_path}")
 

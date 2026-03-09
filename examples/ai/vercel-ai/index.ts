@@ -10,6 +10,8 @@
  * Anthropic, Google, Mistral, and others with the same interface).
  */
 
+import path from 'node:path';
+import { copyFileSync } from 'node:fs';
 import { generateText, tool } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import {
@@ -20,12 +22,15 @@ import {
 import { z } from 'zod';
 
 async function main() {
-  const [inputPath = 'contract.docx', outputPath = 'reviewed.docx'] = process.argv.slice(2);
+  const [rawInput = 'contract.docx', rawOutput = 'reviewed.docx'] = process.argv.slice(2);
+  const inputPath = path.resolve(rawInput);
+  const outputPath = path.resolve(rawOutput);
 
-  // 1. Connect to SuperDoc
+  // 1. Connect to SuperDoc — copy to output path so the original is preserved
+  copyFileSync(inputPath, outputPath);
   const client = createSuperDocClient();
   await client.connect();
-  await client.doc.open({ doc: inputPath });
+  await client.doc.open({ doc: outputPath });
 
   // 2. Get tools in Vercel AI format (all tools — no discover_tools since the framework manages a fixed tool set)
   const { tools: sdTools } = await chooseTools({ provider: 'vercel', mode: 'all' });
@@ -55,8 +60,8 @@ async function main() {
 
   console.log(result.text);
 
-  // 4. Save
-  await client.doc.save({ doc: outputPath });
+  // 4. Save (in-place to the copy)
+  await client.doc.save();
   await client.dispose();
   console.log(`\nSaved to ${outputPath}`);
 }

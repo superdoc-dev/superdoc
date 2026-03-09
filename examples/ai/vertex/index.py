@@ -13,6 +13,8 @@ Requires:
 
 import sys
 import os
+import shutil
+from pathlib import Path
 from vertexai.generative_models import GenerativeModel, Tool, FunctionDeclaration, Part
 import vertexai
 from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool, sanitize_tool_schemas
@@ -38,13 +40,14 @@ def to_vertex_tools(generic_tools):
 
 def main():
     args = sys.argv[1:]
-    input_path = args[0] if args else "contract.docx"
-    output_path = args[1] if len(args) > 1 else "reviewed.docx"
+    input_path = str(Path(args[0] if args else "contract.docx").resolve())
+    output_path = str(Path(args[1] if len(args) > 1 else "reviewed.docx").resolve())
 
-    # 1. Connect to SuperDoc
+    # 1. Connect to SuperDoc — copy to output path so the original is preserved
+    shutil.copy2(input_path, output_path)
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc=input_path)
+    client.doc.open(doc=output_path)
 
     # 2. Get tools in generic format and convert to Vertex shape
     result = choose_tools(provider="generic")
@@ -109,8 +112,8 @@ def main():
 
         response = chat.send_message(function_responses)
 
-    # 5. Save
-    client.doc.save(doc=output_path)
+    # 5. Save (in-place to the copy)
+    client.doc.save()
     client.dispose()
     print(f"\nSaved to {output_path}")
 

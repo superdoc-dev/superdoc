@@ -13,6 +13,8 @@ Requires:
 
 import sys
 import json
+import shutil
+from pathlib import Path
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
@@ -38,13 +40,14 @@ def make_superdoc_tool(client, tool_def):
 
 def main():
     args = sys.argv[1:]
-    input_path = args[0] if args else "contract.docx"
-    output_path = args[1] if len(args) > 1 else "reviewed.docx"
+    input_path = str(Path(args[0] if args else "contract.docx").resolve())
+    output_path = str(Path(args[1] if len(args) > 1 else "reviewed.docx").resolve())
 
-    # 1. Connect to SuperDoc
+    # 1. Connect to SuperDoc — copy to output path so the original is preserved
+    shutil.copy2(input_path, output_path)
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc=input_path)
+    client.doc.open(doc=output_path)
 
     # 2. Get tools in generic format and wrap as LangChain tools
     # Use mode="all" — no discover_tools since the framework manages a fixed tool set
@@ -67,8 +70,8 @@ def main():
     last_message = result["messages"][-1]
     print(last_message.content)
 
-    # 5. Save
-    client.doc.save(doc=output_path)
+    # 5. Save (in-place to the copy)
+    client.doc.save()
     client.dispose()
     print(f"\nSaved to {output_path}")
 

@@ -428,7 +428,13 @@ export async function dispatchSuperDocTool(
     invalidArgument(`Tool arguments for ${toolName} must be an object.`);
   }
 
-  validateDispatchArgs(operationId, args);
+  // Strip doc/sessionId — the SDK client manages session targeting after doc.open().
+  // Models fill these in because the tool schemas expose them, but passing them
+  // alongside an active session causes "stateless input.doc cannot be combined
+  // with a session target" errors.
+  const { doc: _doc, sessionId: _sid, ...cleanArgs } = args;
+
+  validateDispatchArgs(operationId, cleanArgs);
   const method = resolveDocApiMethod(client, operationId);
-  return method(args, invokeOptions);
+  return method(cleanArgs, invokeOptions);
 }

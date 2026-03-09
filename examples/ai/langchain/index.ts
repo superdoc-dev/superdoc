@@ -9,6 +9,8 @@
  * Requires: OPENAI_API_KEY (or swap ChatOpenAI for ChatAnthropic, ChatGoogleGenerativeAI, etc.)
  */
 
+import path from 'node:path';
+import { copyFileSync } from 'node:fs';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
@@ -21,12 +23,15 @@ import {
 } from '@superdoc-dev/sdk';
 
 async function main() {
-  const [inputPath = 'contract.docx', outputPath = 'reviewed.docx'] = process.argv.slice(2);
+  const [rawInput = 'contract.docx', rawOutput = 'reviewed.docx'] = process.argv.slice(2);
+  const inputPath = path.resolve(rawInput);
+  const outputPath = path.resolve(rawOutput);
 
-  // 1. Connect to SuperDoc
+  // 1. Connect to SuperDoc — copy to output path so the original is preserved
+  copyFileSync(inputPath, outputPath);
   const client = createSuperDocClient();
   await client.connect();
-  await client.doc.open({ doc: inputPath });
+  await client.doc.open({ doc: outputPath });
 
   // 2. Get tools in generic format and wrap as LangChain tools (all tools — no discover_tools since the framework manages a fixed tool set)
   const { tools: sdTools } = await chooseTools({ provider: 'generic', mode: 'all' });
@@ -63,8 +68,8 @@ async function main() {
   const lastMessage = result.messages[result.messages.length - 1];
   console.log(lastMessage.content);
 
-  // 5. Save
-  await client.doc.save({ doc: outputPath });
+  // 5. Save (in-place to the copy)
+  await client.doc.save();
   await client.dispose();
   console.log(`\nSaved to ${outputPath}`);
 }

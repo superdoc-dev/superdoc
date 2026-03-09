@@ -20,13 +20,41 @@ from superdoc import (
     SuperDocClient,
     choose_tools,
     dispatch_superdoc_tool,
-    format_tool_result,
-    format_tool_error,
-    merge_discovered_tools,
 )
 
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
+
+
+def to_bedrock_tools(tools):
+    """Convert Anthropic-format tools to Bedrock toolSpec shape."""
+    return [
+        {
+            "toolSpec": {
+                "name": t["name"],
+                "description": t["description"],
+                "inputSchema": {"json": t.get("input_schema", t.get("parameters", {}))},
+            }
+        }
+        for t in tools
+    ]
+
+
+def bedrock_tool_result(tool_use_id, result):
+    """Wrap a tool result in Bedrock's expected format."""
+    json_result = result if isinstance(result, dict) else {"result": result}
+    return {"toolResult": {"toolUseId": tool_use_id, "content": [{"json": json_result}]}}
+
+
+def bedrock_tool_error(tool_use_id, error):
+    """Wrap a tool error in Bedrock's expected format."""
+    return {
+        "toolResult": {
+            "toolUseId": tool_use_id,
+            "content": [{"text": f"Error: {error}"}],
+            "status": "error",
+        }
+    }
 
 
 def main():
@@ -42,8 +70,10 @@ def main():
 
     # 2. Get tools in Anthropic format and convert to Bedrock toolSpec shape
     sd_tools = choose_tools({"provider": "anthropic"})
-    tool_config = {"tools": []}
-    merge_discovered_tools(tool_config, sd_tools, provider="anthropic", target="bedrock")
+    tool_config = {"tools": to_bedrock_tools(sd_tools["tools"])}
+
+    # Track tool names to avoid duplicates when merging discover_tools results
+    known_tools = {t["toolSpec"]["name"] for t in tool_config["tools"]}
 
     # 3. Agentic loop
     bedrock = boto3.client("bedrock-runtime", region_name=REGION)
@@ -81,18 +111,19 @@ def main():
                     # discover_tools is a meta-tool — handle client-side via choose_tools
                     groups = tool_use.get("input", {}).get("groups")
                     discovered = choose_tools({"provider": "anthropic", "groups": groups})
-                    merge_discovered_tools(tool_config, discovered, provider="anthropic", target="bedrock")
+                    # Merge new tools into tool_config, skipping duplicates
+                    for t in discovered.get("tools", []):
+                        if t["name"] in known_tools:
+                            continue
+                        known_tools.add(t["name"])
+                        tool_config["tools"].extend(to_bedrock_tools([t]))
                     result = discovered
                 else:
                     result = dispatch_superdoc_tool(client, name, tool_use.get("input", {}))
 
-                tool_results.append(
-                    format_tool_result(result, target="bedrock", tool_use_id=tool_use["toolUseId"])
-                )
+                tool_results.append(bedrock_tool_result(tool_use["toolUseId"], result))
             except Exception as e:
-                tool_results.append(
-                    format_tool_error(e, target="bedrock", tool_use_id=tool_use["toolUseId"])
-                )
+                tool_results.append(bedrock_tool_error(tool_use["toolUseId"], e))
 
         messages.append({"role": "user", "content": tool_results})
 

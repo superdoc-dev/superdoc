@@ -22,19 +22,23 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
 
     ```typescript
     import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-    import {
-      createSuperDocClient, chooseTools, dispatchSuperDocTool,
-      formatToolResult, mergeDiscoveredTools,
-    } from '@superdoc-dev/sdk';
+    import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
 
     const client = createSuperDocClient();
     await client.connect();
     await client.doc.open({ doc: './contract.docx' });
 
-    // Get tools in Bedrock format
+    // Get tools in Anthropic format, convert to Bedrock toolSpec shape
     const { tools } = await chooseTools({ provider: 'anthropic' });
-    const toolConfig = { tools: [] };
-    mergeDiscoveredTools(toolConfig, { tools }, { provider: 'anthropic', target: 'bedrock' });
+    const toolConfig = {
+      tools: tools.map((t) => ({
+        toolSpec: {
+          name: t.name,
+          description: t.description,
+          inputSchema: { json: t.input_schema },
+        },
+      })),
+    };
 
     const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' });
     const messages = [
@@ -60,12 +64,13 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
       for (const block of toolUses) {
         const { name, input, toolUseId } = block.toolUse;
         const result = await dispatchSuperDocTool(client, name, input ?? {});
-        results.push(formatToolResult(result, { target: 'bedrock', toolUseId }));
+        const json = typeof result === 'object' && result !== null ? result : { result };
+        results.push({ toolResult: { toolUseId, content: [{ json }] } });
       }
       messages.push({ role: 'user', content: results });
     }
 
-    await client.doc.save({ inPlace: true });
+    await client.doc.save();
     await client.dispose();
     ```
   </Tab>
@@ -76,19 +81,26 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
 
     ```python
     import boto3
-    from superdoc import (
-        SuperDocClient, choose_tools, dispatch_superdoc_tool,
-        format_tool_result, merge_discovered_tools,
-    )
+    from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
 
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc="./contract.docx")
+    client.doc.open({"doc": "./contract.docx"})
 
-    # Get tools in Bedrock format
-    sd_tools = choose_tools(provider="anthropic")
-    tool_config = {"tools": []}
-    merge_discovered_tools(tool_config, sd_tools, provider="anthropic", target="bedrock")
+    # Get tools in Anthropic format, convert to Bedrock toolSpec shape
+    sd_tools = choose_tools({"provider": "anthropic"})
+    tool_config = {
+        "tools": [
+            {
+                "toolSpec": {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "inputSchema": {"json": t.get("input_schema", {})},
+                }
+            }
+            for t in sd_tools["tools"]
+        ]
+    }
 
     bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
     messages = [{"role": "user", "content": [{"text": "Review this contract."}]}]
@@ -112,12 +124,13 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
         for block in tool_uses:
             tu = block["toolUse"]
             result = dispatch_superdoc_tool(client, tu["name"], tu.get("input", {}))
+            json_result = result if isinstance(result, dict) else {"result": result}
             tool_results.append(
-                format_tool_result(result, target="bedrock", tool_use_id=tu["toolUseId"])
+                {"toolResult": {"toolUseId": tu["toolUseId"], "content": [{"json": json_result}]}}
             )
         messages.append({"role": "user", "content": tool_results})
 
-    client.doc.save(in_place=True)
+    client.doc.save()
     client.dispose()
     ```
   </Tab>

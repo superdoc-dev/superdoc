@@ -17,13 +17,6 @@ from .format import (
     unformat_strikethrough,
     unformat_underline,
 )
-from .platform import (
-    format_tool_error,
-    format_tool_result,
-    merge_discovered_tools,
-    sanitize_tool_schemas,
-)
-
 __all__ = [
     "clear_bold",
     "clear_italic",
@@ -37,8 +30,4 @@ __all__ = [
     "unformat_italic",
     "unformat_underline",
     "unformat_strikethrough",
-    "format_tool_result",
-    "format_tool_error",
-    "merge_discovered_tools",
-    "sanitize_tool_schemas",
 ]

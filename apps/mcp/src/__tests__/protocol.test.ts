@@ -7,29 +7,24 @@ const BLANK_DOCX = resolve(import.meta.dir, '../../../../shared/common/data/blan
 const SERVER_ENTRY = resolve(import.meta.dir, '../index.ts');
 
 const EXPECTED_TOOLS = [
+  // Lifecycle tools (transport-specific)
   'superdoc_open',
   'superdoc_save',
   'superdoc_close',
+  // Intent-based tools (from @superdoc/llm-tools)
+  'superdoc_read',
   'superdoc_find',
-  'superdoc_get_node',
-  'superdoc_info',
-  'superdoc_get_text',
-  'superdoc_insert',
-  'superdoc_replace',
-  'superdoc_delete',
-  'superdoc_format',
+  'superdoc_edit',
   'superdoc_create',
-  'superdoc_list_changes',
-  'superdoc_accept_change',
-  'superdoc_reject_change',
-  'superdoc_accept_all_changes',
-  'superdoc_reject_all_changes',
-  'superdoc_add_comment',
-  'superdoc_list_comments',
-  'superdoc_reply_comment',
-  'superdoc_resolve_comment',
-  'superdoc_insert_list',
-  'superdoc_list_create',
+  'superdoc_format',
+  'superdoc_table',
+  'superdoc_list',
+  'superdoc_image',
+  'superdoc_comment',
+  'superdoc_review',
+  'superdoc_section',
+  'superdoc_reference',
+  'superdoc_control',
 ];
 
 function textContent(result: Awaited<ReturnType<Client['callTool']>>): string {
@@ -79,7 +74,7 @@ describe('MCP protocol integration', () => {
     }
   });
 
-  it('open → info → get_text → close workflow', async () => {
+  it('open → read info → read text → close workflow', async () => {
     await ready;
 
     // Open
@@ -90,12 +85,18 @@ describe('MCP protocol integration', () => {
 
     const sid = opened.session_id;
 
-    // Info
-    const infoResult = await client.callTool({ name: 'superdoc_info', arguments: { session_id: sid } });
+    // Read info
+    const infoResult = await client.callTool({
+      name: 'superdoc_read',
+      arguments: { session_id: sid, format: 'info' },
+    });
     expect(textContent(infoResult)).toBeTruthy();
 
-    // Get text
-    const textResult = await client.callTool({ name: 'superdoc_get_text', arguments: { session_id: sid } });
+    // Read text
+    const textResult = await client.callTool({
+      name: 'superdoc_read',
+      arguments: { session_id: sid, format: 'text' },
+    });
     expect(textContent(textResult)).toBeDefined();
 
     // Close

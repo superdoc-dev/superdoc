@@ -515,6 +515,9 @@ importers:
       '@superdoc/document-api':
         specifier: workspace:*
         version: link:../../packages/document-api
+      '@superdoc/llm-tools':
+        specifier: workspace:*
+        version: link:../../packages/llm-tools
       '@superdoc/super-editor':
         specifier: workspace:*
         version: link:../../packages/super-editor
@@ -946,6 +949,12 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
+
+  packages/llm-tools:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
 
   packages/preset-geometry: {}
 

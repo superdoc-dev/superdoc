@@ -263,7 +263,8 @@ Use SuperDoc tools with agent frameworks. The framework manages the agentic loop
     await client.connect();
     await client.doc.open({ doc: './contract.docx' });
 
-    const { tools: sdTools } = await chooseTools({ provider: 'vercel' });
+    // All tools — no discover_tools since the framework manages a fixed tool set
+    const { tools: sdTools } = await chooseTools({ provider: 'vercel', mode: 'all' });
 
     // Wrap as Vercel AI tool() objects
     const tools = {};
@@ -312,7 +313,8 @@ Use SuperDoc tools with agent frameworks. The framework manages the agentic loop
         await client.connect();
         await client.doc.open({ doc: './contract.docx' });
 
-        const { tools: sdTools } = await chooseTools({ provider: 'generic' });
+        // All tools — no discover_tools since the framework manages a fixed tool set
+        const { tools: sdTools } = await chooseTools({ provider: 'generic', mode: 'all' });
 
         // Wrap as LangChain DynamicStructuredTool objects
         const tools = sdTools.map(
@@ -359,14 +361,16 @@ Use SuperDoc tools with agent frameworks. The framework manages the agentic loop
         client.connect()
         client.doc.open(doc="./contract.docx")
 
-        result = choose_tools(provider="generic")
+        # All tools — no discover_tools since the framework manages a fixed tool set
+        result = choose_tools(provider="generic", mode="all")
 
         # Wrap as LangChain StructuredTool objects
         def make_tool(t):
-            def invoke(args: dict) -> str:
-                return json.dumps(dispatch_superdoc_tool(client, t["name"], args))
+            def invoke(**kwargs) -> str:
+                return json.dumps(dispatch_superdoc_tool(client, t["name"], kwargs))
             return StructuredTool.from_function(
                 func=invoke, name=t["name"], description=t["description"],
+                infer_schema=False,
             )
 
         tools = [make_tool(t) for t in result["tools"]]

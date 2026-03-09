@@ -1,19 +1,23 @@
 export const isLinkedParagraphStyleId = (editor, styleId) => {
-  if (!styleId || !editor?.converter?.linkedStyles) return false;
-  return editor.converter.linkedStyles.some((style) => style.type === 'paragraph' && style.id === styleId);
+  if (!styleId) return false;
+
+  const translatedStyles = editor?.converter?.translatedLinkedStyles?.styles;
+  const styleDefinition = translatedStyles?.[styleId];
+  return Boolean(styleDefinition?.type === 'paragraph' && styleDefinition?.link);
 };
 
-export const clearInheritedLinkedStyleId = (attrs, editor) => {
+export const clearInheritedLinkedStyleId = (attrs, editor, { emptyParagraph = false } = {}) => {
+  if (!emptyParagraph) return attrs;
   if (!attrs || typeof attrs !== 'object') return attrs;
   const paragraphProperties = attrs.paragraphProperties;
   const styleId = paragraphProperties?.styleId;
   if (!isLinkedParagraphStyleId(editor, styleId)) return attrs;
 
-  const nextParagraphProperties = { ...paragraphProperties };
-  delete nextParagraphProperties.styleId;
-
   return {
     ...attrs,
-    paragraphProperties: nextParagraphProperties,
+    paragraphProperties: {
+      ...paragraphProperties,
+      styleId: null,
+    },
   };
 };

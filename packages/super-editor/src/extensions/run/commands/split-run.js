@@ -97,7 +97,7 @@ export function splitBlockPatch(state, dispatch, editor) {
           paraId: null,
           textId: null,
         });
-        paragraphAttrs = clearInheritedLinkedStyleId(paragraphAttrs, editor);
+        paragraphAttrs = clearInheritedLinkedStyleId(paragraphAttrs, editor, { emptyParagraph: atEnd });
         types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
         splitDepth = d;
       } else if (node.type.name === 'tableCell') {
@@ -178,6 +178,17 @@ export function splitBlockPatch(state, dispatch, editor) {
  */
 function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
   const styleId = paragraphAttrs?.paragraphProperties?.styleId;
+  const hasExplicitStyleReset =
+    paragraphAttrs?.paragraphProperties &&
+    Object.prototype.hasOwnProperty.call(paragraphAttrs.paragraphProperties, 'styleId') &&
+    paragraphAttrs.paragraphProperties.styleId == null;
+
+  if (hasExplicitStyleReset) {
+    tr.setStoredMarks([]);
+    tr.setMeta('sdStyleMarks', []);
+    return;
+  }
+
   if (!editor?.converter && !styleId) {
     return;
   }

@@ -392,13 +392,50 @@ describe('splitRunToParagraph with style marks', () => {
     expect(storedMarkTypes).not.toContain('bold');
   });
 
-  it('does not inherit linked paragraph styles onto the new paragraph when splitting', () => {
+  it('does not inherit linked paragraph styles onto the new empty paragraph', () => {
     const linkedStyleConverter = {
       convertedXml: {},
       numbering: {},
       translatedNumbering: {},
-      translatedLinkedStyles: {},
-      linkedStyles: [{ id: 'Heading1', type: 'paragraph' }],
+      translatedLinkedStyles: {
+        styles: {
+          Heading1: { styleId: 'Heading1', type: 'paragraph', link: 'Heading1Char' },
+        },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = linkedStyleConverter;
+    loadDoc(STYLED_PARAGRAPH_DOC);
+
+    const start = findTextPos('Heading Text');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Heading Text'.length);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    const paragraphs = [];
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph') paragraphs.push(node);
+    });
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].attrs?.paragraphProperties?.styleId).toBe('Heading1');
+    expect(paragraphs[1].attrs?.paragraphProperties?.styleId).toBeNull();
+  });
+
+  it('preserves linked paragraph styles when splitting text into two non-empty paragraphs', () => {
+    const linkedStyleConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        styles: {
+          Heading1: { styleId: 'Heading1', type: 'paragraph', link: 'Heading1Char' },
+        },
+      },
       documentGuid: 'test-guid-123',
       promoteToGuid: vi.fn(),
     };
@@ -420,7 +457,161 @@ describe('splitRunToParagraph with style marks', () => {
 
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs[0].attrs?.paragraphProperties?.styleId).toBe('Heading1');
-    expect(paragraphs[1].attrs?.paragraphProperties?.styleId).toBeUndefined();
+    expect(paragraphs[1].attrs?.paragraphProperties?.styleId).toBe('Heading1');
+  });
+
+  it('does not carry linked style marks into text typed in the new empty paragraph', () => {
+    const linkedStyleConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {} },
+        styles: {
+          Heading1: {
+            styleId: 'Heading1',
+            type: 'paragraph',
+            link: 'Heading1Char',
+            runProperties: {
+              bold: true,
+              fontSize: 28,
+            },
+          },
+        },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = linkedStyleConverter;
+    loadDoc(STYLED_PARAGRAPH_DOC);
+
+    const start = findTextPos('Heading Text');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 'Heading Text'.length);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    editor.commands.insertContent('X');
+
+    let insertedTextNode = null;
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'text' && node.text === 'X') {
+        insertedTextNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    expect(insertedTextNode).toBeTruthy();
+    const markTypes = (insertedTextNode?.marks || []).map((mark) => mark.type?.name);
+    expect(markTypes).not.toContain('bold');
+    expect(markTypes).not.toContain('textStyle');
+  });
+
+  it('does not carry linked style marks into an empty paragraph created from a previously split linked-style paragraph', () => {
+    const linkedStyleConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: {} },
+        styles: {
+          Heading1: {
+            styleId: 'Heading1',
+            type: 'paragraph',
+            link: 'Heading1Char',
+            runProperties: {
+              bold: true,
+              fontSize: 28,
+            },
+          },
+        },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = linkedStyleConverter;
+    loadDoc(STYLED_PARAGRAPH_DOC);
+
+    const start = findTextPos('Heading Text');
+    expect(start).not.toBeNull();
+
+    updateSelection((start ?? 0) + 7);
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    const splitParagraphTextPos = findTextPos(' Text');
+    expect(splitParagraphTextPos).not.toBeNull();
+    updateSelection((splitParagraphTextPos ?? 0) + ' Text'.length);
+    expect(editor.commands.splitRunToParagraph()).toBe(true);
+
+    editor.commands.insertContent('Y');
+
+    let insertedTextNode = null;
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'text' && node.text === 'Y') {
+        insertedTextNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    expect(insertedTextNode).toBeTruthy();
+    const markTypes = (insertedTextNode?.marks || []).map((mark) => mark.type?.name);
+    expect(markTypes).not.toContain('bold');
+    expect(markTypes).not.toContain('textStyle');
+  });
+
+  it('preserves ordinary paragraph styles on the new paragraph when splitting', () => {
+    const bodyTextConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {
+        styles: {
+          BodyText: { styleId: 'BodyText', type: 'paragraph' },
+        },
+      },
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = bodyTextConverter;
+    loadDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: { styleId: 'BodyText' },
+          },
+          content: [
+            {
+              type: 'run',
+              content: [{ type: 'text', text: 'Body Text' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const start = findTextPos('Body Text');
+    expect(start).not.toBeNull();
+    updateSelection((start ?? 0) + 4);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    const paragraphs = [];
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph') paragraphs.push(node);
+    });
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].attrs?.paragraphProperties?.styleId).toBe('BodyText');
+    expect(paragraphs[1].attrs?.paragraphProperties?.styleId).toBe('BodyText');
   });
 
   it('handles missing converter gracefully during split', () => {

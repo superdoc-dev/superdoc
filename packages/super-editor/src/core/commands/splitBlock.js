@@ -47,7 +47,6 @@ export const splitBlock =
 
     const extensionAttrs = editor.extensionService.attributes;
     let newAttrs = Attribute.getSplittedAttributes(extensionAttrs, $from.node().type.name, $from.node().attrs);
-    newAttrs = clearInheritedLinkedStyleId(newAttrs, editor);
 
     // Remove any overridden attributes
     if (attrsToRemoveOverride.length > 0) {
@@ -67,6 +66,7 @@ export const splitBlock =
 
     if (dispatch) {
       const atEnd = $to.parentOffset === $to.parent.content.size;
+      newAttrs = clearInheritedLinkedStyleId(newAttrs, editor, { emptyParagraph: atEnd });
       if (selection instanceof TextSelection) tr.deleteSelection();
       const deflt = $from.depth === 0 ? null : defaultBlockAt($from.node(-1).contentMatchAt($from.indexAfter(-1)));
 

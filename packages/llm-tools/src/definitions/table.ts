@@ -11,10 +11,27 @@ export const tableTool: ToolDefinition = {
       session_id: { type: 'string', description: 'Session ID from superdoc_open.' },
       action: {
         type: 'string',
-        enum: ['get', 'insert_row', 'delete_row', 'insert_column', 'delete_column', 'merge_cells', 'set_style', 'sort'],
+        enum: [
+          'get',
+          'set_cells',
+          'insert_row',
+          'delete_row',
+          'insert_column',
+          'delete_column',
+          'merge_cells',
+          'set_style',
+          'sort',
+        ],
         description: 'The table operation to perform.',
       },
       target: { type: 'string', description: 'JSON table address from superdoc_find results.' },
+      data: {
+        type: 'array',
+        items: { type: 'array', items: { type: 'string' } },
+        description:
+          'For set_cells: 2D array of cell values. Row-major order, e.g. [["A1","B1"],["A2","B2"]]. ' +
+          'Fills cells from the table node; skips null/empty values.',
+      },
       position: {
         type: 'string',
         description: 'Position for insert operations (e.g. "above", "below", "left", "right").',

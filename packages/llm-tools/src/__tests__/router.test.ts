@@ -59,30 +59,41 @@ describe('routeRead', () => {
 });
 
 describe('routeFind', () => {
-  test('routes text search', async () => {
+  test('routes text search with select wrapper', async () => {
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_find', { pattern: 'hello' }, execute);
     expect(calls[0].operationId).toBe('find');
-    expect(calls[0].input).toEqual({ type: 'text', pattern: 'hello', mode: 'contains' });
+    expect(calls[0].input).toEqual({ select: { type: 'text', pattern: 'hello', mode: 'contains' } });
   });
 
-  test('routes node type search', async () => {
+  test('routes node type search with select wrapper', async () => {
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_find', { type: 'heading' }, execute);
-    expect(calls[0].input).toEqual({ type: 'node', nodeType: 'heading' });
+    expect(calls[0].input).toEqual({ select: { type: 'node', nodeKind: 'heading' } });
   });
 
   test('routes combined pattern + type search', async () => {
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_find', { pattern: 'hello', type: 'heading' }, execute);
-    expect(calls[0].input).toEqual({ type: 'text', pattern: 'hello', mode: 'contains', nodeType: 'heading' });
+    expect(calls[0].input).toEqual({
+      select: { type: 'text', pattern: 'hello', mode: 'contains', nodeKind: 'heading' },
+    });
   });
 
-  test('wraps in select when limit/offset provided', async () => {
+  test('includes limit and offset in query', async () => {
     const { execute, calls } = mockExecutor();
-    await dispatch('superdoc_find', { pattern: 'test', limit: 5 }, execute);
-    expect(calls[0].input).toHaveProperty('select');
-    expect(calls[0].input).toHaveProperty('limit', 5);
+    await dispatch('superdoc_find', { pattern: 'test', limit: 5, offset: 10 }, execute);
+    expect(calls[0].input).toEqual({
+      select: { type: 'text', pattern: 'test', mode: 'contains' },
+      limit: 5,
+      offset: 10,
+    });
+  });
+
+  test('empty select when no pattern or type', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_find', {}, execute);
+    expect(calls[0].input).toEqual({ select: {} });
   });
 });
 
@@ -93,7 +104,7 @@ describe('routeEdit', () => {
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_edit', { action: 'insert', target, text: 'hello' }, execute);
     expect(calls[0].operationId).toBe('insert');
-    expect(calls[0].input.text).toBe('hello');
+    expect(calls[0].input.value).toBe('hello');
   });
 
   test('routes replace', async () => {
@@ -148,16 +159,18 @@ describe('routeCreate', () => {
     const at = JSON.stringify({ kind: 'block', nodeId: 'p1' });
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_create', { type: 'list', kind: 'ordered', at }, execute);
-    expect(calls[0].operationId).toBe('lists.create');
+    expect(calls[0].operationId).toBe('create.list');
     expect(calls[0].input.kind).toBe('ordered');
-    expect(calls[0].input.target).toEqual({ kind: 'block', nodeId: 'p1' });
+    expect(calls[0].input.at).toEqual({ kind: 'block', nodeId: 'p1' });
   });
 
-  test('list creation throws without at', async () => {
-    const { execute } = mockExecutor();
-    await expect(dispatch('superdoc_create', { type: 'list', kind: 'ordered' }, execute)).rejects.toThrow(
-      'requires an "at" parameter',
-    );
+  test('routes list creation without at as single create.list call', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_create', { type: 'list', kind: 'bullet', text: 'Item one' }, execute);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].operationId).toBe('create.list');
+    expect(calls[0].input.kind).toBe('bullet');
+    expect(calls[0].input.text).toBe('Item one');
   });
 
   test('routes content_control with kind', async () => {
@@ -181,7 +194,7 @@ describe('routeFormat', () => {
     await dispatch('superdoc_format', { target, bold: true, italic: true }, execute);
     expect(calls).toHaveLength(1);
     expect(calls[0].operationId).toBe('format.apply');
-    expect(calls[0].input.inline).toEqual({ bold: 'on', italic: 'on' });
+    expect(calls[0].input.inline).toEqual({ bold: true, italic: true });
   });
 
   test('routes paragraph alignment', async () => {
@@ -707,7 +720,7 @@ describe('routeFormat (additional branches)', () => {
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_format', { target, bold: false }, execute);
     expect(calls[0].operationId).toBe('format.apply');
-    expect(calls[0].input.inline).toEqual({ bold: 'off' });
+    expect(calls[0].input.inline).toEqual({ bold: false });
   });
 
   test('routes line_spacing to line field', async () => {
@@ -801,5 +814,287 @@ describe('routeReference (additional branches)', () => {
     await dispatch('superdoc_reference', { action: 'update_link', id, tooltip: 'New tip' }, execute);
     expect(calls[0].input.patch).toEqual({ tooltip: 'New tip' });
     expect(calls[0].input.patch).not.toHaveProperty('href');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Content address auto-resolution
+// ---------------------------------------------------------------------------
+
+describe('content address auto-resolution', () => {
+  /** Executor that returns a mock SDNodeResult when getNodeById is called. */
+  function nodeAwareExecutor(nodeText: string, returnValue: unknown = { ok: true }) {
+    const calls: Array<{ operationId: string; input: Record<string, unknown>; options?: Record<string, unknown> }> = [];
+    const execute: Executor = async (operationId, input, options) => {
+      calls.push({ operationId, input, options });
+      if (operationId === 'getNodeById') {
+        return {
+          node: {
+            kind: 'paragraph',
+            id: (input as Record<string, unknown>).nodeId,
+            paragraph: {
+              inlines: [{ kind: 'run', run: { text: nodeText } }],
+            },
+          },
+          address: { kind: 'content', stability: 'stable', nodeId: (input as Record<string, unknown>).nodeId },
+        };
+      }
+      return returnValue;
+    };
+    return { execute, calls };
+  }
+
+  test('format: resolves content address to text address', async () => {
+    const contentTarget = JSON.stringify({ kind: 'content', stability: 'stable', nodeId: 'node-1' });
+    const { execute, calls } = nodeAwareExecutor('Revenue');
+    await dispatch('superdoc_format', { target: contentTarget, bold: true }, execute);
+
+    // First call should be getNodeById to resolve the address
+    expect(calls[0].operationId).toBe('getNodeById');
+    expect(calls[0].input.nodeId).toBe('node-1');
+
+    // Second call should be format.apply with resolved text address
+    expect(calls[1].operationId).toBe('format.apply');
+    expect(calls[1].input.target).toEqual({ kind: 'text', blockId: 'node-1', range: { start: 0, end: 7 } });
+  });
+
+  test('format: passes text address through unchanged', async () => {
+    const textTarget = JSON.stringify({ kind: 'text', blockId: 'node-1', range: { start: 0, end: 5 } });
+    const { execute, calls } = nodeAwareExecutor('Hello');
+    await dispatch('superdoc_format', { target: textTarget, bold: true }, execute);
+
+    // Should NOT call getNodeById — text address passes through
+    expect(calls).toHaveLength(1);
+    expect(calls[0].operationId).toBe('format.apply');
+    expect(calls[0].input.target).toEqual({ kind: 'text', blockId: 'node-1', range: { start: 0, end: 5 } });
+  });
+
+  test('comment create: resolves content address to text address', async () => {
+    const contentTarget = JSON.stringify({ kind: 'content', stability: 'stable', nodeId: 'para-1' });
+    const { execute, calls } = nodeAwareExecutor('Hello world');
+    await dispatch('superdoc_comment', { action: 'create', target: contentTarget, text: 'Nice!' }, execute);
+
+    expect(calls[0].operationId).toBe('getNodeById');
+    expect(calls[1].operationId).toBe('comments.create');
+    expect(calls[1].input.target).toEqual({ kind: 'text', blockId: 'para-1', range: { start: 0, end: 11 } });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Find result enrichment
+// ---------------------------------------------------------------------------
+
+describe('find result enrichment', () => {
+  /** Returns a mock find result with paragraph nodes. */
+  function findResultWithParagraphs() {
+    return {
+      total: 2,
+      limit: 10,
+      offset: 0,
+      items: [
+        {
+          node: {
+            kind: 'paragraph',
+            id: 'p1',
+            paragraph: { inlines: [{ kind: 'run', run: { text: 'Hello World' } }] },
+          },
+          address: { kind: 'content', stability: 'stable', nodeId: 'p1' },
+        },
+        {
+          node: {
+            kind: 'heading',
+            id: 'h1',
+            heading: { level: 1, inlines: [{ kind: 'run', run: { text: 'Title' } }] },
+          },
+          address: { kind: 'content', stability: 'stable', nodeId: 'h1' },
+        },
+      ],
+    };
+  }
+
+  test('adds textAddress to each find result', async () => {
+    const { execute, calls } = mockExecutor(findResultWithParagraphs());
+    const result = (await dispatch('superdoc_find', { type: 'paragraph' }, execute)) as Record<string, unknown>;
+    const items = result.items as Array<Record<string, unknown>>;
+
+    expect(items[0].textAddress).toEqual({ kind: 'text', blockId: 'p1', range: { start: 0, end: 11 } });
+    expect(items[1].textAddress).toEqual({ kind: 'text', blockId: 'h1', range: { start: 0, end: 5 } });
+  });
+
+  test('adds matchAddress for text searches', async () => {
+    const findResult = {
+      total: 1,
+      limit: 10,
+      offset: 0,
+      items: [
+        {
+          node: {
+            kind: 'paragraph',
+            id: 'p1',
+            paragraph: { inlines: [{ kind: 'run', run: { text: 'The Revenue report' } }] },
+          },
+          address: { kind: 'content', stability: 'stable', nodeId: 'p1' },
+        },
+      ],
+    };
+    const { execute } = mockExecutor(findResult);
+    const result = (await dispatch('superdoc_find', { pattern: 'Revenue' }, execute)) as Record<string, unknown>;
+    const items = result.items as Array<Record<string, unknown>>;
+
+    // matchAddress should point to "Revenue" starting at offset 4
+    expect(items[0].matchAddress).toEqual({ kind: 'text', blockId: 'p1', range: { start: 4, end: 11 } });
+    // textAddress covers full block
+    expect(items[0].textAddress).toEqual({ kind: 'text', blockId: 'p1', range: { start: 0, end: 18 } });
+  });
+
+  test('no matchAddress for node-type searches', async () => {
+    const { execute } = mockExecutor(findResultWithParagraphs());
+    const result = (await dispatch('superdoc_find', { type: 'paragraph' }, execute)) as Record<string, unknown>;
+    const items = result.items as Array<Record<string, unknown>>;
+
+    expect(items[0].matchAddress).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Table set_cells
+// ---------------------------------------------------------------------------
+
+describe('routeTable set_cells', () => {
+  /** Executor that returns a table node when getNodeById is called. */
+  function tableAwareExecutor() {
+    const calls: Array<{ operationId: string; input: Record<string, unknown>; options?: Record<string, unknown> }> = [];
+    const execute: Executor = async (operationId, input, options) => {
+      calls.push({ operationId, input, options });
+      if (operationId === 'getNodeById') {
+        return {
+          node: {
+            kind: 'table',
+            id: 'tbl-1',
+            table: {
+              rows: [
+                {
+                  cells: [
+                    { content: [{ kind: 'paragraph', id: 'c00', paragraph: { inlines: [] } }] },
+                    { content: [{ kind: 'paragraph', id: 'c01', paragraph: { inlines: [] } }] },
+                  ],
+                },
+                {
+                  cells: [
+                    { content: [{ kind: 'paragraph', id: 'c10', paragraph: { inlines: [] } }] },
+                    { content: [{ kind: 'paragraph', id: 'c11', paragraph: { inlines: [] } }] },
+                  ],
+                },
+              ],
+            },
+          },
+        };
+      }
+      return { success: true };
+    };
+    return { execute, calls };
+  }
+
+  test('populates all cells in a 2x2 table', async () => {
+    const target = JSON.stringify({ kind: 'content', nodeId: 'tbl-1' });
+    const { execute, calls } = tableAwareExecutor();
+    const result = (await dispatch(
+      'superdoc_table',
+      {
+        action: 'set_cells',
+        target,
+        data: [
+          ['A', 'B'],
+          ['C', 'D'],
+        ],
+      },
+      execute,
+    )) as Record<string, unknown>;
+
+    // 1 getNodeById + 4 insert calls
+    expect(calls).toHaveLength(5);
+    expect(calls[0].operationId).toBe('getNodeById');
+    expect(calls[1].operationId).toBe('insert');
+    expect(calls[1].input.value).toBe('A');
+    expect(calls[1].input.target).toEqual({ kind: 'text', blockId: 'c00', range: { start: 0, end: 0 } });
+    expect(calls[4].input.value).toBe('D');
+    expect(calls[4].input.target).toEqual({ kind: 'text', blockId: 'c11', range: { start: 0, end: 0 } });
+
+    expect(result.success).toBe(true);
+    expect(result.cellsSet).toBe(4);
+  });
+
+  test('skips null/empty cells', async () => {
+    const target = JSON.stringify({ kind: 'content', nodeId: 'tbl-1' });
+    const { execute, calls } = tableAwareExecutor();
+    await dispatch(
+      'superdoc_table',
+      {
+        action: 'set_cells',
+        target,
+        data: [
+          ['A', ''],
+          [null, 'D'],
+        ],
+      },
+      execute,
+    );
+
+    // 1 getNodeById + 2 insert calls (skipped empty and null)
+    expect(calls).toHaveLength(3);
+    expect(calls[1].input.value).toBe('A');
+    expect(calls[2].input.value).toBe('D');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-item list creation
+// ---------------------------------------------------------------------------
+
+describe('routeCreate list with items', () => {
+  test('creates list then inserts additional items', async () => {
+    let callIndex = 0;
+    const calls: Array<{ operationId: string; input: Record<string, unknown> }> = [];
+    const execute: Executor = async (operationId, input) => {
+      calls.push({ operationId, input: input as Record<string, unknown> });
+      callIndex++;
+      if (operationId === 'create.list') {
+        return { success: true, listId: '1:item-0', item: { kind: 'block', nodeType: 'listItem', nodeId: 'item-0' } };
+      }
+      if (operationId === 'lists.insert') {
+        return { success: true, item: { kind: 'block', nodeType: 'listItem', nodeId: `item-${callIndex}` } };
+      }
+      return { success: true };
+    };
+
+    const result = (await dispatch(
+      'superdoc_create',
+      { type: 'list', kind: 'bullet', items: ['First', 'Second', 'Third'] },
+      execute,
+    )) as Record<string, unknown>;
+
+    // 1 create.list + 2 lists.insert
+    expect(calls).toHaveLength(3);
+    expect(calls[0].operationId).toBe('create.list');
+    expect(calls[0].input.text).toBe('First');
+
+    expect(calls[1].operationId).toBe('lists.insert');
+    expect(calls[1].input.text).toBe('Second');
+    expect(calls[1].input.position).toBe('after');
+
+    expect(calls[2].operationId).toBe('lists.insert');
+    expect(calls[2].input.text).toBe('Third');
+
+    expect(result.success).toBe(true);
+    expect(result.listId).toBe('1:item-0');
+    expect((result.items as unknown[]).length).toBe(3);
+  });
+
+  test('single text still uses simple create.list', async () => {
+    const { execute, calls } = mockExecutor({ success: true, listId: '1:x', item: { nodeId: 'x' } });
+    await dispatch('superdoc_create', { type: 'list', text: 'Only one' }, execute);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].operationId).toBe('create.list');
+    expect(calls[0].input.text).toBe('Only one');
   });
 });

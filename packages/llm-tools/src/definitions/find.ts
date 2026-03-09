@@ -4,7 +4,8 @@ export const findTool: ToolDefinition = {
   name: 'superdoc_find',
   description:
     'Search for content in the document. Returns addresses that other tools need for edits. ' +
-    'Call this before superdoc_edit, superdoc_format, or any tool that requires a target.',
+    'Each result includes a "textAddress" (covers full block text) and, for text searches, a "matchAddress" ' +
+    '(exact range of the match). Pass these directly to superdoc_format or superdoc_comment as the target.',
   inputSchema: {
     type: 'object',
     properties: {

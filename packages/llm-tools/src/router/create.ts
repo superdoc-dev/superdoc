@@ -33,13 +33,36 @@ export async function routeCreate(params: Record<string, unknown>, execute: Exec
       return execute('create.image', input, options);
     }
     case 'list': {
-      if (!at) throw new Error('List creation requires an "at" parameter pointing to paragraphs to convert.');
-      const input: Record<string, unknown> = {
-        mode: 'fromParagraphs',
-        target: at,
-        kind: params.kind ?? 'bullet',
-      };
-      return execute('lists.create', input, options);
+      const kind = (params.kind ?? 'bullet') as string;
+      const items = params.items as string[] | undefined;
+
+      // Multi-item shorthand: create the first item, then insert the rest
+      if (Array.isArray(items) && items.length > 0) {
+        const firstInput: Record<string, unknown> = { kind, text: items[0] };
+        if (at) firstInput.at = at;
+        const firstResult = (await execute('create.list', firstInput, options)) as Record<string, unknown>;
+
+        let lastItemAddress = firstResult.item as Record<string, unknown>;
+        const allItems = [lastItemAddress];
+
+        for (let i = 1; i < items.length; i++) {
+          const insertResult = (await execute('lists.insert', {
+            target: { kind: 'content', stability: 'stable', nodeId: lastItemAddress?.nodeId },
+            position: 'after',
+            text: items[i],
+          })) as Record<string, unknown>;
+          lastItemAddress = insertResult.item as Record<string, unknown>;
+          allItems.push(lastItemAddress);
+        }
+
+        return { success: true, listId: firstResult.listId, items: allItems };
+      }
+
+      // Single-item creation
+      const input: Record<string, unknown> = { kind };
+      if (params.text) input.text = params.text;
+      if (at) input.at = at;
+      return execute('create.list', input, options);
     }
     case 'section_break': {
       const input: Record<string, unknown> = {};

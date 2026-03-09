@@ -14,7 +14,12 @@ export const commentTool: ToolDefinition = {
         enum: ['list', 'create', 'reply', 'resolve', 'delete'],
         description: 'The comment operation to perform.',
       },
-      target: { type: 'string', description: 'JSON text address to anchor the comment to. For action "create".' },
+      target: {
+        type: 'string',
+        description:
+          'JSON address to anchor the comment to. For action "create". Accepts both text addresses (with range) and ' +
+          'content addresses (just nodeId) — content addresses are auto-resolved to cover the full block text.',
+      },
       text: { type: 'string', description: 'Comment body. For actions "create" and "reply".' },
       comment_id: { type: 'string', description: 'Comment ID. For actions "reply", "resolve", and "delete".' },
       include_resolved: { type: 'boolean', description: 'Include resolved comments in results. For action "list".' },

@@ -26,6 +26,11 @@ export const createTool: ToolDefinition = {
       cols: { type: 'number', minimum: 1, description: 'Number of columns. For type "table".' },
       src: { type: 'string', description: 'Image file path or URL. For type "image".' },
       kind: { type: 'string', enum: ['ordered', 'bullet'], description: 'List kind. For type "list".' },
+      items: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'For type "list": create a list with multiple items at once. e.g. ["First", "Second", "Third"].',
+      },
       suggest: { type: 'boolean', description: 'If true, creates as a tracked change.' },
     },
     required: ['session_id', 'type'],

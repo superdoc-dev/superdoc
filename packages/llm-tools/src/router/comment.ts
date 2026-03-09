@@ -1,5 +1,5 @@
 import type { Executor } from '../types.js';
-import { parseTarget } from './utils.js';
+import { parseTarget, resolveTextTarget } from './utils.js';
 
 export async function routeComment(params: Record<string, unknown>, execute: Executor) {
   const action = params.action as string;
@@ -11,9 +11,10 @@ export async function routeComment(params: Record<string, unknown>, execute: Exe
       return execute('comments.list', input);
     }
     case 'create': {
-      const target = parseTarget(params);
-      if (!target)
+      const rawTarget = parseTarget(params);
+      if (!rawTarget)
         throw new Error('Target is required for "create" action. Use superdoc_find first to get a target address.');
+      const target = await resolveTextTarget(rawTarget, execute);
       return execute('comments.create', { text: params.text, target });
     }
     case 'reply':

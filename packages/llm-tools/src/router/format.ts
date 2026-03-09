@@ -1,14 +1,14 @@
 import type { Executor } from '../types.js';
-import { parseTarget, trackedOptions } from './utils.js';
+import { parseTarget, trackedOptions, resolveTextTarget } from './utils.js';
 
 const INLINE_KEYS = ['bold', 'italic', 'underline', 'strikethrough', 'font', 'size', 'color', 'highlight'] as const;
 
 function toRunProperties(params: Record<string, unknown>): Record<string, unknown> {
   const props: Record<string, unknown> = {};
-  if (params.bold != null) props.bold = params.bold ? 'on' : 'off';
-  if (params.italic != null) props.italic = params.italic ? 'on' : 'off';
-  if (params.underline != null) props.underline = params.underline ? 'on' : 'off';
-  if (params.strikethrough != null) props.strikethrough = params.strikethrough ? 'on' : 'off';
+  if (params.bold != null) props.bold = Boolean(params.bold);
+  if (params.italic != null) props.italic = Boolean(params.italic);
+  if (params.underline != null) props.underline = Boolean(params.underline);
+  if (params.strikethrough != null) props.strikethrough = Boolean(params.strikethrough);
   if (params.font != null) props.fontFamily = params.font;
   if (params.size != null) props.fontSize = params.size;
   if (params.color != null) props.color = params.color;
@@ -17,7 +17,8 @@ function toRunProperties(params: Record<string, unknown>): Record<string, unknow
 }
 
 export async function routeFormat(params: Record<string, unknown>, execute: Executor) {
-  const target = parseTarget(params);
+  const rawTarget = parseTarget(params);
+  const target = await resolveTextTarget(rawTarget, execute);
   const options = trackedOptions(params);
   const results: unknown[] = [];
 

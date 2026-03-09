@@ -11,7 +11,12 @@ export const formatTool: ToolDefinition = {
     type: 'object',
     properties: {
       session_id: { type: 'string', description: 'Session ID from superdoc_open.' },
-      target: { type: 'string', description: 'JSON address from superdoc_find results.' },
+      target: {
+        type: 'string',
+        description:
+          'JSON address from superdoc_find. Accepts both text addresses (with range) and content addresses ' +
+          '(just nodeId) — content addresses are auto-resolved to cover the full block text.',
+      },
       suggest: { type: 'boolean', description: 'If true, creates a tracked change.' },
       // Inline formatting
       bold: { type: 'boolean', description: 'Set or remove bold.' },

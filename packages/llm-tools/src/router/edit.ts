@@ -8,7 +8,7 @@ export async function routeEdit(params: Record<string, unknown>, execute: Execut
 
   switch (action) {
     case 'insert':
-      return execute('insert', { text: params.text, target }, options);
+      return execute('insert', { value: params.text, target }, options);
     case 'replace':
       return execute('replace', { text: params.text, target }, options);
     case 'delete':

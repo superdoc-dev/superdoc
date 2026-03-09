@@ -11,16 +11,6 @@ You write the agentic loop and control the conversation directly.
 | Platform | Node.js | Python | Auth |
 |----------|---------|--------|------|
 | [AWS Bedrock](./bedrock) | `index.ts` | `index.py` | AWS credentials (`aws configure`) |
-| [Google Vertex AI](./vertex) | `index.ts` | `index.py` | Google Cloud credentials (`gcloud auth application-default login`) |
-
-## Agent frameworks
-
-The framework manages the agentic loop — you configure tools and let it run.
-
-| Framework | Node.js | Python | Auth |
-|-----------|---------|--------|------|
-| [Vercel AI SDK](./vercel-ai) | `index.ts` | — | `OPENAI_API_KEY` |
-| [LangChain](./langchain) | `index.ts` | `index.py` | `OPENAI_API_KEY` |
 
 ## Full demo
 
@@ -38,6 +28,7 @@ npx tsx index.ts contract.docx reviewed.docx
 
 # Python
 cd bedrock
+python -m venv venv && source venv/bin/activate
 pip install superdoc-sdk boto3
 python index.py contract.docx reviewed.docx
 ```

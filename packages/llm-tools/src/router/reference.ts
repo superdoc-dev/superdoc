@@ -15,20 +15,26 @@ export async function routeReference(params: Record<string, unknown>, execute: E
         text: params.text,
         link: { destination: { href: params.url } },
       });
-    case 'update_link':
+    case 'update_link': {
+      const linkTarget = parseTarget(params, 'id');
       return execute('hyperlinks.patch', {
-        target: params.id,
-        patch: { href: params.url, ...(params.text != null ? { text: params.text } : {}) },
+        target: linkTarget,
+        patch: { href: params.url, ...(params.text != null ? { tooltip: params.text } : {}) },
       });
-    case 'remove_link':
-      return execute('hyperlinks.remove', { target: params.id });
+    }
+    case 'remove_link': {
+      const linkTarget = parseTarget(params, 'id');
+      return execute('hyperlinks.remove', { target: linkTarget });
+    }
     // Bookmarks
     case 'list_bookmarks':
       return execute('bookmarks.list', {});
     case 'insert_bookmark':
       return execute('bookmarks.insert', { at: target, name: params.name });
-    case 'remove_bookmark':
-      return execute('bookmarks.remove', { target: params.id });
+    case 'remove_bookmark': {
+      const bookmarkTarget = parseTarget(params, 'id');
+      return execute('bookmarks.remove', { target: bookmarkTarget });
+    }
     // Footnotes
     case 'list_footnotes':
       return execute('footnotes.list', {});
@@ -38,8 +44,10 @@ export async function routeReference(params: Record<string, unknown>, execute: E
         type: params.note_type ?? 'footnote',
         content: params.text,
       });
-    case 'remove_footnote':
-      return execute('footnotes.remove', { target: params.id });
+    case 'remove_footnote': {
+      const footnoteTarget = parseTarget(params, 'id');
+      return execute('footnotes.remove', { target: footnoteTarget });
+    }
     default:
       throw new Error(`Unknown reference action: "${action}".`);
   }

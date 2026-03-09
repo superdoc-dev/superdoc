@@ -15,11 +15,34 @@ export const tableTool: ToolDefinition = {
         description: 'The table operation to perform.',
       },
       target: { type: 'string', description: 'JSON table address from superdoc_find results.' },
-      position: { type: 'number', description: 'Row or column index for insert/delete operations.' },
-      range: { type: 'string', description: 'Cell range for merge_cells (e.g. "A1:C3").' },
+      position: {
+        type: 'string',
+        description: 'Position for insert operations (e.g. "above", "below", "left", "right").',
+      },
+      column_index: { type: 'number', description: 'Column index for insert_column/delete_column.' },
+      start: {
+        type: 'object',
+        properties: { rowIndex: { type: 'number' }, columnIndex: { type: 'number' } },
+        description: 'Start cell for merge_cells. e.g. {"rowIndex": 0, "columnIndex": 0}',
+      },
+      end: {
+        type: 'object',
+        properties: { rowIndex: { type: 'number' }, columnIndex: { type: 'number' } },
+        description: 'End cell for merge_cells. e.g. {"rowIndex": 1, "columnIndex": 2}',
+      },
       style: { type: 'string', description: 'Table style name for set_style.' },
-      column: { type: 'number', description: 'Column index to sort by.' },
-      direction: { type: 'string', enum: ['asc', 'desc'], description: 'Sort direction.' },
+      keys: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            columnIndex: { type: 'number' },
+            direction: { type: 'string', enum: ['ascending', 'descending'] },
+            type: { type: 'string', enum: ['text', 'number', 'date'] },
+          },
+        },
+        description: 'Sort keys for action "sort". e.g. [{"columnIndex": 0, "direction": "ascending", "type": "text"}]',
+      },
     },
     required: ['session_id', 'action', 'target'],
   },

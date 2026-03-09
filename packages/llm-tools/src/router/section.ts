@@ -34,7 +34,14 @@ export async function routeSection(params: Record<string, unknown>, execute: Exe
     case 'list_headers_footers':
       return execute('headerFooters.list', { section: target, kind: params.kind });
     case 'get_header_footer':
-      return execute('headerFooters.get', { target: params.slot });
+      return execute('headerFooters.get', {
+        target: {
+          kind: 'headerFooterSlot',
+          section: target,
+          headerFooterKind: params.kind,
+          variant: params.slot ?? 'default',
+        },
+      });
     case 'set_header_footer':
       return execute('headerFooters.parts.create', { kind: params.kind });
     default:

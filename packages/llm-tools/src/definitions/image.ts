@@ -20,7 +20,7 @@ export const imageTool: ToolDefinition = {
       alt_text: { type: 'string', description: 'Alt text for accessibility. For action "set_alt_text".' },
       wrap: {
         type: 'string',
-        enum: ['inline', 'square', 'tight', 'behind', 'in_front'],
+        enum: ['inline', 'square', 'tight', 'through', 'top_and_bottom', 'none'],
         description: 'Text wrap type. For action "set_wrap".',
       },
     },

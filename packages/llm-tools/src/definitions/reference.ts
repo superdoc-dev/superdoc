@@ -29,7 +29,10 @@ export const referenceTool: ToolDefinition = {
       url: { type: 'string', description: 'URL for hyperlink actions.' },
       text: { type: 'string', description: 'Display text for links or footnote content.' },
       name: { type: 'string', description: 'Bookmark name.' },
-      id: { type: 'string', description: 'Reference ID for update/remove actions.' },
+      id: {
+        type: 'string',
+        description: 'JSON address of the reference (from list results) for update/remove actions.',
+      },
     },
     required: ['session_id', 'action'],
   },

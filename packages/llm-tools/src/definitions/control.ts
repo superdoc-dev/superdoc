@@ -23,7 +23,12 @@ export const controlTool: ToolDefinition = {
       type: {
         type: 'string',
         enum: ['text', 'checkbox', 'dropdown', 'date', 'repeating_section'],
-        description: 'Control type to create. For action "wrap".',
+        description: 'Control type. For action "fill" auto-detection hint (optional).',
+      },
+      kind: {
+        type: 'string',
+        enum: ['block', 'inline'],
+        description: 'Content control scope. For action "wrap". Defaults to "block".',
       },
     },
     required: ['session_id', 'action'],

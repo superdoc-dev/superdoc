@@ -424,11 +424,17 @@ describe('routeImage', () => {
     expect(calls[0].input.description).toBe('A photo');
   });
 
-  test('routes set_wrap with type field', async () => {
+  test('routes set_wrap with mapped type value', async () => {
     const { execute, calls } = mockExecutor();
     await dispatch('superdoc_image', { action: 'set_wrap', target, wrap: 'tight' }, execute);
     expect(calls[0].operationId).toBe('images.setWrapType');
-    expect(calls[0].input.type).toBe('tight');
+    expect(calls[0].input.type).toBe('Tight');
+  });
+
+  test('routes set_wrap top_and_bottom to TopAndBottom', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_image', { action: 'set_wrap', target, wrap: 'top_and_bottom' }, execute);
+    expect(calls[0].input.type).toBe('TopAndBottom');
   });
 
   test('routes delete', async () => {
@@ -477,6 +483,24 @@ describe('routeSection', () => {
     expect(calls[0].operationId).toBe('headerFooters.list');
     expect(calls[0].input.section).toEqual({ kind: 'section', sectionId: 's1' });
   });
+
+  test('routes get_header_footer with full slot address', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_section', { action: 'get_header_footer', target, kind: 'header', slot: 'first' }, execute);
+    expect(calls[0].operationId).toBe('headerFooters.get');
+    expect(calls[0].input.target).toEqual({
+      kind: 'headerFooterSlot',
+      section: { kind: 'section', sectionId: 's1' },
+      headerFooterKind: 'header',
+      variant: 'first',
+    });
+  });
+
+  test('get_header_footer defaults variant to "default"', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_section', { action: 'get_header_footer', target, kind: 'footer' }, execute);
+    expect(calls[0].input.target.variant).toBe('default');
+  });
 });
 
 describe('routeReference', () => {
@@ -500,19 +524,40 @@ describe('routeReference', () => {
     expect(calls[0].input.text).toBe('Click');
   });
 
-  test('routes update_link with patch structure', async () => {
+  test('routes update_link with parsed target address', async () => {
+    const id = JSON.stringify({
+      kind: 'inline',
+      nodeType: 'hyperlink',
+      anchor: { start: { blockId: 'b1', offset: 0 }, end: { blockId: 'b1', offset: 5 } },
+    });
     const { execute, calls } = mockExecutor();
-    await dispatch('superdoc_reference', { action: 'update_link', id: 'link1', url: 'https://new.com' }, execute);
+    await dispatch('superdoc_reference', { action: 'update_link', id, url: 'https://new.com' }, execute);
     expect(calls[0].operationId).toBe('hyperlinks.patch');
-    expect(calls[0].input.target).toBe('link1');
+    expect(calls[0].input.target).toEqual(JSON.parse(id));
     expect(calls[0].input.patch).toEqual({ href: 'https://new.com' });
   });
 
-  test('routes remove_link', async () => {
+  test('routes update_link maps text to tooltip', async () => {
+    const id = JSON.stringify({
+      kind: 'inline',
+      nodeType: 'hyperlink',
+      anchor: { start: { blockId: 'b1', offset: 0 }, end: { blockId: 'b1', offset: 5 } },
+    });
     const { execute, calls } = mockExecutor();
-    await dispatch('superdoc_reference', { action: 'remove_link', id: 'link1' }, execute);
+    await dispatch('superdoc_reference', { action: 'update_link', id, url: 'https://new.com', text: 'Tip' }, execute);
+    expect(calls[0].input.patch).toEqual({ href: 'https://new.com', tooltip: 'Tip' });
+  });
+
+  test('routes remove_link with parsed target address', async () => {
+    const id = JSON.stringify({
+      kind: 'inline',
+      nodeType: 'hyperlink',
+      anchor: { start: { blockId: 'b1', offset: 0 }, end: { blockId: 'b1', offset: 5 } },
+    });
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_reference', { action: 'remove_link', id }, execute);
     expect(calls[0].operationId).toBe('hyperlinks.remove');
-    expect(calls[0].input.target).toBe('link1');
+    expect(calls[0].input.target).toEqual(JSON.parse(id));
   });
 
   test('routes insert_bookmark with at field', async () => {
@@ -523,11 +568,12 @@ describe('routeReference', () => {
     expect(calls[0].input.name).toBe('MyBookmark');
   });
 
-  test('routes remove_bookmark with target', async () => {
+  test('routes remove_bookmark with parsed target', async () => {
+    const id = JSON.stringify({ kind: 'bookmark', bookmarkId: 'bk1' });
     const { execute, calls } = mockExecutor();
-    await dispatch('superdoc_reference', { action: 'remove_bookmark', id: 'bk1' }, execute);
+    await dispatch('superdoc_reference', { action: 'remove_bookmark', id }, execute);
     expect(calls[0].operationId).toBe('bookmarks.remove');
-    expect(calls[0].input.target).toBe('bk1');
+    expect(calls[0].input.target).toEqual({ kind: 'bookmark', bookmarkId: 'bk1' });
   });
 
   test('routes insert_footnote with at, type, content', async () => {
@@ -539,11 +585,12 @@ describe('routeReference', () => {
     expect(calls[0].input.content).toBe('See appendix');
   });
 
-  test('routes remove_footnote with target', async () => {
+  test('routes remove_footnote with parsed target', async () => {
+    const id = JSON.stringify({ kind: 'footnote', footnoteId: 'fn1' });
     const { execute, calls } = mockExecutor();
-    await dispatch('superdoc_reference', { action: 'remove_footnote', id: 'fn1' }, execute);
+    await dispatch('superdoc_reference', { action: 'remove_footnote', id }, execute);
     expect(calls[0].operationId).toBe('footnotes.remove');
-    expect(calls[0].input.target).toBe('fn1');
+    expect(calls[0].input.target).toEqual({ kind: 'footnote', footnoteId: 'fn1' });
   });
 });
 
@@ -593,8 +640,14 @@ describe('routeControl', () => {
 
   test('routes wrap with kind field', async () => {
     const { execute, calls } = mockExecutor();
-    await dispatch('superdoc_control', { action: 'wrap', target, type: 'block' }, execute);
+    await dispatch('superdoc_control', { action: 'wrap', target, kind: 'inline' }, execute);
     expect(calls[0].operationId).toBe('contentControls.wrap');
+    expect(calls[0].input.kind).toBe('inline');
+  });
+
+  test('wrap defaults kind to block', async () => {
+    const { execute, calls } = mockExecutor();
+    await dispatch('superdoc_control', { action: 'wrap', target }, execute);
     expect(calls[0].input.kind).toBe('block');
   });
 });

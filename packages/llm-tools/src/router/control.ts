@@ -32,7 +32,7 @@ export async function routeControl(params: Record<string, unknown>, execute: Exe
       }
     }
     case 'wrap':
-      return execute('contentControls.wrap', { target, kind: params.type });
+      return execute('contentControls.wrap', { target, kind: params.kind ?? 'block' });
     default:
       throw new Error(`Unknown control action: "${action}".`);
   }

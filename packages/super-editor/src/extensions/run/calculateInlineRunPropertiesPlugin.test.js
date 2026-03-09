@@ -318,7 +318,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     });
   });
 
-  it('keeps paragraph runProperties in sync with the first run', () => {
+  it('does not sync paragraph runProperties with the first run', () => {
     const schema = makeSchema();
     const doc = paragraphDoc(schema);
     const state = createState(schema, doc);
@@ -328,10 +328,10 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     const { state: nextState } = state.applyTransaction(tr);
 
     const paragraph = nextState.doc.firstChild;
-    expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
+    expect(paragraph.attrs.paragraphProperties).toBeNull();
   });
 
-  it('treats the first run inside inline wrappers as the paragraph first run', () => {
+  it('does not sync paragraph runProperties for first runs inside inline wrappers', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [
       schema.node('paragraph', null, [
@@ -347,7 +347,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     const { state: nextState } = state.applyTransaction(tr);
 
     const paragraph = nextState.doc.firstChild;
-    expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
+    expect(paragraph.attrs.paragraphProperties).toBeNull();
   });
 
   it('does not update paragraph runProperties when a non-first run changes', () => {
@@ -372,7 +372,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(firstRun?.attrs.runProperties).toBeNull();
   });
 
-  it('updates paragraph runProperties when first run is nested inside an inline container', () => {
+  it('does not update paragraph runProperties when first run is nested inside an inline container', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [
       schema.node('paragraph', null, [
@@ -391,7 +391,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     const { state: nextState } = state.applyTransaction(tr);
 
     const paragraph = nextState.doc.firstChild;
-    expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
+    expect(paragraph.attrs.paragraphProperties).toBeNull();
   });
 
   it('does not update paragraph runProperties when nested run is not first in paragraph', () => {

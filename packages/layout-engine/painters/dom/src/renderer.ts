@@ -782,6 +782,23 @@ const clampLumUnit = (value: number): number => {
   return Math.max(-100000, Math.min(100000, value));
 };
 
+const parseVmlFixedFraction = (value: string | number | undefined): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'string' || value.length === 0) {
+    return null;
+  }
+
+  if (value.endsWith('f')) {
+    const raw = Number.parseInt(value.slice(0, -1), 10);
+    return Number.isFinite(raw) ? raw / 65536 : null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const buildImageFilters = (source: ImageFilterSource): string[] => {
   const filters: string[] = [];
 
@@ -790,15 +807,20 @@ const buildImageFilters = (source: ImageFilterSource): string[] => {
   }
 
   if (source.gain != null || source.blacklevel != null) {
-    if (source.gain && typeof source.gain === 'string' && source.gain.endsWith('f')) {
-      const contrast = Math.max(0, parseInt(source.gain, 10) / 65536) * (2 / 3);
+    const gain = parseVmlFixedFraction(source.gain);
+    const blacklevel = parseVmlFixedFraction(source.blacklevel);
+
+    if (gain != null) {
+      const contrast = Math.max(0, gain);
       if (contrast > 0) {
         filters.push(`contrast(${contrast})`);
       }
     }
 
-    if (source.blacklevel && typeof source.blacklevel === 'string' && source.blacklevel.endsWith('f')) {
-      const brightness = Math.max(0, 1 + parseInt(source.blacklevel, 10) / 327 / 100) * 1.3;
+    if (blacklevel != null) {
+      // CSS has no black-point control, so approximate VML blacklevel with a linear
+      // brightness shift using the same 0..32767 range Word's watermark UI uses.
+      const brightness = Math.max(0, 1 + blacklevel * (65536 / 32767));
       if (brightness > 0) {
         filters.push(`brightness(${brightness})`);
       }

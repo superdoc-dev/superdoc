@@ -126,9 +126,22 @@ const applyFootnotePropertiesToSettings = (converter, convertedXml) => {
   if (!updatedRoot) return convertedXml;
 
   const elements = Array.isArray(updatedRoot.elements) ? updatedRoot.elements : [];
-  const nextElements = elements.filter((el) => el?.name !== 'w:footnotePr');
-  nextElements.push(carbonCopy(props.originalXml));
-  updatedRoot.elements = nextElements;
+  const existingIdx = elements.findIndex((el) => el?.name === 'w:footnotePr');
+  const copy = carbonCopy(props.originalXml);
+
+  if (existingIdx !== -1) {
+    // Replace in-place to preserve CT_Settings schema ordering
+    elements[existingIdx] = copy;
+  } else {
+    // Insert before w:endnotePr (next element in the XSD sequence).
+    // If endnotePr isn't present either, insert before w:compat as a fallback.
+    const endnoteIdx = elements.findIndex((el) => el?.name === 'w:endnotePr');
+    const compatIdx = elements.findIndex((el) => el?.name === 'w:compat');
+    const insertIdx = endnoteIdx !== -1 ? endnoteIdx : compatIdx !== -1 ? compatIdx : elements.length;
+    elements.splice(insertIdx, 0, copy);
+  }
+
+  updatedRoot.elements = elements;
 
   return { ...convertedXml, 'word/settings.xml': updatedSettings };
 };

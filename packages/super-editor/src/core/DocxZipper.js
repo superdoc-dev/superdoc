@@ -253,10 +253,22 @@ class DocxZipper {
       return !hasFile(filename);
     });
 
+    // Prune Override entries for any part explicitly deleted via updatedDocs (value === null).
+    // OPC requires every Override to reference an existing part in the package.
+    if (updatedDocs) {
+      for (const [filename, value] of Object.entries(updatedDocs)) {
+        if (value !== null) continue;
+        const partName = `/${filename}`;
+        if (!staleOverridePartNames.includes(partName)) {
+          staleOverridePartNames.push(partName);
+        }
+      }
+    }
+
     const beginningString = '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">';
     let updatedContentTypesXml = contentTypesXml.replace(beginningString, `${beginningString}${typesString}`);
 
-    // Remove Override elements for comment parts that no longer exist
+    // Remove Override elements for parts that no longer exist
     for (const partName of staleOverridePartNames) {
       const escapedPartName = partName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const overrideRegex = new RegExp(`\\s*<Override[^>]*PartName="${escapedPartName}"[^>]*/>`, 'g');
@@ -388,9 +400,16 @@ class DocxZipper {
     const unzippedOriginalDocx = await this.unzip(originalDocxFile);
     const filePromises = [];
     unzippedOriginalDocx.forEach((relativePath, zipEntry) => {
-      const promise = zipEntry.async('string').then((content) => {
-        unzippedOriginalDocx.file(zipEntry.name, content);
-      });
+      // For XML/rels files, read as raw bytes and decode properly to handle
+      // non-UTF-8 encodings (e.g. UTF-16 LE customXml parts). Writing back
+      // as a decoded string ensures the zip always contains valid UTF-8.
+      const promise = isXmlLike(zipEntry.name)
+        ? zipEntry.async('uint8array').then((u8) => {
+            unzippedOriginalDocx.file(zipEntry.name, ensureXmlString(u8));
+          })
+        : zipEntry.async('uint8array').then((u8) => {
+            unzippedOriginalDocx.file(zipEntry.name, u8);
+          });
       filePromises.push(promise);
     });
     await Promise.all(filePromises);

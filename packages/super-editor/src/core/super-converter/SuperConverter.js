@@ -1294,6 +1294,14 @@ class SuperConverter {
     const referencedNumIds = collectReferencedNumIds(this.convertedXml);
     const { liveAbstracts, liveDefinitions } = filterOrphanedNumberingDefinitions(this.numbering, referencedNumIds);
 
+    // If pruning leaves no definitions, omit numbering.xml entirely.
+    // An empty w:numbering root element violates the OOXML schema
+    // and causes Word to report corruption (SD-2170).
+    if (liveAbstracts.length === 0 && liveDefinitions.length === 0) {
+      delete this.convertedXml[numberingPath];
+      return;
+    }
+
     currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
 
     // Update the numbering file

@@ -549,6 +549,14 @@ export function syncBibliographyPartToPackage(convertedXml, bibliographyPart) {
     };
   }
 
+  // If there are no sources to write, preserve the original bibliography part
+  // as-is rather than recreating it. Rebuilding can introduce subtle
+  // differences (encoding, attribute order) that cause Word to flag the
+  // document as corrupt (SD-2170).
+  if (normalizedSources.length === 0 && currentPackageState.partPath) {
+    return bibliographyPart ?? createEmptyBibliographyPart();
+  }
+
   const preferredPartPath = bibliographyPart?.partPath || currentPackageState.partPath;
   const preferredItemIndex = parseItemIndex(preferredPartPath);
   const itemIndex = preferredItemIndex ?? getNextCustomXmlItemIndex(convertedXml);

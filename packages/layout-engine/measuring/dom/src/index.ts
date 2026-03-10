@@ -198,6 +198,7 @@ function getTableBorderWidths(borders: TableBorders | null | undefined): {
 
 const DEFAULT_TAB_INTERVAL_PX = twipsToPx(DEFAULT_TAB_INTERVAL_TWIPS);
 const TAB_EPSILON = 0.1;
+const DEFAULT_CELL_PADDING = { top: 0, left: 4, right: 4, bottom: 0 };
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const ALLOWED_TAB_VALS = new Set<TabStop['val']>(['start', 'center', 'end', 'decimal', 'bar', 'clear']);
 
@@ -2603,6 +2604,138 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     columnWidths = Array.from({ length: maxCellCount }, () => columnWidth);
   }
 
+  // AutoFit: content-based column sizing for auto-layout tables (ECMA-376 §17.18.87).
+  // When tableLayout is not 'fixed', columns must be wide enough to fit their content.
+  // The spec algorithm:
+  //   1. Calculate maximum content width per column (natural width, no line wrapping)
+  //   2. Use max content widths as target column widths
+  //   3. If total exceeds available width, proportionally scale down
+  //   4. Table can grow up to page width to accommodate content
+  const isFixedLayout = block.attrs?.tableLayout === 'fixed';
+
+  if (!isFixedLayout) {
+    const gridColCount = columnWidths.length;
+    const maxContentWidths = new Array(gridColCount).fill(0);
+
+    // Measure maximum content width per column (natural width with no wrapping).
+    // For each single-span cell, measure content with unconstrained width. The widest
+    // resulting line is the maximum content width per ECMA-376 §17.18.87.
+    const autoFitRowspanTracker: number[] = new Array(gridColCount).fill(0);
+
+    for (const row of block.rows) {
+      let colIndex = 0;
+
+      for (const cell of row.cells) {
+        const colspan = cell.colSpan ?? 1;
+        const rowspan = cell.rowSpan ?? 1;
+
+        // Skip columns occupied by rowspans
+        while (colIndex < gridColCount && autoFitRowspanTracker[colIndex] > 0) {
+          autoFitRowspanTracker[colIndex]--;
+          colIndex++;
+        }
+        if (colIndex >= gridColCount) break;
+
+        // Per spec: only single-span cells define column widths directly
+        if (colspan === 1) {
+          const cellPadding = cell.attrs?.padding ?? DEFAULT_CELL_PADDING;
+          const paddingH = (cellPadding.left ?? 4) + (cellPadding.right ?? 4);
+
+          const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+          let cellMaxWidth = 0;
+
+          for (const cellBlock of cellBlocks) {
+            // Measure with large maxWidth to get natural content width (no wrapping)
+            const maxMeasure = await measureBlock(cellBlock, { maxWidth: 99999, maxHeight: Infinity });
+
+            let blockMaxWidth = 0;
+            if (maxMeasure.kind === 'paragraph') {
+              for (const line of (maxMeasure as ParagraphMeasure).lines) {
+                if (line.width > blockMaxWidth) blockMaxWidth = line.width;
+              }
+            } else if (maxMeasure.kind === 'image' || maxMeasure.kind === 'drawing') {
+              blockMaxWidth = maxMeasure.width;
+            } else if (maxMeasure.kind === 'table') {
+              blockMaxWidth = maxMeasure.totalWidth;
+            } else if (maxMeasure.kind === 'list') {
+              for (const item of (maxMeasure as ListMeasure).items) {
+                if (item.paragraph) {
+                  for (const line of item.paragraph.lines) {
+                    if (line.width > blockMaxWidth) blockMaxWidth = line.width;
+                  }
+                }
+              }
+            }
+
+            if (blockMaxWidth > cellMaxWidth) cellMaxWidth = blockMaxWidth;
+          }
+
+          const totalWidth = cellMaxWidth + paddingH;
+          if (totalWidth > maxContentWidths[colIndex]) {
+            maxContentWidths[colIndex] = totalWidth;
+          }
+        }
+
+        // Track rowspans
+        if (rowspan > 1) {
+          for (let c = 0; c < colspan && colIndex + c < gridColCount; c++) {
+            autoFitRowspanTracker[colIndex + c] = rowspan - 1;
+          }
+        }
+
+        colIndex += colspan;
+      }
+
+      // Decrement remaining rowspan trackers
+      for (let col = colIndex; col < gridColCount; col++) {
+        if (autoFitRowspanTracker[col] > 0) {
+          autoFitRowspanTracker[col]--;
+        }
+      }
+    }
+
+    // Apply content-based widths: expand columns that are narrower than their
+    // maximum content width, capped at available width (maxWidth = page width).
+    const contentTotal = maxContentWidths.reduce((a, b) => a + b, 0);
+
+    if (contentTotal > 0) {
+      if (contentTotal <= maxWidth) {
+        // All content fits within the page — use natural content widths directly.
+        for (let i = 0; i < gridColCount; i++) {
+          if (maxContentWidths[i] > columnWidths[i]) {
+            columnWidths[i] = maxContentWidths[i];
+          }
+        }
+        // Guard: per-column max(content, grid) can exceed maxWidth even when
+        // contentTotal alone fits. Scale down if the expanded total overflows.
+        const expandedTotal = columnWidths.reduce((a, b) => a + b, 0);
+        if (expandedTotal > maxWidth && gridColCount > 0) {
+          const scale = maxWidth / expandedTotal;
+          for (let i = 0; i < gridColCount; i++) {
+            columnWidths[i] = Math.max(1, Math.round(columnWidths[i] * scale));
+          }
+          const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
+          if (scaledSum !== maxWidth) {
+            const diff = maxWidth - scaledSum;
+            columnWidths[gridColCount - 1] = Math.max(1, columnWidths[gridColCount - 1] + diff);
+          }
+        }
+      } else {
+        // Content exceeds page width — proportionally scale to fit within maxWidth.
+        const scale = maxWidth / contentTotal;
+        for (let i = 0; i < gridColCount; i++) {
+          columnWidths[i] = Math.max(1, Math.round(maxContentWidths[i] * scale));
+        }
+        // Normalize to exact target width
+        const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
+        if (scaledSum !== maxWidth && gridColCount > 0) {
+          const diff = maxWidth - scaledSum;
+          columnWidths[gridColCount - 1] = Math.max(1, columnWidths[gridColCount - 1] + diff);
+        }
+      }
+    }
+  }
+
   // Derive grid column count from computed columnWidths (handles both explicit tblGrid and fallback cases)
   const gridColumnCount = columnWidths.length;
 
@@ -2659,7 +2792,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       }
 
       // Get cell padding for height calculation
-      const cellPadding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
+      const cellPadding = cell.attrs?.padding ?? DEFAULT_CELL_PADDING;
       const paddingTop = cellPadding.top ?? 0;
       const paddingBottom = cellPadding.bottom ?? 0;
       const paddingLeft = cellPadding.left ?? 4;

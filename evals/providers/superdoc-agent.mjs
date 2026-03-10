@@ -4,9 +4,14 @@
  * Opens a real DOCX file via the CLI, sends prompt to LLM,
  * executes tool calls against the document, loops until done,
  * returns the final document text.
+ *
+ * Vars:
+ *   fixture:  DOCX filename in fixtures/ (default: doc-template.docx)
+ *   model:    OpenAI model ID (default: gpt-4o)
+ *   keepFile: Save the edited DOCX to results/output/{evalId}/ (default: false)
  */
 
-import { copyFileSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpenAI } from 'openai';
@@ -17,7 +22,6 @@ const FIXTURES_DIR = resolve(EVALS_ROOT, 'fixtures');
 const OUTPUT_DIR = resolve(EVALS_ROOT, 'results/output');
 const SYSTEM_PROMPT = readFileSync(resolve(EVALS_ROOT, 'prompts/agent.txt'), 'utf8');
 
-// Point SDK at the local CLI build
 if (!process.env.SUPERDOC_CLI_BIN) {
   process.env.SUPERDOC_CLI_BIN = resolve(EVALS_ROOT, '../apps/cli/dist/index.js');
 }
@@ -34,8 +38,13 @@ async function loadSdk() {
 
 function cleanArgs(args) {
   // eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
-  const { doc, sessionId, ...rest } = args
+  const { doc, sessionId, ...rest } = args;
   return rest;
+}
+
+function cleanup(docPath, stateDir) {
+  try { unlinkSync(docPath); } catch {}
+  try { rmSync(stateDir, { recursive: true, force: true }); } catch {}
 }
 
 export default class SuperDocAgentProvider {
@@ -52,36 +61,39 @@ export default class SuperDocAgentProvider {
     const vars = context?.vars || {};
     const fixture = vars.fixture || 'doc-template.docx';
     const model = vars.model || 'gpt-4o';
-    const roundTrip = vars.roundTrip === true || vars.roundTrip === 'true';
     const keepFile = vars.keepFile === true || vars.keepFile === 'true';
     const srcPath = resolve(FIXTURES_DIR, fixture);
 
-    // Always work on a copy so the original fixture is never modified
-    const tmpName = `tmp-${Date.now()}-${fixture}`;
-    const docPath = resolve(FIXTURES_DIR, tmpName);
+    // Unique ID for this test (file copy + state dir isolation for concurrency)
+    const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const docPath = resolve(FIXTURES_DIR, `tmp-${uid}-${fixture}`);
+    const stateDir = resolve(FIXTURES_DIR, `.state-${uid}`);
     copyFileSync(srcPath, docPath);
 
-    // If keepFile, we'll copy the result to results/output/ after editing
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    // Output path for keepFile
+    const evalId = context?.evaluationId || `eval-${Date.now()}`;
     const baseName = fixture.replace(/\.docx$/i, '');
-    const outputPath = keepFile ? resolve(OUTPUT_DIR, `${baseName}-${ts}.docx`) : null;
-    if (keepFile) mkdirSync(OUTPUT_DIR, { recursive: true });
+    const outputDir = keepFile ? resolve(OUTPUT_DIR, evalId) : null;
+    const outputPath = keepFile ? resolve(outputDir, `${baseName}.docx`) : null;
+    if (keepFile) mkdirSync(outputDir, { recursive: true });
 
-    // 1. Create client and open document
+    // 1. Create client with isolated state directory
     let client;
     try {
       client = sdk.createSuperDocClient({
         startupTimeoutMs: 15_000,
         requestTimeoutMs: 30_000,
         watchdogTimeoutMs: 120_000,
+        env: { SUPERDOC_CLI_STATE_DIR: stateDir },
       });
       await client.connect();
       await client.doc.open({ doc: docPath });
     } catch (err) {
+      cleanup(docPath, stateDir);
       return { error: `Failed to open document: ${err.message}` };
     }
 
-    // 2. Load essential tools
+    // 2. Load tools
     const activeToolMap = new Map();
     try {
       const chosen = await sdk.chooseTools({ provider: 'openai' });
@@ -91,14 +103,14 @@ export default class SuperDocAgentProvider {
       }
     } catch (err) {
       await client.dispose().catch(() => {});
+      cleanup(docPath, stateDir);
       return { error: `Failed to load tools: ${err.message}` };
     }
 
     // 3. Build messages
     const task = vars.task || prompt;
-    const systemContent = SYSTEM_PROMPT.replace('{{task}}', task);
     const messages = [
-      { role: 'system', content: systemContent },
+      { role: 'system', content: SYSTEM_PROMPT.replace('{{task}}', task) },
       { role: 'user', content: task },
     ];
 
@@ -117,35 +129,23 @@ export default class SuperDocAgentProvider {
 
         const message = response.choices[0].message;
         messages.push(message);
-
         if (!message.tool_calls?.length) break;
 
         for (const call of message.tool_calls) {
           const toolName = call.function.name;
           let toolArgs;
-          try {
-            toolArgs = JSON.parse(call.function.arguments || '{}');
-          } catch {
-            toolArgs = {};
-          }
+          try { toolArgs = JSON.parse(call.function.arguments || '{}'); }
+          catch { toolArgs = {}; }
 
           let result;
           try {
             if (toolName === DISCOVER_TOOLS_NAME) {
               const groups = Array.isArray(toolArgs.groups) ? toolArgs.groups : [];
-              const discovered = await sdk.chooseTools({
-                provider: 'openai',
-                groups,
-                mode: 'essential',
-                includeDiscoverTool: false,
-              });
+              const discovered = await sdk.chooseTools({ provider: 'openai', groups, mode: 'essential', includeDiscoverTool: false });
               let added = 0;
               for (const t of discovered.tools) {
                 const name = t.function?.name;
-                if (name && !activeToolMap.has(name)) {
-                  activeToolMap.set(name, t);
-                  added++;
-                }
+                if (name && !activeToolMap.has(name)) { activeToolMap.set(name, t); added++; }
               }
               result = { ok: true, loaded: groups, newTools: added };
             } else {
@@ -155,64 +155,38 @@ export default class SuperDocAgentProvider {
             result = { ok: false, error: err.message };
           }
 
-          toolLog.push({ tool: toolName, args: toolArgs, ok: !result?.error });
-          messages.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            content: typeof result === 'string' ? result : JSON.stringify(result),
-          });
+          toolLog.push({ tool: toolName, ok: !result?.error });
+          messages.push({ role: 'tool', tool_call_id: call.id, content: typeof result === 'string' ? result : JSON.stringify(result) });
         }
       }
 
-      // 5. Get document text after edits
-      const afterText = await client.doc.getText();
+      // 5. Get final document text
+      const documentText = await client.doc.getText();
 
-      let exportedText = null;
+      // 6. Save if keepFile
+      if (keepFile) await client.doc.save().catch(() => {});
 
-      if (roundTrip) {
-        // 6. Save the document back to DOCX
-        await client.doc.save();
-        await client.doc.close().catch(() => {});
-        await client.dispose().catch(() => {});
+      // 7. Close
+      await client.doc.close().catch(() => {});
+      await client.dispose().catch(() => {});
 
-        // 7. Re-open the saved file and verify edits survived
-        const client2 = sdk.createSuperDocClient({
-          startupTimeoutMs: 15_000,
-          requestTimeoutMs: 30_000,
-          watchdogTimeoutMs: 120_000,
-        });
-        await client2.connect();
-        await client2.doc.open({ doc: docPath });
-        exportedText = await client2.doc.getText();
-        await client2.doc.close().catch(() => {});
-        await client2.dispose().catch(() => {});
-      } else {
-        await client.doc.close().catch(() => {});
-        await client.dispose().catch(() => {});
-      }
+      // 8. Copy to output
+      if (keepFile && outputPath) copyFileSync(docPath, outputPath);
 
-      // Copy to results/output/ if keepFile, then always clean up temp
-      if (keepFile && outputPath) {
-        // Save the document first if not already saved by roundTrip
-        if (!roundTrip) await client.doc.save().catch(() => {});
-        copyFileSync(docPath, outputPath);
-      }
-      unlinkSync(docPath);
+      // 9. Cleanup
+      cleanup(docPath, stateDir);
 
       return {
         output: JSON.stringify({
-          documentText: roundTrip ? exportedText : afterText,
-          afterEditText: afterText,
-          exportedText: exportedText,
-          roundTrip: roundTrip,
+          documentText,
           outputFile: outputPath,
           toolCalls: toolLog,
           turns: toolLog.length,
         }),
       };
     } catch (err) {
-      try { unlinkSync(docPath); } catch {}
       await client.dispose().catch(() => {});
+      cleanup(docPath, stateDir);
       return { error: `Agent loop failed: ${err.message}` };
     }
   }

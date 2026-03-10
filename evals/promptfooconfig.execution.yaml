@@ -23,7 +23,9 @@ defaultTest:
       try { return JSON.parse(output).documentText; } catch { return output; }
 
 evaluateOptions:
-  maxConcurrency: 1
+  # Each test gets its own CLI subprocess with isolated state dir (SUPERDOC_CLI_STATE_DIR).
+  # This enables concurrent execution. Keep concurrency moderate to avoid resource exhaustion.
+  maxConcurrency: 5
   timeoutMs: 120000
 
 tests:

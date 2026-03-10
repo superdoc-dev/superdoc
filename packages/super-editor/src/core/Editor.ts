@@ -62,6 +62,7 @@ import type { DocumentApi } from '@superdoc/document-api';
 import { createDocumentApi } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 import { initPartsRuntime } from './parts/init-parts-runtime.js';
+import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -2742,6 +2743,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
           true,
           updatedDocs,
         );
+
+        // Reconcile package-level singleton metadata (content-type overrides
+        // and root relationships) against the final set of output entries.
+        // this.options.content is DocxFileEntry[] | Record<string, unknown> | string | null.
+        // The synchronizer accepts an array of {name, content} or a key→content map.
+        const content = this.options.content;
+        const baseFiles = Array.isArray(content) || (content && typeof content === 'object') ? content : null;
+        const { contentTypesXml, relsXml } = syncPackageMetadata({
+          baseFiles: baseFiles as Parameters<typeof syncPackageMetadata>[0]['baseFiles'],
+          updatedDocs,
+        });
+        updatedDocs['[Content_Types].xml'] = contentTypesXml;
+        updatedDocs['_rels/.rels'] = relsXml;
+
         return updatedDocs;
       }
 

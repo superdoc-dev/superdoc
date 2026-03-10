@@ -1,3 +1,189 @@
 :root {
-  /* CSS variables */
+  /* SuperDoc CSS Variables */
+
+  /* Primitive: colors */
+  --sd-color-blue-50: #ebf0ff;
+  --sd-color-blue-100: #d6e1ff;
+  --sd-color-blue-200: #adc3ff;
+  --sd-color-blue-300: #85a5ff;
+  --sd-color-blue-400: #5c87ff;
+  --sd-color-blue-500: #1355ff;
+  --sd-color-blue-600: #0f44cc;
+  --sd-color-blue-700: #0b3399;
+  --sd-color-blue-800: #082266;
+  --sd-color-blue-900: #041133;
+
+  --sd-color-gray-50: #fafafa;
+  --sd-color-gray-100: #f5f5f5;
+  --sd-color-gray-200: #f2f2f2;
+  --sd-color-gray-300: #e0e0e0;
+  --sd-color-gray-400: #dbdbdb;
+  --sd-color-gray-500: #ababab;
+  --sd-color-gray-600: #888888;
+  --sd-color-gray-700: #666666;
+  --sd-color-gray-800: #424242;
+  --sd-color-gray-900: #212121;
+
+  --sd-color-red-500: #ed4337;
+  --sd-color-green-500: #00853d;
+  --sd-color-rose-500: #cb0e47;
+
+  /* Primitive: font-size */
+  --sd-font-size-50: 10px;
+  --sd-font-size-100: 11px;
+  --sd-font-size-200: 12px;
+  --sd-font-size-300: 13px;
+  --sd-font-size-400: 14px;
+  --sd-font-size-500: 15px;
+  --sd-font-size-600: 16px;
+
+  /* Primitive: radius */
+  --sd-radius-50: 4px;
+  --sd-radius-100: 6px;
+  --sd-radius-200: 8px;
+  --sd-radius-300: 12px;
+
+  /* UI: general */
+  --sd-ui-font-family: Arial, Helvetica, sans-serif;
+  --sd-ui-text: #47484a;
+  --sd-ui-text-muted: var(--sd-color-gray-700);
+  --sd-ui-text-disabled: var(--sd-color-gray-500);
+  --sd-ui-surface: #ffffff;
+  --sd-ui-surface-hover: var(--sd-color-gray-400);
+  --sd-ui-surface-active: #c8d0d8;
+  --sd-ui-surface-disabled: var(--sd-color-gray-100);
+  --sd-ui-border: var(--sd-color-gray-400);
+  --sd-ui-action: var(--sd-color-blue-500);
+  --sd-ui-action-hover: var(--sd-color-blue-600);
+  --sd-ui-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --sd-ui-radius: var(--sd-radius-100);
+
+  --sd-ui-font-size-50: var(--sd-font-size-50);
+  --sd-ui-font-size-100: var(--sd-font-size-100);
+  --sd-ui-font-size-200: var(--sd-font-size-200);
+  --sd-ui-font-size-300: var(--sd-font-size-300);
+  --sd-ui-font-size-400: var(--sd-font-size-400);
+  --sd-ui-font-size-500: var(--sd-font-size-500);
+  --sd-ui-font-size-600: var(--sd-font-size-600);
+
+  /* UI: dropdown */
+  --sd-ui-dropdown-border: #e4e6eb;
+  --sd-ui-dropdown-surface: #ffffff;
+  --sd-ui-dropdown-option-radius: 3px;
+  --sd-ui-dropdown-text: var(--sd-ui-text);
+  --sd-ui-dropdown-hover-text: var(--sd-ui-dropdown-text);
+  --sd-ui-dropdown-selected-text: var(--sd-ui-dropdown-text);
+  --sd-ui-dropdown-surface-hover: #d8dee5;
+  --sd-ui-dropdown-surface-active: #d8dee5;
+  --sd-ui-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+
+  /* UI: tooltip */
+  --sd-ui-tooltip-surface: #262626;
+  --sd-ui-tooltip-text: #ffffff;
+  --sd-ui-tooltip-radius: var(--sd-radius-100);
+  --sd-ui-tooltip-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+
+  /* UI: toolbar */
+  --sd-ui-toolbar-height: 32px;
+  --sd-ui-toolbar-padding-x: 16px;
+  --sd-ui-toolbar-padding-y: 4px;
+  --sd-ui-toolbar-item-gap: 2px;
+  --sd-ui-toolbar-item-padding: 5px;
+  --sd-ui-toolbar-background: transparent;
+  --sd-ui-toolbar-button-text: var(--sd-ui-text);
+  --sd-ui-toolbar-button-hover-surface: var(--sd-ui-surface-hover);
+  --sd-ui-toolbar-button-active-surface: var(--sd-ui-surface-active);
+
+  /* UI: context menu */
+  --sd-ui-context-menu-surface: #ffffff;
+  --sd-ui-context-menu-text: #47484a;
+  --sd-ui-context-menu-font-size: var(--sd-font-size-200);
+  --sd-ui-context-menu-radius: 0;
+  --sd-ui-context-menu-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1);
+  --sd-ui-context-menu-border: #eee;
+  --sd-ui-context-menu-input-border: #ddd;
+  --sd-ui-context-menu-input-focus-border: #0096fd;
+  --sd-ui-context-menu-item-hover-surface: #f5f5f5;
+  --sd-ui-context-menu-item-active-surface: #edf6ff;
+  --sd-ui-context-menu-item-active-text: #0096fd;
+
+  /* UI: tools */
+  --sd-ui-tools-gap: 6px;
+  --sd-ui-tools-item-size: 50px;
+  --sd-ui-tools-item-radius: var(--sd-radius-300);
+  --sd-ui-tools-item-surface: rgba(219, 219, 219, 0.6);
+  --sd-ui-tools-icon-size: 20px;
+
+  /* UI: comments panel */
+  --sd-ui-comments-panel-card-background: #f3f6fd;
+  --sd-ui-comments-panel-card-hover-background: #f3f6fd;
+  --sd-ui-comments-panel-card-active-background: #ffffff;
+  --sd-ui-comments-panel-card-resolved-background: #f0f0f0;
+  --sd-ui-comments-panel-card-active-border: var(--sd-color-gray-300);
+  --sd-ui-comments-panel-card-radius: var(--sd-radius-300);
+  --sd-ui-comments-panel-card-padding: 16px;
+  --sd-ui-comments-panel-card-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
+  --sd-ui-comments-panel-separator: var(--sd-color-gray-300);
+  --sd-ui-comments-panel-transition: all 200ms ease;
+  --sd-ui-comments-panel-author-text: var(--sd-color-gray-900);
+  --sd-ui-comments-panel-author-size: var(--sd-font-size-400);
+  --sd-ui-comments-panel-author-weight: 600;
+  --sd-ui-comments-panel-imported-tag-text: var(--sd-color-gray-600);
+  --sd-ui-comments-panel-imported-tag-background: var(--sd-color-gray-200);
+  --sd-ui-comments-panel-timestamp-text: var(--sd-color-gray-600);
+  --sd-ui-comments-panel-timestamp-size: var(--sd-font-size-200);
+  --sd-ui-comments-panel-body-text: var(--sd-color-gray-900);
+  --sd-ui-comments-panel-body-text-size: var(--sd-font-size-400);
+  --sd-ui-comments-panel-resolved-badge-text: var(--sd-color-green-500);
+  --sd-ui-comments-panel-tc-insert-text: var(--sd-color-green-500);
+  --sd-ui-comments-panel-tc-delete-text: var(--sd-color-rose-500);
+  --sd-ui-comments-panel-dropdown-border: var(--sd-color-gray-400);
+  --sd-ui-comments-panel-dropdown-background: #ffffff;
+  --sd-ui-comments-panel-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --sd-ui-comments-panel-dropdown-option-text-size: var(--sd-font-size-400);
+  --sd-ui-comments-panel-dropdown-option-text: var(--sd-ui-comments-panel-body-text);
+  --sd-ui-comments-panel-dropdown-option-hover-text: var(--sd-ui-comments-panel-dropdown-option-text);
+  --sd-ui-comments-panel-dropdown-option-selected-text: var(--sd-ui-comments-panel-dropdown-option-text);
+  --sd-ui-comments-panel-dropdown-option-hover-background: #f3f3f5;
+  --sd-ui-comments-panel-input-border: var(--sd-color-gray-400);
+  --sd-ui-comments-panel-visibility-internal-background: #cde6e6;
+  --sd-ui-comments-panel-visibility-external-background: #f5cfda;
+
+  /* Styles: comments */
+  --sd-comments-highlight-external-base: #b1124b;
+  --sd-comments-highlight-external: #b1124b40;
+  --sd-comments-highlight-external-active: #b1124b66;
+  --sd-comments-highlight-external-faded: #b1124b20;
+  --sd-comments-highlight-internal-base: #078383;
+  --sd-comments-highlight-internal: #07838340;
+  --sd-comments-highlight-internal-active: #07838366;
+  --sd-comments-highlight-internal-faded: #07838320;
+  --sd-comments-highlight-external-nested-border: #b1124b99;
+  --sd-comments-highlight-internal-nested-border: #07838399;
+  --sd-comments-highlight-hover: #1354ff55;
+  --sd-comments-selection-background: #1354ff55;
+
+  /* Styles: tracked changes */
+  --sd-tracked-changes-insert-background: #399c7222;
+  --sd-tracked-changes-insert-border: #00853d;
+  --sd-tracked-changes-delete-background: #cb0e4722;
+  --sd-tracked-changes-delete-border: #cb0e47;
+  --sd-tracked-changes-format-border: gold;
+  --sd-tracked-changes-insert-background-focused: #399c7244;
+  --sd-tracked-changes-delete-background-focused: #cb0e4744;
+  --sd-tracked-changes-format-background-focused: #ffd70033;
+
+  /* Styles: content controls (SDT) */
+  --sd-content-controls-block-border: #629be7;
+  --sd-content-controls-block-hover-background: #f2f2f2;
+  --sd-content-controls-inline-border: #629be7;
+  --sd-content-controls-inline-hover-background: #f2f2f2;
+  --sd-content-controls-label-border: #629be7;
+  --sd-content-controls-label-background: #629be7ee;
+  --sd-content-controls-label-text: #ffffff;
+  --sd-content-controls-lock-hover-background: rgba(98, 155, 231, 0.08);
+
+  /* Styles: layout */
+  --sd-layout-page-background: #ffffff;
+  --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }

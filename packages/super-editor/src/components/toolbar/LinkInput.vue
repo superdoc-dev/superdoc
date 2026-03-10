@@ -288,8 +288,8 @@ const handleRemove = () => {
   display: flex;
   flex-direction: column;
   padding: 1em;
-  border-radius: 5px;
-  background-color: #fff;
+  border-radius: var(--sd-ui-radius, 6px);
+  background-color: var(--sd-ui-dropdown-surface, #ffffff);
   box-sizing: border-box;
 
   :deep(svg) {
@@ -303,34 +303,34 @@ const handleRemove = () => {
     align-content: baseline;
     display: flex;
     align-items: center;
-    font-size: 16px;
+    font-size: var(--sd-ui-font-size-600, 16px);
 
     input {
-      font-size: 13px;
+      font-size: var(--sd-ui-font-size-300, 13px);
       flex-grow: 1;
       padding: 10px;
-      border-radius: 8px;
+      border-radius: var(--sd-ui-radius, 6px);
       padding-left: 32px;
-      box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
-      color: #666;
-      border: 1px solid #ddd;
+      box-shadow: var(--sd-ui-shadow, 0 4px 12px rgba(0, 0, 0, 0.12));
+      color: var(--sd-ui-text-muted, #666666);
+      border: 1px solid var(--sd-ui-border, #dbdbdb);
       box-sizing: border-box;
 
       &:active,
       &:focus {
         outline: none;
-        border: 1px solid #1355ff;
+        border: 1px solid var(--sd-ui-action, #1355ff);
       }
 
       &[readonly] {
-        background-color: #f5f5f5;
+        background-color: var(--sd-ui-surface-disabled, #f5f5f5);
         cursor: default;
-        color: #888;
-        border-color: #e0e0e0;
+        color: var(--sd-ui-text-disabled, #888);
+        border-color: var(--sd-ui-border, #e0e0e0);
 
         &:active,
         &:focus {
-          border-color: #e0e0e0;
+          border-color: var(--sd-ui-border, #e0e0e0);
         }
       }
     }
@@ -375,9 +375,9 @@ const handleRemove = () => {
 }
 
 .open-link-icon:hover {
-  color: #1355ff;
-  background-color: white;
-  border: 1px solid #dbdbdb;
+  color: var(--sd-ui-action, #1355ff);
+  background-color: var(--sd-ui-surface, #ffffff);
+  border: 1px solid var(--sd-ui-border, #dbdbdb);
 }
 
 .open-link-icon :deep(svg) {
@@ -416,7 +416,7 @@ const handleRemove = () => {
 }
 
 .go-to-anchor a {
-  font-size: 14px;
+  font-size: var(--sd-ui-font-size-400, 14px);
   text-decoration: underline;
 }
 
@@ -425,7 +425,7 @@ const handleRemove = () => {
 }
 
 .link-title {
-  font-size: 14px;
+  font-size: var(--sd-ui-font-size-400, 14px);
   font-weight: 600;
   margin-bottom: 10px;
 }
@@ -439,20 +439,20 @@ const handleRemove = () => {
   justify-content: center;
   align-items: center;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: var(--sd-ui-radius, 6px);
   outline: none;
-  background-color: white;
-  color: black;
+  background-color: var(--sd-ui-surface, #ffffff);
+  color: var(--sd-ui-text, #47484a);
   font-weight: 400;
-  font-size: 13px;
+  font-size: var(--sd-ui-font-size-300, 13px);
   cursor: pointer;
   transition: all 0.2s ease;
-  border: 1px solid #ebebeb;
+  border: 1px solid var(--sd-ui-border, #dbdbdb);
   box-sizing: border-box;
 }
 
 .remove-btn:hover {
-  background-color: #dbdbdb;
+  background-color: var(--sd-ui-surface-hover, #dbdbdb);
 }
 
 .submit-btn {
@@ -460,13 +460,13 @@ const handleRemove = () => {
   justify-content: center;
   align-items: center;
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: var(--sd-ui-radius, 6px);
   outline: none;
   border: none;
-  background-color: #1355ff;
+  background-color: var(--sd-ui-action, #1355ff);
   color: white;
   font-weight: 400;
-  font-size: 13px;
+  font-size: var(--sd-ui-font-size-300, 13px);
   cursor: pointer;
   transition: all 0.2s ease;
   box-sizing: border-box;
@@ -474,7 +474,7 @@ const handleRemove = () => {
     background-color: black;
   } */
   &:hover {
-    background-color: #0d47c1;
+    background-color: var(--sd-ui-action-hover, #0f44cc);
   }
 }
 

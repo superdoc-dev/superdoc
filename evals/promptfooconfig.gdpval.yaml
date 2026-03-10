@@ -16,7 +16,7 @@ prompts:
     label: 'Minimal baseline prompt'
 
 providers:
-  - id: openai:chat:gpt-4o
+  - id: openai:chat:gpt-5.4
     label: 'GPT-4o + SuperDoc'
     prompts:
       - 'SuperDoc agent prompt'
@@ -26,7 +26,7 @@ providers:
       tools: file://lib/essential.json
       tool_choice: required
 
-  - id: openai:chat:gpt-4o
+  - id: openai:chat:gpt-5.4
     label: 'GPT-4o Only (no tools)'
     prompts:
       - 'Minimal baseline prompt'

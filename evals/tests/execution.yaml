@@ -57,3 +57,165 @@
     # Summary comes after existing content (not prepended)
     - type: javascript
       value: output.indexOf('Summary') > output.indexOf('All sorts of lists are supported')
+
+# =============================================================================
+# MEMORANDUM TESTS -- real legal document with headings, lists, dates, amounts
+# =============================================================================
+
+# --- READING & COMPREHENSION ---
+
+- description: 'Memo: Agent reads the full memorandum'
+  vars:
+    fixture: memorandum.docx
+    task: 'Get the full text of this document.'
+  assert:
+    - type: contains
+      value: 'MEMORANDUM'
+    - type: contains
+      value: 'General Counsel'
+    - type: contains
+      value: 'Interim Operating Covenants'
+    - type: contains
+      value: '$25,000,000'
+
+- description: 'Memo: Agent finds specific section content'
+  vars:
+    fixture: memorandum.docx
+    task: 'Find the section about Employee Matters and tell me what it says about hiring.'
+  assert:
+    - type: contains
+      value: 'Employee Matters'
+    - type: contains
+      value: 'hiring'
+
+# --- FIND AND REPLACE ---
+
+- description: 'Memo: Replace party name throughout document'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
+  assert:
+    - type: contains
+      value: 'Chief Legal Officer'
+    - type: not-contains
+      value: 'General Counsel'
+    # Rest of document intact
+    - type: contains
+      value: 'OPERATIONAL COVENANTS'
+    - type: contains
+      value: '$25,000,000'
+
+- description: 'Memo: Replace date in the document'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace the date "December 30, 2024" with "January 15, 2025".'
+  assert:
+    - type: contains
+      value: 'January 15, 2025'
+    - type: not-contains
+      value: 'December 30, 2024'
+
+# --- ADD CONTENT ---
+
+- description: 'Memo: Add a new section at the end'
+  vars:
+    fixture: memorandum.docx
+    task: 'Add a new heading "CONFIDENTIALITY NOTICE" at the end of the document, followed by a paragraph that says "This memorandum is privileged and confidential."'
+  assert:
+    - type: contains
+      value: 'CONFIDENTIALITY NOTICE'
+    - type: contains
+      value: 'privileged and confidential'
+    # New content comes after existing content
+    - type: javascript
+      value: output.indexOf('CONFIDENTIALITY NOTICE') > output.indexOf('[lawyer]')
+    # Original content intact
+    - type: contains
+      value: 'MEMORANDUM'
+
+# --- DOLLAR AMOUNT EDIT ---
+
+- description: 'Memo: Update monetary threshold'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace the acquisition limit of "$25,000,000" with "$50,000,000".'
+  assert:
+    - type: contains
+      value: '$50,000,000'
+    - type: not-contains
+      value: '$25,000,000'
+    # Other amount untouched
+    - type: contains
+      value: '$150,000,000'
+
+# --- MULTI-STEP EDIT ---
+
+- description: 'Memo: Replace lawyer placeholder with actual name'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" at the end of the document.'
+  assert:
+    - type: contains
+      value: 'Sarah Chen, Partner'
+    - type: not-contains
+      value: '[lawyer]'
+    # Document structure intact
+    - type: contains
+      value: 'Best regards,'
+
+# =============================================================================
+# ROUND-TRIP TESTS -- edit, save to DOCX, re-open, verify edits survived
+# =============================================================================
+# These test the full export pipeline: the edit must survive serialization
+# back to OOXML and re-parsing. If the DOCX exporter drops the change,
+# these tests catch it.
+
+- description: 'Round-trip: added paragraph survives export'
+  vars:
+    fixture: document.docx
+    roundTrip: true
+    task: 'Add a new paragraph at the end of the document that says exactly "ROUND TRIP MARKER".'
+  assert:
+    - type: contains
+      value: 'ROUND TRIP MARKER'
+    - type: contains
+      value: 'A list of list features'
+
+- description: 'Round-trip: find-and-replace survives export'
+  vars:
+    fixture: memorandum.docx
+    roundTrip: true
+    task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
+  assert:
+    - type: contains
+      value: 'Chief Legal Officer'
+    - type: not-contains
+      value: 'General Counsel'
+    - type: contains
+      value: 'OPERATIONAL COVENANTS'
+
+- description: 'Round-trip: added heading survives export'
+  vars:
+    fixture: memorandum.docx
+    roundTrip: true
+    task: 'Add a heading "APPENDIX A" at the end of the document.'
+  assert:
+    - type: contains
+      value: 'APPENDIX A'
+    - type: contains
+      value: 'MEMORANDUM'
+    - type: javascript
+      value: output.indexOf('APPENDIX A') > output.indexOf('[lawyer]')
+
+- description: 'Round-trip: dollar amount edit survives export'
+  vars:
+    fixture: memorandum.docx
+    roundTrip: true
+    task: 'Replace "$25,000,000" with "$75,000,000" in the document.'
+  assert:
+    - type: contains
+      value: '$75,000,000'
+    - type: not-contains
+      value: '$25,000,000'
+    - type: contains
+      value: '$150,000,000'

@@ -6,7 +6,7 @@
  * returns the final document text.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, copyFileSync, unlinkSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpenAI } from 'openai';
@@ -55,7 +55,13 @@ export default class SuperDocAgentProvider {
     const vars = context?.vars || {};
     const fixture = vars.fixture || 'doc-template.docx';
     const model = vars.model || 'gpt-4o';
-    const docPath = resolve(FIXTURES_DIR, fixture);
+    const roundTrip = vars.roundTrip === true || vars.roundTrip === 'true';
+    const srcPath = resolve(FIXTURES_DIR, fixture);
+
+    // Always work on a copy so the original fixture is never modified
+    const tmpName = `tmp-${Date.now()}-${fixture}`;
+    const docPath = resolve(FIXTURES_DIR, tmpName);
+    copyFileSync(srcPath, docPath);
 
     // 1. Create client and open document
     let client;
@@ -154,19 +160,49 @@ export default class SuperDocAgentProvider {
         }
       }
 
-      // 5. Get final document text
-      const finalText = await client.doc.getText();
-      await client.doc.close().catch(() => {});
-      await client.dispose().catch(() => {});
+      // 5. Get document text after edits
+      const afterText = await client.doc.getText();
+
+      let exportedText = null;
+
+      if (roundTrip) {
+        // 6. Save the document back to DOCX
+        await client.doc.save();
+        await client.doc.close().catch(() => {});
+        await client.dispose().catch(() => {});
+
+        // 7. Re-open the saved file and verify edits survived
+        const client2 = sdk.createSuperDocClient({
+          startupTimeoutMs: 15_000,
+          requestTimeoutMs: 30_000,
+          watchdogTimeoutMs: 120_000,
+        });
+        await client2.connect();
+        await client2.doc.open({ doc: docPath });
+        exportedText = await client2.doc.getText();
+        await client2.doc.close().catch(() => {});
+        await client2.dispose().catch(() => {});
+      } else {
+        await client.doc.close().catch(() => {});
+        await client.dispose().catch(() => {});
+      }
+
+      // Cleanup temp file
+      unlinkSync(docPath);
 
       return {
         output: JSON.stringify({
-          documentText: finalText,
+          documentText: roundTrip ? exportedText : afterText,
+          afterEditText: afterText,
+          exportedText: exportedText,
+          roundTrip: roundTrip,
           toolCalls: toolLog,
           turns: toolLog.length,
         }),
       };
     } catch (err) {
+      // Cleanup temp file on error
+      try { unlinkSync(docPath); } catch {}
       await client.dispose().catch(() => {});
       return { error: `Agent loop failed: ${err.message}` };
     }

@@ -400,16 +400,12 @@ class DocxZipper {
     const unzippedOriginalDocx = await this.unzip(originalDocxFile);
     const filePromises = [];
     unzippedOriginalDocx.forEach((relativePath, zipEntry) => {
-      // For XML/rels files, read as raw bytes and decode properly to handle
-      // non-UTF-8 encodings (e.g. UTF-16 LE customXml parts). Writing back
-      // as a decoded string ensures the zip always contains valid UTF-8.
-      const promise = isXmlLike(zipEntry.name)
-        ? zipEntry.async('uint8array').then((u8) => {
-            unzippedOriginalDocx.file(zipEntry.name, ensureXmlString(u8));
-          })
-        : zipEntry.async('uint8array').then((u8) => {
-            unzippedOriginalDocx.file(zipEntry.name, u8);
-          });
+      // Read as raw bytes to handle non-UTF-8 encodings (e.g. UTF-16 LE
+      // customXml parts). XML/rels files are decoded to valid UTF-8 strings;
+      // other entries are kept as raw bytes.
+      const promise = zipEntry.async('uint8array').then((u8) => {
+        unzippedOriginalDocx.file(zipEntry.name, isXmlLike(zipEntry.name) ? ensureXmlString(u8) : u8);
+      });
       filePromises.push(promise);
     });
     await Promise.all(filePromises);

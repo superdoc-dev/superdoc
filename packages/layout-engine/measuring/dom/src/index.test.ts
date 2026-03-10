@@ -5474,5 +5474,52 @@ describe('measureBlock', () => {
       // The wider content column should get a proportionally larger share
       expect(tableMeasure.columnWidths[1]).toBeGreaterThan(tableMeasure.columnWidths[0]);
     });
+
+    it('skips AutoFit when grid widths are reasonable (not placeholder values)', async () => {
+      // Grid total = 400px, maxWidth = 600px → 66% of page width.
+      // This is well above the 10% placeholder threshold, so AutoFit should NOT run.
+      // Columns should keep their original grid widths even if content is wider.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-skip-reasonable',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'VeryWideContentThatExceedsColumnWidth', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Short', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200, 200], // Reasonable grid widths (400/600 = 66%)
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 600 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      // Grid widths should be preserved — AutoFit should not have run
+      expect(tableMeasure.columnWidths[0]).toBe(200);
+      expect(tableMeasure.columnWidths[1]).toBe(200);
+    });
   });
 });

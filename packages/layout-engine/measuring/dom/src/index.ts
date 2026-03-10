@@ -2611,9 +2611,29 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
   //   2. Use max content widths as target column widths
   //   3. If total exceeds available width, proportionally scale down
   //   4. Table can grow up to page width to accommodate content
+  //
+  // IMPORTANT — INTENTIONALLY LIMITED SCOPE (SD-2174):
+  // We only apply AutoFit when the grid column widths are clearly placeholder values
+  // (total grid width < 10% of available page width). Some DOCX generators (e.g. non-Word
+  // tools) emit dummy w:gridCol values like w=100 for every column, paired with a tiny
+  // w:tblW percentage, producing columns of ~7px that render as vertical slivers.
+  //
+  // A full AutoFit implementation would run on ALL non-fixed tables, but doing so today
+  // changes the layout of ~30 documents in our test corpus because the rest of the table
+  // pipeline (grid priority, percentage width scaling, cell measurement) was built without
+  // AutoFit in mind. Broadening this to all tables requires:
+  //   - VRT baselines for every affected document
+  //   - Verifying each change improves Word parity (not just "different")
+  //   - Possibly adjusting the column width priority logic in pm-adapter
+  //
+  // Until then, we only rescue tables that are clearly broken. If you're here because a
+  // table renders too narrow, consider lowering the threshold or removing this gate — but
+  // run pnpm test:layout first to understand the blast radius.
   const isFixedLayout = block.attrs?.tableLayout === 'fixed';
+  const totalGridWidth = columnWidths.reduce((a, b) => a + b, 0);
+  const gridLooksLikePlaceholder = totalGridWidth < maxWidth * 0.1;
 
-  if (!isFixedLayout) {
+  if (!isFixedLayout && gridLooksLikePlaceholder) {
     const gridColCount = columnWidths.length;
     const maxContentWidths = new Array(gridColCount).fill(0);
 

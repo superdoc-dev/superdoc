@@ -4701,6 +4701,76 @@ describe('DomPainter', () => {
       expect(filter.brightness).toBeCloseTo(1.7, 4);
     });
 
+    it('preserves zero-valued DrawingML luminance filters', () => {
+      const dataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const imageBlocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'img-block-dml-zero',
+          runs: [
+            {
+              kind: 'image',
+              src: dataUrl,
+              width: 100,
+              height: 100,
+              lum: {
+                bright: -100000,
+                contrast: -100000,
+              },
+            },
+          ],
+        },
+      ];
+
+      const imageMeasures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 0,
+              width: 100,
+              ascent: 100,
+              descent: 0,
+              lineHeight: 100,
+            },
+          ],
+          totalHeight: 100,
+        },
+      ];
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block-dml-zero',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      painter.paint(imageLayout, mount);
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.filter).toContain('contrast(0)');
+      expect((img as HTMLElement).style.filter).toContain('brightness(0)');
+    });
+
     it('renders VML gain and blacklevel using fixed-fraction units', () => {
       const dataUrl =
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

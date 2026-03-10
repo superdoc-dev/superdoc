@@ -835,14 +835,14 @@ const buildImageFilters = (source: ImageFilterSource): string[] => {
 
     if (contrastValue != null) {
       const contrast = Math.max(0, 1 + contrastValue / 100000);
-      if (contrast > 0) {
+      if (contrast >= 0) {
         filters.push(`contrast(${contrast})`);
       }
     }
 
     if (brightValue != null) {
       const brightness = Math.max(0, 1 + brightValue / 100000);
-      if (brightness > 0) {
+      if (brightness >= 0) {
         filters.push(`brightness(${brightness})`);
       }
     }

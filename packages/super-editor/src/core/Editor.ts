@@ -2,6 +2,7 @@ import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
 import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
+import type { Doc as YDoc } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
@@ -1540,8 +1541,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const tr = this.state.tr.replaceWith(0, this.state.doc.content.size, doc).setMeta('addToHistory', false);
     this.#dispatchTransaction(tr);
 
-    if (this.options.ydoc) {
-      this.options.ydoc.getMap('meta').set('bodySectPr', nextBodySectPr);
+    const ydoc = this.options.ydoc as YDoc | null;
+    if (ydoc) {
+      ydoc.getMap('meta').set('bodySectPr', nextBodySectPr);
     }
 
     if (Object.keys(doc.attrs).length > 0) {

@@ -1,0 +1,62 @@
+# GDPval workflow tests -- compare tool-augmented vs baseline model responses.
+# Uses llm-rubric for qualitative assessment.
+# Maps to CEO's GDPval document: real document workflows that models should handle.
+
+- description: 'GDPval: Find and replace text'
+  vars:
+    task: 'Find the phrase "Q3 Revenue" and replace it with "Q3 2025 Revenue".'
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should demonstrate a concrete plan for finding and replacing text
+        in a document. A good response uses structured tool calls (query_match +
+        apply_mutations) or describes precise steps. A poor response is vague or
+        suggests manual editing.
+      threshold: 0.7
+
+- description: 'GDPval: Multi-step document query'
+  vars:
+    task: 'List all the headings in the document and tell me which section contains a table.'
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should show a systematic approach: first querying headings, then
+        querying tables, and correlating results. Tool-augmented responses should use
+        query_match with node selectors. Baseline responses should at least describe
+        the approach clearly.
+      threshold: 0.7
+
+- description: 'GDPval: Insert content at specific location'
+  vars:
+    task: 'Add a new paragraph "Summary of Changes" right before the last heading in the document.'
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should show ability to locate a specific position (the last heading)
+        and insert content relative to it. Tool-augmented responses should use query_match
+        to find the heading, then create_paragraph or apply_mutations with positional args.
+        Baseline responses lack the ability to actually locate content.
+      threshold: 0.6
+
+- description: 'GDPval: Discover and use extended tools'
+  vars:
+    task: 'Create a 3-column table with headers "Name", "Role", "Department" after the first paragraph.'
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should demonstrate awareness that table creation requires loading
+        additional tools (discover_tools with "tables" and/or "create" groups). Baseline
+        responses can only describe what they would do but cannot execute structured
+        tool calls.
+      threshold: 0.6
+
+- description: 'GDPval: Track changes workflow'
+  vars:
+    task: 'Replace "Draft" with "Final" in the document title, but use tracked changes so it can be reviewed.'
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should show understanding of tracked changes mode. Tool-augmented
+        responses should use apply_mutations with changeMode "tracked" or discover the
+        trackChanges group. Baseline responses lack this capability entirely.
+      threshold: 0.6

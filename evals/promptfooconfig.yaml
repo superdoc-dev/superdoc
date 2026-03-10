@@ -1,0 +1,48 @@
+# SuperDoc tool-call validation -- OpenAI models only
+# Run: pnpm run eval
+# Run 3x for variance: pnpm run eval:repeat
+# Run one category: pnpm run eval -- --filter-metadata category=reading
+# Cross-provider: pnpm run eval:cross
+
+description: 'SuperDoc Tool Evals'
+
+prompts:
+  - file://prompts/agent.txt
+
+providers:
+  - id: openai:chat:gpt-4o
+    label: GPT-4o
+    config: &openai-config
+      temperature: 0
+      seed: 42
+      tools: file://lib/essential.json
+      tool_choice: required
+      timeout: 30000
+
+  - id: openai:chat:gpt-4.1
+    label: GPT-4.1
+    config: *openai-config
+
+  - id: openai:chat:gpt-4.1-mini
+    label: GPT-4.1-mini
+    config: *openai-config
+
+  - id: openai:chat:gpt-5.4
+    label: GPT-5.4
+    config: *openai-config
+
+defaultTest:
+  assert:
+    - type: cost
+      threshold: 0.10
+    - type: latency
+      threshold: 30000
+
+evaluateOptions:
+  maxConcurrency: 5
+  delay: 500
+  timeoutMs: 60000
+
+tests:
+  - file://tests/tool-tests.yaml
+  - file://tests/workflows.yaml

@@ -1,0 +1,122 @@
+# Real document editing workflow tests.
+
+# --- FIND AND EDIT ---
+
+- description: 'Find clause and rewrite it'
+  metadata: { category: workflow }
+  vars:
+    task: 'Find the indemnification clause and rewrite it to limit liability to $1,000,000.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match]
+      threshold: 1.0
+      metric: tool_selection
+
+- description: 'Find and replace throughout document'
+  metadata: { category: workflow }
+  vars:
+    task: 'Replace all mentions of "Company A" with "Acme Corp" throughout the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/assertions.cjs:usesRewriteOp
+      metric: argument_accuracy
+
+# --- TRACKED CHANGES ---
+
+- description: 'Edit with tracked changes uses changeMode tracked'
+  metadata: { category: tracked_changes }
+  vars:
+    task: 'Suggest replacing "annual review" with "quarterly review" using tracked changes so it can be reviewed.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/assertions.cjs:isTrackedMode
+      weight: 2
+      metric: tracked_changes
+
+- description: 'Direct edit does not use tracked mode'
+  metadata: { category: tracked_changes }
+  vars:
+    task: 'Replace "draft" with "final version" in the document title. Apply the change directly.'
+  assert:
+    - type: javascript
+      value: file://lib/assertions.cjs:isNotTrackedMode
+      metric: tracked_changes
+
+# --- MULTI-STEP ---
+
+- description: 'Compound task starts with query'
+  metadata: { category: workflow }
+  vars:
+    task: 'Find the termination clause. Rewrite it to allow either party to terminate with 30 days notice. Add a comment explaining the change.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, discover_tools, apply_mutations]
+      threshold: 0.3
+      metric: tool_selection
+
+- description: 'Simple task uses 3 or fewer tool calls'
+  metadata: { category: efficiency }
+  vars:
+    task: 'Replace the word "hello" with "goodbye" in the document.'
+  assert:
+    - type: javascript
+      metric: efficiency
+      value: output.length <= 3
+
+# --- LIST OPERATIONS ---
+
+- description: 'List conversion discovers lists group'
+  metadata: { category: lists }
+  vars:
+    task: 'Convert the bullet points in section 2 into a numbered list.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'List indent discovers lists group'
+  metadata: { category: lists }
+  vars:
+    task: 'Indent the second and third items in the action items list.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+# --- APPLY_MUTATIONS COMPLEXITY ---
+
+- description: 'Multiple atomic edits in one batch'
+  metadata: { category: mutations }
+  vars:
+    task: 'Replace "Q1" with "Quarter 1" and "Q2" with "Quarter 2" in the financial summary. Do both changes atomically.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/assertions.cjs:atomicMultiStep
+      metric: argument_accuracy
+
+- description: 'Delete uses text.delete op'
+  metadata: { category: mutations }
+  vars:
+    task: 'Remove the sentence "This is a draft document." from the introduction.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/assertions.cjs:usesDeleteOp
+      metric: argument_accuracy

@@ -1,0 +1,93 @@
+# Cross-provider tests -- realistic customer prompts.
+# Tests what a real user would ask, not what a developer who read our docs would ask.
+# Assertions are loose: did the model pick a REASONABLE tool? Not an exact one.
+
+# --- READING (what does the doc say?) ---
+
+- description: 'User asks to read the document'
+  vars:
+    task: 'What does this document say?'
+  assert:
+    - type: tool-call-f1
+      value: [get_document_text, query_match]
+      threshold: 0.5
+
+- description: 'User searches for specific content'
+  vars:
+    task: 'Find where it talks about payment terms.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, get_document_text]
+      threshold: 0.5
+
+- description: 'User asks about document structure'
+  vars:
+    task: 'What are the main sections of this document?'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, get_document_text]
+      threshold: 0.5
+
+# --- SIMPLE EDITS (change something) ---
+
+- description: 'User asks to replace text'
+  vars:
+    task: 'Change the company name from "Acme Inc" to "GlobalCorp" everywhere in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+
+- description: 'User asks to fix a typo'
+  vars:
+    task: 'Fix the typo "teh" to "the" in the first paragraph.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+
+- description: 'User asks to delete something'
+  vars:
+    task: 'Remove the sentence about the old pricing from section 2.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+
+# --- ADDING CONTENT ---
+
+- description: 'User asks to add a paragraph'
+  vars:
+    task: 'Add a paragraph at the end saying "This agreement is effective as of January 1, 2026."'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, apply_mutations, query_match]
+      threshold: 0.3
+
+- description: 'User asks to add a heading'
+  vars:
+    task: 'Add a new section heading called "Data Privacy" before the last section.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+
+# --- UNDO ---
+
+- description: 'User asks to undo'
+  vars:
+    task: 'Undo that last change, it was wrong.'
+  assert:
+    - type: tool-call-f1
+      value: [undo]
+      threshold: 1.0
+
+# --- COMPLEX (real workflow) ---
+
+- description: 'User asks for a multi-step edit'
+  vars:
+    task: 'Find the indemnification clause and update it to cap liability at $500,000.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5

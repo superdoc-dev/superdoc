@@ -1,0 +1,26 @@
+# GDPval benchmark -- Model+SuperDoc vs Model-Only comparison
+# Uses llm-rubric assertions (costs ~$1-2 per run)
+# Run: pnpm run eval:gdpval
+
+description: 'GDPval: SuperDoc tool augmentation vs model-only baseline'
+
+prompts:
+  - file://prompts/agent.txt
+
+providers:
+  - id: openai:chat:gpt-4o
+    label: 'GPT-4o + SuperDoc'
+    config:
+      temperature: 0
+      tools: file://lib/essential.json
+      tool_choice: auto
+
+  - id: openai:chat:gpt-4o
+    label: 'GPT-4o Only (no tools)'
+    config:
+      temperature: 0
+
+tests:
+  - file://tests/gdpval-workflows.yaml
+
+outputPath: results/gdpval-latest.json

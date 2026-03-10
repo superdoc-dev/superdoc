@@ -245,6 +245,13 @@ export type LineBreakRun = {
   pmEnd?: number;
 };
 
+export type ImageLuminanceAdjustment = {
+  /** OOXML a:lum/@bright in raw units (-100000..100000). */
+  bright?: number;
+  /** OOXML a:lum/@contrast in raw units (-100000..100000). */
+  contrast?: number;
+};
+
 /**
  * Inline image run for images that flow with text on the same line.
  * Unlike ImageBlock (anchored/floating images), ImageRun is part of the paragraph's run array
@@ -318,6 +325,7 @@ export type ImageRun = {
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
+  lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
 };
 
 export type BreakRun = {
@@ -569,6 +577,7 @@ export type ImageBlock = {
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
+  lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip

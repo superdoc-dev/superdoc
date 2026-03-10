@@ -156,6 +156,15 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
   if (typeof attrs.grayscale === 'boolean') {
     run.grayscale = attrs.grayscale;
   }
+  const lum = isPlainObject(attrs.lum) ? attrs.lum : undefined;
+  const bright = pickNumber(lum?.bright);
+  const contrast = pickNumber(lum?.contrast);
+  if (bright != null || contrast != null) {
+    run.lum = {
+      ...(bright != null ? { bright } : {}),
+      ...(contrast != null ? { contrast } : {}),
+    };
+  }
 
   return run;
 }

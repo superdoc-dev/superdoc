@@ -6,6 +6,7 @@
   "scripts": {
     "extract-tools": "node lib/extract.mjs",
     "eval": "npx promptfoo eval --env-file .env",
+    "eval:exec": "npx promptfoo eval --env-file .env -c promptfooconfig.execution.yaml",
     "eval:gdpval": "npx promptfoo eval --env-file .env -c promptfooconfig.gdpval.yaml",
     "eval:cross": "npx promptfoo eval --env-file .env -c promptfooconfig.cross-provider.yaml",
     "eval:repeat": "npx promptfoo eval --env-file .env --repeat 3 --no-cache",
@@ -15,6 +16,8 @@
     "baseline:compare": "node lib/compare-baselines.mjs"
   },
   "devDependencies": {
-    "promptfoo": "^0.121.1"
+    "promptfoo": "^0.121.1",
+    "@superdoc-dev/sdk": "1.0.0-alpha.38",
+    "openai": "^6.25.0"
   }
 }

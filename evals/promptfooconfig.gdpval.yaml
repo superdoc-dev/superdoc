@@ -17,7 +17,7 @@ prompts:
 
 providers:
   - id: openai:chat:gpt-5.4
-    label: 'GPT-4o + SuperDoc'
+    label: 'GPT-5.4 + SuperDoc'
     prompts:
       - 'SuperDoc agent prompt'
     config:
@@ -27,7 +27,7 @@ providers:
       tool_choice: required
 
   - id: openai:chat:gpt-5.4
-    label: 'GPT-4o Only (no tools)'
+    label: 'GPT-5.4 Only (no tools)'
     prompts:
       - 'Minimal baseline prompt'
     config:

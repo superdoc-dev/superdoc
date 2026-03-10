@@ -1,0 +1,30 @@
+# Execution tests -- real document editing via SuperDoc CLI.
+# Run: pnpm run eval:exec
+#
+# Unlike tool-call tests, these actually EXECUTE tool calls against real DOCX files.
+# The custom provider runs the full agent loop:
+#   open doc -> LLM picks tools -> execute via CLI -> loop -> return final document text
+#
+# Assertions check that the document CONTENT changed correctly.
+# This is the real eval. Everything else was scaffolding.
+
+description: 'SuperDoc Execution Tests'
+
+prompts:
+  - '{{task}}'
+
+providers:
+  - file://providers/superdoc-agent.mjs
+
+defaultTest:
+  options:
+    # Extract documentText from the JSON output for assertions
+    transform: |
+      try { return JSON.parse(output).documentText; } catch { return output; }
+
+evaluateOptions:
+  maxConcurrency: 1
+  timeoutMs: 120000
+
+tests:
+  - file://tests/execution.yaml

@@ -1,0 +1,59 @@
+# Execution tests -- real document editing via SuperDoc CLI.
+#
+# Each test opens a fresh copy of document.docx, runs the agent, checks the result.
+# Assertions verify BOTH that new content exists AND that old content changed.
+
+- description: 'Agent can read document content'
+  vars:
+    fixture: document.docx
+    task: 'Get the full text of this document.'
+  assert:
+    # Proves the agent actually read the document (known content)
+    - type: contains
+      value: 'A list of list features'
+    - type: contains
+      value: 'We support bullets, symbols and more'
+    - type: contains
+      value: 'All sorts of lists are supported'
+
+- description: 'Agent can add a paragraph at the end'
+  vars:
+    fixture: document.docx
+    task: 'Add a new paragraph at the end of the document that says exactly "EVAL TEST PASSED".'
+  assert:
+    # New content exists
+    - type: contains
+      value: 'EVAL TEST PASSED'
+    # Original content still there (not overwritten)
+    - type: contains
+      value: 'A list of list features'
+
+- description: 'Agent can find and replace text'
+  vars:
+    fixture: document.docx
+    task: 'Replace "bullets" with "bullet points" everywhere in the document.'
+  assert:
+    # New text exists
+    - type: contains
+      value: 'bullet points'
+    # Old text is gone (proves it was replaced, not just appended)
+    - type: not-contains
+      value: 'support bullets,'
+    # Rest of document intact
+    - type: contains
+      value: 'Nested lists'
+
+- description: 'Agent can add a heading at the end'
+  vars:
+    fixture: document.docx
+    task: 'Add a heading "Summary" at the end of the document.'
+  assert:
+    # New heading exists
+    - type: contains
+      value: 'Summary'
+    # Original content still intact
+    - type: contains
+      value: 'A list of list features'
+    # Summary comes after existing content (not prepended)
+    - type: javascript
+      value: output.indexOf('Summary') > output.indexOf('All sorts of lists are supported')

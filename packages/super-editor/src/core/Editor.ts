@@ -1535,9 +1535,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (!this.options.isNewFile) return;
     this.options.isNewFile = false;
     const doc = this.#generatePmData();
+    const nextBodySectPr = JSON.parse(JSON.stringify(doc.attrs?.bodySectPr ?? null));
     // hiding this transaction from history so it doesn't appear in undo stack
     const tr = this.state.tr.replaceWith(0, this.state.doc.content.size, doc).setMeta('addToHistory', false);
     this.#dispatchTransaction(tr);
+
+    if (this.options.ydoc) {
+      this.options.ydoc.getMap('meta').set('bodySectPr', nextBodySectPr);
+    }
+
+    if (Object.keys(doc.attrs).length > 0) {
+      const attrsTr = this.state.tr
+        .setNodeMarkup(0, undefined, {
+          ...(this.state.doc.attrs ?? {}),
+          ...(doc.attrs ?? {}),
+        })
+        .setMeta('addToHistory', false);
+      this.#dispatchTransaction(attrsTr);
+    }
 
     setTimeout(() => {
       this.#initComments();

@@ -12,6 +12,8 @@ import { seedPartsFromEditor } from './part-sync/seed-parts.js';
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
 const headlessCleanupRegisteredEditors = new WeakSet();
+const META_BODY_SECT_PR_KEY = 'bodySectPr';
+const BODY_SECT_PR_SYNC_META_KEY = 'bodySectPrSync';
 
 // Store Y.js observer references outside of reactive `this.options` to avoid
 // Vue's deep traverse hitting circular references inside Y.js Map internals.
@@ -25,6 +27,115 @@ const registerHeadlessBindingCleanup = (editor, cleanup) => {
     cleanup();
     headlessCleanupRegisteredEditors.delete(editor);
   });
+};
+
+const cloneJsonValue = (value) => {
+  if (value == null) return null;
+  return JSON.parse(JSON.stringify(value));
+};
+
+const serializeComparableValue = (value) => JSON.stringify(value ?? null);
+
+const getEditorBodySectPr = (editor) => editor?.state?.doc?.attrs?.bodySectPr ?? null;
+
+const setEditorConverterBodySectPr = (editor, bodySectPr) => {
+  if (!editor?.converter) return;
+  editor.converter.bodySectPr = cloneJsonValue(bodySectPr);
+};
+
+const syncBodySectPrToMetaMap = (ydoc, editor) => {
+  const metaMap = ydoc.getMap('meta');
+  const nextBodySectPr = cloneJsonValue(getEditorBodySectPr(editor));
+  const currentMetaBodySectPr = cloneJsonValue(metaMap.get(META_BODY_SECT_PR_KEY) ?? null);
+
+  setEditorConverterBodySectPr(editor, nextBodySectPr);
+
+  if (serializeComparableValue(nextBodySectPr) === serializeComparableValue(currentMetaBodySectPr)) {
+    return false;
+  }
+
+  metaMap.set(META_BODY_SECT_PR_KEY, nextBodySectPr);
+  return true;
+};
+
+const applyBodySectPrFromMetaMap = (editor, ydoc) => {
+  const nextBodySectPr = cloneJsonValue(ydoc.getMap('meta').get(META_BODY_SECT_PR_KEY) ?? null);
+  const currentBodySectPr = cloneJsonValue(getEditorBodySectPr(editor));
+
+  setEditorConverterBodySectPr(editor, nextBodySectPr);
+
+  if (serializeComparableValue(nextBodySectPr) === serializeComparableValue(currentBodySectPr)) {
+    return false;
+  }
+
+  if (!editor?.state?.tr) return false;
+
+  const nextDocAttrs = {
+    ...(editor.state.doc?.attrs ?? {}),
+    bodySectPr: nextBodySectPr,
+  };
+  const tr = editor.state.tr
+    .setNodeMarkup(0, undefined, nextDocAttrs)
+    .setMeta('addToHistory', false)
+    .setMeta(BODY_SECT_PR_SYNC_META_KEY, true);
+
+  if (typeof editor.dispatch === 'function') {
+    editor.dispatch(tr);
+    return true;
+  }
+
+  if (typeof editor.view?.dispatch === 'function') {
+    editor.view.dispatch(tr);
+    return true;
+  }
+
+  return false;
+};
+
+const registerBodySectPrSync = (editor, ydoc, provider, cleanupState) => {
+  const metaMap = ydoc.getMap('meta');
+  const metaMapObserver = (event) => {
+    if (!event?.changes?.keys?.has?.(META_BODY_SECT_PR_KEY)) return;
+    applyBodySectPrFromMetaMap(editor, ydoc);
+  };
+  metaMap.observe(metaMapObserver);
+  cleanupState.metaMap = metaMap;
+  cleanupState.metaMapObserver = metaMapObserver;
+
+  const applyInitialBodySectPr = () => {
+    if (editor.isDestroyed) return;
+    applyBodySectPrFromMetaMap(editor, ydoc);
+  };
+
+  if (!provider) {
+    applyInitialBodySectPr();
+  } else {
+    cleanupState.bodySectPrPendingCleanup = onCollaborationProviderSynced(provider, applyInitialBodySectPr);
+  }
+
+  if (typeof editor.on === 'function' && !editor.options?.isHeadless) {
+    const bodySectPrTransactionHandler = ({ transaction }) => {
+      if (!transaction || transaction.getMeta?.(BODY_SECT_PR_SYNC_META_KEY)) return;
+
+      const isYjsOrigin = Boolean(transaction.getMeta?.(ySyncPluginKey)?.isChangeOrigin);
+      if (isYjsOrigin) {
+        applyBodySectPrFromMetaMap(editor, ydoc);
+        return;
+      }
+
+      const previousBodySectPr = cloneJsonValue(transaction.before?.attrs?.bodySectPr ?? null);
+      const nextBodySectPr = cloneJsonValue(getEditorBodySectPr(editor));
+
+      if (serializeComparableValue(previousBodySectPr) === serializeComparableValue(nextBodySectPr)) {
+        return;
+      }
+
+      syncBodySectPrToMetaMap(ydoc, editor);
+    };
+
+    editor.on('transaction', bodySectPrTransactionHandler);
+    cleanupState.bodySectPrTransactionHandler = bodySectPrTransactionHandler;
+  }
 };
 
 export const Collaboration = Extension.create({
@@ -66,10 +177,16 @@ export const Collaboration = Extension.create({
     const cleanupState = {
       mediaMap,
       mediaMapObserver,
+      metaMap: null,
+      metaMapObserver: null,
       partSyncHandle: null,
       partSyncPendingCleanup: null,
+      bodySectPrPendingCleanup: null,
+      bodySectPrTransactionHandler: null,
     };
     collaborationCleanupByEditor.set(this.editor, cleanupState);
+
+    registerBodySectPrSync(this.editor, this.options.ydoc, this.editor.options.collaborationProvider, cleanupState);
 
     // Bootstrap part-sync (publisher + consumer) — always active.
     // Requires a full editor with event emitter — skip for minimal test mocks.
@@ -117,10 +234,15 @@ export const Collaboration = Extension.create({
 
     // Clean up Y.js media map observer
     cleanup.mediaMap.unobserve(cleanup.mediaMapObserver);
+    cleanup.metaMap?.unobserve?.(cleanup.metaMapObserver);
 
     // Clean up part-sync publisher/consumer (or pending sync listener)
     cleanup.partSyncHandle?.destroy();
     cleanup.partSyncPendingCleanup?.();
+    cleanup.bodySectPrPendingCleanup?.();
+    if (cleanup.bodySectPrTransactionHandler && typeof this.editor.off === 'function') {
+      this.editor.off('transaction', cleanup.bodySectPrTransactionHandler);
+    }
 
     collaborationCleanupByEditor.delete(this.editor);
   },
@@ -165,7 +287,10 @@ export const initializeMetaMap = (ydoc, editor) => {
     mediaMap.set(key, value);
   });
 
-  // 3. Bootstrap metadata
+  // 3. Sync root-level section defaults that Yjs fragments cannot represent.
+  syncBodySectPrToMetaMap(ydoc, editor);
+
+  // 4. Bootstrap metadata
   const metaMap = ydoc.getMap('meta');
   metaMap.set('fonts', editor.options.fonts);
   metaMap.set('bootstrap', {
@@ -284,37 +409,49 @@ const initHeadlessBinding = (editor) => {
 
     // Skip if this transaction originated from Y.js (avoid infinite loop)
     const meta = transaction.getMeta(ySyncPluginKey);
-    if (meta?.isChangeOrigin) return;
-
-    const binding = ensureInitializedBinding();
-    if (!binding) return;
-
-    // Sync ProseMirror changes to Y.js
-    if (typeof binding._prosemirrorChanged !== 'function') return;
-    const addToHistory = transaction.getMeta('addToHistory') !== false;
-
-    // Match y-prosemirror view.update behavior for non-history changes.
-    if (!addToHistory) {
-      const undoPluginState = yUndoPluginKey.getState(editor.state);
-      undoPluginState?.undoManager?.stopCapturing?.();
-    }
-
-    const syncToYjs = () => {
-      const ydoc = editor.options.ydoc;
-      if (!ydoc) return;
-
-      ydoc.transact((tr) => {
-        tr?.meta?.set?.('addToHistory', addToHistory);
-        binding._prosemirrorChanged(editor.state.doc);
-      }, ySyncPluginKey);
-    };
-
-    if (typeof binding.mux === 'function') {
-      binding.mux(syncToYjs);
+    if (meta?.isChangeOrigin) {
+      applyBodySectPrFromMetaMap(editor, editor.options.ydoc);
       return;
     }
+    if (transaction.getMeta?.(BODY_SECT_PR_SYNC_META_KEY)) return;
 
-    syncToYjs();
+    const previousBodySectPr = cloneJsonValue(transaction.before?.attrs?.bodySectPr ?? null);
+    const nextBodySectPr = cloneJsonValue(getEditorBodySectPr(editor));
+    const bodySectPrChanged = serializeComparableValue(previousBodySectPr) !== serializeComparableValue(nextBodySectPr);
+
+    // Sync document content to Y.js via binding (when available)
+    const binding = ensureInitializedBinding();
+
+    if (binding && typeof binding._prosemirrorChanged === 'function') {
+      const addToHistory = transaction.getMeta('addToHistory') !== false;
+
+      // Match y-prosemirror view.update behavior for non-history changes.
+      if (!addToHistory) {
+        const undoPluginState = yUndoPluginKey.getState(editor.state);
+        undoPluginState?.undoManager?.stopCapturing?.();
+      }
+
+      const syncToYjs = () => {
+        const ydoc = editor.options.ydoc;
+        if (!ydoc) return;
+
+        ydoc.transact((tr) => {
+          tr?.meta?.set?.('addToHistory', addToHistory);
+          binding._prosemirrorChanged(editor.state.doc);
+        }, ySyncPluginKey);
+      };
+
+      if (typeof binding.mux === 'function') {
+        binding.mux(syncToYjs);
+      } else {
+        syncToYjs();
+      }
+    }
+
+    // Sync bodySectPr metadata separately (not part of Y.js fragment)
+    if (bodySectPrChanged) {
+      syncBodySectPrToMetaMap(editor.options.ydoc, editor);
+    }
   };
 
   editor.on('transaction', transactionHandler);

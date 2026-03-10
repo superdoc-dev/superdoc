@@ -37,17 +37,20 @@ const { Collaboration, CollaborationPluginKey, createSyncPlugin, initializeMetaM
 
 const createYMap = (initial = {}) => {
   const store = new Map(Object.entries(initial));
-  let observer;
+  const observers = new Set();
   return {
     set: vi.fn((key, value) => {
       store.set(key, value);
     }),
     get: vi.fn((key) => store.get(key)),
     observe: vi.fn((fn) => {
-      observer = fn;
+      observers.add(fn);
+    }),
+    unobserve: vi.fn((fn) => {
+      observers.delete(fn);
     }),
     _trigger(keys) {
-      observer?.({ changes: { keys } });
+      observers.forEach((observer) => observer({ changes: { keys } }));
     },
     store,
   };
@@ -138,10 +141,10 @@ describe('collaboration extension', () => {
     const context = { editor, options: {} };
     Collaboration.config.addPmPlugins.call(context);
 
-    const syncHandler = provider.on.mock.calls.find(([event]) => event === 'sync')?.[1];
-    expect(syncHandler).toBeTypeOf('function');
+    const syncHandlers = provider.on.mock.calls.filter(([event]) => event === 'sync').map(([, handler]) => handler);
+    expect(syncHandlers.length).toBeGreaterThan(0);
 
-    syncHandler(true);
+    syncHandlers.forEach((handler) => handler(true));
 
     expect(editor.emit).toHaveBeenCalledWith('collaborationReady', { editor, ydoc });
   });
@@ -171,6 +174,17 @@ describe('collaboration extension', () => {
   it('initializes meta map with fonts, bootstrap metadata, and media', () => {
     const ydoc = createYDocStub();
     const editor = {
+      state: {
+        doc: {
+          attrs: {
+            bodySectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+            },
+          },
+        },
+      },
       options: {
         content: { 'word/document.xml': '<doc />' },
         fonts: { 'font1.ttf': new Uint8Array([1]) },
@@ -183,8 +197,107 @@ describe('collaboration extension', () => {
     const metaStore = ydoc._maps.metas.store;
     // initializeMetaMap no longer writes 'docx' — parts are seeded via seedPartsFromEditor
     expect(metaStore.get('fonts')).toEqual(editor.options.fonts);
+    expect(metaStore.get('bodySectPr')).toEqual(editor.state.doc.attrs.bodySectPr);
     expect(metaStore.get('bootstrap')).toEqual(expect.objectContaining({ version: 1, source: 'browser' }));
     expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
+  });
+
+  it('applies bodySectPr from the meta map when the meta entry changes', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const bodySectPr = {
+      type: 'element',
+      name: 'w:sectPr',
+      elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+    };
+    ydoc._maps.metas.store.set('bodySectPr', bodySectPr);
+
+    const tr = {
+      setNodeMarkup: vi.fn(() => tr),
+      setMeta: vi.fn(() => tr),
+    };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      state: {
+        doc: {
+          attrs: {
+            attributes: null,
+            bodySectPr: null,
+          },
+        },
+        tr,
+      },
+      dispatch: vi.fn(),
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
+    };
+
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
+
+    ydoc._maps.metas._trigger(new Map([['bodySectPr', {}]]));
+
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(0, undefined, {
+      attributes: null,
+      bodySectPr,
+    });
+    expect(tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
+    expect(tr.setMeta).toHaveBeenCalledWith('bodySectPrSync', true);
+    expect(editor.dispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('publishes bodySectPr changes from local transactions into the meta map', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const bodySectPr = {
+      type: 'element',
+      name: 'w:sectPr',
+      elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+    };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      state: {
+        doc: {
+          attrs: {
+            attributes: null,
+            bodySectPr,
+          },
+        },
+      },
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
+    };
+
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
+
+    const bodySectPrTransactionHandler = editor.on.mock.calls.find(([event]) => event === 'transaction')?.[1];
+    expect(bodySectPrTransactionHandler).toBeTypeOf('function');
+
+    bodySectPrTransactionHandler({
+      transaction: {
+        before: {
+          attrs: {
+            bodySectPr: null,
+          },
+        },
+        getMeta: vi.fn(() => null),
+      },
+    });
+
+    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('bodySectPr', bodySectPr);
   });
 
   it('generates collaboration data and encodes ydoc update', async () => {

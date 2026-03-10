@@ -2678,7 +2678,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
-      const numbering = numberingData?.elements?.[0] ? this.converter.schemaToXml(numberingData.elements[0]) : null;
+      const numbering = this.converter.schemaToXml(numberingData.elements[0]);
 
       // Export core.xml (contains dcterms:created timestamp)
       const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
@@ -2689,7 +2689,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
-        'word/numbering.xml': numbering ? String(numbering) : null,
+        'word/numbering.xml': String(numbering),
         'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
         ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),

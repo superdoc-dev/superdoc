@@ -253,18 +253,6 @@ class DocxZipper {
       return !hasFile(filename);
     });
 
-    // Prune Override entries for any part explicitly deleted via updatedDocs (value === null).
-    // OPC requires every Override to reference an existing part in the package.
-    if (updatedDocs) {
-      for (const [filename, value] of Object.entries(updatedDocs)) {
-        if (value !== null) continue;
-        const partName = `/${filename}`;
-        if (!staleOverridePartNames.includes(partName)) {
-          staleOverridePartNames.push(partName);
-        }
-      }
-    }
-
     const beginningString = '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">';
     let updatedContentTypesXml = contentTypesXml.replace(beginningString, `${beginningString}${typesString}`);
 

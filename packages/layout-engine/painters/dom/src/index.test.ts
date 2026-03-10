@@ -4620,6 +4620,87 @@ describe('DomPainter', () => {
       expect(img?.height).toBe(100);
     });
 
+    it('renders DrawingML luminance using percentage units', () => {
+      const dataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const imageBlocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'img-block-dml',
+          runs: [
+            {
+              kind: 'image',
+              src: dataUrl,
+              width: 100,
+              height: 100,
+              lum: {
+                bright: 70000,
+                contrast: -70000,
+              },
+            },
+          ],
+        },
+      ];
+
+      const imageMeasures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 0,
+              width: 100,
+              ascent: 100,
+              descent: 0,
+              lineHeight: 100,
+            },
+          ],
+          totalHeight: 100,
+        },
+      ];
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block-dml',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      painter.paint(imageLayout, mount);
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+
+      const parseFilter = (value: string) => {
+        const match = value.match(/contrast\(([^)]+)\)\s+brightness\(([^)]+)\)/);
+        expect(match).toBeTruthy();
+        return {
+          contrast: Number(match?.[1]),
+          brightness: Number(match?.[2]),
+        };
+      };
+
+      const filter = parseFilter((img as HTMLElement).style.filter);
+      expect(filter.contrast).toBeCloseTo(0.3, 4);
+      expect(filter.brightness).toBeCloseTo(1.7, 4);
+    });
+
     it('renders img element with external https URL', () => {
       const imageBlock: FlowBlock = {
         kind: 'paragraph',

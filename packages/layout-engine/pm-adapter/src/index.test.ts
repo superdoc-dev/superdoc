@@ -3025,8 +3025,8 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBeUndefined();
-      expect(paragraph.attrs?.rtl).toBeUndefined();
+      expect(paragraph.attrs?.direction).toBe('rtl');
+      expect(paragraph.attrs?.rtl).toBe(true);
       expect(paragraph.attrs?.indent?.left).toBe(24);
       expect(paragraph.attrs?.indent?.right).toBe(12);
     });
@@ -3936,7 +3936,7 @@ describe('toFlowBlocks', () => {
   });
 
   describe('bidi alignment fallback', () => {
-    it('defaults RTL paragraphs to right alignment when no explicit alignment', () => {
+    it('defaults RTL paragraphs to no explicit alignment (renderer defaults to right)', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -3960,9 +3960,9 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs).toMatchObject({
-        alignment: undefined,
-      });
+      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.rtl).toBe(true);
+      expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
     it('respects explicit alignment on RTL paragraphs', () => {
@@ -3990,12 +3990,14 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
+      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
     });
 
-    it('adjustRightInd overrides alignment to right', () => {
+    it('preserves explicit left alignment on RTL paragraphs', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -4021,9 +4023,51 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
+      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });
+    });
+
+    it('maps start to right and end to left for RTL paragraphs', () => {
+      const pmDocStart = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'start',
+              },
+            },
+            content: [{ type: 'text', text: 'مرحبا' }],
+          },
+        ],
+      };
+
+      const pmDocEnd = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'end',
+              },
+            },
+            content: [{ type: 'text', text: 'مرحبا' }],
+          },
+        ],
+      };
+
+      const { blocks: blocksStart } = toFlowBlocks(pmDocStart);
+      const { blocks: blocksEnd } = toFlowBlocks(pmDocEnd);
+
+      expect(blocksStart[0].attrs?.alignment).toBe('right');
+      expect(blocksEnd[0].attrs?.alignment).toBe('left');
     });
   });
 

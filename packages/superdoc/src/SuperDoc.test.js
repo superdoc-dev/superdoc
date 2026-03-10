@@ -1466,9 +1466,9 @@ describe('SuperDoc.vue', () => {
     const styleVars = wrapper.vm.superdocStyleVars;
 
     // Active insertBorder should be overridden
-    expect(styleVars['--sd-track-insert-border']).toBe('#ff0000');
+    expect(styleVars['--sd-tracked-changes-insert-border']).toBe('#ff0000');
     // deleteBackground should be inherited from base config
-    expect(styleVars['--sd-track-delete-bg']).toBe('#0000ff');
+    expect(styleVars['--sd-tracked-changes-delete-background']).toBe('#0000ff');
   });
 
   it('sets track change CSS vars from base config when no active config provided', async () => {
@@ -1486,9 +1486,9 @@ describe('SuperDoc.vue', () => {
 
     const styleVars = wrapper.vm.superdocStyleVars;
 
-    expect(styleVars['--sd-track-insert-border']).toBe('#11ff11');
-    expect(styleVars['--sd-track-delete-border']).toBe('#ff1111');
-    expect(styleVars['--sd-track-format-border']).toBe('#1111ff');
+    expect(styleVars['--sd-tracked-changes-insert-border']).toBe('#11ff11');
+    expect(styleVars['--sd-tracked-changes-delete-border']).toBe('#ff1111');
+    expect(styleVars['--sd-tracked-changes-format-border']).toBe('#1111ff');
   });
 
   it('sets comment highlight hover color CSS var', async () => {
@@ -1501,6 +1501,6 @@ describe('SuperDoc.vue', () => {
     await nextTick();
 
     const styleVars = wrapper.vm.superdocStyleVars;
-    expect(styleVars['--sd-comment-highlight-hover']).toBe('#abcdef88');
+    expect(styleVars['--sd-comments-highlight-hover']).toBe('#abcdef88');
   });
 });

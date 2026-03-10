@@ -174,6 +174,7 @@
   vars:
     fixture: document.docx
     roundTrip: true
+    keepFile: true
     task: 'Add a new paragraph at the end of the document that says exactly "ROUND TRIP MARKER".'
   assert:
     - type: contains
@@ -185,6 +186,7 @@
   vars:
     fixture: memorandum.docx
     roundTrip: true
+    keepFile: true
     task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
   assert:
     - type: contains
@@ -198,6 +200,7 @@
   vars:
     fixture: memorandum.docx
     roundTrip: true
+    keepFile: true
     task: 'Add a heading "APPENDIX A" at the end of the document.'
   assert:
     - type: contains
@@ -211,6 +214,7 @@
   vars:
     fixture: memorandum.docx
     roundTrip: true
+    keepFile: true
     task: 'Replace "$25,000,000" with "$75,000,000" in the document.'
   assert:
     - type: contains

@@ -2660,8 +2660,11 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
             } else if (maxMeasure.kind === 'list') {
               for (const item of (maxMeasure as ListMeasure).items) {
                 if (item.paragraph) {
+                  // line.width is text-only; add marker and indent space back
+                  const gutterWidth = (item.indentLeft ?? 0) + (item.markerWidth ?? 0);
                   for (const line of item.paragraph.lines) {
-                    if (line.width > blockMaxWidth) blockMaxWidth = line.width;
+                    const lineTotal = gutterWidth + line.width;
+                    if (lineTotal > blockMaxWidth) blockMaxWidth = lineTotal;
                   }
                 }
               }

@@ -4122,4 +4122,94 @@ describe('PresentationEditor', () => {
       });
     });
   });
+
+  describe('progressive rendering (SD-2172)', () => {
+    const BATCH_SIZE = 201; // one more than the threshold to trigger progressive mode
+
+    const makeBlocks = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({ kind: 'paragraph', id: `block-${i}`, runs: [], attrs: {} }));
+
+    const waitForRender = () => new Promise((resolve) => setTimeout(resolve, 150));
+
+    it('renders only the first batch on initial load when block count exceeds the threshold', async () => {
+      mockToFlowBlocks.mockReturnValue({ blocks: makeBlocks(BATCH_SIZE), bookmarks: new Map() });
+      mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
+
+      editor = new PresentationEditor({ element: container, documentId: 'progressive-test' });
+
+      // Wait for Phase 1 to complete
+      await waitForRender();
+
+      // Phase 1 should have called incrementalLayout with only the first 200 blocks
+      const firstCallBlocks = mockIncrementalLayout.mock.calls[0]?.[2];
+      expect(firstCallBlocks).toBeDefined();
+      expect(firstCallBlocks.length).toBe(200);
+    });
+
+    it('queues and completes Phase 2 with the full block set after Phase 1', async () => {
+      mockToFlowBlocks.mockReturnValue({ blocks: makeBlocks(BATCH_SIZE), bookmarks: new Map() });
+      mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
+
+      editor = new PresentationEditor({ element: container, documentId: 'progressive-phase2-test' });
+
+      // Wait for both phases to settle
+      await waitForRender();
+
+      // There should have been at least 2 incrementalLayout calls: Phase 1 (200 blocks) + Phase 2 (full)
+      expect(mockIncrementalLayout.mock.calls.length).toBeGreaterThanOrEqual(2);
+      const lastCallBlocks = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[2];
+      expect(lastCallBlocks).toBeDefined();
+      expect(lastCallBlocks.length).toBe(BATCH_SIZE);
+    });
+
+    it('does not trigger progressive rendering when block count is at or below the threshold', async () => {
+      // Exactly 200 blocks — should NOT split into phases
+      mockToFlowBlocks.mockReturnValue({ blocks: makeBlocks(200), bookmarks: new Map() });
+      mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
+
+      editor = new PresentationEditor({ element: container, documentId: 'progressive-no-split-test' });
+
+      await waitForRender();
+
+      // Every incrementalLayout call should have received all 200 blocks
+      for (const call of mockIncrementalLayout.mock.calls) {
+        const callBlocks = call[2];
+        if (callBlocks) {
+          expect(callBlocks.length).toBe(200);
+        }
+      }
+    });
+
+    it('does not re-trigger progressive rendering on subsequent doc updates', async () => {
+      mockToFlowBlocks.mockReturnValue({ blocks: makeBlocks(BATCH_SIZE), bookmarks: new Map() });
+      mockIncrementalLayout.mockResolvedValue({ layout: { pages: [] }, measures: [] });
+
+      editor = new PresentationEditor({ element: container, documentId: 'progressive-once-test' });
+
+      // Wait for both phases
+      await waitForRender();
+
+      const callsAfterInit = mockIncrementalLayout.mock.calls.length;
+
+      // Simulate a follow-up doc update
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const updateCall = onCalls.mock.calls.find((call: unknown[]) => call[0] === 'update');
+      const handleUpdate = updateCall?.[1] as (payload: { transaction: { docChanged: boolean } }) => void;
+      handleUpdate({ transaction: { docChanged: true } });
+
+      await waitForRender();
+
+      // The follow-up update should send all blocks (progressive flag is already done)
+      const callsAfterUpdate = mockIncrementalLayout.mock.calls.slice(callsAfterInit);
+      for (const call of callsAfterUpdate) {
+        const callBlocks = call[2];
+        if (callBlocks) {
+          expect(callBlocks.length).toBe(BATCH_SIZE);
+        }
+      }
+    });
+  });
 });

@@ -254,6 +254,20 @@ export class PresentationEditor extends EventEmitter {
   } as const;
 
   /**
+   * Progressive rendering: number of blocks to measure and paint in Phase 1 (initial cold load).
+   * Documents with more blocks than this trigger a two-phase render: Phase 1 lays out the first
+   * batch immediately so users see content quickly; Phase 2 (queued automatically via
+   * `#pendingDocChange`) completes the full layout.
+   *
+   * Note: Phase 1 emits `layoutUpdated`/`paginationUpdate` with a partial layout covering only
+   * the first batch. Layout-driven APIs (e.g. `goToAnchor`) may return incomplete results
+   * until Phase 2 completes. See SD-2173 for full-document measurement optimizations.
+   *
+   * Chosen to cover ~2–3 pages of typical document content.
+   */
+  static readonly #PROGRESSIVE_FIRST_BATCH_SIZE = 200;
+
+  /**
    * Get a PresentationEditor instance by document ID.
    */
   static getInstance(documentId: string): PresentationEditor | undefined {
@@ -296,6 +310,8 @@ export class PresentationEditor extends EventEmitter {
   #pendingDocChange = false;
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
+  /** Whether the initial progressive render (Phase 1) has been completed. */
+  #progressiveRenderDone = false;
   #selectionSync = new SelectionSyncCoordinator();
   #epochMapper = new EpochPositionMapper();
   #layoutEpoch = 0;
@@ -3504,7 +3520,7 @@ export class PresentationEditor extends EventEmitter {
       const semanticFootnoteBlocks = isSemanticFlow
         ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
         : [];
-      const blocksForLayout = semanticFootnoteBlocks.length > 0 ? [...blocks, ...semanticFootnoteBlocks] : blocks;
+      let blocksForLayout = semanticFootnoteBlocks.length > 0 ? [...blocks, ...semanticFootnoteBlocks] : blocks;
       const layoutOptions =
         !isSemanticFlow && footnotesLayoutInput
           ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
@@ -3512,6 +3528,16 @@ export class PresentationEditor extends EventEmitter {
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
       const previousMeasures = this.#layoutState.measures;
+
+      // Progressive rendering for initial cold load of large documents (SD-2172).
+      // Phase 1: measure and paint the first batch of blocks immediately so users see
+      // content quickly. Phase 2 (full layout) is queued automatically — it benefits
+      // from Phase 1's warm measureCache, so only the remaining blocks need measurement.
+      if (!this.#progressiveRenderDone && blocksForLayout.length > PresentationEditor.#PROGRESSIVE_FIRST_BATCH_SIZE) {
+        blocksForLayout = blocksForLayout.slice(0, PresentationEditor.#PROGRESSIVE_FIRST_BATCH_SIZE);
+        this.#progressiveRenderDone = true;
+        this.#pendingDocChange = true; // queue Phase 2
+      }
 
       let layout: Layout;
       let measures: Measure[];

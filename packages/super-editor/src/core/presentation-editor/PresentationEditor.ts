@@ -3150,6 +3150,26 @@ export class PresentationEditor extends EventEmitter {
       onUpdateAwarenessSession: () => {
         this.#updateAwarenessSession();
       },
+      onSurfaceUpdate: ({ sourceEditor, surface, headerId, sectionType }) => {
+        this.emit('headerFooterUpdate', {
+          editor: this.#editor,
+          sourceEditor,
+          surface,
+          headerId,
+          sectionType,
+        });
+      },
+      onSurfaceTransaction: ({ sourceEditor, surface, headerId, sectionType, transaction, duration }) => {
+        this.emit('headerFooterTransaction', {
+          editor: this.#editor,
+          sourceEditor,
+          surface,
+          headerId,
+          sectionType,
+          transaction,
+          duration,
+        });
+      },
     });
 
     // Initialize the registry

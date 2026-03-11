@@ -681,7 +681,7 @@ export const makeDefaultItems = ({
             // Store the selected type for future list creation
             superToolbar.selectedNumberingType = numberingType;
             // Update the numbered list button icon
-            setNumberedListIcon(numberedList, numberingType);
+            superToolbar.updateNumberedListIcon(numberedList, numberingType);
             // If we're in an active list, change its type
             const buttonWithCommand = { ...numberedListType, command: 'changeListNumberingType' };
             superToolbar.emitCommand({ item: buttonWithCommand, argument: numberingType });
@@ -699,22 +699,11 @@ export const makeDefaultItems = ({
     ],
     onActivate: ({ numberingType }) => {
       if (numberingType) {
-        // Update stored type when activating on an existing list
         superToolbar.selectedNumberingType = numberingType;
-        setNumberedListIcon(numberedList, numberingType);
+        superToolbar.updateNumberedListIcon(numberedList, numberingType);
       }
     },
-    onDeactivate: () => {
-      // Keep the selected type even when deactivated
-    },
   });
-
-  const setNumberedListIcon = (button, numberingType) => {
-    const icon = getNumberingIcon(numberingType);
-    if (button.icon && button.icon.value !== icon) {
-      button.icon.value = icon;
-    }
-  };
 
   // indent left
   const indentLeft = useToolbarItem({

@@ -93,23 +93,18 @@ export const toggleList =
 
     if (mode === 'create') {
       const numId = ListHelpers.getNewListId(editor);
+      const formatConfig = listType === 'orderedList' && numberingFormat ? getFormatConfig(numberingFormat) : null;
 
-      // Use the provided numbering format or default settings
-      if (listType === 'orderedList' && numberingFormat) {
-        const formatConfig = getFormatConfig(numberingFormat);
-        if (formatConfig) {
-          ListHelpers.generateNewListDefinition({
-            numId: Number(numId),
-            listType,
-            level: '0',
-            start: '1',
-            text: formatConfig.lvlText,
-            fmt: formatConfig.fmt,
-            editor,
-          });
-        } else {
-          ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
-        }
+      if (formatConfig) {
+        ListHelpers.generateNewListDefinition({
+          numId: Number(numId),
+          listType,
+          level: '0',
+          start: '1',
+          text: formatConfig.lvlText,
+          fmt: formatConfig.fmt,
+          editor,
+        });
       } else {
         ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
       }

@@ -188,6 +188,70 @@ describe('handleStyleChangeMarksV2', () => {
     expect(result[0].attrs.before).toEqual([]);
     expect(result[0].attrs.after).toEqual([]);
   });
+
+  it('imports color/font family/font size/italic/bold/underline style changes from rPrChange', () => {
+    const currentMarks = [
+      { type: 'bold', attrs: { value: true } },
+      { type: 'italic', attrs: { value: true } },
+      { type: 'underline', attrs: { underlineType: 'single' } },
+      {
+        type: 'textStyle',
+        attrs: {
+          color: '#FF0000',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '12pt',
+        },
+      },
+    ];
+
+    const rPrChange = {
+      name: 'w:rPrChange',
+      attributes: {
+        'w:id': '55',
+        'w:date': '2026-03-10T12:00:00Z',
+        'w:author': 'Reviewer',
+      },
+      elements: [
+        {
+          name: 'w:rPr',
+          elements: [
+            { name: 'w:b', attributes: { 'w:val': '1' } },
+            { name: 'w:i', attributes: { 'w:val': '1' } },
+            { name: 'w:u', attributes: { 'w:val': 'single' } },
+            { name: 'w:color', attributes: { 'w:val': 'FF0000' } },
+            {
+              name: 'w:rFonts',
+              attributes: { 'w:ascii': 'Arial', 'w:eastAsia': 'Arial', 'w:hAnsi': 'Arial', 'w:cs': 'Arial' },
+            },
+            { name: 'w:sz', attributes: { 'w:val': '24' } },
+          ],
+        },
+      ],
+    };
+
+    const result = handleStyleChangeMarksV2(rPrChange, currentMarks, { docx: {} });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe(TrackFormatMarkName);
+    expect(result[0].attrs.id).toBe('55');
+    expect(result[0].attrs.author).toBe('Reviewer');
+
+    const before = result[0].attrs.before;
+    const beforeBold = before.find((mark) => mark.type === 'bold');
+    const beforeItalic = before.find((mark) => mark.type === 'italic');
+    const beforeUnderline = before.find((mark) => mark.type === 'underline');
+    const beforeTextStyle = before.find((mark) => mark.type === 'textStyle');
+
+    expect(beforeBold?.attrs).toEqual({ value: true });
+    expect(beforeItalic?.attrs).toEqual({ value: true });
+    expect(beforeUnderline?.attrs).toEqual({ underlineType: 'single' });
+    expect(beforeTextStyle?.attrs).toMatchObject({
+      color: '#FF0000',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12pt',
+    });
+    expect(result[0].attrs.after).toEqual(currentMarks);
+  });
 });
 
 describe('createImportMarks', () => {

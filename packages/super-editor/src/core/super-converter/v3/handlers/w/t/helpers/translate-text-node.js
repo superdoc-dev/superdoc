@@ -8,6 +8,7 @@
  */
 import { translator as wRPrNodeTranslator } from '../../rpr/rpr-translator.js';
 import { combineRunProperties, decodeRPrFromMarks } from '@converter/styles.js';
+import { createTrackStyleMark } from '@converter/v3/handlers/helpers.js';
 
 export function getTextNodeForExport(text, marks, params) {
   const hasLeadingOrTrailingSpace = /^\s|\s$/.test(text);
@@ -15,10 +16,25 @@ export function getTextNodeForExport(text, marks, params) {
   const nodeAttrs = space ? { 'xml:space': space } : null;
   const textNodes = [];
 
+  // Attach tracked formatting change metadata to the run so export keeps it open (not pre-accepted).
+  const trackedStyleChange = createTrackStyleMark(marks || []);
   const textRunProperties = decodeRPrFromMarks(marks || []);
   const parentRunProperties = params.extraParams?.runProperties || {};
   const combinedRunProperties = combineRunProperties([parentRunProperties, textRunProperties]);
   const rPrNode = wRPrNodeTranslator.decode({ node: { attrs: { runProperties: combinedRunProperties } } });
+  const hasRunProperties = Array.isArray(rPrNode?.elements) && rPrNode.elements.length > 0;
+  const hasStyleChange = Boolean(trackedStyleChange);
+  const resolvedRunProperties =
+    hasRunProperties || hasStyleChange
+      ? {
+          name: 'w:rPr',
+          elements: [
+            ...(hasRunProperties ? rPrNode.elements : []),
+            // Without this merge, standalone trackFormat marks were dropped during DOCX export.
+            ...(hasStyleChange ? [trackedStyleChange] : []),
+          ],
+        }
+      : null;
 
   textNodes.push({
     name: 'w:t',
@@ -69,6 +85,6 @@ export function getTextNodeForExport(text, marks, params) {
 
   return {
     name: 'w:r',
-    elements: rPrNode ? [rPrNode, ...textNodes] : textNodes,
+    elements: resolvedRunProperties ? [resolvedRunProperties, ...textNodes] : textNodes,
   };
 }

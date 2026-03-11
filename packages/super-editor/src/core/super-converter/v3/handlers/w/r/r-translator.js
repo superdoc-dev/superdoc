@@ -237,15 +237,50 @@ const decode = (params, decodedAttrs = {}) => {
 
   const runPropsTemplate = runPropertiesElement ? cloneXmlNode(runPropertiesElement) : null;
   const applyBaseRunProps = (runNode) => applyRunPropertiesTemplate(runNode, runPropsTemplate);
+  const getRunPropertyChangeNodes = (runNode) => {
+    if (!Array.isArray(runNode?.elements)) return [];
+    const existingRunProperties = runNode.elements.find((el) => el?.name === 'w:rPr');
+    if (!Array.isArray(existingRunProperties?.elements)) return [];
+    // Core fix: preserve any existing <w:rPrChange> so run-property normalization does not drop tracked formatting.
+    return existingRunProperties.elements.filter((el) => el?.name === 'w:rPrChange').map((el) => cloneXmlNode(el));
+  };
+
+  const getRunPropertyChangeKey = (changeNode) =>
+    `${changeNode?.attributes?.['w:id'] ?? ''}|${changeNode?.attributes?.['w:author'] ?? ''}|${changeNode?.attributes?.['w:date'] ?? ''}`;
+
   const replaceRunProps = (runNode) => {
+    const preservedPropertyChanges = getRunPropertyChangeNodes(runNode);
+
     // Remove existing rPr if any
     if (Array.isArray(runNode.elements)) {
       runNode.elements = runNode.elements.filter((el) => el?.name !== 'w:rPr');
     } else {
       runNode.elements = [];
     }
-    if (runPropsTemplate) {
-      runNode.elements.unshift(cloneXmlNode(runPropsTemplate));
+
+    const nextRunProperties = runPropsTemplate ? cloneXmlNode(runPropsTemplate) : null;
+    const runPropertiesNode =
+      nextRunProperties || preservedPropertyChanges.length
+        ? nextRunProperties || { name: 'w:rPr', elements: [] }
+        : null;
+
+    if (runPropertiesNode) {
+      if (!Array.isArray(runPropertiesNode.elements)) runPropertiesNode.elements = [];
+
+      const existingChangeKeys = new Set(
+        runPropertiesNode.elements.filter((el) => el?.name === 'w:rPrChange').map((el) => getRunPropertyChangeKey(el)),
+      );
+
+      preservedPropertyChanges.forEach((changeNode) => {
+        const changeKey = getRunPropertyChangeKey(changeNode);
+        if (!existingChangeKeys.has(changeKey)) {
+          // Keep tracked format changes even when we replace base run properties.
+          runPropertiesNode.elements.push(changeNode);
+          existingChangeKeys.add(changeKey);
+        }
+      });
+
+      runNode.elements.unshift(runPropertiesNode);
     }
   };
 

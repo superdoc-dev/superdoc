@@ -343,4 +343,89 @@ describe('w:r r-translator (node)', () => {
     const vertAlign = runProperties?.elements?.find((el) => el?.name === 'w:vertAlign');
     expect(vertAlign?.attributes?.['w:val']).toBe('superscript');
   });
+
+  it('exports trackFormat marks as w:rPrChange entries', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        content: [
+          {
+            type: 'text',
+            text: 'tracked formatting',
+            marks: [
+              { type: 'bold', attrs: { value: true } },
+              {
+                type: 'trackFormat',
+                attrs: {
+                  id: '42',
+                  author: 'Reviewer',
+                  authorEmail: 'reviewer@example.com',
+                  date: '2026-03-10T12:00:00Z',
+                  before: [
+                    { type: 'bold', attrs: { value: true } },
+                    { type: 'italic', attrs: { value: true } },
+                    {
+                      type: 'underline',
+                      attrs: { underlineType: 'single' },
+                    },
+                    {
+                      type: 'textStyle',
+                      attrs: {
+                        color: '#FF0000',
+                        fontFamily: 'Arial, sans-serif',
+                        fontSize: '12pt',
+                      },
+                    },
+                  ],
+                  after: [
+                    { type: 'bold', attrs: { value: true } },
+                    { type: 'italic', attrs: { value: true } },
+                    {
+                      type: 'underline',
+                      attrs: { underlineType: 'single' },
+                    },
+                    {
+                      type: 'textStyle',
+                      attrs: {
+                        color: '#FF0000',
+                        fontFamily: 'Arial, sans-serif',
+                        fontSize: '12pt',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result?.name).toBe('w:r');
+    const runProperties = result?.elements?.find((el) => el?.name === 'w:rPr');
+    const runPropertyChange = runProperties?.elements?.find((el) => el?.name === 'w:rPrChange');
+    expect(runPropertyChange).toBeDefined();
+    expect(runPropertyChange?.attributes).toMatchObject({
+      'w:id': '42',
+      'w:author': 'Reviewer',
+      'w:authorEmail': 'reviewer@example.com',
+      'w:date': '2026-03-10T12:00:00Z',
+    });
+
+    const beforeProperties = runPropertyChange?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(beforeProperties).toBeDefined();
+    expect(beforeProperties?.elements?.some((el) => el?.name === 'w:b')).toBe(true);
+    expect(beforeProperties?.elements?.some((el) => el?.name === 'w:i')).toBe(true);
+    expect(beforeProperties?.elements?.some((el) => el?.name === 'w:u')).toBe(true);
+
+    const colorNode = beforeProperties?.elements?.find((el) => el?.name === 'w:color');
+    expect(colorNode?.attributes?.['w:val']).toBe('FF0000');
+
+    const fontNode = beforeProperties?.elements?.find((el) => el?.name === 'w:rFonts');
+    expect(fontNode?.attributes?.['w:ascii']).toBe('Arial');
+
+    const sizeNode = beforeProperties?.elements?.find((el) => el?.name === 'w:sz');
+    expect(sizeNode?.attributes?.['w:val']).toBe(24);
+  });
 });

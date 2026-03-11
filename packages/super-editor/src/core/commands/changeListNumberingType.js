@@ -87,18 +87,31 @@ function findAdjacentListItems(doc, startPos, targetNumId, targetIlvl) {
  */
 function applyFormatToGroup(paragraphs, formatConfig, editor, tr) {
   const firstItem = paragraphs[0];
-  const existingIlvl = firstItem.paraProps.numberingProperties?.ilvl ?? 0;
+  const existingNumId = firstItem.paraProps.numberingProperties?.numId;
 
   const newNumId = ListHelpers.getNewListId(editor);
-  ListHelpers.generateNewListDefinition({
-    numId: Number(newNumId),
-    listType: 'orderedList',
-    level: String(existingIlvl),
-    start: '1',
-    text: formatConfig.lvlText,
-    fmt: formatConfig.fmt,
-    editor,
-  });
+
+  // Collect distinct ilvls and apply the format to each level
+  const seenIlvls = new Set();
+  for (const { paraProps } of paragraphs) {
+    seenIlvls.add(paraProps.numberingProperties?.ilvl ?? 0);
+  }
+
+  for (const ilvl of seenIlvls) {
+    // Preserve existing start value from the original definition
+    const details = ListHelpers.getListDefinitionDetails({ numId: existingNumId, level: ilvl, editor });
+    const existingStart = details?.start ?? '1';
+
+    ListHelpers.generateNewListDefinition({
+      numId: Number(newNumId),
+      listType: 'orderedList',
+      level: String(ilvl),
+      start: existingStart,
+      text: formatConfig.lvlText,
+      fmt: formatConfig.fmt,
+      editor,
+    });
+  }
 
   for (const { node, pos, paraProps } of paragraphs) {
     const currentIlvl = paraProps.numberingProperties?.ilvl ?? 0;

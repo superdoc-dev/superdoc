@@ -4,7 +4,7 @@ import {
   type MinimalMarker,
   type MinimalWordLayout,
   type ResolvedListMarkerGeometry,
-} from "@superdoc/common/list-marker-utils.js";
+} from '@superdoc/common/list-marker-utils';
 
 /**
  * Default tab interval in pixels (0.5 inch at 96 DPI).

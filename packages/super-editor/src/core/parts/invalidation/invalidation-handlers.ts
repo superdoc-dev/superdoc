@@ -7,7 +7,7 @@
  */
 
 import type { Editor } from '../../Editor.js';
-import type { PartChangedEvent, PartId  } from '../types.js';
+import type { PartChangedEvent, PartId } from '../types.js';
 import { registerInvalidationHandler } from './part-invalidation-registry.js';
 
 // ---------------------------------------------------------------------------

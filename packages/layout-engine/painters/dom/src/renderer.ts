@@ -2948,7 +2948,10 @@ export class DomPainter {
         }
 
         if (isListFirstLine) {
-          const marker = wordLayout.marker!;
+          const marker = wordLayout?.marker;
+          if (!marker) {
+            return;
+          }
           lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
           // Skip marker rendering when hidden by vanish property (preserves list indentation)

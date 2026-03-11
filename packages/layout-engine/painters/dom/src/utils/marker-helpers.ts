@@ -1,6 +1,7 @@
 import {
   resolveListMarkerGeometry,
   resolveListTextStartPx,
+  type MinimalMarker,
   type MinimalWordLayout,
   type ResolvedListMarkerGeometry,
 } from "@superdoc/common/list-marker-utils.js";
@@ -50,8 +51,12 @@ export const resolvePainterListMarkerGeometry = ({
   firstLineIndentPx,
   markerTextWidthPx,
 }: PainterListTextStartParams): ResolvedListMarkerGeometry | undefined =>
-  resolveListMarkerGeometry(wordLayout, indentLeftPx, firstLineIndentPx, hangingIndentPx, (_markerText, marker) =>
-    resolvePainterMarkerTextWidth(markerTextWidthPx, marker),
+  resolveListMarkerGeometry(
+    wordLayout,
+    indentLeftPx,
+    firstLineIndentPx,
+    hangingIndentPx,
+    (_markerText: string, marker: MinimalMarker) => resolvePainterMarkerTextWidth(markerTextWidthPx, marker),
   );
 
 /**
@@ -65,8 +70,12 @@ export const resolvePainterListTextStartPx = ({
   firstLineIndentPx,
   markerTextWidthPx,
 }: PainterListTextStartParams): number | undefined =>
-  resolveListTextStartPx(wordLayout, indentLeftPx, firstLineIndentPx, hangingIndentPx, (_markerText, marker) =>
-    resolvePainterMarkerTextWidth(markerTextWidthPx, marker),
+  resolveListTextStartPx(
+    wordLayout,
+    indentLeftPx,
+    firstLineIndentPx,
+    hangingIndentPx,
+    (_markerText: string, marker: MinimalMarker) => resolvePainterMarkerTextWidth(markerTextWidthPx, marker),
   );
 
 /**

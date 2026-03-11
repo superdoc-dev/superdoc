@@ -5551,6 +5551,100 @@ describe('DomPainter', () => {
       });
     });
   });
+
+  describe('RTL paragraph rendering', () => {
+    const rtlBlock = (attrs: Record<string, unknown>): FlowBlock => ({
+      kind: 'paragraph',
+      id: 'rtl-block',
+      runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: { direction: 'rtl' as const, rtl: true, ...attrs },
+    });
+
+    const rtlMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        { fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 80, ascent: 12, descent: 4, lineHeight: 20 },
+      ],
+      totalHeight: 20,
+    };
+
+    const rtlLayout: Layout = {
+      pageSize: { w: 300, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId: 'rtl-block', fromLine: 0, toLine: 1, x: 0, y: 0, width: 200 },
+          ],
+        },
+      ],
+    };
+
+    it('sets dir="rtl" and defaults text-align to right', () => {
+      const painter = createDomPainter({ blocks: [rtlBlock({})], measures: [rtlMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      expect(line.style.textAlign).toBe('right');
+    });
+
+    it('preserves explicit left alignment on RTL paragraphs', () => {
+      const painter = createDomPainter({ blocks: [rtlBlock({ alignment: 'left' })], measures: [rtlMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      expect(line.style.textAlign).toBe('left');
+    });
+
+    it('uses text-align right for RTL justified paragraphs', () => {
+      const painter = createDomPainter({ blocks: [rtlBlock({ alignment: 'justify' })], measures: [rtlMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      expect(line.style.textAlign).toBe('right');
+    });
+
+    it('does not use absolute positioning for RTL lines with tab segments', () => {
+      const tabBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'rtl-block',
+        runs: [
+          { text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', width: 40, fontFamily: 'Arial', fontSize: 16 } as any,
+          { text: 'عالم', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: { direction: 'rtl' as const, rtl: true },
+      };
+
+      const tabMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0, fromChar: 0, toRun: 2, toChar: 4,
+            width: 160, ascent: 12, descent: 4, lineHeight: 20,
+            segments: [
+              { runIndex: 0, fromChar: 0, toChar: 5, width: 60 },
+              { runIndex: 1, fromChar: 0, toChar: 0, width: 40, x: 60 },
+              { runIndex: 2, fromChar: 0, toChar: 4, width: 60, x: 100 },
+            ],
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const painter = createDomPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+      painter.paint(rtlLayout, mount);
+
+      const line = mount.querySelector('.superdoc-line') as HTMLElement;
+      expect(line.dir).toBe('rtl');
+      const spans = Array.from(line.querySelectorAll('span'));
+      const hasAbsolute = spans.some((s) => s.style.position === 'absolute');
+      expect(hasAbsolute).toBe(false);
+    });
+  });
 });
 
 describe('ImageFragment (block-level images)', () => {

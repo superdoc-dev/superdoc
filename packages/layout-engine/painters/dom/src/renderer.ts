@@ -5187,22 +5187,7 @@ export class DomPainter {
     if (isRtl) {
       el.dir = 'rtl';
     }
-
-    // Apply text-align based on alignment and direction.
-    // For justify, DomPainter applies spacing via word-spacing; set the base
-    // text-align to match the paragraph's natural direction so the last line
-    // (which isn't stretched) aligns correctly.
-    if (alignment === 'center' || alignment === 'right') {
-      el.style.textAlign = alignment;
-    } else if (alignment === 'left') {
-      el.style.textAlign = 'left';
-    } else if (alignment === 'justify') {
-      el.style.textAlign = isRtl ? 'right' : 'left';
-    } else if (isRtl) {
-      el.style.textAlign = 'right';
-    } else {
-      el.style.textAlign = 'left';
-    }
+    el.style.textAlign = resolveTextAlign(alignment, isRtl ?? false);
 
     if (lineRange.pmStart != null) {
       el.dataset.pmStart = String(lineRange.pmStart);
@@ -5233,11 +5218,7 @@ export class DomPainter {
         leaderEl.classList.add('superdoc-leader');
         leaderEl.setAttribute('data-style', ld.style);
         leaderEl.style.position = 'absolute';
-        if (isRtl) {
-          leaderEl.style.right = `${ld.from}px`;
-        } else {
-          leaderEl.style.left = `${ld.from}px`;
-        }
+        leaderEl.style.left = `${ld.from}px`;
         leaderEl.style.width = `${Math.max(0, ld.to - ld.from)}px`;
         // Align leaders closer to the text baseline using measured descent
         const baselineOffset = Math.max(1, Math.round(Math.max(1, line.descent * 0.5)));
@@ -5267,11 +5248,7 @@ export class DomPainter {
         const barEl = this.doc!.createElement('div');
         barEl.classList.add('superdoc-tab-bar');
         barEl.style.position = 'absolute';
-        if (isRtl) {
-          barEl.style.right = `${bar.x}px`;
-        } else {
-          barEl.style.left = `${bar.x}px`;
-        }
+        barEl.style.left = `${bar.x}px`;
         barEl.style.top = '0px';
         barEl.style.bottom = '0px';
         barEl.style.width = '1px';
@@ -5464,15 +5441,14 @@ export class DomPainter {
       el.style.wordSpacing = `${spacingPerSpace}px`;
     }
 
-    if (hasExplicitPositioning && line.segments) {
-      // Use segment-based rendering with absolute positioning for tab-aligned text
-      // When rendering segments, we need to track cumulative X position
-      // for segments that don't have explicit X coordinates.
+    if (hasExplicitPositioning && line.segments && !isRtl) {
+      // Use segment-based rendering with absolute positioning for tab-aligned text.
+      // Skipped for RTL: the layout engine computes tab X positions in LTR order,
+      // so for RTL paragraphs we fall through to inline-flow rendering where the
+      // browser's native bidi algorithm handles tab positioning via dir="rtl".
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
-      // For RTL paragraphs, position from the right edge instead of left.
-      const useRightPositioning = isRtl;
       const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
       const indentLeft = paraIndent?.left ?? 0;
       const firstLine = paraIndent?.firstLine ?? 0;
@@ -5492,13 +5468,6 @@ export class DomPainter {
       const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
-      const setHorizontalPos = (elem: HTMLElement, xPx: number) => {
-        if (useRightPositioning) {
-          elem.style.right = `${xPx}px`;
-        } else {
-          elem.style.left = `${xPx}px`;
-        }
-      };
       const segmentsByRun = new Map<number, LineSegment[]>();
       line.segments.forEach((segment) => {
         const list = segmentsByRun.get(segment.runIndex);
@@ -5582,12 +5551,11 @@ export class DomPainter {
             geoSdtWrapperLeft = elemLeftPx;
             geoSdtMaxRight = elemLeftPx;
             geoSdtWrapper.style.position = 'absolute';
-            setHorizontalPos(geoSdtWrapper, elemLeftPx);
+            geoSdtWrapper.style.left = `${elemLeftPx}px`;
             geoSdtWrapper.style.top = '0px';
             geoSdtWrapper.style.height = `${line.lineHeight}px`;
           }
-          // Adjust element position to be relative to wrapper
-          setHorizontalPos(elem, elemLeftPx - geoSdtWrapperLeft);
+          elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
           geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
           this.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
           geoSdtWrapper.appendChild(elem);
@@ -5613,7 +5581,7 @@ export class DomPainter {
 
           const tabEl = this.doc!.createElement('span');
           tabEl.style.position = 'absolute';
-          setHorizontalPos(tabEl, tabStartX + indentOffset);
+          tabEl.style.left = `${tabStartX + indentOffset}px`;
           tabEl.style.top = '0px';
           tabEl.style.width = `${actualTabWidth}px`;
           tabEl.style.height = `${line.lineHeight}px`;
@@ -5672,7 +5640,7 @@ export class DomPainter {
             const segWidth =
               (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : elem.offsetWidth) ?? 0;
             elem.style.position = 'absolute';
-            setHorizontalPos(elem, segX);
+            elem.style.left = `${segX}px`;
             appendToLineGeo(elem, baseRun, segX, segWidth);
             cumulativeX = baseSegX + segWidth;
           }
@@ -5703,7 +5671,7 @@ export class DomPainter {
             const segX = baseSegX + indentOffset;
             const segWidth = (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : 0) ?? 0;
             elem.style.position = 'absolute';
-            setHorizontalPos(elem, segX);
+            elem.style.left = `${segX}px`;
             appendToLineGeo(elem, baseRun, segX, segWidth);
             cumulativeX = baseSegX + segWidth;
           }
@@ -5750,7 +5718,7 @@ export class DomPainter {
             const xPos = baseX + indentOffset;
 
             elem.style.position = 'absolute';
-            setHorizontalPos(elem, xPos);
+            elem.style.left = `${xPos}px`;
             appendToLineGeo(elem, segmentRun, xPos, segment.width ?? 0);
 
             // Update cumulative X for next segment by measuring this element's width
@@ -7011,6 +6979,25 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
   });
 };
 
+/**
+ * Compute the effective CSS text-align for a paragraph given its alignment
+ * attribute and direction. DomPainter handles justify via per-line
+ * word-spacing, so 'justify' becomes 'left' (LTR) or 'right' (RTL) to
+ * align the last line correctly.
+ */
+const resolveTextAlign = (alignment: ParagraphAttrs['alignment'], isRtl: boolean): string => {
+  switch (alignment) {
+    case 'center':
+    case 'right':
+    case 'left':
+      return alignment;
+    case 'justify':
+      return isRtl ? 'right' : 'left';
+    default:
+      return isRtl ? 'right' : 'left';
+  }
+};
+
 const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
   if (!attrs) return;
   if (attrs.styleId) {
@@ -7020,15 +7007,7 @@ const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs)
   if (isRtl) {
     element.dir = 'rtl';
   }
-  if (attrs.alignment) {
-    // Avoid native CSS justify: DomPainter applies justify via per-line word-spacing.
-    // For RTL justified text, base text-align must be 'right' so the last line aligns correctly.
-    if (attrs.alignment === 'justify') {
-      element.style.textAlign = isRtl ? 'right' : 'left';
-    } else {
-      element.style.textAlign = attrs.alignment;
-    }
-  }
+  element.style.textAlign = resolveTextAlign(attrs.alignment, isRtl ?? false);
   if ((attrs as Record<string, unknown>).dropCap) {
     element.classList.add('sd-editor-dropcap');
   }

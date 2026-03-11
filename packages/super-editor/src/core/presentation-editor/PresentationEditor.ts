@@ -4998,6 +4998,7 @@ export class PresentationEditor extends EventEmitter {
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,
         scrollContainer: this.#scrollContainer ?? this.#visibleHost,
+        zoom: this.zoom,
         scrollPageIntoView: (pageIndex) => this.#scrollPageIntoView(pageIndex),
         waitForPageMount: (pageIndex, timeoutMs) => this.#waitForPageMount(pageIndex, { timeout: timeoutMs }),
         getActiveEditor: () => this.getActiveEditor(),

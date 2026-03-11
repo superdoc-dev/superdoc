@@ -2776,6 +2776,20 @@ export class PresentationEditor extends EventEmitter {
       handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
 
+    // Listen for footnote/endnote part mutations (e.g., insert via document API).
+    // These modify the OOXML part and derived cache but don't change the PM document,
+    // so the normal 'update' event won't trigger a layout refresh.
+    const handleNotesPartChanged = () => {
+      this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    };
+    this.#editor.on('notes-part-changed', handleNotesPartChanged);
+    this.#editorListeners.push({
+      event: 'notes-part-changed',
+      handler: handleNotesPartChanged as (...args: unknown[]) => void,
+    });
+
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
       // Setup remote cursor rendering after collaboration is ready

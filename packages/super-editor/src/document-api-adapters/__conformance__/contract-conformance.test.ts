@@ -2813,13 +2813,63 @@ function makeRefEditor(
       },
     },
     converter: {
-      convertedXml: { 'word/document.xml': {} },
-      footnotes: { 'fn-1': { content: 'Footnote text' } },
-      endnotes: {},
+      convertedXml: {
+        'word/document.xml': {},
+        'word/footnotes.xml': {
+          declaration: { attributes: { version: '1.0', encoding: 'UTF-8', standalone: 'yes' } },
+          elements: [
+            {
+              type: 'element',
+              name: 'w:footnotes',
+              attributes: { 'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' },
+              elements: [
+                {
+                  type: 'element',
+                  name: 'w:footnote',
+                  attributes: { 'w:id': 'fn-1' },
+                  elements: [
+                    {
+                      type: 'element',
+                      name: 'w:p',
+                      elements: [
+                        {
+                          type: 'element',
+                          name: 'w:r',
+                          elements: [
+                            { type: 'element', name: 'w:t', elements: [{ type: 'text', text: 'Footnote text' }] },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        'word/endnotes.xml': {
+          declaration: { attributes: { version: '1.0', encoding: 'UTF-8', standalone: 'yes' } },
+          elements: [
+            {
+              type: 'element',
+              name: 'w:endnotes',
+              attributes: { 'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' },
+              elements: [],
+            },
+          ],
+        },
+        'word/settings.xml': {
+          elements: [{ type: 'element', name: 'w:settings', elements: [] }],
+        },
+      },
+      footnotes: [{ id: 'fn-1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Footnote text' }] }] }],
+      endnotes: [],
       ...overrides.converter,
     },
     options: {},
     on: () => {},
+    safeEmit: vi.fn(() => []),
+    emit: vi.fn(),
   } as unknown as Editor;
 }
 

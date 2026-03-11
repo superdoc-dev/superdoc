@@ -1,5 +1,10 @@
 /**
- * Footnote plan-engine wrappers — bridge footnotes.* operations to the adapter layer.
+ * Footnote plan-engine wrappers — bridge footnotes.* operations to the parts system.
+ *
+ * Mutations flow through `mutatePart` / `compoundMutation` so that
+ * `convertedXml['word/footnotes.xml']` (or endnotes) is the canonical store.
+ * `converter.footnotes` / `converter.endnotes` are derived caches rebuilt
+ * by the notes-part-descriptor's `afterCommit` hook.
  */
 
 import type { Editor } from '../../core/Editor.js';
@@ -26,12 +31,21 @@ import {
   buildFootnoteDiscoveryItem,
 } from '../helpers/footnote-resolver.js';
 import { paginate, resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
-import { getRevision } from './revision-tracker.js';
-import { executeDomainCommand } from './plan-wrappers.js';
+import { getRevision, checkRevision } from './revision-tracker.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { executeOutOfBandMutation } from '../out-of-band-mutation.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { mutatePart } from '../../core/parts/mutation/mutate-part.js';
+import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
+import {
+  getNotesConfig,
+  addNoteElement,
+  updateNoteElement,
+  removeNoteElement,
+  bootstrapNotesPart,
+  getNoteElements,
+} from '../../core/parts/adapters/notes-part-descriptor.js';
+import type { NoteEntry } from '../../core/parts/adapters/notes-part-descriptor.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -49,61 +63,28 @@ function configSuccess(): FootnoteConfigResult {
   return { success: true };
 }
 
-function configFailure(code: ReceiptFailureCode, message: string): FootnoteConfigResult {
-  return { success: false, failure: { code, message } };
-}
-
-function receiptApplied(receipt: ReturnType<typeof executeDomainCommand>): boolean {
-  return receipt.steps[0]?.effect === 'changed';
-}
-
-type FootnoteEntry = {
-  id: string;
-  type?: string | null;
-  content: unknown[];
-  originalXml?: unknown;
-};
-
-type LegacyNoteMap = Record<string, { content?: string }>;
+// ---------------------------------------------------------------------------
+// Converter shape
+// ---------------------------------------------------------------------------
 
 interface ConverterNotesStore {
-  footnotes?: FootnoteEntry[] | LegacyNoteMap;
-  endnotes?: FootnoteEntry[] | LegacyNoteMap;
+  footnotes?: NoteEntry[];
+  endnotes?: NoteEntry[];
+  footnoteProperties?: Record<string, unknown> | null;
+  convertedXml?: Record<string, unknown>;
 }
 
-function isLegacyNoteMap(value: unknown): value is LegacyNoteMap {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function textToFootnoteContentNodes(text: string): unknown[] {
-  const lines = text.split(/\r?\n/);
-  return lines.map((line) => ({
-    type: 'paragraph',
-    content: line.length > 0 ? [{ type: 'text', text: line }] : [],
-  }));
-}
-
-function normalizeLegacyNoteMap(map: LegacyNoteMap): FootnoteEntry[] {
-  return Object.entries(map).map(([id, value]) => ({
-    id: String(id),
-    content: textToFootnoteContentNodes(value?.content ?? ''),
-  }));
-}
-
-function ensureNoteEntries(converter: ConverterNotesStore, kind: 'footnotes' | 'endnotes'): FootnoteEntry[] {
-  const current = converter[kind];
-  if (Array.isArray(current)) return current;
-
-  if (isLegacyNoteMap(current)) {
-    const normalized = normalizeLegacyNoteMap(current);
-    converter[kind] = normalized;
-    return normalized;
+function getConverter(editor: Editor): ConverterNotesStore {
+  const converter = (editor as unknown as { converter?: ConverterNotesStore }).converter;
+  if (!converter) {
+    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'converter not available.');
   }
-
-  const initialized: FootnoteEntry[] = [];
-  converter[kind] = initialized;
-  return initialized;
+  return converter;
 }
+
+// ---------------------------------------------------------------------------
+// ID allocation
+// ---------------------------------------------------------------------------
 
 function toNonNegativeInteger(value: unknown): number | null {
   const num = Number(value);
@@ -111,38 +92,59 @@ function toNonNegativeInteger(value: unknown): number | null {
   return num;
 }
 
-function allocateNextNoteId(editor: Editor, type: 'footnote' | 'endnote', entries: FootnoteEntry[]): string {
-  let maxId = 0;
+/**
+ * Collect every non-negative integer ID already in use for a note type.
+ *
+ * Reads from three sources so newly bootstrapped parts (whose derived
+ * cache hasn't been rebuilt yet) are still accounted for:
+ *   1. PM document references (footnoteReference / endnoteReference nodes)
+ *   2. The canonical OOXML part (word/footnotes.xml or word/endnotes.xml)
+ *   3. The derived cache (converter.footnotes / converter.endnotes)
+ *
+ * Special note types (separator, continuationSeparator) use negative IDs
+ * by convention and are excluded by the non-negative filter.
+ */
+function collectUsedNoteIds(editor: Editor, converter: ConverterNotesStore, type: 'footnote' | 'endnote'): Set<number> {
+  const used = new Set<number>();
+  const config = getNotesConfig(type);
 
+  // 1. PM document references
   for (const ref of findAllFootnotes(editor.state.doc, type)) {
     const parsed = toNonNegativeInteger(ref.noteId);
-    if (parsed != null) maxId = Math.max(maxId, parsed);
+    if (parsed != null) used.add(parsed);
   }
 
-  for (const entry of entries) {
-    const parsed = toNonNegativeInteger(entry.id);
-    if (parsed != null) maxId = Math.max(maxId, parsed);
+  // 2. Canonical OOXML part (survives even when the derived cache is stale)
+  const ooxmlPart = converter.convertedXml?.[config.partId];
+  if (ooxmlPart) {
+    for (const el of getNoteElements(ooxmlPart, config.childElementName)) {
+      const parsed = toNonNegativeInteger(el.attributes?.['w:id']);
+      if (parsed != null) used.add(parsed);
+    }
   }
 
-  return String(maxId + 1);
+  // 3. Derived cache (may contain entries not yet in OOXML after a sync)
+  const cache = converter[config.converterKey];
+  if (Array.isArray(cache)) {
+    for (const entry of cache) {
+      const parsed = toNonNegativeInteger(entry.id);
+      if (parsed != null) used.add(parsed);
+    }
+  }
+
+  return used;
 }
 
-function upsertNoteEntry(entries: FootnoteEntry[], noteId: string, content: string): void {
-  const existing = entries.find((entry) => String(entry.id) === noteId);
-  if (existing) {
-    existing.content = textToFootnoteContentNodes(content);
-    return;
-  }
+/**
+ * Allocate the next available note ID by scanning all known sources.
+ */
+function allocateNextNoteId(editor: Editor, converter: ConverterNotesStore, type: 'footnote' | 'endnote'): string {
+  const used = collectUsedNoteIds(editor, converter, type);
 
-  entries.push({
-    id: noteId,
-    content: textToFootnoteContentNodes(content),
-  });
-}
+  let candidate = 1;
+  while (used.has(candidate)) candidate += 1;
 
-function removeNoteEntry(entries: FootnoteEntry[], noteId: string): void {
-  const index = entries.findIndex((entry) => String(entry.id) === noteId);
-  if (index >= 0) entries.splice(index, 1);
+  return String(candidate);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,21 +177,24 @@ export function footnotesGetWrapper(editor: Editor, input: FootnoteGetInput): Fo
 // Mutation operations
 // ---------------------------------------------------------------------------
 
+/**
+ * Insert a new footnote/endnote.
+ *
+ * Uses `compoundMutation` because it touches both:
+ * 1. The OOXML notes part (add <w:footnote> element)
+ * 2. The PM document (insert footnoteReference/endnoteReference node)
+ */
 export function footnotesInsertWrapper(
   editor: Editor,
   input: FootnoteInsertInput,
   options?: MutationOptions,
 ): FootnoteMutationResult {
   rejectTrackedMode('footnotes.insert', options);
+  checkRevision(editor, options?.expectedRevision);
 
-  const converter = (editor as unknown as { converter?: ConverterNotesStore }).converter;
-  if (!converter) {
-    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'footnotes.insert: converter not available.');
-  }
-
-  const noteStoreKey = input.type === 'endnote' ? 'endnotes' : 'footnotes';
-  const noteEntries = ensureNoteEntries(converter, noteStoreKey);
-  const noteId = allocateNextNoteId(editor, input.type, noteEntries);
+  const converter = getConverter(editor);
+  const notesConfig = getNotesConfig(input.type);
+  const noteId = allocateNextNoteId(editor, converter, input.type);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId };
 
   if (options?.dryRun) {
@@ -198,7 +203,6 @@ export function footnotesInsertWrapper(
 
   const nodeTypeName = input.type === 'endnote' ? 'endnoteReference' : 'footnoteReference';
   const nodeType = editor.schema.nodes[nodeTypeName];
-
   if (!nodeType) {
     throw new DocumentApiAdapterError(
       'CAPABILITY_UNAVAILABLE',
@@ -208,30 +212,51 @@ export function footnotesInsertWrapper(
 
   const resolved = resolveInlineInsertPosition(editor, input.at, 'footnotes.insert');
 
-  const receipt = executeDomainCommand(
+  const { success } = compoundMutation({
     editor,
-    () => {
+    source: `footnotes.insert:${input.type}`,
+    affectedParts: [notesConfig.partId],
+    execute: () => {
+      // Bootstrap the notes part inside the transactional path so the
+      // compound snapshot correctly records the part as non-existent.
+      // On rollback the bootstrapped part is removed automatically.
+      bootstrapNotesPart(editor, input.type);
+
+      // 1. Add note element to the canonical OOXML part
+      mutatePart({
+        editor,
+        partId: notesConfig.partId,
+        operation: 'mutate',
+        source: `footnotes.insert:${input.type}`,
+        mutate({ part }) {
+          addNoteElement(part, notesConfig, noteId, input.content);
+        },
+      });
+
+      // 2. Insert the reference node in the PM document
       const node = nodeType.create({ id: noteId });
       const { tr } = editor.state;
       tr.insert(resolved.from, node);
       editor.dispatch(tr);
 
-      // Keep converter note content in exporter-compatible array form.
-      upsertNoteEntry(noteEntries, noteId, input.content);
-
       clearIndexCache(editor);
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
-  if (!receiptApplied(receipt)) {
+  if (!success) {
     return footnoteFailure('NO_OP', 'Insert operation produced no change.');
   }
 
   return footnoteSuccess(address);
 }
 
+/**
+ * Update footnote/endnote content.
+ *
+ * Uses `mutatePart` directly — only the OOXML notes part is modified.
+ * The derived cache is rebuilt by the `afterCommit` hook.
+ */
 export function footnotesUpdateWrapper(
   editor: Editor,
   input: FootnoteUpdateInput,
@@ -242,44 +267,40 @@ export function footnotesUpdateWrapper(
   const resolved = resolveFootnoteTarget(editor.state.doc, input.target);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId: resolved.noteId };
 
-  if (options?.dryRun) {
+  if (options?.dryRun || input.patch.content === undefined) {
     return footnoteSuccess(address);
   }
 
-  // Footnote content is stored in the converter's footnote/endnote parts.
-  // This is an out-of-band mutation since it modifies XML parts, not PM state.
-  const converter = (editor as unknown as { converter?: ConverterNotesStore }).converter;
-  if (!converter) {
-    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'footnotes.update: converter not available.');
-  }
-  const noteStoreKey = resolved.type === 'footnote' ? 'footnotes' : 'endnotes';
-  const noteEntries = ensureNoteEntries(converter, noteStoreKey);
+  const notesConfig = getNotesConfig(resolved.type);
 
-  executeOutOfBandMutation(
+  mutatePart({
     editor,
-    (dryRun) => {
-      if (input.patch.content === undefined) {
-        return { changed: false, payload: undefined };
-      }
-
-      if (!dryRun) {
-        upsertNoteEntry(noteEntries, resolved.noteId, input.patch.content);
-      }
-
-      return { changed: true, payload: undefined };
+    partId: notesConfig.partId,
+    operation: 'mutate',
+    source: `footnotes.update:${resolved.type}`,
+    expectedRevision: options?.expectedRevision,
+    mutate({ part }) {
+      updateNoteElement(part, notesConfig, resolved.noteId, input.patch.content!);
     },
-    { dryRun: options?.dryRun ?? false, expectedRevision: options?.expectedRevision },
-  );
+  });
 
   return footnoteSuccess(address);
 }
 
+/**
+ * Remove a footnote/endnote.
+ *
+ * Uses `compoundMutation` because it touches both:
+ * 1. The PM document (delete the footnoteReference/endnoteReference node)
+ * 2. The OOXML notes part (remove <w:footnote> element if no more references)
+ */
 export function footnotesRemoveWrapper(
   editor: Editor,
   input: FootnoteRemoveInput,
   options?: MutationOptions,
 ): FootnoteMutationResult {
   rejectTrackedMode('footnotes.remove', options);
+  checkRevision(editor, options?.expectedRevision);
 
   const resolved = resolveFootnoteTarget(editor.state.doc, input.target);
   const address: FootnoteAddress = { kind: 'entity', entityType: 'footnote', noteId: resolved.noteId };
@@ -288,40 +309,58 @@ export function footnotesRemoveWrapper(
     return footnoteSuccess(address);
   }
 
-  const receipt = executeDomainCommand(
+  const notesConfig = getNotesConfig(resolved.type);
+
+  const { success } = compoundMutation({
     editor,
-    () => {
+    source: `footnotes.remove:${resolved.type}`,
+    affectedParts: [notesConfig.partId],
+    execute: () => {
+      // 1. Delete the reference node from the PM document
       const { tr } = editor.state;
       const node = tr.doc.nodeAt(resolved.pos);
-      if (node) {
-        tr.delete(resolved.pos, resolved.pos + node.nodeSize);
-        editor.dispatch(tr);
-        const converter = (editor as unknown as { converter?: ConverterNotesStore }).converter;
-        if (converter) {
-          const noteStoreKey = resolved.type === 'footnote' ? 'footnotes' : 'endnotes';
-          const noteEntries = ensureNoteEntries(converter, noteStoreKey);
-          const stillReferenced = findAllFootnotes(editor.state.doc, resolved.type).some(
-            (f) => f.noteId === resolved.noteId,
-          );
-          if (!stillReferenced) {
-            removeNoteEntry(noteEntries, resolved.noteId);
-          }
-        }
-        clearIndexCache(editor);
-        return true;
-      }
-      return false;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
+      if (!node) return false;
 
-  if (!receiptApplied(receipt)) {
+      tr.delete(resolved.pos, resolved.pos + node.nodeSize);
+      editor.dispatch(tr);
+
+      // 2. Remove from the OOXML part if no other references remain
+      const stillReferenced = findAllFootnotes(editor.state.doc, resolved.type).some(
+        (f) => f.noteId === resolved.noteId,
+      );
+
+      if (!stillReferenced) {
+        mutatePart({
+          editor,
+          partId: notesConfig.partId,
+          operation: 'mutate',
+          source: `footnotes.remove:${resolved.type}`,
+          mutate({ part }) {
+            removeNoteElement(part, notesConfig, resolved.noteId);
+          },
+        });
+      }
+
+      clearIndexCache(editor);
+      return true;
+    },
+  });
+
+  if (!success) {
     return footnoteFailure('NO_OP', 'Remove operation produced no change.');
   }
 
   return footnoteSuccess(address);
 }
 
+/**
+ * Configure footnote/endnote numbering and placement.
+ *
+ * Document-wide settings are written to `word/settings.xml` through the
+ * parts system. Section-scoped settings that belong in `sectPr` go through
+ * the document mutation path (not yet implemented — falls back to converter
+ * cache for backward compatibility).
+ */
 export function footnotesConfigureWrapper(
   editor: Editor,
   input: FootnoteConfigureInput,
@@ -329,47 +368,104 @@ export function footnotesConfigureWrapper(
 ): FootnoteConfigResult {
   rejectTrackedMode('footnotes.configure', options);
 
-  interface FootnotePropertiesStore {
-    footnoteProperties?: Record<string, unknown> | null;
-    convertedXml?: Record<string, unknown>;
-  }
+  const prElementName = input.type === 'endnote' ? 'w:endnotePr' : 'w:footnotePr';
 
-  const converter = (editor as unknown as { converter?: FootnotePropertiesStore }).converter;
-  if (!converter) {
-    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'footnotes.configure: converter not available.');
-  }
-
-  executeOutOfBandMutation(
+  // Document-wide config: mutate word/settings.xml
+  mutatePart({
     editor,
-    (dryRun) => {
-      if (dryRun) return { changed: true, payload: undefined };
+    partId: 'word/settings.xml',
+    operation: 'mutate',
+    source: `footnotes.configure:${input.type}`,
+    dryRun: options?.dryRun,
+    expectedRevision: options?.expectedRevision,
+    mutate({ part }) {
+      const root = (part as { elements?: Array<{ elements?: unknown[] }> })?.elements?.[0];
+      if (!root) return;
+      if (!root.elements) root.elements = [];
 
-      // Ensure the footnoteProperties object exists
-      if (!converter.footnoteProperties) {
-        converter.footnoteProperties = { source: 'settings' };
+      // Find or create the footnotePr/endnotePr element
+      interface OoxmlElement {
+        type?: string;
+        name?: string;
+        attributes?: Record<string, string>;
+        elements?: OoxmlElement[];
       }
-      const props = converter.footnoteProperties;
+      const elements = root.elements as OoxmlElement[];
+      let prElement = elements.find((el) => el.name === prElementName);
+      if (!prElement) {
+        prElement = { type: 'element', name: prElementName, elements: [] };
+        elements.push(prElement);
+      }
+      if (!prElement.elements) prElement.elements = [];
 
-      // Apply numbering config fields to converter state (w:footnotePr / w:endnotePr)
-      if (input.numbering) {
-        if (input.numbering.format !== undefined) props.numFmt = input.numbering.format;
-        if (input.numbering.start !== undefined) props.numStart = String(input.numbering.start);
-        if (input.numbering.restartPolicy !== undefined) {
-          props.numRestart = RESTART_POLICY_TO_OOXML[input.numbering.restartPolicy] ?? input.numbering.restartPolicy;
+      if (!input.numbering) return;
+
+      // Apply numbering properties as OOXML child elements
+      const setOrRemoveChild = (name: string, value: string | undefined) => {
+        if (value === undefined) return;
+        const children = prElement!.elements!;
+        const existing = children.findIndex((el) => el.name === name);
+        const newEl: OoxmlElement = { type: 'element', name, attributes: { 'w:val': value } };
+        if (existing >= 0) {
+          children[existing] = newEl;
+        } else {
+          children.push(newEl);
         }
-        if (input.numbering.position !== undefined) props.pos = input.numbering.position;
+      };
+
+      setOrRemoveChild('w:numFmt', input.numbering.format);
+      setOrRemoveChild('w:numStart', input.numbering.start !== undefined ? String(input.numbering.start) : undefined);
+      if (input.numbering.restartPolicy !== undefined) {
+        setOrRemoveChild(
+          'w:numRestart',
+          RESTART_POLICY_TO_OOXML[input.numbering.restartPolicy] ?? input.numbering.restartPolicy,
+        );
       }
-
-      // Store the type so the exporter knows which part to update
-      props.noteType = input.type;
-      if (input.scope) props.scope = input.scope;
-
-      return { changed: true, payload: undefined };
+      setOrRemoveChild('w:pos', input.numbering.position);
     },
-    { dryRun: options?.dryRun ?? false, expectedRevision: options?.expectedRevision },
-  );
+  });
+
+  // Keep the derived footnoteProperties cache in sync so the export path
+  // does not overwrite our changes with the stale originalXml snapshot.
+  // Only sync for footnotes — converter.footnoteProperties represents
+  // w:footnotePr only. Endnote config (w:endnotePr) is a separate element
+  // and must not overwrite the footnote cache.
+  if (!options?.dryRun && prElementName === 'w:footnotePr') {
+    syncFootnotePropertiesCache(editor);
+  }
 
   return configSuccess();
+}
+
+/**
+ * Refresh `converter.footnoteProperties.originalXml` from the canonical
+ * `word/settings.xml` part after a footnote configure mutation.
+ *
+ * The export path (`applyFootnotePropertiesToSettings`) reads `originalXml`
+ * and writes it back to settings.xml, so it must reflect the latest state.
+ *
+ * Only called for footnote (not endnote) configure — `converter.footnoteProperties`
+ * exclusively represents `w:footnotePr`.
+ */
+function syncFootnotePropertiesCache(editor: Editor): void {
+  const converter = getConverter(editor) as ConverterNotesStore & {
+    footnoteProperties?: { source?: string; originalXml?: unknown; [k: string]: unknown } | null;
+  };
+  if (!converter?.footnoteProperties || converter.footnoteProperties.source !== 'settings') return;
+
+  const settingsPart = converter.convertedXml?.['word/settings.xml'] as
+    | { elements?: Array<{ elements?: Array<{ name?: string }> }> }
+    | undefined;
+  const settingsRoot = settingsPart?.elements?.[0];
+  const elements = settingsRoot?.elements ?? [];
+  const prElement = elements.find((el) => el.name === 'w:footnotePr');
+
+  if (prElement) {
+    converter.footnoteProperties.originalXml = structuredClone(prElement);
+  } else {
+    // The element was removed — clear the cache so export doesn't re-emit it
+    converter.footnoteProperties = null;
+  }
 }
 
 const RESTART_POLICY_TO_OOXML: Record<string, string> = {

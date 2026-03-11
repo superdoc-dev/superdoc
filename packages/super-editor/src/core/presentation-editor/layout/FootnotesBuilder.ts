@@ -22,6 +22,7 @@ import type { FlowBlock } from '@superdoc/contracts';
 import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
 
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
+import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
 
 // Re-export types for consumers
 export type { FootnoteReference, FootnotesLayoutInput };
@@ -107,7 +108,7 @@ export function buildFootnotesInput(
   const blocksById = new Map<string, FlowBlock[]>();
 
   idsInUse.forEach((id) => {
-    const entry = importedFootnotes.find((f) => String(f?.id) === id);
+    const entry = findNoteEntryById(importedFootnotes, id);
     const content = entry?.content;
     if (!Array.isArray(content) || content.length === 0) return;
 

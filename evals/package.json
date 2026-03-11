@@ -8,6 +8,7 @@
     "eval": "npx promptfoo eval --env-file .env",
     "eval:all": "npx promptfoo eval --env-file .env && npx promptfoo eval --env-file .env -c promptfooconfig.execution.yaml",
     "eval:exec": "npx promptfoo eval --env-file .env -c promptfooconfig.execution.yaml",
+    "eval:gateway": "npx promptfoo eval --env-file .env -c promptfooconfig.execution-gateway.yaml",
     "eval:gdpval": "npx promptfoo eval --env-file .env -c promptfooconfig.gdpval.yaml",
     "eval:openai": "npx promptfoo eval --env-file .env --filter-providers 'GPT-*'",
     "eval:repeat": "npx promptfoo eval --env-file .env --repeat 3 --no-cache",
@@ -17,8 +18,9 @@
     "baseline:compare": "node lib/compare-baselines.mjs"
   },
   "devDependencies": {
-    "promptfoo": "^0.121.1",
     "@superdoc-dev/sdk": "1.0.0-alpha.38",
-    "openai": "^6.25.0"
+    "ai": "^6.0.116",
+    "openai": "^6.25.0",
+    "promptfoo": "^0.121.1"
   }
 }

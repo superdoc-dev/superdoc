@@ -50,6 +50,7 @@ type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' 
 interface SectionElement {
   name: string;
   attributes?: Record<string, unknown>;
+  elements?: SectionElement[];
 }
 
 /**

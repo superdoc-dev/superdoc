@@ -1,7 +1,11 @@
 {
   "name": "superdoc",
   "type": "module",
+<<<<<<< HEAD
   "version": "1.18.0",
+=======
+  "version": "1.18.2",
+>>>>>>> origin/stable
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",

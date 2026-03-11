@@ -394,6 +394,39 @@ describe('blocksDeleteWrapper', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Ordinal consistency
+  // -------------------------------------------------------------------------
+
+  describe('ordinal consistency with blocks.list', () => {
+    it('reports top-level ordinal, not descendant-traversal index position', () => {
+      // A table with a nested tableRow — the full block index (via descendants())
+      // includes: table, tableRow, paragraph → indexOf(paragraph) = 2.
+      // But blocks.list only lists top-level blocks: table=0, paragraph=1.
+      const tableRow = createNode('tableRow', [], {
+        attrs: { paraId: 'tr1', sdBlockId: 'tr1' },
+        isBlock: true,
+        inlineContent: false,
+      });
+      const table = createNode('table', [tableRow], {
+        attrs: { blockId: 't1', sdBlockId: 't1' },
+        isBlock: true,
+        inlineContent: false,
+      });
+      const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
+        attrs: { paraId: 'p1', sdBlockId: 'p1' },
+        isBlock: true,
+        inlineContent: true,
+      });
+
+      const { editor } = makeBlockDeleteEditor({ children: [table, paragraph] });
+      const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'direct' });
+
+      // Must be 1 (top-level: table=0, paragraph=1), NOT 2 (descendant index position)
+      expect(result.deletedBlock.ordinal).toBe(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Cache invalidation
   // -------------------------------------------------------------------------
 
@@ -651,6 +684,78 @@ describe('blocksDeleteRangeWrapper', () => {
       expect((error as DocumentApiAdapterError).message).toContain('start expected paragraph');
       expect((error as DocumentApiAdapterError).message).toContain('resolved to listItem');
     }
+  });
+
+  it('rejects a range that would silently delete unrecognized node types', () => {
+    const p1 = createNode('paragraph', [createNode('text', [], { text: 'First' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // A node type that mapBlockNodeType does not recognize (e.g., bibliography)
+    const bibliography = createNode('bibliography', [], {
+      attrs: { blockId: 'bib1' },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const p2 = createNode('paragraph', [createNode('text', [], { text: 'Last' })], {
+      attrs: { paraId: 'p2', sdBlockId: 'p2' },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const editor = makeRangeDeleteEditor([p1, bibliography, p2]);
+
+    try {
+      blocksDeleteRangeWrapper(
+        editor,
+        {
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+        },
+        { changeMode: 'direct' },
+      );
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentApiAdapterError);
+      expect((error as DocumentApiAdapterError).code).toBe('INVALID_TARGET');
+      expect((error as DocumentApiAdapterError).message).toContain('unrecognized');
+      expect((error as DocumentApiAdapterError).message).toContain('bibliography');
+    }
+  });
+
+  it('resolves correctly when different node types share the same nodeId', () => {
+    // A paragraph and a listItem both have paraId "shared" — different nodeTypes
+    // but the same raw nodeId. The old findBlockByNodeIdOnly approach would throw
+    // AMBIGUOUS_TARGET; composite-key lookup correctly disambiguates.
+    const para = createNode('paragraph', [createNode('text', [], { text: 'Text' })], {
+      attrs: { paraId: 'shared', sdBlockId: 'sb-para' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const listItem = createNode('paragraph', [createNode('text', [], { text: 'List item' })], {
+      attrs: {
+        paraId: 'shared',
+        sdBlockId: 'sb-li',
+        paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const editor = makeRangeDeleteEditor([para, listItem]);
+
+    // Should NOT throw AMBIGUOUS_TARGET — composite keys (paragraph:shared, listItem:shared) are distinct
+    const result = blocksDeleteRangeWrapper(
+      editor,
+      {
+        start: { kind: 'block', nodeType: 'paragraph', nodeId: 'shared' },
+        end: { kind: 'block', nodeType: 'listItem', nodeId: 'shared' },
+      },
+      { changeMode: 'direct' },
+    );
+    expect(result.success).toBe(true);
+    expect(result.deletedCount).toBe(2);
   });
 
   it('allows a range without section breaks', () => {

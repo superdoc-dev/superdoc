@@ -10,6 +10,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import {
   DELETABLE_BLOCK_NODE_TYPES,
+  type BlockNodeAddress,
   type BlocksDeleteInput,
   type BlocksDeleteResult,
   type BlocksListInput,
@@ -23,10 +24,10 @@ import {
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import {
   findBlockByIdStrict,
-  findBlockByNodeIdOnly,
   mapBlockNodeType,
   resolveBlockNodeId,
   type BlockCandidate,
+  type BlockIndex,
 } from '../helpers/node-address-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
@@ -183,8 +184,13 @@ export function blocksDeleteWrapper(
   const candidate = findBlockByIdStrict(index, input.target);
   validateDeleteTargetNodeType(candidate.nodeType);
 
-  // Capture block summary before deletion for the receipt
-  const candidateOrdinal = index.candidates.indexOf(candidate);
+  // Compute ordinal in top-level order, consistent with blocks.list output.
+  // index.candidates includes nested blocks (tableRow, tableCell via descendants()),
+  // so using indexOf on it would produce ordinals that don't match blocks.list.
+  const topLevel = collectTopLevelBlocks(editor);
+  const candidateOrdinal = topLevel.findIndex(
+    (b) => b.nodeId === candidate.nodeId && b.nodeType === candidate.nodeType,
+  );
   const deletedBlock = toBlockSummary(candidate, candidateOrdinal);
 
   const sdBlockId = resolveSdBlockId(candidate);
@@ -250,6 +256,75 @@ function resolveTopLevelOrdinal(topLevel: BlockCandidate[], candidate: BlockCand
   );
 }
 
+/**
+ * Resolves a deleteRange endpoint using the composite `(nodeType, nodeId)` key.
+ *
+ * Using the composite key avoids false AMBIGUOUS_TARGET errors that occur with
+ * nodeId-only lookup when different node types share the same nodeId (e.g., a
+ * paragraph and a listItem both having paraId "abc123").
+ *
+ * When the exact key isn't found, checks whether the nodeId exists under a
+ * different nodeType and throws a specific INVALID_TARGET diagnostic.
+ */
+function resolveRangeEndpoint(index: BlockIndex, address: BlockNodeAddress, label: string): BlockCandidate {
+  const key = `${address.nodeType}:${address.nodeId}`;
+
+  if (index.ambiguous.has(key)) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share key "${key}".`, {
+      target: address,
+    });
+  }
+
+  const candidate = index.byId.get(key);
+  if (candidate) return candidate;
+
+  // Exact key not found — check if the nodeId exists under a different nodeType
+  const mismatch = index.candidates.find((c) => c.nodeId === address.nodeId);
+  if (mismatch) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `blocks.deleteRange ${label} expected ${address.nodeType}:${address.nodeId} but resolved to ${mismatch.nodeType}.`,
+      { expected: address.nodeType, actual: mismatch.nodeType, nodeId: address.nodeId },
+    );
+  }
+
+  throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block "${key}" was not found.`, {
+    target: address,
+  });
+}
+
+/**
+ * Rejects deletion ranges that contain unrecognized top-level nodes.
+ *
+ * `tr.delete(from, to)` removes ALL nodes in the positional span, including
+ * node types not recognized by `mapBlockNodeType()` (e.g., bibliography,
+ * footnotes). Without this check, those nodes would be silently destroyed.
+ */
+function rejectUnmappedNodesInRange(doc: ProseMirrorNode, rangeBlocks: BlockCandidate[]): void {
+  if (rangeBlocks.length === 0) return;
+
+  const rangeFrom = rangeBlocks[0]!.pos;
+  const rangeTo = rangeBlocks[rangeBlocks.length - 1]!.end;
+  const recognizedPositions = new Set(rangeBlocks.map((b) => b.pos));
+
+  let offset = 0;
+  for (let i = 0; i < doc.childCount; i++) {
+    const child = doc.child(i);
+    const childEnd = offset + child.nodeSize;
+
+    // Only inspect children that overlap the deletion range
+    if (childEnd > rangeFrom && offset < rangeTo && !recognizedPositions.has(offset)) {
+      throw new DocumentApiAdapterError(
+        'INVALID_TARGET',
+        `blocks.deleteRange cannot delete range: unrecognized node "${child.type.name}" at position ${offset} would be silently removed.`,
+        { pmNodeType: child.type.name, pos: offset },
+      );
+    }
+
+    offset = childEnd;
+  }
+}
+
 export function blocksDeleteRangeWrapper(
   editor: Editor,
   input: BlocksDeleteRangeInput,
@@ -260,28 +335,12 @@ export function blocksDeleteRangeWrapper(
   // 1. Collect top-level blocks (direct children of doc node)
   const topLevel = collectTopLevelBlocks(editor);
 
-  // 2. Resolve start and end via nodeId (alias-aware)
+  // 2. Resolve start and end using composite (nodeType, nodeId) key.
+  //    This avoids false AMBIGUOUS_TARGET errors when different node types
+  //    share the same nodeId (e.g., a paragraph and a listItem with the same paraId).
   const index = getBlockIndex(editor);
-  const startCandidate = findBlockByNodeIdOnly(index, input.start.nodeId);
-  const endCandidate = findBlockByNodeIdOnly(index, input.end.nodeId);
-
-  // 2a. Validate that resolved nodeType matches caller-supplied nodeType.
-  //     Without this, a stale address (e.g. nodeType:"paragraph" for a listItem)
-  //     would silently resolve and delete the wrong block type.
-  if (startCandidate.nodeType !== input.start.nodeType) {
-    throw new DocumentApiAdapterError(
-      'INVALID_TARGET',
-      `blocks.deleteRange start expected ${input.start.nodeType}:${input.start.nodeId} but resolved to ${startCandidate.nodeType}.`,
-      { expected: input.start.nodeType, actual: startCandidate.nodeType, nodeId: input.start.nodeId },
-    );
-  }
-  if (endCandidate.nodeType !== input.end.nodeType) {
-    throw new DocumentApiAdapterError(
-      'INVALID_TARGET',
-      `blocks.deleteRange end expected ${input.end.nodeType}:${input.end.nodeId} but resolved to ${endCandidate.nodeType}.`,
-      { expected: input.end.nodeType, actual: endCandidate.nodeType, nodeId: input.end.nodeId },
-    );
-  }
+  const startCandidate = resolveRangeEndpoint(index, input.start, 'start');
+  const endCandidate = resolveRangeEndpoint(index, input.end, 'end');
 
   // 3. Confirm both are top-level
   const startOrdinal = resolveTopLevelOrdinal(topLevel, startCandidate, 'start');
@@ -299,7 +358,12 @@ export function blocksDeleteRangeWrapper(
   // 5. Collect the range and build summaries
   const rangeBlocks = topLevel.slice(startOrdinal, endOrdinal + 1);
 
-  // 5a. Reject ranges that include section breaks
+  // 5a. Reject ranges that contain unrecognized top-level nodes.
+  //     tr.delete(from, to) removes ALL nodes in the positional span, including
+  //     node types not recognized by mapBlockNodeType (e.g., bibliography).
+  rejectUnmappedNodesInRange(editor.state.doc, rangeBlocks);
+
+  // 5b. Reject ranges that include section breaks
   for (const block of rangeBlocks) {
     if (hasSectionBreak(block)) {
       throw new DocumentApiAdapterError(

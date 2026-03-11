@@ -5233,7 +5233,11 @@ export class DomPainter {
         leaderEl.classList.add('superdoc-leader');
         leaderEl.setAttribute('data-style', ld.style);
         leaderEl.style.position = 'absolute';
-        leaderEl.style.left = `${ld.from}px`;
+        if (isRtl) {
+          leaderEl.style.right = `${ld.from}px`;
+        } else {
+          leaderEl.style.left = `${ld.from}px`;
+        }
         leaderEl.style.width = `${Math.max(0, ld.to - ld.from)}px`;
         // Align leaders closer to the text baseline using measured descent
         const baselineOffset = Math.max(1, Math.round(Math.max(1, line.descent * 0.5)));
@@ -5263,7 +5267,11 @@ export class DomPainter {
         const barEl = this.doc!.createElement('div');
         barEl.classList.add('superdoc-tab-bar');
         barEl.style.position = 'absolute';
-        barEl.style.left = `${bar.x}px`;
+        if (isRtl) {
+          barEl.style.right = `${bar.x}px`;
+        } else {
+          barEl.style.left = `${bar.x}px`;
+        }
         barEl.style.top = '0px';
         barEl.style.bottom = '0px';
         barEl.style.width = '1px';

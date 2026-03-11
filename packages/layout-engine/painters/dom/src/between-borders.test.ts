@@ -966,6 +966,69 @@ describe('computeBorderSpaceExpansion', () => {
 });
 
 // ---------------------------------------------------------------------------
+// createParagraphDecorationLayers — border layer positioning
+// ---------------------------------------------------------------------------
+
+describe('createParagraphDecorationLayers — border layer positioning', () => {
+  const PX_PER_PT = 96 / 72;
+
+  it('extends borders into margins using negative offsets', () => {
+    const attrs = {
+      borders: {
+        top: { style: 'solid' as const, width: 2, space: 5 },
+        bottom: { style: 'solid' as const, width: 3, space: 10 },
+        left: { style: 'dashed' as const, width: 1, space: 4 },
+        right: { style: 'dotted' as const, width: 2, space: 6 },
+      },
+    };
+    const { borderLayer } = createParagraphDecorationLayers(document, 260, attrs);
+
+    // top: -(space*PX_PER_PT + width)
+    expect(parseFloat(borderLayer!.style.top)).toBeCloseTo(-(5 * PX_PER_PT + 2));
+    // bottom: -(space*PX_PER_PT + width)
+    expect(parseFloat(borderLayer!.style.bottom)).toBeCloseTo(-(10 * PX_PER_PT + 3));
+    // left: -(space*PX_PER_PT + width) (no indent)
+    expect(parseFloat(borderLayer!.style.left)).toBeCloseTo(-(4 * PX_PER_PT + 1));
+    // width: fragmentWidth + left expansion + right expansion
+    const leftExpansion = 4 * PX_PER_PT + 1;
+    const rightExpansion = 6 * PX_PER_PT + 2;
+    expect(parseFloat(borderLayer!.style.width)).toBeCloseTo(260 + leftExpansion + rightExpansion);
+  });
+
+  it('falls back to border width of 0 when width is not specified', () => {
+    const attrs = {
+      borders: {
+        top: { style: 'solid' as const, space: 3 },
+        bottom: { style: 'solid' as const, space: 6 },
+      },
+    };
+    const { borderLayer } = createParagraphDecorationLayers(document, 260, attrs);
+
+    // width defaults to 0 when not specified
+    expect(parseFloat(borderLayer!.style.top)).toBeCloseTo(-(3 * PX_PER_PT));
+    expect(parseFloat(borderLayer!.style.bottom)).toBeCloseTo(-(6 * PX_PER_PT));
+  });
+
+  it('positions border flush when space is 0', () => {
+    const attrs = {
+      borders: {
+        top: { style: 'solid' as const, width: 2, space: 0 },
+        bottom: { style: 'solid' as const, width: 2, space: 0 },
+        left: { style: 'dashed' as const, width: 2, space: 0 },
+        right: { style: 'dotted' as const, width: 2, space: 0 },
+      },
+    };
+    const { borderLayer } = createParagraphDecorationLayers(document, 260, attrs);
+
+    // space=0, so offset is just the border width
+    expect(parseFloat(borderLayer!.style.top)).toBeCloseTo(-2);
+    expect(parseFloat(borderLayer!.style.bottom)).toBeCloseTo(-2);
+    expect(parseFloat(borderLayer!.style.left)).toBeCloseTo(-2);
+    expect(parseFloat(borderLayer!.style.width)).toBeCloseTo(260 + 2 + 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Incremental update — between-border cache invalidation
 // ---------------------------------------------------------------------------
 

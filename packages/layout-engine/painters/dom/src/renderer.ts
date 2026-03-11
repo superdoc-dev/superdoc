@@ -85,7 +85,11 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import { computeTabWidth } from './utils/marker-helpers.js';
+import {
+  computeTabWidth,
+  resolvePainterListMarkerGeometry,
+  resolvePainterListTextStartPx,
+} from './utils/marker-helpers.js';
 import {
   applySdtContainerStyling,
   getSdtContainerKey,
@@ -2745,13 +2749,38 @@ export class DomPainter {
       const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
       const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
-      // Pre-calculate actual marker+tab inline width for list first lines.
-      // The measurer uses textStartPx to calculate line.maxWidth, but the painter renders
-      // marker+tab as inline elements that may consume MORE space than textStartPx indicates.
-      // This causes justify overflow when line.maxWidth > (fragment.width - actualMarkerTabWidth).
-      let listFirstLineMarkerTabEndPx: number | null = null;
+      const listFirstLineTextStartPx =
+        !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
+          ? resolvePainterListTextStartPx({
+              wordLayout,
+              indentLeftPx: paraIndentLeft,
+              hangingIndentPx: paraIndent?.hanging ?? 0,
+              firstLineIndentPx: paraIndent?.firstLine ?? 0,
+              markerTextWidthPx: fragment.markerTextWidth,
+            })
+          : undefined;
+
+      const shouldUseSharedInlinePrefixGeometry =
+        !fragment.continuesFromPrev &&
+        fragment.markerWidth &&
+        wordLayout?.marker?.justification === 'left' &&
+        wordLayout.firstLineIndentMode !== true &&
+        typeof fragment.markerTextWidth === 'number' &&
+        Number.isFinite(fragment.markerTextWidth) &&
+        fragment.markerTextWidth >= 0;
+      const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
+        ? resolvePainterListMarkerGeometry({
+            wordLayout,
+            indentLeftPx: paraIndentLeft,
+            hangingIndentPx: paraIndent?.hanging ?? 0,
+            firstLineIndentPx: paraIndent?.firstLine ?? 0,
+            markerTextWidthPx: fragment.markerTextWidth,
+          })
+        : undefined;
+
+      // Pre-calculate marker geometry used later when painting the inline prefix.
       let listTabWidth = 0;
-      let markerStartPos: number;
+      let markerStartPos = 0;
       if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
         const markerTextWidth = fragment.markerTextWidth!;
         const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
@@ -2768,9 +2797,10 @@ export class DomPainter {
           currentPos = markerStartPos + markerTextWidth;
         }
 
-        // Calculate tab width using same logic as marker rendering section
         const suffix = wordLayout.marker.suffix ?? 'tab';
-        if (suffix === 'tab') {
+        if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
+          listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
+        } else if (suffix === 'tab') {
           listTabWidth = computeTabWidth(
             currentPos,
             markerJustification,
@@ -2782,10 +2812,15 @@ export class DomPainter {
         } else if (suffix === 'space') {
           listTabWidth = 4;
         }
-        listFirstLineMarkerTabEndPx = currentPos + listTabWidth;
       }
 
       lines.forEach((line, index) => {
+        const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+        const hasListFirstLineMarker =
+          index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+        const shouldUseResolvedListTextStart =
+          hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
+
         // Calculate available width from fragment dimensions (the actual rendered width).
         // This is the ground truth for justify calculations since it matches what's visible.
         // Only subtract positive indents - negative indents already expand fragment.width in layout
@@ -2797,13 +2832,11 @@ export class DomPainter {
         let availableWidthOverride =
           line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
 
-        // For list first lines, use the actual marker+tab inline width instead of line.maxWidth
-        // which is based on textStartPx and may not match the actual rendered inline width.
-        // Must also subtract paraIndentRight to match measurer's calculation:
-        // initialAvailableWidth = maxWidth - textStartPx - indentRight
-        // Only subtract positive paraIndentRight - negative indents already expand fragment.width
-        if (index === 0 && listFirstLineMarkerTabEndPx != null) {
-          availableWidthOverride = fragment.width - listFirstLineMarkerTabEndPx - Math.max(0, paraIndentRight);
+        // Only explicit-positioned list first lines need a painter-side width override.
+        // Inline list first lines already have the correct measured width in `line.maxWidth`,
+        // and second-guessing that width causes justified spacing regressions.
+        if (shouldUseResolvedListTextStart) {
+          availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
         }
 
         // Determine if this is the true last line of the paragraph that should skip justification.
@@ -2824,23 +2857,12 @@ export class DomPainter {
           availableWidthOverride,
           fragment.fromLine + index,
           shouldSkipJustifyForLastLine,
+          shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
         );
 
         // List first lines handle indentation via marker positioning and tab stops,
         // not CSS padding/text-indent. This matches Word's rendering model.
-        const isListFirstLine =
-          index === 0 &&
-          !fragment.continuesFromPrev &&
-          fragment.markerWidth &&
-          fragment.markerTextWidth &&
-          wordLayout?.marker;
-
-        /**
-         * Determines if this line contains segments with explicit X positioning (typically from tabs).
-         * When segments have explicit X positions, they are rendered with absolute positioning,
-         * which means CSS textIndent has no effect on their placement.
-         */
-        const hasExplicitSegmentPositioning = line.segments?.some((seg) => seg.x !== undefined);
+        const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
 
         /**
          * Identifies first lines that require special indent handling.
@@ -2927,7 +2949,7 @@ export class DomPainter {
 
         if (isListFirstLine) {
           const marker = wordLayout.marker!;
-          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
+          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
           // Skip marker rendering when hidden by vanish property (preserves list indentation)
           if (!marker.run.vanish) {
@@ -2950,10 +2972,10 @@ export class DomPainter {
             markerContainer.style.position = 'relative';
             if (markerJustification === 'right') {
               markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              markerContainer.style.left = `${markerStartPos}px`;
             } else if (markerJustification === 'center') {
               markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
               lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
             }
 
@@ -4198,6 +4220,7 @@ export class DomPainter {
       ctx: FragmentRenderContext,
       lineIndex: number,
       isLastLine: boolean,
+      resolvedListTextStartPx?: number,
     ): HTMLElement => {
       // Check if paragraph ends with a line break
       const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
@@ -4206,7 +4229,7 @@ export class DomPainter {
       // Skip justify only on the last line, unless the paragraph ends with a line break
       const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify);
+      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
     };
 
     /**
@@ -5176,6 +5199,7 @@ export class DomPainter {
    * @param availableWidthOverride - Optional override for available width used in justification calculations
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
+   * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @returns The rendered line element
    */
   private renderLine(
@@ -5185,6 +5209,7 @@ export class DomPainter {
     availableWidthOverride?: number,
     lineIndex?: number,
     skipJustify?: boolean,
+    resolvedListTextStartPx?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -5480,13 +5505,15 @@ export class DomPainter {
       const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
       const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
       const isListParagraph = Boolean(wordLayout?.marker);
-      const rawTextStartPx =
+      const fallbackListTextStartPx =
         typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
           ? wordLayout.marker.textStartX
           : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
             ? wordLayout.textStartPx
             : undefined;
-      const listIndentOffset = isFirstLineOfPara ? (rawTextStartPx ?? indentLeft) : indentLeft;
+      const listIndentOffset = isFirstLineOfPara
+        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+        : indentLeft;
       const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
       const segmentsByRun = new Map<number, LineSegment[]>();

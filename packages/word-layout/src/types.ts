@@ -90,9 +90,12 @@ export type WordParagraphLayoutInput = {
 
 export type WordListMarkerLayout = {
   markerText: string;
+  markerBoxWidthPx?: number;
   gutterWidthPx?: number;
   justification: WordListJustification;
+  markerX?: number;
   suffix: WordListSuffix;
+  textStartX?: number;
   run: ResolvedRunProperties;
 };
 

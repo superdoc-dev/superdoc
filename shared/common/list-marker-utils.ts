@@ -79,108 +79,269 @@ export type MinimalWordLayout = {
 export type MarkerTextMeasurer = (markerText: string, marker: MinimalMarker) => number;
 
 /**
- * Resolves the horizontal pixel position where list item text should start.
+ * Resolved list prefix geometry for a single numbered or bulleted paragraph line.
  *
- * This is the authoritative implementation of list marker text positioning logic,
- * used across all measurement and layout subsystems. It handles multiple rendering modes:
+ * All coordinates are measured from the left edge of the paragraph content area.
+ */
+export type ResolvedListMarkerGeometry = {
+  /** Left edge where the visible marker glyph should be painted. */
+  markerStartPx: number;
+  /** Visible marker glyph width in pixels. */
+  markerTextWidthPx: number;
+  /** Horizontal position where paragraph text begins after marker + suffix. */
+  textStartPx: number;
+  /** Width contributed by the suffix separator (tab, space, or nothing). */
+  suffixWidthPx: number;
+};
+
+const getFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return value;
+};
+
+const getNonNegativeFiniteNumber = (value: unknown): number | undefined => {
+  const numericValue = getFiniteNumber(value);
+  if (numericValue == null || numericValue < 0) {
+    return undefined;
+  }
+  return numericValue;
+};
+
+const getMarkerTextWidthPx = (marker: MinimalMarker, measureMarkerText: MarkerTextMeasurer): number => {
+  const glyphWidthPx = getNonNegativeFiniteNumber(marker.glyphWidthPx);
+  if (glyphWidthPx != null) {
+    return glyphWidthPx;
+  }
+
+  if (marker.markerText) {
+    const measuredWidthPx = measureMarkerText(marker.markerText, marker);
+    const safeMeasuredWidthPx = getNonNegativeFiniteNumber(measuredWidthPx);
+    if (safeMeasuredWidthPx != null) {
+      return safeMeasuredWidthPx;
+    }
+  }
+
+  return getNonNegativeFiniteNumber(marker.markerBoxWidthPx) ?? 0;
+};
+
+const getMarkerBoxWidthPx = (marker: MinimalMarker, markerTextWidthPx: number): number =>
+  Math.max(getNonNegativeFiniteNumber(marker.markerBoxWidthPx) ?? 0, markerTextWidthPx);
+
+const getExplicitFirstLineMarkerStartPx = (
+  wordLayout: MinimalWordLayout | undefined,
+  marker: MinimalMarker,
+): number | undefined => {
+  if (wordLayout?.firstLineIndentMode !== true) {
+    return undefined;
+  }
+
+  return getFiniteNumber(marker.markerX);
+};
+
+const getMarkerAnchorPx = (indentLeft: number, firstLine: number, hanging: number): number =>
+  indentLeft - hanging + firstLine;
+
+const getMarkerStartPx = (anchorPx: number, justification: string, markerTextWidthPx: number): number => {
+  if (justification === 'right') {
+    return anchorPx - markerTextWidthPx;
+  }
+  if (justification === 'center') {
+    return anchorPx - markerTextWidthPx / 2;
+  }
+  return anchorPx;
+};
+
+const getNextExplicitTabStopPx = (tabsPx: number[] | undefined, currentPosPx: number): number | undefined => {
+  if (!Array.isArray(tabsPx)) {
+    return undefined;
+  }
+
+  for (const tabPx of tabsPx) {
+    if (typeof tabPx === 'number' && Number.isFinite(tabPx) && tabPx > currentPosPx) {
+      return tabPx;
+    }
+  }
+
+  return undefined;
+};
+
+const getFirstLineTextStartTargetPx = (
+  wordLayout: MinimalWordLayout | undefined,
+  marker: MinimalMarker,
+): number | undefined => {
+  return getFiniteNumber(marker.textStartX) ?? getFiniteNumber(wordLayout?.textStartPx);
+};
+
+const getNextDefaultTabStopPx = (currentPosPx: number): number => {
+  const remainderPx = currentPosPx % DEFAULT_TAB_INTERVAL_PX;
+  if (remainderPx === 0) {
+    return currentPosPx + DEFAULT_TAB_INTERVAL_PX;
+  }
+  return currentPosPx + DEFAULT_TAB_INTERVAL_PX - remainderPx;
+};
+
+const getMinimumReadableTextStartPx = (markerContentEndPx: number, gutterWidthPx: number): number =>
+  markerContentEndPx + gutterWidthPx;
+
+const resolveExplicitStandardTextStartPx = (
+  explicitTextStartPx: number | undefined,
+  markerContentEndPx: number,
+  gutterWidthPx: number,
+): number | undefined => {
+  if (explicitTextStartPx == null) {
+    return undefined;
+  }
+
+  if (explicitTextStartPx > markerContentEndPx) {
+    return explicitTextStartPx;
+  }
+
+  if (explicitTextStartPx > 0) {
+    return getMinimumReadableTextStartPx(markerContentEndPx, gutterWidthPx);
+  }
+
+  return undefined;
+};
+
+/**
+ * Resolves full marker geometry for a list prefix on a paragraph line.
  *
- * **Standard Hanging Indent Mode:**
- * - Marker positioned in hanging indent area (absolute positioning)
- * - Text starts at paraIndentLeft
- * - Tab after marker advances to next tab stop or firstLine indent position
+ * This is the canonical geometry source for marker start, suffix width, and
+ * paragraph text start. Measurement and painting should both use this helper
+ * so they stay aligned on numbered-list first lines.
  *
- * **First-Line Indent Mode (input-rule created lists):**
- * - Marker positioned at paraIndentLeft + firstLine (inline with text flow)
- * - Tab after marker advances to first available tab stop or textStartPx
- * - Matches Word's rendering behavior for auto-numbered lists
+ * @param wordLayout - Word list layout metadata for the paragraph
+ * @param indentLeft - Paragraph left indent in pixels
+ * @param firstLine - Paragraph first-line indent in pixels
+ * @param hanging - Paragraph hanging indent in pixels
+ * @param measureMarkerText - Callback used when marker glyph width is not precomputed
+ * @returns Resolved list prefix geometry, or undefined when the paragraph has no marker
+ */
+export function resolveListMarkerGeometry(
+  wordLayout: MinimalWordLayout | undefined,
+  indentLeft: number,
+  firstLine: number,
+  hanging: number,
+  measureMarkerText: MarkerTextMeasurer,
+): ResolvedListMarkerGeometry | undefined {
+  const marker = wordLayout?.marker;
+  if (!marker) {
+    return undefined;
+  }
+
+  const markerTextWidthPx = getMarkerTextWidthPx(marker, measureMarkerText);
+  const markerBoxWidthPx = getMarkerBoxWidthPx(marker, markerTextWidthPx);
+  const justification = marker.justification ?? 'left';
+  const explicitFirstLineMarkerStartPx = getExplicitFirstLineMarkerStartPx(wordLayout, marker);
+  const anchorPx = getMarkerAnchorPx(indentLeft, firstLine, hanging);
+  const markerStartPx = explicitFirstLineMarkerStartPx ?? getMarkerStartPx(anchorPx, justification, markerTextWidthPx);
+  const markerContentEndPx = markerStartPx + markerTextWidthPx;
+  const suffix = marker.suffix ?? 'tab';
+
+  if (suffix === 'nothing') {
+    return {
+      markerStartPx,
+      markerTextWidthPx,
+      textStartPx: markerContentEndPx,
+      suffixWidthPx: 0,
+    };
+  }
+
+  if (suffix === 'space') {
+    return {
+      markerStartPx,
+      markerTextWidthPx,
+      textStartPx: markerContentEndPx + SPACE_SUFFIX_GAP_PX,
+      suffixWidthPx: SPACE_SUFFIX_GAP_PX,
+    };
+  }
+
+  if (justification !== 'left') {
+    const gutterWidthPx = Math.max(getNonNegativeFiniteNumber(marker.gutterWidthPx) ?? 0, LIST_MARKER_GAP);
+    return {
+      markerStartPx,
+      markerTextWidthPx,
+      textStartPx: markerContentEndPx + gutterWidthPx,
+      suffixWidthPx: gutterWidthPx,
+    };
+  }
+
+  if (wordLayout?.firstLineIndentMode === true) {
+    const explicitTabStopPx = getNextExplicitTabStopPx(wordLayout.tabsPx, markerContentEndPx);
+    const textStartTargetPx = getFirstLineTextStartTargetPx(wordLayout, marker);
+
+    let textStartPx: number;
+    if (explicitTabStopPx != null) {
+      textStartPx = explicitTabStopPx;
+    } else if (textStartTargetPx != null && textStartTargetPx > markerContentEndPx) {
+      textStartPx = textStartTargetPx;
+    } else {
+      textStartPx = markerContentEndPx + LIST_MARKER_GAP;
+    }
+
+    if (textStartPx - markerContentEndPx < LIST_MARKER_GAP) {
+      textStartPx = markerContentEndPx + LIST_MARKER_GAP;
+    }
+
+    return {
+      markerStartPx,
+      markerTextWidthPx,
+      textStartPx,
+      suffixWidthPx: textStartPx - markerContentEndPx,
+    };
+  }
+
+  // Standard hanging-indent: text lands at the hanging-indent text start (indent.left),
+  // NOT at the next paragraph tab stop. Paragraph tab stops in tabsPx are for inline
+  // w:tab characters later in the run — they must not be consumed here.
+  //
+  // Gap: w:doNotUseIndentAsNumberingTabStop and w:noTabHangInd can opt out of this
+  // behavior, but those compat flags are not yet plumbed through the word-layout
+  // contract. Until they are, this unconditionally assumes the default Word mode.
+  // That is correct for the vast majority of documents.
+  const gutterWidthPx = Math.max(getNonNegativeFiniteNumber(marker.gutterWidthPx) ?? 0, LIST_MARKER_GAP);
+  const explicitTextStartPx = resolveExplicitStandardTextStartPx(
+    getFiniteNumber(wordLayout?.textStartPx),
+    markerContentEndPx,
+    gutterWidthPx,
+  );
+  if (explicitTextStartPx != null) {
+    return {
+      markerStartPx,
+      markerTextWidthPx,
+      textStartPx: explicitTextStartPx,
+      suffixWidthPx: explicitTextStartPx - markerContentEndPx,
+    };
+  }
+
+  const markerBoxEndPx = markerStartPx + markerBoxWidthPx;
+  const implicitTextStartPx = indentLeft + firstLine;
+  let textStartPx = implicitTextStartPx;
+  if (textStartPx <= markerBoxEndPx) {
+    textStartPx = getNextDefaultTabStopPx(markerBoxEndPx);
+  }
+
+  return {
+    markerStartPx,
+    markerTextWidthPx,
+    textStartPx,
+    suffixWidthPx: textStartPx - markerContentEndPx,
+  };
+}
+
+/**
+ * Convenience wrapper that returns only the text-start X coordinate from
+ * {@link resolveListMarkerGeometry}. Falls back to `wordLayout.textStartPx`
+ * for firstLineIndentMode paragraphs that have no marker.
  *
- * **Suffix Handling:**
- * - 'space': Add SPACE_SUFFIX_GAP_PX (4px) gap after marker
- * - 'nothing': Text immediately follows marker with no gap
- * - 'tab': Advance to next tab stop or calculated position
- *
- * **Justification Modes:**
- * - 'left': Standard tab-based spacing
- * - 'center'/'right': Use gutterWidthPx with minimum of LIST_MARKER_GAP
- *
- * Algorithm:
- * 1. Determine marker text width (use glyphWidthPx if available, otherwise measure or use markerBoxWidth)
- * 2. Calculate marker start position (markerX for firstLineIndentMode, else paraIndentLeft - hanging + firstLine)
- * 3. Apply suffix-specific spacing:
- *    - 'space': markerStart + markerWidth + SPACE_SUFFIX_GAP_PX
- *    - 'nothing': markerStart + markerWidth
- *    - 'tab': Calculate tab width based on mode and justification
- * 4. For 'tab' suffix with center/right justification: use gutterWidth
- * 5. For 'tab' suffix with left justification in firstLineIndentMode: find next tab stop or use textStartX
- * 6. For 'tab' suffix with left justification in standard mode: calculate tab to firstLine indent
- *
- * @param wordLayout - Word layout configuration containing marker info and positioning mode
- * @param indentLeft - Left paragraph indent in pixels (base position for standard mode)
- * @param firstLine - First-line indent in pixels (offset from left indent)
- * @param hanging - Hanging indent in pixels (creates space for marker in standard mode)
- * @param measureMarkerText - Function to measure marker text width if glyphWidthPx not available.
- *   Should return width in pixels. For list-indent-utils, can return provided markerWidth fallback.
- * @returns Horizontal pixel position where text content should begin, or undefined if no marker present.
- *   This value represents the X coordinate from the left edge of the paragraph content area.
- *
- * @example
- * ```typescript
- * // Standard hanging indent list (marker in margin)
- * const textStart = resolveListTextStartPx(
- *   {
- *     marker: {
- *       glyphWidthPx: 20,
- *       suffix: 'tab',
- *       justification: 'left'
- *     }
- *   },
- *   36,  // indentLeft
- *   0,   // firstLine
- *   18,  // hanging
- *   () => 20  // measureMarkerText (not called since glyphWidthPx provided)
- * );
- * // Returns: ~36 (text starts at indentLeft after tab)
- * ```
- *
- * @example
- * ```typescript
- * // First-line indent mode list (input-rule created)
- * const textStart = resolveListTextStartPx(
- *   {
- *     firstLineIndentMode: true,
- *     marker: {
- *       markerX: 0,
- *       glyphWidthPx: 18,
- *       textStartX: 48,
- *       suffix: 'tab',
- *       justification: 'left'
- *     }
- *   },
- *   0,   // indentLeft
- *   0,   // firstLine
- *   0,   // hanging
- *   () => 18
- * );
- * // Returns: 48 (from textStartX)
- * ```
- *
- * @example
- * ```typescript
- * // Space suffix (rare but valid)
- * const textStart = resolveListTextStartPx(
- *   {
- *     marker: {
- *       glyphWidthPx: 15,
- *       suffix: 'space',
- *       markerX: 0
- *     },
- *     firstLineIndentMode: true
- *   },
- *   0, 0, 0,
- *   () => 15
- * );
- * // Returns: 19 (markerX:0 + glyphWidth:15 + SPACE_SUFFIX_GAP_PX:4)
- * ```
+ * @param wordLayout - Word list layout metadata for the paragraph
+ * @param indentLeft - Paragraph left indent in pixels
+ * @param firstLine - Paragraph first-line indent in pixels
+ * @param hanging - Paragraph hanging indent in pixels
+ * @param measureMarkerText - Callback used when marker glyph width is not precomputed
+ * @returns Horizontal pixel position where text content should begin, or undefined if no marker present
  */
 export function resolveListTextStartPx(
   wordLayout: MinimalWordLayout | undefined,
@@ -189,179 +350,14 @@ export function resolveListTextStartPx(
   hanging: number,
   measureMarkerText: MarkerTextMeasurer,
 ): number | undefined {
-  const marker = wordLayout?.marker;
-  if (!marker) {
-    const textStartPx =
-      wordLayout?.firstLineIndentMode === true &&
-      typeof wordLayout.textStartPx === 'number' &&
-      Number.isFinite(wordLayout.textStartPx)
-        ? wordLayout.textStartPx
-        : undefined;
-    return textStartPx;
+  const geometry = resolveListMarkerGeometry(wordLayout, indentLeft, firstLine, hanging, measureMarkerText);
+  if (geometry) {
+    return geometry.textStartPx;
   }
 
-  // Step 1: Determine marker box width (fallback for text width if needed)
-  const markerBoxWidth =
-    typeof marker.markerBoxWidthPx === 'number' && Number.isFinite(marker.markerBoxWidthPx)
-      ? marker.markerBoxWidthPx
-      : 0;
-
-  // Step 2: Determine marker text width
-  let markerTextWidth =
-    typeof marker.glyphWidthPx === 'number' && Number.isFinite(marker.glyphWidthPx) ? marker.glyphWidthPx : undefined;
-
-  // If glyphWidthPx not available and marker has text, measure it
-  if (markerTextWidth == null && marker.markerText) {
-    markerTextWidth = measureMarkerText(marker.markerText, marker);
-  }
-
-  // Fallback to marker box width if measurement failed or unavailable
-  if (!Number.isFinite(markerTextWidth) || (markerTextWidth !== undefined && markerTextWidth < 0)) {
-    markerTextWidth = markerBoxWidth;
-  }
-
-  // Ensure non-negative width (markerTextWidth is guaranteed to be a number here)
-  const finalMarkerTextWidth = Math.max(0, markerTextWidth ?? 0);
-
-  // Step 3: Determine marker start position
-  let markerStartPos: number;
-  if (
-    wordLayout?.firstLineIndentMode === true &&
-    typeof marker.markerX === 'number' &&
-    Number.isFinite(marker.markerX)
-  ) {
-    // First-line indent mode: marker positioned at markerX
-    markerStartPos = marker.markerX;
-  } else {
-    // Standard mode: marker in hanging indent area
-    markerStartPos = indentLeft - hanging + firstLine;
-  }
-
-  // Validate marker start position
-  if (!Number.isFinite(markerStartPos)) {
-    markerStartPos = 0;
-  }
-
-  // Current horizontal position after marker
-  const currentPos = markerStartPos + finalMarkerTextWidth;
-  const suffix = marker.suffix ?? 'tab';
-
-  // Step 4: Handle 'space' suffix
-  if (suffix === 'space') {
-    return markerStartPos + finalMarkerTextWidth + SPACE_SUFFIX_GAP_PX;
-  }
-
-  // Step 5: Handle 'nothing' suffix
-  if (suffix === 'nothing') {
-    return markerStartPos + finalMarkerTextWidth;
-  }
-
-  // Step 6: Handle 'tab' suffix with justification
-  const markerJustification = marker.justification ?? 'left';
-  // Use the larger of box vs glyph as the effective marker width to ensure we clear the rendered box
-  const markerWidthEffective = Math.max(
-    typeof marker.markerBoxWidthPx === 'number' && Number.isFinite(marker.markerBoxWidthPx)
-      ? marker.markerBoxWidthPx
-      : 0,
-    finalMarkerTextWidth,
-  );
-
-  // Center/right justification: use gutter width
-  if (markerJustification !== 'left') {
-    const gutterWidth =
-      typeof marker.gutterWidthPx === 'number' && Number.isFinite(marker.gutterWidthPx) && marker.gutterWidthPx > 0
-        ? marker.gutterWidthPx
-        : LIST_MARKER_GAP;
-    return markerStartPos + finalMarkerTextWidth + Math.max(gutterWidth, LIST_MARKER_GAP);
-  }
-
-  // Step 7: Left justification with 'tab' suffix in first-line indent mode
   if (wordLayout?.firstLineIndentMode === true) {
-    // Find next tab stop after marker
-    let targetTabStop: number | undefined;
-    if (Array.isArray(wordLayout.tabsPx)) {
-      for (const tab of wordLayout.tabsPx) {
-        if (typeof tab === 'number' && tab > currentPos) {
-          targetTabStop = tab;
-          break;
-        }
-      }
-    }
-
-    // Determine text start target (prefer textStartX over textStartPx)
-    const textStartTarget =
-      typeof marker.textStartX === 'number' && Number.isFinite(marker.textStartX)
-        ? marker.textStartX
-        : wordLayout.textStartPx;
-
-    // Calculate tab width
-    let tabWidth: number;
-    if (targetTabStop !== undefined) {
-      // Use explicit tab stop
-      tabWidth = targetTabStop - currentPos;
-    } else if (textStartTarget !== undefined && Number.isFinite(textStartTarget) && textStartTarget > currentPos) {
-      // Use pre-calculated text start position
-      tabWidth = textStartTarget - currentPos;
-    } else {
-      // Fallback to minimum gap
-      tabWidth = LIST_MARKER_GAP;
-    }
-
-    // Enforce minimum tab width
-    if (tabWidth < LIST_MARKER_GAP) {
-      tabWidth = LIST_MARKER_GAP;
-    }
-
-    return markerStartPos + finalMarkerTextWidth + tabWidth;
+    return getFiniteNumber(wordLayout.textStartPx);
   }
 
-  // Step 8: Left justification with 'tab' suffix in standard mode
-  const textStartTarget =
-    typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
-      ? wordLayout.textStartPx
-      : undefined;
-  const gutterWidth =
-    typeof marker.gutterWidthPx === 'number' && Number.isFinite(marker.gutterWidthPx) && marker.gutterWidthPx > 0
-      ? marker.gutterWidthPx
-      : LIST_MARKER_GAP;
-  const currentPosStandard = markerStartPos + markerWidthEffective;
-
-  // Check for explicit tab stops past the marker position.
-  // The renderer uses these to position the tab after the list marker, so the measurer
-  // must also account for them to avoid a width mismatch that causes extreme negative word-spacing.
-  let explicitTabStop: number | undefined;
-  if (Array.isArray(wordLayout?.tabsPx)) {
-    for (const tab of wordLayout.tabsPx) {
-      if (typeof tab === 'number' && tab > currentPosStandard) {
-        explicitTabStop = tab;
-        break;
-      }
-    }
-  }
-
-  if (explicitTabStop !== undefined) {
-    // Use the explicit tab stop — this matches the renderer's computeTabWidth() behavior
-    return explicitTabStop;
-  }
-
-  if (textStartTarget !== undefined) {
-    const gap = Math.max(textStartTarget - currentPosStandard, gutterWidth);
-    return currentPosStandard + gap;
-  }
-
-  const textStart = indentLeft + firstLine;
-  let tabWidth = textStart - currentPosStandard;
-
-  // Hanging-overflow safeguard: marker overruns the hanging space.
-  // Advance to the next default tab stop, matching the renderer's computeTabWidth() behavior.
-  // The renderer advances to the next 48px-aligned position when no explicit tab stop
-  // is found past the marker. Using LIST_MARKER_GAP instead would create a measurer/renderer
-  // width mismatch that causes incorrect negative word-spacing on justified lines.
-  if (tabWidth <= 0) {
-    const nextDefaultTab =
-      currentPosStandard + DEFAULT_TAB_INTERVAL_PX - (currentPosStandard % DEFAULT_TAB_INTERVAL_PX);
-    tabWidth = nextDefaultTab - currentPosStandard;
-  }
-
-  return currentPosStandard + tabWidth;
+  return undefined;
 }

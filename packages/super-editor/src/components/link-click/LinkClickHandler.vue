@@ -308,14 +308,14 @@ const openLinkInViewingMode = (detail) => {
   if (!href) return;
 
   if (href.startsWith('#') && href.length > 1) {
-    props.editor?.goToAnchor?.(href);
+    const presentationEditor = props.editor?.presentationEditor ?? props.editor?._presentationEditor ?? null;
+    presentationEditor?.goToAnchor?.(href);
     return;
   }
 
   const target = detail.target || '_self';
   const relTokens = String(detail.rel ?? '')
     .split(/\s+/)
-    .map((token) => token.trim().toLowerCase())
     .filter(Boolean);
   const features = ['noopener', 'noreferrer'].filter((token) => relTokens.includes(token)).join(',');
 

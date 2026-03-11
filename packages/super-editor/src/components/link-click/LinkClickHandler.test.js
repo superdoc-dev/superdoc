@@ -23,6 +23,7 @@ vi.mock('prosemirror-state', () => ({
 
 describe('LinkClickHandler', () => {
   let mockEditor;
+  let mockPresentationEditor;
   let mockOpenPopover;
   let mockClosePopover;
   let mockSurfaceElement;
@@ -33,6 +34,10 @@ describe('LinkClickHandler', () => {
     vi.clearAllMocks();
 
     // Create mock editor with state
+    mockPresentationEditor = {
+      goToAnchor: vi.fn(),
+    };
+
     mockEditor = {
       state: {
         selection: {
@@ -64,7 +69,7 @@ describe('LinkClickHandler', () => {
         focus: vi.fn(),
       },
       dispatch: vi.fn(),
-      goToAnchor: vi.fn(),
+      presentationEditor: mockPresentationEditor,
       options: {
         documentMode: 'editing',
         onException: vi.fn(),
@@ -681,7 +686,7 @@ describe('LinkClickHandler', () => {
     mockSurfaceElement.dispatchEvent(linkClickEvent);
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(mockEditor.goToAnchor).toHaveBeenCalledWith('#section-1');
+    expect(mockPresentationEditor.goToAnchor).toHaveBeenCalledWith('#section-1');
     expect(windowOpenSpy).not.toHaveBeenCalled();
     expect(mockOpenPopover).not.toHaveBeenCalled();
     expect(mockEditor.dispatch).not.toHaveBeenCalled();

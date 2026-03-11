@@ -68,7 +68,7 @@ export const LinkedStyles = Extension.create({
         const { tr } = params;
         let node = tr.doc.nodeAt(tr.selection.$from.pos);
 
-        if (node && node.type.name !== 'paragraph') {
+        if (!node || node.type.name !== 'paragraph') {
           node = findParentNodeClosestToPos(tr.selection.$from, (n) => {
             return n.type.name === 'paragraph';
           })?.node;

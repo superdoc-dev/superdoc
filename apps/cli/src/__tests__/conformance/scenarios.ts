@@ -1549,6 +1549,14 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.blocks.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-list');
+    return {
+      stateDir,
+      args: ['blocks', 'list', docPath, '--limit', '10'],
+    };
+  },
   'doc.blocks.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-blocks-delete-success');
     const docPath = await harness.copyFixtureDoc('doc-blocks-delete');
@@ -1563,6 +1571,25 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ kind: 'block', nodeType: block.nodeType, nodeId: block.nodeId }),
         '--out',
         harness.createOutputPath('doc-blocks-delete-output'),
+      ],
+    };
+  },
+  'doc.blocks.deleteRange': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-delete-range-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-delete-range');
+    const { first, second } = await harness.firstTwoBlockAddresses(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'blocks',
+        'delete-range',
+        docPath,
+        '--start-json',
+        JSON.stringify({ kind: 'block', nodeType: first.nodeType, nodeId: first.nodeId }),
+        '--end-json',
+        JSON.stringify({ kind: 'block', nodeType: second.nodeType, nodeId: second.nodeId }),
+        '--out',
+        harness.createOutputPath('doc-blocks-delete-range-output'),
       ],
     };
   },

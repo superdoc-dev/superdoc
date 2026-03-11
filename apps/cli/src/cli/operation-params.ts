@@ -44,7 +44,6 @@ const DRY_RUN_PARAM: CliOperationParamSpec = {
   kind: 'flag',
   flag: 'dry-run',
   type: 'boolean',
-  agentVisible: false,
 };
 const CHANGE_MODE_PARAM: CliOperationParamSpec = {
   name: 'changeMode',
@@ -58,7 +57,6 @@ const EXPECTED_REVISION_PARAM: CliOperationParamSpec = {
   kind: 'flag',
   flag: 'expected-revision',
   type: 'number',
-  agentVisible: false,
 };
 const USER_NAME_PARAM: CliOperationParamSpec = {
   name: 'userName',
@@ -78,7 +76,7 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'expectedRevision', 'dryRun']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
 
 function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): JsonSchema {
   if (schema.$ref && $defs) {
@@ -416,9 +414,18 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
+  'doc.blocks.list': [
+    { name: 'offset', kind: 'flag', flag: 'offset', type: 'number' },
+    { name: 'limit', kind: 'flag', flag: 'limit', type: 'number' },
+    { name: 'nodeTypes', kind: 'jsonFlag', flag: 'node-types-json', type: 'json' },
+  ],
   'doc.blocks.delete': [
     { name: 'nodeType', kind: 'flag', flag: 'node-type', type: 'string' },
     { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+  ],
+  'doc.blocks.deleteRange': [
+    { name: 'start', kind: 'jsonFlag', flag: 'start-json', type: 'json' },
+    { name: 'end', kind: 'jsonFlag', flag: 'end-json', type: 'json' },
   ],
   'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],

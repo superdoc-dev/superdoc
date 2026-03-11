@@ -81,8 +81,9 @@ function mapListsError(operationId: CliExposedOperationId, error: unknown, code:
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
+  // Preserve structured INVALID_TARGET details (requestedNodeType, actualNodeType, remediation)
   if (code === 'INVALID_TARGET') {
-    return new CliError('INVALID_ARGUMENT', message, { operationId, details });
+    return new CliError('INVALID_TARGET', message, { operationId, details });
   }
 
   if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || code === 'CAPABILITY_UNAVAILABLE') {
@@ -177,8 +178,14 @@ function mapCreateError(operationId: CliExposedOperationId, error: unknown, code
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
-  if (code === 'AMBIGUOUS_TARGET' || code === 'INVALID_TARGET') {
+  if (code === 'AMBIGUOUS_TARGET') {
     return new CliError('INVALID_ARGUMENT', message, { operationId, details });
+  }
+
+  // Preserve structured INVALID_TARGET details (requestedNodeType, actualNodeType, remediation)
+  // so CLI consumers can programmatically triage mismatch errors.
+  if (code === 'INVALID_TARGET') {
+    return new CliError('INVALID_TARGET', message, { operationId, details });
   }
 
   if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
@@ -426,7 +433,7 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
   // Lists family
   if (family === 'lists') {
     if (failureCode === 'INVALID_TARGET') {
-      return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+      return new CliError('INVALID_TARGET', failureMessage, { operationId, failure });
     }
     if (failureCode === 'CAPABILITY_UNAVAILABLE') {
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
@@ -459,7 +466,7 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
     }
     if (failureCode === 'INVALID_TARGET') {
-      return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+      return new CliError('INVALID_TARGET', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }

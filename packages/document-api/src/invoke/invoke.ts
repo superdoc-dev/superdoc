@@ -75,7 +75,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     delete: (input, options) => api.delete(input, options),
 
     // --- blocks.* ---
+    'blocks.list': (input) => api.blocks.list(input),
     'blocks.delete': (input, options) => api.blocks.delete(input, options),
+    'blocks.deleteRange': (input, options) => api.blocks.deleteRange(input, options),
 
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),

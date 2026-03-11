@@ -20,7 +20,14 @@ import type {
   CreateHeadingInput,
   CreateHeadingResult,
 } from '../types/create.types.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
+} from '../types/blocks.types.js';
 
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
@@ -488,7 +495,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- blocks.* ---
+  'blocks.list': { input: BlocksListInput | undefined; options: never; output: BlocksListResult };
   'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
+  'blocks.deleteRange': { input: BlocksDeleteRangeInput; options: MutationOptions; output: BlocksDeleteRangeResult };
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };

@@ -17,7 +17,7 @@ export type {
   MarkdownToFragmentAdapter,
 } from './markdown-to-fragment/markdown-to-fragment.js';
 export { executeMarkdownToFragment } from './markdown-to-fragment/markdown-to-fragment.js';
-export type { HistoryState, HistoryActionResult } from './history/history.types.js';
+export type { HistoryState, HistoryActionResult, HistoryNoopReason } from './history/history.types.js';
 
 import type {
   CreateParagraphInput,
@@ -183,8 +183,15 @@ import {
   executeCreateTableOfContents,
 } from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
-import { executeBlocksDelete } from './blocks/blocks.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from './types/blocks.types.js';
+import { executeBlocksList, executeBlocksDelete, executeBlocksDeleteRange } from './blocks/blocks.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
+} from './types/blocks.types.js';
 import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
   CreateTableInput,
@@ -1419,7 +1426,7 @@ export interface DocumentApi {
    */
   trackChanges: TrackChangesApi;
   /**
-   * Block-level structural operations (delete whole blocks).
+   * Block-level structural operations (list, delete, delete-range).
    */
   blocks: BlocksApi;
   /**
@@ -1787,8 +1794,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     blocks: {
+      list(input?: BlocksListInput): BlocksListResult {
+        return executeBlocksList(adapters.blocks, input);
+      },
       delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult {
         return executeBlocksDelete(adapters.blocks, input, options);
+      },
+      deleteRange(input: BlocksDeleteRangeInput, options?: MutationOptions): BlocksDeleteRangeResult {
+        return executeBlocksDeleteRange(adapters.blocks, input, options);
       },
     },
     create: {

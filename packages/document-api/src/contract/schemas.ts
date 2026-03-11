@@ -2550,6 +2550,33 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: textMutationFailureSchemaFor('format.apply'),
   },
   ...formatInlineAliasOperationSchemas,
+  'blocks.list': {
+    input: objectSchema({
+      offset: { type: 'number', minimum: 0 },
+      limit: { type: 'number', minimum: 1 },
+      nodeTypes: { type: 'array', items: { enum: [...blockNodeTypeValues] } },
+    }),
+    output: objectSchema(
+      {
+        total: { type: 'number' },
+        blocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string' },
+              nodeType: { enum: [...blockNodeTypeValues] },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+              isEmpty: { type: 'boolean' },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'textPreview', 'isEmpty'],
+          ),
+        },
+        revision: { type: 'string' },
+      },
+      ['total', 'blocks', 'revision'],
+    ),
+  },
   'blocks.delete': {
     input: objectSchema(
       {
@@ -2561,6 +2588,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
@@ -2568,10 +2601,63 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
     failure: preApplyFailureResultSchemaFor('blocks.delete'),
+  },
+  'blocks.deleteRange': {
+    input: objectSchema(
+      {
+        start: blockNodeAddressSchema,
+        end: blockNodeAddressSchema,
+      },
+      ['start', 'end'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string' },
+              nodeType: { type: 'string' },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'textPreview'],
+          ),
+        },
+        revision: objectSchema(
+          {
+            before: { type: 'string' },
+            after: { type: 'string' },
+          },
+          ['before', 'after'],
+        ),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: { type: 'array' },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    failure: preApplyFailureResultSchemaFor('blocks.deleteRange'),
   },
 
   // --- styles.paragraph.* ---

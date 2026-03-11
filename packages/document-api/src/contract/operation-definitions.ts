@@ -270,7 +270,8 @@ export const OPERATION_DEFINITIONS = {
   },
   find: {
     memberPath: 'find',
-    description: 'Search the document for text or node matches using SDM/1 selectors.',
+    description:
+      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.',
     expectedResult:
       'Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).',
     requiresDocumentContext: true,
@@ -374,7 +375,8 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert content at a target position, or at the end of the document when target is omitted. ' +
+      'Insert inline content at a text position within an existing block, or at the end of the document when target is omitted. ' +
+      'This is NOT for creating sibling blocks — use create.paragraph, create.heading, or lists.insert for that. ' +
       'Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). ' +
       'Supports text (default), markdown, and html content types via the `type` field in legacy mode. ' +
       'Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).',
@@ -473,10 +475,26 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'core',
   },
 
+  'blocks.list': {
+    memberPath: 'blocks.list',
+    description:
+      'List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.',
+    expectedResult:
+      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['INVALID_INPUT'],
+    }),
+    referenceDocPath: 'blocks/list.mdx',
+    referenceGroup: 'blocks',
+    essential: true,
+  },
+
   'blocks.delete': {
     memberPath: 'blocks.delete',
     description: 'Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.',
-    expectedResult: 'Returns a BlocksDeleteResult receipt confirming the block was removed from the document.',
+    expectedResult:
+      'Returns a BlocksDeleteResult receipt confirming the block was removed, including a deletedBlock summary with ordinal, nodeType, and textPreview.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -493,6 +511,31 @@ export const OPERATION_DEFINITIONS = {
       ],
     }),
     referenceDocPath: 'blocks/delete.mdx',
+    referenceGroup: 'blocks',
+  },
+
+  'blocks.deleteRange': {
+    memberPath: 'blocks.deleteRange',
+    description:
+      'Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview.',
+    expectedResult:
+      'Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each with ordinal, nodeId, nodeType, textPreview), before/after revision, and dryRun flag.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: [
+        'TARGET_NOT_FOUND',
+        'AMBIGUOUS_TARGET',
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'CAPABILITY_UNAVAILABLE',
+        'INTERNAL_ERROR',
+      ],
+    }),
+    referenceDocPath: 'blocks/delete-range.mdx',
     referenceGroup: 'blocks',
   },
 
@@ -533,7 +576,7 @@ export const OPERATION_DEFINITIONS = {
 
   'create.paragraph': {
     memberPath: 'create.paragraph',
-    description: 'Create a new paragraph at the target position.',
+    description: 'Create a standalone paragraph at the target position. To add a list item, use lists.insert instead.',
     expectedResult: 'Returns a CreateParagraphResult with the new paragraph block ID and address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1186,7 +1229,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.insert': {
     memberPath: 'lists.insert',
-    description: 'Insert a new list at the target position.',
+    description:
+      'Insert a new list item before or after an existing list item. The new item inherits the target list context.',
     expectedResult: 'Returns a ListsInsertResult with the new list item address and block ID.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1715,7 +1759,8 @@ export const OPERATION_DEFINITIONS = {
 
   'query.match': {
     memberPath: 'query.match',
-    description: 'Deterministic selector-based search with cardinality contracts for mutation targeting.',
+    description:
+      'Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation.',
     expectedResult: 'Returns a QueryMatchOutput with the resolved target address and cardinality metadata.',
     requiresDocumentContext: true,
     metadata: readOperation({
@@ -2647,7 +2692,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'history.undo',
     description: 'Undo the most recent history-safe mutation in the active editor.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the undo stack is empty.',
+      'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -2665,7 +2710,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'history.redo',
     description: 'Redo the most recently undone action in the active editor.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the redo stack is empty.',
+      'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',

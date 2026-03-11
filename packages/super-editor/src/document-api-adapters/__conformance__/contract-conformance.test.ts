@@ -19,7 +19,7 @@ import {
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
-import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
+import { blocksDeleteWrapper, blocksDeleteRangeWrapper } from '../plan-engine/blocks-wrappers.js';
 import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
 import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import {
@@ -892,6 +892,94 @@ function makeBlockDeleteEditor(
         getBlockNodeById:
           overrides.getBlockNodeById ??
           vi.fn((id: string) => (id === 'p1' && hasParagraph ? [{ node: paragraph, pos: 0 }] : [])),
+      },
+    },
+  } as unknown as Editor;
+}
+
+function makeBlockRangeDeleteEditor(): Editor {
+  const p1 = createNode('paragraph', [createNode('text', [], { text: 'First' })], {
+    attrs: { paraId: 'p1', sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const p2 = createNode('paragraph', [createNode('text', [], { text: 'Second' })], {
+    attrs: { paraId: 'p2', sdBlockId: 'p2' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const children = [p1, p2];
+  const doc = createNode('doc', children, { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: false,
+    delete: vi.fn().mockImplementation(function (this: { docChanged: boolean }) {
+      this.docChanged = true;
+    }),
+  };
+
+  return {
+    state: { doc, tr },
+    dispatch,
+    commands: {
+      deleteBlockNodeById: vi.fn(() => true),
+    },
+    helpers: {
+      blockNode: {
+        getBlockNodeById: vi.fn((id: string) => {
+          const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
+          return match ? [{ node: match, pos: 0 }] : [];
+        }),
+      },
+    },
+  } as unknown as Editor;
+}
+
+function makeBlockRangeDeleteEditorWithSectionBreak(): Editor {
+  const p1 = createNode('paragraph', [createNode('text', [], { text: 'First' })], {
+    attrs: { paraId: 'p1', sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const sectBreakPara = createNode('paragraph', [createNode('text', [], { text: 'Section end' })], {
+    attrs: {
+      paraId: 'sect1',
+      sdBlockId: 'sect1',
+      paragraphProperties: { sectPr: { name: 'w:sectPr', elements: [] } },
+    },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const p3 = createNode('paragraph', [createNode('text', [], { text: 'Third' })], {
+    attrs: { paraId: 'p3', sdBlockId: 'p3' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const children = [p1, sectBreakPara, p3];
+  const doc = createNode('doc', children, { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: false,
+  };
+
+  return {
+    state: { doc, tr },
+    dispatch,
+    commands: {
+      deleteBlockNodeById: vi.fn(() => true),
+    },
+    helpers: {
+      blockNode: {
+        getBlockNodeById: vi.fn((id: string) => {
+          const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
+          return match ? [{ node: match, pos: 0 }] : [];
+        }),
       },
     },
   } as unknown as Editor;
@@ -3809,6 +3897,30 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return blocksDeleteWrapper(
         editor,
         { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'blocks.deleteRange': {
+    throwCase: () => {
+      const editor = makeBlockRangeDeleteEditor();
+      return blocksDeleteRangeWrapper(
+        editor,
+        {
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeBlockRangeDeleteEditor();
+      return blocksDeleteRangeWrapper(
+        editor,
+        {
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+        },
         { changeMode: 'direct' },
       );
     },
@@ -7940,6 +8052,20 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     expect(deleteBlockNodeById).not.toHaveBeenCalled();
+    return result;
+  },
+  'blocks.deleteRange': () => {
+    const editor = makeBlockRangeDeleteEditor();
+    const deleteCmd = editor.commands?.deleteBlockNodeById as ReturnType<typeof vi.fn>;
+    const result = blocksDeleteRangeWrapper(
+      editor,
+      {
+        start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+        end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(deleteCmd).not.toHaveBeenCalled();
     return result;
   },
   insert: () => {

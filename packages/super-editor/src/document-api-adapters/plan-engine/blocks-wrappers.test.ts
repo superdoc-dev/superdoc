@@ -2,7 +2,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { BlocksDeleteInput, MutationOptions } from '@superdoc/document-api';
-import { blocksDeleteWrapper } from './blocks-wrappers.js';
+import { blocksDeleteWrapper, blocksDeleteRangeWrapper, blocksListWrapper } from './blocks-wrappers.js';
 import { registerBuiltInExecutors } from './register-executors.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
@@ -23,6 +23,11 @@ type NodeOptions = {
   nodeSize?: number;
 };
 
+function computeTextContent(typeName: string, children: ProseMirrorNode[], text: string): string {
+  if (typeName === 'text') return text;
+  return children.map((c) => (c as any).textContent ?? c.text ?? '').join('');
+}
+
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
   const attrs = options.attrs ?? {};
   const text = options.text ?? '';
@@ -35,10 +40,13 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
   const contentSize = children.reduce((sum, child) => sum + child.nodeSize, 0);
   const nodeSize = isText ? text.length : options.nodeSize != null ? options.nodeSize : isLeaf ? 1 : contentSize + 2;
 
+  const textContent = computeTextContent(typeName, children, text);
+
   const node = {
     type: { name: typeName },
     attrs,
     text: isText ? text : undefined,
+    textContent,
     content: { size: contentSize },
     nodeSize,
     isText,
@@ -160,7 +168,8 @@ describe('blocksDeleteWrapper', () => {
     it('deletes a paragraph block', () => {
       const { editor } = makeBlockDeleteEditor();
       const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'direct' });
-      expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } });
+      expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } });
+      expect(result.deletedBlock).toMatchObject({ nodeId: 'p1', nodeType: 'paragraph', textPreview: 'Hello' });
     });
 
     it('deletes a heading block', () => {
@@ -175,7 +184,8 @@ describe('blocksDeleteWrapper', () => {
       });
       const { editor } = makeBlockDeleteEditor({ children: [heading] });
       const result = blocksDeleteWrapper(editor, makeInput('heading', 'h1'), { changeMode: 'direct' });
-      expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'heading', nodeId: 'h1' } });
+      expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'heading', nodeId: 'h1' } });
+      expect(result.deletedBlock).toMatchObject({ nodeId: 'h1', nodeType: 'heading', textPreview: 'Title' });
     });
 
     it('deletes a list item block', () => {
@@ -190,7 +200,8 @@ describe('blocksDeleteWrapper', () => {
       });
       const { editor } = makeBlockDeleteEditor({ children: [listItem] });
       const result = blocksDeleteWrapper(editor, makeInput('listItem', 'li1'), { changeMode: 'direct' });
-      expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'listItem', nodeId: 'li1' } });
+      expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'listItem', nodeId: 'li1' } });
+      expect(result.deletedBlock).toMatchObject({ nodeId: 'li1', nodeType: 'listItem' });
     });
 
     it('deletes a table block', () => {
@@ -201,7 +212,8 @@ describe('blocksDeleteWrapper', () => {
       });
       const { editor } = makeBlockDeleteEditor({ children: [table] });
       const result = blocksDeleteWrapper(editor, makeInput('table', 't1'), { changeMode: 'direct' });
-      expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'table', nodeId: 't1' } });
+      expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'table', nodeId: 't1' } });
+      expect(result.deletedBlock).toMatchObject({ nodeId: 't1', nodeType: 'table', textPreview: null });
     });
 
     it('rejects image target (inline-only in ProseMirror schema)', () => {
@@ -225,7 +237,7 @@ describe('blocksDeleteWrapper', () => {
       });
       const { editor } = makeBlockDeleteEditor({ children: [sdt] });
       const result = blocksDeleteWrapper(editor, makeInput('sdt', 'sdt1'), { changeMode: 'direct' });
-      expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'sdt', nodeId: 'sdt1' } });
+      expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'sdt', nodeId: 'sdt1' } });
     });
 
     it('deletes an empty paragraph block', () => {
@@ -361,7 +373,8 @@ describe('blocksDeleteWrapper', () => {
         changeMode: 'direct',
         dryRun: true,
       });
-      expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } });
+      expect(result).toMatchObject({ success: true, deleted: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } });
+      expect(result.deletedBlock).toBeDefined();
       expect(deleteBlockNodeById).not.toHaveBeenCalled();
     });
 
@@ -403,5 +416,265 @@ describe('blocksDeleteWrapper', () => {
       const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'));
       expect(result.success).toBe(true);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// blocksListWrapper — canonical ID consistency
+// ---------------------------------------------------------------------------
+
+describe('blocksListWrapper', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('emits canonical blockId (not sdBlockId) for non-paragraph block types', () => {
+    // SDT nodes: resolveBlockNodeId prefers blockId over sdBlockId.
+    // This test ensures blocks.list uses the same canonical ID as the block
+    // index, so IDs from blocks.list work in follow-up delete operations.
+    const sdt = createNode('sdt', [], {
+      attrs: { blockId: 'sdt-canonical', sdBlockId: 'sdt-internal' },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [sdt, paragraph], { isBlock: false });
+    const editor = {
+      state: { doc },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    const sdtEntry = result.blocks.find((b) => b.nodeType === 'sdt');
+    expect(sdtEntry).toBeDefined();
+    // Must use blockId (the canonical ID), not sdBlockId
+    expect(sdtEntry!.nodeId).toBe('sdt-canonical');
+  });
+
+  it('emits canonical paraId for paragraph types even when sdBlockId differs', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
+      attrs: { paraId: 'para-canonical', sdBlockId: 'para-internal' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = {
+      state: { doc },
+    } as unknown as Editor;
+
+    const result = blocksListWrapper(editor);
+    expect(result.blocks[0]!.nodeId).toBe('para-canonical');
+  });
+
+  it('applies offset and limit pagination correctly', () => {
+    const children = Array.from({ length: 5 }, (_, i) =>
+      createNode('paragraph', [createNode('text', [], { text: `P${i}` })], {
+        attrs: { paraId: `p${i}`, sdBlockId: `p${i}` },
+        isBlock: true,
+        inlineContent: true,
+      }),
+    );
+    const doc = createNode('doc', children, { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor, { offset: 1, limit: 2 });
+    expect(result.total).toBe(5);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0]!.ordinal).toBe(1);
+    expect(result.blocks[0]!.nodeId).toBe('p1');
+    expect(result.blocks[1]!.ordinal).toBe(2);
+    expect(result.blocks[1]!.nodeId).toBe('p2');
+  });
+
+  it('filters by nodeTypes when specified', () => {
+    const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const table = createNode('table', [], {
+      attrs: { blockId: 't1', sdBlockId: 't1' },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const doc = createNode('doc', [paragraph, table], { isBlock: false });
+    const editor = { state: { doc } } as unknown as Editor;
+
+    const result = blocksListWrapper(editor, { nodeTypes: ['table'] });
+    expect(result.total).toBe(1);
+    expect(result.blocks[0]!.nodeType).toBe('table');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// blocksDeleteRangeWrapper — section-break rejection
+// ---------------------------------------------------------------------------
+
+describe('blocksDeleteRangeWrapper', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeRangeDeleteEditor(children: ProseMirrorNode[]) {
+    const doc = createNode('doc', children, { isBlock: false });
+    const dispatch = vi.fn();
+    const tr = {
+      setMeta: vi.fn().mockReturnThis(),
+      mapping: { map: (pos: number) => pos },
+      docChanged: false,
+      delete: vi.fn().mockImplementation(function (this: { docChanged: boolean }) {
+        this.docChanged = true;
+      }),
+    };
+    return {
+      state: { doc, tr },
+      dispatch,
+      commands: {
+        deleteBlockNodeById: vi.fn(() => true),
+      },
+      helpers: {
+        blockNode: {
+          getBlockNodeById: vi.fn((id: string) => {
+            const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
+            return match ? [{ node: match, pos: 0 }] : [];
+          }),
+        },
+      },
+    } as unknown as Editor;
+  }
+
+  it('rejects a range that includes a section-break paragraph', () => {
+    const p1 = createNode('paragraph', [createNode('text', [], { text: 'Before' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const sectBreak = createNode('paragraph', [createNode('text', [], { text: 'Break' })], {
+      attrs: {
+        paraId: 'sect1',
+        sdBlockId: 'sect1',
+        paragraphProperties: { sectPr: { name: 'w:sectPr', elements: [] } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const p3 = createNode('paragraph', [createNode('text', [], { text: 'After' })], {
+      attrs: { paraId: 'p3', sdBlockId: 'p3' },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const editor = makeRangeDeleteEditor([p1, sectBreak, p3]);
+
+    try {
+      blocksDeleteRangeWrapper(
+        editor,
+        {
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p3' },
+        },
+        { changeMode: 'direct' },
+      );
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentApiAdapterError);
+      expect((error as DocumentApiAdapterError).code).toBe('INVALID_TARGET');
+      expect((error as DocumentApiAdapterError).message).toContain('section break');
+    }
+  });
+
+  it('also rejects section breaks during dry-run', () => {
+    const p1 = createNode('paragraph', [createNode('text', [], { text: 'Before' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const sectBreak = createNode('paragraph', [createNode('text', [], { text: 'Break' })], {
+      attrs: {
+        paraId: 'sect1',
+        sdBlockId: 'sect1',
+        paragraphProperties: { sectPr: { name: 'w:sectPr', elements: [] } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const editor = makeRangeDeleteEditor([p1, sectBreak]);
+
+    expect(() =>
+      blocksDeleteRangeWrapper(
+        editor,
+        {
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'sect1' },
+        },
+        { changeMode: 'direct', dryRun: true },
+      ),
+    ).toThrow(DocumentApiAdapterError);
+  });
+
+  it('rejects when start nodeType does not match the resolved block', () => {
+    const li = createNode('paragraph', [createNode('text', [], { text: 'List item' })], {
+      attrs: {
+        paraId: 'li1',
+        sdBlockId: 'li1',
+        paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } },
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const p2 = createNode('paragraph', [createNode('text', [], { text: 'Second' })], {
+      attrs: { paraId: 'p2', sdBlockId: 'p2' },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const editor = makeRangeDeleteEditor([li, p2]);
+
+    try {
+      blocksDeleteRangeWrapper(
+        editor,
+        {
+          // Caller says "paragraph" but li1 resolves to "listItem"
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'li1' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+        },
+        { changeMode: 'direct' },
+      );
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentApiAdapterError);
+      expect((error as DocumentApiAdapterError).code).toBe('INVALID_TARGET');
+      expect((error as DocumentApiAdapterError).message).toContain('start expected paragraph');
+      expect((error as DocumentApiAdapterError).message).toContain('resolved to listItem');
+    }
+  });
+
+  it('allows a range without section breaks', () => {
+    const p1 = createNode('paragraph', [createNode('text', [], { text: 'First' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const p2 = createNode('paragraph', [createNode('text', [], { text: 'Second' })], {
+      attrs: { paraId: 'p2', sdBlockId: 'p2' },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const editor = makeRangeDeleteEditor([p1, p2]);
+    const result = blocksDeleteRangeWrapper(
+      editor,
+      {
+        start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+        end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+      },
+      { changeMode: 'direct' },
+    );
+    expect(result.success).toBe(true);
+    expect(result.deletedCount).toBe(2);
   });
 });

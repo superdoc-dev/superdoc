@@ -157,6 +157,8 @@ export async function parseWrapperOperationInput(
         { name: 'input-file', type: 'string' },
         { name: 'text', type: 'string' },
         { name: 'at', type: 'string' },
+        { name: 'at-json', type: 'string' },
+        { name: 'at-file', type: 'string' },
         { name: 'before-address-json', type: 'string' },
         { name: 'before-address-file', type: 'string' },
         { name: 'after-address-json', type: 'string' },

@@ -6,7 +6,6 @@ import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
-import { carbonCopy } from '@core/utilities/carbonCopy';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([

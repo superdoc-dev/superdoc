@@ -70,12 +70,8 @@ const applyBodySectPrFromMetaMap = (editor, ydoc) => {
 
   if (!editor?.state?.tr) return false;
 
-  const nextDocAttrs = {
-    ...(editor.state.doc?.attrs ?? {}),
-    bodySectPr: nextBodySectPr,
-  };
   const tr = editor.state.tr
-    .setNodeMarkup(0, undefined, nextDocAttrs)
+    .setDocAttribute('bodySectPr', nextBodySectPr)
     .setMeta('addToHistory', false)
     .setMeta(BODY_SECT_PR_SYNC_META_KEY, true);
 

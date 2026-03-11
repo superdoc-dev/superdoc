@@ -213,7 +213,7 @@ describe('collaboration extension', () => {
     ydoc._maps.metas.store.set('bodySectPr', bodySectPr);
 
     const tr = {
-      setNodeMarkup: vi.fn(() => tr),
+      setDocAttribute: vi.fn(() => tr),
       setMeta: vi.fn(() => tr),
     };
     const editor = {
@@ -242,10 +242,7 @@ describe('collaboration extension', () => {
 
     ydoc._maps.metas._trigger(new Map([['bodySectPr', {}]]));
 
-    expect(tr.setNodeMarkup).toHaveBeenCalledWith(0, undefined, {
-      attributes: null,
-      bodySectPr,
-    });
+    expect(tr.setDocAttribute).toHaveBeenCalledWith('bodySectPr', bodySectPr);
     expect(tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
     expect(tr.setMeta).toHaveBeenCalledWith('bodySectPrSync', true);
     expect(editor.dispatch).toHaveBeenCalledWith(tr);

@@ -1356,6 +1356,7 @@ function makeSectionsEditor(options: SectionEditorOptions = {}): Editor {
       return tr;
     }),
     setNodeMarkup: vi.fn(() => tr),
+    setDocAttribute: vi.fn(() => tr),
     setMeta: vi.fn(() => tr),
     mapping: {
       maps: [] as unknown[],

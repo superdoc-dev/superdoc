@@ -1530,6 +1530,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Sync root-level document attrs without mutating the first top-level node.
+   */
+  #syncDocumentAttrs(nextAttrs: Record<string, unknown> = {}): void {
+    const currentAttrs = (this.state.doc?.attrs ?? {}) as Record<string, unknown>;
+    const docAttrSpecs = (this.schema?.topNodeType?.spec?.attrs ?? {}) as Record<string, { default?: unknown }>;
+    const attrKeys = new Set([...Object.keys(docAttrSpecs), ...Object.keys(currentAttrs), ...Object.keys(nextAttrs)]);
+
+    if (attrKeys.size === 0) return;
+
+    const valuesMatch = (a: unknown, b: unknown): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+    const tr = this.state.tr.setMeta('addToHistory', false);
+    let changed = false;
+
+    for (const key of attrKeys) {
+      const hasNextValue = Object.prototype.hasOwnProperty.call(nextAttrs, key);
+      const nextValue = hasNextValue ? nextAttrs[key] : docAttrSpecs[key]?.default;
+
+      if (valuesMatch(currentAttrs[key], nextValue)) {
+        continue;
+      }
+
+      tr.setDocAttribute(key, nextValue);
+      changed = true;
+    }
+
+    if (changed) {
+      this.#dispatchTransaction(tr);
+    }
+  }
+
+  /**
    * Replace the current document with new data. Necessary for initializing a new collaboration file,
    * since we need to insert the data only after the provider has synced.
    */
@@ -1547,15 +1579,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       ydoc.getMap('meta').set('bodySectPr', nextBodySectPr);
     }
 
-    if (Object.keys(doc.attrs).length > 0) {
-      const attrsTr = this.state.tr
-        .setNodeMarkup(0, undefined, {
-          ...(this.state.doc.attrs ?? {}),
-          ...(doc.attrs ?? {}),
-        })
-        .setMeta('addToHistory', false);
-      this.#dispatchTransaction(attrsTr);
-    }
+    this.#syncDocumentAttrs((doc.attrs ?? {}) as Record<string, unknown>);
 
     setTimeout(() => {
       this.#initComments();

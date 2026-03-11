@@ -1,8 +1,7 @@
-# SuperDoc tool-call validation -- OpenAI models only
+# SuperDoc Tool Evals -- all providers, unified tests.
 # Run: pnpm run eval
-# Run 3x for variance: pnpm run eval:repeat
-# Run one category: pnpm run eval -- --filter-metadata category=reading
-# Cross-provider: pnpm run eval:cross
+# Filter by provider: pnpm run eval -- --filter-providers "GPT-*"
+# Filter by category: pnpm run eval -- --filter-metadata category=reading
 
 description: 'SuperDoc Tool Evals'
 
@@ -10,8 +9,10 @@ prompts:
   - file://prompts/agent.txt
 
 providers:
+  # --- OpenAI (fast, high rate limits) ---
   - id: openai:chat:gpt-4o
     label: GPT-4o
+    delay: 0
     config: &openai-config
       temperature: 0
       seed: 42
@@ -21,28 +22,57 @@ providers:
 
   - id: openai:chat:gpt-4.1
     label: GPT-4.1
+    delay: 0
     config: *openai-config
 
   - id: openai:chat:gpt-4.1-mini
     label: GPT-4.1-mini
+    delay: 0
     config: *openai-config
 
   - id: openai:chat:gpt-5.4
     label: GPT-5.4
+    delay: 0
     config: *openai-config
 
+  # Anthropic (disabled for now) Reason: Rate limit super aggressive
+  # - id: anthropic:messages:claude-haiku-4-5-20251001
+  #   label: Claude Haiku 4.5
+  #   delay: 5000
+  #   config:
+  #     temperature: 0
+  #     tools: file://lib/essential.json
+  #     tool_choice: auto
+  #     timeout: 30000
+  #     max_tokens: 1024
+  #     maxRetries: 3
+
+  # --- Google ---
+  - id: google:gemini-2.5-pro
+    label: Gemini 2.5 Pro
+    delay: 500
+    config:
+      temperature: 0
+      tools: file://lib/essential.json
+      maxOutputTokens: 1024
+      timeout: 30000
+
 defaultTest:
+  options:
+    transform: file://lib/normalize.cjs
   assert:
     - type: cost
       threshold: 0.10
     - type: latency
       threshold: 30000
+    - type: javascript
+      value: file://lib/assert.cjs
+      metric: argument_quality
 
 evaluateOptions:
-  maxConcurrency: 5
+  maxConcurrency: 10
   delay: 500
-  timeoutMs: 60000
+  timeoutMs: 300000
 
 tests:
-  - file://tests/tool-tests.yaml
-  - file://tests/workflows.yaml
+  - file://tests/tool-quality.yaml

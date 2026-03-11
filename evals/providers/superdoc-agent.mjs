@@ -1,9 +1,7 @@
 /**
- * Custom Promptfoo provider that runs the full SuperDoc agent loop.
+ * Custom Promptfoo provider: runs the full SuperDoc agent loop.
  *
- * Opens a real DOCX file via the CLI, sends prompt to LLM,
- * executes tool calls against the document, loops until done,
- * returns the final document text.
+ * Opens a real DOCX via CLI -> LLM picks tools -> CLI executes them -> returns document text.
  *
  * Vars:
  *   fixture:  DOCX filename in fixtures/ (default: doc-template.docx)
@@ -11,41 +9,127 @@
  *   keepFile: Save the edited DOCX to results/output/{evalId}/ (default: false)
  */
 
-import { copyFileSync, mkdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { copyFileSync, readFileSync } from 'node:fs';
 import { OpenAI } from 'openai';
+import {
+  PATHS,
+  loadSdk,
+  createTempCopy,
+  cleanupTemp,
+  resolveOutputPath,
+  cleanArgs,
+} from './utils.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const EVALS_ROOT = resolve(__dirname, '..');
-const FIXTURES_DIR = resolve(EVALS_ROOT, 'fixtures');
-const OUTPUT_DIR = resolve(EVALS_ROOT, 'results/output');
-const SYSTEM_PROMPT = readFileSync(resolve(EVALS_ROOT, 'prompts/agent.txt'), 'utf8');
+const SYSTEM_PROMPT = readFileSync(PATHS.prompt, 'utf8');
+const MAX_TURNS = 10;
 
 if (!process.env.SUPERDOC_CLI_BIN) {
-  process.env.SUPERDOC_CLI_BIN = resolve(EVALS_ROOT, '../apps/cli/dist/index.js');
+  process.env.SUPERDOC_CLI_BIN = PATHS.cliBin;
 }
 
-const MAX_TURNS = 10;
-const DISCOVER_TOOLS_NAME = 'discover_tools';
+// --- CLI lifecycle ---
 
-let sdkModule = null;
-async function loadSdk() {
-  if (sdkModule) return sdkModule;
-  sdkModule = await import('@superdoc-dev/sdk');
-  return sdkModule;
+async function openDocument(sdk, docPath, stateDir) {
+  const client = sdk.createSuperDocClient({
+    startupTimeoutMs: 15_000,
+    requestTimeoutMs: 30_000,
+    watchdogTimeoutMs: 120_000,
+    env: { SUPERDOC_CLI_STATE_DIR: stateDir },
+  });
+  await client.connect();
+  await client.doc.open({ doc: docPath });
+  return client;
 }
 
-function cleanArgs(args) {
-  // eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
-  const { doc, sessionId, ...rest } = args;
-  return rest;
+async function closeDocument(client, { save = false } = {}) {
+  if (save) await client.doc.save().catch(() => {});
+  await client.doc.close().catch(() => {});
+  await client.dispose().catch(() => {});
 }
 
-function cleanup(docPath, stateDir) {
-  try { unlinkSync(docPath); } catch {}
-  try { rmSync(stateDir, { recursive: true, force: true }); } catch {}
+// --- Tool management ---
+
+async function loadTools(sdk) {
+  const { tools } = await sdk.chooseTools({ provider: 'openai' });
+  const map = new Map();
+  for (const t of tools) {
+    const name = t.function?.name;
+    if (name) map.set(name, t);
+  }
+  return map;
 }
+
+async function handleDiscoverTools(sdk, toolArgs, activeToolMap) {
+  const groups = Array.isArray(toolArgs.groups) ? toolArgs.groups : [];
+  const { tools } = await sdk.chooseTools({
+    provider: 'openai',
+    groups,
+    mode: 'essential',
+    includeDiscoverTool: false,
+  });
+  let added = 0;
+  for (const t of tools) {
+    const name = t.function?.name;
+    if (name && !activeToolMap.has(name)) {
+      activeToolMap.set(name, t);
+      added++;
+    }
+  }
+  return { ok: true, loaded: groups, newTools: added };
+}
+
+// --- Agent loop ---
+
+async function runAgentLoop(sdk, client, activeToolMap, task, model) {
+  const openai = new OpenAI();
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT.replace('{{task}}', task) },
+    { role: 'user', content: task },
+  ];
+  const toolLog = [];
+
+  for (let turn = 0; turn < MAX_TURNS; turn++) {
+    const response = await openai.chat.completions.create({
+      model,
+      messages,
+      tools: [...activeToolMap.values()],
+      temperature: 0,
+    });
+
+    const message = response.choices[0].message;
+    messages.push(message);
+    if (!message.tool_calls?.length) break;
+
+    for (const call of message.tool_calls) {
+      const toolName = call.function.name;
+      let toolArgs;
+      try { toolArgs = JSON.parse(call.function.arguments || '{}'); }
+      catch { toolArgs = {}; }
+
+      let result;
+      try {
+        if (toolName === 'discover_tools') {
+          result = await handleDiscoverTools(sdk, toolArgs, activeToolMap);
+        } else {
+          result = await sdk.dispatchSuperDocTool(client, toolName, cleanArgs(toolArgs));
+        }
+      } catch (err) {
+        result = { ok: false, error: err.message };
+      }
+
+      toolLog.push({ tool: toolName, ok: !result?.error });
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: typeof result === 'string' ? result : JSON.stringify(result),
+      });
+    }
+  }
+
+  return toolLog;
+}
+
+// --- Provider ---
 
 export default class SuperDocAgentProvider {
   constructor(options) {
@@ -62,119 +146,40 @@ export default class SuperDocAgentProvider {
     const fixture = vars.fixture || 'doc-template.docx';
     const model = vars.model || 'gpt-4o';
     const keepFile = vars.keepFile === true || vars.keepFile === 'true';
-    const srcPath = resolve(FIXTURES_DIR, fixture);
+    const task = vars.task || prompt;
 
-    // Unique ID for this test (file copy + state dir isolation for concurrency)
-    const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const docPath = resolve(FIXTURES_DIR, `tmp-${uid}-${fixture}`);
-    const stateDir = resolve(FIXTURES_DIR, `.state-${uid}`);
-    copyFileSync(srcPath, docPath);
-
-    // Output path for keepFile
+    const { docPath, stateDir } = createTempCopy(fixture);
     const evalId = context?.evaluationId || `eval-${Date.now()}`;
-    const baseName = fixture.replace(/\.docx$/i, '');
-    const outputDir = keepFile ? resolve(OUTPUT_DIR, evalId) : null;
-    const outputPath = keepFile ? resolve(outputDir, `${baseName}.docx`) : null;
-    if (keepFile) mkdirSync(outputDir, { recursive: true });
+    const outputPath = keepFile ? resolveOutputPath(evalId, fixture, task) : null;
 
-    // 1. Create client with isolated state directory
+    // Open document
     let client;
     try {
-      client = sdk.createSuperDocClient({
-        startupTimeoutMs: 15_000,
-        requestTimeoutMs: 30_000,
-        watchdogTimeoutMs: 120_000,
-        env: { SUPERDOC_CLI_STATE_DIR: stateDir },
-      });
-      await client.connect();
-      await client.doc.open({ doc: docPath });
+      client = await openDocument(sdk, docPath, stateDir);
     } catch (err) {
-      cleanup(docPath, stateDir);
+      cleanupTemp(docPath, stateDir);
       return { error: `Failed to open document: ${err.message}` };
     }
 
-    // 2. Load tools
-    const activeToolMap = new Map();
+    // Load tools
+    let activeToolMap;
     try {
-      const chosen = await sdk.chooseTools({ provider: 'openai' });
-      for (const t of chosen.tools) {
-        const name = t.function?.name;
-        if (name) activeToolMap.set(name, t);
-      }
+      activeToolMap = await loadTools(sdk);
     } catch (err) {
-      await client.dispose().catch(() => {});
-      cleanup(docPath, stateDir);
+      await closeDocument(client);
+      cleanupTemp(docPath, stateDir);
       return { error: `Failed to load tools: ${err.message}` };
     }
 
-    // 3. Build messages
-    const task = vars.task || prompt;
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT.replace('{{task}}', task) },
-      { role: 'user', content: task },
-    ];
-
-    // 4. Agent loop
-    const openai = new OpenAI();
-    const toolLog = [];
-
+    // Run agent loop
     try {
-      for (let turn = 0; turn < MAX_TURNS; turn++) {
-        const response = await openai.chat.completions.create({
-          model,
-          messages,
-          tools: [...activeToolMap.values()],
-          temperature: 0,
-        });
-
-        const message = response.choices[0].message;
-        messages.push(message);
-        if (!message.tool_calls?.length) break;
-
-        for (const call of message.tool_calls) {
-          const toolName = call.function.name;
-          let toolArgs;
-          try { toolArgs = JSON.parse(call.function.arguments || '{}'); }
-          catch { toolArgs = {}; }
-
-          let result;
-          try {
-            if (toolName === DISCOVER_TOOLS_NAME) {
-              const groups = Array.isArray(toolArgs.groups) ? toolArgs.groups : [];
-              const discovered = await sdk.chooseTools({ provider: 'openai', groups, mode: 'essential', includeDiscoverTool: false });
-              let added = 0;
-              for (const t of discovered.tools) {
-                const name = t.function?.name;
-                if (name && !activeToolMap.has(name)) { activeToolMap.set(name, t); added++; }
-              }
-              result = { ok: true, loaded: groups, newTools: added };
-            } else {
-              result = await sdk.dispatchSuperDocTool(client, toolName, cleanArgs(toolArgs));
-            }
-          } catch (err) {
-            result = { ok: false, error: err.message };
-          }
-
-          toolLog.push({ tool: toolName, ok: !result?.error });
-          messages.push({ role: 'tool', tool_call_id: call.id, content: typeof result === 'string' ? result : JSON.stringify(result) });
-        }
-      }
-
-      // 5. Get final document text
+      const toolLog = await runAgentLoop(sdk, client, activeToolMap, task, model);
       const documentText = await client.doc.getText();
 
-      // 6. Save if keepFile
-      if (keepFile) await client.doc.save().catch(() => {});
+      await closeDocument(client, { save: keepFile });
 
-      // 7. Close
-      await client.doc.close().catch(() => {});
-      await client.dispose().catch(() => {});
-
-      // 8. Copy to output
       if (keepFile && outputPath) copyFileSync(docPath, outputPath);
-
-      // 9. Cleanup
-      cleanup(docPath, stateDir);
+      cleanupTemp(docPath, stateDir);
 
       return {
         output: JSON.stringify({
@@ -185,8 +190,8 @@ export default class SuperDocAgentProvider {
         }),
       };
     } catch (err) {
-      await client.dispose().catch(() => {});
-      cleanup(docPath, stateDir);
+      await closeDocument(client);
+      cleanupTemp(docPath, stateDir);
       return { error: `Agent loop failed: ${err.message}` };
     }
   }

@@ -3115,8 +3115,12 @@ describe('DomPainter', () => {
     const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
     expect(span).toBeTruthy();
     expect(span.dataset.commentIds).toBe('comment-hl');
-    // Comment highlight should be applied even when Word highlight is present
-    expect(span.style.backgroundColor).not.toBe('');
+    // Comment highlight should override Word highlight (#ffff00 → yellow)
+    const bg = span.style.backgroundColor;
+    expect(bg).not.toBe('');
+    expect(bg).not.toBe('#ffff00');
+    expect(bg).not.toBe('rgb(255, 255, 0)');
+    expect(bg).not.toBe('yellow');
   });
 
   it('applies comment highlight styles for non-tracked-change comments', () => {

@@ -94,6 +94,16 @@ export const replaceAroundStep = ({
     return;
   }
 
+  // Detect setNodeMarkup steps: they preserve the node type and content,
+  // only changing attributes (e.g. paragraph styleId for heading changes).
+  // These are safe to apply — they don't alter document structure.
+  const isNodeMarkupChange = step.structure && step.gapFrom === step.from + 1 && step.gapTo === step.to - 1;
+
+  if (isNodeMarkupChange) {
+    newTr.step(step);
+    return;
+  }
+
   const inputType = tr.getMeta('inputType');
   const isBackspace = inputType === 'deleteContentBackward';
 

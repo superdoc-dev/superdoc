@@ -4470,7 +4470,10 @@ export class PresentationEditor extends EventEmitter {
       ...(firstSection?.margins?.header != null ? { header: firstSection.margins.header } : {}),
       ...(firstSection?.margins?.footer != null ? { footer: firstSection.margins.footer } : {}),
     };
-    const columns = firstSection?.columns ?? defaults.columns;
+    // For the first emitted section break, absence of w:cols means OOXML single-column default.
+    // Falling back to document defaults here is wrong because bodySectPr often reflects the
+    // final section, which can leak a later multi-column configuration into the document start.
+    const columns = firstSection ? (firstSection.columns ?? { count: 1, gap: 0 }) : defaults.columns;
 
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;

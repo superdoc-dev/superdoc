@@ -932,6 +932,7 @@ export type SectionBreakBlock = {
   columns?: {
     count: number;
     gap: number;
+    widths?: number[];
     equalWidth?: boolean;
   };
   /**
@@ -1419,6 +1420,8 @@ export type FlowBlock =
 export type ColumnLayout = {
   count: number;
   gap: number;
+  widths?: number[];
+  equalWidth?: boolean;
 };
 
 /** A measured line within a block, output by the measurer. */

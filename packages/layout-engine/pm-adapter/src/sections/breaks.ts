@@ -69,6 +69,16 @@ export function shallowObjectEquals(x?: Record<string, unknown>, y?: Record<stri
   return kx.every((k) => x[k] === y[k]);
 }
 
+const widthsEqual = (a?: number[], b?: number[]): boolean => {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+};
+
 /**
  * Deep equality check for SectionSignature objects to determine if
  * two section configurations are identical.
@@ -83,7 +93,14 @@ export function signaturesEqual(a: SectionSignature, b: SectionSignature): boole
 
   const columnsEq =
     (!a.columnsPx && !b.columnsPx) ||
-    !!(a.columnsPx && b.columnsPx && a.columnsPx.count === b.columnsPx.count && a.columnsPx.gap === b.columnsPx.gap);
+    !!(
+      a.columnsPx &&
+      b.columnsPx &&
+      a.columnsPx.count === b.columnsPx.count &&
+      a.columnsPx.gap === b.columnsPx.gap &&
+      a.columnsPx.equalWidth === b.columnsPx.equalWidth &&
+      widthsEqual(a.columnsPx.widths, b.columnsPx.widths)
+    );
 
   const numberingEq =
     (!a?.numbering && !b?.numbering) ||

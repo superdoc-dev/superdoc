@@ -290,9 +290,9 @@ describe('shouldSkipBalancing', () => {
   });
 
   it('should NOT skip when content can be meaningfully distributed', () => {
-    // 100px total / 2 columns = 50px per column, above minColumnHeight (20px)
+    // 100px total exceeds the available single-column height (80px), so balancing is needed.
     const ctx = createContext(2, [createBlock('block-1', 50), createBlock('block-2', 50)], {
-      availableHeight: 1000,
+      availableHeight: 80,
     });
 
     expect(shouldSkipBalancing(ctx, DEFAULT_BALANCING_CONFIG)).toBe(false);
@@ -357,7 +357,7 @@ describe('balancePageColumns', () => {
         ['block-4', createMeasure('paragraph', [20])],
       ]);
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, measureMap);
+      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 40, measureMap);
 
       // Block 1 stays in column 0
       expect(fragments[0].x).toBe(96);
@@ -374,7 +374,7 @@ describe('balancePageColumns', () => {
         ['block-2', createMeasure('paragraph', [20])],
       ]);
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, measureMap);
+      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 30, measureMap);
 
       // Both fragments should have width set to column width
       expect(fragments[0].width).toBe(288);
@@ -403,7 +403,7 @@ describe('balancePageColumns', () => {
         ['block-6', createMeasure('paragraph', [20])],
       ]);
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, measureMap);
+      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 50, measureMap);
 
       // Column 0: blocks 1, 2 - Y positions stack from top
       expect(fragments[0].y).toBe(96);
@@ -437,7 +437,7 @@ describe('balancePageColumns', () => {
         ['block-6', createMeasure('paragraph', [20])],
       ]);
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, measureMap);
+      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 50, measureMap);
 
       // With >= condition: target = 120px / 2 = 60px per column
       // Block 1 (20px): column 0, height=20
@@ -480,7 +480,7 @@ describe('balancePageColumns', () => {
         ['block-6', createMeasure('paragraph', [21])],
       ]);
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, measureMap);
+      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 70, measureMap);
 
       // Blocks 1, 2 should be in column 0
       expect(fragments[0].x).toBe(96);
@@ -505,7 +505,7 @@ describe('balancePageColumns', () => {
       const origX1 = fragments[0].x;
       const origX2 = fragments[1].x;
 
-      balancePageColumns(fragments, { count: 1, gap: 0, width: 624 }, { left: 96 }, 96, measureMap);
+      balancePageColumns(fragments, { count: 1, gap: 0, width: 624 }, { left: 96 }, 96, 1000, measureMap);
 
       // Should not modify positions for single column
       expect(fragments[0].x).toBe(origX1);
@@ -518,7 +518,7 @@ describe('balancePageColumns', () => {
 
       // Should not throw
       expect(() =>
-        balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, measureMap),
+        balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 1000, measureMap),
       ).not.toThrow();
     });
 
@@ -529,7 +529,7 @@ describe('balancePageColumns', () => {
 
       // Should not throw - block-2 will have height 0
       expect(() =>
-        balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, measureMap),
+        balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 10, measureMap),
       ).not.toThrow();
     });
 
@@ -552,7 +552,7 @@ describe('balancePageColumns', () => {
         ['block-6', createMeasure('paragraph', [20])],
       ]);
 
-      balancePageColumns(fragments, { count: 3, gap: 24, width: 192 }, { left: 96 }, 96, measureMap);
+      balancePageColumns(fragments, { count: 3, gap: 24, width: 192 }, { left: 96 }, 96, 30, measureMap);
 
       // Verify 3 columns are used
       const colXValues = new Set(fragments.map((f) => f.x));

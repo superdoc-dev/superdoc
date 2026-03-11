@@ -826,6 +826,49 @@ describe('toFlowBlocks', () => {
       expect((tailBreaks[0] as never).attrs?.requirePageBoundary).toBeUndefined();
     });
 
+    it('preserves explicit custom column widths for continuous section breaks', () => {
+      const pmDoc: PMNode = {
+        type: 'doc',
+        attrs: { bodySectPr: createTestBodySectPr() },
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Single column' }] },
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                sectPr: {
+                  elements: [
+                    { name: 'w:type', attributes: { 'w:val': 'continuous' } },
+                    {
+                      name: 'w:cols',
+                      attributes: { 'w:num': '2', 'w:equalWidth': '0' },
+                      elements: [
+                        { name: 'w:col', attributes: { 'w:w': '1080', 'w:space': '1523' } },
+                        { name: 'w:col', attributes: { 'w:w': '7459' } },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            content: [{ type: 'text', text: 'Custom columns' }],
+          },
+        ],
+      } as never;
+
+      const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+      const allBreaks = getSectionBreaks(blocks, { includeFirst: true });
+      const contentBreak = allBreaks.find((b) => b.attrs?.sectionIndex === 0);
+
+      expect(contentBreak).toBeDefined();
+      expect((contentBreak as FlowBlock).columns).toEqual({
+        count: 2,
+        gap: 101.53333333333333,
+        widths: [72, 497.26666666666665],
+        equalWidth: false,
+      });
+    });
+
     it('does not mark requirePageBoundary when header/footer margins change', () => {
       const pmDoc: PMNode = {
         type: 'doc',

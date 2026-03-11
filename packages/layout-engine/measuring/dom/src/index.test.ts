@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { measureBlock } from './index.js';
 import type {
   FlowBlock,
@@ -2205,6 +2205,79 @@ describe('measureBlock', () => {
   });
 
   describe('overflow protection', () => {
+    it('does not character-break a borderline single word because of tiny measurement overflow', async () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      expect(ctx).not.toBeNull();
+      const contextPrototype = Object.getPrototypeOf(ctx) as CanvasRenderingContext2D;
+      const originalMeasureText = contextPrototype.measureText;
+      const widthMap = new Map<string, number>([
+        ['Terms', 48.9],
+        ['Term', 39.125],
+        ['Ter', 30],
+        ['Te', 20],
+        ['T', 10],
+        ['s', 8.8984375],
+        ['1.', 13.34375],
+      ]);
+      const measureTextSpy = vi.spyOn(contextPrototype, 'measureText').mockImplementation(function (text: string) {
+        const mappedWidth = widthMap.get(text);
+        if (mappedWidth != null) {
+          return {
+            width: mappedWidth,
+            actualBoundingBoxLeft: 0,
+            actualBoundingBoxRight: mappedWidth,
+            actualBoundingBoxAscent: 12,
+            actualBoundingBoxDescent: 4,
+          } as TextMetrics;
+        }
+        return originalMeasureText.call(this, text);
+      });
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'borderline-overflow-list-item',
+        runs: [
+          {
+            text: 'Terms',
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 16,
+            bold: true,
+            letterSpacing: -0.13333333333333333,
+          },
+        ],
+        attrs: {
+          styleId: 'ListParagraph',
+          indent: { left: 24, hanging: 23.933333333333334 },
+          wordLayout: {
+            indentLeftPx: 24,
+            hangingPx: 23.933333333333334,
+            textStartPx: 24,
+            marker: {
+              markerText: '1.',
+              markerBoxWidthPx: 23.933333333333334,
+              textStartX: 24,
+              gutterWidthPx: 8,
+              suffix: 'tab',
+              run: {
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 16,
+                bold: true,
+              },
+            },
+          },
+        },
+      };
+
+      try {
+        const measure = expectParagraphMeasure(await measureBlock(block, 72.26666666666667));
+        expect(measure.lines).toHaveLength(1);
+        expect(extractLineText(block, measure.lines[0])).toBe('Terms');
+      } finally {
+        measureTextSpy.mockRestore();
+      }
+    });
+
     it('keeps justified line packed by allowing small space flex (Word parity case)', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

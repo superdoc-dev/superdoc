@@ -44,6 +44,13 @@ const SUPPORTED_DELETE_NODE_TYPES = new Set<string>(DELETABLE_BLOCK_NODE_TYPES);
 const REJECTED_DELETE_NODE_TYPES = new Set(['tableRow', 'tableCell']);
 const TEXT_PREVIEW_MAX_LENGTH = 80;
 
+/**
+ * PM node types that `mapBlockNodeType` does not recognize but are safe to
+ * include in range deletions. Passthrough nodes preserve opaque OOXML XML
+ * and don't contain user-addressable content.
+ */
+const RANGE_DELETE_SAFE_NODE_TYPES = new Set(['passthroughBlock', 'passthroughInline']);
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -314,11 +321,15 @@ function rejectUnmappedNodesInRange(doc: ProseMirrorNode, rangeBlocks: BlockCand
 
     // Only inspect children that overlap the deletion range
     if (childEnd > rangeFrom && offset < rangeTo && !recognizedPositions.has(offset)) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        `blocks.deleteRange cannot delete range: unrecognized node "${child.type.name}" at position ${offset} would be silently removed.`,
-        { pmNodeType: child.type.name, pos: offset },
-      );
+      // Passthrough nodes (opaque OOXML preservation) are safe to delete —
+      // they contain no user-addressable content.
+      if (!RANGE_DELETE_SAFE_NODE_TYPES.has(child.type.name)) {
+        throw new DocumentApiAdapterError(
+          'INVALID_TARGET',
+          `blocks.deleteRange cannot delete range: unrecognized node "${child.type.name}" at position ${offset} would be silently removed.`,
+          { pmNodeType: child.type.name, pos: offset },
+        );
+      }
     }
 
     offset = childEnd;

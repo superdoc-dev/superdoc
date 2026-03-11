@@ -724,6 +724,36 @@ describe('blocksDeleteRangeWrapper', () => {
     }
   });
 
+  it('allows passthrough nodes in a deletion range (opaque OOXML preservation)', () => {
+    const p1 = createNode('paragraph', [createNode('text', [], { text: 'First' })], {
+      attrs: { paraId: 'p1', sdBlockId: 'p1' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const passthrough = createNode('passthroughBlock', [], {
+      attrs: { originalName: 'w:bookmarkStart', originalXml: '<w:bookmarkStart/>' },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const p2 = createNode('paragraph', [createNode('text', [], { text: 'Last' })], {
+      attrs: { paraId: 'p2', sdBlockId: 'p2' },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const editor = makeRangeDeleteEditor([p1, passthrough, p2]);
+    const result = blocksDeleteRangeWrapper(
+      editor,
+      {
+        start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+        end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+      },
+      { changeMode: 'direct' },
+    );
+    expect(result.success).toBe(true);
+    expect(result.deletedCount).toBe(2); // Only recognized blocks counted
+  });
+
   it('resolves correctly when different node types share the same nodeId', () => {
     // A paragraph and a listItem both have paraId "shared" — different nodeTypes
     // but the same raw nodeId. The old findBlockByNodeIdOnly approach would throw

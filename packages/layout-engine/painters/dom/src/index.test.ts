@@ -3123,6 +3123,65 @@ describe('DomPainter', () => {
     expect(bg).not.toBe('yellow');
   });
 
+  it('applies active comment highlight over Word highlight when comment is selected (SD-2188)', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'active-hl-block',
+      runs: [
+        {
+          text: 'Active highlighted',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          highlight: '#ffff00',
+          comments: [{ commentId: 'comment-active-hl', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
+
+    const painter = createDomPainter({ blocks: [block], measures: [paragraphMeasure] });
+    painter.setActiveComment('comment-active-hl');
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    const bg = span.style.backgroundColor;
+    expect(bg).not.toBe('');
+    expect(bg).not.toBe('#ffff00');
+    expect(bg).not.toBe('rgb(255, 255, 0)');
+  });
+
+  it('applies faded comment highlight over Word highlight when another comment is active (SD-2188)', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'faded-hl-block',
+      runs: [
+        {
+          text: 'Faded highlighted',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          highlight: '#ffff00',
+          comments: [{ commentId: 'comment-faded-hl', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
+
+    const painter = createDomPainter({ blocks: [block], measures: [paragraphMeasure] });
+    // Activate a different comment so this one gets faded
+    painter.setActiveComment('some-other-comment');
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    const bg = span.style.backgroundColor;
+    expect(bg).not.toBe('');
+    expect(bg).not.toBe('#ffff00');
+    expect(bg).not.toBe('rgb(255, 255, 0)');
+  });
+
   it('applies comment highlight styles for non-tracked-change comments', () => {
     const commentBlock: FlowBlock = {
       kind: 'paragraph',

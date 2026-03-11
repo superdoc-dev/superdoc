@@ -148,6 +148,155 @@ describe('replaceAroundStep handler', () => {
     return newTr;
   };
 
+  describe('isNodeMarkupChange detection', () => {
+    it('allows setNodeMarkup-style steps through (structure=true, insert=1, gap=±1)', () => {
+      const doc = schema.nodes.doc.create(
+        {},
+        schema.nodes.paragraph.create(
+          { paragraphProperties: { styleId: 'Normal' } },
+          schema.nodes.run.create({}, [schema.text('Hello')]),
+        ),
+      );
+      const state = createState(doc);
+
+      // Build a ReplaceAroundStep that matches setNodeMarkup: structure=true, insert=1,
+      // gapFrom=from+1, gapTo=to-1 (wraps the same content in a new node with different attrs)
+      let paraStart = null;
+      let paraEnd = null;
+      state.doc.forEach((node, offset) => {
+        if (paraStart === null && node.type.name === 'paragraph') {
+          paraStart = offset;
+          paraEnd = offset + node.nodeSize;
+        }
+      });
+
+      const newParagraph = schema.nodes.paragraph.create({ paragraphProperties: { styleId: 'Heading1' } });
+      const step = new ReplaceAroundStep(
+        paraStart,
+        paraEnd,
+        paraStart + 1,
+        paraEnd - 1,
+        new Slice(Fragment.from(newParagraph), 0, 0),
+        1,
+        true,
+      );
+
+      const tr = state.tr;
+      tr.setMeta('inputType', 'insertParagraph'); // non-backspace — would normally be blocked
+      const newTr = state.tr;
+      const map = new Mapping();
+
+      replaceAroundStep({
+        state,
+        tr,
+        step,
+        newTr,
+        map,
+        doc: state.doc,
+        user,
+        date,
+        originalStep: step,
+        originalStepIndex: 0,
+      });
+
+      // The step should be applied directly (not blocked)
+      expect(newTr.steps.length).toBe(1);
+      expect(newTr.steps[0]).toBe(step);
+    });
+
+    it('blocks lift-style steps (structure=true, insert=0, gap=±1)', () => {
+      const doc = schema.nodes.doc.create(
+        {},
+        schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Hello')])),
+      );
+      const state = createState(doc);
+
+      let paraStart = null;
+      let paraEnd = null;
+      state.doc.forEach((node, offset) => {
+        if (paraStart === null && node.type.name === 'paragraph') {
+          paraStart = offset;
+          paraEnd = offset + node.nodeSize;
+        }
+      });
+
+      // lift-style step: insert=0, structure=true, gap=±1
+      const step = new ReplaceAroundStep(paraStart, paraEnd, paraStart + 1, paraEnd - 1, Slice.empty, 0, true);
+
+      const tr = state.tr;
+      tr.setMeta('inputType', 'insertParagraph');
+      const newTr = state.tr;
+      const map = new Mapping();
+
+      replaceAroundStep({
+        state,
+        tr,
+        step,
+        newTr,
+        map,
+        doc: state.doc,
+        user,
+        date,
+        originalStep: step,
+        originalStepIndex: 0,
+      });
+
+      // Should be blocked — not a node markup change
+      expect(newTr.steps.length).toBe(0);
+    });
+
+    it('appends step mapping after applying node markup change', () => {
+      const doc = schema.nodes.doc.create(
+        {},
+        schema.nodes.paragraph.create(
+          { paragraphProperties: { styleId: 'Normal' } },
+          schema.nodes.run.create({}, [schema.text('Hello')]),
+        ),
+      );
+      const state = createState(doc);
+
+      let paraStart = null;
+      let paraEnd = null;
+      state.doc.forEach((node, offset) => {
+        if (paraStart === null && node.type.name === 'paragraph') {
+          paraStart = offset;
+          paraEnd = offset + node.nodeSize;
+        }
+      });
+
+      const newParagraph = schema.nodes.paragraph.create({ paragraphProperties: { styleId: 'Heading1' } });
+      const step = new ReplaceAroundStep(
+        paraStart,
+        paraEnd,
+        paraStart + 1,
+        paraEnd - 1,
+        new Slice(Fragment.from(newParagraph), 0, 0),
+        1,
+        true,
+      );
+
+      const tr = state.tr;
+      const newTr = state.tr;
+      const map = new Mapping();
+
+      replaceAroundStep({
+        state,
+        tr,
+        step,
+        newTr,
+        map,
+        doc: state.doc,
+        user,
+        date,
+        originalStep: step,
+        originalStepIndex: 0,
+      });
+
+      // map should have been updated
+      expect(map.maps.length).toBe(1);
+    });
+  });
+
   describe('non-backspace blocking', () => {
     it('blocks non-backspace ReplaceAroundStep (no steps added to newTr)', () => {
       const doc = schema.nodes.doc.create(

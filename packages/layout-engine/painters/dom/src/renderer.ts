@@ -4597,7 +4597,7 @@ export class DomPainter {
     const hasAnyComment = !!commentAnnotations?.length;
     const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
 
-    if (commentHighlight.color && !textRun.highlight && hasAnyComment) {
+    if (commentHighlight.color && hasAnyComment) {
       (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
       // Add thin visual indicator for nested comments when outer comment is selected
       // Use box-shadow instead of border to avoid affecting text layout

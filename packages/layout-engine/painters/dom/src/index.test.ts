@@ -3089,6 +3089,36 @@ describe('DomPainter', () => {
     expect(span.style.backgroundColor).not.toBe('');
   });
 
+  it('applies comment highlight even when text has Word highlight formatting (SD-2188)', () => {
+    const highlightedCommentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'highlight-comment-block',
+      runs: [
+        {
+          text: 'Highlighted and commented',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          highlight: '#ffff00',
+          comments: [{ commentId: 'comment-hl', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      highlightedCommentBlock.id,
+      highlightedCommentBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({ blocks: [highlightedCommentBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.dataset.commentIds).toBe('comment-hl');
+    // Comment highlight should be applied even when Word highlight is present
+    expect(span.style.backgroundColor).not.toBe('');
+  });
+
   it('applies comment highlight styles for non-tracked-change comments', () => {
     const commentBlock: FlowBlock = {
       kind: 'paragraph',

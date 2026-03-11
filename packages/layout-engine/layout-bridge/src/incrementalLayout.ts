@@ -8,6 +8,7 @@ import type {
   ColumnLayout,
   SectionBreakBlock,
 } from '@superdoc/contracts';
+import { cloneColumnLayout } from '@superdoc/contracts';
 import {
   layoutDocument,
   layoutHeaderFooter,
@@ -127,16 +128,6 @@ const COLUMN_EPSILON = 0.01;
 
 type NormalizedColumns = ColumnLayout & { width: number };
 type PageColumns = NormalizedColumns & { left: number; contentWidth: number };
-
-const cloneColumnLayout = (columns?: ColumnLayout): ColumnLayout =>
-  columns
-    ? {
-        count: columns.count,
-        gap: columns.gap,
-        ...(Array.isArray(columns.widths) ? { widths: [...columns.widths] } : {}),
-        ...(columns.equalWidth !== undefined ? { equalWidth: columns.equalWidth } : {}),
-      }
-    : { count: 1, gap: 0 };
 
 const resolveMaxColumnWidth = (contentWidth: number, columns?: ColumnLayout): number => {
   if (!columns || columns.count <= 1) return contentWidth;

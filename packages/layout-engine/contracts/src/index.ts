@@ -25,6 +25,7 @@ export {
 } from './clip-path-inset.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
+export { cloneColumnLayout, widthsEqual } from './column-layout.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';

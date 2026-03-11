@@ -5,6 +5,7 @@
  */
 
 import type { SectionBreakBlock, FlowBlock } from '@superdoc/contracts';
+import { widthsEqual } from '@superdoc/contracts';
 import type { PMNode } from '../types.js';
 import type { SectionRange, SectionSignature, SectPrElement } from './types.js';
 
@@ -68,16 +69,6 @@ export function shallowObjectEquals(x?: Record<string, unknown>, y?: Record<stri
   if (kx.length !== ky.length) return false;
   return kx.every((k) => x[k] === y[k]);
 }
-
-const widthsEqual = (a?: number[], b?: number[]): boolean => {
-  if (!a && !b) return true;
-  if (!a || !b) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-};
 
 /**
  * Deep equality check for SectionSignature objects to determine if

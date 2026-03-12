@@ -104,6 +104,11 @@ import {
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
+import {
+  isRtlParagraph,
+  applyRtlStyles,
+  shouldUseSegmentPositioning,
+} from './features/rtl-paragraph/index.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -5181,13 +5186,7 @@ export class DomPainter {
       el.setAttribute('styleid', styleId);
     }
     const pAttrs = block.attrs as ParagraphAttrs | undefined;
-    const alignment = pAttrs?.alignment;
-    const isRtl = pAttrs?.direction === 'rtl' || pAttrs?.rtl;
-
-    if (isRtl) {
-      el.dir = 'rtl';
-    }
-    el.style.textAlign = resolveTextAlign(alignment, isRtl ?? false);
+    const isRtl = applyRtlStyles(el, pAttrs);
 
     if (lineRange.pmStart != null) {
       el.dataset.pmStart = String(lineRange.pmStart);
@@ -5441,11 +5440,11 @@ export class DomPainter {
       el.style.wordSpacing = `${spacingPerSpace}px`;
     }
 
-    if (hasExplicitPositioning && line.segments && !isRtl) {
+    if (shouldUseSegmentPositioning(hasExplicitPositioning ?? false, Boolean(line.segments), isRtl)) {
       // Use segment-based rendering with absolute positioning for tab-aligned text.
-      // Skipped for RTL: the layout engine computes tab X positions in LTR order,
-      // so for RTL paragraphs we fall through to inline-flow rendering where the
-      // browser's native bidi algorithm handles tab positioning via dir="rtl".
+      // shouldUseSegmentPositioning returns false for RTL because the layout engine
+      // computes tab positions in LTR order; RTL lines fall through to inline-flow
+      // rendering where dir="rtl" lets the browser handle tab positioning.
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
@@ -5468,8 +5467,9 @@ export class DomPainter {
       const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
+      const segments = line.segments!;
       const segmentsByRun = new Map<number, LineSegment[]>();
-      line.segments.forEach((segment) => {
+      segments.forEach((segment) => {
         const list = segmentsByRun.get(segment.runIndex);
         if (list) {
           list.push(segment);
@@ -6979,35 +6979,12 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
   });
 };
 
-/**
- * Compute the effective CSS text-align for a paragraph given its alignment
- * attribute and direction. DomPainter handles justify via per-line
- * word-spacing, so 'justify' becomes 'left' (LTR) or 'right' (RTL) to
- * align the last line correctly.
- */
-const resolveTextAlign = (alignment: ParagraphAttrs['alignment'], isRtl: boolean): string => {
-  switch (alignment) {
-    case 'center':
-    case 'right':
-    case 'left':
-      return alignment;
-    case 'justify':
-      return isRtl ? 'right' : 'left';
-    default:
-      return isRtl ? 'right' : 'left';
-  }
-};
-
 const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
   if (!attrs) return;
   if (attrs.styleId) {
     element.setAttribute('styleid', attrs.styleId);
   }
-  const isRtl = attrs.direction === 'rtl' || attrs.rtl;
-  if (isRtl) {
-    element.dir = 'rtl';
-  }
-  element.style.textAlign = resolveTextAlign(attrs.alignment, isRtl ?? false);
+  applyRtlStyles(element, attrs);
   if ((attrs as Record<string, unknown>).dropCap) {
     element.classList.add('sd-editor-dropcap');
   }

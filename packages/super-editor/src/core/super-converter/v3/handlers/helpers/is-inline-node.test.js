@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { isInlineNode } from './is-inline-node.js';
 
 describe('isInlineNode', () => {
-  it('treats text and bookmark nodes as inline without schema metadata', () => {
+  it('treats common importer inline nodes as inline without schema metadata', () => {
     expect(isInlineNode({ type: 'text', text: 'x' })).toBe(true);
+    expect(isInlineNode({ type: 'run', content: [] })).toBe(true);
     expect(isInlineNode({ type: 'bookmarkStart', attrs: { id: '1' } })).toBe(true);
     expect(isInlineNode({ type: 'bookmarkEnd', attrs: { id: '1' } })).toBe(true);
+    expect(isInlineNode({ type: 'tab' })).toBe(true);
+    expect(isInlineNode({ type: 'footnoteReference', attrs: { id: '1' } })).toBe(true);
   });
 
   it('uses nodeType.isInline when available', () => {

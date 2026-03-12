@@ -7,10 +7,37 @@
  * @param {import('prosemirror-model').Schema | undefined} schema
  * @returns {boolean}
  */
+const INLINE_FALLBACK_TYPES = new Set([
+  'text',
+  'run',
+  'bookmarkStart',
+  'bookmarkEnd',
+  'tab',
+  'lineBreak',
+  'hardBreak',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'commentReference',
+  'permStart',
+  'permEnd',
+  'footnoteReference',
+  'endnoteReference',
+  'fieldAnnotation',
+  'structuredContent',
+  'passthroughInline',
+  'page-number',
+  'total-page-number',
+  'pageReference',
+  'crossReference',
+  'citation',
+  'authorityEntry',
+  'sequenceField',
+  'indexEntry',
+  'tableOfContentsEntry',
+]);
+
 export function isInlineNode(node, schema) {
   if (!node || typeof node !== 'object' || typeof node.type !== 'string') return false;
-  if (node.type === 'text') return true;
-  if (node.type === 'bookmarkStart' || node.type === 'bookmarkEnd') return true;
 
   const nodeType = schema?.nodes?.[node.type];
   if (nodeType) {
@@ -20,5 +47,5 @@ export function isInlineNode(node, schema) {
     }
   }
 
-  return false;
+  return INLINE_FALLBACK_TYPES.has(node.type);
 }

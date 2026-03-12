@@ -462,4 +462,25 @@ describe('docPartObj paragraph import regression', () => {
     expect(result[2].content?.[0]?.type).toBe('run');
     expect(result[2].content?.[0]?.content?.[0]).toMatchObject({ type: 'text', text: 'After' });
   });
+
+  it('keeps normal paragraphs intact when schema metadata is unavailable', () => {
+    const nodeListHandler = defaultNodeListHandler();
+    const paragraphNode = {
+      name: 'w:p',
+      attributes: { 'w:rsidRDefault': 'CCC333' },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Header text' }] }] }],
+    };
+
+    const result = nodeListHandler.handler({
+      nodes: [paragraphNode],
+      docx: {},
+      editor: {},
+      path: [],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('paragraph');
+    expect(result[0].content?.[0]?.type).toBe('run');
+    expect(result[0].content?.[0]?.content?.[0]).toMatchObject({ type: 'text', text: 'Header text' });
+  });
 });

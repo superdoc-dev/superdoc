@@ -1,5 +1,7 @@
 // @ts-check
 import { getStyleTagFromStyleId } from '@core/super-converter/v2/importer/listImporter.js';
+import { translator as wAbstractNumTranslator } from '@core/super-converter/v3/handlers/w/abstractNum';
+import { translator as wNumTranslator } from '@core/super-converter/v3/handlers/w/num';
 import { baseBulletList, baseOrderedListDef } from './baseListDefinitions';
 import { updateNumberingProperties } from '@core/commands/changeListLevel';
 import { findParentNode } from './findParentNode.js';

@@ -27,6 +27,7 @@ export const createTrackStyleMark = (marks) => {
   const existingNode = marks.find((mark) => mark?.name === 'w:rPrChange');
   if (existingNode) {
     // Import path already produced a valid OOXML change node; re-use it verbatim.
+    // these xml nodes come from ins-translator and del-translator
     return existingNode;
   }
 

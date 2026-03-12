@@ -28,7 +28,7 @@ export function normalizeColumnLayout(
   contentWidth: number,
   epsilon = 0.0001,
 ): NormalizedColumnLayout {
-  const rawCount = Number.isFinite(input?.count) ? Math.floor(input.count) : 1;
+  const rawCount = input && Number.isFinite(input.count) ? Math.floor(input.count) : 1;
   const count = Math.max(1, rawCount || 1);
   const gap = Math.max(0, input?.gap ?? 0);
   const totalGap = gap * (count - 1);

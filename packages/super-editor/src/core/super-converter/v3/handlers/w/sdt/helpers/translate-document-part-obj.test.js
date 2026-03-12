@@ -86,8 +86,10 @@ describe('translateDocumentPartObj', () => {
     const result = translateDocumentPartObj({ node });
     const sdtPr = result.elements[0];
 
+    expect(sdtPr).not.toBe(passthroughSdtPr);
     expect(sdtPr.elements.find((el) => el.name === 'w:id')).toBeUndefined();
     expect(sdtPr.elements.find((el) => el.name === 'w:docPartObj')).toBeDefined();
     expect(sdtPr.elements.find((el) => el.name === 'w:foo')).toBeDefined();
+    expect(passthroughSdtPr.elements.find((el) => el.name === 'w:id')).toBeDefined();
   });
 });

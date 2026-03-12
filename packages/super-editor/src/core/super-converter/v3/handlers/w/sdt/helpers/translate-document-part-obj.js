@@ -61,13 +61,14 @@ function generateSdtPrForDocPartObj(attrs) {
   // If we do not know the gallery type, prefer full passthrough to avoid emitting invalid XML
   if (docPartGallery === null) {
     if (attrs.sdtPr) {
-      // Filter out any w:id elements with empty values to avoid invalid XML, but preserve all other passthrough elements
-      if (attrs.sdtPr.elements && Array.isArray(attrs.sdtPr.elements)) {
-        attrs.sdtPr.elements = attrs.sdtPr.elements.filter(
-          (el) => !(el.name === 'w:id' && el.attributes?.['w:val']?.trim() === ''),
-        );
-      }
-      return attrs.sdtPr;
+      // Filter out any w:id elements with empty values to avoid invalid XML, but preserve all other passthrough elements.
+      const filteredSdtPr = {
+        ...attrs.sdtPr,
+        elements: Array.isArray(attrs.sdtPr.elements)
+          ? attrs.sdtPr.elements.filter((el) => !(el.name === 'w:id' && el.attributes?.['w:val']?.trim() === ''))
+          : attrs.sdtPr.elements,
+      };
+      return filteredSdtPr;
     }
     const elements = [
       {

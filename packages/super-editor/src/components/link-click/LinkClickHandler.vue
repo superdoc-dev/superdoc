@@ -308,7 +308,7 @@ const openLinkInViewingMode = (detail) => {
   if (!href) return;
 
   if (href.startsWith('#') && href.length > 1) {
-    const presentationEditor = props.editor?.presentationEditor ?? props.editor?._presentationEditor ?? null;
+    const presentationEditor = props.editor?.presentationEditor ?? null;
     presentationEditor?.goToAnchor?.(href);
     return;
   }

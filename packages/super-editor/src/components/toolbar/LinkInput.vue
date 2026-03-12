@@ -211,9 +211,12 @@ const handleRemove = () => {
 };
 
 const navigateToAnchor = (url) => {
-  if (props.goToAnchor) props.goToAnchor(url);
-  const presentationEditor = props.editor?.presentationEditor ?? props.editor?._presentationEditor ?? null;
-  presentationEditor?.goToAnchor?.(url);
+  const presentationEditor = props.editor?.presentationEditor ?? null;
+  if (presentationEditor) {
+    presentationEditor.goToAnchor(url);
+  } else if (props.goToAnchor) {
+    props.goToAnchor(url);
+  }
 };
 </script>
 

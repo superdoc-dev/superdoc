@@ -289,11 +289,9 @@ describe('shouldSkipBalancing', () => {
     expect(shouldSkipBalancing(ctx, DEFAULT_BALANCING_CONFIG)).toBe(true);
   });
 
-  it('should NOT skip when content can be meaningfully distributed', () => {
-    // 100px total exceeds the available single-column height (80px), so balancing is needed.
-    const ctx = createContext(2, [createBlock('block-1', 50), createBlock('block-2', 50)], {
-      availableHeight: 80,
-    });
+  it('should NOT skip when content height clears the minimum thresholds', () => {
+    // 100px total / 2 columns = 50px per column, which is above minColumnHeight (20px).
+    const ctx = createContext(2, [createBlock('block-1', 50), createBlock('block-2', 50)]);
 
     expect(shouldSkipBalancing(ctx, DEFAULT_BALANCING_CONFIG)).toBe(false);
   });

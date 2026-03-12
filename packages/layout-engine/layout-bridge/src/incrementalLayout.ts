@@ -7,8 +7,9 @@ import type {
   ParagraphBlock,
   ColumnLayout,
   SectionBreakBlock,
+  NormalizedColumnLayout,
 } from '@superdoc/contracts';
-import { cloneColumnLayout } from '@superdoc/contracts';
+import { cloneColumnLayout, normalizeColumnLayout } from '@superdoc/contracts';
 import {
   layoutDocument,
   layoutHeaderFooter,
@@ -126,7 +127,7 @@ const footnoteColumnKey = (pageIndex: number, columnIndex: number): string => `$
 
 const COLUMN_EPSILON = 0.01;
 
-type NormalizedColumns = ColumnLayout & { width: number };
+type NormalizedColumns = NormalizedColumnLayout;
 type PageColumns = NormalizedColumns & { left: number; contentWidth: number };
 
 const resolveMaxColumnWidth = (contentWidth: number, columns?: ColumnLayout): number => {
@@ -136,49 +137,7 @@ const resolveMaxColumnWidth = (contentWidth: number, columns?: ColumnLayout): nu
 };
 
 const normalizeColumnsForFootnotes = (input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns => {
-  const rawCount = Number.isFinite(input?.count) ? Math.floor(input!.count) : 1;
-  const count = Math.max(1, rawCount || 1);
-  const gap = Math.max(0, input?.gap ?? 0);
-  const totalGap = gap * (count - 1);
-  const availableWidth = contentWidth - totalGap;
-  const explicitWidths =
-    Array.isArray(input?.widths) && input.widths.length > 0
-      ? input.widths.filter((width) => typeof width === 'number' && Number.isFinite(width) && width > 0)
-      : [];
-  let widths =
-    explicitWidths.length > 0
-      ? explicitWidths.slice(0, count)
-      : Array.from({ length: count }, () => (availableWidth > 0 ? availableWidth / count : contentWidth));
-
-  if (widths.length < count) {
-    const remaining = Math.max(0, availableWidth - widths.reduce((sum, width) => sum + width, 0));
-    const fallbackWidth = count - widths.length > 0 ? remaining / (count - widths.length) : 0;
-    widths.push(...Array.from({ length: count - widths.length }, () => fallbackWidth));
-  }
-
-  const totalExplicitWidth = widths.reduce((sum, width) => sum + width, 0);
-  if (availableWidth > 0 && totalExplicitWidth > 0) {
-    const scale = availableWidth / totalExplicitWidth;
-    widths = widths.map((width) => Math.max(1, width * scale));
-  }
-
-  const width = widths.reduce((max, value) => Math.max(max, value), 0);
-
-  if (!Number.isFinite(width) || width <= COLUMN_EPSILON) {
-    return {
-      count: 1,
-      gap: 0,
-      width: Math.max(0, contentWidth),
-    };
-  }
-
-  return {
-    count,
-    gap,
-    ...(widths.length > 0 ? { widths } : {}),
-    ...(input?.equalWidth !== undefined ? { equalWidth: input.equalWidth } : {}),
-    width,
-  };
+  return normalizeColumnLayout(input, contentWidth, COLUMN_EPSILON);
 };
 
 const ooXmlSectionColumns = (columns?: ColumnLayout): ColumnLayout => cloneColumnLayout(columns);

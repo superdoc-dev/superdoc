@@ -432,6 +432,7 @@ export class HeaderFooterSessionManager {
       resetSession: () => {
         this.#managerCleanups = [];
         this.#session = { mode: 'body' };
+        this.#teardownActiveEditorEventBridge();
         this.#activeEditor = null;
         this.#deps?.notifyInputBridgeTargetChanged();
       },

@@ -1799,9 +1799,16 @@ export class DomPainter {
     const zoom = this.zoomFactor;
     let scrollY: number;
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
+    // Check if the external scroll container is actually scrollable (content overflows its
+    // visible area). An element can have overflow:auto but still not scroll if it's in an
+    // unconstrained flex layout where the parent has only min-height (no height). In that
+    // case the element grows to fit content and scrollTop stays 0 — fall through to the
+    // viewport-based calculation instead.
+    const scrollCont = this.scrollContainer;
+    const isScrollContainerActive = scrollCont != null && scrollCont.scrollHeight > scrollCont.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
-    } else if (this.scrollContainer) {
+    } else if (isScrollContainerActive) {
       // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
       // Use scrollContainer.scrollTop with a cached mount offset instead of
       // getBoundingClientRect(). Rects are affected by spacer DOM mutations
@@ -1811,10 +1818,10 @@ export class DomPainter {
       // Computed once and cached; invalidated on mount/container/zoom change.
       if (this.scrollContainerMountOffset == null) {
         const mountRect = this.mount.getBoundingClientRect();
-        const containerRect = this.scrollContainer.getBoundingClientRect();
-        this.scrollContainerMountOffset = mountRect.top - containerRect.top + this.scrollContainer.scrollTop;
+        const containerRect = scrollCont.getBoundingClientRect();
+        this.scrollContainerMountOffset = mountRect.top - containerRect.top + scrollCont.scrollTop;
       }
-      scrollY = Math.max(0, (this.scrollContainer.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
+      scrollY = Math.max(0, (scrollCont.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
       // rect.top is in screen space (affected by CSS transform: scale).

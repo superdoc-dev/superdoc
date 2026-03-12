@@ -686,4 +686,65 @@ describe('DomPainter virtualization (vertical)', () => {
     expect(mount.querySelector('.superdoc-page-header')).toBeNull();
     expect(mount.querySelector('.superdoc-page-footer')).toBeNull();
   });
+
+  it('falls through to viewport-based calculation when scroll container is not actually scrollable (SD-2199)', () => {
+    // Reproduces the version tester bug: a wrapper has overflow:auto but is in an
+    // unconstrained flex layout (parent has only min-height, no height). The wrapper
+    // grows to fit content and scrollTop stays 0, so the scroll container branch
+    // must fall through to the viewport-based getBoundingClientRect path.
+    const pageCount = 20;
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 5, overscan: 1, gap: 72, paddingTop: 0 },
+    });
+
+    const layout = makeLayout(pageCount);
+    painter.paint(layout, mount);
+
+    // Mount itself is not scrollable
+    Object.defineProperty(mount, 'scrollHeight', { value: 100, configurable: true });
+    Object.defineProperty(mount, 'clientHeight', { value: 600, configurable: true });
+
+    // Create a scroll container that has overflow:auto CSS but is NOT actually
+    // scrollable (scrollHeight == clientHeight, like an unconstrained flex child).
+    const scrollWrapper = document.createElement('div');
+    Object.defineProperty(scrollWrapper, 'scrollHeight', { value: 8000, configurable: true });
+    Object.defineProperty(scrollWrapper, 'clientHeight', { value: 8000, configurable: true });
+    Object.defineProperty(scrollWrapper, 'scrollTop', { value: 0, writable: true, configurable: true });
+    scrollWrapper.getBoundingClientRect = () =>
+      ({ top: 0, left: 0, right: 400, bottom: 8000, width: 400, height: 8000, x: 0, y: 0, toJSON() {} }) as DOMRect;
+
+    painter.setScrollContainer!(scrollWrapper);
+
+    // Simulate window scroll: mount's rect.top becomes negative as user scrolls
+    const layoutScrollTarget = 5000;
+    mount.getBoundingClientRect = () =>
+      ({
+        top: -layoutScrollTarget,
+        left: 0,
+        right: 400,
+        bottom: 600 - layoutScrollTarget,
+        width: 400,
+        height: 600,
+        x: 0,
+        y: -layoutScrollTarget,
+        toJSON() {},
+      }) as DOMRect;
+
+    painter.onScroll!();
+
+    // With the fix, the non-scrollable scroll container is bypassed and
+    // getBoundingClientRect is used: scrollY = -(-5000) / 1 = 5000
+    // At scrollY=5000, anchor is page 8 (topOfIndex(8)=4576, topOfIndex(9)=5148)
+    // Window = 5, overscan = 1: start = max(0, 8 - 2 - 1) = 5, end = min(19, 5 + 4 + 2) = 11
+    // Pages: 5,6,7,8,9,10,11
+    const pages = mount.querySelectorAll('.superdoc-page');
+    const indices = Array.from(pages).map((p) => Number((p as HTMLElement).dataset.pageIndex));
+
+    // Key assertion: pages beyond the initial window (0-6) should be rendered
+    expect(indices.some((i) => i > 6)).toBe(true);
+    // Anchor page (8) should be in the rendered set
+    expect(indices).toContain(8);
+  });
 });

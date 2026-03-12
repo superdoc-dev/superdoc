@@ -1,20 +1,23 @@
-import { processOutputMarks } from '@converter/exporter.js';
+import { decodeRPrFromMarks } from '@converter/styles.js';
+import { translator as wRPrNodeTranslator } from '@converter/v3/handlers/w/rpr/rpr-translator.js';
 
-// Normalizes marks into the `{ type, attrs }` shape the exporter expects (or `null` if the type can't be inferred).
+// Normalizes marks into a stable `{ type, attrs }` shape before sending them into the newer
+// decodeRPrFromMarks + w:rPr translator pipeline.
 const normalizeMark = (mark) => {
   if (!mark) return null;
   const type = typeof mark.type === 'string' ? mark.type : typeof mark.type?.name === 'string' ? mark.type.name : null;
   if (!type) return null;
+  // Some snapshots only store `{ type }`; normalize to empty attrs so decodeRPrFromMarks stays safe.
   return { type, attrs: mark?.attrs || {} };
 };
 
 const toRunPropertyElements = (marks = []) =>
-  marks
-    .map((mark) => normalizeMark(mark))
-    .filter(Boolean)
-    .map((mark) => processOutputMarks([mark]))
-    .flat()
-    .filter((element) => element && Object.keys(element).length);
+  (() => {
+    const normalizedMarks = marks.map((mark) => normalizeMark(mark)).filter(Boolean);
+    const runProperties = decodeRPrFromMarks(normalizedMarks);
+    const rPrNode = wRPrNodeTranslator.decode({ node: { attrs: { runProperties } } });
+    return Array.isArray(rPrNode?.elements) ? rPrNode.elements : [];
+  })();
 /**
  * Creates export element for trackFormat mark
  * @param {Array} marks SD node marks.

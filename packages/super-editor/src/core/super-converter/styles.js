@@ -520,16 +520,19 @@ export function decodeRPrFromMarks(marks) {
   }
 
   marks.forEach((mark) => {
-    const type = mark.type.name ?? mark.type;
+    if (!mark) return;
+    const type = mark.type?.name ?? mark.type;
+    if (!type) return;
+    // Normalization guard: tracked format snapshots can be sparse (`{ type }`) so attrs may be missing.
+    const attrs = mark.attrs || {};
     switch (type) {
       case 'strike':
       case 'italic':
       case 'bold':
-        runProperties[type] = mark.attrs.value !== '0' && mark.attrs.value !== false;
+        runProperties[type] = attrs.value !== '0' && attrs.value !== false;
         break;
       case 'underline': {
-        const { underlineType, underlineColor, underlineThemeColor, underlineThemeTint, underlineThemeShade } =
-          mark.attrs;
+        const { underlineType, underlineColor, underlineThemeColor, underlineThemeTint, underlineThemeShade } = attrs;
         const underlineAttrs = {};
         if (underlineType) {
           underlineAttrs['w:val'] = underlineType;
@@ -552,11 +555,11 @@ export function decodeRPrFromMarks(marks) {
         break;
       }
       case 'highlight':
-        if (mark.attrs.color) {
-          if (mark.attrs.color.toLowerCase() === 'transparent') {
+        if (attrs.color) {
+          if (attrs.color.toLowerCase() === 'transparent') {
             runProperties.highlight = { 'w:val': 'none' };
           } else {
-            runProperties.highlight = { 'w:val': mark.attrs.color };
+            runProperties.highlight = { 'w:val': attrs.color };
           }
         }
         break;
@@ -564,9 +567,14 @@ export function decodeRPrFromMarks(marks) {
         runProperties.styleId = 'Hyperlink';
         break;
       case 'textStyle':
-        Object.keys(mark.attrs).forEach((attr) => {
-          const value = mark.attrs[attr];
+        Object.keys(attrs).forEach((attr) => {
+          const value = attrs[attr];
           switch (attr) {
+            case 'styleId':
+              if (value != null) {
+                runProperties.styleId = value;
+              }
+              break;
             case 'textTransform':
               if (value != null) {
                 runProperties[attr] = value;

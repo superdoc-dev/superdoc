@@ -446,6 +446,18 @@ describe('decodeRPrFromMarks', () => {
     expect(rPr).toEqual({ textTransform: 'uppercase' });
   });
 
+  it('should decode textStyle with styleId into run style', () => {
+    const marks = [{ type: 'textStyle', attrs: { styleId: 'Emphasis' } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr).toEqual({ styleId: 'Emphasis' });
+  });
+
+  it('should handle sparse mark snapshots with missing attrs', () => {
+    const marks = [{ type: 'bold' }, { type: 'italic' }, { type: 'textStyle' }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr).toEqual({ bold: true, italic: true });
+  });
+
   it('should decode link mark into Hyperlink styleId', () => {
     const marks = [{ type: 'link', attrs: { href: 'https://example.com' } }];
     const rPr = decodeRPrFromMarks(marks);

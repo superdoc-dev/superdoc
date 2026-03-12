@@ -372,9 +372,12 @@ describe('w:r r-translator (node)', () => {
                     {
                       type: 'textStyle',
                       attrs: {
+                        styleId: 'Emphasis',
                         color: '#FF0000',
                         fontFamily: 'Arial, sans-serif',
                         fontSize: '12pt',
+                        letterSpacing: '1.5pt',
+                        vertAlign: 'superscript',
                       },
                     },
                   ],
@@ -388,9 +391,12 @@ describe('w:r r-translator (node)', () => {
                     {
                       type: 'textStyle',
                       attrs: {
+                        styleId: 'Emphasis',
                         color: '#FF0000',
                         fontFamily: 'Arial, sans-serif',
                         fontSize: '12pt',
+                        letterSpacing: '1.5pt',
+                        vertAlign: 'superscript',
                       },
                     },
                   ],
@@ -425,7 +431,16 @@ describe('w:r r-translator (node)', () => {
     const fontNode = beforeProperties?.elements?.find((el) => el?.name === 'w:rFonts');
     expect(fontNode?.attributes?.['w:ascii']).toBe('Arial');
 
+    const styleNode = beforeProperties?.elements?.find((el) => el?.name === 'w:rStyle');
+    expect(styleNode?.attributes?.['w:val']).toBe('Emphasis');
+
     const sizeNode = beforeProperties?.elements?.find((el) => el?.name === 'w:sz');
-    expect(sizeNode?.attributes?.['w:val']).toBe(24);
+    expect(Number(sizeNode?.attributes?.['w:val'])).toBe(24);
+
+    const spacingNode = beforeProperties?.elements?.find((el) => el?.name === 'w:spacing');
+    expect(Number(spacingNode?.attributes?.['w:val'])).toBe(30);
+
+    const vertAlignNode = beforeProperties?.elements?.find((el) => el?.name === 'w:vertAlign');
+    expect(vertAlignNode?.attributes?.['w:val']).toBe('superscript');
   });
 });

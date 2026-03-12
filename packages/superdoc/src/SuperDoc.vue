@@ -307,7 +307,7 @@ const onEditorDocumentLocked = ({ editor, isLocked, lockedBy }) => {
   proxy.$superdoc.lockSuperdoc(isLocked, lockedBy);
 };
 
-const buildEditorUpdatePayload = ({
+const buildEditorPayloadBase = ({
   editor,
   sourceEditor,
   surface = 'body',
@@ -324,28 +324,19 @@ const buildEditorUpdatePayload = ({
   };
 };
 
+const buildEditorUpdatePayload = (payload = {}) => {
+  return buildEditorPayloadBase(payload);
+};
+
 const onEditorUpdate = (payload = {}) => {
   proxy.$superdoc.emit('editor-update', buildEditorUpdatePayload(payload));
 };
 
-const buildEditorTransactionPayload = ({
-  editor,
-  sourceEditor,
-  transaction,
-  duration,
-  surface = 'body',
-  headerId = null,
-  sectionType = null,
-} = {}) => {
-  const effectiveEditor = editor ?? sourceEditor;
+const buildEditorTransactionPayload = ({ transaction, duration, ...payload } = {}) => {
   return {
-    editor: effectiveEditor,
-    sourceEditor: sourceEditor ?? effectiveEditor,
+    ...buildEditorPayloadBase(payload),
     transaction,
     duration,
-    surface,
-    headerId,
-    sectionType,
   };
 };
 

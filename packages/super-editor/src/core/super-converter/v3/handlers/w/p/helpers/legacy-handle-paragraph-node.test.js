@@ -157,6 +157,7 @@ describe('legacy-handle-paragraph-node', () => {
           },
         ],
       },
+      { name: 'w:r', elements: [] },
     ];
 
     const out = handleParagraphNode(params);
@@ -168,5 +169,82 @@ describe('legacy-handle-paragraph-node', () => {
       { tab: { tabType: 'right', pos: 400 } },
       { tab: { tabType: 'center', pos: undefined } },
     ]);
+  });
+
+  it('returns a block node directly when translated paragraph content is block-only', () => {
+    const docPart = {
+      type: 'documentPartObject',
+      attrs: { id: '123', docPartGallery: 'Table of Figures' },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Figure 1' }] }],
+    };
+
+    const out = handleParagraphNode(
+      makeParams({
+        _mockContent: [docPart],
+        nodes: [
+          {
+            name: 'w:p',
+            attributes: { 'w:rsidRDefault': 'ABCDEF' },
+            elements: [{ name: 'w:sdt', elements: [] }],
+          },
+        ],
+        editor: {
+          schema: {
+            nodes: {
+              documentPartObject: { isInline: false, spec: { group: 'block' } },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(out).toEqual([docPart]);
+    expect(mergeTextNodes).not.toHaveBeenCalled();
+  });
+
+  it('splits mixed inline and block children into sibling paragraph and block nodes', () => {
+    mergeTextNodes.mockImplementation((content) => content);
+    const docPart = {
+      type: 'documentPartObject',
+      attrs: { id: '123', docPartGallery: 'Table of Figures' },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Figure 1' }] }],
+    };
+
+    const out = handleParagraphNode(
+      makeParams({
+        _mockContent: [{ type: 'text', text: 'Before' }, docPart, { type: 'text', text: 'After' }],
+        nodes: [
+          {
+            name: 'w:p',
+            attributes: { 'w:rsidRDefault': 'ABCDEF' },
+            elements: [
+              { name: 'w:r', elements: [] },
+              { name: 'w:sdt', elements: [] },
+              { name: 'w:r', elements: [] },
+            ],
+          },
+        ],
+        editor: {
+          schema: {
+            nodes: {
+              documentPartObject: { isInline: false, spec: { group: 'block' } },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(out).toEqual([
+      expect.objectContaining({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Before' }],
+      }),
+      docPart,
+      expect.objectContaining({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'After' }],
+      }),
+    ]);
+    expect(mergeTextNodes).toHaveBeenCalledTimes(2);
   });
 });

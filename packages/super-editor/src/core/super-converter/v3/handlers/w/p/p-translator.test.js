@@ -103,6 +103,31 @@ describe('w/p p-translator', () => {
     });
   });
 
+  it('encode() applies encoded paragraph attrs to paragraph fragments only when legacy handler returns an array', () => {
+    handleParagraphNode.mockReturnValueOnce([
+      { type: 'paragraph', attrs: { fromLegacy: true }, content: [] },
+      { type: 'documentPartObject', attrs: { id: '123' }, content: [] },
+    ]);
+
+    const result = translator.encode({
+      nodes: [{ name: 'w:p', attributes: { 'w14:paraId': 'X' } }],
+      docx: {},
+      nodeListHandler: { handlerEntities: [] },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        type: 'paragraph',
+        attrs: expect.objectContaining({
+          fromLegacy: true,
+          paraId: 'ENC_PARAID',
+          textId: 'ENC_TEXTID',
+        }),
+      }),
+      { type: 'documentPartObject', attrs: { id: '123' }, content: [] },
+    ]);
+  });
+
   it('decode() delegates to exporter and merges decoded attributes', () => {
     const params = {
       node: { type: 'paragraph', attrs: { any: 'thing' } },

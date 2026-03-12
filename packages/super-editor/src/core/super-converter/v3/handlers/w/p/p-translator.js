@@ -21,6 +21,15 @@ const encode = (params, encodedAttrs = {}) => {
   const node = legacyHandleParagraphNode(params);
   if (!node) return undefined;
   if (encodedAttrs && Object.keys(encodedAttrs).length) {
+    if (Array.isArray(node)) {
+      return node.map((child) => {
+        if (child?.type !== 'paragraph') return child;
+        return {
+          ...child,
+          attrs: { ...(child.attrs || {}), ...encodedAttrs },
+        };
+      });
+    }
     node.attrs = { ...node.attrs, ...encodedAttrs };
   }
   return node;

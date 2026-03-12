@@ -16,7 +16,7 @@ export const handleParagraphNode = (params) => {
     return { nodes: [], consumed: 0 };
   }
   const schemaNode = wPNodeTranslator.encode(params);
-  const newNodes = schemaNode ? [schemaNode] : [];
+  const newNodes = Array.isArray(schemaNode) ? schemaNode : schemaNode ? [schemaNode] : [];
   return { nodes: newNodes, consumed: 1 };
 };
 

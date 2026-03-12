@@ -161,7 +161,7 @@ export default class SuperDocAgentGatewayProvider {
     }
 
     try {
-      await generateText({
+      const { totalUsage, steps } = await generateText({
         model: modelId,
         system: SYSTEM_PROMPT.replace('{{task}}', task),
         prompt: task,
@@ -182,6 +182,8 @@ export default class SuperDocAgentGatewayProvider {
           outputFile: outputPath,
           toolCalls: toolLog,
           turns: toolLog.length,
+          usage: totalUsage,
+          steps: steps.length,
         }),
       };
     } catch (err) {

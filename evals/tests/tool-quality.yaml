@@ -295,3 +295,244 @@
       value: [undo]
       threshold: 1.0
       metric: tool_selection
+
+# =============================================================================
+# REAL CUSTOMER PROMPTS -- from Sample LLM Prompts spreadsheet
+# =============================================================================
+
+# --- FIND AND REPLACE (from spreadsheet) ---
+
+- description: 'Customer: Replace placeholder throughout document'
+  metadata: { category: workflow, source: spreadsheet }
+  vars:
+    task: 'Replace the placeholder value [ClientName] with "Acme Corporation" throughout the document.'
+    profile: mutation
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Replace Q1 2025 with Q1 2026'
+  metadata: { category: workflow, source: spreadsheet }
+  vars:
+    task: 'Replace every Q1 2025 with Q1 2026 in the document.'
+    profile: mutation
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Add copyright symbol after brand name'
+  metadata: { category: workflow, source: spreadsheet }
+  vars:
+    task: 'Add the copyright symbol after every instance of "SuperDoc" in the document.'
+    profile: mutation
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Replace shall with must'
+  metadata: { category: workflow, source: spreadsheet }
+  vars:
+    task: 'Find every instance of "shall" and replace it with "must" in the document.'
+    profile: mutation
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+
+# --- FORMATTING (from spreadsheet) ---
+
+- description: 'Customer: Change all headings to 12pt'
+  metadata: { category: format, source: spreadsheet }
+  vars:
+    task: 'Make all the headings in this document 12-point font.'
+    profile: format
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations, discover_tools]
+      threshold: 0.3
+      metric: tool_selection
+
+- description: 'Customer: Change whole document to Times New Roman'
+  metadata: { category: format, source: spreadsheet }
+  vars:
+    task: 'Change the whole document to Times New Roman.'
+    profile: format
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations, discover_tools]
+      threshold: 0.3
+      metric: tool_selection
+
+- description: 'Customer: Apply yellow highlight to risk text'
+  metadata: { category: format, source: spreadsheet }
+  vars:
+    task: 'Apply yellow highlight to every occurrence of "high risk" in the document.'
+    profile: format
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations, discover_tools]
+      threshold: 0.3
+      metric: tool_selection
+
+- description: 'Customer: Underline payment terms sentence'
+  metadata: { category: format, source: spreadsheet }
+  vars:
+    task: 'Underline the sentence containing "payment terms" in the document.'
+    profile: format
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations, discover_tools]
+      threshold: 0.3
+      metric: tool_selection
+
+# --- TABLES (from spreadsheet) ---
+
+- description: 'Customer: Add rows to table'
+  metadata: { category: tables, source: spreadsheet }
+  vars:
+    task: 'Add three new rows to my table.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Insert a table'
+  metadata: { category: tables, source: spreadsheet }
+  vars:
+    task: 'Insert a 4-column by 3-row table under the Pricing Details heading.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+# --- COMMENTS AND TRACKED CHANGES (from spreadsheet) ---
+
+- description: 'Customer: Leave comment on first paragraph'
+  metadata: { category: comments, source: spreadsheet }
+  vars:
+    task: 'Leave a comment asking the legal team to review the terms and conditions.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Comment on liability clauses'
+  metadata: { category: comments, source: spreadsheet }
+  vars:
+    task: 'Add a review comment to each paragraph containing "limitation of liability" in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Redline liability clause with tracked changes'
+  metadata: { category: tracked_changes, source: spreadsheet }
+  vars:
+    task: 'Redline the limitation of liability clause to cap liability at 12 months of fees instead of the current uncapped language. Use tracked changes.'
+    profile: tracked
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+
+# --- LISTS (from spreadsheet) ---
+
+- description: 'Customer: Change list level numbering'
+  metadata: { category: lists, source: spreadsheet }
+  vars:
+    task: 'Change the third level of this list to lowercase Roman numerals.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Replace bullets with checkboxes'
+  metadata: { category: lists, source: spreadsheet }
+  vars:
+    task: 'Replace the bullets in this list with checkboxes.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+
+# --- CONTENT INSERTION (from spreadsheet) ---
+
+- description: 'Customer: Insert CONFIDENTIAL at top'
+  metadata: { category: workflow, source: spreadsheet }
+  vars:
+    task: 'Insert the word CONFIDENTIAL at the very top of the document.'
+    profile: mutation
+  assert:
+    - type: tool-call-f1
+      value: [apply_mutations, create_paragraph, discover_tools]
+      threshold: 0.3
+      metric: tool_selection
+
+- description: 'Customer: Add heading and risk recap'
+  metadata: { category: workflow, source: spreadsheet }
+  vars:
+    task: 'Add a heading called "Legal Risk Summary" at the top of the document and insert a 5-bullet risk recap underneath.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match, create_heading]
+      threshold: 0.3
+      metric: tool_selection
+
+# --- EXTRACTION / ANALYSIS (from spreadsheet) ---
+
+- description: 'Customer: Pull all headings in order'
+  metadata: { category: reading, source: spreadsheet }
+  vars:
+    task: 'Pull out all the headings in this document in order.'
+    expectedNodeType: heading
+    profile: reading
+    checks: [nodeSearchArgs]
+  assert:
+    - type: tool-call-f1
+      value: [query_match, get_document_text]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Customer: Count occurrences of company name'
+  metadata: { category: reading, source: spreadsheet }
+  vars:
+    task: 'How many times does "Acme Corp" appear in this document, and where are the first five mentions?'
+    profile: reading
+  assert:
+    - type: tool-call-f1
+      value: [query_match]
+      threshold: 1.0
+      metric: tool_selection
+
+- description: 'Customer: Get full plain text'
+  metadata: { category: reading, source: spreadsheet }
+  vars:
+    task: 'Pull the full plain text from this document so I can use it somewhere else.'
+  assert:
+    - type: tool-call-f1
+      value: [get_document_text]
+      threshold: 1.0
+      metric: tool_selection
+
+- description: 'Customer: Show document stats'
+  metadata: { category: reading, source: spreadsheet }
+  vars:
+    task: 'Show me the document stats before you make any edits.'
+  assert:
+    - type: javascript
+      metric: tool_selection
+      value: output.length > 0

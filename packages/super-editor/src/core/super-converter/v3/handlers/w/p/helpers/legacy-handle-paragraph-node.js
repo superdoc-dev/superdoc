@@ -75,12 +75,14 @@ function normalizeParagraphChildren(children, schema, textblockAttrs) {
   flushInline();
 
   const lastNodeIndex = normalized.length - 1;
+  const isSingleBlockResult = normalized.length === 1 && normalized[0] != null && normalized[0]?.type !== 'paragraph';
   const paragraphIndexes = normalized.reduce((indexes, node, index) => {
     if (node?.type === 'paragraph') indexes.push(index);
     return indexes;
   }, []);
   const lastParagraphIndex = paragraphIndexes.length ? paragraphIndexes[paragraphIndexes.length - 1] : -1;
-  const shouldAttachWrapperParagraph = hasSectionBreakAttrs(textblockAttrs) && lastNodeIndex !== lastParagraphIndex;
+  const shouldAttachWrapperParagraph =
+    isSingleBlockResult || (hasSectionBreakAttrs(textblockAttrs) && lastNodeIndex !== lastParagraphIndex);
 
   paragraphIndexes.forEach((index) => {
     normalized[index] = {

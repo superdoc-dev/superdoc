@@ -224,6 +224,62 @@ describe('legacy-handle-paragraph-node', () => {
     expect(mergeTextNodes).not.toHaveBeenCalled();
   });
 
+  it('preserves wrapper paragraph formatting when translated paragraph content is block-only', () => {
+    const docPart = {
+      type: 'documentPartObject',
+      attrs: { id: '123', docPartGallery: 'Table of Figures' },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Figure 1' }] }],
+    };
+
+    const out = handleParagraphNode(
+      makeParams({
+        _mockContent: [docPart],
+        nodes: [
+          {
+            name: 'w:p',
+            attributes: { 'w:rsidRDefault': 'ABCDEF' },
+            elements: [
+              {
+                name: 'w:pPr',
+                elements: [
+                  { name: 'w:pStyle', attributes: { 'w:val': 'TOCHeading' } },
+                  { name: 'w:spacing', attributes: { 'w:after': '120', 'w:line': '240', 'w:lineRule': 'auto' } },
+                  { name: 'w:keepNext', attributes: { 'w:val': 'true' } },
+                ],
+              },
+              { name: 'w:sdt', elements: [] },
+            ],
+          },
+        ],
+        editor: {
+          schema: {
+            nodes: {
+              documentPartObject: { isInline: false, spec: { group: 'block' } },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(out).toMatchObject([
+      {
+        ...docPart,
+        attrs: {
+          ...docPart.attrs,
+          wrapperParagraph: {
+            filename: 'source.docx',
+            rsidRDefault: 'ABCDEF',
+            paragraphProperties: {
+              styleId: 'TOCHeading',
+              keepNext: true,
+              spacing: { after: 120, line: 240, lineRule: 'auto' },
+            },
+          },
+        },
+      },
+    ]);
+  });
+
   it('splits mixed inline and block children into sibling paragraph and block nodes', () => {
     mergeTextNodes.mockImplementation((content) => content);
     const docPart = {

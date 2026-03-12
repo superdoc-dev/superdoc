@@ -124,4 +124,44 @@ describe('translateDocumentPartObj', () => {
       name: 'w:sdt',
     });
   });
+
+  it('rewraps the document part in a paragraph for non-sectPr wrapper formatting', () => {
+    const node = {
+      type: 'documentPartObject',
+      content: [],
+      attrs: {
+        id: '123',
+        docPartGallery: 'Table of Figures',
+        docPartUnique: true,
+        wrapperParagraph: {
+          rsidRDefault: 'ABCDEF',
+          paragraphProperties: {
+            styleId: 'TOCHeading',
+            keepNext: true,
+          },
+        },
+      },
+    };
+
+    const result = translateDocumentPartObj({ node });
+
+    expect(result.name).toBe('w:p');
+    expect(result.attributes).toEqual({ 'w:rsidRDefault': 'ABCDEF' });
+    expect(result.elements[0]).toMatchObject({
+      name: 'w:pPr',
+      elements: expect.arrayContaining([
+        {
+          name: 'w:pStyle',
+          attributes: { 'w:val': 'TOCHeading' },
+        },
+        {
+          name: 'w:keepNext',
+          attributes: {},
+        },
+      ]),
+    });
+    expect(result.elements[1]).toMatchObject({
+      name: 'w:sdt',
+    });
+  });
 });

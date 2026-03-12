@@ -103,7 +103,13 @@ describe('translateDocumentPartObj', () => {
         docPartGallery: 'Table of Figures',
         docPartUnique: true,
         wrapperParagraph: {
+          paraId: '41964671',
+          textId: '04598795',
+          rsidR: '00233D7B',
           rsidRDefault: 'ABCDEF',
+          rsidP: '003104CE',
+          rsidRPr: '003104CE',
+          rsidDel: '00DEAD00',
           pageBreakSource: 'sectPr',
           paragraphProperties: {
             sectPr,
@@ -115,7 +121,15 @@ describe('translateDocumentPartObj', () => {
     const result = translateDocumentPartObj({ node });
 
     expect(result.name).toBe('w:p');
-    expect(result.attributes).toEqual({ 'w:rsidRDefault': 'ABCDEF' });
+    expect(result.attributes).toEqual({
+      'w14:paraId': '41964671',
+      'w14:textId': '04598795',
+      'w:rsidR': '00233D7B',
+      'w:rsidRDefault': 'ABCDEF',
+      'w:rsidP': '003104CE',
+      'w:rsidRPr': '003104CE',
+      'w:rsidDel': '00DEAD00',
+    });
     expect(result.elements[0]).toMatchObject({
       name: 'w:pPr',
       elements: [sectPr],
@@ -134,7 +148,12 @@ describe('translateDocumentPartObj', () => {
         docPartGallery: 'Table of Figures',
         docPartUnique: true,
         wrapperParagraph: {
+          paraId: '41964671',
+          textId: '04598795',
+          rsidR: '00233D7B',
           rsidRDefault: 'ABCDEF',
+          rsidP: '003104CE',
+          rsidRPr: '003104CE',
           paragraphProperties: {
             styleId: 'TOCHeading',
             keepNext: true,
@@ -146,7 +165,14 @@ describe('translateDocumentPartObj', () => {
     const result = translateDocumentPartObj({ node });
 
     expect(result.name).toBe('w:p');
-    expect(result.attributes).toEqual({ 'w:rsidRDefault': 'ABCDEF' });
+    expect(result.attributes).toEqual({
+      'w14:paraId': '41964671',
+      'w14:textId': '04598795',
+      'w:rsidR': '00233D7B',
+      'w:rsidRDefault': 'ABCDEF',
+      'w:rsidP': '003104CE',
+      'w:rsidRPr': '003104CE',
+    });
     expect(result.elements[0]).toMatchObject({
       name: 'w:pPr',
       elements: expect.arrayContaining([

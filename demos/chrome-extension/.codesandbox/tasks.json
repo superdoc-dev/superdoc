@@ -1,0 +1,13 @@
+{
+  "$schema": "https://codesandbox.io/schemas/tasks.json",
+  "setupTasks": [
+    { "name": "Install Dependencies", "command": "cd chrome-extension && npm install" }
+  ],
+  "tasks": {
+    "build": {
+      "name": "Build Extension",
+      "command": "cd chrome-extension && npm run build",
+      "runAtStart": true
+    }
+  }
+}

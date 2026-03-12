@@ -1,0 +1,14 @@
+{
+  "$schema": "https://codesandbox.io/schemas/tasks.json",
+  "setupTasks": [
+    { "name": "Install Dependencies", "command": "cd cloud-function && npm install" }
+  ],
+  "tasks": {
+    "start": {
+      "name": "Start Server",
+      "command": "cd cloud-function && npm start",
+      "runAtStart": true,
+      "preview": { "port": 3000 }
+    }
+  }
+}

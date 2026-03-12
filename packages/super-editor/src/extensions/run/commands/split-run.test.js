@@ -241,6 +241,29 @@ describe('splitRunToParagraph with style marks', () => {
     ],
   };
 
+  const BASE_CONVERTER = {
+    convertedXml: {},
+    numbering: {},
+    translatedNumbering: {},
+    documentGuid: 'test-guid-123',
+    promoteToGuid: vi.fn(),
+  };
+
+  const createHeadingLinkedStyleConverter = ({ runProperties } = {}) => ({
+    ...BASE_CONVERTER,
+    translatedLinkedStyles: {
+      ...(runProperties ? { docDefaults: { runProperties: {} } } : {}),
+      styles: {
+        Heading1: {
+          styleId: 'Heading1',
+          type: 'paragraph',
+          link: 'Heading1Char',
+          ...(runProperties ? { runProperties } : {}),
+        },
+      },
+    },
+  });
+
   const loadDoc = (json) => {
     const docNode = editor.schema.nodeFromJSON(json);
     const state = EditorState.create({ schema: editor.schema, doc: docNode });
@@ -393,18 +416,7 @@ describe('splitRunToParagraph with style marks', () => {
   });
 
   it('does not inherit linked paragraph styles onto the new empty paragraph', () => {
-    const linkedStyleConverter = {
-      convertedXml: {},
-      numbering: {},
-      translatedNumbering: {},
-      translatedLinkedStyles: {
-        styles: {
-          Heading1: { styleId: 'Heading1', type: 'paragraph', link: 'Heading1Char' },
-        },
-      },
-      documentGuid: 'test-guid-123',
-      promoteToGuid: vi.fn(),
-    };
+    const linkedStyleConverter = createHeadingLinkedStyleConverter();
 
     editor.converter = linkedStyleConverter;
     loadDoc(STYLED_PARAGRAPH_DOC);
@@ -427,18 +439,7 @@ describe('splitRunToParagraph with style marks', () => {
   });
 
   it('preserves linked paragraph styles when splitting text into two non-empty paragraphs', () => {
-    const linkedStyleConverter = {
-      convertedXml: {},
-      numbering: {},
-      translatedNumbering: {},
-      translatedLinkedStyles: {
-        styles: {
-          Heading1: { styleId: 'Heading1', type: 'paragraph', link: 'Heading1Char' },
-        },
-      },
-      documentGuid: 'test-guid-123',
-      promoteToGuid: vi.fn(),
-    };
+    const linkedStyleConverter = createHeadingLinkedStyleConverter();
 
     editor.converter = linkedStyleConverter;
     loadDoc(STYLED_PARAGRAPH_DOC);
@@ -461,27 +462,12 @@ describe('splitRunToParagraph with style marks', () => {
   });
 
   it('does not carry linked style marks into text typed in the new empty paragraph', () => {
-    const linkedStyleConverter = {
-      convertedXml: {},
-      numbering: {},
-      translatedNumbering: {},
-      translatedLinkedStyles: {
-        docDefaults: { runProperties: {} },
-        styles: {
-          Heading1: {
-            styleId: 'Heading1',
-            type: 'paragraph',
-            link: 'Heading1Char',
-            runProperties: {
-              bold: true,
-              fontSize: 28,
-            },
-          },
-        },
+    const linkedStyleConverter = createHeadingLinkedStyleConverter({
+      runProperties: {
+        bold: true,
+        fontSize: 28,
       },
-      documentGuid: 'test-guid-123',
-      promoteToGuid: vi.fn(),
-    };
+    });
 
     editor.converter = linkedStyleConverter;
     loadDoc(STYLED_PARAGRAPH_DOC);
@@ -511,27 +497,12 @@ describe('splitRunToParagraph with style marks', () => {
   });
 
   it('does not carry linked style marks into an empty paragraph created from a previously split linked-style paragraph', () => {
-    const linkedStyleConverter = {
-      convertedXml: {},
-      numbering: {},
-      translatedNumbering: {},
-      translatedLinkedStyles: {
-        docDefaults: { runProperties: {} },
-        styles: {
-          Heading1: {
-            styleId: 'Heading1',
-            type: 'paragraph',
-            link: 'Heading1Char',
-            runProperties: {
-              bold: true,
-              fontSize: 28,
-            },
-          },
-        },
+    const linkedStyleConverter = createHeadingLinkedStyleConverter({
+      runProperties: {
+        bold: true,
+        fontSize: 28,
       },
-      documentGuid: 'test-guid-123',
-      promoteToGuid: vi.fn(),
-    };
+    });
 
     editor.converter = linkedStyleConverter;
     loadDoc(STYLED_PARAGRAPH_DOC);

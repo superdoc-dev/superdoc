@@ -1,7 +1,9 @@
+import { readTranslatedLinkedStyles } from '@core/parts/adapters/styles-read.js';
+
 export const isLinkedParagraphStyleId = (editor, styleId) => {
   if (!styleId) return false;
 
-  const translatedStyles = editor?.converter?.translatedLinkedStyles?.styles;
+  const translatedStyles = readTranslatedLinkedStyles(editor)?.styles;
   const styleDefinition = translatedStyles?.[styleId];
   return Boolean(styleDefinition?.type === 'paragraph' && styleDefinition?.link);
 };

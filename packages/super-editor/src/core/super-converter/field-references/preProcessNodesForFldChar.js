@@ -35,6 +35,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let currentFieldStack = [];
   let unpairedEnd = null;
   let collecting = false;
+  const rawNodeSourceTokens = new WeakMap();
 
   /**
    * Finalizes the current field. If collecting nodes, it processes them.
@@ -69,29 +70,43 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   /**
    * Captures the original raw node at most once for the currently active field.
    * @param {OpenXmlNode} rawNode
-   * @param {Set<OpenXmlNode[]>} capturedRawStacks
+   * @param {Set<OpenXmlNode>} capturedRawNodes
+   * @param {object} rawSourceToken
    */
-  const captureRawNodeForCurrentField = (rawNode, capturedRawStacks) => {
+  const captureRawNodeForCurrentField = (rawNode, capturedRawNodes, rawSourceToken) => {
     if (rawCollectedNodesStack.length === 0) return;
+    if (capturedRawNodes.has(rawNode)) return;
     const currentRawStack = rawCollectedNodesStack[rawCollectedNodesStack.length - 1];
-    if (capturedRawStacks.has(currentRawStack)) return;
-    currentRawStack.push(rawNode);
-    capturedRawStacks.add(currentRawStack);
+    const lastRawNode = currentRawStack[currentRawStack.length - 1];
+    const canMergeIntoLastNode =
+      lastRawNode?.name === 'w:r' &&
+      rawNode?.name === 'w:r' &&
+      rawNodeSourceTokens.get(lastRawNode) === rawSourceToken &&
+      Array.isArray(lastRawNode.elements) &&
+      Array.isArray(rawNode.elements);
+    if (canMergeIntoLastNode) {
+      lastRawNode.elements.push(...carbonCopy(rawNode.elements));
+    } else {
+      currentRawStack.push(rawNode);
+      rawNodeSourceTokens.set(rawNode, rawSourceToken);
+    }
+    capturedRawNodes.add(rawNode);
   };
 
   /**
    * Processes a single logical node against the fldChar state machine.
    * @param {OpenXmlNode} node
    * @param {OpenXmlNode} rawNode
-   * @param {Set<OpenXmlNode[]>} capturedRawStacks
+   * @param {Set<OpenXmlNode>} capturedRawNodes
+   * @param {object} rawSourceToken
    */
-  const processNode = (node, rawNode, capturedRawStacks) => {
+  const processNode = (node, rawNode, capturedRawNodes, rawSourceToken) => {
     collecting = collectedNodesStack.length > 0;
 
     if (shouldSkipFieldProcessing(node)) {
       if (collecting) {
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
-        captureRawNodeForCurrentField(rawNode, capturedRawStacks);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
       } else {
         processedNodes.push(node);
       }
@@ -124,7 +139,8 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       collectedNodesStack.push([]);
       const rawStack = [rawNode];
       rawCollectedNodesStack.push(rawStack);
-      capturedRawStacks.add(rawStack);
+      rawNodeSourceTokens.set(rawNode, rawSourceToken);
+      capturedRawNodes.add(rawNode);
       currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false });
       return;
     }
@@ -135,7 +151,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       if (!currentField.afterSeparate) {
         const instructionTokens = extractInstructionTokensFromNode(node);
         if (instructionTokens.length > 0) {
-          captureRawNodeForCurrentField(rawNode, capturedRawStacks);
+          captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
           currentField.instructionTokens.push(...instructionTokens);
           const instrTextValue = instrTextEl?.elements?.[0]?.text;
           if (instrTextValue != null) {
@@ -152,13 +168,13 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
 
     if (fldType === 'end') {
       if (collecting) {
-        captureRawNodeForCurrentField(rawNode, capturedRawStacks);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
       }
       finalizeField();
       return;
     } else if (fldType === 'separate') {
       if (collecting) {
-        captureRawNodeForCurrentField(rawNode, capturedRawStacks);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         const currentField = currentFieldStack[currentFieldStack.length - 1];
         if (currentField) {
           currentField.afterSeparate = true;
@@ -183,24 +199,25 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           collectedNodesStack.push([node]);
           const rawStack = [rawNode];
           rawCollectedNodesStack.push(rawStack);
-          capturedRawStacks.add(rawStack);
+          rawNodeSourceTokens.set(rawNode, rawSourceToken);
+          capturedRawNodes.add(rawNode);
         });
       } else if (childResult.unpairedEnd) {
         // A field from this level or higher ended in the children.
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
-        captureRawNodeForCurrentField(rawNode, capturedRawStacks);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         finalizeField();
       } else if (collecting) {
         // This node is part of a field being collected at this level.
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
-        captureRawNodeForCurrentField(rawNode, capturedRawStacks);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
       } else {
         // This node is not part of any field.
         processedNodes.push(node);
       }
     } else if (collecting) {
       collectedNodesStack[collectedNodesStack.length - 1].push(node);
-      captureRawNodeForCurrentField(rawNode, capturedRawStacks);
+      captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
     } else {
       processedNodes.push(node);
     }
@@ -209,9 +226,11 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   for (const node of nodes) {
     const rawNode = carbonCopy(node);
     const logicalNodes = expandNodeForFieldProcessing(node);
-    const capturedRawStacks = new Set();
-    logicalNodes.forEach((logicalNode) => {
-      processNode(logicalNode, rawNode, capturedRawStacks);
+    const rawLogicalNodes = expandNodeForFieldProcessing(rawNode);
+    const capturedRawNodes = new Set();
+    const rawSourceToken = {};
+    logicalNodes.forEach((logicalNode, index) => {
+      processNode(logicalNode, rawLogicalNodes[index] ?? rawNode, capturedRawNodes, rawSourceToken);
     });
   }
 

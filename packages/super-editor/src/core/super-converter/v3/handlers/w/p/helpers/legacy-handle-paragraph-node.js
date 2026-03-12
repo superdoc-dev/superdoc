@@ -21,6 +21,24 @@ function getTableStyleId(path) {
   return tblStyle.attributes?.['w:val'];
 }
 
+function cloneParagraphAttrsForFragment(attrs, { keepSectPr = false } = {}) {
+  if (!attrs) return {};
+
+  const nextAttrs = { ...attrs };
+  if (attrs.paragraphProperties && typeof attrs.paragraphProperties === 'object') {
+    nextAttrs.paragraphProperties = { ...attrs.paragraphProperties };
+    if (!keepSectPr) {
+      delete nextAttrs.paragraphProperties.sectPr;
+    }
+  }
+
+  if (!keepSectPr) {
+    delete nextAttrs.pageBreakSource;
+  }
+
+  return nextAttrs;
+}
+
 function normalizeParagraphChildren(children, schema, textblockAttrs) {
   const normalized = [];
   let pendingInline = [];
@@ -29,7 +47,7 @@ function normalizeParagraphChildren(children, schema, textblockAttrs) {
     if (!pendingInline.length) return;
     normalized.push({
       type: 'paragraph',
-      attrs: { ...textblockAttrs },
+      attrs: null,
       content: pendingInline,
       marks: [],
     });
@@ -47,6 +65,20 @@ function normalizeParagraphChildren(children, schema, textblockAttrs) {
   }
 
   flushInline();
+
+  const paragraphIndexes = normalized.reduce((indexes, node, index) => {
+    if (node?.type === 'paragraph') indexes.push(index);
+    return indexes;
+  }, []);
+  const lastParagraphIndex = paragraphIndexes.length ? paragraphIndexes[paragraphIndexes.length - 1] : -1;
+
+  paragraphIndexes.forEach((index) => {
+    normalized[index] = {
+      ...normalized[index],
+      attrs: cloneParagraphAttrsForFragment(textblockAttrs, { keepSectPr: index === lastParagraphIndex }),
+    };
+  });
+
   return normalized;
 }
 

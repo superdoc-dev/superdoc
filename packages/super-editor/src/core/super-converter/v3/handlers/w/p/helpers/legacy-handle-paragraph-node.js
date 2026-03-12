@@ -39,6 +39,14 @@ function cloneParagraphAttrsForFragment(attrs, { keepSectPr = false } = {}) {
   return nextAttrs;
 }
 
+function hasSectionBreakAttrs(attrs) {
+  return Boolean(attrs?.paragraphProperties?.sectPr);
+}
+
+function cloneWrapperParagraphAttrs(attrs) {
+  return cloneParagraphAttrsForFragment(attrs, { keepSectPr: true });
+}
+
 function normalizeParagraphChildren(children, schema, textblockAttrs) {
   const normalized = [];
   let pendingInline = [];
@@ -66,18 +74,33 @@ function normalizeParagraphChildren(children, schema, textblockAttrs) {
 
   flushInline();
 
+  const lastNodeIndex = normalized.length - 1;
   const paragraphIndexes = normalized.reduce((indexes, node, index) => {
     if (node?.type === 'paragraph') indexes.push(index);
     return indexes;
   }, []);
   const lastParagraphIndex = paragraphIndexes.length ? paragraphIndexes[paragraphIndexes.length - 1] : -1;
+  const shouldAttachWrapperParagraph = hasSectionBreakAttrs(textblockAttrs) && lastNodeIndex !== lastParagraphIndex;
 
   paragraphIndexes.forEach((index) => {
     normalized[index] = {
       ...normalized[index],
-      attrs: cloneParagraphAttrsForFragment(textblockAttrs, { keepSectPr: index === lastParagraphIndex }),
+      attrs: cloneParagraphAttrsForFragment(textblockAttrs, {
+        keepSectPr: !shouldAttachWrapperParagraph && index === lastParagraphIndex,
+      }),
     };
   });
+
+  if (shouldAttachWrapperParagraph) {
+    const lastNode = normalized[lastNodeIndex];
+    normalized[lastNodeIndex] = {
+      ...lastNode,
+      attrs: {
+        ...(lastNode?.attrs || {}),
+        wrapperParagraph: cloneWrapperParagraphAttrs(textblockAttrs),
+      },
+    };
+  }
 
   return normalized;
 }

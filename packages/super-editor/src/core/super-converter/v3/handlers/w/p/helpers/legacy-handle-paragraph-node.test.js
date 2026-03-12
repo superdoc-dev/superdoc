@@ -171,12 +171,13 @@ describe('legacy-handle-paragraph-node', () => {
     ]);
   });
 
-  it('returns a block node directly when translated paragraph content is block-only', () => {
+  it('preserves sectPr on wrapper metadata when translated paragraph content is block-only', () => {
     const docPart = {
       type: 'documentPartObject',
       attrs: { id: '123', docPartGallery: 'Table of Figures' },
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Figure 1' }] }],
     };
+    const sectPr = { name: 'w:sectPr', elements: [] };
 
     const out = handleParagraphNode(
       makeParams({
@@ -185,7 +186,13 @@ describe('legacy-handle-paragraph-node', () => {
           {
             name: 'w:p',
             attributes: { 'w:rsidRDefault': 'ABCDEF' },
-            elements: [{ name: 'w:sdt', elements: [] }],
+            elements: [
+              {
+                name: 'w:pPr',
+                elements: [{ name: 'w:sectPr', elements: [] }],
+              },
+              { name: 'w:sdt', elements: [] },
+            ],
           },
         ],
         editor: {
@@ -198,7 +205,22 @@ describe('legacy-handle-paragraph-node', () => {
       }),
     );
 
-    expect(out).toEqual([docPart]);
+    expect(out).toMatchObject([
+      {
+        ...docPart,
+        attrs: {
+          ...docPart.attrs,
+          wrapperParagraph: {
+            filename: 'source.docx',
+            pageBreakSource: 'sectPr',
+            paragraphProperties: {
+              sectPr,
+            },
+            rsidRDefault: 'ABCDEF',
+          },
+        },
+      },
+    ]);
     expect(mergeTextNodes).not.toHaveBeenCalled();
   });
 
@@ -248,7 +270,7 @@ describe('legacy-handle-paragraph-node', () => {
     expect(mergeTextNodes).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps sectPr only on the last paragraph fragment after splitting', () => {
+  it('keeps sectPr on the last paragraph fragment when content continues after a hoisted block', () => {
     mergeTextNodes.mockImplementation((content) => content);
     const sectPr = { name: 'w:sectPr', elements: [] };
     const docPart = {
@@ -295,6 +317,62 @@ describe('legacy-handle-paragraph-node', () => {
         pageBreakSource: 'sectPr',
         paragraphProperties: {
           sectPr,
+        },
+      },
+    });
+  });
+
+  it('stores sectPr on a trailing block when it is the last emitted node', () => {
+    mergeTextNodes.mockImplementation((content) => content);
+    const sectPr = { name: 'w:sectPr', elements: [] };
+    const docPart = {
+      type: 'documentPartObject',
+      attrs: { id: '123', docPartGallery: 'Table of Figures' },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Figure 1' }] }],
+    };
+
+    const out = handleParagraphNode(
+      makeParams({
+        _mockContent: [{ type: 'text', text: 'Before' }, docPart],
+        nodes: [
+          {
+            name: 'w:p',
+            attributes: { 'w:rsidRDefault': 'ABCDEF' },
+            elements: [
+              {
+                name: 'w:pPr',
+                elements: [{ name: 'w:sectPr', elements: [] }],
+              },
+              { name: 'w:r', elements: [] },
+              { name: 'w:sdt', elements: [] },
+            ],
+          },
+        ],
+        editor: {
+          schema: {
+            nodes: {
+              documentPartObject: { isInline: false, spec: { group: 'block' } },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(out[0]).toMatchObject({
+      type: 'paragraph',
+      attrs: {
+        paragraphProperties: {},
+      },
+    });
+    expect(out[0].attrs).not.toHaveProperty('pageBreakSource');
+    expect(out[1]).toMatchObject({
+      type: 'documentPartObject',
+      attrs: {
+        wrapperParagraph: {
+          pageBreakSource: 'sectPr',
+          paragraphProperties: {
+            sectPr,
+          },
         },
       },
     });

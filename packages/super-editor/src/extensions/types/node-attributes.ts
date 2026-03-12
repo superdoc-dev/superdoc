@@ -1070,6 +1070,8 @@ export interface DocumentPartObjectAttrs extends BlockNodeAttributes {
   docPartGallery?: unknown;
   /** Whether document part is unique */
   docPartUnique?: boolean;
+  /** @internal Original wrapper paragraph attrs for export preservation */
+  wrapperParagraph?: unknown;
 }
 
 // ============================================

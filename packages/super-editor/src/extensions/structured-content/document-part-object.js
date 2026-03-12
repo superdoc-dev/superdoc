@@ -46,6 +46,9 @@ export const DocumentPartObject = Node.create({
       docPartUnique: {
         default: true,
       },
+      wrapperParagraph: {
+        default: null,
+      },
     };
   },
 });

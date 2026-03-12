@@ -92,4 +92,36 @@ describe('translateDocumentPartObj', () => {
     expect(sdtPr.elements.find((el) => el.name === 'w:foo')).toBeDefined();
     expect(passthroughSdtPr.elements.find((el) => el.name === 'w:id')).toBeDefined();
   });
+
+  it('rewraps the document part in a paragraph when wrapper paragraph attrs are present', () => {
+    const sectPr = { name: 'w:sectPr', elements: [] };
+    const node = {
+      type: 'documentPartObject',
+      content: [],
+      attrs: {
+        id: '123',
+        docPartGallery: 'Table of Figures',
+        docPartUnique: true,
+        wrapperParagraph: {
+          rsidRDefault: 'ABCDEF',
+          pageBreakSource: 'sectPr',
+          paragraphProperties: {
+            sectPr,
+          },
+        },
+      },
+    };
+
+    const result = translateDocumentPartObj({ node });
+
+    expect(result.name).toBe('w:p');
+    expect(result.attributes).toEqual({ 'w:rsidRDefault': 'ABCDEF' });
+    expect(result.elements[0]).toMatchObject({
+      name: 'w:pPr',
+      elements: [sectPr],
+    });
+    expect(result.elements[1]).toMatchObject({
+      name: 'w:sdt',
+    });
+  });
 });

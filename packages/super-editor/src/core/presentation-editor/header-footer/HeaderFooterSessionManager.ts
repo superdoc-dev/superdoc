@@ -979,16 +979,8 @@ export class HeaderFooterSessionManager {
     editor.on('transaction', emitSurfaceTransaction);
 
     this.#activeEditorEventCleanup = () => {
-      try {
-        editor.off?.('update', emitSurfaceUpdate);
-      } catch (error) {
-        console.warn('[HeaderFooterSessionManager] Failed to remove update listener:', error);
-      }
-      try {
-        editor.off?.('transaction', emitSurfaceTransaction);
-      } catch (error) {
-        console.warn('[HeaderFooterSessionManager] Failed to remove transaction listener:', error);
-      }
+      editor.off?.('update', emitSurfaceUpdate);
+      editor.off?.('transaction', emitSurfaceTransaction);
     };
   }
 

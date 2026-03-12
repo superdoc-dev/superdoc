@@ -130,6 +130,8 @@ const COLUMN_EPSILON = 0.01;
 type NormalizedColumns = NormalizedColumnLayout;
 type PageColumns = NormalizedColumns & { left: number; contentWidth: number };
 
+// TODO: Footnotes are measured against the widest column width for the section.
+// If a footnote ultimately lands in a narrower column, its wrapping can be slightly off.
 const resolveMaxColumnWidth = (contentWidth: number, columns?: ColumnLayout): number => {
   if (!columns || columns.count <= 1) return contentWidth;
   const normalized = normalizeColumnsForFootnotes(columns, contentWidth);

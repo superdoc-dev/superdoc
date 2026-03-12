@@ -99,6 +99,13 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         );
         const runProperties = firstInlineProps ?? null;
 
+        const existingInlineKeys = runNode.attrs?.runPropertiesInlineKeys || [];
+        const styleKeys = runNode.attrs?.runPropertiesStyleKeys || [];
+        const keysFromMarks = (segment) => {
+          const textNode = segment.content?.find((n) => n.isText);
+          return Object.keys(decodeRPrFromMarks(textNode?.marks || []));
+        };
+        const overrideKeysFromInlineProps = (inlineProps) => styleKeys.filter((k) => inlineProps && k in inlineProps);
         if (segments.length === 1) {
           const hadInlineKeys =
             Array.isArray(runNode.attrs?.runPropertiesInlineKeys) && runNode.attrs.runPropertiesInlineKeys.length > 0;

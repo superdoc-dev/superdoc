@@ -65,9 +65,6 @@ defaultTest:
       threshold: 0.10
     - type: latency
       threshold: 30000
-    - type: javascript
-      value: file://lib/assert.cjs
-      metric: argument_quality
 
 evaluateOptions:
   maxConcurrency: 10

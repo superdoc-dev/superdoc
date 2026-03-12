@@ -285,3 +285,39 @@
       value: 'reasonable best efforts'
     - type: contains
       value: 'OPERATIONAL COVENANTS'
+
+# =============================================================================
+# TABLE DOC TESTS -- document with tables
+# =============================================================================
+
+- description: 'Table: Agent reads table content'
+  vars:
+    fixture: table-doc.docx
+    task: 'Get the full text of this document.'
+  assert:
+    - type: contains
+      value: 'Component'
+    - type: contains
+      value: 'Version'
+
+- description: 'Table: Replace text inside table cell'
+  vars:
+    fixture: table-doc.docx
+    task: 'Replace every "Test" with "Production" in the table.'
+  assert:
+    - type: contains
+      value: 'Production'
+    - type: not-contains
+      value: 'Test'
+
+# =============================================================================
+# COMMENTS DOC TESTS -- document with existing comments
+# =============================================================================
+
+- description: 'Comments: Agent reads document with comments'
+  vars:
+    fixture: comments-doc.docx
+    task: 'Get the full text of this document.'
+  assert:
+    - type: contains
+      value: 'comment'

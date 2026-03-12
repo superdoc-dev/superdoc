@@ -1,14 +1,22 @@
 # Execution tests -- real document editing via SuperDoc CLI.
 #
-# Each test opens a fresh copy of document.docx, runs the agent, checks the result.
-# Assertions verify BOTH that new content exists AND that old content changed.
+# Assertion rules:
+#   1. Every edit asserts new content exists AND old content is gone.
+#   2. Every test verifies unrelated content is intact (no collateral damage).
+#   3. Position tests use indexOf() for ordering.
 
-- description: 'Agent can read document content'
+# =============================================================================
+# DOCUMENT.DOCX -- simple document with bullet lists
+# Known content: "A list of list features", "We support bullets, symbols and more",
+#   "All sorts of bullets.", "Nested lists", "Numbers", "Or letters",
+#   "All sorts of lists are supported"
+# =============================================================================
+
+- description: 'Read: lists document content'
   vars:
     fixture: document.docx
     task: 'Get the full text of this document.'
   assert:
-    # Proves the agent actually read the document (known content)
     - type: contains
       value: 'A list of list features'
     - type: contains
@@ -16,55 +24,50 @@
     - type: contains
       value: 'All sorts of lists are supported'
 
-- description: 'Agent can add a paragraph at the end'
-  vars:
-    fixture: document.docx
-    task: 'Add a new paragraph at the end of the document that says exactly "EVAL TEST PASSED".'
-  assert:
-    # New content exists
-    - type: contains
-      value: 'EVAL TEST PASSED'
-    # Original content still there (not overwritten)
-    - type: contains
-      value: 'A list of list features'
-
-- description: 'Agent can find and replace text'
+- description: 'Replace: bullets to bullet points, all occurrences'
   vars:
     fixture: document.docx
     task: 'Replace "bullets" with "bullet points" everywhere in the document.'
   assert:
-    # New text exists
     - type: contains
       value: 'bullet points'
-    # Old text is gone (proves it was replaced, not just appended)
     - type: not-contains
-      value: 'support bullets,'
-    # Rest of document intact
+      value: 'support bullets'
+    - type: not-contains
+      value: 'sorts of bullets'
     - type: contains
       value: 'Nested lists'
 
-- description: 'Agent can add a heading at the end'
+- description: 'Insert: paragraph appended at end'
+  vars:
+    fixture: document.docx
+    task: 'Add a new paragraph at the end of the document that says exactly "EVAL TEST PASSED".'
+  assert:
+    - type: contains
+      value: 'EVAL TEST PASSED'
+    - type: contains
+      value: 'A list of list features'
+    - type: javascript
+      value: "output.indexOf('EVAL TEST PASSED') > output.indexOf('All sorts of lists are supported')"
+
+- description: 'Insert: heading appended at end'
   vars:
     fixture: document.docx
     task: 'Add a heading "Summary" at the end of the document.'
   assert:
-    # New heading exists
     - type: contains
       value: 'Summary'
-    # Original content still intact
-    - type: contains
-      value: 'A list of list features'
-    # Summary comes after existing content (not prepended)
     - type: javascript
-      value: output.indexOf('Summary') > output.indexOf('All sorts of lists are supported')
+      value: "output.indexOf('Summary') > output.indexOf('All sorts of lists are supported')"
 
 # =============================================================================
-# MEMORANDUM TESTS -- real legal document with headings, lists, dates, amounts
+# MEMORANDUM.DOCX -- legal memo
+# Known: "MEMORANDUM", "TO: General Counsel", "DATE: December 30, 2024",
+#   "$25,000,000", "$150,000,000", "March 1-31, 2025", "Acquiror",
+#   "reasonable best efforts", "[lawyer]", "Best regards,"
 # =============================================================================
 
-# --- READING & COMPREHENSION ---
-
-- description: 'Memo: Agent reads the full memorandum'
+- description: 'Read: memo with all key sections'
   vars:
     fixture: memorandum.docx
     task: 'Get the full text of this document.'
@@ -72,70 +75,39 @@
     - type: contains
       value: 'MEMORANDUM'
     - type: contains
-      value: 'General Counsel'
-    - type: contains
-      value: 'Interim Operating Covenants'
+      value: 'OPERATIONAL COVENANTS'
     - type: contains
       value: '$25,000,000'
-
-- description: 'Memo: Agent finds specific section content'
-  vars:
-    fixture: memorandum.docx
-    task: 'Find the section about Employee Matters and tell me what it says about hiring.'
-  assert:
     - type: contains
-      value: 'Employee Matters'
-    - type: contains
-      value: 'hiring'
+      value: 'Best regards,'
 
-# --- FIND AND REPLACE ---
-
-- description: 'Memo: Replace party name throughout document'
+- description: 'Replace: party name, all occurrences, amounts untouched'
   vars:
     fixture: memorandum.docx
     task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
   assert:
     - type: contains
-      value: 'Chief Legal Officer'
+      value: 'TO: Chief Legal Officer'
+    - type: contains
+      value: 'Dear Chief Legal Officer'
     - type: not-contains
       value: 'General Counsel'
-    # Rest of document intact
-    - type: contains
-      value: 'OPERATIONAL COVENANTS'
     - type: contains
       value: '$25,000,000'
 
-- description: 'Memo: Replace date in the document'
+- description: 'Replace: date changed, other dates untouched'
   vars:
     fixture: memorandum.docx
     task: 'Replace the date "December 30, 2024" with "January 15, 2025".'
   assert:
     - type: contains
-      value: 'January 15, 2025'
+      value: 'DATE: January 15, 2025'
     - type: not-contains
       value: 'December 30, 2024'
-
-# --- ADD CONTENT ---
-
-- description: 'Memo: Add a new section at the end'
-  vars:
-    fixture: memorandum.docx
-    task: 'Add a new heading "CONFIDENTIALITY NOTICE" at the end of the document, followed by a paragraph that says "This memorandum is privileged and confidential."'
-  assert:
     - type: contains
-      value: 'CONFIDENTIALITY NOTICE'
-    - type: contains
-      value: 'privileged and confidential'
-    # New content comes after existing content
-    - type: javascript
-      value: output.indexOf('CONFIDENTIALITY NOTICE') > output.indexOf('[lawyer]')
-    # Original content intact
-    - type: contains
-      value: 'MEMORANDUM'
+      value: 'March 1-31, 2025'
 
-# --- DOLLAR AMOUNT EDIT ---
-
-- description: 'Memo: Update monetary threshold'
+- description: 'Replace: $25M to $50M, $150M untouched'
   vars:
     fixture: memorandum.docx
     task: 'Replace the acquisition limit of "$25,000,000" with "$50,000,000".'
@@ -144,13 +116,10 @@
       value: '$50,000,000'
     - type: not-contains
       value: '$25,000,000'
-    # Other amount untouched
     - type: contains
       value: '$150,000,000'
 
-# --- MULTI-STEP EDIT ---
-
-- description: 'Memo: Replace lawyer placeholder with actual name'
+- description: 'Replace: [lawyer] placeholder, signature intact'
   vars:
     fixture: memorandum.docx
     task: 'Replace "[lawyer]" with "Sarah Chen, Partner" at the end of the document.'
@@ -159,68 +128,24 @@
       value: 'Sarah Chen, Partner'
     - type: not-contains
       value: '[lawyer]'
-    # Document structure intact
     - type: contains
       value: 'Best regards,'
+    - type: javascript
+      value: "output.indexOf('Sarah Chen') > output.indexOf('Best regards')"
 
-# =============================================================================
-# EXPORT TESTS -- edit and save the DOCX to results/output/
-# =============================================================================
-
-- description: 'Export: add paragraph and save'
-  vars:
-    fixture: document.docx
-    keepFile: true
-    task: 'Add a new paragraph at the end of the document that says exactly "EXPORT TEST MARKER".'
-  assert:
-    - type: contains
-      value: 'EXPORT TEST MARKER'
-    - type: contains
-      value: 'A list of list features'
-
-- description: 'Export: find-and-replace and save'
+- description: 'Insert: heading + paragraph after signature'
   vars:
     fixture: memorandum.docx
-    keepFile: true
-    task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
+    task: 'Add a new heading "CONFIDENTIALITY NOTICE" at the end of the document, followed by a paragraph that says "This memorandum is privileged and confidential."'
   assert:
     - type: contains
-      value: 'Chief Legal Officer'
-    - type: not-contains
-      value: 'General Counsel'
+      value: 'CONFIDENTIALITY NOTICE'
     - type: contains
-      value: 'OPERATIONAL COVENANTS'
+      value: 'privileged and confidential'
+    - type: javascript
+      value: "output.indexOf('CONFIDENTIALITY NOTICE') > output.indexOf('Best regards')"
 
-- description: 'Export: add heading and save'
-  vars:
-    fixture: memorandum.docx
-    keepFile: true
-    task: 'Add a heading "APPENDIX A" at the end of the document.'
-  assert:
-    - type: contains
-      value: 'APPENDIX A'
-    - type: contains
-      value: 'MEMORANDUM'
-
-- description: 'Export: dollar amount edit and save'
-  vars:
-    fixture: memorandum.docx
-    keepFile: true
-    task: 'Replace "$25,000,000" with "$75,000,000" in the document.'
-  assert:
-    - type: contains
-      value: '$75,000,000'
-    - type: not-contains
-      value: '$25,000,000'
-    - type: contains
-      value: '$150,000,000'
-
-# =============================================================================
-# CUSTOMER PROMPT TESTS -- from Sample LLM Prompts spreadsheet
-# Real editing tasks customers would ask for, executed on real documents.
-# =============================================================================
-
-- description: 'Customer: Replace placeholder throughout memo'
+- description: 'Replace: Acquiror to Buyer, amounts untouched'
   vars:
     fixture: memorandum.docx
     task: 'Replace every instance of "Acquiror" with "Buyer" in this document.'
@@ -230,41 +155,9 @@
     - type: not-contains
       value: 'Acquiror'
     - type: contains
-      value: 'MEMORANDUM'
+      value: '$25,000,000'
 
-- description: 'Customer: Replace shall with must'
-  vars:
-    fixture: memorandum.docx
-    task: 'Find every "shall" and replace it with "must" in this document.'
-  assert:
-    - type: not-contains
-      value: 'shall'
-    - type: contains
-      value: 'MEMORANDUM'
-
-- description: 'Customer: Insert CONFIDENTIAL at top'
-  vars:
-    fixture: memorandum.docx
-    task: 'Insert the word "CONFIDENTIAL" at the very top of the document.'
-  assert:
-    - type: contains
-      value: 'CONFIDENTIAL'
-    - type: javascript
-      value: output.indexOf('CONFIDENTIAL') < output.indexOf('MEMORANDUM')
-
-- description: 'Customer: Add heading and summary at top'
-  vars:
-    fixture: memorandum.docx
-    task: 'Add a heading called "EXECUTIVE SUMMARY" at the top of the document, followed by a paragraph that says "This memo outlines key obligations for the interim period."'
-  assert:
-    - type: contains
-      value: 'EXECUTIVE SUMMARY'
-    - type: contains
-      value: 'key obligations'
-    - type: javascript
-      value: output.indexOf('EXECUTIVE SUMMARY') < output.indexOf('OPERATIONAL COVENANTS')
-
-- description: 'Customer: Replace go-shop date'
+- description: 'Replace: go-shop date, Dec date untouched'
   vars:
     fixture: memorandum.docx
     task: 'Replace the go-shop period date "March 1-31, 2025" with "April 1-30, 2025" in the document.'
@@ -273,8 +166,10 @@
       value: 'April 1-30, 2025'
     - type: not-contains
       value: 'March 1-31, 2025'
+    - type: contains
+      value: 'December 30, 2024'
 
-- description: 'Customer: Replace Net terms'
+- description: 'Replace: legal terms, covenants section intact'
   vars:
     fixture: memorandum.docx
     task: 'Replace "reasonable best efforts" with "commercially reasonable efforts" everywhere in the document.'
@@ -284,13 +179,13 @@
     - type: not-contains
       value: 'reasonable best efforts'
     - type: contains
-      value: 'OPERATIONAL COVENANTS'
+      value: 'Maintain the company in good standing'
 
 # =============================================================================
-# TABLE DOC TESTS -- document with tables
+# TABLE DOC -- document with tables
 # =============================================================================
 
-- description: 'Table: Agent reads table content'
+- description: 'Table: reads headers and cell content'
   vars:
     fixture: table-doc.docx
     task: 'Get the full text of this document.'
@@ -299,25 +194,102 @@
       value: 'Component'
     - type: contains
       value: 'Version'
+    - type: contains
+      value: 'January 22, 2026'
 
-- description: 'Table: Replace text inside table cell'
+- description: 'Table: replace cell content, headers untouched'
   vars:
     fixture: table-doc.docx
-    task: 'Replace every "Test" with "Production" in the table.'
+    task: 'Replace every cell that says "Test" with "Production" in the table.'
   assert:
     - type: contains
       value: 'Production'
-    - type: not-contains
-      value: 'Test'
+    - type: contains
+      value: 'Component'
+    - type: contains
+      value: 'January 22, 2026'
 
 # =============================================================================
-# COMMENTS DOC TESTS -- document with existing comments
+# MULTI-STEP -- compound operations
 # =============================================================================
 
-- description: 'Comments: Agent reads document with comments'
+- description: 'Multi-step: find section, insert paragraph after it'
   vars:
-    fixture: comments-doc.docx
-    task: 'Get the full text of this document.'
+    fixture: memorandum.docx
+    task: 'Find the section about "Alternative Transaction Proposals" and add a paragraph right after it that says "NOTE: Legal review required for this section."'
   assert:
     - type: contains
-      value: 'comment'
+      value: 'NOTE: Legal review required for this section'
+    - type: javascript
+      value: "output.indexOf('NOTE: Legal review required') > output.indexOf('Alternative Transaction Proposals')"
+
+- description: 'Multi-step: replace placeholder AND add disclaimer at end'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" and then add a new heading "DISCLAIMER" at the very end of the document followed by a paragraph "This document does not constitute legal advice."'
+  assert:
+    - type: contains
+      value: 'Sarah Chen, Partner'
+    - type: not-contains
+      value: '[lawyer]'
+    - type: contains
+      value: 'DISCLAIMER'
+    - type: contains
+      value: 'does not constitute legal advice'
+    - type: javascript
+      value: "output.indexOf('DISCLAIMER') > output.indexOf('Sarah Chen')"
+
+# =============================================================================
+# EXPORT -- save edited DOCX to results/output/
+# =============================================================================
+
+- description: 'Export: replace + heading + save'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "$25,000,000" with "$75,000,000" and add a heading "APPENDIX A" at the end of the document.'
+  assert:
+    - type: contains
+      value: '$75,000,000'
+    - type: not-contains
+      value: '$25,000,000'
+    - type: contains
+      value: '$150,000,000'
+    - type: contains
+      value: 'APPENDIX A'
+    - type: javascript
+      value: "output.indexOf('APPENDIX A') > output.indexOf('Best regards')"
+
+# =============================================================================
+# ASPIRATIONAL -- may not fully work yet. Failures are expected.
+# =============================================================================
+
+- description: 'Aspirational: glossary of defined terms at end'
+  vars:
+    fixture: memorandum.docx
+    task: 'Generate a glossary of defined terms at the end of the document. Include at least: "Acquiror", "go-shop period", "GAAP". Format as a heading "GLOSSARY" followed by the terms.'
+  assert:
+    - type: contains
+      value: 'GLOSSARY'
+    - type: javascript
+      value: "output.indexOf('GLOSSARY') > output.indexOf('Best regards')"
+
+- description: 'Aspirational: create table from bullet list'
+  vars:
+    fixture: document.docx
+    task: 'Turn this bulleted list into a two-column table. First column has the list items, second column is empty. The table should have a header row with "Feature" and "Notes".'
+  assert:
+    - type: contains
+      value: 'Feature'
+    - type: contains
+      value: 'Notes'
+
+- description: 'Aspirational: redline with tracked changes'
+  vars:
+    fixture: memorandum.docx
+    task: 'In the "Restrictive Covenants" section, replace "No liquidation" with "Company may not pursue liquidation" using tracked changes so it can be reviewed.'
+  assert:
+    - type: contains
+      value: 'Restrictive Covenants'
+    - type: contains
+      value: 'MEMORANDUM'

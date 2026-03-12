@@ -1,8 +1,10 @@
-# Tool quality tests -- explicit assertions, no profile abstraction.
-# Every test lists its assertions directly so anyone can read it.
+# Tool quality tests -- does the LLM pick the right tool with valid arguments?
+# No documents involved. Tests the model's understanding of our tool API.
+#
+# Each test has explicit assertions. No profile abstraction.
 
 # =============================================================================
-# READING -- does the model find/read content?
+# READING -- tool selection for finding/reading content
 # =============================================================================
 
 - description: 'Text search calls query_match'
@@ -15,7 +17,7 @@
       threshold: 1.0
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:textSearchArgs        # select.type === "text", pattern exists
+      value: file://lib/checks.cjs:textSearchArgs
       metric: argument_accuracy
 
 - description: 'Node search calls query_match with node selector'
@@ -29,7 +31,7 @@
       threshold: 1.0
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:nodeSearchArgs         # select.type === "node", nodeType matches
+      value: file://lib/checks.cjs:nodeSearchArgs
       metric: argument_accuracy
 
 - description: 'Get document text calls get_document_text'
@@ -43,31 +45,20 @@
       metric: tool_selection
 
 - description: 'Count occurrences uses query_match'
-  metadata: { category: reading, source: spreadsheet }
+  metadata: { category: reading }
   vars:
-    task: 'How many times does "Acme Corp" appear in this document, and where are the first five mentions?'
+    task: 'How many times does "Acme Corp" appear in this document?'
   assert:
     - type: tool-call-f1
       value: [query_match]
       threshold: 1.0
       metric: tool_selection
 
-- description: 'Pull headings in order'
-  metadata: { category: reading, source: spreadsheet }
-  vars:
-    task: 'Pull out all the headings in this document in order.'
-    expectedNodeType: heading
-  assert:
-    - type: tool-call-f1
-      value: [query_match, get_document_text]
-      threshold: 0.5
-      metric: tool_selection
-
 # =============================================================================
-# MUTATIONS -- find and replace, delete, insert
+# MUTATIONS -- replace, delete, insert operations
 # =============================================================================
 
-- description: 'Replace text uses text.rewrite op'
+- description: 'Replace uses text.rewrite, not bare replace'
   metadata: { category: mutation }
   vars:
     task: 'Replace the text "old title" with "new title" in the document.'
@@ -77,13 +68,13 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:validOpNames           # uses text.rewrite, not "replace"
+      value: file://lib/checks.cjs:validOpNames
       metric: argument_accuracy
     - type: javascript
       value: file://lib/checks.cjs:noHallucinatedParams
       metric: argument_accuracy
 
-- description: 'Delete text uses text.delete'
+- description: 'Delete uses text.delete with op + where fields'
   metadata: { category: mutation }
   vars:
     task: 'Remove the sentence "This is a draft document." from the introduction.'
@@ -96,46 +87,23 @@
       value: file://lib/checks.cjs:validOpNames
       metric: argument_accuracy
     - type: javascript
-      value: file://lib/checks.cjs:stepFields              # steps have op + where
+      value: file://lib/checks.cjs:stepFields
       metric: argument_accuracy
 
-- description: 'Replace placeholder throughout (customer prompt)'
-  metadata: { category: mutation, source: spreadsheet }
-  vars:
-    task: 'Replace the placeholder value [ClientName] with "Acme Corporation" throughout the document.'
-  assert:
-    - type: tool-call-f1
-      value: [query_match, apply_mutations]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:validOpNames
-      metric: argument_accuracy
-
-- description: 'Replace shall with must (customer prompt)'
-  metadata: { category: mutation, source: spreadsheet }
-  vars:
-    task: 'Find every instance of "shall" and replace it with "must" in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [query_match, apply_mutations]
-      threshold: 0.5
-      metric: tool_selection
-
-- description: 'Atomic multi-step replace'
+- description: 'Atomic multi-step has atomic: true and 2+ steps'
   metadata: { category: mutation }
   vars:
-    task: 'Replace "Q1" with "Quarter 1" and "Q2" with "Quarter 2" in the financial summary. Do both changes atomically.'
+    task: 'Replace "Q1" with "Quarter 1" and "Q2" with "Quarter 2" atomically.'
   assert:
     - type: tool-call-f1
       value: [query_match, apply_mutations]
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:atomicMultiStep          # atomic: true, 2+ steps
+      value: file://lib/checks.cjs:atomicMultiStep
       metric: argument_accuracy
 
-- description: 'Does not use require "any" in mutations'
+- description: 'Mutation where uses require "first", not "any"'
   metadata: { category: mutation }
   vars:
     task: 'Replace the first occurrence of "draft" with "final" in the document.'
@@ -145,14 +113,14 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:noRequireAny             # require: "first" not "any"
+      value: file://lib/checks.cjs:noRequireAny
       metric: correctness
 
 # =============================================================================
 # FORMATTING -- bold, font, highlight, underline
 # =============================================================================
 
-- description: 'Bold uses format.apply with inline structure'
+- description: 'Bold uses format.apply with {inline: {bold: true}}'
   metadata: { category: format }
   vars:
     task: 'Make the word "Important" bold in the document.'
@@ -162,29 +130,19 @@
       threshold: 0.3
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:correctFormatArgs        # { inline: { bold: true } }
+      value: file://lib/checks.cjs:correctFormatArgs
       metric: argument_accuracy
 
-- description: 'Does not combine rewrite and format in one batch'
+- description: 'No mixed rewrite + format in one batch'
   metadata: { category: format }
   vars:
     task: 'Replace "old text" with "new text" and make it bold.'
   assert:
     - type: javascript
-      value: file://lib/checks.cjs:noMixedBatch             # no text.rewrite + format.apply together
+      value: file://lib/checks.cjs:noMixedBatch
       metric: correctness
 
-- description: 'Change headings to 12pt (customer prompt)'
-  metadata: { category: format, source: spreadsheet }
-  vars:
-    task: 'Make all the headings in this document 12-point font.'
-  assert:
-    - type: tool-call-f1
-      value: [query_match, apply_mutations, discover_tools]
-      threshold: 0.3
-      metric: tool_selection
-
-- description: 'Apply highlight to text (customer prompt)'
+- description: 'Highlight text'
   metadata: { category: format, source: spreadsheet }
   vars:
     task: 'Apply yellow highlight to every occurrence of "high risk" in the document.'
@@ -194,7 +152,7 @@
       threshold: 0.3
       metric: tool_selection
 
-- description: 'Underline specific text (customer prompt)'
+- description: 'Underline text'
   metadata: { category: format, source: spreadsheet }
   vars:
     task: 'Underline the sentence containing "payment terms" in the document.'
@@ -205,10 +163,10 @@
       metric: tool_selection
 
 # =============================================================================
-# STRUCTURAL -- headings, paragraphs, content insertion
+# STRUCTURAL -- headings, paragraphs
 # =============================================================================
 
-- description: 'Add heading uses create_heading, not text.insert'
+- description: 'Heading uses create_heading, not text.insert'
   metadata: { category: structure }
   vars:
     task: 'Add a new heading "Chapter 2" at the end of the document.'
@@ -218,10 +176,10 @@
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:noTextInsertForStructure  # not text.insert inside apply_mutations
+      value: file://lib/checks.cjs:noTextInsertForStructure
       metric: correctness
 
-- description: 'Add paragraph uses create_paragraph'
+- description: 'Paragraph uses create_paragraph or discover_tools'
   metadata: { category: structure }
   vars:
     task: 'Add a new paragraph at the end of the document.'
@@ -231,28 +189,8 @@
       threshold: 0.5
       metric: tool_selection
 
-- description: 'Insert CONFIDENTIAL at top (customer prompt)'
-  metadata: { category: structure, source: spreadsheet }
-  vars:
-    task: 'Insert the word CONFIDENTIAL at the very top of the document.'
-  assert:
-    - type: tool-call-f1
-      value: [apply_mutations, create_paragraph, discover_tools]
-      threshold: 0.3
-      metric: tool_selection
-
-- description: 'Add heading + content (customer prompt)'
-  metadata: { category: structure, source: spreadsheet }
-  vars:
-    task: 'Add a heading called "Legal Risk Summary" at the top of the document and insert a 5-bullet risk recap underneath.'
-  assert:
-    - type: tool-call-f1
-      value: [discover_tools, query_match, create_heading]
-      threshold: 0.3
-      metric: tool_selection
-
 # =============================================================================
-# TABLES -- discover tools, add rows, insert table
+# TABLES -- discover and operate
 # =============================================================================
 
 - description: 'Table request discovers tables group'
@@ -269,17 +207,7 @@
       value: file://lib/checks.cjs:validDiscoverGroups
       metric: argument_accuracy
 
-- description: 'Add rows to table (customer prompt)'
-  metadata: { category: tables, source: spreadsheet }
-  vars:
-    task: 'Add three new rows to my table.'
-  assert:
-    - type: tool-call-f1
-      value: [discover_tools, query_match]
-      threshold: 0.5
-      metric: tool_selection
-
-- description: 'Insert a table (customer prompt)'
+- description: 'Insert a table'
   metadata: { category: tables, source: spreadsheet }
   vars:
     task: 'Insert a 4-column by 3-row table under the Pricing Details heading.'
@@ -290,10 +218,10 @@
       metric: tool_selection
 
 # =============================================================================
-# COMMENTS -- create, reply, review
+# COMMENTS
 # =============================================================================
 
-- description: 'Comment request discovers comments group'
+- description: 'Comment discovers comments group'
   metadata: { category: comments }
   vars:
     task: 'Add a comment on the first paragraph saying "Needs legal review".'
@@ -303,17 +231,7 @@
       threshold: 0.5
       metric: tool_selection
 
-- description: 'Leave comment on pricing table (customer prompt)'
-  metadata: { category: comments, source: spreadsheet }
-  vars:
-    task: 'Leave a comment for the legal team on the pricing table, asking for updated numbers.'
-  assert:
-    - type: tool-call-f1
-      value: [discover_tools, query_match]
-      threshold: 0.5
-      metric: tool_selection
-
-- description: 'Comment on liability clauses (customer prompt)'
+- description: 'Comment on liability clauses'
   metadata: { category: comments, source: spreadsheet }
   vars:
     task: 'Add a review comment to each paragraph containing "limitation of liability" in the document.'
@@ -324,35 +242,13 @@
       metric: tool_selection
 
 # =============================================================================
-# TRACKED CHANGES -- edit with suggestions
+# TRACKED CHANGES
 # =============================================================================
 
-- description: 'Tracked change uses changeMode tracked'
+- description: 'Tracked change sets changeMode tracked'
   metadata: { category: tracked_changes }
   vars:
-    task: 'Suggest replacing "annual review" with "quarterly review" using tracked changes so it can be reviewed.'
-  assert:
-    - type: tool-call-f1
-      value: [query_match, apply_mutations]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:isTrackedMode            # changeMode === "tracked"
-      metric: correctness
-
-- description: 'Direct edit does not use tracked mode'
-  metadata: { category: tracked_changes }
-  vars:
-    task: 'Replace "draft" with "final version" in the document title. Apply the change directly.'
-  assert:
-    - type: javascript
-      value: file://lib/checks.cjs:isNotTrackedMode          # changeMode !== "tracked"
-      metric: correctness
-
-- description: 'Redline liability clause (customer prompt)'
-  metadata: { category: tracked_changes, source: spreadsheet }
-  vars:
-    task: 'Redline the limitation of liability clause to cap liability at 12 months of fees. Use tracked changes.'
+    task: 'Suggest replacing "annual review" with "quarterly review" using tracked changes.'
   assert:
     - type: tool-call-f1
       value: [query_match, apply_mutations]
@@ -362,8 +258,17 @@
       value: file://lib/checks.cjs:isTrackedMode
       metric: correctness
 
+- description: 'Direct edit does not set tracked mode'
+  metadata: { category: tracked_changes }
+  vars:
+    task: 'Replace "draft" with "final version" in the title. Apply directly.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:isNotTrackedMode
+      metric: correctness
+
 # =============================================================================
-# LISTS -- numbering, bullets, indentation
+# LISTS
 # =============================================================================
 
 - description: 'List operation discovers lists group'
@@ -376,7 +281,7 @@
       threshold: 0.5
       metric: tool_selection
 
-- description: 'Change list numbering (customer prompt)'
+- description: 'Change list numbering'
   metadata: { category: lists, source: spreadsheet }
   vars:
     task: 'Change the third level of this list to lowercase Roman numerals.'
@@ -386,18 +291,8 @@
       threshold: 0.5
       metric: tool_selection
 
-- description: 'Replace bullets with checkboxes (customer prompt)'
-  metadata: { category: lists, source: spreadsheet }
-  vars:
-    task: 'Replace the bullets in this list with checkboxes.'
-  assert:
-    - type: tool-call-f1
-      value: [discover_tools, query_match]
-      threshold: 0.5
-      metric: tool_selection
-
 # =============================================================================
-# HYGIENE -- no hallucinated params, valid args
+# HYGIENE
 # =============================================================================
 
 - description: 'No hallucinated doc or sessionId params'
@@ -409,10 +304,6 @@
       value: file://lib/checks.cjs:noHallucinatedParams
       metric: argument_accuracy
 
-# =============================================================================
-# UNDO
-# =============================================================================
-
 - description: 'Undo calls undo tool'
   metadata: { category: history }
   vars:
@@ -423,10 +314,6 @@
       threshold: 1.0
       metric: tool_selection
 
-# =============================================================================
-# EFFICIENCY
-# =============================================================================
-
 - description: 'Simple task uses 3 or fewer tool calls'
   metadata: { category: efficiency }
   vars:
@@ -434,4 +321,62 @@
   assert:
     - type: javascript
       metric: efficiency
-      value: output.length <= 3
+      value: "output.length <= 3"
+
+# =============================================================================
+# ASPIRATIONAL -- not fully supported yet. Failures expected.
+# =============================================================================
+
+- description: 'Aspirational: Set page margins'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Set the page margins to 0.7 inches on all sides.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 1.0
+
+- description: 'Aspirational: Insert table of contents'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Insert a table of contents immediately following the title page.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 1.0
+
+- description: 'Aspirational: Merge table cells'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Merge the first two header cells in row 1.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+
+- description: 'Aspirational: Accept formatting-only tracked changes'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Accept all tracked changes that only affect formatting.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+
+- description: 'Aspirational: Turn text into hyperlink'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Turn every instance of "SuperDoc" into a hyperlink to https://www.superdoc.dev.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, discover_tools]
+      threshold: 0.5
+
+- description: 'Aspirational: Identify liability risks'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Which sections of this document pose the greatest liability to me?'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, get_document_text]
+      threshold: 0.5

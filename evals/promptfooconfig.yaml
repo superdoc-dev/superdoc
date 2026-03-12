@@ -47,15 +47,15 @@ providers:
   #     max_tokens: 1024
   #     maxRetries: 3
 
-  # --- Google ---
-  - id: google:gemini-2.5-pro
-    label: Gemini 2.5 Pro
-    delay: 500
-    config:
-      temperature: 0
-      tools: file://lib/essential.json
-      maxOutputTokens: 1024
-      timeout: 30000
+  # # --- Google ---
+  # - id: google:gemini-2.5-pro
+  #   label: Gemini 2.5 Pro
+  #   delay: 1000
+  #   config:
+  #     temperature: 0
+  #     tools: file://lib/essential.json
+  #     maxOutputTokens: 1024
+  #     timeout: 30000
 
 defaultTest:
   options:

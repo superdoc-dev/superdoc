@@ -545,6 +545,41 @@ describe('SuperDoc.vue', () => {
     });
   });
 
+  it('falls back to sourceEditor for body update and transaction payloads', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.onTransaction = vi.fn();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const bodyEditor = { options: { documentId: 'doc-1' } };
+    const transaction = { docChanged: true, getMeta: vi.fn(() => null) };
+
+    options.onUpdate({ sourceEditor: bodyEditor });
+    expect(superdocStub.emit).toHaveBeenCalledWith('editor-update', {
+      editor: bodyEditor,
+      sourceEditor: bodyEditor,
+      surface: 'body',
+      headerId: null,
+      sectionType: null,
+    });
+
+    options.onTransaction({
+      sourceEditor: bodyEditor,
+      transaction,
+      duration: 7,
+    });
+    expect(superdocStub.config.onTransaction).toHaveBeenCalledWith({
+      editor: bodyEditor,
+      sourceEditor: bodyEditor,
+      transaction,
+      duration: 7,
+      surface: 'body',
+      headerId: null,
+      sectionType: null,
+    });
+  });
+
   it('shows comments sidebar and tools, handles menu actions', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

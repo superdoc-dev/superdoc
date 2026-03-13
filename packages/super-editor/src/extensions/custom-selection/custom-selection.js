@@ -163,21 +163,6 @@ export const CustomSelection = Extension.create({
           if (!nextState?.preservedSelection) return nextState;
           if (!tr.docChanged) return nextState;
 
-          // For history/undo-like transactions and other non-history mutations
-          // (marked with addToHistory: false), clear any preserved visual
-          // selection instead of remapping it. This ensures that highlights
-          // don't "reappear" after undo/redo cycles, while still allowing
-          // normal typing/editing (which uses the default addToHistory: true)
-          // to preserve selection overlays when appropriate.
-          const addToHistoryMeta = tr.getMeta('addToHistory');
-          if (addToHistoryMeta === false) {
-            return {
-              ...nextState,
-              preservedSelection: null,
-              showVisualSelection: false,
-            };
-          }
-
           const mappedSelection = mapPreservedSelection(nextState.preservedSelection, tr);
           if (!mappedSelection) {
             return {

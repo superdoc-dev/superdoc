@@ -1,5 +1,6 @@
 import type { SuperDoc } from 'superdoc';
 
+/** Field definition for template builder */
 export interface FieldDefinition {
   id: string;
   label: string;
@@ -7,8 +8,10 @@ export interface FieldDefinition {
   metadata?: Record<string, any>;
   mode?: 'inline' | 'block';
   group?: string;
+  fieldType?: string;
 }
 
+/** Field instance in a template document */
 export interface TemplateField {
   id: string | number;
   alias: string;
@@ -16,6 +19,7 @@ export interface TemplateField {
   position?: number;
   mode?: 'inline' | 'block';
   group?: string;
+  fieldType?: string;
 }
 
 export interface TriggerEvent {
@@ -109,6 +113,15 @@ export interface SuperDocTemplateBuilderProps {
   menu?: MenuConfig;
   list?: ListConfig;
   toolbar?: boolean | string | ToolbarConfig;
+
+  /** Content Security Policy nonce for dynamically injected styles */
+  cspNonce?: string;
+
+  /** Telemetry configuration for SuperDoc */
+  telemetry?: { enabled: boolean; metadata?: Record<string, any> };
+
+  /** License key for SuperDoc */
+  licenseKey?: string;
 
   // Events
   onReady?: () => void;

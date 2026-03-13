@@ -1,0 +1,2131 @@
+---
+title: mutations.apply
+sidebarTitle: mutations.apply
+description: Execute a mutation plan atomically against the document.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Execute a mutation plan atomically against the document.
+
+- Operation ID: `mutations.apply`
+- API member path: `editor.doc.mutations.apply(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `yes`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a PlanReceipt with per-step results for the atomically applied mutation plan.
+
+## Supported step operations
+
+Use these values in `steps[].op` when authoring mutation plans.
+
+### Assert
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>assert</code></span> | Assert selector cardinality after mutation steps complete. | — |
+
+### Text
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>text.rewrite</code></span> | Rewrite matched text ranges with replacement content. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/replace"><code>replace</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>text.insert</code></span> | Insert text before or after a matched range. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/insert"><code>insert</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>text.delete</code></span> | Delete matched text ranges. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/delete"><code>delete</code></a></span> |
+
+### Format
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>format.apply</code></span> | Apply inline formatting patch changes to matched text ranges. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> |
+
+### Create
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>create.paragraph</code></span> | Create a paragraph adjacent to the matched block. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/paragraph"><code>create.paragraph</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>create.heading</code></span> | Create a heading adjacent to the matched block. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/heading"><code>create.heading</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>create.table</code></span> | Create a table at the requested location. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/table"><code>create.table</code></a></span> |
+
+### Tables
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.delete</code></span> | Delete the target table from the document. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete"><code>tables.delete</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearContents</code></span> | Clear contents from a target table or cell range. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-contents"><code>tables.clearContents</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.move</code></span> | Move a table to a new position. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/move"><code>tables.move</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.split</code></span> | Split a table into two tables at a target row. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/split"><code>tables.split</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.convertFromText</code></span> | Convert a text range into a table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/convert-from-text"><code>tables.convertFromText</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.convertToText</code></span> | Convert a table to plain text. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/convert-to-text"><code>tables.convertToText</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setLayout</code></span> | Set table layout mode. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-layout"><code>tables.setLayout</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.insertRow</code></span> | Insert a row into the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-row"><code>tables.insertRow</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.deleteRow</code></span> | Delete a row from the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-row"><code>tables.deleteRow</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setRowHeight</code></span> | Set row height in the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-height"><code>tables.setRowHeight</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.distributeRows</code></span> | Distribute row heights evenly. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/distribute-rows"><code>tables.distributeRows</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setRowOptions</code></span> | Set row-level options (header repeat, page break, etc.). | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-options"><code>tables.setRowOptions</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.insertColumn</code></span> | Insert a column into the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-column"><code>tables.insertColumn</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.deleteColumn</code></span> | Delete a column from the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-column"><code>tables.deleteColumn</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setColumnWidth</code></span> | Set column width in the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-column-width"><code>tables.setColumnWidth</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.distributeColumns</code></span> | Distribute column widths evenly. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/distribute-columns"><code>tables.distributeColumns</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.insertCell</code></span> | Insert a cell into a table row. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-cell"><code>tables.insertCell</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.deleteCell</code></span> | Delete a cell from a table row. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-cell"><code>tables.deleteCell</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.mergeCells</code></span> | Merge a range of table cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/merge-cells"><code>tables.mergeCells</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.unmergeCells</code></span> | Unmerge a merged table cell. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/unmerge-cells"><code>tables.unmergeCells</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.splitCell</code></span> | Split a table cell into multiple cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/split-cell"><code>tables.splitCell</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setCellProperties</code></span> | Set properties on target table cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-properties"><code>tables.setCellProperties</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.sort</code></span> | Sort table rows by a column value. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/sort"><code>tables.sort</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setAltText</code></span> | Set table alt text properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-alt-text"><code>tables.setAltText</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setStyle</code></span> | Set table style identifier. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-style"><code>tables.setStyle</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearStyle</code></span> | Clear direct table style assignment. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-style"><code>tables.clearStyle</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setStyleOption</code></span> | Set table style option flags. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-style-option"><code>tables.setStyleOption</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setBorder</code></span> | Set table border properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-border"><code>tables.setBorder</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearBorder</code></span> | Clear table border properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-border"><code>tables.clearBorder</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.applyBorderPreset</code></span> | Apply a border preset to a table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/apply-border-preset"><code>tables.applyBorderPreset</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setShading</code></span> | Set table shading properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-shading"><code>tables.setShading</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearShading</code></span> | Clear table shading properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-shading"><code>tables.clearShading</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setTablePadding</code></span> | Set table-level cell padding. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-table-padding"><code>tables.setTablePadding</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setCellPadding</code></span> | Set cell padding for target cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-padding"><code>tables.setCellPadding</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setCellSpacing</code></span> | Set table cell spacing. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-spacing"><code>tables.setCellSpacing</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearCellSpacing</code></span> | Clear table cell spacing. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-cell-spacing"><code>tables.clearCellSpacing</code></a></span> |
+
+The runtime capability snapshot also exposes this allowlist at `planEngine.supportedStepOps`.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `atomic` | `true` | yes | Constant: `true` |
+| `changeMode` | enum | yes | `"direct"`, `"tracked"` |
+| `expectedRevision` | string | no |  |
+| `steps` | object(op="text.rewrite") \\| object(op="text.insert") \\| object(op="text.delete") \\| object(op="format.apply") \\| object(op="assert")[] | yes |  |
+
+### Example request
+
+```json
+{
+  "atomic": true,
+  "changeMode": "direct",
+  "expectedRevision": "rev-001",
+  "steps": [
+    {
+      "args": {
+        "replacement": {
+          "text": "Hello, world."
+        },
+        "style": {
+          "inline": {
+            "mode": "preserve",
+            "onNonUniform": "error",
+            "requireUniform": true
+          },
+          "paragraph": {
+            "mode": "preserve"
+          }
+        }
+      },
+      "id": "id-001",
+      "op": "text.rewrite",
+      "where": {
+        "by": "select",
+        "require": "first",
+        "select": {
+          "caseSensitive": true,
+          "mode": "contains",
+          "pattern": "hello world",
+          "type": "text"
+        },
+        "within": {
+          "kind": "block",
+          "nodeId": "node-def456",
+          "nodeType": "paragraph"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `revision` | object | yes |  |
+| `revision.after` | string | yes |  |
+| `revision.before` | string | yes |  |
+| `steps` | object[] | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+| `timing` | object | yes |  |
+| `timing.totalMs` | number | yes |  |
+| `trackedChanges` | object[] | no |  |
+
+### Example response
+
+```json
+{
+  "revision": {
+    "after": "example",
+    "before": "example"
+  },
+  "steps": [
+    {}
+  ],
+  "success": true,
+  "timing": {
+    "totalMs": 12.5
+  },
+  "trackedChanges": [
+    {}
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `REVISION_MISMATCH`
+- `MATCH_NOT_FOUND`
+- `AMBIGUOUS_MATCH`
+- `STYLE_CONFLICT`
+- `PRECONDITION_FAILED`
+- `INVALID_INPUT`
+- `CROSS_BLOCK_MATCH`
+- `SPAN_FRAGMENTED`
+- `TARGET_MOVED`
+- `PLAN_CONFLICT_OVERLAP`
+- `INVALID_STEP_COMBINATION`
+- `REVISION_CHANGED_SINCE_COMPILE`
+- `INVALID_INSERTION_CONTEXT`
+- `DOCUMENT_IDENTITY_CONFLICT`
+- `CAPABILITY_UNAVAILABLE`
+- `DUPLICATE_ID`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `CAPABILITY_UNSUPPORTED`
+
+## Non-applied failure codes
+
+- `INVALID_CONTEXT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "atomic": {
+      "const": true,
+      "type": "boolean"
+    },
+    "changeMode": {
+      "enum": [
+        "direct",
+        "tracked"
+      ]
+    },
+    "expectedRevision": {
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "replacement": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "blocks": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "blocks"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "style": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "inline": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "preserve",
+                              "set",
+                              "clear",
+                              "merge"
+                            ],
+                            "type": "string"
+                          },
+                          "onNonUniform": {
+                            "enum": [
+                              "error",
+                              "useLeadingRun",
+                              "majority",
+                              "union"
+                            ]
+                          },
+                          "requireUniform": {
+                            "type": "boolean"
+                          },
+                          "setMarks": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "bold": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              },
+                              "italic": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              },
+                              "strike": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              },
+                              "underline": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "type": "object"
+                      },
+                      "paragraph": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "preserve",
+                              "set",
+                              "clear"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "inline"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "replacement"
+                ],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "op": {
+                "const": "text.rewrite",
+                "type": "string"
+              },
+              "where": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "select",
+                        "type": "string"
+                      },
+                      "require": {
+                        "enum": [
+                          "first",
+                          "exactlyOne",
+                          "all"
+                        ]
+                      },
+                      "select": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "caseSensitive": {
+                                "type": "boolean"
+                              },
+                              "mode": {
+                                "enum": [
+                                  "contains",
+                                  "regex"
+                                ]
+                              },
+                              "pattern": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "text"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "pattern"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "block",
+                                  "inline"
+                                ]
+                              },
+                              "nodeType": {
+                                "enum": [
+                                  "paragraph",
+                                  "heading",
+                                  "listItem",
+                                  "table",
+                                  "tableRow",
+                                  "tableCell",
+                                  "tableOfContents",
+                                  "image",
+                                  "sdt",
+                                  "run",
+                                  "bookmark",
+                                  "comment",
+                                  "hyperlink",
+                                  "footnoteRef",
+                                  "endnoteRef",
+                                  "crossRef",
+                                  "indexEntry",
+                                  "citation",
+                                  "authorityEntry",
+                                  "sequenceField",
+                                  "tab",
+                                  "lineBreak"
+                                ]
+                              },
+                              "type": {
+                                "const": "node"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "within": {
+                        "$ref": "#/$defs/NodeAddress"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "select",
+                      "require"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "ref",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "type": "string"
+                      },
+                      "within": {
+                        "$ref": "#/$defs/NodeAddress"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "ref"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "where",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "type": "object"
+                  },
+                  "position": {
+                    "enum": [
+                      "before",
+                      "after"
+                    ]
+                  },
+                  "style": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "inline": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "inherit",
+                              "set",
+                              "clear"
+                            ],
+                            "type": "string"
+                          },
+                          "setMarks": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "bold": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              },
+                              "italic": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              },
+                              "strike": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              },
+                              "underline": {
+                                "enum": [
+                                  "on",
+                                  "off",
+                                  "clear"
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "inline"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "position",
+                  "content"
+                ],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "op": {
+                "const": "text.insert",
+                "type": "string"
+              },
+              "where": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "const": "select",
+                    "type": "string"
+                  },
+                  "require": {
+                    "enum": [
+                      "first",
+                      "exactlyOne"
+                    ]
+                  },
+                  "select": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "caseSensitive": {
+                            "type": "boolean"
+                          },
+                          "mode": {
+                            "enum": [
+                              "contains",
+                              "regex"
+                            ]
+                          },
+                          "pattern": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "text"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "pattern"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "block",
+                              "inline"
+                            ]
+                          },
+                          "nodeType": {
+                            "enum": [
+                              "paragraph",
+                              "heading",
+                              "listItem",
+                              "table",
+                              "tableRow",
+                              "tableCell",
+                              "tableOfContents",
+                              "image",
+                              "sdt",
+                              "run",
+                              "bookmark",
+                              "comment",
+                              "hyperlink",
+                              "footnoteRef",
+                              "endnoteRef",
+                              "crossRef",
+                              "indexEntry",
+                              "citation",
+                              "authorityEntry",
+                              "sequenceField",
+                              "tab",
+                              "lineBreak"
+                            ]
+                          },
+                          "type": {
+                            "const": "node"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "within": {
+                    "$ref": "#/$defs/NodeAddress"
+                  }
+                },
+                "required": [
+                  "by",
+                  "select",
+                  "require"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "where",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "op": {
+                "const": "text.delete",
+                "type": "string"
+              },
+              "where": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "select",
+                        "type": "string"
+                      },
+                      "require": {
+                        "enum": [
+                          "first",
+                          "exactlyOne",
+                          "all"
+                        ]
+                      },
+                      "select": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "caseSensitive": {
+                                "type": "boolean"
+                              },
+                              "mode": {
+                                "enum": [
+                                  "contains",
+                                  "regex"
+                                ]
+                              },
+                              "pattern": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "text"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "pattern"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "block",
+                                  "inline"
+                                ]
+                              },
+                              "nodeType": {
+                                "enum": [
+                                  "paragraph",
+                                  "heading",
+                                  "listItem",
+                                  "table",
+                                  "tableRow",
+                                  "tableCell",
+                                  "tableOfContents",
+                                  "image",
+                                  "sdt",
+                                  "run",
+                                  "bookmark",
+                                  "comment",
+                                  "hyperlink",
+                                  "footnoteRef",
+                                  "endnoteRef",
+                                  "crossRef",
+                                  "indexEntry",
+                                  "citation",
+                                  "authorityEntry",
+                                  "sequenceField",
+                                  "tab",
+                                  "lineBreak"
+                                ]
+                              },
+                              "type": {
+                                "const": "node"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "within": {
+                        "$ref": "#/$defs/NodeAddress"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "select",
+                      "require"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "ref",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "type": "string"
+                      },
+                      "within": {
+                        "$ref": "#/$defs/NodeAddress"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "ref"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "where",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "inline": {
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "bCs": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "bold": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "border": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "color": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "space": {
+                                "oneOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "sz": {
+                                "oneOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "val": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "caps": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "charScale": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "contextualAlternates": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "cs": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dstrike": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "eastAsianLayout": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "combine": {
+                                "oneOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "combineBrackets": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "vert": {
+                                "oneOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "vertCompress": {
+                                "oneOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "em": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "emboss": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "fitText": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "id": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "val": {
+                                "oneOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "fontFamily": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "fontSize": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "fontSizeCs": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "highlight": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "iCs": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "imprint": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "italic": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "kerning": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "lang": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "bidi": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "eastAsia": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "val": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "letterSpacing": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "ligatures": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "numForm": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "numSpacing": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "oMath": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "outline": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "position": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "rFonts": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "ascii": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "asciiTheme": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "cs": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "csTheme": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "eastAsia": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "eastAsiaTheme": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "hAnsi": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "hAnsiTheme": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "hint": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "rStyle": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "rtl": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "shading": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "color": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "fill": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "val": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "shadow": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "smallCaps": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "snapToGrid": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "specVanish": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "strike": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "stylisticSets": {
+                        "oneOf": [
+                          {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "number"
+                                },
+                                "val": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "id"
+                              ],
+                              "type": "object"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "underline": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "minProperties": 1,
+                            "properties": {
+                              "color": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "style": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "themeColor": {
+                                "oneOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "vanish": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "vertAlign": {
+                        "oneOf": [
+                          {
+                            "enum": [
+                              "superscript",
+                              "subscript",
+                              "baseline"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "webHidden": {
+                        "oneOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "inline"
+                ],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "op": {
+                "const": "format.apply",
+                "type": "string"
+              },
+              "where": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "select",
+                        "type": "string"
+                      },
+                      "require": {
+                        "enum": [
+                          "first",
+                          "exactlyOne",
+                          "all"
+                        ]
+                      },
+                      "select": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "caseSensitive": {
+                                "type": "boolean"
+                              },
+                              "mode": {
+                                "enum": [
+                                  "contains",
+                                  "regex"
+                                ]
+                              },
+                              "pattern": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "text"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "pattern"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "block",
+                                  "inline"
+                                ]
+                              },
+                              "nodeType": {
+                                "enum": [
+                                  "paragraph",
+                                  "heading",
+                                  "listItem",
+                                  "table",
+                                  "tableRow",
+                                  "tableCell",
+                                  "tableOfContents",
+                                  "image",
+                                  "sdt",
+                                  "run",
+                                  "bookmark",
+                                  "comment",
+                                  "hyperlink",
+                                  "footnoteRef",
+                                  "endnoteRef",
+                                  "crossRef",
+                                  "indexEntry",
+                                  "citation",
+                                  "authorityEntry",
+                                  "sequenceField",
+                                  "tab",
+                                  "lineBreak"
+                                ]
+                              },
+                              "type": {
+                                "const": "node"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "within": {
+                        "$ref": "#/$defs/NodeAddress"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "select",
+                      "require"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "ref",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "type": "string"
+                      },
+                      "within": {
+                        "$ref": "#/$defs/NodeAddress"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "ref"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "where",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectCount": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "expectCount"
+                ],
+                "type": "object"
+              },
+              "id": {
+                "type": "string"
+              },
+              "op": {
+                "const": "assert",
+                "type": "string"
+              },
+              "where": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "const": "select",
+                    "type": "string"
+                  },
+                  "select": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "caseSensitive": {
+                            "type": "boolean"
+                          },
+                          "mode": {
+                            "enum": [
+                              "contains",
+                              "regex"
+                            ]
+                          },
+                          "pattern": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "text"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "pattern"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "block",
+                              "inline"
+                            ]
+                          },
+                          "nodeType": {
+                            "enum": [
+                              "paragraph",
+                              "heading",
+                              "listItem",
+                              "table",
+                              "tableRow",
+                              "tableCell",
+                              "tableOfContents",
+                              "image",
+                              "sdt",
+                              "run",
+                              "bookmark",
+                              "comment",
+                              "hyperlink",
+                              "footnoteRef",
+                              "endnoteRef",
+                              "crossRef",
+                              "indexEntry",
+                              "citation",
+                              "authorityEntry",
+                              "sequenceField",
+                              "tab",
+                              "lineBreak"
+                            ]
+                          },
+                          "type": {
+                            "const": "node"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "within": {
+                    "$ref": "#/$defs/NodeAddress"
+                  }
+                },
+                "required": [
+                  "by",
+                  "select"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "where",
+              "args"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "atomic",
+    "changeMode",
+    "steps"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "success": {
+      "const": true
+    },
+    "timing": {
+      "additionalProperties": false,
+      "properties": {
+        "totalMs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "totalMs"
+      ],
+      "type": "object"
+    },
+    "trackedChanges": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success",
+    "revision",
+    "steps",
+    "timing"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "success": {
+      "const": true
+    },
+    "timing": {
+      "additionalProperties": false,
+      "properties": {
+        "totalMs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "totalMs"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "success",
+    "revision",
+    "steps",
+    "timing"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "REVISION_MISMATCH",
+            "MATCH_NOT_FOUND",
+            "AMBIGUOUS_MATCH",
+            "STYLE_CONFLICT",
+            "PRECONDITION_FAILED",
+            "INVALID_INPUT",
+            "CROSS_BLOCK_MATCH",
+            "SPAN_FRAGMENTED",
+            "TARGET_MOVED",
+            "PLAN_CONFLICT_OVERLAP",
+            "INVALID_STEP_COMBINATION",
+            "REVISION_CHANGED_SINCE_COMPILE",
+            "INVALID_INSERTION_CONTEXT",
+            "DOCUMENT_IDENTITY_CONFLICT",
+            "CAPABILITY_UNAVAILABLE",
+            "DUPLICATE_ID",
+            "RAW_MODE_REQUIRED",
+            "PRESERVE_ONLY_VIOLATION",
+            "CAPABILITY_UNSUPPORTED"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

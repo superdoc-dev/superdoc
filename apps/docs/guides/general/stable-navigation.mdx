@@ -1,0 +1,36 @@
+---
+title: Stable navigation after edits
+sidebarTitle: Stable navigation
+description: Find nodes once and navigate to them reliably after document edits.
+---
+
+When users edit a document, stored positions can drift.
+Use `PositionTracker` so navigation targets stay stable.
+
+## Hyperlinks example
+
+```javascript
+// 1) Find hyperlink nodes
+const found = editor.doc.find({
+  select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
+});
+
+// 2) Track each found node
+const links = found.items.map((item) => ({
+  item,
+  trackerId: editor.positionTracker.trackNode(item),
+}));
+
+// 3) Navigate later (for example, from a sidebar click)
+function goToLink(link) {
+  if (!link?.trackerId) return;
+  editor.positionTracker.goToTracked(link.trackerId);
+}
+```
+
+## Best practices
+
+- Track results right after `find()`.
+- Store `trackerId` in UI state, not raw positions.
+- Re-run `find()` and rebuild tracked IDs when refreshing your list.
+- Handle missing targets gracefully (`goToTracked` can return `false` if content was removed).

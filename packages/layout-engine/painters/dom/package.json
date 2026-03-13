@@ -17,8 +17,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@superdoc/common": "workspace:*",
     "@superdoc/contracts": "workspace:*",
     "@superdoc/font-utils": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/pm-adapter": "workspace:*",
     "@superdoc/preset-geometry": "workspace:*",
     "@superdoc/url-validation": "workspace:*"
   },

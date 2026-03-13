@@ -101,6 +101,7 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
   // Optional properties
   if (typeof attrs.alt === 'string') run.alt = attrs.alt;
   if (typeof attrs.title === 'string') run.title = attrs.title;
+  if (typeof attrs.clipPath === 'string') run.clipPath = attrs.clipPath;
 
   // Spacing attributes (from wrap.attrs.distT/distB/distL/distR)
   const distTop = pickNumber(wrapAttrs.distTop ?? wrapAttrs.distT);
@@ -128,6 +129,41 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
   // SDT metadata
   if (sdtMetadata) {
     run.sdt = sdtMetadata;
+  }
+
+  // Extract rotation/flip transforms from transformData
+  const transformData = isPlainObject(attrs.transformData) ? attrs.transformData : undefined;
+  if (transformData) {
+    const rotation = typeof transformData.rotation === 'number' ? transformData.rotation : undefined;
+    if (rotation !== undefined) run.rotation = rotation;
+
+    const flipH = typeof transformData.horizontalFlip === 'boolean' ? transformData.horizontalFlip : undefined;
+    if (flipH !== undefined) run.flipH = flipH;
+
+    const flipV = typeof transformData.verticalFlip === 'boolean' ? transformData.verticalFlip : undefined;
+    if (flipV !== undefined) run.flipV = flipV;
+  }
+
+  // VML image adjustments for watermark effects
+  if (typeof attrs.gain === 'string' || typeof attrs.gain === 'number') {
+    run.gain = attrs.gain;
+  }
+  if (typeof attrs.blacklevel === 'string' || typeof attrs.blacklevel === 'number') {
+    run.blacklevel = attrs.blacklevel;
+  }
+
+  // OOXML image effects
+  if (typeof attrs.grayscale === 'boolean') {
+    run.grayscale = attrs.grayscale;
+  }
+  const lum = isPlainObject(attrs.lum) ? attrs.lum : undefined;
+  const bright = pickNumber(lum?.bright);
+  const contrast = pickNumber(lum?.contrast);
+  if (bright != null || contrast != null) {
+    run.lum = {
+      ...(bright != null ? { bright } : {}),
+      ...(contrast != null ? { contrast } : {}),
+    };
   }
 
   return run;

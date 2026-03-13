@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { Node, Attribute } from '@core/index.js';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 /**
  * Size configuration for content blocks
@@ -42,6 +43,20 @@ import { Node, Attribute } from '@core/index.js';
  *   background: '#e5e7eb'
  * })
  */
+
+/**
+ * Default attributes for a horizontal rule content block.
+ * Single source of truth shared by both `parseDOM` (for `<hr>` tags)
+ * and the `insertHorizontalRule` command.
+ * @returns {ContentBlockAttributes}
+ */
+export function createDefaultHorizontalRuleAttrs() {
+  return {
+    horizontalRule: true,
+    size: { width: '100%', height: 2 },
+    background: '#e5e7eb',
+  };
+}
 
 /**
  * @module ContentBlock
@@ -101,9 +116,7 @@ export const ContentBlock = Node.create({
             // Use relativeHeight from OOXML for proper z-ordering of overlapping elements
             const relativeHeight = attrs.originalAttributes?.relativeHeight;
             if (relativeHeight != null) {
-              // Scale down the relativeHeight value to a reasonable CSS z-index range
-              // OOXML uses large numbers (e.g., 251659318), we normalize to a smaller range
-              const zIndex = Math.floor(relativeHeight / 1000000);
+              const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
               style += `z-index: ${zIndex}; `;
             } else {
               style += 'z-index: 1; ';
@@ -147,6 +160,14 @@ export const ContentBlock = Node.create({
     return [
       {
         tag: `div[data-type="${this.name}"]`,
+        // Paragraph registers a broad `tag: 'div'` rule at default priority 50.
+        // Without explicit priority, PM's insertion-order tie-breaking lets
+        // paragraph consume our div first. Priority 60 ensures contentBlock wins.
+        priority: 60,
+      },
+      {
+        tag: 'hr',
+        getAttrs: () => createDefaultHorizontalRuleAttrs(),
       },
     ];
   },
@@ -170,11 +191,7 @@ export const ContentBlock = Node.create({
         ({ commands }) => {
           return commands.insertContent({
             type: this.name,
-            attrs: {
-              horizontalRule: true,
-              size: { width: '100%', height: 2 },
-              background: '#e5e7eb',
-            },
+            attrs: createDefaultHorizontalRuleAttrs(),
           });
         },
 

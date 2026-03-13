@@ -60,8 +60,8 @@ const getStyle = (conversation) => {
   const { selection, commentId } = conversation;
   const containerBounds = selection.getContainerLocation(props.parent);
   const placement = conversation.selection.selectionBounds;
-  const top = (parseFloat(placement.top) + containerBounds.top) * activeZoom.value;
-
+  const isPdf = selection?.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
   const internalHighlightColor = '#078383';
   const externalHighlightColor = '#B1124B';
 
@@ -72,10 +72,10 @@ const getStyle = (conversation) => {
 
   return {
     position: 'absolute',
-    top: parseFloat(placement.top) + 'px',
-    left: placement.left + 'px',
-    width: placement.right - placement.left + 'px',
-    height: placement.bottom - placement.top + 'px',
+    top: parseFloat(placement.top) * zoom + 'px',
+    left: placement.left * zoom + 'px',
+    width: (placement.right - placement.left) * zoom + 'px',
+    height: (placement.bottom - placement.top) * zoom + 'px',
     backgroundColor: fillColor,
     pointerEvents: conversation.suppressClick ? 'none' : 'auto',
   };

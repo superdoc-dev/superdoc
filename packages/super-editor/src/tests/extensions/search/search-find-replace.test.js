@@ -887,6 +887,31 @@ describe('Search find/replace commands', () => {
         editor.destroy();
       }
     });
+
+    it('should respect caseSensitive option for string patterns', () => {
+      const editor = createDocxTestEditor();
+
+      try {
+        const { doc, paragraph, run } = editor.schema.nodes;
+        const testDoc = doc.create(null, [
+          paragraph.create(null, [run.create(null, [editor.schema.text('Test TEST test TeSt')])]),
+        ]);
+
+        const baseState = EditorState.create({
+          schema: editor.schema,
+          doc: testDoc,
+          plugins: editor.state.plugins,
+        });
+        editor.setState(baseState);
+
+        const matches = editor.commands.search('test', { caseSensitive: true });
+
+        expect(matches).toHaveLength(1);
+        expect(matches[0].text).toBe('test');
+      } finally {
+        editor.destroy();
+      }
+    });
   });
 
   describe('Whole word matching', () => {

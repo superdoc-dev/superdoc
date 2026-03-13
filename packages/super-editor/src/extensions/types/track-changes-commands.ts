@@ -24,6 +24,16 @@ export type TrackedChangeOptions = {
   trackedChange: TrackedChange;
 };
 
+/** Explicit context-menu resolution options */
+export type TrackedChangeResolutionOptions = {
+  /** Optional explicit range to resolve */
+  from?: number;
+  /** Optional explicit range to resolve */
+  to?: number;
+  /** Optional tracked change ID for by-id fallback */
+  trackedChangeId?: string | null;
+};
+
 /** Options for programmatic tracked change insertion */
 export type InsertTrackedChangeOptions = {
   /** Start position (defaults to selection start) */
@@ -32,6 +42,8 @@ export type InsertTrackedChangeOptions = {
   to?: number;
   /** Replacement text */
   text?: string;
+  /** Explicit change ID for deterministic callers (defaults to a new UUID) */
+  id?: string;
   /** Author override for the tracked change (defaults to editor user if not provided) */
   user?: Partial<User>;
   /** Optional comment reply to attach to the tracked change */
@@ -72,6 +84,11 @@ export interface TrackChangesCommands {
   acceptTrackedChangeFromToolbar: () => boolean;
 
   /**
+   * Accept tracked change from context menu with optional explicit range
+   */
+  acceptTrackedChangeFromContextMenu: (options?: TrackedChangeResolutionOptions) => boolean;
+
+  /**
    * Accept tracked change by its ID
    * @param id - The tracked change ID
    */
@@ -108,6 +125,11 @@ export interface TrackChangesCommands {
    * Reject tracked change from toolbar (uses active thread or selection)
    */
   rejectTrackedChangeFromToolbar: () => boolean;
+
+  /**
+   * Reject tracked change from context menu with optional explicit range
+   */
+  rejectTrackedChangeFromContextMenu: (options?: TrackedChangeResolutionOptions) => boolean;
 
   /**
    * Reject tracked change by its ID

@@ -1,0 +1,281 @@
+---
+title: lists.insert
+sidebarTitle: lists.insert
+description: Insert a new list at the target position.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert a new list at the target position.
+
+- Operation ID: `lists.insert`
+- API member path: `editor.doc.lists.insert(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `yes`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsInsertResult with the new list item address and block ID.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `position` | enum | yes | `"before"`, `"after"` |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `text` | string | no |  |
+
+### Example request
+
+```json
+{
+  "position": "before",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "text": "Hello, world."
+}
+```
+
+## Output fields
+
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `insertionPoint` | TextAddress | yes | TextAddress |
+| `insertionPoint.blockId` | string | yes |  |
+| `insertionPoint.kind` | `"text"` | yes | Constant: `"text"` |
+| `insertionPoint.range` | Range | yes | Range |
+| `insertionPoint.range.end` | integer | yes |  |
+| `insertionPoint.range.start` | integer | yes |  |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+| `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "insertionPoint": {
+    "blockId": "block-abc123",
+    "kind": "text",
+    "range": {
+      "end": 10,
+      "start": 0
+    }
+  },
+  "item": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "success": true,
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "trackedChange",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "position": {
+      "enum": [
+        "before",
+        "after"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/ListItemAddress"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "target",
+    "position"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "insertionPoint": {
+          "$ref": "#/$defs/TextAddress"
+        },
+        "item": {
+          "$ref": "#/$defs/ListItemAddress"
+        },
+        "success": {
+          "const": true
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/TrackedChangeAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success",
+        "item",
+        "insertionPoint"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "insertionPoint": {
+      "$ref": "#/$defs/TextAddress"
+    },
+    "item": {
+      "$ref": "#/$defs/ListItemAddress"
+    },
+    "success": {
+      "const": true
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/TrackedChangeAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success",
+    "item",
+    "insertionPoint"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

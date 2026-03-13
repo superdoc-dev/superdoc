@@ -4,5 +4,9 @@
     "composite": true,
     "outDir": "dist-types"
   },
-  "references": [{ "path": "../super-editor/tsconfig.types.json" }, { "path": "../../shared/common/tsconfig.json" }]
+  "references": [
+    { "path": "../super-editor/tsconfig.types.json" },
+    { "path": "../collaboration-yjs/tsconfig.json" },
+    { "path": "../../shared/common/tsconfig.json" }
+  ]
 }

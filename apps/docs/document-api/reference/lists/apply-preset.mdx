@@ -1,0 +1,264 @@
+---
+title: lists.applyPreset
+sidebarTitle: lists.applyPreset
+description: Apply a built-in list formatting preset to the target list.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Apply a built-in list formatting preset to the target list.
+
+- Operation ID: `lists.applyPreset`
+- API member path: `editor.doc.lists.applyPreset(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match the preset.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `levels` | integer[] | no |  |
+| `preset` | enum | yes | `"decimal"`, `"decimalParenthesis"`, `"lowerLetter"`, `"upperLetter"`, `"lowerRoman"`, `"upperRoman"`, `"disc"`, `"circle"`, `"square"`, `"dash"` |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+
+### Example request
+
+```json
+{
+  "levels": [
+    1
+  ],
+  "preset": "decimal",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"`, `"INVALID_INPUT"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "item": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `LEVEL_OUT_OF_RANGE`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "levels": {
+      "items": {
+        "maximum": 8,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "preset": {
+      "enum": [
+        "decimal",
+        "decimalParenthesis",
+        "lowerLetter",
+        "upperLetter",
+        "lowerRoman",
+        "upperRoman",
+        "disc",
+        "circle",
+        "square",
+        "dash"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/ListItemAddress"
+    }
+  },
+  "required": [
+    "target",
+    "preset"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "$ref": "#/$defs/ListItemAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "item"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "LEVEL_OUT_OF_RANGE",
+                "INVALID_INPUT"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item": {
+      "$ref": "#/$defs/ListItemAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "item"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "LEVEL_OUT_OF_RANGE",
+            "INVALID_INPUT"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

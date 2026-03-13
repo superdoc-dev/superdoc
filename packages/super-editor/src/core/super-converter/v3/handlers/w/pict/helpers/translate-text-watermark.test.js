@@ -6,13 +6,6 @@ vi.mock('@helpers/generateDocxRandomId', () => ({
   generateRandomSigned32BitIntStrId: () => '12345678',
 }));
 
-vi.mock('@converter/exporter', () => ({
-  wrapTextInRun: (content) => ({
-    name: 'w:r',
-    elements: [content],
-  }),
-}));
-
 describe('translateTextWatermark', () => {
   describe('Round-trip with VML attributes', () => {
     it('should use original VML attributes when available', () => {
@@ -61,14 +54,9 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      expect(result.name).toBe('w:p');
-      expect(result.elements).toHaveLength(1);
-      expect(result.elements[0].name).toBe('w:r');
+      expect(result.name).toBe('w:pict');
 
-      const pict = result.elements[0].elements[0];
-      expect(pict.name).toBe('w:pict');
-
-      const shape = pict.elements[0];
+      const shape = result.elements[0];
       expect(shape.name).toBe('v:shape');
       expect(shape.attributes).toEqual(node.attrs.vmlAttributes);
 
@@ -115,7 +103,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const textpath = shape.elements.find((el) => el.name === 'v:textpath');
       expect(textpath.attributes.string).toBe('NEW TEXT');
     });
@@ -144,7 +132,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const fill = shape.elements.find((el) => el.name === 'v:fill');
       const stroke = shape.elements.find((el) => el.name === 'v:stroke');
 
@@ -203,9 +191,9 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      expect(result.name).toBe('w:p');
+      expect(result.name).toBe('w:pict');
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       expect(shape.name).toBe('v:shape');
       expect(shape.attributes.id).toContain('PowerPlusWaterMarkObject');
       expect(shape.attributes.type).toBe('#_x0000_t136');
@@ -241,7 +229,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const path = shape.elements.find((el) => el.name === 'v:path');
       expect(path).toBeDefined();
       expect(path.attributes.textpathok).toBe('t');
@@ -267,7 +255,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const textpath = shape.elements.find((el) => el.name === 'v:textpath');
       expect(textpath).toBeDefined();
       expect(textpath.attributes.on).toBe('t');
@@ -297,7 +285,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const fill = shape.elements.find((el) => el.name === 'v:fill');
       expect(fill).toBeDefined();
       expect(fill.attributes.type).toBe('solid');
@@ -319,7 +307,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const fill = shape.elements.find((el) => el.name === 'v:fill');
       expect(fill).toBeUndefined();
     });
@@ -343,7 +331,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const stroke = shape.elements.find((el) => el.name === 'v:stroke');
       expect(stroke).toBeDefined();
       expect(stroke.attributes.color).toBe('#00ff00');
@@ -367,7 +355,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const stroke = shape.elements.find((el) => el.name === 'v:stroke');
       expect(stroke).toBeUndefined();
     });
@@ -388,7 +376,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const wrap = shape.elements.find((el) => el.name === 'w10:wrap');
       expect(wrap).toBeDefined();
       expect(wrap.attributes.type).toBe('square');
@@ -407,7 +395,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const wrap = shape.elements.find((el) => el.name === 'w10:wrap');
       expect(wrap).toBeDefined();
       expect(wrap.attributes.type).toBe('none');
@@ -429,7 +417,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       expect(shape.attributes.stroked).toBe('f');
     });
 
@@ -446,7 +434,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       expect(shape.attributes.fillcolor).toBe('silver');
     });
 
@@ -466,7 +454,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       expect(shape.attributes.adj).toBe('10800');
     });
   });
@@ -506,7 +494,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const style = shape.attributes.style;
 
       expect(style).toContain('position:absolute');
@@ -536,7 +524,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const style = shape.attributes.style;
 
       expect(style).toContain('margin-left:0.05pt');
@@ -557,7 +545,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const style = shape.attributes.style;
 
       expect(style).not.toContain('rotation');
@@ -582,7 +570,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const textpath = shape.elements.find((el) => el.name === 'v:textpath');
       const style = textpath.attributes.style;
 
@@ -603,7 +591,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const textpath = shape.elements.find((el) => el.name === 'v:textpath');
 
       expect(textpath.attributes.style).toBe('');
@@ -628,7 +616,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const style = shape.attributes.style;
 
       expect(style).toContain('width:72pt');
@@ -657,7 +645,7 @@ describe('translateTextWatermark', () => {
 
       const result = translateTextWatermark({ node });
 
-      const shape = result.elements[0].elements[0].elements[0];
+      const shape = result.elements[0];
       const elementNames = shape.elements.map((el) => el.name);
 
       expect(elementNames[0]).toBe('v:path');

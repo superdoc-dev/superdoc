@@ -115,7 +115,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
   ]}
 />
 
-## How It Works
+## How it works
 
 Every block-level node (paragraphs, headings, etc.) automatically receives a unique `sdBlockId` attribute. This enables:
 
@@ -124,7 +124,11 @@ Every block-level node (paragraphs, headings, etc.) automatically receives a uni
 3. **Collaborative editing** - Reference blocks consistently across clients
 4. **Programmatic updates** - Update document structure via APIs
 
-## Use Case
+<Warning>
+`sdBlockId` is regenerated on every document load. If you need cross-session block references (e.g., headless CLI pipelines, multi-step AI workflows), use the [Document API](/document-api/overview) instead. `editor.doc.find()` returns addresses whose `nodeId` prefers DOCX-native `paraId` for imported blocks. This is best-effort stable, not a permanent global ID: Word or other tools can rewrite IDs during structural changes, and SuperDoc may rewrite duplicates on import.
+</Warning>
+
+## Use case
 
 - **Document APIs** - Build REST APIs that manipulate specific blocks
 - **Collaboration** - Track who edited which blocks in real-time

@@ -508,20 +508,21 @@ describe('table live xml test', () => {
     expect(extractParagraphText(result.nodes[0].content[1].content[1].content[0])).toBe('COL 2 ROW 2');
   });
 
-  it('gets styles from base tab and parse internal borders', () => {
+  it('gets styles from base tab and parse internal borders via tableCellProperties', () => {
     const nodes = parseXmlToJson(nilBordersTableXml).elements;
     const styles = parseXmlToJson(simpleTableStyleXml);
     const docx = {
       'word/styles.xml': styles,
     };
     const result = tableNodeHandlerEntity.handler({ nodes, docx, nodeListHandler: defaultNodeListHandler() });
-    expect(result.nodes[0].content[0].content[0].attrs.borders).toBeDefined();
-    expect(result.nodes[0].content[0].content[1].attrs.borders).toBeDefined();
-    expect(result.nodes[0].content[0].content[0].attrs.borders.right.val).toBe('none');
-    expect(result.nodes[0].content[0].content[1].attrs.borders.bottom.val).toBe('none');
-    expect(result.nodes[0].content[0].content[0].attrs.cellMargins).toBeDefined();
-    expect(result.nodes[0].content[0].content[0].attrs.cellMargins.left).toBeCloseTo(7.2, 1);
-    expect(result.nodes[0].content[0].content[0].attrs.cellMargins.right).toBeCloseTo(7.2, 1);
+    // attrs.borders is no longer set during import — borders are in tableCellProperties.borders
+    const cell0 = result.nodes[0].content[0].content[0].attrs;
+    const cell1 = result.nodes[0].content[0].content[1].attrs;
+    expect(cell0.tableCellProperties?.borders?.right?.val).toBe('none');
+    expect(cell1.tableCellProperties?.borders?.bottom?.val).toBe('none');
+    expect(cell0.cellMargins).toBeDefined();
+    expect(cell0.cellMargins.left).toBeCloseTo(7.2, 1);
+    expect(cell0.cellMargins.right).toBeCloseTo(7.2, 1);
   });
 
   it('correctly gets colwidth for cells without inline width', () => {

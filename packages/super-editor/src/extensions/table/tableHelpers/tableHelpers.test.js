@@ -18,6 +18,7 @@ import {
   buildFormattedCellBlock,
   buildRowFromTemplateRow,
   insertRowsAtTableEnd,
+  insertRowAtIndex,
 } from './appendRows.js';
 
 const cellMinWidth = 80;
@@ -92,6 +93,20 @@ describe('tableHelpers', () => {
     expect(filledCell.content.firstChild.textContent).toBe('Hello');
   });
 
+  it('createCell accepts attrs parameter for setting cell attributes', () => {
+    const cellType = schema.nodes.tableCell;
+
+    const cellWithWidth = createCell(cellType, null, { colwidth: [200] });
+    expect(cellWithWidth.type.name).toBe('tableCell');
+    expect(cellWithWidth.attrs.colwidth).toEqual([200]);
+
+    const cellWithContent = createCell(cellType, schema.nodes.paragraph.create(null, schema.text('Test')), {
+      colwidth: [150],
+    });
+    expect(cellWithContent.attrs.colwidth).toEqual([150]);
+    expect(cellWithContent.content.firstChild.textContent).toBe('Test');
+  });
+
   const buildRowTable = (widths, overrideCol, overrideValue) => {
     const cellType = schema.nodes.tableCell;
     const rowType = schema.nodes.tableRow;
@@ -155,13 +170,72 @@ describe('tableHelpers', () => {
     expect(result.colgroupValues).toEqual([120, 150, 96]);
   });
 
-  it('createTable builds tables with rows, optional header, and borders', () => {
-    const table = createTable(schema, 2, 3, true);
+  it('createTable builds tables with rows, optional header, and custom attrs', () => {
+    const tableAttrs = { tableStyleId: 'TableGrid', borders: { top: { size: 1 } } };
+    const table = createTable(schema, 2, 3, true, null, null, tableAttrs);
     expect(table.type.name).toBe('table');
     expect(table.firstChild.childCount).toBe(3);
     expect(table.attrs.borders.top).toBeDefined();
+    expect(table.attrs.tableStyleId).toBe('TableGrid');
     const headerCell = table.firstChild.firstChild;
     expect(headerCell.type.name).toBe('tableHeader');
+
+    // Header row should have repeatHeader set
+    expect(table.firstChild.attrs.tableRowProperties?.repeatHeader).toBe(true);
+    // Body row should not
+    expect(table.child(1).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+  });
+
+  it('createTable builds tables without attrs when none provided', () => {
+    const table = createTable(schema, 2, 3, false);
+    expect(table.type.name).toBe('table');
+    expect(table.childCount).toBe(2);
+  });
+
+  it('createTable applies column widths when provided', () => {
+    const columnWidths = [200, 100, 200];
+    const table = createTable(schema, 2, 3, false, null, columnWidths);
+
+    expect(table.type.name).toBe('table');
+    expect(table.childCount).toBe(2); // 2 rows
+
+    // Check first row cells have correct widths
+    const firstRow = table.firstChild;
+    expect(firstRow.childCount).toBe(3);
+    expect(firstRow.child(0).attrs.colwidth).toEqual([200]);
+    expect(firstRow.child(1).attrs.colwidth).toEqual([100]);
+    expect(firstRow.child(2).attrs.colwidth).toEqual([200]);
+
+    // Check second row cells also have correct widths
+    const secondRow = table.child(1);
+    expect(secondRow.child(0).attrs.colwidth).toEqual([200]);
+    expect(secondRow.child(1).attrs.colwidth).toEqual([100]);
+    expect(secondRow.child(2).attrs.colwidth).toEqual([200]);
+  });
+
+  it('createTable applies column widths to header row when withHeaderRow is true', () => {
+    const columnWidths = [150, 150];
+    const table = createTable(schema, 2, 2, true, null, columnWidths);
+
+    // First row should be header cells with widths
+    const headerRow = table.firstChild;
+    expect(headerRow.child(0).type.name).toBe('tableHeader');
+    expect(headerRow.child(0).attrs.colwidth).toEqual([150]);
+    expect(headerRow.child(1).attrs.colwidth).toEqual([150]);
+
+    // Second row should be regular cells with widths
+    const bodyRow = table.child(1);
+    expect(bodyRow.child(0).type.name).toBe('tableCell');
+    expect(bodyRow.child(0).attrs.colwidth).toEqual([150]);
+  });
+
+  it('createTable uses default widths when columnWidths is null', () => {
+    const table = createTable(schema, 1, 2, false, null, null);
+
+    const firstRow = table.firstChild;
+    // Default colwidth from schema is [100]
+    expect(firstRow.child(0).attrs.colwidth).toEqual([100]);
+    expect(firstRow.child(1).attrs.colwidth).toEqual([100]);
   });
 
   it('createTableBorders assigns uniform border configuration', () => {
@@ -397,6 +471,7 @@ describe('tableHelpers', () => {
       });
 
       expect(newRow?.content.content[0].type.name).toBe('tableCell');
+      expect(newRow?.content.content[0].attrs.borders).toBeNull();
     });
 
     it('buildRowFromTemplateRow copies style when copyRowStyle is true', () => {
@@ -461,6 +536,27 @@ describe('tableHelpers', () => {
 
       const updatedTable = tr.doc.nodeAt(tablePos);
       expect(updatedTable?.childCount).toBe(initialChildCount);
+    });
+
+    it('insertRowAtIndex keeps default body borders when source row has headers', () => {
+      const { table, state } = buildTableDoc(2, 1, true);
+      const tr = state.tr;
+      const tablePos = 0;
+
+      const didInsert = insertRowAtIndex({
+        tr,
+        tablePos,
+        tableNode: table,
+        sourceRowIndex: 0,
+        insertIndex: 1,
+        schema,
+      });
+
+      expect(didInsert).toBe(true);
+      const updatedTable = tr.doc.nodeAt(tablePos);
+      const insertedCell = updatedTable?.child(1)?.child(0);
+      expect(insertedCell?.type.name).toBe('tableCell');
+      expect(insertedCell?.attrs.borders).toBeNull();
     });
   });
 });

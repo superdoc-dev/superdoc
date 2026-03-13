@@ -1,11 +1,10 @@
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
-import { wrapTextInRun } from '@converter/exporter';
 
 /**
  * Translates a text watermark node back to w:pict XML with VML text path.
  *
  * @param {Object} params - The parameters for translation.
- * @returns {Object} The XML representation (w:p containing w:pict).
+ * @returns {Object} The XML representation (w:pict).
  */
 export function translateTextWatermark(params) {
   const { node } = params;
@@ -70,12 +69,7 @@ export function translateTextWatermark(params) {
       elements: [shape],
     };
 
-    const par = {
-      name: 'w:p',
-      elements: [wrapTextInRun(pict)],
-    };
-
-    return par;
+    return pict;
   }
 
   // Fallback: construct VML from text watermark attributes
@@ -168,12 +162,7 @@ export function translateTextWatermark(params) {
     elements: [shape],
   };
 
-  const par = {
-    name: 'w:p',
-    elements: [wrapTextInRun(pict)],
-  };
-
-  return par;
+  return pict;
 }
 
 /**

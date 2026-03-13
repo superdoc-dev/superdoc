@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { translator, config } from './r-translator.js';
+import * as converterStyles from '../../../../styles.js';
 
 describe('w:r r-translator (node)', () => {
   it('exposes correct metadata', () => {
@@ -153,6 +154,81 @@ describe('w:r r-translator (node)', () => {
     expect(child.attrs).toEqual({ originalName: 'w:custom' });
   });
 
+  it('passes tableInfo and numberingDefinedInline to resolveRunProperties when table context is available', () => {
+    const resolveRunPropertiesSpy = vi
+      .spyOn(converterStyles, 'resolveRunProperties')
+      .mockImplementation(() => ({ bold: true }));
+    const runNode = {
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Cell' }] }],
+    };
+
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'Cell', marks: [] }]) },
+      docx: {},
+      extraParams: {
+        paragraphProperties: { styleId: 'ListParagraph' },
+        rowIndex: 2,
+        columnIndex: 1,
+        tableProperties: { tableStyleId: 'TableGrid' },
+        totalColumns: 3,
+        totalRows: 4,
+        numberingDefinedInline: true,
+      },
+    };
+
+    translator.encode(params);
+
+    expect(resolveRunPropertiesSpy).toHaveBeenCalledTimes(1);
+    expect(resolveRunPropertiesSpy).toHaveBeenCalledWith(
+      params,
+      {},
+      { styleId: 'ListParagraph' },
+      {
+        rowIndex: 2,
+        cellIndex: 1,
+        tableProperties: { tableStyleId: 'TableGrid' },
+        numCells: 3,
+        numRows: 4,
+      },
+      false,
+      true,
+    );
+
+    resolveRunPropertiesSpy.mockRestore();
+  });
+
+  it('passes null tableInfo to resolveRunProperties when table context is incomplete', () => {
+    const resolveRunPropertiesSpy = vi.spyOn(converterStyles, 'resolveRunProperties').mockImplementation(() => ({}));
+    const runNode = {
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'No table context' }] }],
+    };
+
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'No table context', marks: [] }]) },
+      docx: {},
+      extraParams: {
+        paragraphProperties: { styleId: 'Normal' },
+        rowIndex: 0,
+        columnIndex: 0,
+        tableProperties: { tableStyleId: 'TableGrid' },
+        totalColumns: 2,
+        // totalRows missing on purpose
+      },
+    };
+
+    translator.encode(params);
+
+    expect(resolveRunPropertiesSpy).toHaveBeenCalledTimes(1);
+    expect(resolveRunPropertiesSpy.mock.calls[0][3]).toBeNull();
+    expect(resolveRunPropertiesSpy.mock.calls[0][5]).toBeUndefined();
+
+    resolveRunPropertiesSpy.mockRestore();
+  });
+
   it('does not wrap a comment range start and end in a run node', () => {
     const params = {
       node: {
@@ -221,5 +297,50 @@ describe('w:r r-translator (node)', () => {
         },
       }),
     );
+  });
+
+  it('emits inline w:sdt as a paragraph-level sibling instead of wrapping it in w:r', () => {
+    const params = {
+      node: {
+        type: 'run',
+        attrs: { runProperties: [] },
+        content: [
+          {
+            type: 'structuredContent',
+            attrs: {
+              id: '123',
+              controlType: 'checkbox',
+              type: 'checkbox',
+            },
+            content: [{ type: 'text', text: ' ' }],
+          },
+        ],
+      },
+      editor: { extensionService: { extensions: [] } },
+    };
+
+    const result = translator.decode(params);
+    expect(result).toBeDefined();
+    expect(result.name).toBe('w:sdt');
+  });
+
+  it('adds superscript reference run properties when decoding footnote references', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        content: [{ type: 'footnoteReference', attrs: { id: '1' } }],
+      },
+    });
+
+    expect(result?.name).toBe('w:r');
+    const runProperties = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(runProperties).toBeDefined();
+
+    const runStyle = runProperties?.elements?.find((el) => el?.name === 'w:rStyle');
+    expect(runStyle?.attributes?.['w:val']).toBe('FootnoteReference');
+
+    const vertAlign = runProperties?.elements?.find((el) => el?.name === 'w:vertAlign');
+    expect(vertAlign?.attributes?.['w:val']).toBe('superscript');
   });
 });

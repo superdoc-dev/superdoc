@@ -5,7 +5,10 @@
  */
 
 import type {
+  BorderStyle,
   BoxSpacing,
+  CellBorders,
+  CellSpacing,
   FlowBlock,
   ParagraphBlock,
   ImageBlock,
@@ -31,7 +34,12 @@ import type {
   NestedConverters,
   TableNodeToBlockParams,
 } from '../types.js';
-import { extractTableBorders, extractCellBorders, extractCellPadding } from '../attributes/index.js';
+import {
+  extractTableBorders,
+  extractCellPadding,
+  convertBorderSpec,
+  normalizeShadingColor,
+} from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
@@ -41,7 +49,61 @@ import {
   applySdtMetadataToParagraphBlocks,
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
-import { TableProperties } from '@superdoc/style-engine/ooxml';
+import {
+  TableProperties,
+  resolveTableCellProperties,
+  resolveExistingTableEffectiveStyleId,
+  type TableInfo,
+} from '@superdoc/style-engine/ooxml';
+import { resolveThemeColorValue } from '../marks/theme-color.js';
+
+/**
+ * Normalizes tableCellSpacing from PM node to CellSpacing object format.
+ * Converts legacy number values (pixels) to { value, type: 'px' } so that
+ * FlowBlock table attrs always use the object format and deserialization is safe.
+ */
+function normalizeCellSpacing(raw: number | { value?: number; type?: string } | null | undefined): CellSpacing {
+  if (raw == null) {
+    return { value: 0, type: 'px' };
+  }
+  if (typeof raw === 'number') {
+    return { value: Math.max(0, raw), type: 'px' };
+  }
+  const value = typeof raw.value === 'number' ? Math.max(0, raw.value) : 0;
+  const t = (raw.type ?? 'px').toLowerCase();
+  const type = t === 'dxa' ? 'dxa' : 'px';
+  return { value, type };
+}
+
+function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'none':
+    case 'nil':
+      return 'none';
+    case 'double':
+      return 'double';
+    case 'dashed':
+      return 'dashed';
+    case 'dotted':
+    case 'dot':
+      return 'dotted';
+    case 'thick':
+      return 'thick';
+    case 'triple':
+      return 'triple';
+    case 'dotdash':
+      return 'dotDash';
+    case 'dotdotdash':
+      return 'dotDotDash';
+    case 'wave':
+      return 'wave';
+    case 'doublewave':
+      return 'doubleWave';
+    case 'single':
+    default:
+      return 'single';
+  }
+}
 
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
@@ -64,6 +126,7 @@ type ParseTableCellArgs = {
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
   tableProperties?: TableProperties;
+  rowCnfStyle?: Record<string, unknown> | null;
 };
 
 type ParseTableRowArgs = {
@@ -185,7 +248,23 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Table cells can contain paragraphs, images/drawings, structured content blocks, and nested tables.
   const blocks: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[] = [];
 
+  // Build tableInfo once with cnfStyle flags and reuse for both cascade and context.
+  const rowCnfStyle = args.rowCnfStyle ?? null;
+  const cellCnfStyle = (cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined)?.cnfStyle ?? null;
+  const tableInfo: TableInfo | undefined = tableProperties
+    ? { tableProperties, rowIndex, cellIndex, numCells, numRows, rowCnfStyle, cellCnfStyle }
+    : undefined;
+
+  // Resolve table cell properties from the style cascade (wholeTable → bands → conditional → inline)
+  const inlineTcProps = cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined;
+  const resolvedTcProps = resolveTableCellProperties(
+    inlineTcProps as Parameters<typeof resolveTableCellProperties>[0],
+    tableInfo,
+    context.converterContext?.translatedLinkedStyles,
+  );
+
   // Extract cell background color for auto text color resolution
+  // Priority: inline background attr > literal fill > theme fill
   const cellBackground = cellNode.attrs?.background as { color?: string } | undefined;
   let cellBackgroundColor: string | undefined;
   if (cellBackground && typeof cellBackground.color === 'string') {
@@ -198,15 +277,29 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       }
     }
   }
+  // Fall back to resolved style shading if no inline background
+  if (!cellBackgroundColor && resolvedTcProps?.shading) {
+    const { fill, themeFill, themeFillTint, themeFillShade } = resolvedTcProps.shading;
+    const normalizedFill = normalizeShadingColor(fill);
+    if (normalizedFill) {
+      cellBackgroundColor = normalizedFill;
+    } else if (themeFill && context.themeColors) {
+      const resolved = resolveThemeColorValue(themeFill, themeFillTint, themeFillShade, context.themeColors);
+      const normalizedTheme = normalizeShadingColor(resolved);
+      if (normalizedTheme) {
+        cellBackgroundColor = normalizedTheme;
+      }
+    }
+  }
 
   // Create enhanced converter context with table style paragraph props for the style cascade
   // This allows paragraphs inside table cells to inherit table style's pPr
   // Also includes backgroundColor for auto text color resolution
   const cellConverterContext: ConverterContext =
-    tableProperties || cellBackgroundColor
+    tableInfo || cellBackgroundColor
       ? ({
           ...context.converterContext,
-          ...(tableProperties && { tableInfo: { tableProperties, rowIndex, cellIndex, numCells, numRows } }),
+          ...(tableInfo && { tableInfo }),
           ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
         } as ConverterContext)
       : context.converterContext;
@@ -394,8 +487,41 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
   const cellAttrs: TableCellAttrs = {};
 
-  const borders = extractCellBorders(cellNode.attrs ?? {});
-  if (borders) cellAttrs.borders = borders;
+  // Cell borders come from the style-engine cascade (resolvedTcProps.borders).
+  // Inline tableCellProperties.borders are already folded into resolvedTcProps
+  // by resolveTableCellProperties (inline wins over style cascade).
+  if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
+    const resolvedBorders: CellBorders = {};
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      if (spec) resolvedBorders[side] = spec;
+    }
+    if (Object.keys(resolvedBorders).length > 0) {
+      cellAttrs.borders = resolvedBorders;
+    }
+  }
+
+  // Fallback: older persisted docs may store cell borders in attrs.borders
+  // (pre-migration pixel format: { size: px, color: hex, val: string }).
+  // The transaction-based migration only runs when an edit touches the table
+  // range, so untouched legacy cells need this fallback for rendering.
+  // Only borders with a `val` property qualify — old schema defaults from
+  // createCellBorders() lack `val` and should be ignored (the style-engine
+  // resolves those from the table style cascade).
+  if (!cellAttrs.borders && cellNode.attrs?.borders && typeof cellNode.attrs.borders === 'object') {
+    const legacy = cellNode.attrs.borders as Record<string, { size?: number; color?: string; val?: string }>;
+    const fallback: CellBorders = {};
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      const b = legacy[side];
+      if (b && b.val && typeof b.size === 'number' && b.size > 0) {
+        const color = b.color ? (b.color.startsWith('#') ? b.color : `#${b.color}`) : '#000000';
+        fallback[side] = { style: normalizeLegacyBorderStyle(b.val), width: b.size, color };
+      }
+    }
+    if (Object.keys(fallback).length > 0) {
+      cellAttrs.borders = fallback;
+    }
+  }
 
   const padding =
     extractCellPadding(cellNode.attrs ?? {}) ?? (defaultCellPadding ? { ...defaultCellPadding } : undefined);
@@ -416,6 +542,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (background && typeof background.color === 'string') {
     const bgColor = background.color;
     cellAttrs.background = bgColor.startsWith('#') ? bgColor : `#${bgColor}`;
+  } else if (cellBackgroundColor) {
+    // Use resolved style background when no inline background is set
+    cellAttrs.background = cellBackgroundColor;
   }
 
   const tableCellProperties = cellNode.attrs?.tableCellProperties;
@@ -477,6 +606,9 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
   }
 
   const cells: TableCell[] = [];
+  const rowCnfStyle = (rowNode.attrs?.tableRowProperties as Record<string, unknown> | undefined)?.cnfStyle as
+    | Record<string, unknown>
+    | undefined;
   rowNode.content.forEach((cellNode, cellIndex) => {
     const parsedCell = parseTableCell({
       cellNode,
@@ -487,6 +619,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       tableProperties,
       numCells: rowNode?.content?.length || 1,
       numRows,
+      rowCnfStyle,
     });
     if (parsedCell) {
       cells.push(parsedCell);
@@ -680,8 +813,27 @@ export function tableNodeToBlock(
     enableComments,
   };
 
-  const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext);
+  // Compute the effective table style ID once per table. This single canonical
+  // style ID is used for both table-level hydration and cell/paragraph cascades.
+  const explicitStyleId = typeof node.attrs?.tableStyleId === 'string' ? node.attrs.tableStyleId : null;
+  const resolvedStyle = resolveExistingTableEffectiveStyleId(explicitStyleId, converterContext?.translatedLinkedStyles);
+  const effectiveStyleId = resolvedStyle.styleId;
+
+  const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext, effectiveStyleId);
   const defaultCellPadding = hydratedTableStyle?.cellPadding;
+
+  // Build tableProperties with the effective style ID for consistent cascade resolution.
+  // PM node attrs are never mutated — the effective ID lives only in this transient object.
+  // When effectiveStyleId is null (resolver found no style), strip any raw tableStyleId
+  // from the cascade object to prevent invalid IDs from influencing resolution.
+  const rawTableProperties = node.attrs?.tableProperties as TableProperties | undefined;
+  const tablePropertiesForCascade: TableProperties | undefined =
+    effectiveStyleId || rawTableProperties
+      ? {
+          ...rawTableProperties,
+          tableStyleId: effectiveStyleId ?? undefined,
+        }
+      : undefined;
 
   const rows: TableRow[] = [];
   node.content.forEach((rowNode, rowIndex) => {
@@ -691,7 +843,7 @@ export function tableNodeToBlock(
       numRows: node?.content?.length ?? 1,
       context: parserDeps,
       defaultCellPadding,
-      tableProperties: node.attrs?.tableProperties as TableProperties | undefined,
+      tableProperties: tablePropertiesForCascade,
     });
     if (parsedRow) {
       rows.push(parsedRow);
@@ -702,7 +854,12 @@ export function tableNodeToBlock(
 
   const tableAttrs: Record<string, unknown> = {};
   const getBorderSource = (): Record<string, unknown> | undefined => {
-    if (node.attrs?.borders && typeof node.attrs.borders === 'object' && node.attrs.borders !== null) {
+    if (
+      node.attrs?.borders &&
+      typeof node.attrs.borders === 'object' &&
+      node.attrs.borders !== null &&
+      Object.keys(node.attrs.borders as Record<string, unknown>).length > 0
+    ) {
       return node.attrs.borders as Record<string, unknown>;
     }
     if (
@@ -722,8 +879,14 @@ export function tableNodeToBlock(
     tableAttrs.borderCollapse = node.attrs.borderCollapse;
   }
 
-  if (node.attrs?.tableCellSpacing) {
-    tableAttrs.cellSpacing = node.attrs.tableCellSpacing;
+  if (node.attrs?.tableCellSpacing !== undefined && node.attrs?.tableCellSpacing !== null) {
+    tableAttrs.cellSpacing = normalizeCellSpacing(node.attrs.tableCellSpacing);
+  } else if (hydratedTableStyle?.tableCellSpacing) {
+    tableAttrs.cellSpacing = normalizeCellSpacing(hydratedTableStyle.tableCellSpacing);
+    // Cell spacing requires border-collapse: separate
+    if (!tableAttrs.borderCollapse) {
+      tableAttrs.borderCollapse = 'separate';
+    }
   }
 
   if (node.attrs?.justification) {
@@ -740,6 +903,10 @@ export function tableNodeToBlock(
 
   if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
     tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  }
+
+  if (defaultCellPadding && typeof defaultCellPadding === 'object') {
+    tableAttrs.defaultCellPadding = { ...defaultCellPadding };
   }
 
   // Pass tableLayout through (extracted by tblLayout-translator.js)
@@ -762,15 +929,16 @@ export function tableNodeToBlock(
   };
 
   /**
-   * Column width priority hierarchy (per plan Phase 3):
+   * Column width priority hierarchy:
    * 1. User-edited grid (userEdited flag + grid attribute)
-   * 2. PM colwidth attributes (fallback for PM-native edits)
-   * 3. Original OOXML grid (untouched documents)
+   * 2. Original OOXML grid (untouched documents — grid values sum to page width)
+   * 3. PM colwidth attributes (fallback for PM-native edits or missing grid)
    * 4. Auto-calculate from content (no explicit widths)
    *
-   * When both grid and colwidth are present:
-   * - If userEdited=true: use grid (Priority 1)
-   * - Otherwise: use colwidth (Priority 2) over grid (Priority 3)
+   * Grid values (from w:tblGrid) represent actual column positions on the page and
+   * sum to exactly the content width. Cell colwidth values may be scaled up from tcW
+   * (cell width hints) during import and require down-scaling in the measuring code,
+   * which introduces proportion changes that make columns narrower than they should be.
    */
 
   // Priority 1: User-edited grid (preserves resize operations)
@@ -791,7 +959,22 @@ export function tableNodeToBlock(
     }
   }
 
-  // Priority 2: PM colwidth attributes (higher priority than grid when userEdited !== true)
+  // Priority 2: Original OOXML grid (grid values are authoritative for column positions)
+  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
+    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
+      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
+      .map((col) => {
+        const twips = typeof col.col === 'number' ? col.col : 0;
+        return twips > 0 ? twipsToPixels(twips) : 0;
+      })
+      .filter((width: number) => width > 0);
+
+    if (columnWidths.length === 0) {
+      columnWidths = undefined;
+    }
+  }
+
+  // Priority 3: PM colwidth attributes (fallback when no grid is available)
   if (!columnWidths && Array.isArray(node.content) && node.content.length > 0) {
     const firstRow = node.content[0];
     if (firstRow && isTableRowNode(firstRow) && Array.isArray(firstRow.content) && firstRow.content.length > 0) {
@@ -809,21 +992,6 @@ export function tableNodeToBlock(
       if (tempWidths.length > 0) {
         columnWidths = tempWidths;
       }
-    }
-  }
-
-  // Priority 3: Original OOXML grid (fallback when no colwidth)
-  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
-    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
-      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
-      .map((col) => {
-        const twips = typeof col.col === 'number' ? col.col : 0;
-        return twips > 0 ? twipsToPixels(twips) : 0;
-      })
-      .filter((width: number) => width > 0);
-
-    if (columnWidths.length === 0) {
-      columnWidths = undefined;
     }
   }
 

@@ -47,6 +47,25 @@ export class EventEmitter<EventMap extends DefaultEventMap = DefaultEventMap> {
   }
 
   /**
+   * Emit event with per-listener isolation.
+   * Every registered listener is invoked even if earlier listeners throw.
+   * Exceptions are collected and returned so the caller can log or handle them.
+   */
+  safeEmit<K extends keyof EventMap>(name: K, ...args: EventMap[K]): Error[] {
+    const callbacks = this.#events.get(name);
+    if (!callbacks) return [];
+    const errors: Error[] = [];
+    for (const fn of callbacks) {
+      try {
+        fn.apply(this, args);
+      } catch (err) {
+        errors.push(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+    return errors;
+  }
+
+  /**
    * Remove a specific callback from event
    * or all event subscriptions.
    * @param name Event name.

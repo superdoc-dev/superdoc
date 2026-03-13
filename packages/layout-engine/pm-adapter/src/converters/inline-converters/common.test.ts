@@ -79,4 +79,42 @@ describe('applyInlineRunProperties', () => {
     expect(result).not.toBe(baseRun);
     expect(baseRun.italic).toBeUndefined();
   });
+
+  it('preserves mark-derived bold when runProperties does not specify bold (SD-2011)', () => {
+    const runWithBold: TextRun = {
+      ...baseRun,
+      bold: true,
+    };
+    // Empty runProperties — bold is undefined in computeRunAttrs result
+    const runProperties: RunProperties = {};
+
+    const result = applyInlineRunProperties(runWithBold, runProperties);
+
+    // bold should be preserved from the run (mark-derived), not overwritten by undefined
+    expect(result.bold).toBe(true);
+  });
+
+  it('preserves mark-derived italic when runProperties does not specify italic (SD-2011)', () => {
+    const runWithItalic: TextRun = {
+      ...baseRun,
+      italic: true,
+    };
+    const runProperties: RunProperties = {};
+
+    const result = applyInlineRunProperties(runWithItalic, runProperties);
+
+    expect(result.italic).toBe(true);
+  });
+
+  it('overwrites bold when runProperties explicitly sets bold to false', () => {
+    const runWithBold: TextRun = {
+      ...baseRun,
+      bold: true,
+    };
+    const runProperties: RunProperties = { bold: false };
+
+    const result = applyInlineRunProperties(runWithBold, runProperties);
+
+    expect(result.bold).toBe(false);
+  });
 });

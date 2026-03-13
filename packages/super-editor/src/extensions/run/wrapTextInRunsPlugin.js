@@ -1,58 +1,7 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
 import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
 import { carbonCopy } from '@core/utilities/carbonCopy';
-
-const mergeRanges = (ranges, docSize) => {
-  if (!ranges.length) return [];
-  const sorted = ranges
-    .map(({ from, to }) => ({
-      from: Math.max(0, from),
-      to: Math.min(docSize, to),
-    }))
-    .filter(({ from, to }) => from < to)
-    .sort((a, b) => a.from - b.from);
-
-  const merged = [];
-  for (const range of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && range.from <= last.to) {
-      last.to = Math.max(last.to, range.to);
-    } else {
-      merged.push({ ...range });
-    }
-  }
-  return merged;
-};
-
-const collectChangedRanges = (trs, docSize) => {
-  const ranges = [];
-  trs.forEach((tr) => {
-    if (!tr.docChanged) return;
-    tr.mapping.maps.forEach((map) => {
-      map.forEach((oldStart, oldEnd, newStart, newEnd) => {
-        if (newStart !== oldStart || oldEnd !== newEnd) {
-          ranges.push({ from: newStart, to: newEnd });
-        }
-      });
-    });
-  });
-  return mergeRanges(ranges, docSize);
-};
-
-const mapRangesThroughTransactions = (ranges, transactions, docSize) => {
-  let mapped = ranges;
-  transactions.forEach((tr) => {
-    mapped = mapped
-      .map(({ from, to }) => {
-        const mappedFrom = tr.mapping.map(from, -1);
-        const mappedTo = tr.mapping.map(to, 1);
-        if (mappedFrom >= mappedTo) return null;
-        return { from: mappedFrom, to: mappedTo };
-      })
-      .filter(Boolean);
-  });
-  return mergeRanges(mapped, docSize);
-};
+import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 
 const getParagraphAtPos = (doc, pos) => {
   try {
@@ -158,8 +107,10 @@ const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta =
       let textNode = node;
 
       // For the first node in a paragraph, inherit run properties from previous paragraph
-      // and merge marks (this preserves existing marks like italic while adding inherited ones like bold)
-      if (index === 0) {
+      // and merge marks (this preserves existing marks like italic while adding inherited ones like bold).
+      // Only apply when the text is a direct child of the paragraph — not when it is
+      // first inside an inline wrapper like structuredContent (SDT).
+      if (index === 0 && parent.type.name === 'paragraph') {
         ({ runProperties, textNode } = copyRunPropertiesFromPreviousParagraph(state, pos, textNode, runType, editor));
       }
 
@@ -235,9 +186,9 @@ export const wrapTextInRunsPlugin = (editor) => {
       const runType = newState.schema.nodes.run;
       if (!runType) return null;
 
-      pendingRanges = mapRangesThroughTransactions(pendingRanges, transactions, docSize);
-      const changedRanges = collectChangedRanges(transactions, docSize);
-      pendingRanges = mergeRanges([...pendingRanges, ...changedRanges], docSize);
+      pendingRanges = collectChangedRangesThroughTransactions(transactions, docSize, {
+        extraRanges: pendingRanges,
+      });
 
       if (view?.composing) {
         return null;

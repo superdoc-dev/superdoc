@@ -1,3 +1,5 @@
+import { DOM_CLASS_NAMES } from './constants.js';
+
 export const CLASS_NAMES = {
   container: 'superdoc-layout',
   page: 'superdoc-page',
@@ -76,6 +78,11 @@ export const fragmentStyles: Partial<CSSStyleDeclaration> = {
   boxSizing: 'border-box',
 };
 
+/**
+ * Line container styles. z-index is intentionally not set on the line so that
+ * the resize overlay (and other UI) can stack above content. Only the image
+ * element itself gets z-index for layering within the line (e.g. above tab leaders).
+ */
 export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => ({
   lineHeight: `${lineHeight}px`,
   height: `${lineHeight}px`,
@@ -87,7 +94,6 @@ export const lineStyles = (lineHeight: number): Partial<CSSStyleDeclaration> => 
   // provides defense-in-depth against any remaining sub-pixel rendering
   // differences between measurement and display.
   overflow: 'visible',
-  zIndex: '10',
 });
 
 const PRINT_STYLES = `
@@ -179,7 +185,7 @@ const LINK_AND_TOC_STYLES = `
 }
 
 /* Screen reader only content (WCAG SC 1.3.1) */
-.sr-only {
+.superdoc-sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -242,6 +248,23 @@ const TRACK_CHANGE_STYLES = `
 
 .superdoc-layout .track-format-dec.highlighted {
   border-bottom: 2px solid gold;
+}
+
+.superdoc-layout .track-insert-dec.highlighted.track-change-focused {
+  border-style: solid;
+  border-width: 2px;
+  background-color: #399c7244;
+}
+
+.superdoc-layout .track-delete-dec.highlighted.track-change-focused {
+  border-style: solid;
+  border-width: 2px;
+  background-color: #cb0e4744;
+}
+
+.superdoc-layout .track-format-dec.highlighted.track-change-focused {
+  border-bottom-width: 3px;
+  background-color: #ffd70033;
 }
 `;
 
@@ -352,31 +375,50 @@ const SDT_CONTAINER_STYLES = `
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
+}
+
+.superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+/* Group hover (JavaScript-coordinated) */
+.superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) {
+  background-color: #f2f2f2;
+  border-color: transparent;
+}
+
+.superdoc-structured-content-block.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
 }
 
 /* Structured content drag handle/label - positioned above */
 .superdoc-structured-content__label {
-  font-size: 10px;
+  font-size: 11px;
   align-items: center;
   justify-content: center;
   position: absolute;
   left: 2px;
   top: -19px;
   width: calc(100% - 4px);
-  max-width: 110px;
+  max-width: 130px;
   min-width: 0;
   height: 18px;
   padding: 0 4px;
   border: 1px solid #629be7;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background-color: #629be7dd;
+  background-color: #629be7ee;
   box-sizing: border-box;
   z-index: 10;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
 .superdoc-structured-content__label span {
@@ -386,7 +428,8 @@ const SDT_CONTAINER_STYLES = `
   text-overflow: ellipsis;
 }
 
-.superdoc-structured-content-block:hover .superdoc-structured-content__label {
+.superdoc-structured-content-block.ProseMirror-selectednode .superdoc-structured-content__label,
+.superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) .superdoc-structured-content__label {
   display: inline-flex;
 }
 
@@ -415,42 +458,71 @@ const SDT_CONTAINER_STYLES = `
   border-bottom: none;
 }
 
+/* Collapse double borders between adjacent SDT blocks */
+.superdoc-structured-content-block + .superdoc-structured-content-block {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 /* Structured Content Inline - Inline wrapper with blue border */
 .superdoc-structured-content-inline {
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
   display: inline;
   z-index: 10;
 }
 
 /* Hover effect for inline structured content */
-.superdoc-structured-content-inline:hover {
-  background-color: rgba(98, 155, 231, 0.15);
-  border-color: #4a8ad9;
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+  border-color: transparent;
 }
 
+.superdoc-structured-content-inline.ProseMirror-selectednode {
+  border-color: #629be7;
+  outline: none;
+  background-color: transparent;
+}
 /* Inline structured content label - shown on hover */
 .superdoc-structured-content-inline__label {
   position: absolute;
   bottom: calc(100% + 2px);
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
-  padding: 2px 6px;
-  background-color: #629be7dd;
+  font-size: 11px;
+  padding: 0 4px;
+  background-color: #629be7ee;
   color: white;
   border-radius: 4px;
   white-space: nowrap;
   z-index: 100;
   display: none;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
 }
 
-.superdoc-structured-content-inline:hover .superdoc-structured-content-inline__label {
+.superdoc-structured-content-inline.ProseMirror-selectednode .superdoc-structured-content-inline__label {
   display: block;
+}
+
+.superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover .superdoc-structured-content-inline__label {
+  display: none;
+}
+
+/* Hover highlight for SDT containers.
+ * Hover adds background highlight and z-index boost.
+ * Block SDTs use .sdt-hover class (event delegation for multi-fragment coordination).
+ * Inline SDTs use :hover (single element, no coordination needed).
+ * Hover is suppressed when the node is selected (SD-1584). */
+.superdoc-structured-content-block[data-lock-mode].sdt-hover:not(.ProseMirror-selectednode),
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
+  background-color: rgba(98, 155, 231, 0.08);
+  z-index: 9999999;
 }
 
 /* Viewing mode: remove structured content affordances */
@@ -459,6 +531,11 @@ const SDT_CONTAINER_STYLES = `
   background: none;
   border: none;
   padding: 0;
+}
+
+.presentation-editor--viewing .superdoc-structured-content-block:hover {
+  background: none;
+  border: none;
 }
 
 .presentation-editor--viewing .superdoc-structured-content-inline:hover {
@@ -499,7 +576,7 @@ const FIELD_ANNOTATION_STYLES = `
 .superdoc-layout .annotation *::selection {
   background: transparent;
 }
-  
+
 .superdoc-layout .annotation::-moz-selection,
 .superdoc-layout .annotation *::-moz-selection  {
   background: transparent;
@@ -544,7 +621,12 @@ const IMAGE_SELECTION_STYLES = `
 }
 
 /* Ensure inline images can be targeted */
-.superdoc-inline-image.superdoc-image-selected {
+.${DOM_CLASS_NAMES.INLINE_IMAGE}.superdoc-image-selected {
+  outline-offset: 2px;
+}
+
+/* Selection on clip wrapper so outline matches the visible cropped portion, not the scaled image */
+.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}.superdoc-image-selected {
   outline-offset: 2px;
 }
 `;

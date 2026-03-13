@@ -1,18 +1,30 @@
-# AI Examples
+# AI Integration Examples
 
-Examples for integrating AI capabilities with SuperDoc.
+Give LLMs structured access to document operations. Each example connects SuperDoc's Document Engine to a cloud AI platform or agent framework — open a doc, let the model review and edit it with tools, save the result.
 
-## Examples
+**Docs:** [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) · [LLM Tools](https://docs.superdoc.dev/document-engine/ai-agents/llm-tools)
 
-| Example | Description |
-|---------|-------------|
-| [quickstart](./quickstart) | Quick start guide for SuperDoc AI features |
-| [prompts](./prompts) | Example prompts for AI-powered document operations |
+## Cloud platforms
 
-## Running an Example
+You write the agentic loop and control the conversation directly.
+
+| Platform | Node.js | Python | Auth |
+|----------|---------|--------|------|
+| [AWS Bedrock](./bedrock) | `index.ts` | `index.py` | AWS credentials (`aws configure`) |
+
+## Run
 
 ```bash
-cd <example-folder>
+# Node.js
+cd bedrock
 npm install
-npm run dev
+npx tsx index.ts contract.docx reviewed.docx
+
+# Python
+cd bedrock
+python -m venv venv && source venv/bin/activate
+pip install superdoc-sdk boto3
+python index.py contract.docx reviewed.docx
 ```
+
+Each integration needs different dependencies — see the README in each directory.

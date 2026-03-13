@@ -10,7 +10,6 @@ import type {
   DrawingBlock,
   DrawingContentSnapshot,
   ImageBlock,
-  ParagraphIndent,
   ShapeGroupChild,
   ShapeGroupDrawing,
   ShapeGroupImageChild,
@@ -415,6 +414,25 @@ export function toBoxSpacing(spacing?: Record<string, unknown>): BoxSpacing | un
   });
 
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** Minimum top/bottom cell padding (px) when imported value is in (0, 2). */
+const MIN_TOP_BOTTOM_CELL_PADDING_PX = 2;
+
+/**
+ * Normalizes top/bottom cell padding: values greater than 0 but less than 2px
+ * are raised to 2px so small imported values remain usable. Zero and values >= 2
+ * are unchanged.
+ */
+export function normalizeCellPaddingTopBottom(padding: BoxSpacing): BoxSpacing {
+  const out = { ...padding };
+  if (typeof out.top === 'number' && out.top > 0 && out.top < MIN_TOP_BOTTOM_CELL_PADDING_PX) {
+    out.top = MIN_TOP_BOTTOM_CELL_PADDING_PX;
+  }
+  if (typeof out.bottom === 'number' && out.bottom > 0 && out.bottom < MIN_TOP_BOTTOM_CELL_PADDING_PX) {
+    out.bottom = MIN_TOP_BOTTOM_CELL_PADDING_PX;
+  }
+  return out;
 }
 
 // ============================================================================
@@ -936,7 +954,7 @@ export function inferExtensionFromPath(value?: string | null): string | undefine
  * // Matches via candidate path: word/media/rId3.png
  * ```
  */
-export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<string, string>): FlowBlock[] {
+export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<string, string | Uint8Array>): FlowBlock[] {
   if (!mediaFiles || Object.keys(mediaFiles).length === 0) {
     return blocks;
   }
@@ -945,7 +963,9 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
   Object.entries(mediaFiles).forEach(([key, value]) => {
     const normalized = normalizeMediaKey(key);
     if (normalized) {
-      normalizedMedia.set(normalized, value);
+      // Handle Uint8Array values from persistence layers (e.g., Y.js binary encoding)
+      const stringValue = value instanceof Uint8Array ? new TextDecoder().decode(value) : value;
+      normalizedMedia.set(normalized, stringValue);
     }
   });
 
@@ -1438,8 +1458,20 @@ export function normalizeTextInsets(
 export const OOXML_Z_INDEX_BASE = 251658240;
 
 // ============================================================================
-// OOXML Element Utilities
+// OOXML Element Utilities (z-index from relativeHeight)
 // ============================================================================
+
+/**
+ * Coerces relativeHeight from OOXML (number or string) to a finite number.
+ */
+export function coerceRelativeHeight(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
 
 /**
  * Normalizes z-index from OOXML relativeHeight value.
@@ -1463,8 +1495,50 @@ export const OOXML_Z_INDEX_BASE = 251658240;
  */
 export function normalizeZIndex(originalAttributes: unknown): number | undefined {
   if (!isPlainObject(originalAttributes)) return undefined;
-  const relativeHeight = originalAttributes.relativeHeight;
-  if (typeof relativeHeight !== 'number') return undefined;
-  // Subtract base to get relative z-index, ensuring non-negative values
+  const relativeHeight = coerceRelativeHeight(originalAttributes.relativeHeight);
+  if (relativeHeight === undefined) return undefined;
   return Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+}
+
+/**
+ * Resolves the CSS z-index for a floating object based on its behindDoc flag
+ * and an OOXML-derived raw value.
+ *
+ * - behindDoc objects always return 0.
+ * - Non-behindDoc objects are clamped to at least 1 so they never share the
+ *   behindDoc sentinel value (0).
+ *
+ * @param behindDoc - Whether the object is behind body text
+ * @param raw - OOXML-derived z-index (from normalizeZIndex or block.zIndex)
+ * @param fallback - Value to use when raw is undefined (default: 1)
+ * @returns Resolved z-index
+ */
+export function resolveFloatingZIndex(behindDoc: boolean, raw: number | undefined, fallback = 1): number {
+  if (behindDoc) return 0;
+  if (raw === undefined) return Math.max(1, fallback);
+  return Math.max(1, raw);
+}
+
+/**
+ * Returns z-index for an image or drawing block.
+ *
+ * We cannot rely on `block.zIndex` only: when the flow-block cache hits, the
+ * paragraph handler reuses cached blocks and never calls the image/shape
+ * converters, so those blocks never get `zIndex` set. This helper uses
+ * `block.zIndex` when present, otherwise derives from
+ * `block.attrs.originalAttributes.relativeHeight` via normalizeZIndex,
+ * otherwise behindDoc ? 0 : 1.
+ *
+ * Rendering policy:
+ * - behindDoc anchored objects always return 0.
+ * - Anchored objects with text wrapping (Square/Tight/Through/TopAndBottom, or
+ *   missing wrap metadata) keep OOXML relativeHeight ordering but are clamped
+ *   to at least 1 (never 0 unless behindDoc=true).
+ * - Front/no-wrap anchored objects (wrap None) also preserve OOXML relativeHeight order.
+ */
+export function getFragmentZIndex(block: ImageBlock | DrawingBlock): number {
+  const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
+  const raw = typeof block.zIndex === 'number' ? block.zIndex : normalizeZIndex(attrs?.originalAttributes);
+
+  return resolveFloatingZIndex(block.anchor?.behindDoc === true, raw);
 }

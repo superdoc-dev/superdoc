@@ -5,6 +5,15 @@ import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
 import { preProcessIndexInstruction } from './index-preprocessor.js';
 import { preProcessXeInstruction } from './xe-preprocessor.js';
+import { preProcessTcInstruction as preProcessTcFieldInstruction } from './tc-preprocessor.js';
+import { preProcessRefInstruction } from './ref-preprocessor.js';
+import { preProcessNoterefInstruction } from './noteref-preprocessor.js';
+import { preProcessStylerefInstruction } from './styleref-preprocessor.js';
+import { preProcessSeqInstruction } from './seq-preprocessor.js';
+import { preProcessCitationInstruction } from './citation-preprocessor.js';
+import { preProcessBibliographyInstruction } from './bibliography-preprocessor.js';
+import { preProcessTaInstruction } from './ta-preprocessor.js';
+import { preProcessToaInstruction } from './toa-preprocessor.js';
 
 /**
  * @callback InstructionPreProcessor
@@ -36,6 +45,24 @@ export const getInstructionPreProcessor = (instruction) => {
       return preProcessIndexInstruction;
     case 'XE':
       return preProcessXeInstruction;
+    case 'TC':
+      return preProcessTcFieldInstruction;
+    case 'REF':
+      return preProcessRefInstruction;
+    case 'NOTEREF':
+      return preProcessNoterefInstruction;
+    case 'STYLEREF':
+      return preProcessStylerefInstruction;
+    case 'SEQ':
+      return preProcessSeqInstruction;
+    case 'CITATION':
+      return preProcessCitationInstruction;
+    case 'BIBLIOGRAPHY':
+      return preProcessBibliographyInstruction;
+    case 'TA':
+      return preProcessTaInstruction;
+    case 'TOA':
+      return preProcessToaInstruction;
     default:
       return null;
   }

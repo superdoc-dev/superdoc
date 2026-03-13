@@ -1,6 +1,7 @@
 // @ts-expect-error - preset-geometry package may not have type definitions
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { inchesToPixels } from '@converter/helpers.js';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 import {
   createGradient,
   createTextElement,
@@ -8,13 +9,6 @@ import {
   applyAlphaToSVG,
   generateTransforms,
 } from '../shared/svg-utils.js';
-
-/**
- * Scaling factor to convert OOXML relativeHeight values to CSS z-index range.
- * OOXML uses large numbers (e.g., 251659318), so we scale down by dividing by this factor.
- * This ensures proper z-ordering of overlapping elements while staying within reasonable CSS limits.
- */
-const Z_INDEX_SCALE_FACTOR = 1000000;
 
 export class VectorShapeView {
   node;
@@ -204,9 +198,7 @@ export class VectorShapeView {
       // Use relativeHeight from OOXML for proper z-ordering of overlapping elements
       const relativeHeight = originalAttributes?.relativeHeight;
       if (relativeHeight != null) {
-        // Scale down the relativeHeight value to a reasonable CSS z-index range
-        // OOXML uses large numbers (e.g., 251659318), we normalize to a smaller range
-        const zIndex = Math.floor(relativeHeight / Z_INDEX_SCALE_FACTOR);
+        const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
         style += `z-index: ${zIndex};`;
       } else if (wrap?.attrs?.behindDoc) {
         style += 'z-index: -1;';

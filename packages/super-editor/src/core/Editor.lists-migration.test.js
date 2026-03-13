@@ -1,6 +1,5 @@
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as listsV2Migrations from '@core/migrations/0.14-listsv2/listsv2migration.js';
-import * as collaborationHelpers from '@extensions/collaboration/collaboration-helpers.js';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import * as Y from 'yjs';
 
@@ -16,7 +15,6 @@ describe('Editor list migration guard', () => {
   });
 
   beforeEach(() => {
-    vi.spyOn(collaborationHelpers, 'updateYdocDocxData').mockResolvedValue();
     migrateSpy = vi.spyOn(listsV2Migrations, 'migrateListsToV2IfNecessary').mockReturnValue([]);
   });
 

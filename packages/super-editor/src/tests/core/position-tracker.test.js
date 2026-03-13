@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createDocxTestEditor } from '../helpers/editor-test-utils.js';
 import { EditorState } from 'prosemirror-state';
 import { positionTrackerKey } from '@core/PositionTracker.js';
@@ -652,6 +652,133 @@ describe('PositionTracker', () => {
         expect(editor.state.doc.textBetween(one.from, one.to)).toBe('one');
         expect(editor.state.doc.textBetween(two.from, two.to)).toBe('two');
         expect(editor.state.doc.textBetween(three.from, three.to)).toBe('three');
+      } finally {
+        editor.destroy();
+      }
+    });
+  });
+
+  describe('trackNode() and goToTracked()', () => {
+    it('should track a find() item via trackNode', () => {
+      const editor = createDocxTestEditor();
+
+      try {
+        const { doc, paragraph, run } = editor.schema.nodes;
+        const linkMark = editor.schema.marks.link.create({ href: 'http://www.google.com' });
+        const testDoc = doc.create(null, [
+          paragraph.create({ paraId: '4652C010' }, [
+            run.create(null, [editor.schema.text('Google', [linkMark]), editor.schema.text(' docs')]),
+          ]),
+        ]);
+
+        const baseState = EditorState.create({
+          schema: editor.schema,
+          doc: testDoc,
+          plugins: editor.state.plugins,
+        });
+        editor.setState(baseState);
+
+        const tracker = editor.positionTracker;
+        const findItem = {
+          address: {
+            kind: 'inline',
+            nodeType: 'hyperlink',
+            anchor: {
+              start: { blockId: '4652C010', offset: 0 },
+              end: { blockId: '4652C010', offset: 6 },
+            },
+          },
+          node: {
+            nodeType: 'hyperlink',
+            kind: 'inline',
+            properties: { href: 'http://www.google.com' },
+          },
+        };
+
+        const id = tracker.trackNode(findItem, { type: 'sidebar-link' });
+
+        expect(id).toBeTypeOf('string');
+        const resolved = tracker.resolve(id);
+        expect(resolved).not.toBeNull();
+        expect(editor.state.doc.textBetween(resolved.from, resolved.to)).toBe('Google');
+        expect(resolved.spec.type).toBe('sidebar-link');
+      } finally {
+        editor.destroy();
+      }
+    });
+
+    it('should return null from trackNode when the find item cannot be resolved', () => {
+      const editor = createDocxTestEditor();
+
+      try {
+        const { doc, paragraph, run } = editor.schema.nodes;
+        const testDoc = doc.create(null, [paragraph.create(null, [run.create(null, [editor.schema.text('hello')])])]);
+
+        const baseState = EditorState.create({
+          schema: editor.schema,
+          doc: testDoc,
+          plugins: editor.state.plugins,
+        });
+        editor.setState(baseState);
+
+        const tracker = editor.positionTracker;
+        const unresolvedItem = {
+          address: {
+            kind: 'inline',
+            anchor: {
+              start: { blockId: 'missing-block', offset: 0 },
+              end: { blockId: 'missing-block', offset: 5 },
+            },
+          },
+        };
+
+        expect(tracker.trackNode(unresolvedItem)).toBeNull();
+      } finally {
+        editor.destroy();
+      }
+    });
+
+    it('should navigate tracked ranges with goToTracked', () => {
+      const editor = createDocxTestEditor();
+
+      try {
+        const { doc, paragraph, run } = editor.schema.nodes;
+        const testDoc = doc.create(null, [
+          paragraph.create(null, [run.create(null, [editor.schema.text('hello world')])]),
+        ]);
+
+        const baseState = EditorState.create({
+          schema: editor.schema,
+          doc: testDoc,
+          plugins: editor.state.plugins,
+        });
+        editor.setState(baseState);
+
+        const tracker = editor.positionTracker;
+        let worldFrom = null;
+        let worldTo = null;
+        editor.state.doc.descendants((node, pos) => {
+          if (!node.isText) return;
+          const index = (node.text ?? '').indexOf('world');
+          if (index === -1 || worldFrom != null) return;
+          worldFrom = pos + index;
+          worldTo = pos + index + 5;
+        });
+        expect(worldFrom).toBeTypeOf('number');
+        expect(worldTo).toBeTypeOf('number');
+        const id = tracker.track(worldFrom, worldTo, { type: 'search' });
+
+        const scrollToPosition = vi.fn(() => true);
+        editor.presentationEditor = {
+          scrollToPosition,
+        };
+
+        const didNavigate = tracker.goToTracked(id);
+
+        expect(didNavigate).toBe(true);
+        expect(editor.state.selection.from).toBe(worldFrom);
+        expect(editor.state.selection.to).toBe(worldTo);
+        expect(scrollToPosition).toHaveBeenCalledWith(worldFrom, { block: 'center' });
       } finally {
         editor.destroy();
       }

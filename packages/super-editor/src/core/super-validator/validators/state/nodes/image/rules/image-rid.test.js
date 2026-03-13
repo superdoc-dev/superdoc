@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../../../../../../parts/adapters/relationships-mutation.js', () => ({
+  findOrCreateRelationship: vi.fn(),
+}));
+
+import { findOrCreateRelationship } from '../../../../../../parts/adapters/relationships-mutation.js';
 import { ensureValidImageRID } from './image-rid.js';
 
 describe('ensureValidImageRID', () => {
@@ -7,6 +13,8 @@ describe('ensureValidImageRID', () => {
   let mockLogger;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+
     mockTransaction = {
       setNodeMarkup: vi.fn(),
     };
@@ -15,14 +23,7 @@ describe('ensureValidImageRID', () => {
       debug: vi.fn(),
     };
 
-    mockEditor = {
-      converter: {
-        docxHelpers: {
-          findRelationshipIdFromTarget: vi.fn(),
-          insertNewRelationship: vi.fn(),
-        },
-      },
-    };
+    mockEditor = {};
   });
 
   it('does nothing if image already has rId and src', () => {
@@ -55,8 +56,8 @@ describe('ensureValidImageRID', () => {
     expect(mockTransaction.setNodeMarkup).not.toHaveBeenCalled();
   });
 
-  it('reuses existing rId if found via findRelationshipIdFromTarget', () => {
-    mockEditor.converter.docxHelpers.findRelationshipIdFromTarget.mockReturnValue('existing-rId');
+  it('reuses existing rId if found', () => {
+    findOrCreateRelationship.mockReturnValue('existing-rId');
 
     const images = [
       {
@@ -69,17 +70,18 @@ describe('ensureValidImageRID', () => {
 
     expect(result.modified).toBe(true);
     expect(result.results[0]).toBe('Added missing rId to image at pos 2');
+    expect(findOrCreateRelationship).toHaveBeenCalledWith(mockEditor, 'image-rid:ensureValidImageRID', {
+      target: 'img.jpg',
+      type: 'image',
+    });
     expect(mockTransaction.setNodeMarkup).toHaveBeenCalledWith(2, undefined, {
       src: 'img.jpg',
       rId: 'existing-rId',
     });
-
-    expect(mockLogger.debug).toHaveBeenCalledWith('Reusing existing rId for image:', 'existing-rId', 'at pos:', 2);
   });
 
   it('creates new rId when not found', () => {
-    mockEditor.converter.docxHelpers.findRelationshipIdFromTarget.mockReturnValue(null);
-    mockEditor.converter.docxHelpers.insertNewRelationship.mockReturnValue('new-rId');
+    findOrCreateRelationship.mockReturnValue('new-rId');
 
     const images = [
       {
@@ -96,16 +98,10 @@ describe('ensureValidImageRID', () => {
       src: 'new-img.png',
       rId: 'new-rId',
     });
-
-    expect(mockLogger.debug).toHaveBeenCalledWith('Creating new rId for image at pos:', 3, 'with src:', 'new-img.png');
   });
 
   it('handles multiple images with mixed outcomes', () => {
-    mockEditor.converter.docxHelpers.findRelationshipIdFromTarget
-      .mockReturnValueOnce(null) // first image -> not found
-      .mockReturnValueOnce('reused-rId'); // second image -> found
-
-    mockEditor.converter.docxHelpers.insertNewRelationship.mockReturnValue('created-rId');
+    findOrCreateRelationship.mockReturnValueOnce('created-rId').mockReturnValueOnce('reused-rId');
 
     const images = [
       { node: { attrs: { src: 'a.png' } }, pos: 0 },

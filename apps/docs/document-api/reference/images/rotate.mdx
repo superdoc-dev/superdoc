@@ -1,0 +1,170 @@
+---
+title: images.rotate
+sidebarTitle: images.rotate
+description: Set the absolute rotation angle for an image.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set the absolute rotation angle for an image.
+
+- Operation ID: `images.rotate`
+- API member path: `editor.doc.images.rotate(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ImagesMutationResult; reports NO_OP if already set.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `angle` | number | yes |  |
+| `imageId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "angle": 12.5,
+  "imageId": "example"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | no |  |
+| `image` | object | no |  |
+| `success` | boolean | no |  |
+
+### Example response
+
+```json
+{
+  "image": {},
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "angle": {
+      "maximum": 360,
+      "minimum": 0,
+      "type": "number"
+    },
+    "imageId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "imageId",
+    "angle"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "type": "object"
+    },
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "image"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -33,6 +33,8 @@
 export interface BlockNodeAttributes {
   /** SuperDoc block tracking ID */
   sdBlockId?: string | null;
+  /** Incrementing revision for block-level changes */
+  sdBlockRev?: number | null;
   /** Additional HTML attributes */
   extraAttrs?: Record<string, string>;
 }

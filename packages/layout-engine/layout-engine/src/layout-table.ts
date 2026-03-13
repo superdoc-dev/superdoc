@@ -3,6 +3,7 @@ import type {
   TableMeasure,
   TableFragment,
   TableColumnBoundary,
+  TableRowBoundary,
   TableFragmentMetadata,
   TableRowMeasure,
   TableRow,
@@ -12,6 +13,12 @@ import type {
 } from '@superdoc/contracts';
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
+
+/**
+ * Ratio of column width (0..1). An anchored table with totalWidth >= columnWidth * this value
+ * is treated as full-width and laid out inline instead of as a floating fragment.
+ */
+export const ANCHORED_TABLE_FULL_WIDTH_RATIO = 0.99;
 
 export type TableLayoutContext = {
   block: TableBlock;
@@ -89,49 +96,35 @@ function getTableIndentWidth(attrs: TableBlock['attrs']): number {
 }
 
 /**
- * Apply table indent offset to x position and width, ensuring width never goes negative.
+ * Apply table indent offset to x position and width, ensuring width stays in a sane range.
  *
- * When a table has a tableIndent offset:
- * - Positive indent: Shifts table right, reduces available width
- * - Negative indent: Shifts table left (into margin), increases available width
+ * Positive indents move the table right. Width is only reduced when needed to prevent
+ * right overflow past the current column (avoids double-shrinking tables whose grid is
+ * already reduced by tblInd in OOXML).
  *
- * Width clamping prevents negative widths when indent is larger than available space,
- * which would cause rendering issues. This is an edge case but must be handled safely.
+ * Negative indents keep the historical behavior: move left and expand width to preserve
+ * the same right edge.
  *
  * @param x - Original x position in pixels
  * @param width - Original width in pixels
  * @param indent - Table indent offset in pixels (positive or negative)
+ * @param columnWidth - Column width available for the table
  * @returns Object with adjusted x and width values
- *
- * @remarks
- * Width clamping to 0 is a defensive measure. In production scenarios, this should
- * rarely occur as the layout engine typically allocates sufficient column width.
- * However, when it does occur (e.g., extreme negative indent or narrow columns),
- * clamping prevents undefined behavior in the rendering layer.
- *
- * @example
- * ```typescript
- * // Normal positive indent
- * applyTableIndent(100, 400, 50);
- * // returns { x: 150, width: 350 }
- *
- * // Normal negative indent (extends into margin)
- * applyTableIndent(100, 400, -20);
- * // returns { x: 80, width: 420 }
- *
- * // Edge case: indent exceeds width (clamped)
- * applyTableIndent(100, 200, 250);
- * // returns { x: 350, width: 0 }
- *
- * // Zero indent (no change)
- * applyTableIndent(100, 400, 0);
- * // returns { x: 100, width: 400 }
- * ```
  */
-function applyTableIndent(x: number, width: number, indent: number): { x: number; width: number } {
+function applyTableIndent(x: number, width: number, indent: number, columnWidth: number): { x: number; width: number } {
+  const shiftedX = x + indent;
+
+  if (indent <= 0) {
+    return {
+      x: shiftedX,
+      width: Math.max(0, width - indent),
+    };
+  }
+
+  const maxWidthWithinColumn = Math.max(0, columnWidth - indent);
   return {
-    x: x + indent,
-    width: Math.max(0, width - indent),
+    x: shiftedX,
+    width: Math.min(width, maxWidthWithinColumn),
   };
 }
 
@@ -140,7 +133,7 @@ function applyTableIndent(x: number, width: number, indent: number): { x: number
  *
  * When justification is center or right/end, the table is aligned within the
  * column width and tableIndent is ignored. Otherwise, tableIndent offsets the
- * table from the left margin and reduces its usable width.
+ * table from the left margin and clamps width only when needed to avoid overflow.
  *
  * @param baseX - Left edge of the column in pixels
  * @param columnWidth - Available column width in pixels
@@ -165,21 +158,61 @@ function resolveTableFrame(
   }
 
   const tableIndent = getTableIndentWidth(attrs);
-  return applyTableIndent(baseX, width, tableIndent);
+  return applyTableIndent(baseX, width, tableIndent, columnWidth);
 }
 
 /**
- * Calculate minimum width for a table column.
+ * Rescales column widths when a table is clamped to fit a narrower section.
  *
- * Uses a conservative minimum of 10px per column to match PM's
- * columnResizing behavior.
+ * In mixed-orientation documents, tables are measured at the widest section's
+ * content width but may render in narrower sections. When the measured total
+ * width exceeds the fragment width, column widths must be proportionally
+ * rescaled so cells don't overflow the fragment container (SD-1859).
  *
- * @returns Minimum width in pixels (10px)
+ * @returns Rescaled column widths if clamping occurred, undefined otherwise.
  */
-function calculateColumnMinWidth(): number {
-  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
+export function rescaleColumnWidths(
+  measureColumnWidths: number[] | undefined,
+  measureTotalWidth: number,
+  fragmentWidth: number,
+): number[] | undefined {
+  if (
+    !measureColumnWidths ||
+    measureColumnWidths.length === 0 ||
+    measureTotalWidth <= fragmentWidth ||
+    measureTotalWidth <= 0
+  ) {
+    return undefined;
+  }
+  const scale = fragmentWidth / measureTotalWidth;
+  const scaled = measureColumnWidths.map((w) => Math.max(1, Math.round(w * scale)));
+  const scaledSum = scaled.reduce((a, b) => a + b, 0);
+  const target = Math.round(fragmentWidth);
+  if (scaledSum !== target && scaled.length > 0) {
+    scaled[scaled.length - 1] = Math.max(1, scaled[scaled.length - 1] + (target - scaledSum));
+  }
+  return scaled;
+}
 
-  return DEFAULT_MIN_WIDTH;
+const COLUMN_MIN_WIDTH_PX = 25;
+const COLUMN_MAX_WIDTH_PX = 200;
+const ROW_MIN_HEIGHT_PX = 10;
+
+/**
+ * Calculate minimum width for a table column from its measured width.
+ *
+ * Clamps the measured width to [COLUMN_MIN_WIDTH_PX, COLUMN_MAX_WIDTH_PX]
+ * so that resize handles enforce a sensible range (min 25px, max 200px).
+ * Invalid/negative/zero measured widths are treated as the minimum.
+ *
+ * @param measuredWidth - Measured width in pixels (may be invalid)
+ * @returns Clamped minimum width in pixels
+ */
+function calculateColumnMinWidth(measuredWidth: number): number {
+  if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+    return COLUMN_MIN_WIDTH_PX;
+  }
+  return Math.max(COLUMN_MIN_WIDTH_PX, Math.min(COLUMN_MAX_WIDTH_PX, measuredWidth));
 }
 
 /**
@@ -198,18 +231,20 @@ function calculateColumnMinWidth(): number {
  * Edge cases handled:
  * - Empty columnWidths array: Returns empty array (no boundaries)
  * - Single column: Returns one boundary with proper min/max constraints
- * - Very wide/narrow columns: Handled by calculateColumnMinWidth
+ * - Very wide/narrow columns: Supported with a fixed resize floor
  *
  * @param measure - Table measurement containing column widths
  * @returns Array of column boundary metadata, one per column
  */
-function generateColumnBoundaries(measure: TableMeasure): TableColumnBoundary[] {
+function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: number[]): TableColumnBoundary[] {
   const boundaries: TableColumnBoundary[] = [];
-  let xPosition = 0;
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  let xPosition = cellSpacingPx; // space before first column
+  const widths = effectiveWidths ?? measure.columnWidths;
 
-  for (let i = 0; i < measure.columnWidths.length; i++) {
-    const width = measure.columnWidths[i];
-    const minWidth = calculateColumnMinWidth();
+  for (let i = 0; i < widths.length; i++) {
+    const width = widths[i];
+    const minWidth = calculateColumnMinWidth(width);
 
     const boundary = {
       index: i,
@@ -221,7 +256,102 @@ function generateColumnBoundaries(measure: TableMeasure): TableColumnBoundary[] 
 
     boundaries.push(boundary);
 
-    xPosition += width;
+    // Next boundary is after this column plus spacing (border-spacing between columns)
+    xPosition += width + cellSpacingPx;
+  }
+
+  return boundaries;
+}
+
+/**
+ * Generate row boundary metadata for interactive table row resizing.
+ *
+ * Creates metadata that enables the overlay component to position horizontal
+ * resize handles and enforce minimum height constraints during drag operations.
+ *
+ * Boundaries are marked non-resizable when:
+ * - A cell in the row above has a rowSpan that crosses the boundary
+ * - The row is a repeated header on a continuation fragment (resize originals only)
+ *
+ * @param measure - Table measurement containing row heights
+ * @param block - Table block (used for rowSpan inspection)
+ * @param fromRow - Starting body row index (inclusive)
+ * @param toRow - Ending body row index (exclusive)
+ * @param repeatHeaderCount - Number of repeated header rows on this fragment
+ * @param cellSpacingPx - Cell spacing in pixels (border-spacing)
+ * @returns Array of row boundary metadata
+ */
+function generateRowBoundaries(
+  measure: TableMeasure,
+  block: TableBlock,
+  fromRow: number,
+  toRow: number,
+  repeatHeaderCount: number,
+  cellSpacingPx: number,
+  partialRow?: PartialRowInfo | null,
+): TableRowBoundary[] {
+  const boundaries: TableRowBoundary[] = [];
+
+  // Build ordered list of rendered rows: headers first, then body rows
+  const renderedRows: Array<{ rowIndex: number; isRepeatedHeader: boolean }> = [];
+  if (repeatHeaderCount > 0) {
+    for (let r = 0; r < repeatHeaderCount && r < measure.rows.length; r++) {
+      renderedRows.push({ rowIndex: r, isRepeatedHeader: fromRow > 0 });
+    }
+  }
+  for (let r = fromRow; r < toRow && r < measure.rows.length; r++) {
+    renderedRows.push({ rowIndex: r, isRepeatedHeader: false });
+  }
+
+  // Build a set of ABSOLUTE row indices whose bottom boundary is blocked by rowspan cells.
+  // A boundary after absolute row N is blocked if any cell's rowSpan crosses it.
+  //
+  // We must scan ALL table rows, not just renderedRows, because a rowspan that
+  // starts before fromRow can extend into this fragment's rendered range.
+  // Example: row 1 has rowSpan=4, fragment renders rows 3-5. The boundary after
+  // row 3 is blocked because the span from row 1 crosses it.
+  const blockedBoundaries = new Set<number>();
+  for (let r = 0; r < measure.rows.length; r++) {
+    const rowMeasure = measure.rows[r];
+    if (!rowMeasure) continue;
+
+    for (const cellMeasure of rowMeasure.cells) {
+      const rowSpan = cellMeasure.rowSpan ?? 1;
+      if (rowSpan <= 1) continue;
+
+      // This cell spans from row r to r + rowSpan - 1.
+      // Block boundaries after rows r through r + rowSpan - 2.
+      for (let boundaryRow = r; boundaryRow < r + rowSpan - 1; boundaryRow++) {
+        blockedBoundaries.add(boundaryRow);
+      }
+    }
+  }
+
+  let yPosition = cellSpacingPx;
+  for (let ri = 0; ri < renderedRows.length; ri++) {
+    const { rowIndex, isRepeatedHeader } = renderedRows[ri];
+    const rowMeasure = measure.rows[rowIndex];
+    if (!rowMeasure) continue;
+
+    const isPartial = partialRow?.rowIndex === rowIndex;
+    const height = isPartial ? partialRow.partialHeight : rowMeasure.height;
+    const contentHeight = getRowContentHeight(block.rows[rowIndex], rowMeasure);
+    const minHeight = isPartial ? Math.max(1, height) : Math.max(ROW_MIN_HEIGHT_PX, contentHeight);
+
+    // A boundary is resizable unless:
+    // 1. It's a repeated header on a continuation fragment
+    // 2. A rowspan crosses this boundary (blockedBoundaries)
+    const resizable = !isRepeatedHeader && !isPartial && !blockedBoundaries.has(rowIndex);
+
+    boundaries.push({
+      index: rowIndex,
+      y: yPosition,
+      height,
+      minHeight,
+      resizable,
+    });
+
+    yPosition += height + cellSpacingPx;
   }
 
   return boundaries;
@@ -283,23 +413,66 @@ function calculateFragmentHeight(
   fragment: Pick<TableFragment, 'fromRow' | 'toRow' | 'repeatHeaderCount'>,
   measure: TableMeasure,
   _headerCount: number,
+  borderCollapse?: 'collapse' | 'separate',
 ): number {
   let height = 0;
+  let rowCount = 0;
 
   // Add header height if continuation with repeated headers
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     height += sumRowHeights(measure.rows, 0, fragment.repeatHeaderCount);
+    rowCount += fragment.repeatHeaderCount;
   }
 
   // Add body row heights (fromRow to toRow, exclusive)
+  const bodyRowCount = fragment.toRow - fragment.fromRow;
   height += sumRowHeights(measure.rows, fragment.fromRow, fragment.toRow);
+  rowCount += bodyRowCount;
 
+  // Add vertical gaps: space before first row, between rows, after last row (outer spacing)
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  if (rowCount > 0 && cellSpacingPx > 0) {
+    height += (rowCount + 1) * cellSpacingPx;
+  }
+  // Only add outer border height when border-collapse is separate (DOM paints container-level borders only then)
+  if (rowCount > 0 && measure.tableBorderWidths && borderCollapse === 'separate') {
+    const borderWidthV = measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
+    height += borderWidthV;
+  }
+
+  return height;
+}
+
+/**
+ * Height of a body-only fragment (rows fromRow..toRow) including vertical spacing and borders.
+ * Must match the body portion of calculateFragmentHeight so findSplitPoint's fit check
+ * agrees with the actual rendered fragment height. Borders only included when borderCollapse === 'separate'.
+ */
+function calculateBodyFragmentHeight(
+  measure: TableMeasure,
+  fromRow: number,
+  toRow: number,
+  borderCollapse?: 'collapse' | 'separate',
+): number {
+  const rowCount = toRow - fromRow;
+  if (rowCount <= 0) {
+    return 0;
+  }
+  let height = sumRowHeights(measure.rows, fromRow, toRow);
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  if (cellSpacingPx > 0) {
+    height += (rowCount + 1) * cellSpacingPx;
+  }
+  if (measure.tableBorderWidths && borderCollapse === 'separate') {
+    height += measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
+  }
   return height;
 }
 
 type SplitPointResult = {
   endRow: number; // Exclusive row index (next row after last included)
   partialRow: PartialRowInfo | null; // Null for row-boundary splits, PartialRowInfo for mid-row splits
+  forcePageBreak?: boolean; // When true, force a page break after this fragment (rowspan-aware clean break)
 };
 
 /**
@@ -310,26 +483,62 @@ type SplitPointResult = {
 const MIN_PARTIAL_ROW_HEIGHT = 20;
 
 /**
- * Get all lines from a cell's blocks (multi-block or single paragraph).
+ * Get the line segments for a single embedded table row.
  *
- * Cells can have multiple blocks (cell.blocks) or a single paragraph (cell.paragraph).
- * This function normalizes access to all lines across all paragraph blocks.
- *
- * @param cell - Cell measure
- * @returns Array of all lines with their lineHeight
+ * If any cell in the row contains nested tables, recursively expand using
+ * the tallest cell's segments. This enables the layout engine to split at
+ * sub-row boundaries even for deeply nested tables (table-in-table-in-table).
+ * Otherwise, return the row as a single segment with its measured height.
  */
-function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeight: number }> {
+function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }> {
+  // Check if any cell has nested table blocks
+  const hasNestedTable = row.cells.some((cell) => cell.blocks?.some((b) => b.kind === 'table'));
+
+  if (!hasNestedTable) {
+    // Simple case: no nested tables, row is one segment
+    return [{ lineHeight: row.height || 0 }];
+  }
+
+  // Recursive case: find the cell with the most segments (tallest content)
+  let tallestLines: Array<{ lineHeight: number }> = [];
+  for (const cell of row.cells) {
+    const cellLines = getCellLines(cell);
+    if (cellLines.length > tallestLines.length) {
+      tallestLines = cellLines;
+    }
+  }
+
+  return tallestLines.length > 0 ? tallestLines : [{ lineHeight: row.height || 0 }];
+}
+
+export function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeight: number }> {
   // Multi-block cells use the `blocks` array
   if (cell.blocks && cell.blocks.length > 0) {
     const allLines: Array<{ lineHeight: number }> = [];
     for (const block of cell.blocks) {
       if (block.kind === 'paragraph') {
-        // Type guard ensures block is ParagraphMeasure
-        if (block.kind === 'paragraph' && 'lines' in block) {
+        if ('lines' in block) {
           const paraBlock = block as ParagraphMeasure;
           if (paraBlock.lines) {
             allLines.push(...paraBlock.lines);
           }
+        }
+      } else if (block.kind === 'table') {
+        // Embedded tables: expand individual rows as separate segments so the
+        // outer table splitter can break at embedded-table row boundaries,
+        // matching MS Word behavior where nested tables paginate across pages.
+        // Recursively expand rows that contain further nested tables.
+        const tableBlock = block as TableMeasure;
+        for (const row of tableBlock.rows) {
+          allLines.push(...getEmbeddedRowLines(row));
+        }
+      } else {
+        // Non-paragraph blocks (images, drawings) are represented as a single
+        // unsplittable segment with their full height. This ensures computePartialRow
+        // accounts for their height when splitting rows across pages.
+        const blockHeight = 'height' in block ? (block as { height: number }).height : 0;
+        if (blockHeight > 0) {
+          allLines.push({ lineHeight: blockHeight });
         }
       }
     }
@@ -344,34 +553,13 @@ function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeigh
   return [];
 }
 
-/**
- * Calculate the height of lines from startLine to endLine for a cell.
- *
- * @param cell - Cell measure containing paragraph with lines
- * @param fromLine - Starting line index (inclusive, must be >= 0)
- * @param toLine - Ending line index (exclusive), -1 means to end
- * @returns Height in pixels
- */
-function _calculateCellLinesHeight(cell: TableRowMeasure['cells'][number], fromLine: number, toLine: number): number {
-  if (fromLine < 0) {
-    throw new Error(`Invalid fromLine ${fromLine}: must be >= 0`);
-  }
-  const lines = getCellLines(cell);
-  const endLine = toLine === -1 ? lines.length : toLine;
-  let height = 0;
-  for (let i = fromLine; i < endLine && i < lines.length; i++) {
-    height += lines[i].lineHeight || 0;
-  }
-  return height;
-}
-
 type CellPadding = { top: number; bottom: number; left: number; right: number };
 
 function getCellPadding(cellIdx: number, blockRow?: TableRow): CellPadding {
   const padding = blockRow?.cells?.[cellIdx]?.attrs?.padding ?? {};
   return {
-    top: padding.top ?? 2,
-    bottom: padding.bottom ?? 2,
+    top: padding.top ?? 0,
+    bottom: padding.bottom ?? 0,
     left: padding.left ?? 4,
     right: padding.right ?? 4,
   };
@@ -548,7 +736,30 @@ function computeCellPmRange(
       continue;
     }
 
-    mergePmRange(range, extractBlockPmRange(block as { attrs?: Record<string, unknown> }));
+    // Non-paragraph blocks: advance cumulative count to stay aligned with getCellLines().
+    // Embedded tables expand to N segments (recursively, matching getEmbeddedRowLines);
+    // images/drawings are 1 segment.
+    if (blockMeasure.kind === 'table') {
+      const tableMeasure = blockMeasure as TableMeasure;
+      let tableSegments = 0;
+      for (const row of tableMeasure.rows) {
+        tableSegments += getEmbeddedRowLines(row).length;
+      }
+      const blockStart = cumulativeLineCount;
+      const blockEnd = cumulativeLineCount + tableSegments;
+      // Only include PM range if this block overlaps the requested line range
+      if (blockStart < toLine && blockEnd > fromLine) {
+        mergePmRange(range, extractBlockPmRange(block as { attrs?: Record<string, unknown> }));
+      }
+      cumulativeLineCount += tableSegments;
+    } else {
+      // Images, drawings: 1 segment each
+      const blockStart = cumulativeLineCount;
+      cumulativeLineCount += 1;
+      if (blockStart < toLine && blockStart >= fromLine) {
+        mergePmRange(range, extractBlockPmRange(block as { attrs?: Record<string, unknown> }));
+      }
+    }
   }
 
   return range;
@@ -750,6 +961,7 @@ function computePartialRow(
   measure: TableMeasure,
   availableHeight: number,
   fromLineByCell?: number[],
+  fullPageHeight?: number,
 ): PartialRowInfo {
   const row = measure.rows[rowIndex];
   if (!row) {
@@ -783,7 +995,22 @@ function computePartialRow(
     for (let i = startLine; i < lines.length; i++) {
       const lineHeight = lines[i].lineHeight || 0;
       if (cumulativeHeight + lineHeight > availableForLines) {
-        break; // Can't fit this line
+        // Force progress: only when the segment is truly taller than a full page
+        // (e.g. an embedded table that can never fit on any page). This prevents
+        // infinite pagination loops. Normal lines that don't fit at the bottom of a
+        // page should NOT be forced — the caller will advance to the next page.
+        if (
+          cumulativeHeight === 0 &&
+          i === startLine &&
+          availableForLines > 0 &&
+          fullPageHeight != null &&
+          lineHeight > fullPageHeight
+        ) {
+          // Cap height to available space — overflow:hidden on the cell clips the rest.
+          cumulativeHeight += Math.min(lineHeight, availableForLines);
+          cutLine = i + 1;
+        }
+        break;
       }
       cumulativeHeight += lineHeight;
       cutLine = i + 1; // Exclusive index
@@ -861,8 +1088,15 @@ function findSplitPoint(
   fullPageHeight?: number,
   _pendingPartialRow?: PartialRowInfo | null,
 ): SplitPointResult {
-  let accumulatedHeight = 0;
-  let lastFitRow = startRow; // Last row that fit completely
+  let lastFitRow = startRow; // Last row that fit completely (exclusive end index)
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+
+  // Rowspan-aware splitting: track the farthest row reached by any active rowspan
+  // and the last boundary where no rowspan crosses (a "clean" break point).
+  // When the standard break point splits a rowspan group, prefer the clean break
+  // to avoid continuation cells and match Word's behavior.
+  let maxRowspanEnd = startRow;
+  let lastCleanFitRow = startRow;
 
   for (let i = startRow; i < block.rows.length; i++) {
     const row = block.rows[i];
@@ -873,19 +1107,44 @@ function findSplitPoint(
       cantSplit = true;
     }
 
-    // Check if this row fits completely
-    if (accumulatedHeight + rowHeight <= availableHeight) {
+    // Track the farthest rowspan extent from this row's cells
+    if (rowMeasure) {
+      for (const cellMeasure of rowMeasure.cells) {
+        const rs = cellMeasure.rowSpan ?? 1;
+        if (rs > 1) {
+          maxRowspanEnd = Math.max(maxRowspanEnd, i + rs);
+        }
+      }
+    }
+
+    // Check if this row fits: use full fragment height (rows + spacing + borders) so pagination matches render
+    const fragmentHeightWithRow = calculateBodyFragmentHeight(measure, startRow, i + 1, borderCollapse);
+    if (fragmentHeightWithRow <= availableHeight) {
       // Row fits completely
-      accumulatedHeight += rowHeight;
       lastFitRow = i + 1; // Next row index (exclusive)
+
+      // A boundary is "clean" if no active rowspan crosses it
+      if (maxRowspanEnd <= i + 1) {
+        lastCleanFitRow = i + 1;
+      }
     } else {
-      // Row doesn't fit completely
-      const remainingHeight = availableHeight - accumulatedHeight;
+      // Row doesn't fit completely; remaining space after last full row set.
+      // When lastFitRow === startRow (first row doesn't fit), no rows have been placed yet, so
+      // we must subtract the vertical space that appears before the first row (top spacing + top border)
+      // instead of using calculateBodyFragmentHeight(startRow, startRow) which is 0.
+      let remainingHeight =
+        availableHeight - calculateBodyFragmentHeight(measure, startRow, lastFitRow, borderCollapse);
+      if (lastFitRow === startRow) {
+        const cellSpacingPx = measure.cellSpacingPx ?? 0;
+        const topBorderPx =
+          borderCollapse === 'separate' && measure.tableBorderWidths ? measure.tableBorderWidths.top : 0;
+        remainingHeight = availableHeight - cellSpacingPx - topBorderPx;
+      }
 
       // Check if this is an over-tall row (exceeds full page height) - force split regardless of cantSplit
       // This handles edge case where a row is taller than an entire page
       if (fullPageHeight && rowHeight > fullPageHeight) {
-        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight);
+        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight, undefined, fullPageHeight);
         return { endRow: i + 1, partialRow };
       }
 
@@ -895,6 +1154,10 @@ function findSplitPoint(
         if (lastFitRow === startRow) {
           return { endRow: startRow, partialRow: null };
         }
+        // Prefer a clean break point that avoids splitting rowspan groups
+        if (maxRowspanEnd > lastFitRow && lastCleanFitRow > startRow) {
+          return { endRow: lastCleanFitRow, partialRow: null, forcePageBreak: true };
+        }
         // Break before the cantSplit row
         return { endRow: lastFitRow, partialRow: null };
       }
@@ -902,7 +1165,7 @@ function findSplitPoint(
       // Row doesn't have cantSplit - try to split mid-row (MS Word default behavior)
       // Only split if we have meaningful space (at least MIN_PARTIAL_ROW_HEIGHT for one line)
       if (remainingHeight >= MIN_PARTIAL_ROW_HEIGHT) {
-        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight);
+        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight, undefined, fullPageHeight);
 
         // Check if we can actually fit any lines
         const hasContent = partialRow.toLineByCell.some(
@@ -915,7 +1178,10 @@ function findSplitPoint(
         }
       }
 
-      // Can't fit any content from this row - break before it
+      // Can't fit any content from this row - prefer clean break if available
+      if (maxRowspanEnd > lastFitRow && lastCleanFitRow > startRow) {
+        return { endRow: lastCleanFitRow, partialRow: null, forcePageBreak: true };
+      }
       return { endRow: lastFitRow, partialRow: null };
     }
   }
@@ -927,22 +1193,29 @@ function findSplitPoint(
 /**
  * Generate fragment metadata for a table fragment.
  *
- * Currently only includes column boundaries; row boundaries omitted to reduce DOM overhead.
+ * Includes column boundaries and row boundaries for interactive resizing.
  *
  * @param measure - Table measurements
- * @param fromRow - Starting row (unused but kept for future row boundaries)
- * @param toRow - Ending row (unused but kept for future row boundaries)
- * @param repeatHeaderCount - Header count (unused but kept for future metadata)
+ * @param block - Table block (used for rowSpan and content height inspection)
+ * @param fromRow - Starting body row index (inclusive)
+ * @param toRow - Ending body row index (exclusive)
+ * @param repeatHeaderCount - Number of repeated header rows on this fragment
+ * @param effectiveWidths - Optional rescaled column widths
  * @returns Table fragment metadata
  */
 function generateFragmentMetadata(
   measure: TableMeasure,
-  _fromRow: number,
-  _toRow: number,
-  _repeatHeaderCount: number,
+  block: TableBlock,
+  fromRow: number,
+  toRow: number,
+  repeatHeaderCount: number,
+  effectiveWidths?: number[],
+  partialRow?: PartialRowInfo | null,
 ): TableFragmentMetadata {
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
   return {
-    columnBoundaries: generateColumnBoundaries(measure),
+    columnBoundaries: generateColumnBoundaries(measure, effectiveWidths),
+    rowBoundaries: generateRowBoundaries(measure, block, fromRow, toRow, repeatHeaderCount, cellSpacingPx, partialRow),
     coordinateSystem: 'fragment',
   };
 }
@@ -962,14 +1235,19 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   state = context.ensurePage();
   const height = Math.min(context.measure.totalHeight, state.contentBottom - state.cursorY);
 
-  const metadata: TableFragmentMetadata = {
-    columnBoundaries: generateColumnBoundaries(context.measure),
-    coordinateSystem: 'fragment',
-  };
-
   const baseX = context.columnX(state.columnIndex);
   const baseWidth = Math.min(context.columnWidth, context.measure.totalWidth || context.columnWidth);
   const { x, width } = resolveTableFrame(baseX, context.columnWidth, baseWidth, context.block.attrs);
+  const columnWidths = rescaleColumnWidths(context.measure.columnWidths, context.measure.totalWidth, width);
+
+  const metadata = generateFragmentMetadata(
+    context.measure,
+    context.block,
+    0,
+    context.block.rows.length,
+    0,
+    columnWidths,
+  );
 
   const fragment: TableFragment = {
     kind: 'table',
@@ -981,6 +1259,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
     width,
     height,
     metadata,
+    columnWidths,
   };
   applyTableFragmentPmRange(fragment, context.block, context.measure);
   state.page.fragments.push(fragment);
@@ -1017,12 +1296,20 @@ export function layoutTableBlock({
   advanceColumn,
   columnX,
 }: TableLayoutContext): void {
-  // Skip anchored/floating tables handled by the float manager
+  // Anchored/floating tables are normally placed by the float manager when we layout their anchor
+  // paragraph. Treat full-width floating tables as inline so they flow like normal tables and
+  // don't create overlap or extra pages.
+  let treatAsInline = false;
   if (block.anchor?.isAnchored) {
-    return;
+    const totalWidth = measure.totalWidth ?? 0;
+    treatAsInline = columnWidth > 0 && totalWidth >= columnWidth * ANCHORED_TABLE_FULL_WIDTH_RATIO;
+    if (!treatAsInline) {
+      return;
+    }
   }
 
-  // 1. Detect floating tables - use monolithic layout
+  // 1. Detect floating tables - use monolithic layout so the table stays one unit (no split across pages).
+  // This applies even when treatAsInline (full-width anchored): we still flow the table here but render it as one fragment.
   const tableProps = block.attrs?.tableProperties as Record<string, unknown> | undefined;
   const floatingProps = tableProps?.floatingTableProperties as Record<string, unknown> | undefined;
   if (floatingProps && Object.keys(floatingProps).length > 0) {
@@ -1101,14 +1388,13 @@ export function layoutTableBlock({
   // This can occur in test scenarios or with placeholder tables
   if (block.rows.length === 0 && measure.totalHeight > 0) {
     const height = Math.min(measure.totalHeight, state.contentBottom - state.cursorY);
-    const metadata: TableFragmentMetadata = {
-      columnBoundaries: generateColumnBoundaries(measure),
-      coordinateSystem: 'fragment',
-    };
 
     const baseX = columnX(state.columnIndex);
     const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+    const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
+
+    const metadata = generateFragmentMetadata(measure, block, 0, 0, 0, columnWidths);
 
     const fragment: TableFragment = {
       kind: 'table',
@@ -1120,12 +1406,16 @@ export function layoutTableBlock({
       width,
       height,
       metadata,
+      columnWidths,
     };
     applyTableFragmentPmRange(fragment, block, measure);
     state.page.fragments.push(fragment);
     state.cursorY += height;
     return;
   }
+
+  // Resolve border-collapse for fragment height (match measuring/render: only add borders when separate)
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
 
   // 4. Loop until all rows processed (including pending partial rows)
   while (currentRow < block.rows.length || pendingPartialRow !== null) {
@@ -1148,11 +1438,25 @@ export function layoutTableBlock({
       }
     }
 
+    // If repeated headers would prevent a cantSplit row from fitting, skip header repetition.
+    // Word does not split cantSplit rows just because repeated headers eat up space.
+    if (repeatHeaderCount > 0 && !pendingPartialRow) {
+      const bodyRow = block.rows[currentRow];
+      const bodyRowHeight = measure.rows[currentRow]?.height || 0;
+      const bodyCantSplit = bodyRow?.attrs?.tableRowProperties?.cantSplit === true;
+      const spaceWithHeaders = availableHeight - headerHeight;
+      if (bodyCantSplit && bodyRowHeight > spaceWithHeaders && bodyRowHeight <= availableHeight) {
+        repeatHeaderCount = 0;
+      }
+    }
+
     // Adjust available height for header repetition
     const availableForBody = repeatHeaderCount > 0 ? availableHeight - headerHeight : availableHeight;
 
     // Calculate full page height (for detecting over-tall rows)
-    const fullPageHeight = state.contentBottom; // Assumes content starts at y=0
+    // This is the actual usable content area height, accounting for top margin.
+    // The ?? 0 handles test fixtures that may not set topMargin.
+    const fullPageHeight = state.contentBottom - (state.topMargin ?? 0);
 
     // Handle pending partial row continuation
     if (pendingPartialRow !== null) {
@@ -1165,6 +1469,7 @@ export function layoutTableBlock({
         measure,
         availableForBody,
         fromLineByCell,
+        fullPageHeight,
       );
 
       const madeProgress = continuationPartialRow.toLineByCell.some(
@@ -1191,6 +1496,7 @@ export function layoutTableBlock({
         const baseX = columnX(state.columnIndex);
         const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
         const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+        const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
         const fragment: TableFragment = {
           kind: 'table',
@@ -1205,7 +1511,16 @@ export function layoutTableBlock({
           continuesOnNext: hasRemainingLinesAfterContinuation || rowIndex + 1 < block.rows.length,
           repeatHeaderCount,
           partialRow: continuationPartialRow,
-          metadata: generateFragmentMetadata(measure, rowIndex, rowIndex + 1, repeatHeaderCount),
+          metadata: generateFragmentMetadata(
+            measure,
+            block,
+            rowIndex,
+            rowIndex + 1,
+            repeatHeaderCount,
+            scaledWidths,
+            continuationPartialRow,
+          ),
+          columnWidths: scaledWidths,
         };
 
         applyTableFragmentPmRange(fragment, block, measure);
@@ -1236,7 +1551,13 @@ export function layoutTableBlock({
 
     // Normal row processing
     const bodyStartRow = currentRow;
-    const { endRow, partialRow } = findSplitPoint(block, measure, bodyStartRow, availableForBody, fullPageHeight);
+    const { endRow, partialRow, forcePageBreak } = findSplitPoint(
+      block,
+      measure,
+      bodyStartRow,
+      availableForBody,
+      fullPageHeight,
+    );
 
     // If no rows fit and page has content, advance
     if (endRow === bodyStartRow && partialRow === null && state.page.fragments.length > 0) {
@@ -1247,13 +1568,21 @@ export function layoutTableBlock({
     // If still no rows fit after retry, force split
     // This handles edge case where row is too tall to fit on empty page
     if (endRow === bodyStartRow && partialRow === null) {
-      const forcedPartialRow = computePartialRow(bodyStartRow, block.rows[bodyStartRow], measure, availableForBody);
+      const forcedPartialRow = computePartialRow(
+        bodyStartRow,
+        block.rows[bodyStartRow],
+        measure,
+        availableForBody,
+        undefined,
+        fullPageHeight,
+      );
       const forcedEndRow = bodyStartRow + 1;
       const fragmentHeight = forcedPartialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
 
       const baseX = columnX(state.columnIndex);
       const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
       const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+      const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
       const fragment: TableFragment = {
         kind: 'table',
@@ -1268,7 +1597,16 @@ export function layoutTableBlock({
         continuesOnNext: !forcedPartialRow.isLastPart || forcedEndRow < block.rows.length,
         repeatHeaderCount,
         partialRow: forcedPartialRow,
-        metadata: generateFragmentMetadata(measure, bodyStartRow, forcedEndRow, repeatHeaderCount),
+        metadata: generateFragmentMetadata(
+          measure,
+          block,
+          bodyStartRow,
+          forcedEndRow,
+          repeatHeaderCount,
+          scaledWidths,
+          forcedPartialRow,
+        ),
+        columnWidths: scaledWidths,
       };
 
       applyTableFragmentPmRange(fragment, block, measure);
@@ -1289,12 +1627,14 @@ export function layoutTableBlock({
         { fromRow: bodyStartRow, toRow: endRow, repeatHeaderCount },
         measure,
         headerCount,
+        borderCollapse,
       );
     }
 
     const baseX = columnX(state.columnIndex);
     const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
+    const scaledWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
     const fragment: TableFragment = {
       kind: 'table',
@@ -1309,7 +1649,16 @@ export function layoutTableBlock({
       continuesOnNext: endRow < block.rows.length || (partialRow ? !partialRow.isLastPart : false),
       repeatHeaderCount,
       partialRow: partialRow || undefined,
-      metadata: generateFragmentMetadata(measure, bodyStartRow, endRow, repeatHeaderCount),
+      metadata: generateFragmentMetadata(
+        measure,
+        block,
+        bodyStartRow,
+        endRow,
+        repeatHeaderCount,
+        scaledWidths,
+        partialRow,
+      ),
+      columnWidths: scaledWidths,
     };
 
     applyTableFragmentPmRange(fragment, block, measure);
@@ -1326,6 +1675,13 @@ export function layoutTableBlock({
     }
 
     isTableContinuation = true;
+
+    // If findSplitPoint chose a clean rowspan boundary (earlier than the standard break),
+    // force a page break so the remaining rows start on the next page instead of
+    // continuing to fill the current page with another fragment.
+    if (forcePageBreak && currentRow < block.rows.length) {
+      state = advanceColumn(state);
+    }
   }
 }
 
@@ -1339,10 +1695,7 @@ export function createAnchoredTableFragment(
   x: number,
   y: number,
 ): TableFragment {
-  const metadata: TableFragmentMetadata = {
-    columnBoundaries: generateColumnBoundaries(measure),
-    coordinateSystem: 'fragment',
-  };
+  const metadata = generateFragmentMetadata(measure, block, 0, block.rows.length, 0);
 
   const fragment: TableFragment = {
     kind: 'table',

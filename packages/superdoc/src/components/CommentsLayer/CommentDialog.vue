@@ -3,6 +3,7 @@ import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'v
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
+import { PresentationEditor } from '@superdoc/super-editor';
 import { superdocIcons } from '@superdoc/icons.js';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
@@ -30,7 +31,8 @@ const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
 /* Comments store refs */
-const { addComment, cancelComment, deleteComment, removePendingComment } = commentsStore;
+const { addComment, cancelComment, deleteComment, removePendingComment, requestInstantSidebarAlignment } =
+  commentsStore;
 const {
   suppressInternalExternal,
   getConfig,
@@ -279,6 +281,8 @@ const hasTextContent = computed(() => {
 
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
+  const targetClientY = commentDialogElement.value?.getBoundingClientRect?.()?.top;
+  requestInstantSidebarAlignment(targetClientY);
 
   // Only set as active if not resolved (resolved comments can't be edited)
   if (!props.comment.resolvedTime) {
@@ -294,6 +298,15 @@ const setFocus = () => {
       ? props.comment.commentId
       : props.comment.importedId || props.comment.commentId;
     editor.commands?.setCursorById(cursorId);
+
+    const presentation = props.comment.fileId ? PresentationEditor.getInstance(props.comment.fileId) : null;
+    if (presentation && Number.isFinite(targetClientY)) {
+      const fallbackThreadId = props.comment.commentId;
+      const scrolled = presentation.scrollThreadAnchorToClientY(cursorId, targetClientY, { behavior: 'auto' });
+      if (!scrolled && fallbackThreadId && fallbackThreadId !== cursorId) {
+        presentation.scrollThreadAnchorToClientY(fallbackThreadId, targetClientY, { behavior: 'auto' });
+      }
+    }
   }
 };
 

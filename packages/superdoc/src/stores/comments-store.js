@@ -55,6 +55,7 @@ export const useCommentsStore = defineStore('comments', () => {
   const skipSelectionUpdate = ref(false);
   const isFloatingCommentsReady = ref(false);
   const generalCommentIds = ref([]);
+  const instantSidebarAlignmentTargetY = ref(null);
 
   const pendingComment = ref(null);
   const isViewingMode = computed(() => viewingVisibility.documentMode === 'viewing');
@@ -516,6 +517,19 @@ export const useCommentsStore = defineStore('comments', () => {
         superdoc,
       });
     }
+  };
+
+  const requestInstantSidebarAlignment = (targetY = null) => {
+    instantSidebarAlignmentTargetY.value = Number.isFinite(targetY) ? targetY : null;
+  };
+
+  const peekInstantSidebarAlignment = () => {
+    const targetY = instantSidebarAlignmentTargetY.value;
+    return Number.isFinite(targetY) ? targetY : null;
+  };
+
+  const clearInstantSidebarAlignment = () => {
+    instantSidebarAlignmentTargetY.value = null;
   };
 
   const debounceEmit = (commentId, event, superdoc, delay = 1000) => {
@@ -1160,7 +1174,6 @@ export const useCommentsStore = defineStore('comments', () => {
     visibleConversations,
     skipSelectionUpdate,
     isFloatingCommentsReady,
-
     // Getters
     getConfig,
     documentsWithConverations,
@@ -1193,5 +1206,8 @@ export const useCommentsStore = defineStore('comments', () => {
     clearEditorCommentPositions,
     handleTrackedChangeUpdate,
     syncTrackedChangePositionsWithDocument,
+    requestInstantSidebarAlignment,
+    peekInstantSidebarAlignment,
+    clearInstantSidebarAlignment,
   };
 });

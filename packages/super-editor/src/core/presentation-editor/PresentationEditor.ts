@@ -2174,6 +2174,52 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Scroll a comment or tracked-change anchor so its top edge lands at the
+   * requested viewport Y coordinate.
+   *
+   * @param threadId - Comment or tracked-change identifier
+   * @param targetClientY - Desired top position in client/viewport coordinates
+   * @param options - Scrolling options
+   * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @returns True when the thread could be resolved and scrolling was applied
+   */
+  scrollThreadAnchorToClientY(
+    threadId: string,
+    targetClientY: number,
+    options: { behavior?: ScrollBehavior } = {},
+  ): boolean {
+    if (!threadId || !Number.isFinite(targetClientY)) return false;
+
+    const threadPosition = this.#collectCommentPositions()[threadId];
+    if (!threadPosition) return false;
+
+    const selectionBounds = this.getSelectionBounds(threadPosition.start, threadPosition.end);
+    const currentTop = selectionBounds?.bounds?.top;
+    if (!Number.isFinite(currentTop)) return false;
+
+    const deltaY = currentTop - targetClientY;
+    if (Math.abs(deltaY) < 1) return true;
+
+    const behavior = options.behavior ?? 'auto';
+    const scrollTarget = this.#scrollContainer ?? this.#visibleHost;
+
+    if (scrollTarget instanceof Window) {
+      const currentScrollY = scrollTarget.scrollY ?? scrollTarget.pageYOffset ?? 0;
+      scrollTarget.scrollTo({ top: currentScrollY + deltaY, behavior });
+      return true;
+    }
+
+    if (scrollTarget instanceof HTMLElement) {
+      const maxScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, scrollTarget.scrollTop + deltaY));
+      scrollTarget.scrollTo({ top: nextScrollTop, behavior });
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Find the DOM element containing a specific document position.
    * Returns the most specific (smallest range) matching element.
    */

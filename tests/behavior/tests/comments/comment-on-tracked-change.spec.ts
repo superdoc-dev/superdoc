@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
 import { assertDocumentApiReady, listComments, listTrackChanges } from '../../helpers/document-api.js';
+import { expectDialogTopNearLocator } from '../../helpers/comments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/comments-tcs/gdocs-comment-on-change.docx');
@@ -79,4 +80,32 @@ test('clicking a different comment activates its dialog', async ({ superdoc }) =
   await expect(superdoc.page.locator('.comment-placeholder .comments-dialog.is-active')).toHaveCount(0);
 
   await superdoc.snapshot('comment deselected after clicking away');
+});
+
+test('clicking the tracked-change bubble keeps that overlapping thread active', async ({ superdoc, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Alignment assertions are currently stabilized in Chromium only.');
+
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
+  await superdoc.waitForStable();
+  await assertDocumentApiReady(superdoc.page);
+
+  const trackedChangeBubble = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+    has: superdoc.page.locator('.tracked-change-text', { hasText: 'new text' }),
+  });
+
+  await expect(trackedChangeBubble).toBeVisible({ timeout: 5_000 });
+  await trackedChangeBubble.first().click({ position: { x: 12, y: 12 } });
+  await superdoc.waitForStable();
+
+  const activeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active', {
+    has: superdoc.page.locator('.tracked-change-text', { hasText: 'new text' }),
+  });
+
+  await expect(activeDialog).toBeVisible({ timeout: 5_000 });
+  await expect(activeDialog.locator('.change-type', { hasText: 'Replaced' }).first()).toBeVisible();
+  await expect(activeDialog.locator('.tracked-change-text.is-inserted', { hasText: 'new text' })).toBeVisible();
+
+  const overlappingHighlight = superdoc.page.locator('.superdoc-comment-highlight', { hasText: 'new text' }).first();
+  await expectDialogTopNearLocator(activeDialog, overlappingHighlight, { tolerancePx: 24 });
 });

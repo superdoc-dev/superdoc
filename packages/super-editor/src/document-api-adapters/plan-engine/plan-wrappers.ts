@@ -41,7 +41,7 @@ import {
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import { compilePlan } from './compiler.js';
-import type { CompiledTarget, CompiledSelectionTarget } from './executor-registry.types.js';
+import type { CompiledTarget, CompiledSpanTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
 import { checkRevision, getRevision } from './revision-tracker.js';
 import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
@@ -711,6 +711,13 @@ function selectionTargetToResolution(
   };
 }
 
+/** Fallback resolution when no target data is available. */
+const EMPTY_RESOLUTION: TextMutationResolution = {
+  target: { kind: 'text', blockId: '', range: { start: 0, end: 0 } },
+  range: { from: 0, to: 0 },
+  text: '',
+};
+
 /**
  * Builds a TextMutationResolution directly from the compiled plan's
  * CompiledSelectionTarget. This produces correct resolution data
@@ -721,11 +728,13 @@ function buildSelectionResolutionFromCompiled(compiled: CompiledPlan, stepId: st
   const target = compiledStep?.targets[0];
 
   if (target?.kind === 'selection') {
-    const sel = target as CompiledSelectionTarget;
-    return selectionTargetToResolution(sel.normalizedTarget, { from: sel.absFrom, to: sel.absTo }, sel.text);
+    return selectionTargetToResolution(
+      target.normalizedTarget,
+      { from: target.absFrom, to: target.absTo },
+      target.text,
+    );
   }
 
-  // Fallback for non-selection targets (ref-based resolution).
   if (target?.kind === 'range') {
     return {
       target: { kind: 'text', blockId: target.blockId, range: { start: target.from, end: target.to } },
@@ -734,10 +743,35 @@ function buildSelectionResolutionFromCompiled(compiled: CompiledPlan, stepId: st
     };
   }
 
+  if (target?.kind === 'span') {
+    return spanTargetToResolution(target);
+  }
+
+  return EMPTY_RESOLUTION;
+}
+
+/** Converts a CompiledSpanTarget to a TextMutationResolution using its segments. */
+function spanTargetToResolution(target: CompiledSpanTarget): TextMutationResolution {
+  const first = target.segments[0];
+  const last = target.segments[target.segments.length - 1];
+  if (!first || !last) {
+    return EMPTY_RESOLUTION;
+  }
+
+  const isCrossBlock = first.blockId !== last.blockId;
+  const selectionTarget: SelectionTarget | undefined = isCrossBlock
+    ? {
+        kind: 'selection',
+        start: { kind: 'text', blockId: first.blockId, offset: first.from },
+        end: { kind: 'text', blockId: last.blockId, offset: last.to },
+      }
+    : undefined;
+
   return {
-    target: { kind: 'text', blockId: '', range: { start: 0, end: 0 } },
-    range: { from: 0, to: 0 },
-    text: '',
+    target: { kind: 'text', blockId: first.blockId, range: { start: first.from, end: first.to } },
+    range: { from: first.absFrom, to: last.absTo },
+    text: target.text,
+    ...(selectionTarget ? { selectionTarget } : undefined),
   };
 }
 
@@ -1331,11 +1365,19 @@ interface ExpandedBlockRange {
   lastBlock: BlockCandidate;
 }
 
+/** Container node types that should not be used as block boundaries — they
+ *  enclose child blocks and would cause the expansion to swallow entire tables. */
+const CONTAINER_NODE_TYPES: ReadonlySet<string> = new Set(['table', 'tableRow', 'tableCell']);
+
 /**
  * Expands a PM position range to encompass full block boundaries.
- * Finds the first block whose range intersects `absFrom` and the last
- * block whose range intersects `absTo`, then returns their outer boundaries
- * plus the block IDs needed for receipt metadata.
+ * Finds the first content-level block whose range intersects `absFrom` and
+ * the last content-level block whose range intersects `absTo`, then returns
+ * their outer boundaries plus the block IDs needed for receipt metadata.
+ *
+ * Container nodes (table, tableRow, tableCell) are excluded so that a
+ * selection inside a table cell expands only to the cell's leaf blocks,
+ * not to the entire table.
  */
 function expandToBlockBoundaries(index: BlockIndex, absFrom: number, absTo: number): ExpandedBlockRange {
   let blockFrom = absFrom;
@@ -1344,6 +1386,7 @@ function expandToBlockBoundaries(index: BlockIndex, absFrom: number, absTo: numb
   let lastBlock: BlockCandidate | undefined;
 
   for (const candidate of index.candidates) {
+    if (CONTAINER_NODE_TYPES.has(candidate.nodeType)) continue;
     // Skip non-overlapping blocks.
     if (candidate.end <= absFrom || candidate.pos >= absTo) continue;
     if (candidate.pos <= blockFrom) {
@@ -1370,6 +1413,7 @@ const VALID_EDGE_NODE_TYPES: ReadonlySet<string> = new Set<SelectionEdgeNodeType
   'table',
   'tableOfContents',
   'sdt',
+  'image',
 ]);
 
 /**

@@ -65,6 +65,23 @@ function ref(name: string): JsonSchema {
   return { $ref: `#/$defs/${name}` };
 }
 
+/**
+ * Builds a `oneOf` schema that merges each TargetLocator branch with additional
+ * payload properties. This avoids the `allOf` + `additionalProperties: false`
+ * conflict where each branch would reject keys defined in the other schema.
+ */
+function targetLocatorWithPayload(
+  payloadProperties: Record<string, JsonSchema>,
+  payloadRequired: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema({ target: ref('SelectionTarget'), ...payloadProperties }, ['target', ...payloadRequired]),
+      objectSchema({ ref: { type: 'string' }, ...payloadProperties }, ['ref', ...payloadRequired]),
+    ],
+  };
+}
+
 /** Shared output/success/failure shape for ImagesMutationResult operations. */
 function imagesMutationSchemaSet(inputSchema: JsonSchema): OperationSchemaSet {
   return {
@@ -1562,7 +1579,7 @@ const formatInlineAliasOperationSchemas: Record<FormatInlineAliasOperationId, Op
     const requiredFields = supportsImplicitTrueValue(operationId) ? [] : ['value'];
     const schema: OperationSchemaSet = {
       input: {
-        allOf: [targetLocatorSchema, objectSchema({ value: entry.schema }, requiredFields)],
+        ...targetLocatorWithPayload({ value: entry.schema }, requiredFields),
       },
       output: textMutationResultSchemaFor(operationId),
       success: textMutationSuccessSchema,
@@ -2565,28 +2582,26 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       oneOf: [
         // Text replacement: TargetLocator + text
         {
-          allOf: [targetLocatorSchema, objectSchema({ text: { type: 'string' } }, ['text'])],
+          ...targetLocatorWithPayload({ text: { type: 'string' } }, ['text']),
         },
         // Structural replacement: exactly one of (target | ref) + content
         {
-          allOf: [
-            // Require at least one locator — mirrors runtime validation.
-            {
-              oneOf: [
-                objectSchema({ target: { oneOf: [sdAddressSchema, textAddressSchema, selectionTargetSchema] } }, [
-                  'target',
-                ]),
-                objectSchema({ ref: { type: 'string' } }, ['ref']),
-              ],
-            },
+          oneOf: [
             objectSchema(
               {
                 target: { oneOf: [sdAddressSchema, textAddressSchema, selectionTargetSchema] },
+                content: { type: 'object' },
+                nestingPolicy: { type: 'object' },
+              },
+              ['target', 'content'],
+            ),
+            objectSchema(
+              {
                 ref: { type: 'string' },
                 content: { type: 'object' },
                 nestingPolicy: { type: 'object' },
               },
-              ['content'],
+              ['ref', 'content'],
             ),
           ],
         },
@@ -2598,7 +2613,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   delete: {
     input: {
-      allOf: [targetLocatorSchema, objectSchema({ behavior: deleteBehaviorSchema })],
+      ...targetLocatorWithPayload({ behavior: deleteBehaviorSchema }),
     },
     output: textMutationResultSchemaFor('delete'),
     success: textMutationSuccessSchema,
@@ -2606,7 +2621,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'format.apply': {
     input: {
-      allOf: [targetLocatorSchema, objectSchema({ inline: buildInlineRunPatchSchema() }, ['inline'])],
+      ...targetLocatorWithPayload({ inline: buildInlineRunPatchSchema() }, ['inline']),
     },
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,

@@ -27,7 +27,7 @@ import type {
 } from './executor-registry.types.js';
 import { planError } from './errors.js';
 import { hasStepExecutor } from './executor-registry.js';
-import { captureRunsInRange } from './style-resolver.js';
+import { captureRunsInRange, checkUniformity, type CapturedStyle } from './style-resolver.js';
 import { getBlockIndex } from '../helpers/index-cache.js';
 import { getRevision } from './revision-tracker.js';
 import { executeTextSelector } from '../find/text-strategy.js';
@@ -778,6 +778,12 @@ function resolveTargetWhereClause(editor: Editor, step: MutationStep, where: Tar
       ? editor.state.doc.textBetween(absFrom, absTo, '\n', '\ufffc')
       : resolved.text;
 
+  // Capture inline style for style-preserving operations (mirrors buildRangeTarget logic).
+  const capturedStyle =
+    step.op === 'text.rewrite' || step.op === 'format.apply'
+      ? captureStyleAtAbsoluteRange(editor, absFrom, absTo)
+      : undefined;
+
   return {
     kind: 'selection',
     stepId: step.id,
@@ -786,7 +792,50 @@ function resolveTargetWhereClause(editor: Editor, step: MutationStep, where: Tar
     absTo,
     normalizedTarget: where.target,
     text,
+    capturedStyle,
   };
+}
+
+/**
+ * Captures inline style runs for an absolute PM position range.
+ *
+ * Walks all text blocks between `absFrom` and `absTo`, captures runs from
+ * each block's overlapping portion, and merges them into a single
+ * CapturedStyle with a continuous offset sequence. This ensures cross-block
+ * selections capture formatting from all blocks, not just the first.
+ */
+function captureStyleAtAbsoluteRange(editor: Editor, absFrom: number, absTo: number): CapturedStyle | undefined {
+  const doc = editor.state.doc;
+  const allRuns: CapturedStyle['runs'] = [];
+  let runOffset = 0;
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    if (!node.isTextblock) return true;
+
+    const blockEnd = pos + node.nodeSize;
+    const overlapFrom = Math.max(absFrom, pos + 1);
+    const overlapTo = Math.min(absTo, blockEnd - 1);
+    if (overlapFrom >= overlapTo) return false;
+
+    const relFrom = overlapFrom - pos - 1;
+    const relTo = overlapTo - pos - 1;
+    const captured = captureRunsInRange(editor, pos, relFrom, relTo);
+
+    for (const run of captured.runs) {
+      allRuns.push({
+        ...run,
+        from: runOffset + (run.from - relFrom),
+        to: runOffset + (run.to - relFrom),
+      });
+    }
+    runOffset += relTo - relFrom;
+
+    return false; // Don't descend into inline content (captureRunsInRange handles that)
+  });
+
+  if (allRuns.length === 0) return undefined;
+
+  return { runs: allRuns, isUniform: checkUniformity(allRuns) };
 }
 
 // ---------------------------------------------------------------------------

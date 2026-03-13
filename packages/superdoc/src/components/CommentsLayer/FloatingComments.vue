@@ -82,10 +82,20 @@ const commentsRenderKey = ref(0);
 const sidebarOffsetY = ref(0);
 const disableInstantLayoutTransitions = ref(false);
 
+const isPendingThread = (commentOrId) => {
+  const pendingId = pendingComment.value?.commentId;
+  if (!pendingId) return false;
+  if (typeof commentOrId === 'object') return commentOrId?.commentId === pendingId;
+  return commentOrId === pendingId || commentOrId === 'pending';
+};
+
 // Resolve activeComment (which stores commentId) to the position key used by allPositions
 // (which prefers importedId). Without this, imported Word comments where importedId !== commentId
 // would fail the template guard and could unmount when scrolled out of the observer viewport.
 const resolveLayoutKey = (commentOrId, preferredId) => {
+  if (preferredId === 'pending' || isPendingThread(preferredId) || isPendingThread(commentOrId)) {
+    return 'pending';
+  }
   const { key } = resolveCommentPositionEntry(commentOrId, preferredId);
   if (key) return key;
   return getCommentAliasIds(commentOrId)[0] ?? getCommentPositionKey(commentOrId);
@@ -126,14 +136,14 @@ const getAnchorTop = (comment) => {
 // For editor docs, uses the 'pending' mark position from editorCommentPositions.
 // For PDF docs, falls back to selection bounds (same as getAnchorTop).
 const getPendingAnchorTop = () => {
-  if (props.currentDocument.type === 'application/pdf') {
-    const zoom = (activeZoom.value ?? 100) / 100;
-    const top = Number(pendingComment.value?.selection?.selectionBounds?.top);
-    return isNaN(top) ? null : top * zoom;
+  const positionEntry = editorCommentPositions.value['pending'];
+  if (typeof positionEntry?.bounds?.top === 'number' && !isNaN(positionEntry.bounds.top)) {
+    return positionEntry.bounds.top;
   }
 
-  const positionEntry = editorCommentPositions.value['pending'];
-  return positionEntry?.bounds?.top ?? null;
+  const zoom = props.currentDocument.type === 'application/pdf' ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = Number(pendingComment.value?.selection?.selectionBounds?.top);
+  return isNaN(top) ? null : top * zoom;
 };
 
 // Pre-compute all positions with collision avoidance
@@ -281,13 +291,20 @@ const setInstantLayoutTransitionsDisabled = (disabled) => {
   disableInstantLayoutTransitions.value = disabled;
 };
 
-const alignCommentKeyToClientY = (key, targetY) => {
-  if (!Number.isFinite(targetY)) return;
+const alignCommentKeyToClientY = (key, targetY, onComplete) => {
+  if (!Number.isFinite(targetY)) {
+    onComplete?.(false);
+    return;
+  }
   const el = placeholderRefs.value[key];
-  if (!el) return;
+  if (!el) {
+    onComplete?.(false);
+    return;
+  }
 
   const currentTop = el.getBoundingClientRect().top;
   sidebarOffsetY.value += targetY - currentTop;
+  onComplete?.(true);
 };
 
 // Store placeholder ref by comment ID
@@ -333,10 +350,11 @@ watch(activeCommentKey, (newKey, oldKey) => {
     if (!shouldAlign || !newKey) return;
 
     nextTick(() => {
-      alignCommentKeyToClientY(newKey, instantAlignmentTargetY);
-      clearInstantSidebarAlignment();
-      requestAnimationFrame(() => {
-        setInstantLayoutTransitionsDisabled(false);
+      alignCommentKeyToClientY(newKey, instantAlignmentTargetY, () => {
+        clearInstantSidebarAlignment();
+        requestAnimationFrame(() => {
+          setInstantLayoutTransitionsDisabled(false);
+        });
       });
     });
   };
@@ -364,7 +382,9 @@ watch(activeComment, () => {
     sidebarOffsetY.value = 0;
     return;
   }
-  const comment = commentsStore.getComment(activeComment.value);
+  const comment = isPendingThread(activeComment.value)
+    ? pendingComment.value
+    : commentsStore.getComment(activeComment.value);
   if (!comment) return;
   const key = resolveLayoutKey(comment);
   if (!key) return;
@@ -381,7 +401,7 @@ watch(activeComment, () => {
       const parentRect = props.parent?.getBoundingClientRect?.();
       if (!parentRect) return;
 
-      const anchorTop = getAnchorTop(comment);
+      const anchorTop = key === 'pending' ? getPendingAnchorTop() : getAnchorTop(comment);
       if (typeof anchorTop !== 'number' || isNaN(anchorTop)) return;
 
       const currentTop = el.getBoundingClientRect().top;

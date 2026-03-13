@@ -190,9 +190,20 @@ const handleDocumentReady = (documentId, container) => {
   proxy.$superdoc.broadcastPdfDocumentReady();
 };
 
+const getPendingCommentTargetClientY = () => {
+  if (!selectionPosition.value || !layers.value) return null;
+
+  const isPdf = selectionPosition.value.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = Number(selectionPosition.value.top);
+  if (!Number.isFinite(top)) return null;
+
+  return layers.value.getBoundingClientRect().top + top * zoom;
+};
+
 const handleToolClick = (tool) => {
   const toolOptions = {
-    comments: () => showAddComment(proxy.$superdoc),
+    comments: () => showAddComment(proxy.$superdoc, getPendingCommentTargetClientY()),
     ai: () => handleAiToolClick(),
   };
 

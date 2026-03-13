@@ -545,7 +545,7 @@ export const useCommentsStore = defineStore('comments', () => {
     }, delay);
   };
 
-  const showAddComment = (superdoc) => {
+  const showAddComment = (superdoc, targetClientY = null) => {
     const event = { type: COMMENT_EVENTS.PENDING };
     superdoc.emit('comments-update', event);
 
@@ -571,6 +571,7 @@ export const useCommentsStore = defineStore('comments', () => {
       superdocStore.selectionPosition.source = 'super-editor';
     }
 
+    requestInstantSidebarAlignment(targetClientY);
     activeComment.value = pendingComment.value.commentId;
   };
 

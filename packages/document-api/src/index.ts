@@ -10,6 +10,18 @@ export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
 export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
+export type {
+  RangeAnchor,
+  DocumentEdgeAnchor,
+  PointAnchor,
+  RefBoundaryAnchor,
+  ResolveRangeInput,
+  ResolveRangeOutput,
+  RangeBlockPreview,
+  RangePreview,
+  RangeResolverAdapter,
+} from './ranges/index.js';
+export { executeResolveRange } from './ranges/index.js';
 export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
 export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
@@ -98,6 +110,8 @@ import {
 } from './clear-content/clear-content.js';
 import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
+import { executeResolveRange } from './ranges/resolve.js';
+import type { RangeResolverAdapter, ResolveRangeInput, ResolveRangeOutput } from './ranges/ranges.types.js';
 import { executeInsert } from './insert/insert.js';
 import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
@@ -1336,6 +1350,14 @@ export interface MutationsApi {
   apply(input: MutationsApplyInput): PlanReceipt;
 }
 
+export interface RangesApi {
+  resolve(input: ResolveRangeInput): ResolveRangeOutput;
+}
+
+export interface RangesAdapter {
+  resolve(input: ResolveRangeInput): ResolveRangeOutput;
+}
+
 export interface QueryAdapter {
   match(input: QueryMatchInput): QueryMatchOutput;
 }
@@ -1503,6 +1525,10 @@ export interface DocumentApi {
    */
   query: QueryApi;
   /**
+   * Deterministic range construction from explicit document anchors.
+   */
+  ranges: RangesApi;
+  /**
    * Mutation plan engine — preview and apply atomic mutation plans.
    */
   mutations: MutationsApi;
@@ -1568,6 +1594,7 @@ export interface DocumentApiAdapters {
   fields?: FieldsAdapter;
   citations?: CitationsAdapter;
   authorities?: AuthoritiesAdapter;
+  ranges: RangesAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -2751,6 +2778,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     query: {
       match(input: QueryMatchInput): QueryMatchOutput {
         return adapters.query.match(input);
+      },
+    },
+    ranges: {
+      resolve(input: ResolveRangeInput): ResolveRangeOutput {
+        return executeResolveRange(adapters.ranges, input);
       },
     },
     mutations: {

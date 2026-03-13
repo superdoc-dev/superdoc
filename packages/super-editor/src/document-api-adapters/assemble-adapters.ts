@@ -85,6 +85,7 @@ import {
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
+import { resolveRange } from './helpers/range-resolver.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 import { registerPartDescriptor } from '../core/parts/registry/part-registry.js';
@@ -665,6 +666,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
         update: (input, options) => authorityEntriesUpdateWrapper(editor, input, options),
         remove: (input, options) => authorityEntriesRemoveWrapper(editor, input, options),
       },
+    },
+    ranges: {
+      resolve: (input) => resolveRange(editor, input),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

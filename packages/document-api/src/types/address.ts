@@ -51,10 +51,9 @@ export type TextTarget = {
  *
  * Excludes:
  * - `tableRow`, `tableCell` — row/column semantics out of scope
- * - `image` — block-image deletion not yet proven end-to-end
  * - `listItem` — derived from paragraph attrs, no distinct PM wrapper node
  */
-export type SelectionEdgeNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'image' | 'listItem'>;
+export type SelectionEdgeNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'listItem'>;
 
 export const SELECTION_EDGE_NODE_TYPES = [
   'paragraph',
@@ -62,6 +61,7 @@ export const SELECTION_EDGE_NODE_TYPES = [
   'table',
   'tableOfContents',
   'sdt',
+  'image',
 ] as const satisfies readonly SelectionEdgeNodeType[];
 
 /** Block node address valid as a `nodeEdge` selection anchor. */

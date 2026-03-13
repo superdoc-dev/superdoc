@@ -61,7 +61,8 @@ export type ReferenceGroupKey =
   | 'captions'
   | 'fields'
   | 'citations'
-  | 'authorities';
+  | 'authorities'
+  | 'ranges';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -1771,6 +1772,23 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'query/match.mdx',
     referenceGroup: 'query',
+    essential: true,
+  },
+
+  'ranges.resolve': {
+    memberPath: 'ranges.resolve',
+    description:
+      'Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic.',
+    expectedResult:
+      'Returns a ResolveRangeOutput with evaluatedRevision, handle.ref, target (SelectionTarget), and preview metadata.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_TARGET', 'TARGET_NOT_FOUND', 'INVALID_CONTEXT', 'REVISION_MISMATCH'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'ranges/resolve.mdx',
+    referenceGroup: 'ranges',
     essential: true,
   },
 

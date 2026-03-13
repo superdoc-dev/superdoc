@@ -49,6 +49,7 @@ Document API is currently alpha and subject to breaking changes.
 | Fields | 5 | 0 | 5 | [Open](/document-api/reference/fields/index) |
 | Citations | 15 | 0 | 15 | [Open](/document-api/reference/citations/index) |
 | Table of Authorities | 11 | 0 | 11 | [Open](/document-api/reference/authorities/index) |
+| Ranges | 1 | 0 | 1 | [Open](/document-api/reference/ranges/index) |
 
 ## Available operations
 
@@ -558,3 +559,9 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-insert"><code>authorities.entries.insert</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.insert(...)</code></span> | Insert a new TA authority entry field at a target location. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-update"><code>authorities.entries.update</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.update(...)</code></span> | Update the properties of an existing TA authority entry. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-remove"><code>authorities.entries.remove</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.authorities.entries.remove(...)</code></span> | Remove a TA authority entry field from the document. |
+
+#### Ranges
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/ranges/resolve"><code>ranges.resolve</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.ranges.resolve(...)</code></span> | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |

@@ -4153,7 +4153,87 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['atomic', 'changeMode', 'steps'],
     );
 
+    // ---------------------------------------------------------------
+    // ranges.resolve schema
+    // ---------------------------------------------------------------
+
+    const documentEdgeAnchorSchema = objectSchema(
+      {
+        kind: { const: 'document' },
+        edge: { enum: ['start', 'end'] },
+      },
+      ['kind', 'edge'],
+    );
+
+    const pointAnchorSchema = objectSchema(
+      {
+        kind: { const: 'point' },
+        point: ref('SelectionPoint'),
+      },
+      ['kind', 'point'],
+    );
+
+    const refBoundaryAnchorSchema = objectSchema(
+      {
+        kind: { const: 'ref' },
+        ref: { type: 'string', minLength: 1 },
+        boundary: { enum: ['start', 'end'] },
+      },
+      ['kind', 'ref', 'boundary'],
+    );
+
+    const rangeAnchorSchema: JsonSchema = {
+      oneOf: [documentEdgeAnchorSchema, pointAnchorSchema, refBoundaryAnchorSchema],
+    };
+
+    const rangeBlockPreviewSchema = objectSchema(
+      {
+        nodeId: { type: 'string' },
+        nodeType: { enum: [...blockNodeTypeValues] },
+        textPreview: { type: 'string' },
+      },
+      ['nodeId', 'nodeType', 'textPreview'],
+    );
+
+    const rangePreviewSchema = objectSchema(
+      {
+        text: { type: 'string' },
+        truncated: { type: 'boolean' },
+        blocks: arraySchema(rangeBlockPreviewSchema),
+      },
+      ['text', 'truncated', 'blocks'],
+    );
+
+    const resolveRangeOutputSchema = objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        handle: objectSchema(
+          {
+            ref: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            refStability: { const: 'ephemeral' },
+            coversFullTarget: { type: 'boolean' },
+          },
+          ['ref', 'refStability', 'coversFullTarget'],
+        ),
+        target: selectionTargetSchema,
+        preview: rangePreviewSchema,
+      },
+      ['evaluatedRevision', 'handle', 'target', 'preview'],
+    );
+
     return {
+      'ranges.resolve': {
+        input: objectSchema(
+          {
+            start: rangeAnchorSchema,
+            end: rangeAnchorSchema,
+            expectedRevision: { type: 'string' },
+          },
+          ['start', 'end'],
+        ),
+        output: resolveRangeOutputSchema,
+      },
+
       'mutations.preview': {
         input: mutationsInputSchema,
         output: objectSchema(

@@ -404,11 +404,17 @@ export const CommentsPlugin = Extension.create({
           return true;
         },
       setCursorById:
-        (id) =>
+        (id, options = {}) =>
         ({ state, editor }) => {
           const { from } = findRangeById(state.doc, id) || {};
           if (from != null) {
             state.tr.setSelection(TextSelection.create(state.doc, from));
+            if (options.preferredActiveThreadId) {
+              state.tr.setMeta(CommentsPluginKey, {
+                type: 'setCursorById',
+                preferredActiveThreadId: options.preferredActiveThreadId,
+              });
+            }
             if (editor.view && typeof editor.view.focus === 'function') {
               editor.view.focus();
             }
@@ -497,6 +503,13 @@ export const CommentsPlugin = Extension.create({
             const { selection } = tr;
             let currentActiveThread = getActiveCommentId(newEditorState.doc, selection);
             if (trChangedActiveComment) currentActiveThread = meta.activeThreadId;
+            if (
+              meta?.type === 'setCursorById' &&
+              meta.preferredActiveThreadId &&
+              selectionContainsThread(newEditorState.doc, selection, meta.preferredActiveThreadId)
+            ) {
+              currentActiveThread = meta.preferredActiveThreadId;
+            }
 
             const previousSelectionId = pluginState.activeThreadId;
             if (previousSelectionId !== currentActiveThread) {
@@ -804,6 +817,17 @@ const getActiveCommentId = (doc, selection) => {
   // For nested comments, the inner one has the smallest size
   containingComments.sort((a, b) => a.size - b.size);
   return containingComments[0].commentId;
+};
+
+const selectionContainsThread = (doc, selection, threadId) => {
+  if (!selection || !threadId) return false;
+  const { $from, $to } = selection;
+  if ($from.pos !== $to.pos) return false;
+
+  const range = findRangeById(doc, threadId);
+  if (!range) return false;
+
+  return $from.pos >= range.from && $from.pos < range.to;
 };
 
 const findTrackedMark = ({
@@ -1140,6 +1164,7 @@ export { createOrUpdateTrackedChangeComment };
 
 export const __test__ = {
   getActiveCommentId,
+  selectionContainsThread,
   findTrackedMark,
   handleTrackedChangeTransaction,
   getTrackedChangeText,

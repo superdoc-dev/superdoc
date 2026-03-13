@@ -297,7 +297,7 @@ const setFocus = () => {
     const cursorId = props.comment.resolvedTime
       ? props.comment.commentId
       : props.comment.importedId || props.comment.commentId;
-    editor.commands?.setCursorById(cursorId);
+    editor.commands?.setCursorById(cursorId, { preferredActiveThreadId: cursorId });
 
     const presentation = props.comment.fileId ? PresentationEditor.getInstance(props.comment.fileId) : null;
     if (presentation && Number.isFinite(targetClientY)) {

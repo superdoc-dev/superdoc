@@ -5,7 +5,7 @@
  */
 
 import type { WordParagraphLayoutInput, WordParagraphLayoutOutput, WordListSuffix } from './types.js';
-import { DEFAULT_LIST_HANGING_PX } from './marker-utils.js';
+import { DEFAULT_LIST_HANGING_PX, LIST_MARKER_GAP } from './marker-utils.js';
 import { twipsToPixels } from './unit-conversions.js';
 
 export * from './types.js';
@@ -25,6 +25,7 @@ export {
 
 export { LIST_MARKER_GAP, DEFAULT_LIST_HANGING_PX } from './marker-utils.js';
 export type { NumberingFormat } from './marker-utils.js';
+export { createNumberingManager } from './numbering-manager.js';
 
 /**
  * Computes the complete layout properties for a Word paragraph, including indentation,
@@ -87,7 +88,11 @@ export function computeWordParagraphLayout(input: WordParagraphLayoutInput): Wor
     indentLeftPx: paragraph.indent?.left ?? 0,
     hangingPx: paragraph.indent?.hanging ?? 0,
     firstLinePx: paragraph.indent?.firstLine,
-    tabsPx: paragraph.tabs?.map((tab) => twipsToPixels(tab.pos)) ?? [],
+    tabsPx:
+      paragraph.tabs
+        ?.filter((tab) => tab.val !== 'clear' && tab.val !== 'bar')
+        .map((tab) => twipsToPixels(tab.pos))
+        .sort((a, b) => a - b) ?? [],
     textStartPx: paragraph.indent?.left ?? 0,
     marker: undefined,
     defaultTabIntervalPx: paragraph.tabIntervalTwips,
@@ -125,11 +130,10 @@ export function computeWordParagraphLayout(input: WordParagraphLayoutInput): Wor
 
   layout.marker = {
     markerText: listRenderingAttrs.markerText,
-    // markerBoxWidthPx: markerBoxWidthPx + 1000,
-    // markerX,
-    // textStartX: layout.textStartPx,
-    // Gutter is the small gap between marker and text, not the full marker box width
-    // gutterWidthPx: LIST_MARKER_GAP,
+    markerBoxWidthPx,
+    markerX,
+    textStartX: layout.textStartPx,
+    gutterWidthPx: LIST_MARKER_GAP,
     justification: listRenderingAttrs.justification ?? 'left',
     suffix: normalizeSuffix(listRenderingAttrs.suffix),
     run: markerRun,

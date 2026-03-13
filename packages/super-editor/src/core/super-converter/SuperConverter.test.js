@@ -6,11 +6,6 @@ vi.mock('uuid', () => ({
   v4: vi.fn(() => 'test-uuid-1234'),
 }));
 
-function hasTemporaryId(converter) {
-  // Has temporary ID if no GUID but has hash (or could generate one)
-  return !converter.documentGuid && !!(converter.documentHash || converter.fileSource);
-}
-
 describe('SuperConverter Document GUID', () => {
   let mockDocx;
   let mockCustomXml;
@@ -49,14 +44,13 @@ describe('SuperConverter Document GUID', () => {
   describe('Document Identifier Resolution', () => {
     it('prioritizes Microsoft docId from settings.xml', () => {
       mockSettingsXml.content = `<?xml version="1.0" encoding="UTF-8"?>
-        <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" 
+        <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
                     xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">
           <w15:docId w15:val="{MICROSOFT-GUID-123}"/>
         </w:settings>`;
 
       const converter = new SuperConverter({ docx: mockDocx });
       expect(converter.getDocumentGuid()).toBe('MICROSOFT-GUID-123');
-      expect(hasTemporaryId(converter)).toBe(false);
     });
 
     it('uses custom DocumentGuid when no Microsoft GUID exists', () => {
@@ -74,44 +68,399 @@ describe('SuperConverter Document GUID', () => {
 
       const converter = new SuperConverter({ docx: customDocx });
       expect(converter.getDocumentGuid()).toBe('CUSTOM-GUID-456');
-      expect(hasTemporaryId(converter)).toBe(false);
     });
 
-    it('generates hash for unmodified document without GUID', async () => {
+    it('generates content hash and assigns GUID for document without GUID/timestamp', async () => {
       const fileSource = Buffer.from('test file content');
       const converter = new SuperConverter({
         docx: mockDocx,
         fileSource,
       });
 
-      // getDocumentIdentifier is now async
-      const identifier = await converter.getDocumentIdentifier();
-      expect(identifier).toMatch(/^HASH-/);
-      expect(hasTemporaryId(converter)).toBe(true);
+      // Before calling getDocumentIdentifier, no GUID is assigned
       expect(converter.getDocumentGuid()).toBeNull();
+
+      // getDocumentIdentifier assigns GUID and returns content hash (since no timestamp)
+      const identifier = await converter.getDocumentIdentifier();
+      expect(identifier).toBe('HASH-61D1432F');
+
+      // GUID is now assigned (for persistence on export)
+      expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
+      expect(converter.documentModified).toBe(true);
+    });
+
+    it('new file: sets fresh timestamp on init', () => {
+      const mockCoreXml = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          </cp:coreProperties>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [...mockDocx, mockCoreXml],
+        isNewFile: true,
+      });
+
+      // New file should have timestamp set immediately
+      const timestamp = converter.getDocumentCreatedTimestamp();
+      expect(timestamp).not.toBeNull();
+      expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    });
+
+    it('new file: uses identifier hash (GUID + timestamp)', async () => {
+      const mockCoreXml = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          </cp:coreProperties>`,
+      };
+      const mockSettingsWithGuid = {
+        name: 'word/settings.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                      xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">
+            <w15:docId w15:val="{NEW-FILE-GUID}"/>
+          </w:settings>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsWithGuid, mockDocx[2], mockCoreXml],
+        isNewFile: true,
+      });
+
+      // Has both GUID and timestamp, so should use identifier hash
+      const identifier = await converter.getDocumentIdentifier();
+      expect(identifier).toMatch(/^HASH-[A-F0-9]+$/);
+      expect(converter.documentModified).toBeFalsy();
+    });
+
+    it('imported file with GUID and timestamp: uses identifier hash', async () => {
+      const mockCoreXmlWithTimestamp = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <dcterms:created xsi:type="dcterms:W3CDTF">2024-01-15T10:30:00Z</dcterms:created>
+          </cp:coreProperties>`,
+      };
+      const mockSettingsWithGuid = {
+        name: 'word/settings.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                      xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">
+            <w15:docId w15:val="{EXISTING-GUID-123}"/>
+          </w:settings>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsWithGuid, mockDocx[2], mockCoreXmlWithTimestamp],
+        isNewFile: false,
+      });
+
+      const identifier = await converter.getDocumentIdentifier();
+      expect(identifier).toBe('HASH-A5FD6589');
+      expect(converter.getDocumentGuid()).toBe('EXISTING-GUID-123');
+      expect(converter.getDocumentCreatedTimestamp()).toBe('2024-01-15T10:30:00Z');
+      expect(converter.documentModified).toBeFalsy();
+    });
+
+    it('imported file with GUID but no timestamp: uses content hash and generates timestamp', async () => {
+      const mockCoreXmlEmpty = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          </cp:coreProperties>`,
+      };
+      const mockSettingsWithGuid = {
+        name: 'word/settings.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                      xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">
+            <w15:docId w15:val="{EXISTING-GUID-456}"/>
+          </w:settings>`,
+      };
+      const fileSource = Buffer.from('test file content for guid no timestamp');
+
+      const converter = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsWithGuid, mockDocx[2], mockCoreXmlEmpty],
+        fileSource,
+        isNewFile: false,
+      });
+
+      // Has GUID but no timestamp
+      expect(converter.getDocumentGuid()).toBe('EXISTING-GUID-456');
+      expect(converter.getDocumentCreatedTimestamp()).toBeNull();
+
+      const identifier = await converter.getDocumentIdentifier();
+      expect(identifier).toMatch(/^HASH-[A-F0-9]+$/);
+
+      // Timestamp should now be generated
+      expect(converter.getDocumentCreatedTimestamp()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+      expect(converter.documentModified).toBe(true);
+    });
+
+    it('imported file with timestamp but no GUID: uses content hash and generates GUID', async () => {
+      const mockCoreXmlWithTimestamp = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <dcterms:created xsi:type="dcterms:W3CDTF">2024-01-15T10:30:00Z</dcterms:created>
+          </cp:coreProperties>`,
+      };
+      const fileSource = Buffer.from('test file content for timestamp no guid');
+
+      const converter = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsXml, mockDocx[2], mockCoreXmlWithTimestamp],
+        fileSource,
+        isNewFile: false,
+      });
+
+      // Has timestamp but no GUID
+      expect(converter.getDocumentGuid()).toBeNull();
+      expect(converter.getDocumentCreatedTimestamp()).toBe('2024-01-15T10:30:00Z');
+
+      const identifier = await converter.getDocumentIdentifier();
+      expect(identifier).toMatch(/^HASH-[A-F0-9]+$/);
+
+      // GUID should now be generated
+      expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
+      expect(converter.documentModified).toBe(true);
+    });
+
+    it('imported file with neither GUID nor timestamp: uses content hash and generates both', async () => {
+      const mockCoreXmlEmpty = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          </cp:coreProperties>`,
+      };
+      const fileSource = Buffer.from('test file content for neither');
+
+      const converter = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsXml, mockDocx[2], mockCoreXmlEmpty],
+        fileSource,
+        isNewFile: false,
+      });
+
+      // Has neither
+      expect(converter.getDocumentGuid()).toBeNull();
+      expect(converter.getDocumentCreatedTimestamp()).toBeNull();
+
+      const identifier = await converter.getDocumentIdentifier();
+      expect(identifier).toMatch(/^HASH-[A-F0-9]+$/);
+
+      // Both should now be generated
+      expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
+      expect(converter.getDocumentCreatedTimestamp()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+      expect(converter.documentModified).toBe(true);
+    });
+
+    it('content hash is stable for same file content', async () => {
+      const fileSource = Buffer.from('identical file content');
+      const mockCoreXmlEmpty = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties">
+          </cp:coreProperties>`,
+      };
+
+      const converter1 = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsXml, mockDocx[2], mockCoreXmlEmpty],
+        fileSource,
+        isNewFile: false,
+      });
+
+      const converter2 = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsXml, mockDocx[2], mockCoreXmlEmpty],
+        fileSource,
+        isNewFile: false,
+      });
+
+      const identifier1 = await converter1.getDocumentIdentifier();
+      const identifier2 = await converter2.getDocumentIdentifier();
+
+      expect(identifier1).toBe(identifier2);
+    });
+
+    it('identifier hash is stable for same GUID and timestamp', async () => {
+      const mockCoreXmlWithTimestamp = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <dcterms:created xsi:type="dcterms:W3CDTF">2024-01-15T10:30:00Z</dcterms:created>
+          </cp:coreProperties>`,
+      };
+      const mockSettingsWithGuid = {
+        name: 'word/settings.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                      xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">
+            <w15:docId w15:val="{STABLE-GUID}"/>
+          </w:settings>`,
+      };
+
+      const converter1 = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsWithGuid, mockDocx[2], mockCoreXmlWithTimestamp],
+      });
+
+      const converter2 = new SuperConverter({
+        docx: [mockCustomXml, mockSettingsWithGuid, mockDocx[2], mockCoreXmlWithTimestamp],
+      });
+
+      const identifier1 = await converter1.getDocumentIdentifier();
+      const identifier2 = await converter2.getDocumentIdentifier();
+
+      expect(identifier1).toBe(identifier2);
+    });
+  });
+
+  describe('Document Timestamp Methods', () => {
+    it('getDocumentCreatedTimestamp returns timestamp when present', () => {
+      const mockCoreXmlWithTimestamp = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <dcterms:created xsi:type="dcterms:W3CDTF">2024-06-15T14:30:00Z</dcterms:created>
+          </cp:coreProperties>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [...mockDocx, mockCoreXmlWithTimestamp],
+      });
+
+      expect(converter.getDocumentCreatedTimestamp()).toBe('2024-06-15T14:30:00Z');
+    });
+
+    it('getDocumentCreatedTimestamp returns null when not present', () => {
+      const mockCoreXmlEmpty = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties">
+          </cp:coreProperties>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [...mockDocx, mockCoreXmlEmpty],
+      });
+
+      expect(converter.getDocumentCreatedTimestamp()).toBeNull();
+    });
+
+    it('getDocumentCreatedTimestamp returns null when core.xml is missing', () => {
+      const converter = new SuperConverter({
+        docx: mockDocx,
+      });
+
+      expect(converter.getDocumentCreatedTimestamp()).toBeNull();
+    });
+
+    it('setDocumentCreatedTimestamp updates existing timestamp', () => {
+      const mockCoreXmlWithTimestamp = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <dcterms:created xsi:type="dcterms:W3CDTF">2024-01-01T00:00:00Z</dcterms:created>
+          </cp:coreProperties>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [...mockDocx, mockCoreXmlWithTimestamp],
+      });
+
+      expect(converter.getDocumentCreatedTimestamp()).toBe('2024-01-01T00:00:00Z');
+
+      converter.setDocumentCreatedTimestamp('2024-12-25T12:00:00Z');
+
+      expect(converter.getDocumentCreatedTimestamp()).toBe('2024-12-25T12:00:00Z');
+    });
+
+    it('setDocumentCreatedTimestamp creates element when dcterms:created is missing', () => {
+      const mockCoreXmlEmpty = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                            xmlns:dcterms="http://purl.org/dc/terms/"
+                            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          </cp:coreProperties>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [...mockDocx, mockCoreXmlEmpty],
+      });
+
+      expect(converter.getDocumentCreatedTimestamp()).toBeNull();
+
+      converter.setDocumentCreatedTimestamp('2024-07-04T09:00:00Z');
+
+      expect(converter.getDocumentCreatedTimestamp()).toBe('2024-07-04T09:00:00Z');
+    });
+
+    it('setDocumentCreatedTimestamp creates elements array when missing', () => {
+      const mockCoreXmlNoElements = {
+        name: 'docProps/core.xml',
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+          <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"/>`,
+      };
+
+      const converter = new SuperConverter({
+        docx: [...mockDocx, mockCoreXmlNoElements],
+      });
+
+      expect(converter.getDocumentCreatedTimestamp()).toBeNull();
+
+      converter.setDocumentCreatedTimestamp('2024-08-15T16:30:00Z');
+
+      expect(converter.getDocumentCreatedTimestamp()).toBe('2024-08-15T16:30:00Z');
+    });
+
+    it('generateWordTimestamp returns correct format without milliseconds', () => {
+      const timestamp = SuperConverter.generateWordTimestamp();
+
+      // Should match YYYY-MM-DDTHH:MM:SSZ format (no milliseconds)
+      expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+
+      // Seconds should be 00 (truncated to minute precision)
+      expect(timestamp).toMatch(/:00Z$/);
     });
   });
 
   describe('GUID Promotion', () => {
-    it('promotes hash to GUID when document is modified', async () => {
+    it('promoteToGuid returns existing GUID if already set', async () => {
       const fileSource = Buffer.from('test file content');
       const converter = new SuperConverter({
         docx: mockDocx,
         fileSource,
       });
 
-      // Generate hash first (async)
+      // getDocumentIdentifier assigns a GUID
       await converter.getDocumentIdentifier();
+      expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
 
-      // Now check if has temporary ID
-      expect(hasTemporaryId(converter)).toBe(true);
+      // Clear the mock to verify promoteToGuid doesn't generate a new one
+      vi.clearAllMocks();
 
-      // Promote to GUID
+      // promoteToGuid should return the existing GUID
       const guid = converter.promoteToGuid();
       expect(guid).toBe('test-uuid-1234');
-      expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
-      expect(hasTemporaryId(converter)).toBe(false);
-      expect(converter.documentModified).toBe(true);
+      expect(uuidv4).not.toHaveBeenCalled();
     });
 
     it('does not re-promote if already has GUID', () => {
@@ -925,5 +1274,152 @@ describe('XML whitespace preservation', () => {
     expect(textNodes[1].elements[0].text).toContain('[[sdspace]]');
     expect(textNodes[2].attributes?.['xml:space']).toBe('default');
     expect(textNodes[2].elements[0].text).toBe('Trimmed text  ');
+  });
+});
+
+describe('SuperConverter styles fallback', () => {
+  const baseDocumentXml = {
+    name: 'word/document.xml',
+    content: `<?xml version="1.0" encoding="UTF-8"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body><w:p><w:r><w:t>Test</w:t></w:r></w:p></w:body>
+      </w:document>`,
+  };
+
+  const buildStylesXml = (styleId) => ({
+    name: 'word/styles2.xml',
+    content: `<?xml version="1.0" encoding="UTF-8"?>
+      <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:style w:type="paragraph" w:styleId="${styleId}">
+          <w:name w:val="${styleId}"/>
+        </w:style>
+      </w:styles>`,
+  });
+
+  it('uses styles2.xml when styles.xml is missing', () => {
+    const styles2Xml = buildStylesXml('AltStyle2');
+    const converter = new SuperConverter({ docx: [baseDocumentXml, styles2Xml] });
+    const styles = converter.convertedXml['word/styles.xml'];
+
+    expect(styles).toBeTruthy();
+    expect(styles.elements?.[0]?.name).toBe('w:styles');
+    expect(styles.elements?.[0]?.elements?.[0]?.attributes?.['w:styleId']).toBe('AltStyle2');
+  });
+
+  it('prefers the lowest-indexed styles file when multiple exist', () => {
+    const styles2Xml = buildStylesXml('AltStyle2');
+    const styles4Xml = {
+      name: 'word/styles4.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:style w:type="paragraph" w:styleId="AltStyle4">
+            <w:name w:val="AltStyle4"/>
+          </w:style>
+        </w:styles>`,
+    };
+
+    const converter = new SuperConverter({ docx: [baseDocumentXml, styles4Xml, styles2Xml] });
+    const styles = converter.convertedXml['word/styles.xml'];
+
+    expect(styles?.elements?.[0]?.elements?.[0]?.attributes?.['w:styleId']).toBe('AltStyle2');
+  });
+});
+
+describe('SuperConverter comment cleanup on export', () => {
+  const makeCommentCleanupDocx = () => [
+    {
+      name: 'word/document.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>Test</w:t></w:r></w:p></w:body>
+        </w:document>`,
+    },
+    {
+      name: 'word/_rels/document.xml.rels',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>
+          <Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="./commentsExtended.xml"/>
+          <Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2016/09/relationships/commentsIds" Target="/word/commentsIds.xml"/>
+          <Relationship Id="rId4" Type="http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible" Target="word/commentsExtensible.xml"/>
+          <Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>
+          <Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="comments.xml"/>
+        </Relationships>`,
+    },
+    {
+      name: 'docProps/custom.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties">
+        </Properties>`,
+    },
+    {
+      name: 'word/numbering.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    },
+    {
+      name: 'word/comments.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+    },
+    {
+      name: 'word/commentsExtended.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"/>`,
+    },
+    {
+      name: 'word/commentsIds.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w16cid:commentsIds xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid"/>`,
+    },
+    {
+      name: 'word/commentsExtensible.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+        <w16cex:commentsExtensible xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex"/>`,
+    },
+  ];
+
+  it('removes stale comment files and prunes only comment relationships when no comments remain', async () => {
+    const converter = new SuperConverter({ docx: makeCommentCleanupDocx() });
+    converter.numbering = { abstracts: {}, definitions: {} };
+
+    const exportToXmlJsonSpy = vi.spyOn(converter, 'exportToXmlJson').mockReturnValue({
+      result: converter.convertedXml['word/document.xml'].elements[0],
+      params: {
+        relationships: [],
+        media: {},
+        exportedCommentDefs: [],
+      },
+    });
+
+    await converter.exportToDocx({}, {}, {}, false, 'external', [], null, false, null);
+
+    expect(converter.convertedXml['word/comments.xml']).toBeUndefined();
+    expect(converter.convertedXml['word/commentsExtended.xml']).toBeUndefined();
+    expect(converter.convertedXml['word/commentsIds.xml']).toBeUndefined();
+    expect(converter.convertedXml['word/commentsExtensible.xml']).toBeUndefined();
+
+    const relationships =
+      converter.convertedXml['word/_rels/document.xml.rels'].elements.find((el) => el.name === 'Relationships')
+        .elements || [];
+
+    expect(
+      relationships.some((rel) =>
+        [
+          'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments',
+          'http://schemas.microsoft.com/office/2011/relationships/commentsExtended',
+          'http://schemas.microsoft.com/office/2016/09/relationships/commentsIds',
+          'http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible',
+        ].includes(rel.attributes?.Type),
+      ),
+    ).toBe(false);
+
+    // Non-comment relationships are retained even if they share a target name.
+    expect(relationships.some((rel) => rel.attributes?.Type?.includes('/hyperlink'))).toBe(true);
+    expect(
+      relationships.some((rel) => rel.attributes?.Type?.includes('/header') && rel.attributes?.Id === 'rId6'),
+    ).toBe(true);
+
+    exportToXmlJsonSpy.mockRestore();
   });
 });

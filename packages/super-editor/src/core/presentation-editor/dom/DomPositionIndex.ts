@@ -1,5 +1,5 @@
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
-
+import { sortedIndexBy } from 'lodash';
 import { debugLog, getSelectionDebugConfig } from '../selection/SelectionDebug.js';
 
 /**
@@ -224,6 +224,39 @@ export class DomPositionIndex {
     return entry;
   }
 
+  /**
+   * Finds the index entry that either contains the given position,
+   * or is the closest entry before or after it.
+   * @param pos - The ProseMirror position to look up
+   * @returns The closest entry to this position, or null if the index is empty
+   * @remarks
+   * This method first attempts to find an entry that contains the position.
+   * If none is found, it then finds the closest entry before or after the position.
+   * If the index is empty, it returns null.
+   */
+  findEntryClosestToPosition(pos: number): DomPositionIndexEntry | null {
+    if (!Number.isFinite(pos)) return null;
+    const entries = this.#entries;
+    if (entries.length === 0) return null;
+
+    const entryAtPos = this.findEntryAtPosition(pos);
+    if (entryAtPos) return entryAtPos;
+
+    const idx = sortedIndexBy(entries, { pmStart: pos } as never, 'pmStart') - 1;
+
+    const beforeEntry = idx >= 0 ? entries[idx] : null;
+    const afterEntry = idx < entries.length - 1 ? entries[idx + 1] : null;
+
+    if (beforeEntry && afterEntry) {
+      const distBefore = pos - beforeEntry.pmEnd;
+      const distAfter = afterEntry.pmStart - pos;
+      return distBefore <= distAfter ? beforeEntry : afterEntry;
+    }
+    if (beforeEntry) return beforeEntry;
+    if (afterEntry) return afterEntry;
+    return null;
+  }
+
   findElementAtPosition(pos: number): HTMLElement | null {
     return this.findEntryAtPosition(pos)?.el ?? null;
   }
@@ -232,13 +265,24 @@ export class DomPositionIndex {
    * Finds all index entries whose position ranges overlap with the given range.
    *
    * @param from - The start of the query range (inclusive)
-   * @param to - The end of the query range (exclusive)
+   * @param to - The end of the query range (exclusive by default, inclusive with `boundaryInclusive`)
+   * @param options - Options controlling boundary behavior
    * @returns Array of entries that overlap the range, in index order
    *
    * @remarks
-   * An entry overlaps the query range [start, end) if:
+   * By default, an entry overlaps the query range [start, end) if:
    * - entry.pmStart < end (entry starts before query range ends)
    * - entry.pmEnd > start (entry ends after query range starts)
+   *
+   * When `boundaryInclusive` is true, the overlap condition becomes [start, end]:
+   * - entry.pmStart <= end (entry starts at or before query range ends)
+   * - entry.pmEnd >= start (entry ends at or after query range starts)
+   *
+   * Use `boundaryInclusive: true` for selection overlay rendering where positions at
+   * run boundaries (e.g., between two adjacent text runs with different marks) need to
+   * resolve to adjacent DOM entries. ProseMirror run nodes create a 2-position gap
+   * between adjacent text spans; inclusive boundaries ensure entries touching the gap
+   * are found.
    *
    * The algorithm:
    * 1. Normalizes the range (swaps from/to if necessary)
@@ -257,7 +301,7 @@ export class DomPositionIndex {
    * - Zero-length ranges (from === to) return empty array
    * - Reversed ranges are automatically normalized (from > to is handled)
    */
-  findEntriesInRange(from: number, to: number): DomPositionIndexEntry[] {
+  findEntriesInRange(from: number, to: number, options?: { boundaryInclusive?: boolean }): DomPositionIndexEntry[] {
     if (!Number.isFinite(from) || !Number.isFinite(to)) return [];
     const start = Math.min(from, to);
     const end = Math.max(from, to);
@@ -265,6 +309,8 @@ export class DomPositionIndex {
 
     const entries = this.#entries;
     if (entries.length === 0) return [];
+
+    const inclusive = options?.boundaryInclusive === true;
 
     // Find first entry whose pmStart <= start, then adjust forward if it ends before start.
     let lo = 0;
@@ -286,8 +332,8 @@ export class DomPositionIndex {
     const out: DomPositionIndexEntry[] = [];
     for (let i = idx; i < entries.length; i += 1) {
       const entry = entries[i];
-      if (entry.pmStart >= end) break;
-      if (entry.pmEnd <= start) continue;
+      if (inclusive ? entry.pmStart > end : entry.pmStart >= end) break;
+      if (inclusive ? entry.pmEnd < start : entry.pmEnd <= start) continue;
       out.push(entry);
     }
     return out;

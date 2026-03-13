@@ -33,3 +33,9 @@ export { processDocumentSectionChildren, handleDocumentSectionNode } from './doc
 
 // Document Part Object
 export { handleDocumentPartObjectNode } from './document-part-object.js';
+
+// Bibliography
+export { handleBibliographyNode } from './bibliography.js';
+
+// Table of Authorities
+export { handleTableOfAuthoritiesNode } from './table-of-authorities.js';

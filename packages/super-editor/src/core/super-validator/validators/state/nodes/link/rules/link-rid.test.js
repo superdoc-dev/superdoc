@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../../../../../../parts/adapters/relationships-mutation.js', () => ({
+  findOrCreateRelationship: vi.fn(),
+}));
+
+import { findOrCreateRelationship } from '../../../../../../parts/adapters/relationships-mutation.js';
 import { ensureValidLinkRID } from './index.js';
 
 describe('ensureValidLinkRID', () => {
@@ -8,6 +14,8 @@ describe('ensureValidLinkRID', () => {
   let mockLinkMarkType;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+
     mockLinkMarkType = {
       create: vi.fn((attrs) => ({ type: 'link', attrs })),
     };
@@ -22,12 +30,6 @@ describe('ensureValidLinkRID', () => {
     };
 
     mockEditor = {
-      converter: {
-        docxHelpers: {
-          findRelationshipIdFromTarget: vi.fn(),
-          insertNewRelationship: vi.fn(),
-        },
-      },
       schema: {
         marks: {
           link: mockLinkMarkType,
@@ -54,7 +56,7 @@ describe('ensureValidLinkRID', () => {
   });
 
   it('reuses existing rId when found', () => {
-    mockEditor.converter.docxHelpers.findRelationshipIdFromTarget.mockReturnValue('existing-rId');
+    findOrCreateRelationship.mockReturnValue('existing-rId');
 
     const links = [
       {
@@ -68,6 +70,10 @@ describe('ensureValidLinkRID', () => {
 
     expect(result.modified).toBe(true);
     expect(result.results[0]).toContain('Added missing rId to link');
+    expect(findOrCreateRelationship).toHaveBeenCalledWith(mockEditor, 'link-rid:ensureValidLinkRID', {
+      target: 'https://example.com',
+      type: 'hyperlink',
+    });
     expect(mockLinkMarkType.create).toHaveBeenCalledWith({
       href: 'https://example.com',
       rId: 'existing-rId',
@@ -81,20 +87,10 @@ describe('ensureValidLinkRID', () => {
         rId: 'existing-rId',
       },
     });
-
-    expect(mockLogger.debug).toHaveBeenCalledWith(
-      'Reusing existing rId for link:',
-      'existing-rId',
-      'from pos:',
-      5,
-      'to pos:',
-      15,
-    );
   });
 
   it('creates new rId when not found', () => {
-    mockEditor.converter.docxHelpers.findRelationshipIdFromTarget.mockReturnValue(null);
-    mockEditor.converter.docxHelpers.insertNewRelationship.mockReturnValue('new-rId');
+    findOrCreateRelationship.mockReturnValue('new-rId');
 
     const links = [
       {
@@ -117,15 +113,6 @@ describe('ensureValidLinkRID', () => {
         rId: 'new-rId',
       },
     });
-
-    expect(mockLogger.debug).toHaveBeenCalledWith(
-      'Creating new rId for link from pos:',
-      2,
-      'to pos:',
-      9,
-      'with href:',
-      'https://new.com',
-    );
   });
 
   it('skips marks with no href', () => {
@@ -146,11 +133,7 @@ describe('ensureValidLinkRID', () => {
   });
 
   it('handles multiple links with mixed outcomes', () => {
-    mockEditor.converter.docxHelpers.findRelationshipIdFromTarget
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce('reused-rId');
-
-    mockEditor.converter.docxHelpers.insertNewRelationship.mockReturnValue('created-rId');
+    findOrCreateRelationship.mockReturnValueOnce('created-rId').mockReturnValueOnce('reused-rId');
 
     const links = [
       { mark: { attrs: { href: 'a.com' } }, from: 0, to: 5 },

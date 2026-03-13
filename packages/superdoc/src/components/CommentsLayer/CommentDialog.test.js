@@ -73,10 +73,15 @@ const InternalDropdownStub = defineComponent({
   },
 });
 
+let commentInputFocusSpies;
+
 const CommentInputStub = defineComponent({
   name: 'CommentInputStub',
   props: ['users', 'config', 'comment'],
-  setup() {
+  setup(_, { expose }) {
+    const focusSpy = vi.fn();
+    commentInputFocusSpies.push(focusSpy);
+    expose({ focus: focusSpy });
     return () => h('div', { class: 'comment-input-stub' });
   },
 });
@@ -87,12 +92,6 @@ vi.mock('@superdoc/components/CommentsLayer/InternalDropdown.vue', () => ({ defa
 vi.mock('@superdoc/components/CommentsLayer/CommentHeader.vue', () => ({ default: CommentHeaderStub }));
 vi.mock('@superdoc/components/CommentsLayer/CommentInput.vue', () => ({ default: CommentInputStub }));
 vi.mock('@superdoc/components/general/Avatar.vue', () => ({ default: AvatarStub }));
-
-vi.mock('naive-ui', () => ({
-  NDropdown: simpleStub('NDropdown'),
-  NTooltip: simpleStub('NTooltip'),
-  NSelect: simpleStub('NSelect'),
-}));
 
 vi.mock('@superdoc/core/collaboration/permissions.js', () => ({
   PERMISSIONS: { MANAGE_COMMENTS: 'manage' },
@@ -215,6 +214,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
 describe('CommentDialog.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    commentInputFocusSpies = [];
   });
 
   it('focuses the comment on mount and adds replies', async () => {
@@ -225,6 +225,11 @@ describe('CommentDialog.vue', () => {
     expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId);
     expect(commentsStoreStub.activeComment.value).toBe(baseComment.commentId);
 
+    // Click the reply pill to expand the editor
+    const pill = wrapper.find('.reply-pill');
+    await pill.trigger('click');
+    await nextTick();
+
     commentsStoreStub.pendingComment.value = {
       commentId: 'pending-1',
       selection: baseComment.selection,
@@ -232,7 +237,7 @@ describe('CommentDialog.vue', () => {
     };
     await nextTick();
 
-    const addButton = wrapper.findAll('button.sd-button.primary').find((btn) => btn.text() === 'Comment');
+    const addButton = wrapper.find('button.reply-btn-primary');
     await addButton.trigger('click');
     expect(commentsStoreStub.getPendingComment).toHaveBeenCalled();
     expect(commentsStoreStub.addComment).toHaveBeenCalledWith({
@@ -264,6 +269,176 @@ describe('CommentDialog.vue', () => {
     expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
   });
 
+  it('calls custom accept handler instead of default behavior when configured', async () => {
+    const customAcceptHandler = vi.fn();
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    // Configure custom handler
+    superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('resolve');
+
+    // Custom handler should be called
+    expect(customAcceptHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+
+    // Default accept command should NOT be called (custom handler replaces it)
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+
+    // Cleanup should still happen
+    await nextTick();
+    expect(commentsStoreStub.activeComment.value).toBe(null);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('calls custom reject handler instead of default behavior when configured', async () => {
+    const customRejectHandler = vi.fn();
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackDelete',
+        deletedText: 'Removed',
+      },
+    });
+
+    // Configure custom handler
+    superdocStub.config.onTrackedChangeBubbleReject = customRejectHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('reject');
+
+    // Custom handler should be called
+    expect(customRejectHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+
+    // Default reject command should NOT be called (custom handler replaces it)
+    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+
+    // Cleanup should still happen
+    await nextTick();
+    expect(commentsStoreStub.activeComment.value).toBe(null);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('uses default behavior when custom handler is not a function', async () => {
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    // Set to non-function value
+    superdocStub.config.onTrackedChangeBubbleAccept = 'not-a-function';
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('resolve');
+
+    // Default behavior should be called
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+  });
+
+  it('uses default behavior when no custom handler is configured', async () => {
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    // Explicitly ensure no handlers are configured
+    expect(superdocStub.config.onTrackedChangeBubbleAccept).toBeUndefined();
+    expect(superdocStub.config.onTrackedChangeBubbleReject).toBeUndefined();
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+
+    // Test accept
+    header.vm.$emit('resolve');
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+
+    // Test reject
+    header.vm.$emit('reject');
+    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+  });
+
+  it('still runs cleanup when custom handler does nothing (no-op)', async () => {
+    const noOpHandler = vi.fn(); // Does nothing, just records call
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    superdocStub.config.onTrackedChangeBubbleAccept = noOpHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('resolve');
+
+    // Handler was called
+    expect(noOpHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+
+    // Default accept command should NOT run (custom handler replaces it)
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+
+    // Cleanup should still happen (dialog closes even though handler did nothing)
+    await nextTick();
+    expect(commentsStoreStub.activeComment.value).toBe(null);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('does not call custom handler for non-tracked-change comments', async () => {
+    const customAcceptHandler = vi.fn();
+    const customRejectHandler = vi.fn();
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: false, // Regular comment, not a tracked change
+        commentText: '<p>Regular comment</p>',
+      },
+    });
+
+    superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+    superdocStub.config.onTrackedChangeBubbleReject = customRejectHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+
+    // Resolve on regular comment should use default behavior (resolveComment)
+    header.vm.$emit('resolve');
+    expect(customAcceptHandler).not.toHaveBeenCalled();
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+
+    // Reject on regular comment should delete the comment
+    header.vm.$emit('reject');
+    expect(customRejectHandler).not.toHaveBeenCalled();
+    expect(commentsStoreStub.deleteComment).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      commentId: baseComment.commentId,
+    });
+  });
+
   it('supports editing threaded comments and toggling internal state', async () => {
     const childComment = reactive({
       uid: 'uid-2',
@@ -288,12 +463,17 @@ describe('CommentDialog.vue', () => {
       extraComments: [childComment],
     });
 
+    // Activate the comment so child replies become visible
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     headers[1].vm.$emit('overflow-select', 'edit');
     expect(commentsStoreStub.editingCommentId.value).toBe(childComment.commentId);
     expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, childComment.commentId);
 
     commentsStoreStub.currentCommentText.value = '<p>Updated</p>';
+    await nextTick();
     await nextTick();
     const updateButton = wrapper.findAll('button.sd-button.primary').find((btn) => btn.text() === 'Update');
     await updateButton.trigger('click');
@@ -309,6 +489,48 @@ describe('CommentDialog.vue', () => {
     const dropdown = wrapper.findComponent(InternalDropdownStub);
     dropdown.vm.$emit('select', 'external');
     expect(baseComment.setIsInternal).toHaveBeenCalledWith({ isInternal: false, superdoc: superdocStub });
+  });
+
+  it('prepopulates edit text from a ref-based commentText value', async () => {
+    const baseCommentWithRef = {
+      commentText: { value: '<p>Ref text</p>' },
+    };
+
+    const { wrapper, superdocStub } = await mountDialog({
+      baseCommentOverrides: baseCommentWithRef,
+    });
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('overflow-select', 'edit');
+
+    expect(commentsStoreStub.currentCommentText.value).toBe('<p>Ref text</p>');
+    expect(typeof commentsStoreStub.currentCommentText.value).toBe('string');
+    expect(commentsStoreStub.currentCommentText.value).not.toBe(baseCommentWithRef.commentText);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, 'comment-1');
+  });
+
+  it('auto-focuses the edit input when entering edit mode', async () => {
+    const { wrapper } = await mountDialog();
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('overflow-select', 'edit');
+    await nextTick();
+
+    expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
+  });
+
+  it('auto-focuses the new comment input when reply pill is clicked', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
+    // Click the reply pill to expand the editor
+    const pill = wrapper.find('.reply-pill');
+    expect(pill.exists()).toBe(true);
+    await pill.trigger('click');
+    await nextTick();
+
+    expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
   });
 
   it('emits dialog-exit when clicking outside active comment and no track changes highlighted', async () => {
@@ -392,6 +614,17 @@ describe('CommentDialog.vue', () => {
       extraComments: [childComment2, childComment1],
     });
 
+    // Activate the comment so child replies become visible
+    commentsStoreStub.activeComment.value = 'tc-parent';
+    await nextTick();
+
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);
 
@@ -460,6 +693,17 @@ describe('CommentDialog.vue', () => {
       extraComments: [replyToRoot, rangeBasedRoot],
     });
 
+    // Activate the comment so child replies become visible
+    commentsStoreStub.activeComment.value = 'tc-parent';
+    await nextTick();
+
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);
     expect(headers[0].props('comment').commentId).toBe('tc-parent');
@@ -474,9 +718,14 @@ describe('CommentDialog.vue', () => {
     commentsStoreStub.activeComment.value = baseComment.commentId;
     await nextTick();
 
-    // Find the cancel button in the comment footer (add new comment section)
-    const cancelButton = wrapper.findAll('button.sd-button').find((btn) => btn.text() === 'Cancel');
-    expect(cancelButton).toBeDefined();
+    // Click the reply pill to expand the editor
+    const pill = wrapper.find('.reply-pill');
+    await pill.trigger('click');
+    await nextTick();
+
+    // Find the cancel button in the reply actions
+    const cancelButton = wrapper.find('button.reply-btn-cancel');
+    expect(cancelButton.exists()).toBe(true);
 
     await cancelButton.trigger('click');
 

@@ -1,0 +1,197 @@
+---
+title: Common workflows
+sidebarTitle: Common Workflows
+description: Recommended patterns for working with the Document API
+---
+
+These are the recommended patterns for new integrations.
+
+## Plan with query.match, then apply with mutations
+
+This is the recommended default for most apps: match first, preview, then apply.
+
+```ts
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'foo' },
+  require: 'first',
+});
+
+const ref = match.items?.[0]?.handle?.ref;
+if (!ref) return;
+
+const plan = {
+  expectedRevision: match.evaluatedRevision,
+  atomic: true,
+  changeMode: 'direct',
+  steps: [
+    {
+      id: 'replace-foo',
+      op: 'text.rewrite',
+      where: { by: 'ref', ref },
+      args: { replacement: { text: 'bar' } },
+    },
+  ],
+};
+
+const preview = editor.doc.mutations.preview(plan);
+if (preview.valid) {
+  editor.doc.mutations.apply(plan);
+}
+```
+
+## Run multiple edits as one plan
+
+When several changes should stay together, group them into one plan:
+
+```ts
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'payment terms' },
+  require: 'first',
+});
+
+const ref = match.items?.[0]?.handle?.ref;
+if (!ref) return;
+
+const plan = {
+  expectedRevision: match.evaluatedRevision,
+  atomic: true,
+  changeMode: 'direct',
+  steps: [
+    {
+      id: 'rewrite-terms',
+      op: 'text.rewrite',
+      where: { by: 'ref', ref },
+      args: {
+        replacement: { text: 'updated payment terms' },
+      },
+    },
+    {
+      id: 'format-terms',
+      op: 'format.apply',
+      where: { by: 'ref', ref },
+      args: {
+        inline: { bold: 'on' },
+      },
+    },
+  ],
+};
+
+const preview = editor.doc.mutations.preview(plan);
+if (preview.valid) {
+  editor.doc.mutations.apply(plan);
+}
+```
+
+## Quick search and single edit
+
+For lightweight text edits, use `query.match` and apply against the matched block range:
+
+```ts
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'foo' },
+  require: 'first',
+});
+
+const firstBlock = match.items?.[0]?.blocks?.[0];
+if (firstBlock) {
+  editor.doc.replace({
+    target: {
+      kind: 'text',
+      blockId: firstBlock.blockId,
+      range: { start: firstBlock.range.start, end: firstBlock.range.end },
+    },
+    text: 'bar',
+  });
+}
+```
+
+## Tracked-mode insert
+
+Insert text as a tracked change so reviewers can accept or reject it:
+
+```ts
+const receipt = editor.doc.insert(
+  { text: 'new content' },
+  { changeMode: 'tracked' },
+);
+```
+
+The receipt includes a `resolution` with the resolved insertion point and `inserted` entries with tracked-change IDs.
+
+## Check capabilities before acting
+
+Use `capabilities()` to branch on what the editor supports:
+
+```ts
+const caps = editor.doc.capabilities();
+const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+
+if (caps.operations['format.apply'].available) {
+  editor.doc.format.apply({
+    target,
+    inline: { bold: 'on' },
+  });
+}
+
+if (caps.global.trackChanges.enabled) {
+  editor.doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
+}
+```
+
+## Cross-session block addressing
+
+When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. For cross-session block targeting, use `query.match` addresses (`NodeAddress` with `kind: 'block'`), which carry DOCX-native `paraId`-derived IDs when available.
+
+This pattern is common in headless pipelines: extract block references in one session, then apply edits in another.
+
+```ts
+import { Editor } from 'superdoc/super-editor';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const docx = await readFile('./contract.docx');
+
+// Session 1: extract block addresses
+const editor1 = await Editor.open(docx);
+const result = editor1.doc.query.match({
+  select: { type: 'node', nodeType: 'paragraph' },
+  require: 'any',
+});
+
+// Save addresses — for DOCX-imported blocks, nodeId uses paraId when available
+const addresses = result.items.map((item) => ({
+  address: item.address,
+}));
+await writeFile('./blocks.json', JSON.stringify(addresses));
+editor1.destroy();
+
+// Session 2: load the same file again and apply edits
+const editor2 = await Editor.open(docx);
+const saved = JSON.parse(await readFile('./blocks.json', 'utf-8'));
+
+// Addresses from session 1 usually resolve when reloading the same unchanged DOCX
+for (const { address } of saved) {
+  const node = editor2.doc.getNode(address); // works across sessions
+}
+editor2.destroy();
+```
+
+<Info>
+`nodeId` stability depends on the ID source. For DOCX-imported content, `nodeId` comes from `paraId` when available and is best-effort stable across loads. For nodes created at runtime, it falls back to `sdBlockId`, which is volatile.
+</Info>
+
+<Warning>
+No ID is guaranteed to survive all Microsoft Word round-trips. Re-extract addresses after major external edits or transformations, since Word (or other tools) may rewrite paragraph IDs and SuperDoc may rewrite duplicate IDs on import.
+</Warning>
+
+## Dry-run preview
+
+Pass `dryRun: true` to validate an operation without applying it:
+
+```ts
+const preview = editor.doc.insert(
+  { target, value: 'hello' },
+  { dryRun: true },
+);
+// preview.success tells you whether the insert would succeed
+// preview.resolution shows the resolved target range
+```

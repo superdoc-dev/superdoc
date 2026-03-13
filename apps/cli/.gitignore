@@ -1,0 +1,26 @@
+# dependencies (bun install)
+node_modules
+
+# output
+dist
+
+# env files
+.env
+
+# caches
+*.tsbuildinfo
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# local debug fixture captures
+src/__tests__/fixtures-cli-debug*/
+
+# CLI test fixtures (generated at runtime)
+src/__tests__/fixtures-cli/
+
+# native build artifacts
+artifacts/
+
+# staged platform binaries
+platforms/*/bin/

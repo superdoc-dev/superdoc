@@ -1,7 +1,15 @@
+import { v5 as uuidv5 } from 'uuid';
 import { emuToPixels, rotToDegrees, polygonToObj } from '@converter/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
-import { extractStrokeWidth, extractStrokeColor, extractFillColor, extractLineEnds } from './vector-shape-helpers';
+import {
+  extractStrokeWidth,
+  extractStrokeColor,
+  extractFillColor,
+  extractLineEnds,
+  extractCustomGeometry,
+} from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
+import { convertTiffToPng, isTiffExtension, setTiffDomEnvironment } from './tiff-converter.js';
 import {
   collectTextBoxParagraphs,
   preProcessTextBoxContent,
@@ -10,10 +18,19 @@ import {
   extractParagraphAlignment,
   extractBodyPrProperties,
 } from './textbox-content-helpers.js';
+import { parseRelativeHeight } from './relative-height.js';
+import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
 const GROUP_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+
+/**
+ * Namespace UUID for generating deterministic sdImageId values.
+ * Images imported from DOCX derive their sdImageId from rEmbed + document-part
+ * filename so the same image always receives the same ID across open cycles.
+ */
+const SD_IMAGE_ID_NAMESPACE = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
 
 /**
  * Normalize a relationship target to a relative media path.
@@ -70,6 +87,41 @@ const extractEffectExtent = (node) => {
 
   if (!left && !top && !right && !bottom) return null;
   return { left, top, right, bottom };
+};
+
+const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
+  const edges = {
+    left: srcRectAttrs.l,
+    top: srcRectAttrs.t,
+    right: srcRectAttrs.r,
+    bottom: srcRectAttrs.b,
+  };
+
+  let hasValue = false;
+  let hasPositive = false;
+  const percentEdges = {};
+
+  for (const [edge, value] of Object.entries(edges)) {
+    if (value == null) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    hasValue = true;
+    if (numeric < 0) {
+      return null;
+    }
+    const percent = Math.max(0, Math.min(100, numeric / 1000));
+    if (percent > 0) hasPositive = true;
+    percentEdges[edge] = percent;
+  }
+
+  if (!hasValue || !hasPositive) return null;
+
+  const top = percentEdges.top ?? 0;
+  const right = percentEdges.right ?? 0;
+  const bottom = percentEdges.bottom ?? 0;
+  const left = percentEdges.left ?? 0;
+
+  return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
 };
 
 /**
@@ -259,6 +311,10 @@ export function handleImageNode(node, params, isAnchor) {
     return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isHidden);
   }
 
+  if (uri === CHART_URI) {
+    return handleChartDrawing(params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isAnchor);
+  }
+
   const picture = graphicData?.elements.find((el) => el.name === 'pic:pic');
   if (!picture || !picture.elements) {
     return null;
@@ -270,6 +326,19 @@ export function handleImageNode(node, params, isAnchor) {
     return null;
   }
 
+  // Check for image effects (grayscale, luminance, etc.)
+  const hasGrayscale = blip.elements?.some((el) => el.name === 'a:grayscl');
+  const lumEl = blip.elements?.find((el) => el.name === 'a:lum');
+  const rawBright = Number(lumEl?.attributes?.bright);
+  const rawContrast = Number(lumEl?.attributes?.contrast);
+  const lum =
+    Number.isFinite(rawBright) || Number.isFinite(rawContrast)
+      ? {
+          ...(Number.isFinite(rawBright) ? { bright: rawBright } : {}),
+          ...(Number.isFinite(rawContrast) ? { contrast: rawContrast } : {}),
+        }
+      : undefined;
+
   // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
   // This tells Word to scale the image to fill the extent rectangle.
   //
@@ -278,12 +347,13 @@ export function handleImageNode(node, params, isAnchor) {
   // - Negative values (e.g., b="-3978"): Word extended the mapping (image doesn't need clipping)
   // - Empty/no srcRect: no pre-adjustment, use cover+clip for aspect ratio mismatch
   //
-  // Since we don't implement actual srcRect cropping, we still need cover mode for positive values.
-  // Only skip cover mode when srcRect has negative values (Word already adjusted the mapping).
+  // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
+  // negative values (Word already adjusted the mapping).
   const stretch = blipFill?.elements?.find((el) => el.name === 'a:stretch');
   const fillRect = stretch?.elements?.find((el) => el.name === 'a:fillRect');
   const srcRect = blipFill?.elements?.find((el) => el.name === 'a:srcRect');
   const srcRectAttrs = srcRect?.attributes || {};
+  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
 
   // Check if srcRect has negative values (indicating Word extended/adjusted the image mapping)
   const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
@@ -292,12 +362,15 @@ export function handleImageNode(node, params, isAnchor) {
   });
 
   const shouldStretch = Boolean(stretch && fillRect);
-  // Use cover mode when stretching, unless srcRect has negative values (Word already adjusted)
-  const shouldCover = shouldStretch && !srcRectHasNegativeValues;
+  // Use cover mode for plain stretch/fillRect when there is no explicit srcRect clipping.
+  // When srcRect emits clipping, we set explicit objectFit='fill' so clip-path math applies
+  // to a fully filled extent box (avoids "thin strip" rendering for cropped anchors).
+  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
+  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
-    const xfrm = spPr.elements.find((el) => el.name === 'a:xfrm');
+    const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
     if (xfrm?.attributes) {
       transformData = {
         ...transformData,
@@ -305,6 +378,52 @@ export function handleImageNode(node, params, isAnchor) {
         verticalFlip: xfrm.attributes['flipV'] === '1',
         horizontalFlip: xfrm.attributes['flipH'] === '1',
       };
+    }
+  }
+
+  // --- Parse pic:nvPicPr for lockAspectRatio, hyperlink ---
+  const nvPicPr = picture.elements.find((el) => el.name === 'pic:nvPicPr');
+  const cNvPicPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPicPr');
+  const picLocks = cNvPicPr?.elements?.find((el) => el.name === 'a:picLocks');
+  // Per OOXML §20.1.2.2.31, noChangeAspect defaults to false when not specified.
+  // When a:picLocks is absent entirely, there is no lock → false.
+  const lockAspectRatio = picLocks
+    ? picLocks.attributes?.['noChangeAspect'] === '1' || picLocks.attributes?.['noChangeAspect'] === 1
+    : false;
+
+  // Parse image hyperlink from pic:cNvPr > a:hlinkClick, falling back to
+  // wp:docPr > a:hlinkClick (Word's canonical placement per §20.4.2.5).
+  const cNvPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPr');
+  const hlinkClick =
+    cNvPr?.elements?.find((el) => el.name === 'a:hlinkClick') ||
+    docPr?.elements?.find((el) => el.name === 'a:hlinkClick');
+  let hyperlink = null;
+  if (hlinkClick?.attributes?.['r:id']) {
+    const hlinkRId = hlinkClick.attributes['r:id'];
+    const currentFile2 = filename || 'document.xml';
+    let hlinkRels = docx[`word/_rels/${currentFile2}.rels`];
+    if (!hlinkRels) hlinkRels = docx[`word/_rels/document.xml.rels`];
+    const hlinkRelationships = hlinkRels?.elements?.find((el) => el.name === 'Relationships');
+    const hlinkRel = hlinkRelationships?.elements?.find((el) => el.attributes?.['Id'] === hlinkRId);
+    if (hlinkRel?.attributes?.['Target']) {
+      hyperlink = { url: hlinkRel.attributes['Target'] };
+      if (hlinkClick.attributes?.['tooltip']) {
+        hyperlink.tooltip = hlinkClick.attributes['tooltip'];
+      }
+    }
+  }
+
+  // --- Parse decorative flag from wp:docPr > a:extLst > a:ext > adec:decorative ---
+  let decorative = false;
+  const docPrExtLst = docPr?.elements?.find((el) => el.name === 'a:extLst');
+  if (docPrExtLst) {
+    for (const ext of docPrExtLst.elements || []) {
+      if (ext.name !== 'a:ext') continue;
+      const decEl = ext.elements?.find((el) => el.name === 'adec:decorative' || el.name === 'a16:decorative');
+      if (decEl && (decEl.attributes?.['val'] === '1' || decEl.attributes?.['val'] === 1)) {
+        decorative = true;
+        break;
+      }
     }
   }
 
@@ -322,6 +441,7 @@ export function handleImageNode(node, params, isAnchor) {
   const { elements } = relationships || [];
 
   const rel = elements?.find((el) => el.attributes['Id'] === rEmbed);
+
   if (!rel) {
     return null;
   }
@@ -356,6 +476,22 @@ export function handleImageNode(node, params, isAnchor) {
     }
   }
 
+  // Convert TIFF images to PNG for display (browsers cannot render TIFF natively)
+  if (!wasConverted && isTiffExtension(extension)) {
+    const mediaData = converter?.media?.[path];
+    if (mediaData) {
+      if (converter?.domEnvironment) {
+        setTiffDomEnvironment(converter.domEnvironment);
+      }
+      const conversionResult = convertTiffToPng(mediaData);
+      if (conversionResult?.dataUri) {
+        finalSrc = conversionResult.dataUri;
+        finalExtension = conversionResult.format || 'png';
+        wasConverted = true;
+      }
+    }
+  }
+
   // For converted metafile images (EMF+/WMF+ placeholders), we want them to render
   // as block-level images, not inline. We use the original wrap type if available,
   // otherwise default to the original wrap settings.
@@ -363,12 +499,24 @@ export function handleImageNode(node, params, isAnchor) {
   // which is not what we want for placeholder images that should maintain their original layout.
   const wrapValue = wrap;
 
+  // Extract relativeHeight from anchor attributes for first-class z-order support.
+  // We only accept OOXML-conformant unsignedInt values.
+  const relativeHeight = isAnchor ? parseRelativeHeight(attributes['relativeHeight']) : null;
+
+  // Derive a deterministic sdImageId from the drawing's docPr id, the rEmbed,
+  // and the document-part filename so the same image always receives the same
+  // stable ID across multiple opens of the same DOCX.
+  const docPrId = docPr?.attributes?.id ?? '';
+  const sdImageId = uuidv5(`${currentFile}:${rEmbed}:${docPrId}`, SD_IMAGE_ID_NAMESPACE);
+
   const nodeAttrs = {
+    sdImageId,
+    relativeHeight,
     // originalXml: carbonCopy(node),
     src: finalSrc,
     alt:
-      isMetafileExtension(extension) && !wasConverted
-        ? 'Unable to render EMF/WMF image'
+      (isMetafileExtension(extension) || isTiffExtension(extension)) && !wasConverted
+        ? 'Unable to render image'
         : docPr?.attributes?.name || 'Image',
     extension: finalExtension,
     // Store original path and extension for potential round-tripping
@@ -397,6 +545,9 @@ export function handleImageNode(node, params, isAnchor) {
       : {}),
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
     shouldCover,
+    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : {}),
+    ...(clipPath ? { clipPath } : {}),
+    rawSrcRect: srcRect,
     originalPadding: {
       distT: attributes['distT'],
       distB: attributes['distB'],
@@ -405,8 +556,13 @@ export function handleImageNode(node, params, isAnchor) {
     },
     originalAttributes: node.attributes,
     rId: relAttributes['Id'],
+    lockAspectRatio,
+    decorative,
+    hyperlink,
     ...(order.length ? { drawingChildOrder: order } : {}),
     ...(originalChildren.length ? { originalDrawingChildren: originalChildren } : {}),
+    ...(hasGrayscale ? { grayscale: true } : {}),
+    ...(lum ? { lum } : {}),
   };
 
   return {
@@ -450,9 +606,22 @@ const handleShapeDrawing = (
   const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
 
-  // For all other shapes (with or without text), or shapes with gradients, use the vector shape handler
-  if (shapeType) {
-    const result = getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor });
+  // Check for custom geometry when no preset geometry is found
+  const custGeom = !shapeType ? extractCustomGeometry(spPr) : null;
+
+  // For shapes with preset geometry or custom geometry, use the vector shape handler
+  if (shapeType || custGeom) {
+    const result = getVectorShape({
+      params,
+      node,
+      graphicData,
+      size,
+      marginOffset,
+      anchorData,
+      wrap,
+      isAnchor,
+      customGeometry: custGeom,
+    });
     if (result?.attrs && isHidden) {
       result.attrs.hidden = true;
     }
@@ -553,9 +722,10 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       const spPr = wsp.elements?.find((el) => el.name === 'wps:spPr');
       if (!spPr) return null;
 
-      // Extract shape kind
+      // Extract shape kind (preset geometry) or custom geometry
       const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
       const shapeKind = prstGeom?.attributes?.['prst'];
+      const customGeom = !shapeKind ? extractCustomGeometry(spPr) : null;
 
       // Extract size and transformations
       const shapeXfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
@@ -625,6 +795,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
         shapeType: 'vectorShape',
         attrs: {
           kind: shapeKind,
+          customGeometry: customGeom || undefined,
           x,
           y,
           width,
@@ -753,6 +924,64 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
   };
 
   return result;
+};
+
+/**
+ * Handles a chart drawing within a WordprocessingML graphic node.
+ *
+ * Detects the c:chart element, resolves the chart part from relationships,
+ * parses the chart XML into a normalized ChartModel, and returns a chart node.
+ *
+ * @param {{ docx: Object, filename?: string }} params - Translator params
+ * @param {Object} node - The wp:anchor or wp:inline node
+ * @param {Object} graphicData - The a:graphicData node with chart URI
+ * @param {{ width?: number, height?: number }} size - Bounding box from wp:extent
+ * @param {{ top?: number, right?: number, bottom?: number, left?: number }} padding
+ * @param {{ horizontal?: number, top?: number }} marginOffset - Anchor position offsets
+ * @param {Object|null} anchorData - Anchor positioning data
+ * @param {Object} wrap - Wrap configuration
+ * @param {boolean} isAnchor - Whether the drawing is anchored
+ * @returns {{ type: 'chart', attrs: Object }|null}
+ */
+const handleChartDrawing = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isAnchor) => {
+  const chartEl = graphicData?.elements?.find((el) => el.name === 'c:chart');
+  const chartRelId = chartEl?.attributes?.['r:id'];
+
+  if (!chartRelId) return null;
+
+  const { docx, filename } = params;
+  const resolved = resolveChartPart(docx, chartRelId, filename);
+  if (!resolved) return null;
+
+  const { chartPartPath } = resolved;
+  const chartXml = docx[chartPartPath];
+  const chartData = chartXml ? parseChartXml(chartXml) : null;
+
+  // Preserve original drawing XML for round-trip export
+  const drawingNode = params.nodes?.[0];
+
+  const { order, originalChildren } = collectPreservedDrawingChildren(node);
+
+  return {
+    type: 'chart',
+    attrs: {
+      width: size.width || 400,
+      height: size.height || 300,
+      chartData,
+      chartRelId,
+      chartPartPath,
+      isAnchor,
+      anchorData,
+      wrap,
+      padding,
+      marginOffset,
+      originalAttributes: node?.attributes,
+      originalChildren,
+      originalChildOrder: order,
+      originalXml: drawingNode ? carbonCopy(drawingNode) : null,
+      drawingContent: drawingNode || null,
+    },
+  };
 };
 
 /**
@@ -1042,7 +1271,17 @@ const buildShapePlaceholder = (node, size, padding, marginOffset, shapeType) => 
  * //   }
  * // }
  */
-export function getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor }) {
+export function getVectorShape({
+  params,
+  node,
+  graphicData,
+  size,
+  marginOffset,
+  anchorData,
+  wrap,
+  isAnchor,
+  customGeometry,
+}) {
   const schemaAttrs = {};
 
   const drawingNode = params.nodes?.[0];
@@ -1060,13 +1299,20 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
     return null;
   }
 
-  // Extract shape kind
+  // Extract shape kind (preset geometry) or custom geometry
   const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
   const shapeKind = prstGeom?.attributes?.['prst'];
-  if (!shapeKind) {
-    console.warn('Shape kind not found');
-  }
   schemaAttrs.kind = shapeKind;
+
+  // Store custom geometry if provided (from a:custGeom) or extract it here
+  if (customGeometry) {
+    schemaAttrs.customGeometry = customGeometry;
+  } else if (!shapeKind) {
+    const extracted = extractCustomGeometry(spPr);
+    if (extracted) {
+      schemaAttrs.customGeometry = extracted;
+    }
+  }
 
   // Use wp:extent for dimensions (final displayed size from anchor)
   // This is the correct size that Word displays the shape at

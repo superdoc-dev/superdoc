@@ -149,9 +149,9 @@ describe('deleteSelection', () => {
   // When user selects text from right to left and replace it with a single char,
   // Prosemirror will interpret this as a backspace operation, which will delete the character.
   // This is a workaround to prevent this from happening, by checking if the current DOM selection is a single character.
-  it('returns false when current dom selection is a single character', () => {
+  it('returns false for collapsed selection when current dom selection is a single character', () => {
     const doc = schema.node('doc', null, [schema.node('paragraph', null, schema.text('abc def ghi'))]);
-    const sel = TextSelection.create(doc, 2, 5);
+    const sel = TextSelection.create(doc, 2, 2);
     const state = EditorState.create({ schema, doc, selection: sel });
 
     vi.spyOn(document, 'getSelection').mockReturnValue({
@@ -163,6 +163,28 @@ describe('deleteSelection', () => {
     const cmd = deleteSelection();
     const ok = cmd({ state, tr: state.tr });
     expect(ok).toBe(false);
+  });
+
+  it('does not short-circuit non-empty selection when dom baseNode length is 1', () => {
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, schema.text('abc def ghi'))]);
+    const sel = TextSelection.create(doc, 2, 5);
+    const state = EditorState.create({ schema, doc, selection: sel });
+
+    vi.spyOn(document, 'getSelection').mockReturnValue({
+      baseNode: {
+        data: 'a',
+      },
+    });
+
+    pmDeleteSelection.mockReturnValueOnce('delegated-single-char-node');
+
+    const cmd = deleteSelection();
+    const dispatch = vi.fn();
+    const res = cmd({ state, tr: state.tr, dispatch });
+
+    expect(pmDeleteSelection).toHaveBeenCalledTimes(1);
+    expect(pmDeleteSelection).toHaveBeenCalledWith(state, dispatch);
+    expect(res).toBe('delegated-single-char-node');
   });
 
   it('handles SSR environment when document is undefined', () => {

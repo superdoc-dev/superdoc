@@ -1,0 +1,346 @@
+---
+title: hyperlinks.insert
+sidebarTitle: hyperlinks.insert
+description: Insert new linked text at a target position.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert new linked text at a target position.
+
+- Operation ID: `hyperlinks.insert`
+- API member path: `editor.doc.hyperlinks.insert(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HyperlinkMutationResult with the created hyperlink address on success, or a failure code.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `link` | object | yes |  |
+| `link.destination` | object | yes |  |
+| `link.destination.anchor` | string | no |  |
+| `link.destination.docLocation` | string | no |  |
+| `link.destination.href` | string | no |  |
+| `link.rel` | string | no |  |
+| `link.target` | string | no |  |
+| `link.tooltip` | string | no |  |
+| `target` | TextAddress | no | TextAddress |
+| `target.blockId` | string | no |  |
+| `target.kind` | `"text"` | no | Constant: `"text"` |
+| `target.range` | Range | no | Range |
+| `target.range.end` | integer | no |  |
+| `target.range.start` | integer | no |  |
+| `text` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "link": {
+    "destination": {
+      "anchor": "example",
+      "href": "example"
+    },
+    "target": "example",
+    "tooltip": "example"
+  },
+  "target": {
+    "blockId": "block-abc123",
+    "kind": "text",
+    "range": {
+      "end": 10,
+      "start": 0
+    }
+  },
+  "text": "Hello, world."
+}
+```
+
+## Output fields
+
+### Variant 1 (hyperlink.kind="inline")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `hyperlink` | object(kind="inline") | yes |  |
+| `hyperlink.anchor` | InlineAnchor | yes | InlineAnchor |
+| `hyperlink.anchor.end` | Position | yes | Position |
+| `hyperlink.anchor.end.blockId` | string | yes |  |
+| `hyperlink.anchor.end.offset` | integer | yes |  |
+| `hyperlink.anchor.start` | Position | yes | Position |
+| `hyperlink.anchor.start.blockId` | string | yes |  |
+| `hyperlink.anchor.start.offset` | integer | yes |  |
+| `hyperlink.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `hyperlink.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | object | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "hyperlink": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "inline",
+    "nodeType": "hyperlink"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "link": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "type": "string"
+            },
+            "docLocation": {
+              "type": "string"
+            },
+            "href": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "rel": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "tooltip": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "destination"
+      ],
+      "type": "object"
+    },
+    "target": {
+      "$ref": "#/$defs/TextAddress"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text",
+    "link"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "hyperlink": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "$ref": "#/$defs/InlineAnchor"
+            },
+            "kind": {
+              "const": "inline"
+            },
+            "nodeType": {
+              "const": "hyperlink"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "anchor"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "hyperlink"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {
+              "type": "object"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "hyperlink": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InlineAnchor"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "hyperlink"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "hyperlink"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {
+          "type": "object"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

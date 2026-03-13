@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "group:monorepos",
+    ":separateMajorReleases",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "schedule": ["before 7am on monday"],
+  "prConcurrentLimit": 5,
+  "ignoreDeps": ["pdfjs-dist", "@hocuspocus/provider"],
+  "packageRules": [
+    {
+      "description": "Auto-merge dev dependency patches",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "groupName": "dev dependencies (patch)"
+    },
+    {
+      "description": "Ignore demos and examples — not shipped to users",
+      "matchFileNames": ["demos/**", "examples/**"],
+      "enabled": false
+    },
+    {
+      "description": "Don't touch vite — overridden with rolldown-vite",
+      "matchPackageNames": ["vite"],
+      "enabled": false
+    }
+  ],
+  "platformAutomerge": true
+}

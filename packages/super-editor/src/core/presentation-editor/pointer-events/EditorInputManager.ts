@@ -36,6 +36,8 @@ import {
   hitTestTable as hitTestTableFromHelper,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
+import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/painter-dom';
+import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 
 // =============================================================================
 // Constants
@@ -50,6 +52,15 @@ const SCROLL_DETECTION_TOLERANCE_PX = 1;
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
+/**
+ * Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder).
+ * Semantic footnote blocks use the {@link isSemanticFootnoteBlockId} helper from
+ * shared constants — it matches both heading and body footnote block IDs.
+ */
+function isFootnoteBlockId(blockId: string): boolean {
+  return typeof blockId === 'string' && (blockId.startsWith('footnote-') || isSemanticFootnoteBlockId(blockId));
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -61,6 +72,13 @@ export type LayoutState = {
   layout: Layout | null;
   blocks: FlowBlock[];
   measures: Measure[];
+};
+
+type StructuredContentSelection = {
+  node: ProseMirrorNode;
+  pos: number;
+  start: number;
+  end: number;
 };
 
 /**
@@ -117,9 +135,17 @@ export type EditorInputCallbacks = {
   /** Emit event */
   emit?: (event: string, payload: unknown) => void;
   /** Normalize client point to layout coordinates */
-  normalizeClientPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null;
+  normalizeClientPoint?: (
+    clientX: number,
+    clientY: number,
+  ) => { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null;
   /** Hit test header/footer region */
-  hitTestHeaderFooterRegion?: (x: number, y: number) => HeaderFooterRegion | null;
+  hitTestHeaderFooterRegion?: (
+    x: number,
+    y: number,
+    pageIndex?: number,
+    pageLocalY?: number,
+  ) => HeaderFooterRegion | null;
   /** Exit header/footer mode */
   exitHeaderFooterMode?: () => void;
   /** Activate header/footer region */
@@ -486,6 +512,44 @@ export class EditorInputManager {
     return calculateExtendedSelection(layoutState?.blocks ?? [], anchor, head, mode);
   }
 
+  /**
+   * When the drag anchor is outside an isolating node (table), prevent the head
+   * from resolving inside one. If the head is inside a table cell, clamp it to
+   * just before or after the table boundary (depending on drag direction).
+   *
+   * Selections that span PAST a table (anchor before, head after) are allowed —
+   * only positions resolving INSIDE the table are clamped.
+   */
+  #clampHeadAtIsolatingBoundary(doc: ProseMirrorNode, anchor: number, head: number): number {
+    const forward = head >= anchor;
+
+    try {
+      const $head = doc.resolve(head);
+      // Find the outermost isolating ancestor. Walk from innermost to outermost,
+      // tracking the shallowest isolating depth. Using the outermost ensures that
+      // we clamp to just before/after the entire table, not to a boundary between
+      // cells within the same table.
+      let isolatingDepth = -1;
+      for (let d = $head.depth; d > 0; d--) {
+        const node = $head.node(d);
+        if (node.type.spec.isolating || node.type.spec.tableRole === 'table') {
+          isolatingDepth = d;
+        }
+      }
+
+      if (isolatingDepth > 0) {
+        const boundary = forward ? $head.before(isolatingDepth) : $head.after(isolatingDepth);
+        const near = Selection.near(doc.resolve(boundary), forward ? -1 : 1);
+        if (near instanceof TextSelection) return near.head;
+        return anchor;
+      }
+    } catch {
+      /* position resolution failed */
+    }
+
+    return head;
+  }
+
   #shouldUseCellSelection(currentTableHit: TableHitResult | null): boolean {
     return shouldUseCellSelectionFromHelper(currentTableHit, this.#cellAnchor, this.#cellDragMode);
   }
@@ -826,15 +890,33 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
+    // Disallow cursor placement in footnote lines: keep current selection and only focus editor.
+    const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
+    const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
+    if (isFootnoteBlockId(clickedBlockId)) {
+      if (!isDraggableAnnotation) event.preventDefault();
+      this.#focusEditor();
+      return;
+    }
+
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
-      if (this.#handleClickInHeaderFooterMode(event, x, y)) return;
+      if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
+        return;
     }
 
     // Check for header/footer region hit
-    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
-    if (headerFooterRegion) return; // Will be handled by double-click
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(
+      x,
+      y,
+      normalizedPoint.pageIndex,
+      normalizedPoint.pageLocalY,
+    );
+    if (headerFooterRegion) {
+      event.preventDefault(); // Prevent native selection before double-click handles it
+      return; // Will be handled by double-click
+    }
 
     // Get hit position
     const viewportHost = this.#deps.getViewportHost();
@@ -875,9 +957,53 @@ export class EditorInputManager {
       event.preventDefault();
     }
 
+    const inlineStructuredContentLabel = target?.closest?.(
+      '.superdoc-structured-content-inline__label',
+    ) as HTMLElement | null;
+    if (inlineStructuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentInlineFromElement(doc, inlineStructuredContentLabel);
+      if (resolved) {
+        try {
+          const tr = editor.state.tr.setSelection(TextSelection.create(doc, resolved.start, resolved.end));
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
+    const structuredContentLabel = target?.closest?.('.superdoc-structured-content__label') as HTMLElement | null;
+    if (structuredContentLabel && doc) {
+      const resolved = this.#resolveStructuredContentBlockFromElement(doc, structuredContentLabel);
+      if (resolved) {
+        try {
+          const contentRange = this.#findStructuredContentBlockContentRange(resolved);
+          const selection =
+            contentRange != null
+              ? TextSelection.create(doc, contentRange.from, contentRange.to)
+              : NodeSelection.create(editor.state.doc, resolved.pos);
+          const tr = editor.state.tr.setSelection(selection);
+          editor.view?.dispatch(tr);
+        } catch {}
+
+        this.#callbacks.scheduleSelectionUpdate?.();
+        this.#focusEditor();
+        return;
+      }
+    }
+
     // Handle click outside text content
     if (!rawHit) {
       this.#focusEditorAtFirstPosition();
+      return;
+    }
+
+    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout).
+    // Keep the current selection unchanged instead of moving caret to document start.
+    if (isFootnoteBlockId(rawHit.blockId)) {
+      this.#focusEditor();
       return;
     }
 
@@ -918,12 +1044,23 @@ export class EditorInputManager {
       this.#dragAnchorPageIndex = hit.pageIndex;
       this.#pendingMarginClick = this.#callbacks.computePendingMarginClick?.(event.pointerId, x, y) ?? null;
 
-      // Check for table cell selection
+      // Check for table cell selection.
+      // Verify that the resolved click position is actually inside the table before
+      // activating cell selection. hitTestTable uses geometry-based coordinates that
+      // may have small offsets from the DOM, causing false positives for clicks on
+      // paragraphs near table boundaries.
       const tableHit = this.#hitTestTable(x, y);
       if (tableHit) {
         const tablePos = this.#getTablePosFromHit(tableHit);
-        if (tablePos !== null) {
+        const hitIsInsideTable =
+          tablePos !== null &&
+          doc &&
+          hit.pos >= tablePos &&
+          hit.pos <= tablePos + (doc.nodeAt(tablePos)?.nodeSize ?? 0);
+        if (tablePos !== null && hitIsInsideTable) {
           this.#setCellAnchor(tableHit, tablePos);
+        } else {
+          this.#clearCellAnchor();
         }
       } else {
         this.#clearCellAnchor();
@@ -972,9 +1109,16 @@ export class EditorInputManager {
     // Set selection for single click
     if (!handledByDepth) {
       try {
-        let nextSelection: Selection = TextSelection.create(doc, hit.pos);
-        if (!nextSelection.$from.parent.inlineContent) {
-          nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+        // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
+        const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
+        let nextSelection: Selection;
+        if (sdtBlock) {
+          nextSelection = NodeSelection.create(doc, sdtBlock.pos);
+        } else {
+          nextSelection = TextSelection.create(doc, hit.pos);
+          if (!nextSelection.$from.parent.inlineContent) {
+            nextSelection = Selection.near(doc.resolve(hit.pos), 1);
+          }
         }
         const tr = editor.state.tr.setSelection(nextSelection);
         // Preserve stored marks (e.g., formatting selected from toolbar before clicking)
@@ -1092,16 +1236,15 @@ export class EditorInputManager {
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
 
-    const viewportHost = this.#deps.getViewportHost();
-    const visibleHost = this.#deps.getVisibleHost();
-    const zoom = this.#deps.getZoom();
-    const rect = viewportHost.getBoundingClientRect();
-    const scrollLeft = visibleHost.scrollLeft ?? 0;
-    const scrollTop = visibleHost.scrollTop ?? 0;
-    const x = (event.clientX - rect.left + scrollLeft) / zoom;
-    const y = (event.clientY - rect.top + scrollTop) / zoom;
+    const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
+    if (!normalized) return;
 
-    const region = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(
+      normalized.x,
+      normalized.y,
+      normalized.pageIndex,
+      normalized.pageLocalY,
+    );
     if (region) {
       event.preventDefault();
       event.stopPropagation();
@@ -1246,6 +1389,148 @@ export class EditorInputManager {
     }
   }
 
+  #findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContentBlock') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentBlockById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContentBlock') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #findStructuredContentInlineAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
+    if (!Number.isFinite(pos)) return null;
+
+    const $pos = doc.resolve(pos);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
+      if (node.type?.name === 'structuredContent') {
+        return {
+          node,
+          pos: $pos.before(depth),
+          start: $pos.start(depth),
+          end: $pos.end(depth),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #findStructuredContentInlineById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
+    let found: StructuredContentSelection | null = null;
+    doc.descendants((node, pos) => {
+      if (node.type?.name !== 'structuredContent') return true;
+      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+      if (String(nodeId ?? '') !== id) return true;
+
+      found = {
+        node,
+        pos,
+        start: pos + 1,
+        end: pos + node.nodeSize - 1,
+      };
+      return false;
+    });
+    return found;
+  }
+
+  #resolveStructuredContentBlockFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentBlockById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const containerSdtId = container.dataset?.sdtContainerId;
+    if (containerSdtId) {
+      const match = this.#findStructuredContentBlockById(doc, containerSdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentBlockAtPos(doc, pmStart);
+    }
+
+    return null;
+  }
+
+  #resolveStructuredContentInlineFromElement(
+    doc: ProseMirrorNode,
+    element: HTMLElement,
+  ): StructuredContentSelection | null {
+    const container = element.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+    if (!container) return null;
+
+    const sdtId = container.dataset?.sdtId;
+    if (sdtId) {
+      const match = this.#findStructuredContentInlineById(doc, sdtId);
+      if (match) return match;
+    }
+
+    const pmStartRaw = container.dataset?.pmStart;
+    const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
+    if (Number.isFinite(pmStart)) {
+      return this.#findStructuredContentInlineAtPos(doc, pmStart);
+    }
+
+    return null;
+  }
+
+  #findStructuredContentBlockContentRange(resolved: StructuredContentSelection): { from: number; to: number } | null {
+    let from: number | null = null;
+    let to: number | null = null;
+    resolved.node.descendants((child, pos) => {
+      if (!child.isTextblock) return true;
+      const basePos = resolved.pos + 1 + pos;
+      const childFrom = basePos + 1;
+      const childTo = basePos + child.nodeSize - 1;
+      if (from == null) {
+        from = childFrom;
+      }
+      to = childTo;
+      return true;
+    });
+    if (from == null || to == null) return null;
+    return { from, to };
+  }
+
   #handleClickWithoutLayout(event: PointerEvent, isDraggableAnnotation: boolean): void {
     if (!isDraggableAnnotation) {
       event.preventDefault();
@@ -1259,7 +1544,13 @@ export class EditorInputManager {
     this.#focusEditorAtFirstPosition();
   }
 
-  #handleClickInHeaderFooterMode(event: PointerEvent, x: number, y: number): boolean {
+  #handleClickInHeaderFooterMode(
+    event: PointerEvent,
+    x: number,
+    y: number,
+    pageIndex?: number,
+    pageLocalY?: number,
+  ): boolean {
     const session = this.#deps?.getHeaderFooterSession();
     const activeEditorHost = session?.overlayManager?.getActiveEditorHost?.();
     const clickedInsideEditorHost =
@@ -1269,13 +1560,16 @@ export class EditorInputManager {
       return true; // Let editor handle it
     }
 
-    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y, pageIndex, pageLocalY);
     if (!headerFooterRegion) {
       this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling
     }
 
-    return true; // In header/footer region
+    // Click is in a H/F region on a different page — don't consume the event.
+    // Let it fall through to the existing footer region check in #handlePointerDown
+    // which properly calls event.preventDefault() before the dblclick handler activates it.
+    return false;
   }
 
   #handleInlineImageClick(
@@ -1287,10 +1581,13 @@ export class EditorInputManager {
   ): boolean {
     if (!targetImg) return false;
 
-    const imgPmStart = targetImg.dataset?.pmStart ? Number(targetImg.dataset.pmStart) : null;
+    // When image has clipPath it is wrapped in a clip-wrapper; pm-start is on the wrapper
+    const wrapper = targetImg.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
+    const pmStartSource = wrapper ?? targetImg;
+    const imgPmStart = pmStartSource?.dataset?.pmStart ? Number(pmStartSource.dataset.pmStart) : null;
     if (Number.isNaN(imgPmStart) || imgPmStart == null) return false;
 
-    const imgLayoutEpochRaw = targetImg.dataset?.layoutEpoch;
+    const imgLayoutEpochRaw = pmStartSource?.dataset?.layoutEpoch;
     const imgLayoutEpoch = imgLayoutEpochRaw != null ? Number(imgLayoutEpochRaw) : NaN;
     const rawLayoutEpoch = Number.isFinite(rawHit.layoutEpoch) ? rawHit.layoutEpoch : NaN;
     const effectiveEpoch =
@@ -1322,11 +1619,14 @@ export class EditorInputManager {
       const tr = editor!.state.tr.setSelection(NodeSelection.create(doc, clampedImgPos));
       editor!.view?.dispatch(tr);
 
-      const selector = `.superdoc-inline-image[data-pm-start="${imgPmStart}"]`;
+      // Prefer wrapper (clip container) so selection outline is on the visible cropped box only, not the full image.
+      // The compound selector lists wrapper before inline-image; querySelector returns the first DOM-order
+      // match, and the wrapper is always an ancestor of the image, so it is found first when present.
       const viewportHost = this.#deps?.getViewportHost();
-      const targetElement = viewportHost?.querySelector(selector);
+      const targetElement = viewportHost?.querySelector(buildInlineImagePmSelector(imgPmStart));
+      const elementForHighlight = (wrapper ?? targetElement ?? targetImg) as HTMLElement;
       this.#callbacks.emit?.('imageSelected', {
-        element: targetElement ?? targetImg,
+        element: elementForHighlight,
         blockId: null,
         pmStart: clampedImgPos,
       });
@@ -1362,7 +1662,7 @@ export class EditorInputManager {
       if (fragmentHit.fragment.kind === 'image') {
         const viewportHost = this.#deps?.getViewportHost();
         const targetElement = viewportHost?.querySelector(
-          `.superdoc-image-fragment[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-pm-start="${fragmentHit.fragment.pmStart}"]`,
         );
         if (targetElement) {
           this.#callbacks.emit?.('imageSelected', {
@@ -1429,6 +1729,9 @@ export class EditorInputManager {
 
     if (!rawHit) return;
 
+    // Don't extend selection into footnote lines
+    if (isFootnoteBlockId(rawHit.blockId)) return;
+
     const editor = this.#deps.getEditor();
     const doc = editor.state?.doc;
     if (!doc) return;
@@ -1474,7 +1777,15 @@ export class EditorInputManager {
 
     // Text selection mode
     const anchor = this.#dragAnchor!;
-    const head = hit.pos;
+    let head = hit.pos;
+
+    // When the drag started outside a table, prevent the head from entering an isolating
+    // node (table). If the head resolves inside a table, ProseMirror-tables' appendTransaction
+    // converts the TextSelection into a CellSelection, causing the anchor to jump.
+    if (!this.#cellAnchor) {
+      head = this.#clampHeadAtIsolatingBoundary(doc, anchor, head);
+    }
+
     const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
 
     try {
@@ -1522,7 +1833,7 @@ export class EditorInputManager {
     }
   }
 
-  #handleHover(normalized: { x: number; y: number }): void {
+  #handleHover(normalized: { x: number; y: number; pageIndex?: number; pageLocalY?: number }): void {
     if (!this.#deps) return;
 
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
@@ -1536,7 +1847,12 @@ export class EditorInputManager {
       return;
     }
 
-    const region = this.#callbacks.hitTestHeaderFooterRegion?.(normalized.x, normalized.y);
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(
+      normalized.x,
+      normalized.y,
+      normalized.pageIndex,
+      normalized.pageLocalY,
+    );
     if (!region) {
       this.#callbacks.clearHoverRegion?.();
       return;

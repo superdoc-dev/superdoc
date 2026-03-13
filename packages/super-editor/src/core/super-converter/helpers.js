@@ -1,6 +1,65 @@
 import { parseSizeUnit } from '../utilities/index.js';
 import { xml2js } from 'xml-js';
 
+// --- Browser-compatible CRC32 (replaces buffer-crc32 to avoid Node.js Buffer dependency) ---
+const CRC32_TABLE = new Uint32Array(256);
+for (let i = 0; i < 256; i++) {
+  let c = i;
+  for (let j = 0; j < 8; j++) {
+    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  }
+  CRC32_TABLE[i] = c;
+}
+
+/**
+ * Compute CRC32 of a Uint8Array and return as 8-char lowercase hex string.
+ * Drop-in replacement for `buffer-crc32(buf).toString('hex')`.
+ */
+function computeCrc32Hex(data) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
+}
+
+/** Decode a base64 string to Uint8Array (works in both Node 16+ and browsers). */
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Convert a base64 string or data URI to an ArrayBuffer.
+ * Accepts ArrayBuffer, TypedArray, data URI, or raw base64 string.
+ *
+ * @param {string|ArrayBuffer|Uint8Array} data
+ * @returns {ArrayBuffer}
+ */
+function dataUriToArrayBuffer(data) {
+  if (data instanceof ArrayBuffer) return data;
+  if (ArrayBuffer.isView(data)) return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+
+  if (typeof data !== 'string') {
+    throw new Error('Unsupported data type for conversion to ArrayBuffer');
+  }
+
+  let base64 = data;
+  if (data.startsWith('data:')) {
+    const commaIndex = data.indexOf(',');
+    if (commaIndex === -1) {
+      throw new Error('Invalid data URI: missing base64 content');
+    }
+    base64 = data.substring(commaIndex + 1);
+  }
+
+  return base64ToUint8Array(base64).buffer;
+}
+
 // CSS pixels per inch; used to convert between Word's inch-based measurements and DOM pixels.
 const PIXELS_PER_INCH = 96;
 
@@ -276,21 +335,7 @@ const getArrayBufferFromUrl = async (input) => {
   // If this is a data URI we need only the payload portion
   const base64Payload = isDataUri ? trimmed.split(',', 2)[1] : trimmed.replace(/\s/g, '');
 
-  try {
-    if (typeof globalThis.atob === 'function') {
-      const binary = globalThis.atob(base64Payload);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return bytes.buffer;
-    }
-  } catch (err) {
-    console.warn('atob failed, falling back to Buffer:', err);
-  }
-
-  const buf = Buffer.from(base64Payload, 'base64');
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  return base64ToUint8Array(base64Payload).buffer;
 };
 
 const getContentTypesFromXml = (contentTypesXml) => {
@@ -579,6 +624,86 @@ function convertSizeToCSS(value, type) {
   }
 }
 
+/**
+ * Detects image type from file content using magic bytes (file signatures).
+ * Supports PNG, JPEG, GIF, BMP, TIFF, WEBP.
+ *
+ * @param {Uint8Array|string} data - Binary data as Uint8Array or base64 string
+ * @returns {string|null} - Detected image type (e.g., 'png', 'jpeg') or null if not detected
+ */
+const detectImageType = (data) => {
+  let bytes;
+
+  if (typeof data === 'string') {
+    // Assume base64 string
+    try {
+      bytes = base64ToUint8Array(data);
+    } catch {
+      return null;
+    }
+  } else if (data instanceof Uint8Array) {
+    bytes = data;
+  } else {
+    return null;
+  }
+
+  if (bytes.length < 12) return null;
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return 'png';
+  }
+
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'jpeg';
+  }
+
+  // GIF: 47 49 46 38 (GIF8)
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return 'gif';
+  }
+
+  // BMP: 42 4D (BM)
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return 'bmp';
+  }
+
+  // TIFF: 49 49 2A 00 (little-endian) or 4D 4D 00 2A (big-endian)
+  if (
+    (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
+    (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a)
+  ) {
+    return 'tiff';
+  }
+
+  // WEBP: 52 49 46 46 ... 57 45 42 50 (RIFF....WEBP)
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'webp';
+  }
+
+  return null;
+};
+
 export {
   PIXELS_PER_INCH,
   inchesToTwips,
@@ -620,4 +745,8 @@ export {
   convertSizeToCSS,
   resolveShadingFillColor,
   resolveOpcTargetPath,
+  computeCrc32Hex,
+  base64ToUint8Array,
+  dataUriToArrayBuffer,
+  detectImageType,
 };

@@ -38,7 +38,7 @@
  */
 
 import { Node, Attribute } from '@core/index.js';
-import { createCellBorders } from './helpers/createCellBorders.js';
+import { renderCellBorderStyle } from './helpers/renderCellBorderStyle.js';
 
 /**
  * Cell margins configuration
@@ -101,6 +101,32 @@ export const TableCell = Node.create({
 
   addAttributes() {
     return {
+      /** @private */
+      sdBlockId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: (elem) => elem.getAttribute('data-sd-block-id'),
+        renderDOM: (attrs) => {
+          return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
+        },
+      },
+
+      /** @private - OOXML identifier preserved across DOCX roundtrips */
+      paraId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
+      },
+
+      /** @private - OOXML text identifier preserved across DOCX roundtrips */
+      textId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
+      },
+
       colspan: {
         default: 1,
       },
@@ -163,21 +189,10 @@ export const TableCell = Node.create({
       },
 
       borders: {
-        default: () => createCellBorders(),
-        renderDOM({ borders }) {
+        default: null,
+        renderDOM: ({ borders }) => {
           if (!borders) return {};
-          const sides = ['top', 'right', 'bottom', 'left'];
-          const style = sides
-            .map((side) => {
-              const border = borders?.[side];
-              if (border && border.val === 'none') return `border-${side}: ${border.val};`;
-              let color = border?.color || 'black';
-              if (color === 'auto') color = 'black';
-              if (border) return `border-${side}: ${Math.ceil(border.size)}px solid ${color};`;
-              return '';
-            })
-            .join(' ');
-          return { style };
+          return renderCellBorderStyle(borders);
         },
       },
 

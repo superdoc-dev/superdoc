@@ -1,0 +1,150 @@
+---
+title: contentControls.getBinding
+sidebarTitle: contentControls.getBinding
+description: "Get the data binding metadata (w:dataBinding) of a content control."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get the data binding metadata (w:dataBinding) of a content control.
+
+- Operation ID: `contentControls.getBinding`
+- API member path: `editor.doc.contentControls.getBinding(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns the ContentControlBinding or null if no binding is set.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(nodeType="sdt") | yes |  |
+| `target.kind` | enum | yes | `"block"`, `"inline"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"sdt"` | yes | Constant: `"sdt"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "sdt"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `prefixMappings` | string | no |  |
+| `storeItemId` | string | yes |  |
+| `xpath` | string | yes |  |
+
+### Variant 2
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "prefixMappings": "example",
+  "storeItemId": "example",
+  "xpath": "example"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block",
+            "inline"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "sdt"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "prefixMappings": {
+          "type": "string"
+        },
+        "storeItemId": {
+          "type": "string"
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "storeItemId",
+        "xpath"
+      ],
+      "type": "object"
+    },
+    {
+      "type": "null"
+    }
+  ]
+}
+```
+</Accordion>

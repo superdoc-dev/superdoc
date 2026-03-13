@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Mark, Attribute } from '@core/index.js';
+import { cssColorToHex } from '@core/utilities/cssColorToHex.js';
 
 /**
  * Configuration options for Highlight
@@ -34,7 +35,7 @@ export const Highlight = Mark.create({
     return {
       color: {
         default: null,
-        parseDOM: (element) => element.getAttribute('data-color') || element.style.backgroundColor,
+        parseDOM: (element) => cssColorToHex(element.getAttribute('data-color') || element.style.backgroundColor),
         renderDOM: (attributes) => {
           if (!attributes.color) {
             return {};
@@ -49,7 +50,18 @@ export const Highlight = Mark.create({
   },
 
   parseDOM() {
-    return [{ tag: 'mark' }];
+    return [
+      { tag: 'mark' },
+      {
+        style: 'background-color',
+        getAttrs: (value) => {
+          if (!value || value === 'transparent' || value === 'inherit' || value === 'initial' || value === 'unset')
+            return false;
+          const color = cssColorToHex(value);
+          return color ? { color } : false;
+        },
+      },
+    ];
   },
 
   renderDOM({ htmlAttributes }) {

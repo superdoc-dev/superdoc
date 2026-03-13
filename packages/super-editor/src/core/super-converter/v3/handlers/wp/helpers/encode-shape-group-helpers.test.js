@@ -25,6 +25,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   }),
   extractStrokeWidth: vi.fn(() => 1),
   extractLineEnds: vi.fn(() => null),
+  extractCustomGeometry: vi.fn(() => null),
 }));
 
 vi.mock('@core/utilities/carbonCopy.js', () => ({

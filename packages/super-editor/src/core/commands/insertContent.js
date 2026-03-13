@@ -12,6 +12,8 @@ import { processContent } from '../helpers/contentProcessor.js';
  * @param {Object} [options={}] - Options for insertion.
  * @param {string} [options.contentType] - The type of content being inserted: 'html', 'markdown', 'text', or 'schema'.
  * @param {boolean} [options.parseOptions] - Additional options for parsing (if applicable).
+ * @param {((items: Array<{tagName: string, outerHTML: string, count: number}>) => void) | null} [options.onUnsupportedContent] - Callback for unsupported HTML elements. Falls back to editor.options.onUnsupportedContent.
+ * @param {boolean} [options.warnOnUnsupportedContent] - When true, emits console.warn for unsupported content. Falls back to editor.options.warnOnUnsupportedContent.
  * @returns {function} A command function that can be executed by the editor.
  */
 export const insertContent =
@@ -30,10 +32,18 @@ export const insertContent =
           content: value,
           type: options.contentType,
           editor,
+          onUnsupportedContent: options.onUnsupportedContent ?? editor.options?.onUnsupportedContent,
+          warnOnUnsupportedContent: options.warnOnUnsupportedContent ?? editor.options?.warnOnUnsupportedContent,
         });
 
         const jsonContent = processedDoc.toJSON();
-        const ok = commands.insertContentAt({ from: tr.selection.from, to: tr.selection.to }, jsonContent, options);
+        const insertionContent =
+          jsonContent?.type === 'doc' && Array.isArray(jsonContent.content) ? jsonContent.content : jsonContent;
+        const ok = commands.insertContentAt(
+          { from: tr.selection.from, to: tr.selection.to },
+          insertionContent,
+          options,
+        );
 
         // Schedule list migration right after the insert transaction dispatches
         if (ok && (options.contentType === 'html' || options.contentType === 'markdown')) {

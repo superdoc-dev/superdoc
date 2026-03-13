@@ -1,0 +1,186 @@
+---
+title: Types
+keywords: "superdoc react types, typescript superdoc, react editor types, SuperDocRef, SuperDocEditorProps"
+---
+
+`@superdoc-dev/react` includes full TypeScript support.
+
+## TypeScript usage
+
+```tsx
+import { useRef } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import type { SuperDocRef, SuperDocReadyEvent } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+interface EditorProps {
+  document: string | File | Blob;
+  userId: string;
+}
+
+function DocEditor({ document, userId }: EditorProps) {
+  const editorRef = useRef<SuperDocRef>(null);
+
+  const handleReady = ({ superdoc }: SuperDocReadyEvent) => {
+    console.log('SuperDoc ready');
+  };
+
+  const handleExport = async () => {
+    const blob = await editorRef.current?.getInstance()?.export({
+      triggerDownload: true
+    });
+    return blob;
+  };
+
+  return (
+    <SuperDocEditor
+      ref={editorRef}
+      document={document}
+      documentMode="editing"
+      role="editor"
+      user={{
+        name: userId,
+        email: `${userId}@company.com`
+      }}
+      onReady={handleReady}
+    />
+  );
+}
+```
+
+## Exported types
+
+```tsx
+import type {
+  // Component props and ref
+  SuperDocEditorProps,
+  SuperDocRef,
+  CallbackProps,
+
+  // Core types (extracted from superdoc constructor)
+  DocumentMode,
+  UserRole,
+  SuperDocUser,
+  SuperDocModules,
+  SuperDocConfig,
+  SuperDocInstance,
+  Editor,
+
+  // Callback event types
+  SuperDocReadyEvent,
+  SuperDocEditorCreateEvent,
+  SuperDocEditorUpdateEvent,
+  SuperDocContentErrorEvent,
+  SuperDocExceptionEvent,
+} from '@superdoc-dev/react';
+```
+
+| Type | Description |
+|------|-------------|
+| `SuperDocEditorProps` | All props accepted by `<SuperDocEditor>` |
+| `SuperDocRef` | Ref type — use with `useRef<SuperDocRef>` |
+| `CallbackProps` | Callback props interface (`onReady`, `onEditorCreate`, etc.) |
+| `DocumentMode` | `'editing' \| 'viewing' \| 'suggesting'` |
+| `UserRole` | `'editor' \| 'viewer' \| 'suggester'` |
+| `SuperDocUser` | `{ name: string, email: string, image?: string }` |
+| `SuperDocModules` | Module configuration object |
+| `SuperDocConfig` | Full SuperDoc configuration |
+| `SuperDocInstance` | The SuperDoc instance type |
+| `Editor` | ProseMirror editor instance type |
+| `SuperDocReadyEvent` | `{ superdoc: SuperDocInstance }` |
+| `SuperDocEditorCreateEvent` | `{ editor: Editor }` |
+| `SuperDocEditorUpdateEvent` | `{ editor: Editor }` |
+| `SuperDocContentErrorEvent` | `{ error: Error, editor: Editor, documentId: string, file: File }` |
+| `SuperDocExceptionEvent` | `{ error: Error }` |
+
+## Framework integration
+
+### Next.js (App Router)
+
+The wrapper handles SSR automatically. For additional control, use `dynamic` with `ssr: false`:
+
+```jsx
+'use client';
+
+import dynamic from 'next/dynamic';
+
+const SuperDocEditor = dynamic(
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
+  {
+    ssr: false,
+    loading: () => <div>Loading editor...</div>
+  }
+);
+
+export default function EditorPage() {
+  return <SuperDocEditor document="/api/document" />;
+}
+```
+
+### Next.js (Pages Router)
+
+```jsx
+import dynamic from 'next/dynamic';
+
+const SuperDocEditor = dynamic(
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
+  { ssr: false }
+);
+
+export default function EditorPage() {
+  return <SuperDocEditor document="/api/document" />;
+}
+```
+
+### Vite / Create React App
+
+Works out of the box:
+
+```jsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  return <SuperDocEditor document={file} />;
+}
+```
+
+## Troubleshooting
+
+### "document is not defined" (SSR)
+
+The component handles SSR internally, but if you still see errors, use dynamic import:
+
+```jsx
+const SuperDocEditor = dynamic(
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
+  { ssr: false }
+);
+```
+
+### React Strict Mode double-mount
+
+The component handles React 18 Strict Mode correctly. The internal cleanup flag prevents issues from double-invocation during development.
+
+### Document not loading
+
+1. Verify the file is a valid `.docx` document
+2. Check that `document` prop is a `File`, `Blob`, URL string, or config object
+3. Listen for `onContentError` events for parsing errors
+
+### Changing document mode
+
+The component handles `documentMode` prop changes efficiently without rebuilding:
+
+```jsx
+const [mode, setMode] = useState('editing');
+
+<button onClick={() => setMode('viewing')}>View</button>
+<SuperDocEditor documentMode={mode} />
+```
+
+You can also use the imperative API:
+
+```jsx
+editorRef.current?.getInstance()?.setDocumentMode('viewing');
+```

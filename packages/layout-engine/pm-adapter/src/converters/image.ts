@@ -8,7 +8,7 @@ import type { ImageBlock, BoxSpacing, ImageAnchor } from '@superdoc/contracts';
 import type { PMNode, BlockIdGenerator, PositionMap, NodeHandlerContext, TrackedChangesConfig } from '../types.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { shouldHideTrackedNode, annotateBlockWithTrackedChange } from '../tracked-changes.js';
-import { isFiniteNumber, pickNumber } from '../utilities.js';
+import { isFiniteNumber, pickNumber, normalizeZIndex, resolveFloatingZIndex } from '../utilities.js';
 
 // ============================================================================
 // Constants
@@ -257,6 +257,9 @@ export function imageNodeToBlock(
   const explicitObjectFit = typeof attrs.objectFit === 'string' ? (attrs.objectFit as string) : undefined;
   const shouldCover = attrs.shouldCover === true;
   const isAnchor = anchor?.isAnchored ?? (typeof attrs.isAnchor === 'boolean' ? attrs.isAnchor : false);
+  const lum = isPlainObject(attrs.lum) ? attrs.lum : undefined;
+  const lumBright = pickNumber(lum?.bright);
+  const lumContrast = pickNumber(lum?.contrast);
 
   const objectFit: 'contain' | 'cover' | 'fill' | 'scale-down' | undefined = isAllowedObjectFit(explicitObjectFit)
     ? explicitObjectFit
@@ -268,6 +271,15 @@ export function imageNodeToBlock(
           ? 'contain'
           : 'contain';
 
+  // Same z-index as editor: from OOXML relativeHeight (Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE))
+  const zIndexFromRelativeHeight = normalizeZIndex(attrs.originalAttributes as Record<string, unknown> | undefined);
+  const zIndex = resolveFloatingZIndex(anchor?.behindDoc === true, zIndexFromRelativeHeight);
+
+  // Extract rotation/flip transforms from transformData
+  const transformData = isPlainObject(attrs.transformData) ? attrs.transformData : undefined;
+  const rotation = typeof transformData?.rotation === 'number' ? transformData.rotation : undefined;
+  const flipH = typeof transformData?.horizontalFlip === 'boolean' ? transformData.horizontalFlip : undefined;
+  const flipV = typeof transformData?.verticalFlip === 'boolean' ? transformData.verticalFlip : undefined;
   return {
     kind: 'image',
     id: nextBlockId('image'),
@@ -282,11 +294,25 @@ export function imageNodeToBlock(
     margin: toBoxSpacing(attrs.marginOffset as Record<string, unknown> | undefined),
     anchor,
     wrap: normalizedWrap,
+    ...(zIndex !== undefined && { zIndex }),
     attrs: attrsWithPm,
     // VML image adjustments for watermark effects
     gain: typeof attrs.gain === 'string' || typeof attrs.gain === 'number' ? attrs.gain : undefined,
     blacklevel:
       typeof attrs.blacklevel === 'string' || typeof attrs.blacklevel === 'number' ? attrs.blacklevel : undefined,
+    // OOXML image effects (grayscale, etc.)
+    grayscale: typeof attrs.grayscale === 'boolean' ? attrs.grayscale : undefined,
+    lum:
+      lumBright != null || lumContrast != null
+        ? {
+            ...(lumBright != null ? { bright: lumBright } : {}),
+            ...(lumContrast != null ? { contrast: lumContrast } : {}),
+          }
+        : undefined,
+    // Image transformations from OOXML a:xfrm
+    ...(rotation !== undefined && { rotation }),
+    ...(flipH !== undefined && { flipH }),
+    ...(flipV !== undefined && { flipV }),
   };
 }
 

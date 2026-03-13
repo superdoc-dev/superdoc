@@ -5,32 +5,71 @@ on:
     branches: [main]
     paths:
       - 'packages/template-builder/**'
-      # Add more demo paths here as needed
+      - 'packages/esign/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
-  deploy-template-builder-demo:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
+
       - run: pnpm install
+
+      - name: Build superdoc (dependency)
+        run: pnpm run build:superdoc
+
       - name: Build template-builder
         run: pnpm --filter @superdoc-dev/template-builder build
-      - name: Build demo
-        run: pnpm --filter superdoc-template-builder-demo build
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./packages/template-builder/demo/dist
-          cname: template-builder.superdoc.dev
 
-  # Add more demo deploy jobs here as needed
-  # deploy-another-demo:
-  #   runs-on: ubuntu-latest
-  #   steps: ...
+      - name: Build esign
+        run: pnpm --filter @superdoc-dev/esign build
+
+      - name: Build template-builder demo
+        run: pnpm --filter superdoc-template-builder-demo build
+        env:
+          VITE_BASE_PATH: /template-builder/
+
+      - name: Build esign demo
+        run: pnpm --filter superdoc-esign-demo build
+        env:
+          VITE_BASE_PATH: /esign/
+
+      - name: Prepare combined publish directory
+        run: |
+          mkdir -p ./demos-dist
+          cp -r ./packages/template-builder/demo/dist ./demos-dist/template-builder
+          cp -r ./packages/esign/demo/dist ./demos-dist/esign
+          echo '<html><head><meta http-equiv="refresh" content="0; url=/template-builder/"></head></html>' > ./demos-dist/index.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./demos-dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

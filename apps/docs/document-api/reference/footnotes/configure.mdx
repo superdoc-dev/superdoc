@@ -1,0 +1,281 @@
+---
+title: footnotes.configure
+sidebarTitle: footnotes.configure
+description: Configure numbering and placement for footnotes or endnotes.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Configure numbering and placement for footnotes or endnotes.
+
+- Operation ID: `footnotes.configure`
+- API member path: `editor.doc.footnotes.configure(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a FootnoteConfigResult indicating success or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `numbering` | object | no |  |
+| `numbering.format` | enum | no | `"decimal"`, `"lowerRoman"`, `"upperRoman"`, `"lowerLetter"`, `"upperLetter"`, `"symbol"` |
+| `numbering.position` | enum | no | `"pageBottom"`, `"beneathText"`, `"sectionEnd"`, `"documentEnd"` |
+| `numbering.restartPolicy` | enum | no | `"continuous"`, `"eachSection"`, `"eachPage"` |
+| `numbering.start` | integer | no |  |
+| `scope` | object(kind="document") \\| object(kind="section") | yes | One of: object(kind="document"), object(kind="section") |
+| `type` | enum | yes | `"footnote"`, `"endnote"` |
+
+### Example request
+
+```json
+{
+  "numbering": {
+    "format": "decimal",
+    "start": 0
+  },
+  "scope": {
+    "kind": "document"
+  },
+  "type": "footnote"
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "numbering": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "decimal",
+            "lowerRoman",
+            "upperRoman",
+            "lowerLetter",
+            "upperLetter",
+            "symbol"
+          ]
+        },
+        "position": {
+          "enum": [
+            "pageBottom",
+            "beneathText",
+            "sectionEnd",
+            "documentEnd"
+          ]
+        },
+        "restartPolicy": {
+          "enum": [
+            "continuous",
+            "eachSection",
+            "eachPage"
+          ]
+        },
+        "start": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "scope": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "document"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "section"
+            },
+            "sectionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sectionId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "type": {
+      "enum": [
+        "footnote",
+        "endnote"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "scope"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

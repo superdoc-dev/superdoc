@@ -1,9 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('y-prosemirror', () => ({
-  ySyncPlugin: vi.fn(() => 'y-sync-plugin'),
-  prosemirrorToYDoc: vi.fn(),
-}));
+// Mock binding object - we'll configure this in tests
+const mockBinding = {
+  initView: vi.fn(),
+  _forceRerender: vi.fn(),
+  mux: vi.fn((fn) => fn()),
+  _prosemirrorChanged: vi.fn(),
+};
+
+vi.mock('y-prosemirror', () => {
+  const mockSyncPluginKey = {
+    getState: vi.fn(() => ({ binding: mockBinding })),
+  };
+  const mockUndoPluginKey = {
+    getState: vi.fn(() => null),
+  };
+  return {
+    ySyncPlugin: vi.fn(() => 'y-sync-plugin'),
+    ySyncPluginKey: mockSyncPluginKey,
+    yUndoPluginKey: mockUndoPluginKey,
+    prosemirrorToYDoc: vi.fn(),
+  };
+});
 
 vi.mock('yjs', () => ({
   encodeStateAsUpdate: vi.fn(() => new Uint8Array([1, 2, 3])),
@@ -13,25 +31,26 @@ import * as YProsemirror from 'y-prosemirror';
 import * as Yjs from 'yjs';
 
 import * as CollaborationModule from './collaboration.js';
-import * as CollaborationHelpers from './collaboration-helpers.js';
 
 const { Collaboration, CollaborationPluginKey, createSyncPlugin, initializeMetaMap, generateCollaborationData } =
   CollaborationModule;
-const { updateYdocDocxData } = CollaborationHelpers;
 
 const createYMap = (initial = {}) => {
   const store = new Map(Object.entries(initial));
-  let observer;
+  const observers = new Set();
   return {
     set: vi.fn((key, value) => {
       store.set(key, value);
     }),
     get: vi.fn((key) => store.get(key)),
     observe: vi.fn((fn) => {
-      observer = fn;
+      observers.add(fn);
+    }),
+    unobserve: vi.fn((fn) => {
+      observers.delete(fn);
     }),
     _trigger(keys) {
-      observer?.({ changes: { keys } });
+      observers.forEach((observer) => observer({ changes: { keys } }));
     },
     store,
   };
@@ -42,20 +61,18 @@ const createYDocStub = ({ docxValue, hasDocx = true } = {}) => {
   const metas = createYMap(initialMetaEntries);
   if (!hasDocx) metas.store.delete('docx');
   const media = createYMap();
-  const headerFooterJson = createYMap();
   const listeners = {};
   return {
     getXmlFragment: vi.fn(() => ({ fragment: true })),
     getMap: vi.fn((name) => {
       if (name === 'meta') return metas;
-      if (name === 'headerFooterJson') return headerFooterJson;
       return media;
     }),
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
     transact: vi.fn((fn, meta) => fn(meta)),
-    _maps: { metas, media, headerFooterJson },
+    _maps: { metas, media },
     _listeners: listeners,
   };
 };
@@ -66,263 +83,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-describe('collaboration helpers', () => {
-  it('updates docx payloads inside the ydoc meta map', async () => {
-    const ydoc = createYDocStub();
-    const metas = ydoc._maps.metas;
-    metas.store.set('docx', [{ name: 'word/document.xml', content: '<old />' }]);
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new />', 'word/styles.xml': '<styles />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ]);
-    expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), {
-      event: 'docx-update',
-      user: editor.options.user,
-    });
-  });
-
-  it('returns early when neither explicit ydoc nor editor.options.ydoc exist', async () => {
-    const editor = {
-      options: { ydoc: null, user: { id: 'user-1' }, content: [] },
-      exportDocx: vi.fn(),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(editor.exportDocx).not.toHaveBeenCalled();
-  });
-
-  it('normalizes docx arrays via toArray when meta map stores a Y.Array-like structure', async () => {
-    const docxSource = {
-      toArray: vi.fn(() => [{ name: 'word/document.xml', content: '<old />' }]),
-    };
-    const ydoc = createYDocStub({ docxValue: docxSource });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-2' }, content: [] },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<new />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(docxSource.toArray).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ]);
-  });
-
-  it('normalizes docx payloads when meta map stores an iterable collection', async () => {
-    const docxSet = new Set([
-      { name: 'word/document.xml', content: '<old />' },
-      { name: 'word/numbering.xml', content: '<numbers />' },
-    ]);
-    const ydoc = createYDocStub({ docxValue: docxSet });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-3' }, content: [] },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/numbering.xml', content: '<numbers />' },
-      { name: 'word/document.xml', content: '<new />' },
-    ]);
-  });
-
-  it('falls back to editor options content when no docx entry exists in the meta map', async () => {
-    const initialContent = [
-      { name: 'word/document.xml', content: '<initial />' },
-      { name: 'word/footnotes.xml', content: '<foot />' },
-    ];
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-4' }, content: initialContent },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<updated />' }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/footnotes.xml', content: '<foot />' },
-      { name: 'word/document.xml', content: '<updated />' },
-    ]);
-    const originalDocEntry = initialContent.find((entry) => entry.name === 'word/document.xml');
-    expect(originalDocEntry.content).toBe('<initial />');
-  });
-
-  it('prefers the explicit ydoc argument over editor options', async () => {
-    const optionsYdoc = createYDocStub();
-    const explicitYdoc = createYDocStub();
-    explicitYdoc._maps.metas.store.set('docx', [{ name: 'word/document.xml', content: '<old explicit />' }]);
-
-    const editor = {
-      options: { ydoc: optionsYdoc, user: { id: 'user-5' } },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<new explicit />' }),
-    };
-
-    await updateYdocDocxData(editor, explicitYdoc);
-
-    expect(explicitYdoc._maps.metas.set).toHaveBeenCalledWith('docx', [
-      { name: 'word/document.xml', content: '<new explicit />' },
-    ]);
-    expect(optionsYdoc._maps.metas.set).not.toHaveBeenCalled();
-  });
-
-  it('skips transaction when docx content has not changed', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<same />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<same />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
-    expect(ydoc.transact).not.toHaveBeenCalled();
-  });
-
-  it('updates only changed files and triggers transaction', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<old />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<new />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith(
-      'docx',
-      expect.arrayContaining([
-        { name: 'word/styles.xml', content: '<styles />' },
-        { name: 'word/document.xml', content: '<new />' },
-      ]),
-    );
-  });
-
-  it('triggers transaction when new file is added', async () => {
-    const existingDocx = [{ name: 'word/document.xml', content: '<doc />' }];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/numbering.xml': '<numbering />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).toHaveBeenCalled();
-  });
-
-  it('skips transaction when multiple files all remain unchanged', async () => {
-    const existingDocx = [
-      { name: 'word/document.xml', content: '<doc />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-      { name: 'word/numbering.xml', content: '<numbering />' },
-    ];
-    const ydoc = createYDocStub({ docxValue: existingDocx });
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' } },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/styles.xml': '<styles />',
-        'word/numbering.xml': '<numbering />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    expect(ydoc.transact).not.toHaveBeenCalled();
-  });
-
-  it('initializes docx metadata even when exported content matches initial content', async () => {
-    const initialContent = [
-      { name: 'word/document.xml', content: '<doc />' },
-      { name: 'word/styles.xml', content: '<styles />' },
-    ];
-    // No docx entry exists in meta map (hasDocx: false)
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'user-1' }, content: initialContent },
-      // Export returns identical content to initial
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<doc />',
-        'word/styles.xml': '<styles />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    // Transaction should still happen to initialize the docx metadata for collaborators
-    expect(ydoc.transact).toHaveBeenCalled();
-    expect(metas.set).toHaveBeenCalledWith('docx', initialContent);
-  });
-
-  it('initializes docx metadata for new documents with no changes', async () => {
-    const initialContent = [{ name: 'word/document.xml', content: '<empty />' }];
-    const ydoc = createYDocStub({ hasDocx: false });
-    const metas = ydoc._maps.metas;
-
-    const editor = {
-      options: { ydoc, user: { id: 'new-user' }, content: initialContent },
-      exportDocx: vi.fn().mockResolvedValue({
-        'word/document.xml': '<empty />',
-      }),
-    };
-
-    await updateYdocDocxData(editor);
-
-    // Even with no content changes, the metadata must be persisted for collaborators
-    expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), {
-      event: 'docx-update',
-      user: editor.options.user,
-    });
-    expect(metas.set).toHaveBeenCalledWith('docx', initialContent);
-  });
 });
 
 describe('collaboration extension', () => {
@@ -356,7 +116,7 @@ describe('collaboration extension', () => {
       expect.objectContaining({ onFirstRender: expect.any(Function) }),
     );
     expect(provider.on).toHaveBeenCalledWith('synced', expect.any(Function));
-    expect(ydoc.on).toHaveBeenCalledWith('afterTransaction', expect.any(Function));
+    expect(provider.on).toHaveBeenCalledWith('sync', expect.any(Function));
 
     const mediaObserver = ydoc._maps.media.observe.mock.calls[0][0];
     ydoc._maps.media.get.mockReturnValue({ blob: true });
@@ -364,72 +124,29 @@ describe('collaboration extension', () => {
     expect(editor.storage.image.media['word/media/image.png']).toEqual({ blob: true });
   });
 
-  describe('debounced docx sync', () => {
-    const DEBOUNCE_DELAY_MS = 1000;
-
-    const createDebouncedSyncTestContext = () => {
-      const updateSpy = vi.spyOn(CollaborationHelpers, 'updateYdocDocxData').mockResolvedValue();
-      const ydoc = createYDocStub();
-      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
-      const editor = {
-        options: {
-          isHeadless: false,
-          ydoc,
-          collaborationProvider: provider,
-        },
-        storage: { image: { media: {} } },
-        emit: vi.fn(),
-        view: { state: { doc: {} }, dispatch: vi.fn() },
-      };
-      const context = { editor, options: {} };
-      return { updateSpy, ydoc, editor, context };
+  it('emits collaborationReady on sync(true) when provider does not emit synced', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
     };
 
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
 
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    const syncHandlers = provider.on.mock.calls.filter(([event]) => event === 'sync').map(([, handler]) => handler);
+    expect(syncHandlers.length).toBeGreaterThan(0);
 
-    it('debounces updateYdocDocxData for local non-docx transactions', () => {
-      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
-      Collaboration.config.addPmPlugins.call(context);
+    syncHandlers.forEach((handler) => handler(true));
 
-      ydoc._listeners.afterTransaction({
-        local: true,
-        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
-      });
-
-      expect(updateSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(DEBOUNCE_DELAY_MS - 1);
-      expect(updateSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1);
-      expect(updateSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('coalesces rapid transactions into a single update', () => {
-      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
-      Collaboration.config.addPmPlugins.call(context);
-
-      const transaction = {
-        local: true,
-        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
-      };
-
-      ydoc._listeners.afterTransaction(transaction);
-      vi.advanceTimersByTime(400);
-      ydoc._listeners.afterTransaction(transaction);
-
-      vi.advanceTimersByTime(DEBOUNCE_DELAY_MS - 1);
-      expect(updateSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1);
-      expect(updateSpy).toHaveBeenCalledTimes(1);
-    });
+    expect(editor.emit).toHaveBeenCalledWith('collaborationReady', { editor, ydoc });
   });
 
   it('creates sync plugin fragment via helper', () => {
@@ -449,12 +166,25 @@ describe('collaboration extension', () => {
 
     const { onFirstRender } = YProsemirror.ySyncPlugin.mock.calls[0][1];
     onFirstRender();
-    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('docx', editor.options.content);
+    // initializeMetaMap seeds fonts and media into the ydoc maps
+    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('fonts', editor.options.fonts);
+    expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([1]));
   });
 
-  it('initializes meta map with content, fonts, and media', () => {
+  it('initializes meta map with fonts, bootstrap metadata, and media', () => {
     const ydoc = createYDocStub();
     const editor = {
+      state: {
+        doc: {
+          attrs: {
+            bodySectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+            },
+          },
+        },
+      },
       options: {
         content: { 'word/document.xml': '<doc />' },
         fonts: { 'font1.ttf': new Uint8Array([1]) },
@@ -465,9 +195,106 @@ describe('collaboration extension', () => {
     initializeMetaMap(ydoc, editor);
 
     const metaStore = ydoc._maps.metas.store;
-    expect(metaStore.get('docx')).toEqual(editor.options.content);
+    // initializeMetaMap no longer writes 'docx' — parts are seeded via seedPartsFromEditor
     expect(metaStore.get('fonts')).toEqual(editor.options.fonts);
+    expect(metaStore.get('bodySectPr')).toEqual(editor.state.doc.attrs.bodySectPr);
+    expect(metaStore.get('bootstrap')).toEqual(expect.objectContaining({ version: 1, source: 'browser' }));
     expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
+  });
+
+  it('applies bodySectPr from the meta map when the meta entry changes', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const bodySectPr = {
+      type: 'element',
+      name: 'w:sectPr',
+      elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+    };
+    ydoc._maps.metas.store.set('bodySectPr', bodySectPr);
+
+    const tr = {
+      setDocAttribute: vi.fn(() => tr),
+      setMeta: vi.fn(() => tr),
+    };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      state: {
+        doc: {
+          attrs: {
+            attributes: null,
+            bodySectPr: null,
+          },
+        },
+        tr,
+      },
+      dispatch: vi.fn(),
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
+    };
+
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
+
+    ydoc._maps.metas._trigger(new Map([['bodySectPr', {}]]));
+
+    expect(tr.setDocAttribute).toHaveBeenCalledWith('bodySectPr', bodySectPr);
+    expect(tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
+    expect(tr.setMeta).toHaveBeenCalledWith('bodySectPrSync', true);
+    expect(editor.dispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('publishes bodySectPr changes from local transactions into the meta map', () => {
+    const ydoc = createYDocStub();
+    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const bodySectPr = {
+      type: 'element',
+      name: 'w:sectPr',
+      elements: [{ type: 'element', name: 'w:pgSz', attributes: { 'w:orient': 'landscape' } }],
+    };
+    const editor = {
+      options: {
+        isHeadless: false,
+        ydoc,
+        collaborationProvider: provider,
+      },
+      state: {
+        doc: {
+          attrs: {
+            attributes: null,
+            bodySectPr,
+          },
+        },
+      },
+      storage: { image: { media: {} } },
+      emit: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      view: { state: { doc: {} }, dispatch: vi.fn() },
+    };
+
+    const context = { editor, options: {} };
+    Collaboration.config.addPmPlugins.call(context);
+
+    const bodySectPrTransactionHandler = editor.on.mock.calls.find(([event]) => event === 'transaction')?.[1];
+    expect(bodySectPrTransactionHandler).toBeTypeOf('function');
+
+    bodySectPrTransactionHandler({
+      transaction: {
+        before: {
+          attrs: {
+            bodySectPr: null,
+          },
+        },
+        getMeta: vi.fn(() => null),
+      },
+    });
+
+    expect(ydoc._maps.metas.set).toHaveBeenCalledWith('bodySectPr', bodySectPr);
   });
 
   it('generates collaboration data and encodes ydoc update', async () => {
@@ -482,14 +309,12 @@ describe('collaboration extension', () => {
         mediaFiles: {},
         user: { id: 'user' },
       },
-      exportDocx: vi.fn().mockResolvedValue({ 'word/document.xml': '<updated />' }),
     };
 
     const data = await generateCollaborationData(editor);
 
     expect(YProsemirror.prosemirrorToYDoc).toHaveBeenCalledWith(doc, 'supereditor');
     expect(Yjs.encodeStateAsUpdate).toHaveBeenCalledWith(ydoc);
-    expect(editor.exportDocx).toHaveBeenCalled();
     expect(data).toBeInstanceOf(Uint8Array);
   });
 
@@ -656,6 +481,335 @@ describe('collaboration extension', () => {
 
       // Verify the local version was NOT overwritten (since it already exists)
       expect(editor.storage.image.media['word/media/local-image.png']).toBe('base64-local-version');
+    });
+  });
+
+  describe('headless mode Y.js sync', () => {
+    const createHeadlessEditor = (overrides = {}) => {
+      const ydoc = overrides.ydoc ?? createYDocStub();
+      const provider = overrides.collaborationProvider ?? { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: true,
+          ydoc,
+          collaborationProvider: provider,
+          ...overrides.options,
+        },
+        state: overrides.state ?? { doc: { type: 'doc' } },
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        once: vi.fn(),
+        dispatch: overrides.dispatch ?? vi.fn(),
+      };
+      return { editor, ydoc, provider, context: { editor, options: {} } };
+    };
+
+    const getTransactionListener = (editor) => editor.on.mock.calls.find((call) => call[0] === 'transaction')?.[1];
+
+    const getDestroyCleanup = (editor) => editor.once.mock.calls.find((call) => call[0] === 'destroy')?.[1];
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockBinding.initView.mockClear();
+      mockBinding._forceRerender.mockClear();
+      mockBinding.mux.mockClear();
+      mockBinding._prosemirrorChanged.mockClear();
+      YProsemirror.ySyncPluginKey.getState.mockReturnValue({ binding: mockBinding });
+      YProsemirror.yUndoPluginKey.getState.mockReturnValue(null);
+    });
+
+    it('initializes Y.js binding with headless view shim when isHeadless is true', () => {
+      const { context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+      const shimArg = mockBinding.initView.mock.calls[0][0];
+      expect(shimArg).toHaveProperty('state');
+      expect(shimArg).toHaveProperty('dispatch');
+      expect(shimArg).toHaveProperty('hasFocus');
+      expect(shimArg).toHaveProperty('_root');
+      expect(shimArg.hasFocus()).toBe(false);
+    });
+
+    it('does not initialize headless binding when isHeadless is false', () => {
+      const ydoc = createYDocStub();
+      const editorState = { doc: {} };
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const editor = {
+        options: {
+          isHeadless: false,
+          ydoc,
+          collaborationProvider: provider,
+        },
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        view: { state: editorState, dispatch: vi.fn() },
+      };
+
+      const context = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      expect(mockBinding.initView).not.toHaveBeenCalled();
+    });
+
+    it('registers transaction listener in headless mode', () => {
+      const { editor, context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      expect(editor.on).toHaveBeenCalledWith('transaction', expect.any(Function));
+    });
+
+    it('forces an initial rerender to hydrate headless state from Y.js', () => {
+      const { context } = createHeadlessEditor({ state: { doc: { type: 'doc', content: [] } } });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+      expect(mockBinding._forceRerender).toHaveBeenCalledTimes(1);
+    });
+
+    it('registers headless PM->Y sync before onCreate lifecycle runs', () => {
+      const { editor, context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+
+      expect(editor.on).toHaveBeenCalledWith('transaction', expect.any(Function));
+    });
+
+    it('syncs PM changes to Y.js via transaction listener', () => {
+      const editorState = { doc: { type: 'doc', content: [] } };
+      const { editor, context } = createHeadlessEditor({ state: editorState });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListener = getTransactionListener(editor);
+      expect(transactionListener).toBeDefined();
+
+      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue(null) } });
+
+      expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
+    });
+
+    it('wraps headless PM->Y sync in the binding mutex', () => {
+      const editorState = { doc: { type: 'doc', content: [] } };
+      const { editor, context } = createHeadlessEditor({ state: editorState });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListener = getTransactionListener(editor);
+      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue(null) } });
+
+      expect(mockBinding.mux).toHaveBeenCalledTimes(1);
+      expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
+    });
+
+    it('propagates addToHistory=false into Y.js transaction meta for headless sync', () => {
+      const ydoc = createYDocStub();
+      const yjsMetaSet = vi.fn();
+      ydoc.transact = vi.fn((fn) => {
+        fn({ meta: { set: yjsMetaSet } });
+      });
+
+      const editorState = { doc: { type: 'doc', content: [] } };
+      const { editor, context } = createHeadlessEditor({ ydoc, state: editorState });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListener = getTransactionListener(editor);
+      transactionListener({
+        transaction: {
+          getMeta: vi.fn((key) => {
+            if (key === 'addToHistory') return false;
+            return null;
+          }),
+        },
+      });
+
+      expect(ydoc.transact).toHaveBeenCalledWith(expect.any(Function), YProsemirror.ySyncPluginKey);
+      expect(yjsMetaSet).toHaveBeenCalledWith('addToHistory', false);
+      expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
+    });
+
+    it('stops undo capture for headless transactions marked addToHistory=false', () => {
+      const stopCapturing = vi.fn();
+      YProsemirror.yUndoPluginKey.getState.mockReturnValue({
+        undoManager: {
+          stopCapturing,
+        },
+      });
+
+      const { editor, context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListener = getTransactionListener(editor);
+      transactionListener({
+        transaction: {
+          getMeta: vi.fn((key) => {
+            if (key === 'addToHistory') return false;
+            return null;
+          }),
+        },
+      });
+
+      expect(stopCapturing).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips sync for transactions originating from Y.js', () => {
+      const { editor, context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListener = getTransactionListener(editor);
+      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue({ isChangeOrigin: true }) } });
+
+      expect(mockBinding._prosemirrorChanged).not.toHaveBeenCalled();
+    });
+
+    it('handles missing binding gracefully', () => {
+      YProsemirror.ySyncPluginKey.getState.mockReturnValue(null);
+
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { context } = createHeadlessEditor();
+
+      Collaboration.config.addPmPlugins.call(context);
+      expect(() => Collaboration.config.onCreate.call(context)).not.toThrow();
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('no sync state or binding found'));
+      consoleSpy.mockRestore();
+    });
+
+    it('headless shim state getter returns current editor state', () => {
+      const initialState = { doc: { type: 'doc', content: 'initial' } };
+      const updatedState = { doc: { type: 'doc', content: 'updated' } };
+      const { editor, context } = createHeadlessEditor({ state: initialState });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const shimArg = mockBinding.initView.mock.calls[0][0];
+      expect(shimArg.state).toBe(initialState);
+
+      editor.state = updatedState;
+      expect(shimArg.state).toBe(updatedState);
+    });
+
+    it('headless shim dispatch calls editor.dispatch', () => {
+      const dispatchMock = vi.fn();
+      const { context } = createHeadlessEditor({ dispatch: dispatchMock });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const shimArg = mockBinding.initView.mock.calls[0][0];
+      const mockTr = { steps: [] };
+      shimArg.dispatch(mockTr);
+
+      expect(dispatchMock).toHaveBeenCalledWith(mockTr);
+    });
+
+    it('cleans up transaction listener on editor destroy', () => {
+      const { editor, context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      expect(editor.once).toHaveBeenCalledWith('destroy', expect.any(Function));
+
+      const cleanupFn = getDestroyCleanup(editor);
+      expect(cleanupFn).toBeDefined();
+
+      const transactionHandler = getTransactionListener(editor);
+      expect(transactionHandler).toBeDefined();
+
+      cleanupFn();
+
+      expect(editor.off).toHaveBeenCalledWith('transaction', transactionHandler);
+    });
+
+    it('does not register duplicate headless listeners when onCreate runs after addPmPlugins', () => {
+      const { editor, context } = createHeadlessEditor();
+
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      const transactionListenerRegistrations = editor.on.mock.calls.filter(([event]) => event === 'transaction');
+      const destroyCleanupRegistrations = editor.once.mock.calls.filter(([event]) => event === 'destroy');
+
+      expect(transactionListenerRegistrations).toHaveLength(1);
+      expect(destroyCleanupRegistrations).toHaveLength(1);
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-initializes binding when sync plugin binding changes between transactions', () => {
+      const { editor, context } = createHeadlessEditor({ state: { doc: { type: 'doc', content: [] } } });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+
+      // Simulate a new binding (e.g. after ydoc reconnect)
+      const newBinding = {
+        initView: vi.fn(),
+        _forceRerender: vi.fn(),
+        mux: vi.fn((fn) => fn()),
+        _prosemirrorChanged: vi.fn(),
+      };
+      YProsemirror.ySyncPluginKey.getState.mockReturnValue({ binding: newBinding });
+
+      const transactionListener = getTransactionListener(editor);
+      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue(null) } });
+
+      // New binding should have been initialized
+      expect(newBinding.initView).toHaveBeenCalledTimes(1);
+      expect(newBinding._forceRerender).toHaveBeenCalledTimes(1);
+      expect(newBinding._prosemirrorChanged).toHaveBeenCalledWith(editor.state.doc);
+    });
+
+    it('cleanup allows fresh binding state on subsequent initHeadlessBinding calls', () => {
+      const { editor, context } = createHeadlessEditor();
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+
+      // Trigger cleanup (simulates editor destroy)
+      const cleanupFn = getDestroyCleanup(editor);
+      cleanupFn();
+
+      // Reset mocks and re-initialize for a fresh editor lifecycle
+      mockBinding.initView.mockClear();
+      mockBinding._forceRerender.mockClear();
+
+      // A second addPmPlugins + onCreate cycle should create a fresh binding
+      const context2 = { editor, options: {} };
+      Collaboration.config.addPmPlugins.call(context2);
+      Collaboration.config.onCreate.call(context2);
+
+      expect(mockBinding.initView).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls initializeMetaMap for new files in headless mode', () => {
+      const ydoc = createYDocStub();
+      const { context } = createHeadlessEditor({
+        ydoc,
+        options: {
+          isNewFile: true,
+          content: { 'word/document.xml': '<doc />' },
+          fonts: { 'font1.ttf': new Uint8Array([1]) },
+          mediaFiles: { 'word/media/img.png': new Uint8Array([5]) },
+        },
+      });
+      Collaboration.config.addPmPlugins.call(context);
+      Collaboration.config.onCreate.call(context);
+
+      // initializeMetaMap seeds fonts, bootstrap metadata, and media
+      const metaStore = ydoc._maps.metas.store;
+      expect(metaStore.get('fonts')).toEqual({ 'font1.ttf': new Uint8Array([1]) });
+      expect(metaStore.get('bootstrap')).toEqual(expect.objectContaining({ version: 1, source: 'browser' }));
+      expect(ydoc._maps.media.set).toHaveBeenCalledWith('word/media/img.png', new Uint8Array([5]));
     });
   });
 });

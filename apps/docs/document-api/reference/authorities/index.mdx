@@ -1,0 +1,28 @@
+---
+title: Table of Authorities operations
+sidebarTitle: Table of Authorities
+description: Table of Authorities operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Table of authorities lifecycle and TA entry operations.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/list"><code>authorities.list</code></a></span> | `authorities.list` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/get"><code>authorities.get</code></a></span> | `authorities.get` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/insert"><code>authorities.insert</code></a></span> | `authorities.insert` | Yes | `non-idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/configure"><code>authorities.configure</code></a></span> | `authorities.configure` | Yes | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/rebuild"><code>authorities.rebuild</code></a></span> | `authorities.rebuild` | Yes | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/remove"><code>authorities.remove</code></a></span> | `authorities.remove` | Yes | `non-idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-list"><code>authorities.entries.list</code></a></span> | `authorities.entries.list` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-get"><code>authorities.entries.get</code></a></span> | `authorities.entries.get` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-insert"><code>authorities.entries.insert</code></a></span> | `authorities.entries.insert` | Yes | `non-idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-update"><code>authorities.entries.update</code></a></span> | `authorities.entries.update` | Yes | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/authorities/entries-remove"><code>authorities.entries.remove</code></a></span> | `authorities.entries.remove` | Yes | `non-idempotent` | No | No |
+

@@ -1,0 +1,681 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { Editor } from '../core/Editor.js';
+import { INLINE_PROPERTY_REGISTRY, OPERATION_IDS, PUBLIC_MUTATION_STEP_OP_IDS } from '@superdoc/document-api';
+import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
+import { getDocumentApiCapabilities } from './capabilities-adapter.js';
+
+function makeEditor(overrides: Partial<Editor> = {}): Editor {
+  const defaultCommands = {
+    insertParagraphAt: vi.fn(() => true),
+    insertHeadingAt: vi.fn(() => true),
+    insertListItemAt: vi.fn(() => true),
+    setTextSelection: vi.fn(() => true),
+    addComment: vi.fn(() => true),
+    editComment: vi.fn(() => true),
+    addCommentReply: vi.fn(() => true),
+    moveComment: vi.fn(() => true),
+    resolveComment: vi.fn(() => true),
+    removeComment: vi.fn(() => true),
+    setCommentInternal: vi.fn(() => true),
+    setActiveComment: vi.fn(() => true),
+    setCursorById: vi.fn(() => true),
+    insertTrackedChange: vi.fn(() => true),
+    acceptTrackedChangeById: vi.fn(() => true),
+    rejectTrackedChangeById: vi.fn(() => true),
+    acceptAllTrackedChanges: vi.fn(() => true),
+    rejectAllTrackedChanges: vi.fn(() => true),
+  };
+
+  const defaultMarks = {
+    bold: {
+      create: vi.fn(() => ({ type: 'bold' })),
+    },
+    [TrackFormatMarkName]: {
+      create: vi.fn(() => ({ type: TrackFormatMarkName })),
+    },
+  };
+
+  const overrideCommands = (overrides.commands ?? {}) as Partial<Editor['commands']>;
+
+  const commands = {
+    ...defaultCommands,
+    ...overrideCommands,
+  };
+
+  // When the caller explicitly passes `schema: undefined`, respect that instead
+  // of constructing a default schema with marks.
+  const explicitUndefinedSchema = 'schema' in overrides && overrides.schema === undefined;
+  const overrideSchema = (overrides.schema ?? {}) as Partial<Editor['schema']>;
+  const overrideMarks = (overrideSchema.marks ?? {}) as Record<string, unknown>;
+
+  const schema = explicitUndefinedSchema
+    ? undefined
+    : {
+        ...overrideSchema,
+        marks: {
+          ...defaultMarks,
+          ...overrideMarks,
+        },
+      };
+
+  const defaultOptions = {
+    user: { name: 'Test User', email: 'test@example.com' },
+  };
+
+  return {
+    options: defaultOptions,
+    ...overrides,
+    commands,
+    schema,
+  } as unknown as Editor;
+}
+
+describe('getDocumentApiCapabilities', () => {
+  it('returns deterministic per-operation coverage for the full operation inventory', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const operationKeys = Object.keys(capabilities.operations).sort();
+    expect(operationKeys).toEqual([...OPERATION_IDS].sort());
+  });
+
+  it('reports planEngine step-op support from the canonical mutation step catalog', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    expect(capabilities.planEngine.supportedStepOps).toEqual(PUBLIC_MUTATION_STEP_OP_IDS);
+    expect(capabilities.planEngine.supportedStepOps).not.toContain('domain.command');
+  });
+
+  it('marks namespaces as unavailable when required commands are missing', () => {
+    const editor = makeEditor({
+      commands: {
+        addComment: undefined,
+        insertListItemAt: undefined,
+        insertTrackedChange: undefined,
+      } as unknown as Editor['commands'],
+      schema: {
+        marks: {
+          bold: undefined,
+          [TrackFormatMarkName]: {},
+        },
+      } as unknown as Editor['schema'],
+    });
+
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.global.comments.enabled).toBe(false);
+    expect(capabilities.global.lists.enabled).toBe(false);
+    expect(capabilities.global.trackChanges.enabled).toBe(false);
+    expect(capabilities.global.history.enabled).toBe(false);
+    expect(capabilities.operations['comments.create'].available).toBe(false);
+    expect(capabilities.operations['lists.insert'].available).toBe(false);
+    expect(capabilities.operations.insert.tracked).toBe(false);
+    expect(capabilities.operations['format.apply'].available).toBe(false);
+  });
+
+  it('reports history namespace enabled only when undo/redo commands are both present', () => {
+    const fullCapabilities = getDocumentApiCapabilities(
+      makeEditor({
+        commands: {
+          undo: vi.fn(() => true),
+          redo: vi.fn(() => true),
+        } as unknown as Editor['commands'],
+      }),
+    );
+    expect(fullCapabilities.global.history.enabled).toBe(true);
+
+    const missingRedoCapabilities = getDocumentApiCapabilities(
+      makeEditor({
+        commands: {
+          redo: undefined,
+        } as unknown as Editor['commands'],
+      }),
+    );
+    expect(missingRedoCapabilities.global.history.enabled).toBe(false);
+  });
+
+  it('exposes tracked + dryRun flags in line with command catalog capabilities', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+
+    expect(capabilities.operations.insert.tracked).toBe(true);
+    expect(capabilities.operations.insert.dryRun).toBe(true);
+    expect(capabilities.operations['lists.create'].tracked).toBe(false);
+    expect(capabilities.operations['lists.create'].dryRun).toBe(true);
+    expect(capabilities.operations['trackChanges.decide'].dryRun).toBe(false);
+    expect(capabilities.operations['create.paragraph'].dryRun).toBe(true);
+    expect(capabilities.operations['create.heading'].available).toBe(true);
+    expect(capabilities.operations['create.heading'].tracked).toBe(true);
+    expect(capabilities.operations['create.heading'].dryRun).toBe(true);
+  });
+
+  it('advertises dryRun for list mutators that implement dry-run behavior', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const listMutations = [
+      'lists.insert',
+      'lists.indent',
+      'lists.outdent',
+      'lists.create',
+      'lists.attach',
+      'lists.detach',
+      'lists.join',
+      'lists.separate',
+      'lists.setLevel',
+      'lists.setValue',
+      'lists.continuePrevious',
+      'lists.setLevelRestart',
+      'lists.convertToText',
+    ] as const;
+
+    for (const operationId of listMutations) {
+      expect(capabilities.operations[operationId].dryRun, `${operationId} should advertise dryRun support`).toBe(true);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // SD-1973 list formatting operations
+  // ---------------------------------------------------------------------------
+
+  it('advertises dryRun for SD-1973 list formatting mutators', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    // setLevelPictureBullet excluded — requires numbering XML helper (tested separately)
+    const formattingOps = [
+      'lists.applyTemplate',
+      'lists.applyPreset',
+      'lists.setLevelNumbering',
+      'lists.setLevelBullet',
+      'lists.setLevelAlignment',
+      'lists.setLevelIndents',
+      'lists.setLevelTrailingCharacter',
+      'lists.setLevelMarkerFont',
+      'lists.clearLevelOverrides',
+    ] as const;
+
+    for (const operationId of formattingOps) {
+      expect(capabilities.operations[operationId].available, `${operationId} should be available`).toBe(true);
+      expect(capabilities.operations[operationId].dryRun, `${operationId} should advertise dryRun`).toBe(true);
+    }
+  });
+
+  it('marks lists.captureTemplate as available (read-only, no dryRun)', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    expect(capabilities.operations['lists.captureTemplate'].available).toBe(true);
+    // captureTemplate is read-only — dryRun depends on catalog metadata
+  });
+
+  it('marks lists.setLevelPictureBullet as unavailable when numbering XML is missing', () => {
+    // Default editor has no converter → no numbering XML
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    expect(capabilities.operations['lists.setLevelPictureBullet'].available).toBe(false);
+    expect(capabilities.operations['lists.setLevelPictureBullet'].reasons).toContain('HELPER_UNAVAILABLE');
+    expect(capabilities.operations['lists.setLevelPictureBullet'].reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('marks lists.setLevelPictureBullet as available when numbering XML is present', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: { 'word/numbering.xml': { name: 'root', elements: [] } },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['lists.setLevelPictureBullet'].available).toBe(true);
+    expect(capabilities.operations['lists.setLevelPictureBullet'].reasons).toBeUndefined();
+  });
+
+  it('keeps global lists namespace enabled with all SD-1973 operations registered', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    // lists.setLevelPictureBullet is unavailable (no converter) but the namespace
+    // check only looks at command availability — the helper predicate does not affect it.
+    // However, since setLevelPictureBullet has an empty command array, hasAllCommands
+    // returns true. The namespace check uses hasAllCommands, so it stays enabled.
+    expect(capabilities.global.lists.enabled).toBe(true);
+  });
+
+  it('reports tracked mode unavailable when no editor user is configured', () => {
+    const capabilities = getDocumentApiCapabilities(
+      makeEditor({
+        options: { user: null } as unknown as Editor['options'],
+      }),
+    );
+
+    expect(capabilities.operations.insert.available).toBe(true);
+    expect(capabilities.operations.insert.tracked).toBe(false);
+    expect(capabilities.operations.insert.reasons).toContain('TRACKED_MODE_UNAVAILABLE');
+    expect(capabilities.operations['create.paragraph'].tracked).toBe(false);
+    expect(capabilities.operations['create.paragraph'].reasons).toContain('TRACKED_MODE_UNAVAILABLE');
+    expect(capabilities.operations['create.heading'].tracked).toBe(false);
+    expect(capabilities.operations['create.heading'].reasons).toContain('TRACKED_MODE_UNAVAILABLE');
+  });
+
+  it('never reports tracked=true when the operation is unavailable', () => {
+    const capabilities = getDocumentApiCapabilities(
+      makeEditor({
+        commands: {
+          insertTrackedChange: vi.fn(() => true),
+          insertParagraphAt: undefined,
+        } as unknown as Editor['commands'],
+      }),
+    );
+
+    expect(capabilities.operations['create.paragraph'].available).toBe(false);
+    expect(capabilities.operations['create.paragraph'].tracked).toBe(false);
+  });
+
+  it('marks create.heading as unavailable when insertHeadingAt command is missing', () => {
+    const capabilities = getDocumentApiCapabilities(
+      makeEditor({
+        commands: {
+          insertHeadingAt: undefined,
+        } as unknown as Editor['commands'],
+      }),
+    );
+
+    expect(capabilities.operations['create.heading'].available).toBe(false);
+    expect(capabilities.operations['create.heading'].tracked).toBe(false);
+    expect(capabilities.operations['create.heading'].reasons).toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('does not emit unavailable reasons for modes that are unsupported by design', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const createReasons = capabilities.operations['lists.create'].reasons ?? [];
+    const trackChangesDecideReasons = capabilities.operations['trackChanges.decide'].reasons ?? [];
+
+    expect(createReasons).not.toContain('TRACKED_MODE_UNAVAILABLE');
+    expect(createReasons).not.toContain('DRY_RUN_UNAVAILABLE');
+    expect(trackChangesDecideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
+  });
+
+  it('handles an editor with undefined schema gracefully', () => {
+    const editor = makeEditor({
+      schema: undefined as unknown as Editor['schema'],
+    });
+
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.operations['format.apply'].available).toBe(false);
+    // insert.tracked remains true because the default insertTrackedChange command
+    // is still present — tracked mode for insert depends on commands, not schema.
+    expect(capabilities.operations.insert.tracked).toBe(true);
+    // Smoke-test: every operation has a defined entry
+    for (const id of OPERATION_IDS) {
+      expect(capabilities.operations[id]).toBeDefined();
+    }
+  });
+
+  it('marks blocks.delete as unavailable when blockNode helper is missing', () => {
+    const editor = makeEditor({
+      commands: {
+        deleteBlockNodeById: vi.fn(() => true),
+      } as unknown as Editor['commands'],
+    });
+    // editor has the command but no helpers.blockNode.getBlockNodeById
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.operations['blocks.delete'].available).toBe(false);
+    expect(capabilities.operations['blocks.delete'].dryRun).toBe(false);
+    expect(capabilities.operations['blocks.delete'].reasons).toContain('HELPER_UNAVAILABLE');
+    expect(capabilities.operations['blocks.delete'].reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('marks blocks.delete as available when both command and helper are present', () => {
+    const editor = makeEditor({
+      commands: {
+        deleteBlockNodeById: vi.fn(() => true),
+      } as unknown as Editor['commands'],
+    });
+    // Add the required helper
+    (editor as any).helpers = {
+      blockNode: { getBlockNodeById: vi.fn(() => []) },
+    };
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.operations['blocks.delete'].available).toBe(true);
+    expect(capabilities.operations['blocks.delete'].dryRun).toBe(true);
+    expect(capabilities.operations['blocks.delete'].tracked).toBe(false);
+  });
+
+  it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for non-command-backed availability failures', () => {
+    const capabilities = getDocumentApiCapabilities(
+      makeEditor({
+        schema: {
+          marks: {
+            bold: undefined,
+            [TrackFormatMarkName]: {},
+          },
+        } as unknown as Editor['schema'],
+      }),
+    );
+
+    const styleReasons = capabilities.operations['format.apply'].reasons ?? [];
+    expect(styleReasons).toContain('OPERATION_UNAVAILABLE');
+    expect(styleReasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  // ---------------------------------------------------------------------------
+  // format.apply / format.<inlineKey> capability reporting
+  // ---------------------------------------------------------------------------
+
+  describe('format capabilities', () => {
+    function makeFormatEditor(
+      overrides: {
+        commands?: Record<string, unknown>;
+        marks?: Record<string, unknown>;
+        nodes?: Record<string, unknown>;
+      } = {},
+    ) {
+      return makeEditor({
+        commands: {
+          ...overrides.commands,
+        } as unknown as Editor['commands'],
+        schema: {
+          marks: {
+            bold: { create: vi.fn(() => ({ type: 'bold' })) },
+            italic: { create: vi.fn(() => ({ type: 'italic' })) },
+            underline: { create: vi.fn(() => ({ type: 'underline' })) },
+            strike: { create: vi.fn(() => ({ type: 'strike' })) },
+            highlight: { create: vi.fn(() => ({ type: 'highlight' })) },
+            textStyle: { create: vi.fn(() => ({ type: 'textStyle' })) },
+            [TrackFormatMarkName]: { create: vi.fn(() => ({ type: TrackFormatMarkName })) },
+            ...overrides.marks,
+          },
+          nodes: {
+            run: { name: 'run' },
+            ...overrides.nodes,
+          },
+        } as unknown as Editor['schema'],
+      });
+    }
+
+    it('reports format.apply as available when at least one inline property is supported', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { bold: undefined } }));
+      expect(capabilities.operations['format.apply'].available).toBe(true);
+    });
+
+    it('reports a capability entry for every inline property registry key', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      const propertyKeys = Object.keys(capabilities.format.supportedInlineProperties).sort();
+      const registryKeys = INLINE_PROPERTY_REGISTRY.map((entry) => entry.key).sort();
+      expect(propertyKeys).toEqual(registryKeys);
+    });
+
+    it('reports textStyle-backed properties as unavailable when textStyle mark is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { textStyle: undefined } }));
+      expect(capabilities.format.supportedInlineProperties.fontSize.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.color.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.bold.available).toBe(true);
+    });
+
+    it('reports run-attribute properties as unavailable when the run node is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ nodes: { run: undefined } }));
+      expect(capabilities.format.supportedInlineProperties.rFonts.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.lang.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.bold.available).toBe(true);
+    });
+
+    it('reports tracked support only for tracked inline properties', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      expect(capabilities.format.supportedInlineProperties.bold.tracked).toBe(true);
+      expect(capabilities.format.supportedInlineProperties.rFonts.tracked).toBe(false);
+    });
+
+    it('reports format.apply tracked=false when only non-tracked (run-attribute) properties are available', () => {
+      // Editor has: run node, TrackFormatMarkName, insertTrackedChange, user
+      // But NO mark-backed inline properties (bold, italic, etc.) — only run-attribute ones
+      const capabilities = getDocumentApiCapabilities(
+        makeFormatEditor({
+          marks: {
+            bold: undefined,
+            italic: undefined,
+            underline: undefined,
+            strike: undefined,
+            highlight: undefined,
+            textStyle: undefined,
+          },
+        }),
+      );
+      // format.apply is available because run-attribute properties exist
+      expect(capabilities.operations['format.apply'].available).toBe(true);
+      // But tracked should be false — no tracked property is available
+      expect(capabilities.operations['format.apply'].tracked).toBe(false);
+    });
+
+    // -----------------------------------------------------------------------
+    // format.<inlineKey> operation-level capability parity
+    // -----------------------------------------------------------------------
+
+    it('reports operations["format.bold"] as unavailable when bold mark is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { bold: undefined } }));
+      expect(capabilities.operations['format.bold'].available).toBe(false);
+      expect(capabilities.operations['format.bold'].reasons).toContain('OPERATION_UNAVAILABLE');
+      expect(capabilities.operations['format.bold'].reasons).not.toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('reports operations["format.color"] tracked=false when TrackFormatMarkName is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeFormatEditor({ marks: { [TrackFormatMarkName]: undefined } }),
+      );
+      // color is textStyle-backed → still available
+      expect(capabilities.operations['format.color'].available).toBe(true);
+      expect(capabilities.operations['format.color'].tracked).toBe(false);
+    });
+
+    it('reports operations["format.rFonts"] as unavailable when run node is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ nodes: { run: undefined } }));
+      expect(capabilities.operations['format.rFonts'].available).toBe(false);
+      expect(capabilities.operations['format.rFonts'].reasons).toContain('OPERATION_UNAVAILABLE');
+    });
+
+    it('reports operations["format.rFonts"] tracked=false because run-attribute properties are not tracked', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      expect(capabilities.operations['format.rFonts'].available).toBe(true);
+      expect(capabilities.operations['format.rFonts'].tracked).toBe(false);
+    });
+
+    it('ensures every format.<inlineKey> operation matches its supportedInlineProperties entry', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      for (const entry of INLINE_PROPERTY_REGISTRY) {
+        const operationId = `format.${entry.key}` as `format.${typeof entry.key}`;
+        const operation = capabilities.operations[operationId];
+        const property = capabilities.format.supportedInlineProperties[entry.key];
+        expect(operation.available, `${operationId} available mismatch`).toBe(property.available);
+        expect(operation.tracked, `${operationId} tracked mismatch`).toBe(property.tracked);
+      }
+    });
+
+    it('ensures parity holds when marks/nodes are partially missing', () => {
+      // Remove textStyle (affects color, fontSize, etc.) and run node (affects rFonts, lang, etc.)
+      const capabilities = getDocumentApiCapabilities(
+        makeFormatEditor({ marks: { textStyle: undefined }, nodes: { run: undefined } }),
+      );
+      for (const entry of INLINE_PROPERTY_REGISTRY) {
+        const operationId = `format.${entry.key}` as `format.${typeof entry.key}`;
+        const operation = capabilities.operations[operationId];
+        const property = capabilities.format.supportedInlineProperties[entry.key];
+        expect(operation.available, `${operationId} available mismatch`).toBe(property.available);
+        expect(operation.tracked, `${operationId} tracked mismatch`).toBe(property.tracked);
+      }
+    });
+  });
+
+  // --- TOC capability tests ---
+
+  describe('TOC operations', () => {
+    function makeTocEditor(overrides: { commands?: Record<string, unknown> } = {}) {
+      return makeEditor({
+        commands: {
+          insertTableOfContentsAt: vi.fn(() => true),
+          setTableOfContentsInstructionById: vi.fn(() => true),
+          replaceTableOfContentsContentById: vi.fn(() => true),
+          deleteTableOfContentsById: vi.fn(() => true),
+          ...overrides.commands,
+        } as unknown as Editor['commands'],
+      });
+    }
+
+    it('marks TOC operations as available when all required commands are present', () => {
+      const capabilities = getDocumentApiCapabilities(makeTocEditor());
+
+      expect(capabilities.operations['create.tableOfContents'].available).toBe(true);
+      expect(capabilities.operations['toc.configure'].available).toBe(true);
+      expect(capabilities.operations['toc.update'].available).toBe(true);
+      expect(capabilities.operations['toc.remove'].available).toBe(true);
+    });
+
+    it('marks create.tableOfContents as unavailable when insertTableOfContentsAt is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { insertTableOfContentsAt: undefined } }),
+      );
+
+      expect(capabilities.operations['create.tableOfContents'].available).toBe(false);
+      expect(capabilities.operations['create.tableOfContents'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('marks toc.configure as unavailable when setTableOfContentsInstructionById is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { setTableOfContentsInstructionById: undefined } }),
+      );
+
+      expect(capabilities.operations['toc.configure'].available).toBe(false);
+      expect(capabilities.operations['toc.configure'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('marks toc.update as unavailable when replaceTableOfContentsContentById is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { replaceTableOfContentsContentById: undefined } }),
+      );
+
+      expect(capabilities.operations['toc.update'].available).toBe(false);
+      expect(capabilities.operations['toc.update'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('marks toc.remove as unavailable when deleteTableOfContentsById is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { deleteTableOfContentsById: undefined } }),
+      );
+
+      expect(capabilities.operations['toc.remove'].available).toBe(false);
+      expect(capabilities.operations['toc.remove'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('reports dryRun support for TOC mutation operations', () => {
+      const capabilities = getDocumentApiCapabilities(makeTocEditor());
+
+      expect(capabilities.operations['create.tableOfContents'].dryRun).toBe(true);
+      expect(capabilities.operations['toc.configure'].dryRun).toBe(true);
+      expect(capabilities.operations['toc.update'].dryRun).toBe(true);
+      expect(capabilities.operations['toc.remove'].dryRun).toBe(true);
+    });
+  });
+
+  // --- styles.apply capability tests ---
+
+  it('marks styles.apply as available when converter has a valid styles part', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:styles', elements: [] }] },
+      },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['styles.apply'].available).toBe(true);
+    expect(capabilities.operations['styles.apply'].dryRun).toBe(true);
+    expect(capabilities.operations['styles.apply'].reasons).toBeUndefined();
+  });
+
+  it('marks styles.apply unavailable with OPERATION_UNAVAILABLE when converter is missing', () => {
+    const editor = makeEditor();
+    // No converter set on editor — default case
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('reports STYLES_PART_MISSING when converter exists but word/styles.xml is absent', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {},
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('STYLES_PART_MISSING');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('reports STYLES_PART_MISSING when styles part has no w:styles root', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:other' }] },
+      },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('STYLES_PART_MISSING');
+  });
+
+  it('keeps styles.apply available when collaboration provider is synced', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:styles', elements: [] }] },
+      },
+    };
+    (editor as unknown as { options: Record<string, unknown> }).options.collaborationProvider = { synced: true };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['styles.apply'].available).toBe(true);
+    expect(capabilities.operations['styles.apply'].dryRun).toBe(true);
+    expect(capabilities.operations['styles.apply'].reasons).toBeUndefined();
+  });
+
+  it('styles.apply never reports COMMAND_UNAVAILABLE', () => {
+    const editor = makeEditor();
+    // No converter → unavailable, but should not use COMMAND_UNAVAILABLE
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('marks sections.setOddEvenHeadersFooters as unavailable when converter is missing', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const reasons = capabilities.operations['sections.setOddEvenHeadersFooters'].reasons ?? [];
+
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].available).toBe(false);
+    expect(reasons).toContain('HELPER_UNAVAILABLE');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('marks sections.setOddEvenHeadersFooters as available when converter is present', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = { convertedXml: {} };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].available).toBe(true);
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].dryRun).toBe(true);
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].tracked).toBe(false);
+  });
+
+  it('marks sections.setHeaderFooterRef as unavailable when converter is missing', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const reasons = capabilities.operations['sections.setHeaderFooterRef'].reasons ?? [];
+
+    expect(capabilities.operations['sections.setHeaderFooterRef'].available).toBe(false);
+    expect(reasons).toContain('HELPER_UNAVAILABLE');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('marks sections.setHeaderFooterRef as available when converter is present', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = { convertedXml: {} };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['sections.setHeaderFooterRef'].available).toBe(true);
+    expect(capabilities.operations['sections.setHeaderFooterRef'].dryRun).toBe(true);
+    expect(capabilities.operations['sections.setHeaderFooterRef'].tracked).toBe(false);
+  });
+});

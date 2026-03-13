@@ -82,6 +82,7 @@ describe('handleGoogleDocsHtml', () => {
     expect(generateNewListDefinitionMock).toHaveBeenCalledTimes(2);
 
     const parsedNode = parseSpy.mock.calls[0][0];
+    expect(parsedNode.dataset.superdocImport).toBe('true');
     const paragraphs = Array.from(parsedNode.querySelectorAll('p[data-num-id]'));
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs[0].getAttribute('data-num-id')).toBe('410');

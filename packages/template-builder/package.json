@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/template-builder",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "React template builder component for SuperDoc",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,10 +11,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
-    }
+    },
+    "./field-types.css": "./src/styles/field-types.css"
   },
   "files": [
     "dist",
+    "src/styles",
     "README.md"
   ],
   "scripts": {

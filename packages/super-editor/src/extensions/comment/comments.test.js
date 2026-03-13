@@ -115,7 +115,9 @@ describe('comment helpers', () => {
 
     const positions = getCommentPositionsById('comment-123', state.doc);
 
-    expect(positions).toEqual([{ from: 1, to: 6 }]);
+    expect(positions).toEqual([expect.objectContaining({ from: 1, to: 6 })]);
+    expect(positions[0].mark).toBeDefined();
+    expect(positions[0].mark.type.name).toBe(CommentMarkName);
   });
 
   it('removes comments by id and dispatches transaction', () => {
@@ -127,7 +129,11 @@ describe('comment helpers', () => {
 
     removeCommentsById({ commentId: 'comment-123', state, tr, dispatch });
 
-    expect(removeSpy).toHaveBeenCalledWith(1, 6, schema.marks[CommentMarkName]);
+    expect(removeSpy).toHaveBeenCalledWith(
+      1,
+      6,
+      expect.objectContaining({ type: expect.objectContaining({ name: CommentMarkName }) }),
+    );
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
 
@@ -322,15 +328,11 @@ describe('comment helpers', () => {
       after: [{ type: 'italic' }, { type: 'textStyle', attrs: { fontSize: '14px', color: '#222' } }],
     });
 
-    expect(message).toContain('Removed formatting: bold');
-    expect(message).toContain('Added formatting: italic');
-    expect(message).toContain('Modified text style');
-    expect(message).toContain('Changed font size from 12px to 14px');
-    expect(message).toContain('Changed color');
+    expect(message).toBe('italic, removed bold, font size 14px, color');
   });
 
   it('returns default message when no formatting changes', () => {
-    expect(translateFormatChangesToEnglish()).toBe('No formatting changes.');
+    expect(translateFormatChangesToEnglish()).toBe('formatting');
   });
 
   it('computes highlight color from plugin state', () => {
@@ -842,9 +844,11 @@ describe('comments plugin commands', () => {
 });
 
 describe('comments plugin pm plugin', () => {
-  it('skips plugin creation when editor is headless', () => {
-    const result = CommentsPlugin.config.addPmPlugins.call({ editor: { options: { isHeadless: true } } });
-    expect(result).toEqual([]);
+  it('creates state-only plugin in headless mode (no props or view)', () => {
+    const result = CommentsPlugin.config.addPmPlugins.call({ editor: { options: { isHeadless: true, comments: {} } } });
+    expect(result).toHaveLength(1);
+    expect(result[0].spec.props).toBeUndefined();
+    expect(result[0].spec.view).toBeUndefined();
   });
 
   it('initialises state with default values', () => {

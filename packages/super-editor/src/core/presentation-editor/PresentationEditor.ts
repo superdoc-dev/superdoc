@@ -1,7 +1,9 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
+import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
+import { DecorationBridge } from './dom/DecorationBridge.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
-import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
@@ -15,8 +17,12 @@ import {
 import {
   convertPageLocalToOverlayCoords as convertPageLocalToOverlayCoordsFromTransform,
   getPageOffsetX as getPageOffsetXFromTransform,
+  getPageOffsetY as getPageOffsetYFromTransform,
 } from './dom/CoordinateTransform.js';
-import { normalizeClientPoint as normalizeClientPointFromPointer } from './dom/PointerNormalization.js';
+import {
+  normalizeClientPoint as normalizeClientPointFromPointer,
+  denormalizeClientPoint as denormalizeClientPointFromPointer,
+} from './dom/PointerNormalization.js';
 import { getPageElementByIndex } from './dom/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
@@ -59,10 +65,10 @@ import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
 } from './tables/TableSelectionUtilities.js';
 import { DragDropManager } from './input/DragDropManager.js';
+import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
-import { decodeRPrFromMarks } from '../super-converter/styles.js';
-import { halfPointToPoints } from '../super-converter/helpers.js';
-import { toFlowBlocks, ConverterContext } from '@superdoc/pm-adapter';
+import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
+import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
   selectionToRects,
@@ -78,11 +84,12 @@ import type {
   HeaderFooterLayoutResult,
   HeaderFooterType,
   PositionHit,
-  MultiSectionHeaderFooterIdentifier,
   TableHitResult,
 } from '@superdoc/layout-bridge';
+
 import { createDomPainter } from '@superdoc/painter-dom';
-import type { LayoutMode, PageDecorationProvider, RulerOptions } from '@superdoc/painter-dom';
+
+import type { LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -95,6 +102,7 @@ import type {
   Fragment,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
+// TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 
 // Collaboration cursor imports
@@ -102,6 +110,8 @@ import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
+import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
+import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
 // Types
 import type {
@@ -135,6 +145,7 @@ import type {
   PendingMarginClick,
   EditorViewWithScrollFlag,
   PotentiallyMockedFunction,
+  ResolvedLayoutOptions,
 } from './types.js';
 
 // Re-export public types for backward compatibility
@@ -159,19 +170,9 @@ export type {
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
-/**
- * Font size scaling factor for subscript and superscript text.
- * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
- * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
- * Applied to the base font size to reduce text size for sub/superscripts.
- */
-const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
-
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
-/** Default gap between pages when virtualization is enabled (matches renderer.ts virtualGap) */
-const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-/** Default gap between pages without virtualization (from containerStyles in styles.ts) */
+/** Default gap between pages (from containerStyles in styles.ts) */
 const DEFAULT_PAGE_GAP = 24;
 /** Default gap for horizontal layout mode */
 const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
@@ -181,12 +182,26 @@ const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
 const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
 /** Maximum distance between clicks to register as multi-click (pixels) */
 const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
+
+/** Debug flag for performance logging - enable with SD_DEBUG_LAYOUT env variable */
+const layoutDebugEnabled =
+  typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
+
+/** Log performance metrics when debug is enabled */
+const perfLog = (...args: unknown[]): void => {
+  if (!layoutDebugEnabled) return;
+  console.log(...args);
+};
 /** Budget for header/footer initialization before warning (milliseconds) */
 const HEADER_FOOTER_INIT_BUDGET_MS = 200;
 /** Maximum zoom level before warning */
 const MAX_ZOOM_WARNING_THRESHOLD = 10;
 /** Maximum number of selection rectangles per user (performance guardrail) */
 const MAX_SELECTION_RECTS_PER_USER = 100;
+/** Debounce delay for semantic-flow relayout after host resize (milliseconds). */
+const SEMANTIC_RESIZE_DEBOUNCE_MS = 120;
+/** Minimum semantic content width in pixels. */
+const MIN_SEMANTIC_CONTENT_WIDTH_PX = 1;
 
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
 
@@ -245,6 +260,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #options: PresentationEditorOptions;
+  /** Key used to register this instance in the static registry. Separate from options.documentId to avoid mutating caller's object. */
+  #registryKey: string | null = null;
   #editor: Editor;
   #visibleHost: HTMLElement;
   #viewportHost: HTMLElement;
@@ -254,6 +271,10 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHost: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  /** Cache for incremental toFlowBlocks conversion */
+  #flowBlockCache: FlowBlockCache = new FlowBlockCache();
+  #footnoteNumberSignature: string | null = null;
+  #endnoteNumberSignature: string | null = null;
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -273,8 +294,18 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
+  /** Bridges external PM plugin decorations onto painted DOM elements. */
+  #decorationBridge = new DecorationBridge();
+  /** RAF handle for coalesced decoration sync scheduling. */
+  #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
+  #semanticResizeObserver: ResizeObserver | null = null;
+  #semanticResizeRaf: number | null = null;
+  #semanticResizeDebounce: number | null = null;
+  #lastSemanticContainerWidth: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
+  #scrollHandler: (() => void) | null = null;
+  #scrollContainer: Element | Window | null = null;
   #sectionMetadata: SectionMetadata[] = [];
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
   #inputBridge: PresentationInputBridge | null = null;
@@ -293,10 +324,24 @@ export class PresentationEditor extends EventEmitter {
     element: HTMLElement;
     pmStart: number;
   } | null = null;
+  #lastSelectedStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastSelectedStructuredContentInline: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastHoveredStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
   #remoteCursorManager: RemoteCursorManager | null = null;
+  /** Debounce timer for local cursor awareness updates (avoids ~190ms Liveblocks overhead per keystroke) */
+  #cursorUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   /** DOM element for rendering remote cursor overlays */
   #remoteCursorOverlay: HTMLElement | null = null;
   /** DOM element for rendering local selection/caret (dual-layer overlay architecture) */
@@ -346,14 +391,24 @@ export class PresentationEditor extends EventEmitter {
         }
       : undefined;
 
+    const requestedFlowMode = options.layoutEngineOptions?.flowMode === 'semantic' ? 'semantic' : 'paginated';
+    const requestedLayoutMode = options.layoutEngineOptions?.layoutMode ?? 'vertical';
     this.#layoutOptions = {
       pageSize: options.layoutEngineOptions?.pageSize ?? DEFAULT_PAGE_SIZE,
       margins: options.layoutEngineOptions?.margins ?? DEFAULT_MARGINS,
-      virtualization: options.layoutEngineOptions?.virtualization,
+      virtualization:
+        requestedFlowMode === 'semantic'
+          ? {
+              ...(options.layoutEngineOptions?.virtualization ?? {}),
+              enabled: false,
+            }
+          : options.layoutEngineOptions?.virtualization,
       zoom: options.layoutEngineOptions?.zoom ?? 1,
       pageStyles: options.layoutEngineOptions?.pageStyles,
       debugLabel: options.layoutEngineOptions?.debugLabel,
-      layoutMode: options.layoutEngineOptions?.layoutMode ?? 'vertical',
+      layoutMode: requestedFlowMode === 'semantic' ? 'vertical' : requestedLayoutMode,
+      flowMode: requestedFlowMode,
+      semanticOptions: options.layoutEngineOptions?.semanticOptions,
       trackedChanges: options.layoutEngineOptions?.trackedChanges,
       emitCommentPositionsInViewing: options.layoutEngineOptions?.emitCommentPositionsInViewing,
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
@@ -378,12 +433,18 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
+
+    // Add event listeners for structured content hover coordination
+    this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#handleStructuredContentBlockMouseLeave);
+
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
       windowRoot: win,
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
+        this.#syncDecorations();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -444,7 +505,6 @@ export class PresentationEditor extends EventEmitter {
 
     // Wire up manager callbacks to use PresentationEditor methods
     this.#remoteCursorManager.setUpdateCallback(() => this.#updateRemoteCursors());
-    this.#remoteCursorManager.setReRenderCallback(() => this.#renderRemoteCursors());
 
     this.#hoverOverlay = doc.createElement('div');
     this.#hoverOverlay.className = 'presentation-editor__hover-overlay';
@@ -565,11 +625,13 @@ export class PresentationEditor extends EventEmitter {
       this.#setupDragHandlers();
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
+      this.#setupSemanticResizeObserver();
 
-      // Register this instance in the static registry
-      if (options.documentId) {
-        PresentationEditor.#instances.set(options.documentId, this);
-      }
+      // Register this instance in the static registry.
+      // Use a separate field to avoid mutating the caller's options object and to keep
+      // the registry key consistent with the overlay ID set earlier (line ~453).
+      this.#registryKey = options.documentId || `__anonymous_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      PresentationEditor.#instances.set(this.#registryKey, this);
 
       this.#pendingDocChange = true;
       this.#scheduleRerender();
@@ -744,7 +806,7 @@ export class PresentationEditor extends EventEmitter {
    * - In body mode, returns the main editor's state
    * - In header/footer mode, returns the active header/footer editor's state
    *
-   * This enables components like SlashMenu and context menus to access document
+   * This enables components like ContextMenu to access document
    * state, selection, and schema information in the correct editing context.
    *
    * @returns The EditorState for the active editor
@@ -789,7 +851,7 @@ export class PresentationEditor extends EventEmitter {
    *
    * This property returns the options object from the appropriate editor instance,
    * providing access to configuration like document mode, AI settings, and custom
-   * slash menu configuration.
+   * context menu configuration.
    *
    * @returns The options object for the active editor
    *
@@ -1031,6 +1093,8 @@ export class PresentationEditor extends EventEmitter {
     // Re-render if mode changed OR tracked changes preferences changed.
     // Mode change affects enableComments in toFlowBlocks even if tracked changes didn't change.
     if (modeChanged || trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1072,6 +1136,8 @@ export class PresentationEditor extends EventEmitter {
     this.#layoutOptions.trackedChanges = overrides;
     const trackedChangesChanged = this.#syncTrackedChangesPreferences();
     if (trackedChangesChanged) {
+      // Clear flow block cache since conversion-affecting settings changed
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1106,6 +1172,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (hasChanges) {
+      // Clear flow block cache since comment settings affect block conversion
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
       this.#scheduleRerender();
     }
@@ -1465,6 +1533,110 @@ export class PresentationEditor extends EventEmitter {
     return { ...this.#layoutOptions };
   }
 
+  #isSemanticFlowMode(): boolean {
+    return this.#layoutOptions.flowMode === 'semantic';
+  }
+
+  #resolveSemanticMargins(margins: PageMargins): { left: number; right: number; top: number; bottom: number } {
+    const mode = this.#layoutOptions.semanticOptions?.marginsMode ?? 'firstSection';
+    if (mode === 'none') {
+      return { left: 0, right: 0, top: 0, bottom: 0 };
+    }
+
+    const clamp = (value: number | undefined, fallback: number): number => {
+      const v = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+      return v >= 0 ? v : fallback;
+    };
+
+    if (mode === 'custom') {
+      const custom = this.#layoutOptions.semanticOptions?.customMargins;
+      return {
+        left: clamp(custom?.left, clamp(margins.left, DEFAULT_MARGINS.left!)),
+        right: clamp(custom?.right, clamp(margins.right, DEFAULT_MARGINS.right!)),
+        top: clamp(custom?.top, clamp(margins.top, DEFAULT_MARGINS.top!)),
+        bottom: clamp(custom?.bottom, clamp(margins.bottom, DEFAULT_MARGINS.bottom!)),
+      };
+    }
+    // mode === 'firstSection' — keep horizontal margins from the first DOCX section
+    // but zero vertical margins so stacked pages form a seamless continuous surface.
+    return {
+      left: clamp(margins.left, DEFAULT_MARGINS.left!),
+      right: clamp(margins.right, DEFAULT_MARGINS.right!),
+      top: 0,
+      bottom: 0,
+    };
+  }
+
+  #resolveSemanticContainerInnerWidth(): number {
+    const host = this.#visibleHost;
+    if (!host) return DEFAULT_PAGE_SIZE.w;
+    const win = host.ownerDocument?.defaultView ?? window;
+    const style = win.getComputedStyle(host);
+    const paddingLeft = Number.parseFloat(style.paddingLeft ?? '0');
+    const paddingRight = Number.parseFloat(style.paddingRight ?? '0');
+    const horizontalPadding =
+      (Number.isFinite(paddingLeft) ? paddingLeft : 0) + (Number.isFinite(paddingRight) ? paddingRight : 0);
+    const clientWidth = host.clientWidth;
+    if (Number.isFinite(clientWidth) && clientWidth > 0) {
+      return Math.max(1, clientWidth - horizontalPadding);
+    }
+    const rectWidth = host.getBoundingClientRect().width;
+    if (Number.isFinite(rectWidth) && rectWidth > 0) {
+      return Math.max(1, rectWidth - horizontalPadding);
+    }
+    return Math.max(1, DEFAULT_PAGE_SIZE.w - horizontalPadding);
+  }
+
+  #setupSemanticResizeObserver(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
+    const ResizeObs = view.ResizeObserver;
+    if (typeof ResizeObs !== 'function') return;
+
+    this.#lastSemanticContainerWidth = this.#resolveSemanticContainerInnerWidth();
+    this.#semanticResizeObserver = new ResizeObs(() => {
+      this.#scheduleSemanticResizeRelayout();
+    });
+    this.#semanticResizeObserver.observe(this.#visibleHost);
+  }
+
+  #scheduleSemanticResizeRelayout(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
+    if (this.#semanticResizeRaf == null) {
+      this.#semanticResizeRaf = view.requestAnimationFrame(() => {
+        this.#semanticResizeRaf = null;
+        this.#applySemanticResizeRelayout();
+      });
+    }
+    if (this.#semanticResizeDebounce != null) {
+      view.clearTimeout(this.#semanticResizeDebounce);
+    }
+    this.#semanticResizeDebounce = view.setTimeout(() => {
+      this.#semanticResizeDebounce = null;
+      this.#applySemanticResizeRelayout();
+    }, SEMANTIC_RESIZE_DEBOUNCE_MS);
+  }
+
+  #applySemanticResizeRelayout(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const nextWidth = this.#resolveSemanticContainerInnerWidth();
+    const prevWidth = this.#lastSemanticContainerWidth;
+    if (prevWidth != null && Math.abs(nextWidth - prevWidth) < 1) {
+      return;
+    }
+    this.#lastSemanticContainerWidth = nextWidth;
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
+  }
+
+  /**
+   * Return a snapshot of painter output captured during the latest paint cycle.
+   */
+  getPaintSnapshot(): PaintSnapshot | null {
+    return this.#domPainter?.getPaintSnapshot?.() ?? null;
+  }
+
   /**
    * Get the page styles for the section containing the current caret position.
    *
@@ -1541,6 +1713,9 @@ export class PresentationEditor extends EventEmitter {
    * ```
    */
   setLayoutMode(mode: LayoutMode) {
+    if (this.#isSemanticFlowMode()) {
+      return;
+    }
     if (!mode || this.#layoutOptions.layoutMode === mode) {
       return;
     }
@@ -1685,9 +1860,7 @@ export class PresentationEditor extends EventEmitter {
     const isLeftMargin = marginLeft > 0 && x < marginLeft;
     const isRightMargin = marginRight > 0 && x > pageWidth - marginRight;
 
-    const pageEl = this.#viewportHost.querySelector(
-      `.superdoc-page[data-page-index="${pageIndex}"]`,
-    ) as HTMLElement | null;
+    const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
     if (!pageEl) {
       return null;
     }
@@ -1864,19 +2037,39 @@ export class PresentationEditor extends EventEmitter {
 
     // In body mode, use main document layout
     const rects = this.getRangeRects(pos, pos);
-    if (!rects || rects.length === 0) {
-      return null;
+    if (rects && rects.length > 0) {
+      const rect = rects[0];
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      };
     }
 
-    const rect = rects[0];
-    return {
-      top: rect.top,
-      bottom: rect.bottom,
-      left: rect.left,
-      right: rect.right,
-      width: rect.width,
-      height: rect.height,
-    };
+    // Fallback: getRangeRects returns empty for collapsed selections on empty
+    // lines (no painted inline content to measure). Use caret geometry which
+    // combines DOM position data with layout metrics for these cases.
+    const caretRect = this.#computeCaretLayoutRect(pos);
+    if (caretRect) {
+      // caretRect is in page-local layout units; convert to viewport pixels.
+      const viewport = this.denormalizeClientPoint(caretRect.x, caretRect.y, caretRect.pageIndex, caretRect.height);
+      if (viewport) {
+        const h = viewport.height ?? caretRect.height;
+        return {
+          top: viewport.y,
+          bottom: viewport.y + h,
+          left: viewport.x,
+          right: viewport.x + 1, // caret is zero-width; use 1px so callers get a valid rect
+          width: 1,
+          height: h,
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -1971,7 +2164,9 @@ export class PresentationEditor extends EventEmitter {
       if (pageIndex != null) {
         const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
         if (pageEl) {
-          pageEl.scrollIntoView({ block, inline: 'nearest', behavior });
+          // Find the specific element containing this position for precise centering
+          const targetEl = this.#findElementAtPosition(pageEl, clampedPos);
+          (targetEl ?? pageEl).scrollIntoView({ block, inline: 'nearest', behavior });
           return true;
         }
       }
@@ -1980,6 +2175,154 @@ export class PresentationEditor extends EventEmitter {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Find the DOM element containing a specific document position.
+   * Returns the most specific (smallest range) matching element.
+   */
+  #findElementAtPosition(pageEl: HTMLElement, pos: number): HTMLElement | null {
+    const elements = Array.from(pageEl.querySelectorAll('[data-pm-start][data-pm-end]'));
+    let bestMatch: HTMLElement | null = null;
+    let smallestRange = Infinity;
+
+    for (const el of elements) {
+      const htmlEl = el as HTMLElement;
+      // Skip header/footer fragments — their PM positions come from a separate
+      // document and can overlap with body positions, causing incorrect matches.
+      if (htmlEl.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
+
+      const start = Number(htmlEl.dataset.pmStart);
+      const end = Number(htmlEl.dataset.pmEnd);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+
+      if (pos >= start && pos <= end) {
+        const range = end - start;
+        if (range < smallestRange) {
+          smallestRange = range;
+          bestMatch = htmlEl;
+        }
+      }
+    }
+    return bestMatch;
+  }
+
+  /**
+   * Async version of scrollToPosition that handles virtualized pages.
+   *
+   * When pages are virtualized (not mounted in the DOM), this method will:
+   * 1. Try the sync scroll first (fast path if page is already mounted)
+   * 2. If that fails, trigger virtualization to render the target page
+   * 3. Wait for the page to mount (up to 2000ms)
+   * 4. Retry the scroll
+   *
+   * Use this method when navigating to positions that may be on virtualized pages.
+   *
+   * @param pos - Document position in the active editor to scroll to
+   * @param options - Scrolling options
+   * @param options.block - Alignment within the viewport ('start' | 'center' | 'end' | 'nearest')
+   * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @returns Promise resolving to true if scrolling succeeded, false otherwise
+   */
+  async scrollToPositionAsync(
+    pos: number,
+    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+  ): Promise<boolean> {
+    // Fast path: try sync scroll first (works if page already mounted)
+    if (this.scrollToPosition(pos, options)) {
+      return true;
+    }
+
+    // Page not mounted - find which page contains this position
+    const activeEditor = this.getActiveEditor();
+    const doc = activeEditor?.state?.doc;
+    if (!doc || !Number.isFinite(pos)) return false;
+
+    const clampedPos = Math.max(0, Math.min(pos, doc.content.size));
+    const layout = this.#layoutState.layout;
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (!layout || sessionMode !== 'body') return false;
+
+    let pageIndex: number | null = null;
+    for (let idx = 0; idx < layout.pages.length; idx++) {
+      const page = layout.pages[idx];
+      for (const fragment of page.fragments) {
+        const frag = fragment as { pmStart?: number; pmEnd?: number };
+        if (frag.pmStart != null && frag.pmEnd != null && clampedPos >= frag.pmStart && clampedPos <= frag.pmEnd) {
+          pageIndex = idx;
+          break;
+        }
+      }
+      if (pageIndex != null) break;
+    }
+    if (pageIndex == null) return false;
+
+    // Trigger virtualization to render the page
+    this.#scrollPageIntoView(pageIndex);
+
+    // Wait for page to mount in the DOM
+    const mounted = await this.#waitForPageMount(pageIndex, {
+      timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS,
+    });
+    if (!mounted) {
+      console.warn(`[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within timeout`);
+      return false;
+    }
+
+    // Retry now that page is mounted
+    return this.scrollToPosition(pos, options);
+  }
+
+  /**
+   * Scrolls a specific page into view.
+   *
+   * This method supports virtualized rendering: if the target page is not currently
+   * mounted in the DOM, it will scroll to the computed y-position to trigger
+   * virtualization, wait for the page to mount, then perform precise scrolling.
+   *
+   * @param pageNumber - One-based page number to scroll to (e.g., 1 for first page)
+   * @param scrollBehavior - Scroll behavior ('auto' | 'smooth'). Defaults to 'smooth'.
+   * @returns Promise resolving to true if the page was scrolled to, false if layout not available or invalid page
+   *
+   * @example
+   * ```typescript
+   * // Smooth scroll to first page
+   * await presentationEditor.scrollToPage(1);
+   *
+   * // Instant scroll to page 5
+   * await presentationEditor.scrollToPage(5, 'auto');
+   * ```
+   */
+  async scrollToPage(pageNumber: number, scrollBehavior: ScrollBehavior = 'smooth'): Promise<boolean> {
+    const layout = this.#layoutState.layout;
+    if (!layout) return false;
+
+    // Reject non-finite or non-integer input to fail fast instead of timing out
+    if (!Number.isInteger(pageNumber)) return false;
+
+    // Convert 1-based page number to 0-based index
+    const pageIndex = pageNumber - 1;
+
+    // Clamp to valid page range
+    const maxPage = layout.pages.length - 1;
+    if (pageIndex < 0 || pageIndex > maxPage) return false;
+
+    // Check if page is already mounted
+    let pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+
+    // If not mounted (virtualized), scroll to computed y-position to trigger mount
+    if (!pageEl) {
+      this.#scrollPageIntoView(pageIndex);
+      const mounted = await this.#waitForPageMount(pageIndex, { timeout: 2000 });
+      if (!mounted) return false;
+      pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+    }
+
+    if (pageEl) {
+      pageEl.scrollIntoView({ block: 'start', inline: 'nearest', behavior: scrollBehavior });
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -2090,6 +2433,8 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#layoutOptions.zoom = zoom;
     this.#applyZoom();
+    // Notify DomPainter so virtualization accounts for the CSS transform scale
+    this.#domPainter?.setZoom?.(zoom);
     this.emit('zoomChange', { zoom });
     this.#scheduleSelectionUpdate();
     // Trigger cursor updates on zoom changes
@@ -2114,6 +2459,39 @@ export class PresentationEditor extends EventEmitter {
         this.#rafHandle = null;
       }, 'Layout RAF');
     }
+
+    // Cancel pending decoration sync RAF
+    if (this.#decorationSyncRafHandle != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#decorationSyncRafHandle!);
+        this.#decorationSyncRafHandle = null;
+      }, 'Decoration sync RAF');
+    }
+    this.#decorationBridge.destroy();
+
+    // Cancel pending cursor awareness update
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+      this.#cursorUpdateTimer = null;
+    }
+
+    if (this.#semanticResizeRaf != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#semanticResizeRaf!);
+        this.#semanticResizeRaf = null;
+      }, 'Semantic resize RAF');
+    }
+    if (this.#semanticResizeDebounce != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.clearTimeout(this.#semanticResizeDebounce!);
+        this.#semanticResizeDebounce = null;
+      }, 'Semantic resize debounce');
+    }
+    this.#semanticResizeObserver?.disconnect();
+    this.#semanticResizeObserver = null;
 
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
@@ -2140,6 +2518,15 @@ export class PresentationEditor extends EventEmitter {
       }, 'Editor input manager');
     }
 
+    if (this.#scrollHandler) {
+      if (this.#scrollContainer) {
+        this.#scrollContainer.removeEventListener('scroll', this.#scrollHandler);
+      }
+      const win = this.#visibleHost?.ownerDocument?.defaultView;
+      win?.removeEventListener('scroll', this.#scrollHandler);
+      this.#scrollHandler = null;
+      this.#scrollContainer = null;
+    }
     this.#inputBridge?.notifyTargetChanged();
     this.#inputBridge?.destroy();
     this.#inputBridge = null;
@@ -2150,8 +2537,9 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // Unregister from static registry
-    if (this.#options?.documentId) {
-      PresentationEditor.#instances.delete(this.#options.documentId);
+    if (this.#registryKey) {
+      PresentationEditor.#instances.delete(this.#registryKey);
+      this.#registryKey = null;
     }
 
     // Clean up header/footer session manager
@@ -2159,6 +2547,9 @@ export class PresentationEditor extends EventEmitter {
       this.#headerFooterSession?.destroy();
       this.#headerFooterSession = null;
     }, 'Header/footer session manager');
+
+    // Clear flow block cache to free memory
+    this.#flowBlockCache.clear();
 
     this.#domPainter = null;
     this.#pageGeometryHelper = null;
@@ -2189,12 +2580,78 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  /**
+   * Runs a full decoration sync: applies external plugin decoration classes
+   * and styles to the painted DOM elements via DecorationBridge. Runs are
+   * split at decoration boundaries during layout so only the selected portion
+   * gets the background (like the highlight mark, without applying a mark).
+   *
+   * Called synchronously from post-paint and observer-rebuild paths where the
+   * DOM index is guaranteed to be fresh.
+   */
+  #syncDecorations(): void {
+    const state = this.#editor?.view?.state;
+    if (!state) return;
+
+    try {
+      this.#decorationBridge.sync(state, this.#domPositionIndex);
+    } catch (error) {
+      // Sync can call findRangeByText and other doc-dependent logic; if it throws
+      // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
+      console.warn('[PresentationEditor] Decoration sync failed:', error);
+    }
+  }
+
+  /**
+   * Schedules a decoration sync on the next animation frame, coalesced so
+   * rapid transactions (cursor movement, selection changes) don't cause
+   * redundant work.
+   *
+   * Skips scheduling when:
+   * - A rerender is already pending (post-paint will sync).
+   * - No DecorationSet references have actually changed (identity check).
+   */
+  #scheduleDecorationSync(): void {
+    // If a full rerender is pending, the post-paint path will sync. Skip.
+    if (this.#renderScheduled || this.#isRerendering) return;
+
+    // Cheap identity check: bail if no DecorationSet references changed.
+    const state = this.#editor?.view?.state;
+    if (!state || !this.#decorationBridge.hasChanges(state)) return;
+
+    // Already scheduled — RAF will handle it.
+    if (this.#decorationSyncRafHandle != null) return;
+
+    const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+    this.#decorationSyncRafHandle = win.requestAnimationFrame(() => {
+      this.#decorationSyncRafHandle = null;
+      // Re-check: a rerender may have been scheduled between when we queued
+      // this RAF and when it fires. The post-paint path will sync instead.
+      if (this.#renderScheduled || this.#isRerendering) return;
+      this.#syncDecorations();
+    });
+  }
+
   #setupEditorListeners() {
     const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
       const trackedChangesChanged = this.#syncTrackedChangesPreferences();
       if (transaction) {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
+
+        const inputType = transaction.getMeta?.('inputType');
+        // Detect Y.js-origin transactions (remote collaboration changes).
+        // These bypass the blockNodePlugin's sdBlockRev increment to prevent
+        // feedback loops, so the FlowBlockCache's fast revision comparison
+        // cannot be trusted. History undo/redo can also restore tracked-mark-only
+        // changes where visible text stays the same, so use the same JSON fallback.
+        const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
+        const shouldBypassFastRevision =
+          transaction.docChanged &&
+          (ySyncMeta?.isChangeOrigin || inputType === 'historyUndo' || inputType === 'historyRedo');
+        if (shouldBypassFastRevision) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;
@@ -2225,16 +2682,60 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
-      this.#scheduleSelectionUpdate();
+      // Use immediate rendering for selection-only changes (clicks, arrow keys).
+      // Without immediate, the render is RAF-deferred — leaving a window where
+      // a remote collaborator's edit can cancel the pending render via
+      // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
+      // if layout is updating (due to a concurrent doc change), flushNow()
+      // is a no-op and the render will be picked up after layout completes.
+      this.#scheduleSelectionUpdate({ immediate: true });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();
       this.#scheduleA11ySelectionAnnouncement();
     };
+
+    // The 'transaction' event fires for ALL transactions (doc changes,
+    // selection changes, meta-only). The 'update' event only fires for
+    // docChanged transactions, and 'selectionUpdate' only for selection
+    // changes. A meta-only transaction (e.g., a custom command that sets
+    // plugin state without editing text) fires neither.
+    //
+    // We listen on 'transaction' so the decoration bridge picks up changes
+    // from any transaction type. The bridge's own identity check + RAF
+    // coalescing prevent unnecessary work.
+    // When decoration state changes without a doc change (e.g. setFocus), we must
+    // still run a full rerender so runs are split at the new decoration boundaries;
+    // otherwise the bridge applies the class to whole runs and highlights too much.
+    const handleTransaction = (event?: { transaction?: Transaction }) => {
+      const tr = event?.transaction;
+      this.#decorationBridge.recordTransaction(tr);
+      const state = this.#editor?.view?.state;
+      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+      // Sync immediately whenever decorations changed so e.g. clearFocus removes
+      // highlight-selection in the same tick. Only restore when we had a doc change.
+      if (decorationChanged) {
+        const restoreEmpty = tr ? tr.docChanged === true : false;
+        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+          restoreEmptyDecorations: restoreEmpty,
+        });
+      } else {
+        // No immediate sync; schedule coalesced sync on next frame.
+        this.#scheduleDecorationSync();
+      }
+      if (decorationChanged) {
+        this.#pendingDocChange = true;
+        this.#selectionSync.onLayoutStart();
+        this.#scheduleRerender();
+      }
+    };
+
     this.#editor.on('update', handleUpdate);
     this.#editor.on('selectionUpdate', handleSelection);
+    this.#editor.on('transaction', handleTransaction);
     this.#editorListeners.push({ event: 'update', handler: handleUpdate as (...args: unknown[]) => void });
     this.#editorListeners.push({ event: 'selectionUpdate', handler: handleSelection as (...args: unknown[]) => void });
+    this.#editorListeners.push({ event: 'transaction', handler: handleTransaction as (...args: unknown[]) => void });
 
     // Listen for page style changes (e.g., margin adjustments via ruler).
     // These changes don't modify document content (docChanged === false),
@@ -2251,6 +2752,38 @@ export class PresentationEditor extends EventEmitter {
       handler: handlePageStyleUpdate as (...args: unknown[]) => void,
     });
 
+    // Listen for stylesheet default changes (e.g., styles.apply mutations to docDefaults).
+    // These changes mutate translatedLinkedStyles directly and need a full re-render
+    // so the style-engine picks up the updated default properties.
+    const handleStylesDefaultsChanged = () => {
+      // Stylesheet default mutations can change block conversion output even
+      // when PM JSON is unchanged (e.g., default run color/font). Cached flow
+      // blocks must be invalidated so toFlowBlocks recomputes with new defaults.
+      this.#flowBlockCache.clear();
+      this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    };
+    this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);
+    this.#editorListeners.push({
+      event: 'stylesDefaultsChanged',
+      handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
+    });
+
+    // Listen for footnote/endnote part mutations (e.g., insert via document API).
+    // These modify the OOXML part and derived cache but don't change the PM document,
+    // so the normal 'update' event won't trigger a layout refresh.
+    const handleNotesPartChanged = () => {
+      this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    };
+    this.#editor.on('notes-part-changed', handleNotesPartChanged);
+    this.#editorListeners.push({
+      event: 'notes-part-changed',
+      handler: handleNotesPartChanged as (...args: unknown[]) => void,
+    });
+
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
       // Setup remote cursor rendering after collaboration is ready
@@ -2263,23 +2796,6 @@ export class PresentationEditor extends EventEmitter {
     this.#editorListeners.push({
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
-    });
-
-    // Handle remote header/footer changes from collaborators
-    const handleRemoteHeaderFooterChanged = (payload: {
-      type: 'header' | 'footer';
-      sectionId: string;
-      content: unknown;
-    }) => {
-      this.#headerFooterSession?.adapter?.invalidate(payload.sectionId);
-      this.#headerFooterSession?.manager?.refresh();
-      this.#pendingDocChange = true;
-      this.#scheduleRerender();
-    };
-    this.#editor.on('remoteHeaderFooterChanged', handleRemoteHeaderFooterChanged);
-    this.#editorListeners.push({
-      event: 'remoteHeaderFooterChanged',
-      handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
     });
 
     // Listen for comment selection changes to update Layout Engine highlighting
@@ -2319,16 +2835,18 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #updateLocalAwarenessCursor(): void {
-    this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
-  }
-
-  /**
-   * Schedule a remote cursor re-render without re-normalizing awareness states.
-   * Delegates to RemoteCursorManager.
-   * @private
-   */
-  #scheduleRemoteCursorReRender() {
-    this.#remoteCursorManager?.scheduleReRender();
+    // Debounce awareness cursor updates to avoid per-keystroke overhead.
+    // Collaboration providers (e.g. Liveblocks) can spend ~190ms encoding and
+    // syncing awareness state per setLocalStateField call. Batching rapid
+    // cursor movements into a single update every 100ms keeps typing responsive
+    // while maintaining real-time cursor sharing for other participants.
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+    }
+    this.#cursorUpdateTimer = setTimeout(() => {
+      this.#cursorUpdateTimer = null;
+      this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
+    }, 100);
   }
 
   /**
@@ -2409,7 +2927,8 @@ export class PresentationEditor extends EventEmitter {
       goToAnchor: (href: string) => this.goToAnchor(href),
       emit: (event: string, payload: unknown) => this.emit(event, payload),
       normalizeClientPoint: (clientX: number, clientY: number) => this.#normalizeClientPoint(clientX, clientY),
-      hitTestHeaderFooterRegion: (x: number, y: number) => this.#hitTestHeaderFooterRegion(x, y),
+      hitTestHeaderFooterRegion: (x: number, y: number, pageIndex?: number, pageLocalY?: number) =>
+        this.#hitTestHeaderFooterRegion(x, y, pageIndex, pageLocalY),
       exitHeaderFooterMode: () => this.#exitHeaderFooterMode(),
       activateHeaderFooterRegion: (region) => this.#activateHeaderFooterRegion(region),
       createDefaultHeaderFooter: (region) => this.#createDefaultHeaderFooter(region),
@@ -2434,10 +2953,56 @@ export class PresentationEditor extends EventEmitter {
   #setupPointerHandlers() {
     // Delegate to EditorInputManager for pointer events
     this.#editorInputManager?.bind();
+
+    // Scroll handler for virtualization - find the actual scroll container
+    // by walking up the DOM tree to find the first scrollable ancestor
+    this.#scrollHandler = () => {
+      this.#domPainter?.onScroll?.();
+    };
+
+    // Find the scrollable ancestor and attach listener there
+    this.#scrollContainer = this.#findScrollableAncestor(this.#visibleHost);
+    if (this.#scrollContainer) {
+      this.#scrollContainer.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
+
+    // Also listen on window as fallback
+    const win = this.#visibleHost.ownerDocument?.defaultView;
+    if (win && this.#scrollContainer !== win) {
+      win.addEventListener('scroll', this.#scrollHandler, { passive: true });
+    }
   }
 
   /**
-   * Sets up drag and drop handlers for field annotations.
+   * Finds the first scrollable ancestor of an element.
+   * Returns the element itself if it's scrollable, or walks up the tree.
+   *
+   * Note: We only check for overflow CSS property, not whether content currently
+   * overflows. At setup time, content may not be laid out yet, but the element
+   * with overflow:auto/scroll will become the scroll container once content grows.
+   */
+  #findScrollableAncestor(element: HTMLElement): Element | Window | null {
+    const win = element.ownerDocument?.defaultView;
+    if (!win) return null;
+
+    let current: Element | null = element;
+    while (current) {
+      const style = win.getComputedStyle(current);
+      const overflowY = style.overflowY;
+      // Check for scrollable overflow property - don't require hasScroll since
+      // content may not be laid out yet at setup time
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    // If no scrollable ancestor found, return window
+    return win;
+  }
+
+  /**
+   * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
     // Clean up any existing manager
@@ -2450,6 +3015,7 @@ export class PresentationEditor extends EventEmitter {
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
       getViewportHost: () => this.#viewportHost,
       getPainterHost: () => this.#painterHost,
+      insertImageFile: (params) => processAndInsertImageFile(params),
     });
     this.#dragDropManager.bind();
   }
@@ -2552,6 +3118,7 @@ export class PresentationEditor extends EventEmitter {
       setPendingDocChange: () => {
         this.#pendingDocChange = true;
       },
+      getBodyPageCount: () => this.#layoutState?.layout?.pages?.length ?? 1,
     });
 
     // Set up callbacks
@@ -2737,12 +3304,35 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#pendingDocChange = false;
     this.#isRerendering = true;
+
+    // Capture H/F editor focus state before rerender so we can restore it if
+    // a DOM mutation (e.g. page re-ordering in updateVirtualWindow) causes the
+    // browser to blur the active header/footer editor (SD-1993).
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    const activeHfEditor = sessionMode !== 'body' ? this.#headerFooterSession?.activeEditor : null;
+    const hadHfFocus = activeHfEditor?.view?.hasFocus?.() ?? false;
+
     try {
       await this.#rerender();
     } finally {
       this.#isRerendering = false;
       if (this.#pendingDocChange) {
         this.#scheduleRerender();
+      }
+
+      // Restore focus if the H/F editor lost it during rerender.
+      // Guard: only restore if the session is still active with the same editor
+      // (user may have exited H/F mode during the async rerender).
+      if (hadHfFocus && activeHfEditor?.view && this.#headerFooterSession?.activeEditor === activeHfEditor) {
+        const doc = this.#visibleHost.ownerDocument;
+        const editorDom = activeHfEditor.view.dom;
+        if (doc && !editorDom.contains(doc.activeElement)) {
+          try {
+            activeHfEditor.view.focus();
+          } catch {
+            // Ignore focus errors during recovery
+          }
+        }
       }
     }
   }
@@ -2755,9 +3345,13 @@ export class PresentationEditor extends EventEmitter {
       let docJson;
       const viewWindow = this.#visibleHost.ownerDocument?.defaultView ?? window;
       const perf = viewWindow?.performance ?? GLOBAL_PERFORMANCE;
+      const perfNow = () => (perf?.now ? perf.now() : Date.now());
       const startMark = perf?.now?.();
       try {
+        const getJsonStart = perfNow();
         docJson = this.#editor.getJSON();
+        const getJsonEnd = perfNow();
+        perfLog(`[Perf] getJSON: ${(getJsonEnd - getJsonStart).toFixed(2)}ms`);
       } catch (error) {
         this.#handleLayoutError('render', this.#decorateError(error, 'getJSON'));
         return;
@@ -2773,6 +3367,7 @@ export class PresentationEditor extends EventEmitter {
         // Compute visible footnote numbering (1-based) by first appearance in the document.
         // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
         const footnoteNumberById: Record<string, number> = {};
+        const footnoteOrder: string[] = [];
         try {
           const seen = new Set<string>();
           let counter = 1;
@@ -2784,29 +3379,85 @@ export class PresentationEditor extends EventEmitter {
             if (!key || seen.has(key)) return;
             seen.add(key);
             footnoteNumberById[key] = counter;
+            footnoteOrder.push(key);
             counter += 1;
           });
-        } catch {}
+        } catch (e) {
+          // Log traversal errors - footnote numbering may be incorrect if this fails
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
+          }
+        }
+        // Invalidate flow block cache when footnote order changes, since footnote
+        // numbers are embedded in cached blocks and must be recomputed.
+        const footnoteSignature = footnoteOrder.join('|');
+        if (footnoteSignature !== this.#footnoteNumberSignature) {
+          this.#flowBlockCache.clear();
+          this.#footnoteNumberSignature = footnoteSignature;
+        }
+        // Compute visible endnote numbering (same approach as footnotes).
+        const endnoteNumberById: Record<string, number> = {};
+        const endnoteOrder: string[] = [];
+        try {
+          const seen = new Set<string>();
+          let counter = 1;
+          this.#editor?.state?.doc?.descendants?.((node: any) => {
+            if (node?.type?.name !== 'endnoteReference') return;
+            const rawId = node?.attrs?.id;
+            if (rawId == null) return;
+            const key = String(rawId);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            endnoteNumberById[key] = counter;
+            endnoteOrder.push(key);
+            counter += 1;
+          });
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PresentationEditor] Failed to compute endnote numbering:', e);
+          }
+        }
+        const endnoteSignature = endnoteOrder.join('|');
+        if (endnoteSignature !== this.#endnoteNumberSignature) {
+          this.#flowBlockCache.clear();
+          this.#endnoteNumberSignature = endnoteSignature;
+        }
+
         // Expose numbering to node views and layout adapter.
         try {
           if (converter && typeof converter === 'object') {
             converter['footnoteNumberById'] = footnoteNumberById;
+            converter['endnoteNumberById'] = endnoteNumberById;
           }
         } catch {}
+
+        let defaultTableStyleId: string | undefined;
+        if (converter) {
+          const settingsRoot = readSettingsRoot(converter);
+          if (settingsRoot) {
+            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
+          }
+        }
 
         converterContext = converter
           ? {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
+              ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
+              ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
             }
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
+        const positionMapStart = perfNow();
         const positionMap =
           this.#editor?.state?.doc && docJson ? buildPositionMapFromPmDoc(this.#editor.state.doc, docJson) : null;
+        const positionMapEnd = perfNow();
+        perfLog(`[Perf] buildPositionMapFromPmDoc: ${(positionMapEnd - positionMapStart).toFixed(2)}ms`);
         const commentsEnabled =
           this.#documentMode !== 'viewing' || this.#layoutOptions.enableCommentsInViewing === true;
+        const toFlowBlocksStart = perfNow();
         const result = toFlowBlocks(docJson, {
           mediaFiles: (this.#editor?.storage?.image as { media?: Record<string, string> })?.media,
           emitSectionBreaks: true,
@@ -2817,9 +3468,14 @@ export class PresentationEditor extends EventEmitter {
           enableRichHyperlinks: true,
           themeColors: this.#editor?.converter?.themeColors ?? undefined,
           converterContext,
+          flowBlockCache: this.#flowBlockCache,
           ...(positionMap ? { positions: positionMap } : {}),
           ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
         });
+        const toFlowBlocksEnd = perfNow();
+        perfLog(
+          `[Perf] toFlowBlocks: ${(toFlowBlocksEnd - toFlowBlocksStart).toFixed(2)}ms (blocks=${result.blocks.length})`,
+        );
         blocks = result.blocks;
         bookmarks = result.bookmarks ?? new Map();
       } catch (error) {
@@ -2832,7 +3488,19 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
 
+      // Split runs at decoration boundaries so bridge sync applies background only to the
+      // selected portion (like highlight mark) without adding a document mark.
+      const state = this.#editor?.view?.state;
+      const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
+      if (decorationRanges.length > 0) {
+        blocks = splitRunsAtDecorationBoundaries(
+          blocks,
+          decorationRanges.map((r) => ({ from: r.from, to: r.to })),
+        );
+      }
+
       this.#applyHtmlAnnotationMeasurements(blocks);
+      const isSemanticFlow = this.#isSemanticFlowMode();
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
       const footnotesLayoutInput = buildFootnotesInput(
@@ -2841,11 +3509,17 @@ export class PresentationEditor extends EventEmitter {
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
       );
-      const layoutOptions = footnotesLayoutInput
-        ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
-        : baseLayoutOptions;
+      const semanticFootnoteBlocks = isSemanticFlow
+        ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
+        : [];
+      const blocksForLayout = semanticFootnoteBlocks.length > 0 ? [...blocks, ...semanticFootnoteBlocks] : blocks;
+      const layoutOptions =
+        !isSemanticFlow && footnotesLayoutInput
+          ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
+          : baseLayoutOptions;
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
+      const previousMeasures = this.#layoutState.measures;
 
       let layout: Layout;
       let measures: Measure[];
@@ -2855,14 +3529,18 @@ export class PresentationEditor extends EventEmitter {
       let extraMeasures: Measure[] | undefined;
       const headerFooterInput = this.#buildHeaderFooterInput();
       try {
+        const incrementalLayoutStart = perfNow();
         const result = await incrementalLayout(
           previousBlocks,
           previousLayout,
-          blocks,
+          blocksForLayout,
           layoutOptions,
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
           headerFooterInput ?? undefined,
+          previousMeasures,
         );
+        const incrementalLayoutEnd = perfNow();
+        perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
 
         // Type guard: validate incrementalLayout return value
         if (!result || typeof result !== 'object') {
@@ -2903,8 +3581,30 @@ export class PresentationEditor extends EventEmitter {
       if (this.#headerFooterSession) {
         this.#headerFooterSession.multiSectionIdentifier = multiSectionId;
       }
-      const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocks);
-      this.#layoutState = { blocks, measures, layout, bookmarks, anchorMap };
+      const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocksForLayout);
+      this.#layoutState = { blocks: blocksForLayout, measures, layout, bookmarks, anchorMap };
+
+      // Build blockId → pageNumber map for TOC page-number resolution.
+      // Stored on editor.storage so the document-api adapter layer can read it
+      // when toc.update({ mode: 'pageNumbers' }) is called.
+      // pageMapDoc is the doc snapshot this map was derived from — the adapter
+      // layer compares it against editor.state.doc to reject stale maps.
+      const tocStorage = (
+        this.#editor as unknown as { storage?: Record<string, { pageMap?: Map<string, number>; pageMapDoc?: unknown }> }
+      ).storage?.tableOfContents;
+      if (tocStorage) {
+        const pageMap = new Map<string, number>();
+        for (const page of layout.pages) {
+          for (const fragment of page.fragments) {
+            // First occurrence wins — use the page where the block first appears
+            if (!pageMap.has(fragment.blockId)) {
+              pageMap.set(fragment.blockId, page.number);
+            }
+          }
+        }
+        tocStorage.pageMap = pageMap;
+        tocStorage.pageMapDoc = this.#editor.state.doc;
+      }
       if (this.#headerFooterSession) {
         this.#headerFooterSession.headerLayoutResults = headerLayouts ?? null;
         this.#headerFooterSession.footerLayoutResults = footerLayouts ?? null;
@@ -2923,13 +3623,14 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
-      // Process per-rId header/footer content for multi-section support
-      await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
+      // Process per-rId header/footer content and decoration providers (paginated only)
+      if (!isSemanticFlow) {
+        await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
+        this.#updateDecorationProviders(layout);
+      }
 
-      this.#updateDecorationProviders(layout);
-
-      const painter = this.#ensurePainter(blocks, measures);
-      if (typeof painter.setProviders === 'function') {
+      const painter = this.#ensurePainter(blocksForLayout, measures);
+      if (!isSemanticFlow && typeof painter.setProviders === 'function') {
         painter.setProviders(
           this.#headerFooterSession?.headerDecorationProvider,
           this.#headerFooterSession?.footerDecorationProvider,
@@ -2978,24 +3679,33 @@ export class PresentationEditor extends EventEmitter {
       }
 
       // Pass all blocks (main document + headers + footers + extras) to the painter
+      const painterSetDataStart = perfNow();
       painter.setData?.(
-        blocks,
+        blocksForLayout,
         measures,
         headerBlocks.length > 0 ? headerBlocks : undefined,
         headerMeasures.length > 0 ? headerMeasures : undefined,
         footerBlocks.length > 0 ? footerBlocks : undefined,
         footerMeasures.length > 0 ? footerMeasures : undefined,
       );
+      const painterSetDataEnd = perfNow();
+      perfLog(`[Perf] painter.setData: ${(painterSetDataEnd - painterSetDataStart).toFixed(2)}ms`);
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
       // Consumed here and cleared to prevent stale mappings on subsequent paints.
       const mapping = this.#pendingMapping;
       this.#pendingMapping = null;
+      const painterPaintStart = perfNow();
       painter.paint(layout, this.#painterHost, mapping ?? undefined);
-      this.#applyVertAlignToLayout();
+      const painterPaintEnd = perfNow();
+      perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
+      const painterPostStart = perfNow();
       this.#rebuildDomPositionIndex();
+      this.#syncDecorations();
       this.#domIndexObserverManager?.resume();
+      const painterPostEnd = perfNow();
+      perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
       this.#layoutEpoch = layoutEpoch;
       if (this.#updateHtmlAnnotationMeasurements(layoutEpoch)) {
         this.#pendingDocChange = true;
@@ -3014,29 +3724,29 @@ export class PresentationEditor extends EventEmitter {
       // Update viewport dimensions after layout (page count may have changed)
       this.#applyZoom();
 
-      const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocks);
-      const payload = { layout, blocks, measures, metrics };
+      const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocksForLayout);
+      const payload = { layout, blocks: blocksForLayout, measures, metrics };
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);
 
       // Emit fresh comment positions after layout completes.
-      // This ensures positions are always in sync with the current document and layout.
+      // Always emit — even when empty — so the store can clear stale positions
+      // (e.g. when undo removes the last tracked-change mark).
       const allowViewingCommentPositions = this.#layoutOptions.emitCommentPositionsInViewing === true;
       if (this.#documentMode !== 'viewing' || allowViewingCommentPositions) {
         const commentPositions = this.#collectCommentPositions();
-        const positionKeys = Object.keys(commentPositions);
-        if (positionKeys.length > 0) {
-          this.emit('commentPositions', { positions: commentPositions });
-        }
+        this.emit('commentPositions', { positions: commentPositions });
       }
 
       this.#selectionSync.requestRender({ immediate: true });
 
-      // Trigger cursor re-rendering on layout changes without re-normalizing awareness
-      // Layout reflow requires repositioning cursors in the DOM, but awareness states haven't changed
-      // This optimization avoids expensive Yjs position conversions on every layout update
+      // Re-normalize remote cursor positions after layout completes.
+      // Local document changes shift absolute positions, so Yjs relative positions
+      // must be re-resolved against the updated editor state. Without this,
+      // remote cursors appear offset by the number of characters the local user typed.
       if (this.#remoteCursorManager?.hasRemoteCursors()) {
-        this.#scheduleRemoteCursorReRender();
+        this.#remoteCursorManager.markDirty();
+        this.#remoteCursorManager.scheduleUpdate();
       }
     } finally {
       if (!layoutCompleted) {
@@ -3047,17 +3757,37 @@ export class PresentationEditor extends EventEmitter {
 
   #ensurePainter(blocks: FlowBlock[], measures: Measure[]) {
     if (!this.#domPainter) {
+      // Ensure the virtualization gap matches the effective page gap so that
+      // DomPainter's spacer/offset math stays consistent with #applyZoom() height calculations.
+      const virtualization = this.#layoutOptions.virtualization;
+      const effectiveGap = this.#getEffectivePageGap();
+      const normalizedVirtualization = virtualization?.enabled
+        ? { ...virtualization, gap: virtualization.gap ?? effectiveGap }
+        : virtualization;
+
       this.#domPainter = createDomPainter({
         blocks,
         measures,
         layoutMode: this.#layoutOptions.layoutMode ?? 'vertical',
-        virtualization: this.#layoutOptions.virtualization,
+        flowMode: this.#layoutOptions.flowMode ?? 'paginated',
+        virtualization: normalizedVirtualization,
         pageStyles: this.#layoutOptions.pageStyles,
         headerProvider: this.#headerFooterSession?.headerDecorationProvider,
         footerProvider: this.#headerFooterSession?.footerDecorationProvider,
         ruler: this.#layoutOptions.ruler,
-        pageGap: this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap(),
+        pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
       });
+      // Pass the current zoom so virtualization accounts for the CSS transform scale
+      const currentZoom = this.#layoutOptions.zoom ?? 1;
+      if (currentZoom !== 1) {
+        this.#domPainter.setZoom(currentZoom);
+      }
+      // Pass the scroll container so virtualization computes scrollY relative to it,
+      // not the browser viewport. This fixes offset errors when SuperDoc is mounted
+      // inside a wrapper div with overflow-y: auto.
+      if (this.#scrollContainer && this.#scrollContainer instanceof HTMLElement) {
+        this.#domPainter.setScrollContainer?.(this.#scrollContainer);
+      }
     }
     return this.#domPainter;
   }
@@ -3194,6 +3924,260 @@ export class PresentationEditor extends EventEmitter {
     this.#setSelectedFieldAnnotationClass(element, pmStart);
   }
 
+  #clearSelectedStructuredContentBlockClass() {
+    if (!this.#lastSelectedStructuredContentBlock) return;
+    this.#lastSelectedStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentBlock = null;
+  }
+
+  #setSelectedStructuredContentBlockClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentBlock &&
+      this.#lastSelectedStructuredContentBlock.id === id &&
+      this.#lastSelectedStructuredContentBlock.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentBlockClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentBlock = { id, elements };
+  }
+
+  #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContentBlock') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+      node = selection.node;
+    } else {
+      const $pos = (selection as Selection & { $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode } })
+        .$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContentBlock') {
+          node = candidate;
+          break;
+        }
+      }
+      if (!node) {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentBlockClass(elements, id);
+  }
+
+  #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block');
+
+    if (!block || !(block instanceof HTMLElement)) return;
+
+    // Don't show hover effect if already selected
+    if (block.classList.contains('ProseMirror-selectednode')) return;
+
+    const rawId = block.dataset.sdtId;
+    if (!rawId) return;
+
+    this.#setHoveredStructuredContentBlockClass(rawId);
+  };
+
+  #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
+
+    if (!block) return;
+
+    const relatedTarget = event.relatedTarget as HTMLElement | null;
+    if (
+      relatedTarget &&
+      block.dataset.sdtId &&
+      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
+    ) {
+      return;
+    }
+
+    this.#clearHoveredStructuredContentBlockClass();
+  };
+
+  #clearHoveredStructuredContentBlockClass() {
+    if (!this.#lastHoveredStructuredContentBlock) return;
+    this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('sdt-group-hover');
+    });
+    this.#lastHoveredStructuredContentBlock = null;
+  }
+
+  #setHoveredStructuredContentBlockClass(id: string) {
+    if (this.#lastHoveredStructuredContentBlock?.id === id) return;
+
+    this.#clearHoveredStructuredContentBlockClass();
+
+    if (!this.#painterHost) return;
+
+    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+    const elements = Array.from(
+      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+    ) as HTMLElement[];
+
+    if (elements.length === 0) return;
+
+    elements.forEach((element) => {
+      if (!element.classList.contains('ProseMirror-selectednode')) {
+        element.classList.add('sdt-group-hover');
+      }
+    });
+
+    this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  #clearSelectedStructuredContentInlineClass() {
+    if (!this.#lastSelectedStructuredContentInline) return;
+    this.#lastSelectedStructuredContentInline.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentInline = null;
+  }
+
+  #setSelectedStructuredContentInlineClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentInline &&
+      this.#lastSelectedStructuredContentInline.id === id &&
+      this.#lastSelectedStructuredContentInline.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentInline.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentInlineClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentInline = { id, elements };
+  }
+
+  #syncSelectedStructuredContentInlineClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+    let pos: number | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContent') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+      node = selection.node;
+      pos = selection.from;
+    } else {
+      const $pos = (
+        selection as Selection & {
+          $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode; before?: (depth: number) => number };
+        }
+      ).$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContent') {
+          if (typeof $pos.before !== 'function') {
+            this.#clearSelectedStructuredContentInlineClass();
+            return;
+          }
+          node = candidate;
+          pos = $pos.before(depth);
+          break;
+        }
+      }
+      if (!node || pos == null) {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentInlineClass(elements, id);
+  }
+
   /**
    * Updates the visual cursor/selection overlay to match the current editor selection.
    *
@@ -3251,8 +4235,18 @@ export class PresentationEditor extends EventEmitter {
 
     const activeEditor = this.getActiveEditor();
     const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
+    // Keep selection visible when context menu is open.
+    const contextMenuOpen = activeEditor?.state ? !!ContextMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    if (!hasFocus) {
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns, tooltips).
+    // Dropdown/tooltip content is portaled under <body>, so it won't be inside
+    // [data-editor-ui-surface]. Check both in-surface and portaled SD UI roots.
+    const activeEl = document.activeElement;
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.(
+      '[data-editor-ui-surface], .sd-toolbar-dropdown-menu, .toolbar-dropdown-menu',
+    );
+
+    if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -3267,6 +4261,8 @@ export class PresentationEditor extends EventEmitter {
     if (!selection) {
       try {
         this.#clearSelectedFieldAnnotationClass();
+        this.#clearSelectedStructuredContentBlockClass();
+        this.#clearSelectedStructuredContentInlineClass();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -3290,6 +4286,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#syncSelectedFieldAnnotationClass(selection);
+    this.#syncSelectedStructuredContentBlockClass(selection);
+    this.#syncSelectedStructuredContentInlineClass(selection);
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.
@@ -3333,6 +4331,19 @@ export class PresentationEditor extends EventEmitter {
     if (domRects == null) {
       // DOM-derived selection failed; keep last known-good overlay instead of drifting.
       debugLog('warn', 'Local selection: DOM rect computation failed', { from, to });
+      return;
+    }
+
+    // When dragging across mark boundaries, the selection can briefly land in the
+    // 2-position structural gap between adjacent runs, producing zero DOM rects for
+    // one frame. Preserve the last overlay only during active drag to prevent flicker.
+    // Outside drag (scroll, programmatic changes), zero rects means the DOM is stale
+    // or virtualized — clearing the overlay is the safer default.
+    if (domRects.length === 0 && from !== to && this.#editorInputManager?.isDragging) {
+      debugLog('warn', '[drawSelection] zero rects for non-collapsed selection — preserving last overlay', {
+        from,
+        to,
+      });
       return;
     }
 
@@ -3439,7 +4450,7 @@ export class PresentationEditor extends EventEmitter {
     overlay.appendChild(fragment);
   }
 
-  #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]) {
+  #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]): ResolvedLayoutOptions {
     const defaults = this.#computeDefaultLayoutDefaults();
     const firstSection = blocks?.find(
       (block) =>
@@ -3468,19 +4479,64 @@ export class PresentationEditor extends EventEmitter {
 
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
+    const flowMode = this.#layoutOptions.flowMode ?? 'paginated';
+
+    const resolvedMargins = {
+      top: margins.top!,
+      right: margins.right!,
+      bottom: margins.bottom!,
+      left: margins.left!,
+      ...(margins.header != null ? { header: margins.header } : {}),
+      ...(margins.footer != null ? { footer: margins.footer } : {}),
+    };
+
+    if (flowMode === 'semantic') {
+      const semanticMargins = this.#resolveSemanticMargins(margins);
+      const containerWidth = this.#resolveSemanticContainerInnerWidth();
+      const semanticContentWidth = Math.max(
+        MIN_SEMANTIC_CONTENT_WIDTH_PX,
+        containerWidth - semanticMargins.left - semanticMargins.right,
+      );
+      const semanticPageWidth = semanticContentWidth + semanticMargins.left + semanticMargins.right;
+      this.#hiddenHost.style.width = `${semanticContentWidth}px`;
+      this.#lastSemanticContainerWidth = containerWidth;
+      return {
+        flowMode: 'semantic',
+        pageSize: { w: semanticPageWidth, h: pageSize.h },
+        margins: {
+          ...resolvedMargins,
+          top: semanticMargins.top,
+          right: semanticMargins.right,
+          bottom: semanticMargins.bottom,
+          left: semanticMargins.left,
+        },
+        columns: { count: 1, gap: 0 },
+        semantic: {
+          contentWidth: semanticContentWidth,
+          marginLeft: semanticMargins.left,
+          marginRight: semanticMargins.right,
+          marginTop: semanticMargins.top,
+          marginBottom: semanticMargins.bottom,
+        },
+        sectionMetadata,
+      };
+    }
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
     return {
+      flowMode: 'paginated',
       pageSize,
-      margins: margins as Required<Pick<PageMargins, 'top' | 'right' | 'bottom' | 'left'>> &
-        Partial<Pick<PageMargins, 'header' | 'footer'>>,
+      margins: resolvedMargins,
       ...(columns ? { columns } : {}),
       sectionMetadata,
     };
   }
 
   #buildHeaderFooterInput() {
+    if (this.#isSemanticFlowMode()) {
+      return null;
+    }
     const adapter = this.#headerFooterSession?.adapter;
     if (!adapter) {
       return null;
@@ -3639,8 +4695,8 @@ export class PresentationEditor extends EventEmitter {
    * Hit test for header/footer regions at a given point.
    * Delegates to HeaderFooterSessionManager which manages region tracking.
    */
-  #hitTestHeaderFooterRegion(x: number, y: number): HeaderFooterRegion | null {
-    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout) ?? null;
+  #hitTestHeaderFooterRegion(x: number, y: number, pageIndex?: number, pageLocalY?: number): HeaderFooterRegion | null {
+    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout, pageIndex, pageLocalY) ?? null;
   }
 
   #activateHeaderFooterRegion(region: HeaderFooterRegion) {
@@ -3885,11 +4941,17 @@ export class PresentationEditor extends EventEmitter {
     const layout = this.#layoutState.layout;
     if (!layout) return;
 
-    const pageHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    const virtualGap = this.#layoutOptions.virtualization?.gap ?? 0;
+    const defaultHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
+    const virtualGap = this.#getEffectivePageGap();
 
-    // Calculate approximate y position for the page
-    const yPosition = pageIndex * (pageHeight + virtualGap);
+    // Use cumulative per-page heights so mixed-size documents scroll to the
+    // correct position. The renderer's virtualizer uses the same prefix-sum
+    // approach, so the scroll position lands inside the correct window.
+    let yPosition = 0;
+    for (let i = 0; i < pageIndex; i++) {
+      const pageHeight = layout.pages[i]?.size?.h ?? defaultHeight;
+      yPosition += pageHeight + virtualGap;
+    }
 
     // Scroll viewport to the calculated position
     if (this.#visibleHost) {
@@ -3940,6 +5002,8 @@ export class PresentationEditor extends EventEmitter {
         bookmarks: this.#layoutState.bookmarks,
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,
+        scrollContainer: this.#scrollContainer ?? this.#visibleHost,
+        zoom: this.zoom,
         scrollPageIntoView: (pageIndex) => this.#scrollPageIntoView(pageIndex),
         waitForPageMount: (pageIndex, timeoutMs) => this.#waitForPageMount(pageIndex, { timeout: timeoutMs }),
         getActiveEditor: () => this.getActiveEditor(),
@@ -3994,10 +5058,15 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Get effective page gap based on layout mode and virtualization settings.
    * Keeps painter, layout, and geometry in sync.
+   * Uses DEFAULT_PAGE_GAP for both virtualized and non-virtualized modes for visual consistency.
    */
   #getEffectivePageGap(): number {
+    if (this.#isSemanticFlowMode()) {
+      return 0;
+    }
     if (this.#layoutOptions.virtualization?.enabled) {
-      return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_VIRTUALIZED_PAGE_GAP);
+      // Use explicit gap if provided, otherwise use same default as non-virtualized for consistency
+      return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_PAGE_GAP);
     }
     if (this.#layoutOptions.layoutMode === 'horizontal') {
       return DEFAULT_HORIZONTAL_PAGE_GAP;
@@ -4191,6 +5260,25 @@ export class PresentationEditor extends EventEmitter {
    * - Horizontal: Uses totalWidth for viewport width, maxHeight for scroll height
    */
   #applyZoom() {
+    if (this.#isSemanticFlowMode()) {
+      // Semantic mode: fill the container with fluid widths, no zoom scaling.
+      this.#viewportHost.style.width = '100%';
+      this.#viewportHost.style.minWidth = '';
+      this.#viewportHost.style.minHeight = '';
+      this.#viewportHost.style.transform = '';
+
+      this.#painterHost.style.width = '100%';
+      this.#painterHost.style.minHeight = '';
+      this.#painterHost.style.transformOrigin = '';
+      this.#painterHost.style.transform = '';
+
+      this.#selectionOverlay.style.width = '100%';
+      this.#selectionOverlay.style.height = '100%';
+      this.#selectionOverlay.style.transformOrigin = '';
+      this.#selectionOverlay.style.transform = '';
+      return;
+    }
+
     // Apply zoom by scaling the children (#painterHost and #selectionOverlay) and
     // setting the viewport dimensions to the scaled size.
     //
@@ -4247,10 +5335,16 @@ export class PresentationEditor extends EventEmitter {
       this.#viewportHost.style.width = `${scaledWidth}px`;
       this.#viewportHost.style.minWidth = `${scaledWidth}px`;
       this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+      this.#viewportHost.style.height = '';
+      this.#viewportHost.style.overflow = '';
       this.#viewportHost.style.transform = '';
 
       this.#painterHost.style.width = `${totalWidth}px`;
       this.#painterHost.style.minHeight = `${maxHeight}px`;
+      // Negative margin compensates for the CSS box overflow from transform: scale().
+      // At zoom < 1 the unscaled CSS box is larger than the visual; this pulls the
+      // bottom edge up to match, without clipping overlays (e.g., cursor labels).
+      this.#painterHost.style.marginBottom = zoom !== 1 ? `${maxHeight * zoom - maxHeight}px` : '';
       this.#painterHost.style.transformOrigin = 'top left';
       this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 
@@ -4269,19 +5363,30 @@ export class PresentationEditor extends EventEmitter {
     //
     // This ensures the scroll container sees the correct scaled content size while
     // the transform provides visual scaling.
+    //
+    // CSS transform: scale() does NOT change the element's CSS box dimensions.
+    // At zoom < 1, painterHost's CSS box stays at the full unscaled height while its
+    // visual size is smaller. A negative margin-bottom on painterHost compensates for
+    // the difference, so the scroll container sees the correct scaled size without
+    // clipping overlays (e.g., collaboration cursor labels that extend above their caret).
     const scaledWidth = maxWidth * zoom;
     const scaledHeight = totalHeight * zoom;
 
-    // Set viewport to scaled dimensions for scroll container
     this.#viewportHost.style.width = `${scaledWidth}px`;
     this.#viewportHost.style.minWidth = `${scaledWidth}px`;
     this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+    this.#viewportHost.style.height = '';
+    this.#viewportHost.style.overflow = '';
     this.#viewportHost.style.transform = '';
 
-    // Set painterHost to UNSCALED dimensions and apply transform
-    // This way: 816px * scale(1.5) = 1224px visual = matches viewport
+    // Set painterHost to UNSCALED dimensions and apply transform.
+    // Negative margin compensates for the CSS box overflow from transform: scale().
+    // At zoom < 1: totalHeight=74304 with scale(0.75) → visual 55728px but CSS box stays 74304px.
+    // marginBottom = totalHeight * zoom - totalHeight = 74304 * 0.75 - 74304 = -18576px
+    // This shrinks the layout contribution to match the visual size.
     this.#painterHost.style.width = `${maxWidth}px`;
     this.#painterHost.style.minHeight = `${totalHeight}px`;
+    this.#painterHost.style.marginBottom = zoom !== 1 ? `${totalHeight * zoom - totalHeight}px` : '';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 
@@ -4322,6 +5427,15 @@ export class PresentationEditor extends EventEmitter {
 
   #getPageOffsetX(pageIndex: number): number | null {
     return getPageOffsetXFromTransform({
+      painterHost: this.#painterHost,
+      viewportHost: this.#viewportHost,
+      zoom: this.#layoutOptions.zoom ?? 1,
+      pageIndex,
+    });
+  }
+
+  #getPageOffsetY(pageIndex: number): number | null {
+    return getPageOffsetYFromTransform({
       painterHost: this.#painterHost,
       viewportHost: this.#viewportHost,
       zoom: this.#layoutOptions.zoom ?? 1,
@@ -4388,16 +5502,41 @@ export class PresentationEditor extends EventEmitter {
     );
   }
 
-  #normalizeClientPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+  #normalizeClientPoint(
+    clientX: number,
+    clientY: number,
+  ): { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null {
     return normalizeClientPointFromPointer(
       {
         viewportHost: this.#viewportHost,
         visibleHost: this.#visibleHost,
         zoom: this.#layoutOptions.zoom ?? 1,
         getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
       },
       clientX,
       clientY,
+    );
+  }
+
+  denormalizeClientPoint(
+    layoutX: number,
+    layoutY: number,
+    pageIndex?: number,
+    height?: number,
+  ): { x: number; y: number; height?: number } | null {
+    return denormalizeClientPointFromPointer(
+      {
+        viewportHost: this.#viewportHost,
+        visibleHost: this.#visibleHost,
+        zoom: this.#layoutOptions.zoom ?? 1,
+        getPageOffsetX: (pageIndex) => this.#getPageOffsetX(pageIndex),
+        getPageOffsetY: (pageIndex) => this.#getPageOffsetY(pageIndex),
+      },
+      layoutX,
+      layoutY,
+      pageIndex,
+      height,
     );
   }
 
@@ -4482,6 +5621,10 @@ export class PresentationEditor extends EventEmitter {
       };
     }
     return geometry;
+  }
+
+  computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null {
+    return this.#computeCaretLayoutRect(pos);
   }
 
   #getCurrentPageIndex(): number {
@@ -4626,108 +5769,5 @@ export class PresentationEditor extends EventEmitter {
       ?.permissionRanges?.hasAllowedRanges;
     if (hasPermissionOverride) return false;
     return this.#documentMode === 'viewing';
-  }
-
-  /**
-   * Applies vertical alignment and font scaling to layout DOM elements for subscript/superscript rendering.
-   *
-   * This method post-processes the painted DOM layout to apply vertical alignment styles
-   * (super, sub, baseline, or custom position) based on run properties and text style marks.
-   * It handles both DOCX-style vertAlign ('superscript', 'subscript', 'baseline') and
-   * custom position offsets (in half-points).
-   *
-   * Processing logic:
-   * 1. Queries all text spans with ProseMirror position markers
-   * 2. For each span, resolves the ProseMirror position to find the containing run node
-   * 3. Extracts vertAlign and position from run properties and/or text style marks
-   * 4. Applies CSS vertical-align and font-size styles based on the extracted properties
-   * 5. Position takes precedence over vertAlign when both are present
-   *
-   * @throws Does not throw - DOM manipulation errors are silently caught to prevent layout corruption
-   * @private
-   */
-  #applyVertAlignToLayout() {
-    const doc = this.#editor?.state?.doc;
-    if (!doc || !this.#painterHost) return;
-
-    try {
-      const spans = this.#painterHost.querySelectorAll('.superdoc-line span[data-pm-start]') as NodeListOf<HTMLElement>;
-      spans.forEach((span) => {
-        try {
-          // Skip header/footer spans - they belong to separate PM documents
-          // and their data-pm-start values don't correspond to the body doc
-          if (span.closest('.superdoc-page-header, .superdoc-page-footer')) return;
-
-          const pmStart = Number(span.dataset.pmStart ?? 'NaN');
-          if (!Number.isFinite(pmStart)) return;
-
-          const pos = Math.max(0, Math.min(pmStart, doc.content.size));
-          const $pos = doc.resolve(pos);
-
-          let runNode: ProseMirrorNode | null = null;
-          for (let depth = $pos.depth; depth >= 0; depth--) {
-            const node = $pos.node(depth);
-            if (node.type.name === 'run') {
-              runNode = node;
-              break;
-            }
-          }
-
-          let vertAlign: string | null = runNode?.attrs?.runProperties?.vertAlign ?? null;
-          let position: number | null = runNode?.attrs?.runProperties?.position ?? null;
-          let fontSizeHalfPts: number | null = runNode?.attrs?.runProperties?.fontSize ?? null;
-
-          if (!vertAlign && position == null && runNode) {
-            runNode.forEach((child: ProseMirrorNode) => {
-              if (!child.isText || !child.marks?.length) return;
-              const rpr = decodeRPrFromMarks(child.marks as Mark[]) as {
-                vertAlign?: string;
-                position?: number;
-                fontSize?: number;
-              };
-              if (rpr.vertAlign && !vertAlign) vertAlign = rpr.vertAlign;
-              if (rpr.position != null && position == null) position = rpr.position;
-              if (rpr.fontSize != null && fontSizeHalfPts == null) fontSizeHalfPts = rpr.fontSize;
-            });
-          }
-
-          if (vertAlign == null && position == null) return;
-
-          const styleEntries: string[] = [];
-          if (position != null && Number.isFinite(position)) {
-            const pts = halfPointToPoints(position);
-            if (Number.isFinite(pts)) {
-              styleEntries.push(`vertical-align: ${pts}pt`);
-            }
-          } else if (vertAlign === 'superscript' || vertAlign === 'subscript') {
-            styleEntries.push(`vertical-align: ${vertAlign === 'superscript' ? 'super' : 'sub'}`);
-            if (fontSizeHalfPts != null && Number.isFinite(fontSizeHalfPts)) {
-              const scaledPts = halfPointToPoints(fontSizeHalfPts * SUBSCRIPT_SUPERSCRIPT_SCALE);
-              if (Number.isFinite(scaledPts)) {
-                styleEntries.push(`font-size: ${scaledPts}pt`);
-              } else {
-                styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-              }
-            } else {
-              styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-            }
-          } else if (vertAlign === 'baseline') {
-            styleEntries.push('vertical-align: baseline');
-          }
-
-          if (!styleEntries.length) return;
-          const existing = span.getAttribute('style');
-          const merged = existing ? `${existing}; ${styleEntries.join('; ')}` : styleEntries.join('; ');
-          span.setAttribute('style', merged);
-        } catch (error) {
-          // Silently catch errors for individual spans to prevent layout corruption
-          // DOM manipulation failures should not break the entire layout process
-          console.error('Failed to apply vertical alignment to span:', error);
-        }
-      });
-    } catch (error) {
-      // Silently catch errors to prevent layout corruption
-      console.error('Failed to apply vertical alignment to layout:', error);
-    }
   }
 }

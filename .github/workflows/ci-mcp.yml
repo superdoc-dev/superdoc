@@ -1,0 +1,41 @@
+name: CI MCP
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mcp/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-mcp-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build superdoc (dependency)
+        run: pnpm run build:superdoc
+
+      - name: Build
+        run: pnpm --prefix apps/mcp run build
+
+      - name: Test
+        run: pnpm --prefix apps/mcp run test

@@ -10,41 +10,66 @@ const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackForma
  *
  * @param {Object} param0
  * @param {string} param0.commentId The comment ID
+ * @param {string} [param0.importedId] The imported comment ID
  * @param {import('prosemirror-state').EditorState} state The current editor state
  * @param {import('prosemirror-state').Transaction} tr The current transaction
  * @param {Function} param0.dispatch The dispatch function
- * @returns {void}
+ * @returns {boolean} True if any comment marks were removed
  */
-export const removeCommentsById = ({ commentId, state, tr, dispatch }) => {
-  const positions = getCommentPositionsById(commentId, state.doc);
+export const removeCommentsById = ({ commentId, importedId, state, tr, dispatch }) => {
+  const positions = getCommentPositionsById(commentId, state.doc, importedId);
+  const anchorNodePositions = [];
+
+  state.doc.descendants((node, pos) => {
+    const nodeTypeName = node.type?.name;
+    if (nodeTypeName !== 'commentRangeStart' && nodeTypeName !== 'commentRangeEnd') return;
+    const wid = node.attrs?.['w:id'];
+    if (wid === commentId || (importedId && wid === importedId)) {
+      anchorNodePositions.push(pos);
+    }
+  });
+
+  if (!positions.length && !anchorNodePositions.length) return false;
 
   // Remove the mark
-  positions.forEach(({ from, to }) => {
-    tr.removeMark(from, to, state.schema.marks[CommentMarkName]);
+  positions.forEach(({ from, to, mark }) => {
+    tr.removeMark(from, to, mark);
   });
+
+  // Remove resolved-comment anchors (commentRangeStart/commentRangeEnd) when present.
+  anchorNodePositions
+    .slice()
+    .sort((a, b) => b - a)
+    .forEach((pos) => {
+      tr.delete(pos, pos + 1);
+    });
+
   dispatch(tr);
+  return true;
 };
 
 /**
  * Get the positions of a comment by ID
  *
  * @param {String} commentId The comment ID
+ * @param {String} [importedId] The imported comment ID
  * @param {import('prosemirror-model').Node} doc The prosemirror document
- * @returns {Array} The positions of the comment
+ * @returns {Array<{from:number,to:number,mark:Object}>} The positions and exact mark instances for the comment
  */
-export const getCommentPositionsById = (commentId, doc) => {
+export const getCommentPositionsById = (commentId, doc, importedId) => {
   const positions = [];
   doc.descendants((node, pos) => {
     const { marks } = node;
-    const commentMark = marks.find((mark) => mark.type.name === CommentMarkName);
-
-    if (commentMark) {
-      const { attrs } = commentMark;
-      const { commentId: currentCommentId } = attrs;
-      if (commentId === currentCommentId) {
-        positions.push({ from: pos, to: pos + node.nodeSize });
-      }
-    }
+    marks
+      .filter((mark) => mark.type.name === CommentMarkName)
+      .forEach((commentMark) => {
+        const { attrs } = commentMark;
+        const currentCommentId = attrs?.commentId;
+        const currentImportedId = attrs?.importedId;
+        if (commentId === currentCommentId || (importedId && importedId === currentImportedId)) {
+          positions.push({ from: pos, to: pos + node.nodeSize, mark: commentMark });
+        }
+      });
   });
   return positions;
 };
@@ -54,16 +79,19 @@ export const getCommentPositionsById = (commentId, doc) => {
  * This returns the raw segments (per inline node) rather than merged contiguous ranges.
  *
  * @param {string} commentId The comment ID to match
+ * @param {string} [importedId] The imported comment ID to match
  * @param {import('prosemirror-model').Node} doc The ProseMirror document
  * @returns {Array<{from:number,to:number,attrs:Object}>} Segments containing mark attrs
  */
-const getCommentMarkSegmentsById = (commentId, doc) => {
+const getCommentMarkSegmentsById = (commentId, doc, importedId) => {
   const segments = [];
 
   doc.descendants((node, pos) => {
     if (!node.isInline) return;
     const commentMark = node.marks?.find(
-      (mark) => mark.type.name === CommentMarkName && mark.attrs?.commentId === commentId,
+      (mark) =>
+        mark.type.name === CommentMarkName &&
+        (mark.attrs?.commentId === commentId || (importedId && mark.attrs?.importedId === importedId)),
     );
     if (!commentMark) return;
 
@@ -83,11 +111,12 @@ const getCommentMarkSegmentsById = (commentId, doc) => {
  * so this returns both the raw segments and the merged ranges.
  *
  * @param {string} commentId The comment ID to match
+ * @param {string} [importedId] The imported comment ID to match
  * @param {import('prosemirror-model').Node} doc The ProseMirror document
  * @returns {{segments:Array<{from:number,to:number,attrs:Object}>,ranges:Array<{from:number,to:number,internal:boolean}>}}
  */
-const getCommentMarkRangesById = (commentId, doc) => {
-  const segments = getCommentMarkSegmentsById(commentId, doc);
+const getCommentMarkRangesById = (commentId, doc, importedId) => {
+  const segments = getCommentMarkSegmentsById(commentId, doc, importedId);
   if (!segments.length) return { segments, ranges: [] };
 
   const ranges = [];
@@ -127,17 +156,18 @@ const getCommentMarkRangesById = (commentId, doc) => {
  *
  * @param {Object} param0
  * @param {string} param0.commentId The comment ID
+ * @param {string} [param0.importedId] The imported comment ID
  * @param {import('prosemirror-state').EditorState} param0.state The current editor state
  * @param {import('prosemirror-state').Transaction} param0.tr The current transaction
  * @param {Function} param0.dispatch The dispatch function
  * @returns {boolean} True if the comment mark existed and was processed
  */
-export const resolveCommentById = ({ commentId, state, tr, dispatch }) => {
+export const resolveCommentById = ({ commentId, importedId, state, tr, dispatch }) => {
   const { schema } = state;
   const markType = schema.marks?.[CommentMarkName];
   if (!markType) return false;
 
-  const { segments, ranges } = getCommentMarkRangesById(commentId, state.doc);
+  const { segments, ranges } = getCommentMarkRangesById(commentId, state.doc, importedId);
   if (!segments.length) return false;
 
   segments.forEach(({ from, to, attrs }) => {
@@ -665,59 +695,40 @@ export const translateFormatChangesToEnglish = (attrs = {}) => {
   const beforeTypes = new Set(before.map((mark) => mark.type));
   const afterTypes = new Set(after.map((mark) => mark.type));
 
-  const added = [...afterTypes].filter((type) => !beforeTypes.has(type));
-  const removed = [...beforeTypes].filter((type) => !afterTypes.has(type));
+  const ignore = new Set(['textStyle', 'commentMark']);
+  const parts = [];
 
-  const messages = [];
+  // Mark-level additions (bold, italic, etc.)
+  const added = [...afterTypes].filter((t) => !beforeTypes.has(t) && !ignore.has(t));
+  for (const type of added) parts.push(type);
 
-  // Detect added formatting (excluding textStyle, handled separately)
-  const nonTextStyleAdded = added.filter((type) => !['textStyle', 'commentMark'].includes(type));
-  if (nonTextStyleAdded.length) {
-    messages.push(`Added formatting: ${nonTextStyleAdded.join(', ')}`);
-  }
+  // Mark-level removals
+  const removed = [...beforeTypes].filter((t) => !afterTypes.has(t) && !ignore.has(t));
+  for (const type of removed) parts.push(`removed ${type}`);
 
-  // Detect removed formatting (excluding textStyle, handled separately)
-  const nonTextStyleRemoved = removed.filter((type) => !['textStyle', 'commentMark'].includes(type));
-  if (nonTextStyleRemoved.length) {
-    messages.push(`Removed formatting: ${nonTextStyleRemoved.join(', ')}`);
-  }
-
-  // Handling textStyle changes separately
+  // textStyle attribute changes (font, color, size, etc.)
   const beforeTextStyle = before.find((mark) => mark.type === 'textStyle')?.attrs || {};
   const afterTextStyle = after.find((mark) => mark.type === 'textStyle')?.attrs || {};
-
-  const textStyleChanges = [];
-
-  // Function to convert camelCase to human-readable format
   const formatAttrName = (attr) => attr.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 
-  Object.keys({ ...beforeTextStyle, ...afterTextStyle }).forEach((attr) => {
-    const beforeValue = beforeTextStyle[attr];
-    const afterValue = afterTextStyle[attr];
+  for (const attr of Object.keys({ ...beforeTextStyle, ...afterTextStyle })) {
+    const beforeVal = beforeTextStyle[attr];
+    const afterVal = afterTextStyle[attr];
+    if (beforeVal === afterVal || afterVal === null) continue;
 
-    if (beforeValue !== afterValue) {
-      if (afterValue === null) {
-        // Ignore attributes that are now null
-        return;
-      } else if (attr === 'color') {
-        // Special case: Simplify color change message
-        textStyleChanges.push(`Changed color`);
-      } else {
-        const label = formatAttrName(attr); // Convert camelCase to lowercase words
-        if (beforeValue === undefined || beforeValue === null) {
-          textStyleChanges.push(`Set ${label} to ${afterValue}`);
-        } else {
-          textStyleChanges.push(`Changed ${label} from ${beforeValue} to ${afterValue}`);
-        }
-      }
+    const label = formatAttrName(attr);
+    if (attr === 'color') {
+      parts.push('color');
+    } else if (beforeVal === undefined || beforeVal === null) {
+      parts.push(`${label} ${afterVal}`);
+    } else if (afterVal === undefined) {
+      parts.push(`removed ${label}`);
+    } else {
+      parts.push(`${label} ${afterVal}`);
     }
-  });
-
-  if (textStyleChanges.length) {
-    messages.push(`Modified text style: ${textStyleChanges.join(', ')}`);
   }
 
-  return messages.length ? messages.join('. ') : 'No formatting changes.';
+  return parts.length ? parts.join(', ') : 'formatting';
 };
 
 /**

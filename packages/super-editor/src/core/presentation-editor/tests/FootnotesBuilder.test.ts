@@ -4,24 +4,28 @@ import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuil
 import type { ConverterContext } from '@superdoc/pm-adapter';
 
 // Mock toFlowBlocks
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
-    // Return mock blocks based on blockIdPrefix
-    if (typeof opts?.blockIdPrefix === 'string') {
-      const id = opts.blockIdPrefix.replace('footnote-', '').replace('-', '');
-      return {
-        blocks: [
-          {
-            kind: 'paragraph',
-            runs: [{ kind: 'text', text: `Footnote ${id} text`, pmStart: 0, pmEnd: 10 }],
-          },
-        ],
-        bookmarks: new Map(),
-      };
-    }
-    return { blocks: [], bookmarks: new Map() };
-  }),
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
+      // Return mock blocks based on blockIdPrefix
+      if (typeof opts?.blockIdPrefix === 'string') {
+        const id = opts.blockIdPrefix.replace('footnote-', '').replace('-', '');
+        return {
+          blocks: [
+            {
+              kind: 'paragraph',
+              runs: [{ kind: 'text', text: `Footnote ${id} text`, pmStart: 0, pmEnd: 10 }],
+            },
+          ],
+          bookmarks: new Map(),
+        };
+      }
+      return { blocks: [], bookmarks: new Map() };
+    }),
+  };
+});
 
 // =============================================================================
 // Test Helpers
@@ -277,6 +281,24 @@ describe('buildFootnotesInput', () => {
       expect(result?.refs[1]).toEqual({ id: '1', pos: 31 });
       // But only one entry in blocksById
       expect(result?.blocksById.size).toBe(1);
+    });
+
+    it('renders the real note body when a special entry shares the same id', () => {
+      // Simulates the ID-collision scenario: continuationSeparator at id=1 (empty
+      // content) alongside a real note also at id=1 (with text).  The builder
+      // must pick the regular note.
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = {
+        footnotes: [
+          { id: '1', type: 'continuationSeparator', content: [] },
+          { id: '1', type: null, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Real note' }] }] },
+        ],
+      } as ConverterLike;
+
+      const result = buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      expect(result).not.toBeNull();
+      expect(result?.blocksById.has('1')).toBe(true);
     });
 
     it('handles footnote ref with null id', () => {

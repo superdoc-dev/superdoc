@@ -1,9 +1,12 @@
+import { v4 as uuidv4 } from 'uuid';
 import { Attribute, Node } from '@core/index.js';
+import { formatInsetClipPathTransform } from '@superdoc/contracts';
 import { ImageRegistrationPlugin } from './imageHelpers/imageRegistrationPlugin.js';
 import { ImagePositionPlugin } from './imageHelpers/imagePositionPlugin.js';
 import { getNormalizedImageAttrs } from './imageHelpers/legacyAttributes.js';
 import { getRotationMargins } from './imageHelpers/rotation.js';
 import { inchesToPixels } from '@converter/helpers.js';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 /**
  * Configuration options for Image
@@ -86,6 +89,18 @@ export const Image = Node.create({
 
   addAttributes() {
     return {
+      /** Stable, session-scoped image identity. Assigned on import and create. */
+      sdImageId: {
+        default: null,
+        rendered: false,
+      },
+
+      /** Raw OOXML relativeHeight for z-ordering. Only meaningful for floating images. */
+      relativeHeight: {
+        default: null,
+        rendered: false,
+      },
+
       src: {
         default: null,
         renderDOM: ({ src }) => {
@@ -100,6 +115,9 @@ export const Image = Node.create({
       },
 
       id: { rendered: false },
+
+      isPict: { rendered: false },
+      passthroughSiblings: { rendered: false },
 
       hidden: {
         default: false,
@@ -142,10 +160,19 @@ export const Image = Node.create({
 
       anchorData: {
         default: null,
-        rendered: false,
+        renderDOM: ({ anchorData, originalAttributes }) => {
+          const relativeHeight = originalAttributes?.relativeHeight;
+          if (anchorData && relativeHeight) {
+            const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+            return { style: `position:relative; z-index: ${zIndex}` };
+          }
+        },
       },
 
       isAnchor: { rendered: false },
+      vmlWatermark: { rendered: false },
+      vmlAttributes: { rendered: false },
+      vmlImagedata: { rendered: false },
 
       /**
        * @category Attribute
@@ -185,6 +212,46 @@ export const Image = Node.create({
 
       /**
        * @category Attribute
+       * @param {boolean} [grayscale] - Apply grayscale filter to image (OOXML effect)
+       * @private
+       */
+      grayscale: {
+        default: false,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
+       * @param {{bright?: number, contrast?: number}} [lum] - DrawingML luminance adjustment from a:lum
+       * @private
+       */
+      lum: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string|number} [gain] - VML gain for brightness/washout (watermark effect)
+       * @private
+       */
+      gain: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string|number} [blacklevel] - VML blacklevel for contrast adjustment (watermark effect)
+       * @private
+       */
+      blacklevel: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
        * @param {boolean} [simplePos] - Simple positioning flag
        * @private
        */
@@ -200,6 +267,24 @@ export const Image = Node.create({
       shouldCover: {
         default: false,
         rendered: false,
+      },
+
+      clipPath: {
+        default: null,
+        renderDOM: (attrs) => {
+          const clipPath = attrs.clipPath;
+          if (typeof clipPath !== 'string' || clipPath.trim().length === 0) {
+            return {};
+          }
+          // When we have size we render a wrapper in renderDOM; clip-path and scale go on the inner img only, so don't add here
+          if (attrs.size?.width && attrs.size?.height) {
+            return {};
+          }
+          let style = `clip-path: ${clipPath};`;
+          const scaleStyle = formatInsetClipPathTransform(clipPath);
+          if (scaleStyle) style += ` ${scaleStyle}`;
+          return { style };
+        },
       },
 
       size: {
@@ -241,6 +326,28 @@ export const Image = Node.create({
         rendered: false,
       },
       originalDrawingChildren: {
+        default: null,
+        rendered: false,
+      },
+      rawSrcRect: {
+        default: null,
+        rendered: false,
+      },
+
+      /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
+      lockAspectRatio: {
+        default: true,
+        rendered: false,
+      },
+
+      /** Decorative image flag. Maps to OOXML adec:decorative. */
+      decorative: {
+        default: false,
+        rendered: false,
+      },
+
+      /** Image hyperlink. Maps to OOXML pic:cNvPr > a:hlinkClick. */
+      hyperlink: {
         default: null,
         rendered: false,
       },
@@ -309,12 +416,10 @@ export const Image = Node.create({
       switch (type) {
         case 'None':
           style += 'position: absolute;';
-          // Use relativeHeight from OOXML for proper z-ordering of overlapping elements
-          const relativeHeight = node.attrs.originalAttributes?.relativeHeight;
+          // Use first-class relativeHeight attr, falling back to originalAttributes for legacy docs
+          const relativeHeight = node.attrs.relativeHeight ?? node.attrs.originalAttributes?.relativeHeight;
           if (relativeHeight != null) {
-            // Scale down the relativeHeight value to a reasonable CSS z-index range
-            // OOXML uses large numbers (e.g., 251659318), we normalize to a smaller range
-            const zIndex = Math.floor(relativeHeight / 1000000);
+            const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
             style += `z-index: ${zIndex};`;
           } else if (attrs.behindDoc) {
             style += 'z-index: -1;';
@@ -545,6 +650,48 @@ export const Image = Node.create({
       finalAttributes.style = existingStyle + (existingStyle ? ' ' : '') + style;
     }
 
+    const clipPath = node.attrs.clipPath;
+    const hasClipPath = typeof clipPath === 'string' && clipPath.trim().length > 0;
+    const { width: sizeW, height: sizeH } = size ?? {};
+
+    // When clipPath is set we scale the image so the cropped portion fills the box;
+    // wrap in a container so only that portion occupies space and overflow is hidden.
+    // Resize updates node size so wrapper gets new dimensions and cropped portion stays within.
+    if (hasClipPath && sizeW > 0 && sizeH > 0) {
+      const wrapperStyle = [
+        finalAttributes.style || '',
+        'overflow: hidden',
+        `width: ${sizeW}px`,
+        `height: ${sizeH}px`,
+        'display: inline-block',
+        'box-sizing: border-box',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      // clipPath attribute's renderDOM returns {} when size is set (so styles go on wrapper);
+      // inner img is built here so we set clip-path and fill styles explicitly.
+      const imgInnerStyle = [
+        'width: 100%',
+        'height: 100%',
+        'max-width: 100%',
+        'max-height: 100%',
+        'min-width: 0',
+        'min-height: 0',
+        'box-sizing: border-box',
+        `clip-path: ${clipPath}`,
+        formatInsetClipPathTransform(clipPath) || '',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      const imgAttrs = Attribute.mergeAttributes(this.options.htmlAttributes, {
+        src: this.storage.media[node.attrs.src] ?? node.attrs.src,
+        alt: node.attrs.alt ?? 'Uploaded picture',
+        title: node.attrs.title ?? undefined,
+        style: imgInnerStyle,
+      });
+      return ['span', { ...finalAttributes, style: wrapperStyle }, ['img', imgAttrs]];
+    }
+
     return ['img', Attribute.mergeAttributes(this.options.htmlAttributes, finalAttributes)];
   },
 
@@ -568,7 +715,7 @@ export const Image = Node.create({
         ({ commands }) => {
           return commands.insertContent({
             type: this.name,
-            attrs: options,
+            attrs: { ...options, sdImageId: options.sdImageId ?? uuidv4() },
           });
         },
 

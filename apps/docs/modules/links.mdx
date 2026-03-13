@@ -1,0 +1,377 @@
+---
+title: Links
+keywords: "link popover, link click, custom popover, react popover, link resolver, linkPopoverResolver"
+---
+
+Control what happens when a user clicks a link in the editor. By default, SuperDoc shows a built-in popover with the link URL and edit controls. With `popoverResolver`, you can replace it with your own UI in any framework.
+
+## Quick start
+
+No configuration needed for the default behavior — click a link and the built-in popover appears.
+
+To customize, add a `popoverResolver` to the `links` module:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: file,
+  modules: {
+    links: {
+      popoverResolver: (ctx) => {
+        // Navigate anchor links instead of showing a popover
+        if (ctx.isAnchorLink) {
+          window.location.hash = ctx.href;
+          return { type: 'none' };
+        }
+        // Everything else gets the default popover
+        return { type: 'default' };
+      }
+    }
+  }
+});
+```
+
+## Configuration
+
+<ParamField path="modules.links.popoverResolver" type="(ctx: LinkPopoverContext) => LinkPopoverResolution | null | undefined">
+  Synchronous function called when a user clicks a link. Receives a [context object](#resolver-context) and returns a [resolution](#resolution-types) that determines which popover to show. Return `null` or `undefined` to use the default popover.
+</ParamField>
+
+<Warning>
+The resolver must be synchronous. Do not return a Promise. If the resolver throws, SuperDoc falls back to the default popover and calls `onException`.
+</Warning>
+
+## Resolver context
+
+The resolver receives a `LinkPopoverContext` object with all information about the clicked link:
+
+| Property | Type | Description |
+|---|---|---|
+| `editor` | `Editor` | The editor instance |
+| `href` | `string` | The `href` attribute of the clicked link |
+| `target` | `string \| null` | The `target` attribute |
+| `rel` | `string \| null` | The `rel` attribute |
+| `tooltip` | `string \| null` | The `title` attribute |
+| `element` | `HTMLAnchorElement` | The clicked anchor DOM element |
+| `clientX` | `number` | X coordinate of the click |
+| `clientY` | `number` | Y coordinate of the click |
+| `isAnchorLink` | `boolean` | `true` when href starts with `#` |
+| `documentMode` | `string` | Current mode: `'editing'`, `'viewing'`, or `'suggesting'` |
+| `position` | `{ left: string, top: string }` | Computed popover position relative to the editor surface |
+| `closePopover` | `() => void` | Close the popover programmatically |
+
+## Resolution types
+
+The resolver returns one of four resolution types. Return `null` or `undefined` to use the default popover.
+
+### `default`
+
+Show the built-in link popover with URL display and edit controls.
+
+```javascript
+popoverResolver: (ctx) => {
+  return { type: 'default' };
+}
+```
+
+### `none`
+
+Suppress the popover entirely. Use this when the resolver handles the click itself (navigation, opening a modal, logging, etc.).
+
+```javascript
+popoverResolver: (ctx) => {
+  // Open external links in a new tab, no popover
+  if (!ctx.isAnchorLink) {
+    window.open(ctx.href, '_blank');
+    return { type: 'none' };
+  }
+  return { type: 'default' };
+}
+```
+
+### `custom`
+
+Render a Vue component inside the built-in popover shell. `editor` and `closePopover` are automatically injected as props alongside any props you provide.
+
+```javascript
+import MyLinkPopover from './MyLinkPopover.vue';
+
+popoverResolver: (ctx) => {
+  return {
+    type: 'custom',
+    component: MyLinkPopover,
+    props: { href: ctx.href }
+  };
+}
+```
+
+Your component receives `editor`, `closePopover`, and any additional props:
+
+```vue
+<script setup>
+defineProps({
+  editor: { type: Object, required: true },   // auto-injected
+  closePopover: { type: Function, required: true }, // auto-injected
+  href: { type: String },                     // your custom prop
+});
+</script>
+```
+
+### `external`
+
+Mount framework-agnostic UI into a raw DOM container. Use this for React, Svelte, vanilla JS, or any non-Vue framework.
+
+SuperDoc creates a positioned `<div>` element and passes it to your `render` function. You mount your UI into that container. Return a `{ destroy }` callback for cleanup when the popover closes.
+
+```javascript
+popoverResolver: (ctx) => {
+  return {
+    type: 'external',
+    render: ({ container, closePopover, editor, href }) => {
+      // Mount your UI into the container
+      container.innerHTML = `
+        <a href="${href}" target="_blank">Open link</a>
+        <button>Close</button>
+      `;
+      container.querySelector('button').onclick = closePopover;
+
+      return {
+        destroy: () => {
+          // Clean up event listeners, unmount frameworks, etc.
+        }
+      };
+    }
+  };
+}
+```
+
+The `render` function receives an `ExternalPopoverRenderContext`:
+
+| Property | Type | Description |
+|---|---|---|
+| `container` | `HTMLElement` | Empty positioned DOM container to mount your UI into |
+| `closePopover` | `() => void` | Close the popover, call `destroy`, and return focus to the editor |
+| `editor` | `Editor` | The editor instance |
+| `href` | `string` | The href of the clicked link |
+
+<Note>
+The popover automatically closes on click-outside and Escape key — matching the built-in popover behavior. Your `destroy` callback is called in both cases.
+</Note>
+
+## Framework examples
+
+<Tabs>
+  <Tab title="React">
+    Use `createRoot` to mount a React component into the external container. Return `destroy` to unmount cleanly.
+
+    ```jsx
+    import { createRoot } from 'react-dom/client';
+    import { LinkPreview } from './LinkPreview';
+
+    new SuperDoc({
+      selector: '#editor',
+      document: file,
+      modules: {
+        links: {
+          popoverResolver: (ctx) => ({
+            type: 'external',
+            render: ({ container, closePopover, href }) => {
+              const root = createRoot(container);
+              root.render(
+                <LinkPreview href={href} onClose={closePopover} />
+              );
+              return { destroy: () => root.unmount() };
+            }
+          })
+        }
+      }
+    });
+    ```
+
+    With the React wrapper:
+
+    ```jsx
+    import { SuperDocEditor } from '@superdoc-dev/react';
+    import { createRoot } from 'react-dom/client';
+    import { LinkPreview } from './LinkPreview';
+
+    function App() {
+      return (
+        <SuperDocEditor
+          document={file}
+          documentMode="editing"
+          modules={{
+            links: {
+              popoverResolver: (ctx) => ({
+                type: 'external',
+                render: ({ container, closePopover, href }) => {
+                  const root = createRoot(container);
+                  root.render(
+                    <LinkPreview href={href} onClose={closePopover} />
+                  );
+                  return { destroy: () => root.unmount() };
+                }
+              })
+            }
+          }}
+        />
+      );
+    }
+    ```
+  </Tab>
+  <Tab title="Vue">
+    Vue components can use the simpler `custom` type, which renders inside the built-in popover shell:
+
+    ```javascript
+    import MyLinkPopover from './MyLinkPopover.vue';
+
+    new SuperDoc({
+      selector: '#editor',
+      document: file,
+      modules: {
+        links: {
+          popoverResolver: (ctx) => ({
+            type: 'custom',
+            component: MyLinkPopover,
+            props: { href: ctx.href }
+          })
+        }
+      }
+    });
+    ```
+
+    The `external` type also works with Vue if you prefer manual control:
+
+    ```javascript
+    import { createApp } from 'vue';
+    import MyLinkPopover from './MyLinkPopover.vue';
+
+    popoverResolver: (ctx) => ({
+      type: 'external',
+      render: ({ container, closePopover, href }) => {
+        const app = createApp(MyLinkPopover, { href, closePopover });
+        app.mount(container);
+        return { destroy: () => app.unmount() };
+      }
+    })
+    ```
+  </Tab>
+  <Tab title="Vanilla JS">
+    Build your popover with plain DOM APIs:
+
+    ```javascript
+    new SuperDoc({
+      selector: '#editor',
+      document: file,
+      modules: {
+        links: {
+          popoverResolver: (ctx) => ({
+            type: 'external',
+            render: ({ container, closePopover, href }) => {
+              const link = document.createElement('a');
+              link.href = href;
+              link.target = '_blank';
+              link.textContent = href;
+              link.style.padding = '8px 12px';
+              link.style.display = 'block';
+              container.appendChild(link);
+
+              // No cleanup needed for simple DOM
+            }
+          })
+        }
+      }
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Styling
+
+External popovers use CSS custom properties with sensible defaults that match the built-in popover. Override them to match your design system.
+
+### Shared popover variables
+
+These apply to both the built-in popover and external link popovers:
+
+| Variable | Default | Description |
+|---|---|---|
+| `--sd-popover-bg` | `white` | Background color |
+| `--sd-popover-z-index` | `1000` | Stack order |
+| `--sd-popover-radius` | `6px` | Border radius |
+| `--sd-popover-shadow` | `0 0 0 1px rgba(0,0,0,0.05), 0px 10px 20px rgba(0,0,0,0.1)` | Box shadow |
+| `--sd-popover-min-width` | `120px` | Minimum width |
+| `--sd-popover-min-height` | `40px` | Minimum height |
+
+### External link popover overrides
+
+Override just the external link popover without affecting other popovers:
+
+| Variable | Fallback | Description |
+|---|---|---|
+| `--sd-external-link-popover-bg` | `--sd-popover-bg` | Background color |
+| `--sd-external-link-popover-z-index` | `--sd-popover-z-index` | Stack order |
+| `--sd-external-link-popover-radius` | `--sd-popover-radius` | Border radius |
+| `--sd-external-link-popover-shadow` | `--sd-popover-shadow` | Box shadow |
+| `--sd-external-link-popover-min-width` | `--sd-popover-min-width` | Minimum width |
+| `--sd-external-link-popover-min-height` | `--sd-popover-min-height` | Minimum height |
+
+Example — dark theme for external link popovers:
+
+```css
+.superdoc-root {
+  --sd-external-link-popover-bg: #1a1a2e;
+  --sd-external-link-popover-radius: 10px;
+  --sd-external-link-popover-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+```
+
+The external popover container also has the class `sd-external-link-popover` for direct CSS targeting:
+
+```css
+.sd-external-link-popover {
+  font-family: inherit;
+  color: #333;
+}
+```
+
+## Behavior
+
+- **Toggle off**: Clicking a link while its popover is already open closes the popover.
+- **Click outside**: Clicking anywhere outside the popover closes it.
+- **Escape key**: Pressing Escape closes the popover.
+- **Focus**: When a popover closes, focus returns to the editor.
+- **Error handling**: If the resolver or `render` function throws, SuperDoc falls back to the default popover and calls the `onException` callback.
+- **Cursor**: The editor cursor moves to the clicked link position before the resolver runs.
+
+## Conditional resolution
+
+Use resolver context to show different popovers based on link type, document mode, or any other condition:
+
+```javascript
+popoverResolver: (ctx) => {
+  // Anchor links — navigate without a popover
+  if (ctx.isAnchorLink) {
+    document.getElementById(ctx.href.slice(1))?.scrollIntoView();
+    return { type: 'none' };
+  }
+
+  // Viewing mode — open links directly
+  if (ctx.documentMode === 'viewing') {
+    window.open(ctx.href, '_blank');
+    return { type: 'none' };
+  }
+
+  // Internal links — custom component
+  if (ctx.href.startsWith('https://internal.app/')) {
+    return {
+      type: 'custom',
+      component: InternalLinkPopover,
+      props: { href: ctx.href }
+    };
+  }
+
+  // Everything else — default popover
+  return { type: 'default' };
+}
+```

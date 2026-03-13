@@ -80,11 +80,13 @@ export const applyInlineRunProperties = (
     return run;
   }
   const runAttrs = computeRunAttrs(runProperties, converterContext);
-  const merged = { ...run, ...runAttrs };
-  // Preserve existing run color when runProperties doesn't specify one.
-  // Object spread with undefined values overwrites the original, so we restore it.
-  if (runAttrs.color === undefined && run.color !== undefined) {
-    merged.color = run.color;
+  // Merge runAttrs onto run, but skip undefined values to avoid overwriting
+  // mark-derived properties (e.g., bold from a mark) with absent runProperties fields.
+  const merged = { ...run };
+  for (const key of Object.keys(runAttrs) as Array<keyof typeof runAttrs>) {
+    if (runAttrs[key] !== undefined) {
+      (merged as Record<string, unknown>)[key] = runAttrs[key];
+    }
   }
   return merged;
 };

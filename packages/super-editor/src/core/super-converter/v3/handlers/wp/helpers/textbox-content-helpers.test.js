@@ -471,6 +471,12 @@ describe('textbox-content-helpers', () => {
       expect(result.fontFamily).toBe('Arial');
     });
 
+    it('should extract letterSpacing from twips to pixels', () => {
+      resolveRunProperties.mockReturnValue({ letterSpacing: -6 });
+      const result = extractRunFormatting({}, {}, {});
+      expect(result.letterSpacing).toBeCloseTo(-0.4, 3);
+    });
+
     it('should handle color with w:val attribute', () => {
       resolveRunProperties.mockReturnValue({ color: { 'w:val': '00FF00' } });
       const result = extractRunFormatting({}, {}, {});

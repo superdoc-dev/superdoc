@@ -39,6 +39,47 @@
  * @property {Object} [params] Additional params for internal provider (deprecated)
  */
 
+/** @typedef {import('@superdoc/super-editor').Editor} Editor */
+/** @typedef {import('../SuperDoc.js').SuperDoc} SuperDoc */
+
+/**
+ * Context passed to a link popover resolver when a link is clicked.
+ * @typedef {Object} LinkPopoverContext
+ * @property {Editor} editor The editor instance
+ * @property {string} href The href attribute of the clicked link
+ * @property {string | null} target The target attribute of the clicked link
+ * @property {string | null} rel The rel attribute of the clicked link
+ * @property {string | null} tooltip The title/tooltip attribute of the clicked link
+ * @property {HTMLAnchorElement} element The clicked anchor DOM element
+ * @property {number} clientX X coordinate of the click
+ * @property {number} clientY Y coordinate of the click
+ * @property {boolean} isAnchorLink Whether this is an anchor link (href starts with #)
+ * @property {string} documentMode Current document mode ('editing', 'viewing', 'suggesting')
+ * @property {{ left: string, top: string }} position Computed popover position relative to editor surface
+ * @property {() => void} closePopover Close the popover programmatically
+ */
+
+/**
+ * Context passed to an external (framework-agnostic) popover renderer.
+ * @typedef {Object} ExternalPopoverRenderContext
+ * @property {HTMLElement} container Empty DOM container positioned where the popover should appear
+ * @property {() => void} closePopover Call to close the popover and clean up
+ * @property {Editor} editor The editor instance
+ * @property {string} href The href of the clicked link
+ */
+
+/**
+ * Resolution returned by a link popover resolver.
+ * @typedef {{ type: 'default' } | { type: 'none' } | { type: 'custom', component: unknown, props?: Record<string, unknown> } | { type: 'external', render: (ctx: ExternalPopoverRenderContext) => ({ destroy?: () => void } | void) }} LinkPopoverResolution
+ */
+
+/**
+ * Resolver function for customizing the link click popover.
+ * Must be synchronous — do not return a Promise.
+ * Return null/undefined to use the default popover.
+ * @typedef {(ctx: LinkPopoverContext) => LinkPopoverResolution | null | undefined} LinkPopoverResolver
+ */
+
 /**
  * @typedef {Object} Modules
  * @property {Object | false} [comments] Comments module configuration (false to disable)
@@ -75,16 +116,22 @@
  * @property {Object} [ai] AI module configuration
  * @property {string} [ai.apiKey] Harbour API key for AI features
  * @property {string} [ai.endpoint] Custom endpoint URL for AI services
+ * @property {Object} [pdf] PDF module configuration
+ * @property {Object} pdf.pdfLib Preloaded pdf.js library instance
+ * @property {string} [pdf.workerSrc] PDF.js worker source URL (falls back to CDN when omitted)
+ * @property {boolean} [pdf.setWorker] Whether to auto-configure pdf.js worker
+ * @property {boolean} [pdf.textLayer] Enable text layer rendering (default: false)
+ * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
  * @property {Object} [toolbar] Toolbar module configuration
- * @property {Object} [slashMenu] Slash menu module configuration
- * @property {Array} [slashMenu.customItems] Array of custom menu sections with items
- * @property {Function} [slashMenu.menuProvider] Function to customize menu items
- * @property {boolean} [slashMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [links] Link click popover configuration
+ * @property {LinkPopoverResolver} [links.popoverResolver] Custom resolver for the link click popover.
+ * @property {Object} [contextMenu] Context menu module configuration
+ * @property {Array} [contextMenu.customItems] Array of custom menu sections with items
+ * @property {Function} [contextMenu.menuProvider] Function to customize menu items
+ * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [slashMenu] @deprecated Use contextMenu instead
  */
-
-/** @typedef {import('@superdoc/super-editor').Editor} Editor */
-/** @typedef {import('../SuperDoc.js').SuperDoc} SuperDoc */
 
 /**
  * @typedef {'editing' | 'viewing' | 'suggesting'} DocumentMode
@@ -119,6 +166,9 @@
  * @property {ExportType[]} [exportType=['docx']] - File formats to export
  * @property {CommentsType} [commentsType='external'] - How to handle comments
  * @property {string} [exportedName] - Custom filename (without extension)
+ * @property {Blob[]} [additionalFiles] - Extra files to include in the export zip
+ * @property {string[]} [additionalFileNames] - Filenames for the additional files
+ * @property {boolean} [isFinalDoc=false] - Whether this is a final document export
  * @property {boolean} [triggerDownload=true] - Auto-download or return blob
  * @property {string} [fieldsHighlightColor] - Color for field highlights
  */
@@ -156,7 +206,13 @@
  *   Example (custom font):
  *     uiDisplayFallbackFont: '"Inter", Arial, sans-serif'
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
+ * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
  * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
+ * @property {'paginated' | 'semantic'} [layoutEngineOptions.flowMode='paginated'] Layout engine flow mode.
+ *   - 'paginated': standard page-first layout (default)
+ *   - 'semantic': continuous semantic flow without visible pagination boundaries
+ * @property {Object} [layoutEngineOptions.semanticOptions] Internal-only semantic mode tuning options.
+ *   This shape is intentionally not a stable public API in v1.
  * @property {Object} [layoutEngineOptions.trackedChanges] Optional override for paginated track-changes rendering (e.g., `{ mode: 'final' }` to force final view or `{ enabled: false }` to strip metadata entirely)
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
  * @property {(editor: Editor) => void} [onEditorCreate] Callback after an editor is created
@@ -173,6 +229,7 @@
  * @property {(params: { editor: Editor }) => void} [onEditorUpdate] Callback when document is updated
  * @property {(params: { error: Error }) => void} [onException] Callback when an exception is thrown
  * @property {(params: { isRendered: boolean }) => void} [onCommentsListChange] Callback when the comments list is rendered
+ * @property {(params: { totalPages: number, superdoc: SuperDoc }) => void} [onPaginationUpdate] Callback when pagination layout updates (fires after each layout pass with the current page count)
  * @property {(params: {})} [onListDefinitionsChange] Callback when the list definitions change
  * @property {string} [format] The format of the document (docx, pdf, html)
  * @property {Object[]} [editorExtensions] The extensions to load for the editor
@@ -190,8 +247,13 @@
  * @property {boolean} [disableContextMenu] Whether to disable slash / right-click custom context menu
  * @property {string} [html] HTML content to initialize the editor with
  * @property {string} [markdown] Markdown content to initialize the editor with
+ * @property {((items: Array<{tagName: string, outerHTML: string, count: number}>) => void) | null} [onUnsupportedContent] Callback invoked with unsupported HTML elements dropped during import. When provided, console.warn is NOT emitted.
+ * @property {boolean} [warnOnUnsupportedContent] When true and no onUnsupportedContent callback is provided, emits a console.warn with unsupported items
  * @property {boolean} [isDebug=false] Whether to enable debug mode
  * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
+ * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles
+ * @property {string} [licenseKey] License key for organization identification
+ * @property {{ enabled: boolean, endpoint?: string, metadata?: Record<string, unknown>, licenseKey?: string }} [telemetry] Telemetry configuration
  */
 
 export {};

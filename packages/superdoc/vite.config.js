@@ -1,8 +1,10 @@
 import path from 'path';
 import copy from 'rollup-plugin-copy'
 import dts from 'vite-plugin-dts'
+import sirv from 'sirv';
 import { defineConfig } from 'vite'
 import { configDefaults } from 'vitest/config'
+import { createRequire } from 'node:module';
 import { fileURLToPath, URL } from 'node:url';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { visualizer } from 'rollup-plugin-visualizer';
@@ -10,6 +12,37 @@ import vue from '@vitejs/plugin-vue'
 
 import { version } from './package.json';
 import sourceResolve from '../../vite.sourceResolve';
+
+// WORKAROUND: rolldown doesn't support trailing-slash imports (e.g. 'punycode/')
+// which Node.js treats as "resolve the package entry point". node-stdlib-browser's
+// url polyfill uses `import from 'punycode/'` and rolldown tries to open the
+// directory as a file. We resolve the actual entry point here and redirect via a
+// small plugin in optimizeDeps.rollupOptions below.
+// Track: https://github.com/nicolo-ribaudo/tc39-proposal-import-deferral/issues/3
+// TODO: Remove once rolldown supports trailing-slash imports or node-stdlib-browser drops them.
+const require = createRequire(import.meta.url);
+const stdlibRequire = createRequire(require.resolve('node-stdlib-browser/package.json'));
+const repoRequire = createRequire(path.resolve(__dirname, '../../package.json'));
+const punycodeEntry = stdlibRequire.resolve('punycode/punycode.js');
+
+const resolvePackageEsmEntry = (pkg) => {
+  const resolved = repoRequire.resolve(pkg);
+  if (resolved.endsWith(`${path.sep}index.cjs`)) {
+    return resolved.slice(0, -'index.cjs'.length) + 'index.js';
+  }
+  return resolved;
+};
+
+// y-prosemirror cursor/selection plugins return DecorationSet instances that must share
+// identity with the EditorView's prosemirror-view copy. If multiple ProseMirror module
+// instances are bundled, `instanceof DecorationSet` checks fail and collaborative startup
+// can crash during the first Yjs rerender.
+const proseMirrorSingletonAliases = [
+  { find: 'prosemirror-model', replacement: resolvePackageEsmEntry('prosemirror-model') },
+  { find: 'prosemirror-state', replacement: resolvePackageEsmEntry('prosemirror-state') },
+  { find: 'prosemirror-transform', replacement: resolvePackageEsmEntry('prosemirror-transform') },
+  { find: 'prosemirror-view', replacement: resolvePackageEsmEntry('prosemirror-view') },
+];
 
 const visualizerConfig = {
   filename: './dist/bundle-analysis.html',
@@ -19,21 +52,15 @@ const visualizerConfig = {
   open: true
 }
 
+// Internal @superdoc/ paths that map to ./src/ (not workspace packages).
+// Rolldown doesn't support regex capture groups ($1) in alias replacements,
+// so we list these explicitly instead of using /^@superdoc\/(.*)$/.
+// Update this list when adding new src/ subdirectories imported via @superdoc/.
+const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'stores', 'dev', 'icons.js', 'index.js'];
+
 export const getAliases = (_isDev) => {
   const aliases = [
-    // NOTE: There are a number of packages named "@superdoc/PACKAGE", but we also alias
-    // "@superdoc" to the src directory of the superdoc package. This is error-prone and
-    // should be changed, e.g. by renaming the src alias to "@superdoc/superdoc".
-    //
-    // Until then, the alias for "./src" is a regexp that matches any imports starting
-    // with "@superdoc/" that don't also match one of the known packages.
-    //
-    // Also note: this regexp is duplicated in packages/ai/vitest.config.mjs
-
-    {
-      find: /^@superdoc\/(?!common|contracts|geometry-utils|pm-adapter|layout-engine|layout-bridge|painter-dom|style-engine|measuring-dom|word-layout|url-validation|preset-geometry|super-editor|locale-utils|font-utils)(.*)/,
-      replacement: path.resolve(__dirname, './src/$1'),
-    },
+    ...proseMirrorSingletonAliases,
 
     // Workspace packages (source paths for dev)
     { find: '@stores', replacement: fileURLToPath(new URL('./src/stores', import.meta.url)) },
@@ -51,6 +78,12 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.js') },
 
+    // Map @superdoc/<name> to ./src/<name> for internal paths
+    ...superdocSrcAliases.map(name => ({
+      find: `@superdoc/${name}`,
+      replacement: path.resolve(__dirname, `./src/${name}`),
+    })),
+
     // Super Editor aliases
     { find: '@', replacement: '@superdoc/super-editor' },
     ...sourceResolve.alias,
@@ -61,16 +94,17 @@ export const getAliases = (_isDev) => {
 
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode, command}) => {
+export default defineConfig(({ mode, command }) => {
+  const skipDts = process.env.SUPERDOC_SKIP_DTS === '1';
   const plugins = [
     vue(),
-    dts({
+    !skipDts && dts({
       include: ['src/**/*', '../super-editor/src/**/*'],
       outDir: 'dist',
     }),
     copy({
       targets: [
-        { 
+        {
           src: 'node_modules/pdfjs-dist/web/images/*',
           dest: 'dist/images',
         },
@@ -78,7 +112,22 @@ export default defineConfig(({ mode, command}) => {
       hook: 'writeBundle'
     }),
     // visualizer(visualizerConfig)
-  ];
+    {
+      // Serve dist/ as static files so the docs dev server can load the local UMD build - Development only.
+      name: 'serve-dist-for-docs',
+      configureServer(server) {
+        server.middlewares.use(
+          '/dist',
+          sirv(path.resolve(__dirname, 'dist'), {
+            dev: true,
+            setHeaders(res) {
+              res.setHeader('Access-Control-Allow-Origin', '*');
+            },
+          }),
+        );
+      },
+    },
+  ].filter(Boolean);
   if (mode !== 'test') plugins.push(nodePolyfills());
   const isDev = command === 'serve';
 
@@ -102,6 +151,7 @@ export default defineConfig(({ mode, command}) => {
       exclude: [
         ...configDefaults.exclude,
         '**/*.spec.js',
+        'tests/umd-smoke/**',
       ],
     },
     build: {
@@ -136,41 +186,55 @@ export default defineConfig(({ mode, command}) => {
             format: 'es',
             entryFileNames: '[name].es.js',
             chunkFileNames: 'chunks/[name]-[hash].es.js',
-            manualChunks: {
-              'vue': ['vue'],
-              'blank-docx': ['@superdoc/common/data/blank.docx?url'],
-              'jszip': ['jszip'],
-              'eventemitter3': ['eventemitter3'],
-              'uuid': ['uuid'],
-              'xml-js': ['xml-js'],
+            manualChunks(id) {
+              if (id.includes('/node_modules/vue/')) return 'vue';
+              if (id.includes('/node_modules/jszip/')) return 'jszip';
+              if (id.includes('/node_modules/eventemitter3/')) return 'eventemitter3';
+              if (id.includes('/node_modules/uuid/')) return 'uuid';
+              if (id.includes('/node_modules/xml-js/')) return 'xml-js';
+              if (id.includes('blank.docx')) return 'blank-docx';
             }
           },
           {
             format: 'cjs',
             entryFileNames: '[name].cjs',
             chunkFileNames: 'chunks/[name]-[hash].cjs',
-            manualChunks: {
-              'vue': ['vue'],
-              'blank-docx': ['@superdoc/common/data/blank.docx?url'],
-              'jszip': ['jszip'],
-              'eventemitter3': ['eventemitter3'],
-              'uuid': ['uuid'],
-              'xml-js': ['xml-js'],
+            manualChunks(id) {
+              if (id.includes('/node_modules/vue/')) return 'vue';
+              if (id.includes('/node_modules/jszip/')) return 'jszip';
+              if (id.includes('/node_modules/eventemitter3/')) return 'eventemitter3';
+              if (id.includes('/node_modules/uuid/')) return 'uuid';
+              if (id.includes('/node_modules/xml-js/')) return 'xml-js';
+              if (id.includes('blank.docx')) return 'blank-docx';
             }
           }
-        ],        
+        ],
       }
     },
     optimizeDeps: {
       include: ['yjs', '@hocuspocus/provider'],
-      esbuildOptions: {
-        target: 'es2020',
+      // Rolldown treats trailing-slash imports as directory paths.
+      // node-stdlib-browser's url polyfill imports 'punycode/' — resolve it to the
+      // actual file since punycode is also a Node.js builtin and pnpm isolates it.
+      rollupOptions: {
+        plugins: [
+          {
+            name: 'fix-punycode-trailing-slash',
+            resolveId(source) {
+              if (source === 'punycode/' || source === 'punycode') {
+                return { id: punycodeEntry };
+              }
+            },
+          },
+        ],
       },
     },
     resolve: {
       alias: getAliases(isDev),
+      dedupe: ['prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view', 'y-prosemirror'],
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
       conditions: ['source'],
+      preserveSymlinks: false,
     },
     css: {
       postcss: './postcss.config.mjs',

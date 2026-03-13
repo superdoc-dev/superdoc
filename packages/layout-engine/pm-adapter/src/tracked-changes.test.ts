@@ -657,6 +657,19 @@ describe('tracked-changes', () => {
       };
       expect(() => resetRunFormatting(run)).not.toThrow();
     });
+
+    it('should clear vertAlign and baselineShift', () => {
+      const run: TextRun = {
+        text: '1st',
+        fontFamily: 'Arial',
+        fontSize: 10.4,
+        vertAlign: 'superscript',
+        baselineShift: 3,
+      };
+      resetRunFormatting(run);
+      expect(run.vertAlign).toBeUndefined();
+      expect(run.baselineShift).toBeUndefined();
+    });
   });
 
   describe('applyFormatChangeMarks', () => {

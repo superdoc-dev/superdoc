@@ -460,6 +460,7 @@ export class AIActionsService {
     options?: {
       caseSensitive?: boolean;
       trackChanges?: boolean;
+      contentType?: 'html' | 'markdown' | 'text';
     },
   ): Promise<Result> {
     if (!validateInput(findText)) {
@@ -467,6 +468,14 @@ export class AIActionsService {
     }
     if (replacementText === undefined || replacementText === null) {
       throw new Error('Replacement text must be a string (use an empty string "" to delete text).');
+    }
+
+    const isFormattedContentType = options?.contentType === 'html' || options?.contentType === 'markdown';
+    if (options?.trackChanges && isFormattedContentType) {
+      throw new Error(
+        `trackChanges and contentType: '${options.contentType}' cannot be used together. ` +
+          'Tracked changes require plain-text insertion; HTML/Markdown content would be inserted as literal text.',
+      );
     }
 
     const applied: FoundMatch[] = [];
@@ -486,9 +495,16 @@ export class AIActionsService {
 
         if (textMatches && selection.from >= 0 && selection.to <= doc.content.size) {
           // Direct replacement optimization - replace selection without search
+          const isFormattedContent = options?.contentType === 'html' || options?.contentType === 'markdown';
           let changeId: string | undefined;
           if (options?.trackChanges) {
             changeId = this.adapter.createTrackedChange(selection.from, selection.to, replacementText);
+          } else if (isFormattedContent) {
+            this.editor?.commands?.setTextSelection?.({ from: selection.from, to: selection.to });
+            this.adapter.insertFormattedContent(replacementText, {
+              position: 'replace',
+              contentType: options.contentType,
+            });
           } else {
             this.adapter.replaceText(selection.from, selection.to, replacementText);
           }
@@ -517,11 +533,15 @@ export class AIActionsService {
       return { success: false, results: [] };
     }
 
+    const isFormattedReplace = options?.contentType === 'html' || options?.contentType === 'markdown';
     const replacementContainsSearch = options?.caseSensitive
       ? replacementText.includes(findText)
       : replacementText.toLowerCase().includes(findText.toLowerCase());
 
-    const maxPasses = replacementContainsSearch ? 10 : 1;
+    // Formatted content: always single-pass. After HTML/markdown insertion the visible
+    // text may still match findText (e.g., replacing "Hello" with "<b>Hello</b>"),
+    // but the replacement is correct — re-matching would cause duplicate rewrites.
+    const maxPasses = isFormattedReplace ? 1 : replacementContainsSearch ? 10 : 1;
     let pass = 0;
 
     const collectMatches = () => this.adapter.findLiteralMatches(findText, Boolean(options?.caseSensitive));
@@ -535,6 +555,8 @@ export class AIActionsService {
       const descending = [...normalizedMatches].sort((a, b) => b.from - a.from);
       const replacementsThisPass: FoundMatch[] = [];
 
+      const isFormattedContent = options?.contentType === 'html' || options?.contentType === 'markdown';
+
       for (const match of descending) {
         if (options?.trackChanges) {
           const changeId = this.adapter.createTrackedChange(match.from, match.to, replacementText);
@@ -544,6 +566,17 @@ export class AIActionsService {
             positions: [{ from: match.from, to: match.to }],
             changeId,
           } as FoundMatch);
+        } else if (isFormattedContent) {
+          this.editor?.commands?.setTextSelection?.({ from: match.from, to: match.to });
+          this.adapter.insertFormattedContent(replacementText, {
+            position: 'replace',
+            contentType: options!.contentType,
+          });
+          replacementsThisPass.push({
+            originalText: match.text,
+            suggestedText: replacementText,
+            positions: [{ from: match.from, to: match.to }],
+          });
         } else {
           this.adapter.replaceText(match.from, match.to, replacementText);
           replacementsThisPass.push({
@@ -777,7 +810,10 @@ export class AIActionsService {
    * @param options - in reference to the current document position, where to insert the content.
    * @returns Result with inserted content location
    */
-  async insertContent(query: string, options?: { position?: 'before' | 'after' | 'replace' }): Promise<Result> {
+  async insertContent(
+    query: string,
+    options?: { position?: 'before' | 'after' | 'replace'; contentType?: 'html' | 'markdown' | 'text' },
+  ): Promise<Result> {
     if (!validateInput(query)) {
       throw new Error('Query cannot be empty');
     }
@@ -786,10 +822,15 @@ export class AIActionsService {
       return { success: false, results: [] };
     }
 
+    const contentType = options?.contentType;
+    const isFormattedContent = contentType === 'html' || contentType === 'markdown';
+
     const documentContext = this.getDocumentContext();
     const prompt = buildInsertContentPrompt(query, documentContext);
 
-    const useStreaming = this.streamPreference !== false;
+    // Disable streaming for non-text content types — partial HTML/markdown
+    // fragments will produce broken DOM parsing results.
+    const useStreaming = !isFormattedContent && this.streamPreference !== false;
     let streamingInsertedLength = 0;
     const insertionMode =
       options?.position === 'before' || options?.position === 'after' ? options.position : 'replace';
@@ -834,18 +875,25 @@ export class AIActionsService {
         return { success: false, results: [] };
       }
 
-      // Strip list prefixes from suggested text while preserving leading whitespace
-      const strippedText = stripListPrefix(suggestedResult.suggestedText);
+      let finalText: string;
 
-      if (useStreaming && insertionMode === 'replace') {
-        const decoded = strippedText;
-        if (streamingInsertedLength < decoded.length) {
-          this.adapter.insertText(decoded.slice(streamingInsertedLength), { position: insertionMode });
-        }
-        this.onStreamChunk?.(decoded);
+      if (isFormattedContent) {
+        // For HTML/markdown, use the raw text — stripListPrefix would break markdown
+        // list syntax (e.g., `- item`) and could mangle HTML structure.
+        finalText = suggestedResult.suggestedText;
+        this.adapter.insertFormattedContent(finalText, { position: insertionMode, contentType });
+        this.onStreamChunk?.(finalText);
       } else {
-        this.adapter.insertText(strippedText, { position: insertionMode });
-        this.onStreamChunk?.(strippedText);
+        // Strip list prefixes only on the plain-text path
+        finalText = stripListPrefix(suggestedResult.suggestedText);
+        if (useStreaming && insertionMode === 'replace') {
+          if (streamingInsertedLength < finalText.length) {
+            this.adapter.insertText(finalText.slice(streamingInsertedLength), { position: insertionMode });
+          }
+        } else {
+          this.adapter.insertText(finalText, { position: insertionMode });
+        }
+        this.onStreamChunk?.(finalText);
       }
 
       return {
@@ -853,7 +901,7 @@ export class AIActionsService {
         results: [
           {
             ...suggestedResult,
-            suggestedText: strippedText,
+            suggestedText: finalText,
           },
         ],
       };

@@ -12,6 +12,7 @@ export default [
   {
     ignores: [
       '**/dist/**',
+      '**/dist-types/**',
       '**/node_modules/**',
       // Generated/vendor files that shouldn't be linted
       '**/pdfjs.js',
@@ -26,6 +27,8 @@ export default [
       '**/src/**/*.d.ts.map',
       // Test files
       '**/*.test.js',
+      '**/*.test.ts',
+      '**/*.test.tsx',
       '**/*.spec.js',
       '**/tests/**',
       '**/test/**',
@@ -34,12 +37,17 @@ export default [
       // Examples (different environments and coding styles)
       'examples/**',
       '**/examples/**',
+      // Demos (different environments and dependency sets)
+      'demos/**',
+      '**/demos/**',
       // Config files (CommonJS/different environments)
       '**/*.config.js',
       '**/*.cjs',
       '**/commitlint.config.js',
       // E2E tests
       'e2e-tests/**',
+      // SDK scripts — ESM parsed incorrectly by typescript-eslint
+      'packages/sdk/scripts/**',
     ],
   },
   {
@@ -49,6 +57,7 @@ export default [
         // Universal APIs (available in both environments)
         console: 'readonly',
         fetch: 'readonly',
+        AbortSignal: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',
@@ -133,6 +142,10 @@ export default [
           // Temporarily all "@"-prefixed imports. This should likely be changed to use https://github.com/pzmosquito/eslint-import-resolver-vite to properly resolve these aliases
           ignore: [
             '^@.*$',
+            '^bun:.*$', // Bun built-in modules
+            '^superdoc$',
+            '^superdoc/style\\.css$',
+            '^\\..*\/generated\/', // Generated files (codegen artifacts, not in git)
           ],
         }
       ]
@@ -165,6 +178,37 @@ export default [
       // Disable TypeScript rule for JavaScript mock files
       '@typescript-eslint/no-unused-vars': 'off',
       // JavaScript rule with underscore pattern already applied
+    },
+  },
+  // Parts boundary enforcement: prevent direct writes to convertedXml outside part-store.ts
+  {
+    files: [
+      'packages/super-editor/src/**/*.ts',
+      'packages/super-editor/src/**/*.js',
+    ],
+    ignores: [
+      'packages/super-editor/src/core/parts/store/part-store.ts',
+      // Test helpers set up mock convertedXml for part tests
+      'packages/super-editor/src/core/parts/testing/**',
+      // Import/export phases are exempt (initial document load and final export)
+      'packages/super-editor/src/core/super-converter/**',
+      // Validator normalizes rels key paths during document load
+      'packages/super-editor/src/core/super-validator/**',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "AssignmentExpression > MemberExpression[property.name='convertedXml']",
+          message:
+            'Direct assignment to convertedXml is prohibited. Use setPart/removePart from core/parts/store/part-store.ts, or mutatePart/mutateParts for mutations.',
+        },
+        {
+          selector: "AssignmentExpression > MemberExpression[object.property.name='convertedXml'][computed=true]",
+          message:
+            'Direct assignment to convertedXml[...] is prohibited. Use setPart/removePart from core/parts/store/part-store.ts, or mutatePart/mutateParts for mutations.',
+        },
+      ],
     },
   },
   {

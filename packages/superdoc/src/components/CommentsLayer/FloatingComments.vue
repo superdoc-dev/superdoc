@@ -73,6 +73,7 @@ const { activeZoom } = storeToRefs(superdocStore);
 
 const floatingCommentsContainer = ref(null);
 const commentsRenderKey = ref(0);
+const sidebarOffsetY = ref(0);
 
 // Resolve activeComment (which stores commentId) to the position key used by allPositions
 // (which prefers importedId). Without this, imported Word comments where importedId !== commentId
@@ -316,8 +317,8 @@ watch(activeCommentKey, (newKey, oldKey) => {
   });
 });
 
-// Scroll to the active comment ONLY when its anchor is off-screen.
-// getBoundingClientRect() is viewport-relative (accounts for scroll + zoom).
+// Align the active comment bubble with the same on-screen Y position as its
+// document anchor by translating the inner sidebar layer.
 watch(activeComment, () => {
   if (scrollTimer) clearTimeout(scrollTimer);
 
@@ -332,18 +333,15 @@ watch(activeComment, () => {
     scrollTimer = setTimeout(() => {
       const el = placeholderRefs.value[key];
       if (!el) return;
+      const parentRect = props.parent?.getBoundingClientRect?.();
+      if (!parentRect) return;
 
-      const rect = el.getBoundingClientRect();
-      const margin = 80;
-      const availableHeight = window.innerHeight - 2 * margin;
-      const isVisible =
-        rect.height > availableHeight
-          ? rect.top >= margin
-          : rect.top >= margin && rect.bottom <= window.innerHeight - margin;
+      const anchorTop = getAnchorTop(comment);
+      if (typeof anchorTop !== 'number' || isNaN(anchorTop)) return;
 
-      if (!isVisible) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
+      const desiredTop = parentRect.top + anchorTop;
+      const currentTop = el.getBoundingClientRect().top;
+      sidebarOffsetY.value += desiredTop - currentTop;
     }, 400);
   });
 });
@@ -458,7 +456,7 @@ onBeforeUnmount(() => {
   <div class="section-wrapper" ref="floatingCommentsContainer" :style="{ minHeight: totalHeight + 'px' }">
     <!-- sidebar-container stays at top: 0 — the layout algorithm pins the active
          comment at its anchor position directly, no offset needed -->
-    <div class="sidebar-container">
+    <div class="sidebar-container" :style="{ transform: `translateY(${sidebarOffsetY}px)` }">
       <!-- Lightweight placeholders for ALL comments (observed for viewport proximity) -->
       <div
         v-for="pos in allPositions"
@@ -500,6 +498,8 @@ onBeforeUnmount(() => {
   position: absolute;
   width: 300px;
   min-height: 300px;
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 .section-wrapper {

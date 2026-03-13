@@ -1169,11 +1169,15 @@ const getPDFViewer = () => {
 
 .right-sidebar {
   min-width: 320px;
+  height: 100%;
 }
 
 .floating-comments {
   min-width: 300px;
   width: 300px;
+  height: 100%;
+  overflow-y: hidden;
+  overflow-x: hidden;
 }
 
 .superdoc__layers {

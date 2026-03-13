@@ -1,7 +1,40 @@
 // @ts-nocheck
+import { TextSelection } from 'prosemirror-state';
 import { history, redo as originalRedo, undo as originalUndo } from 'prosemirror-history';
 import { undo as yUndo, redo as yRedo, yUndoPlugin } from 'y-prosemirror';
 import { Extension } from '@core/Extension.js';
+import { CustomSelectionPluginKey } from '../custom-selection/custom-selection.js';
+
+function createHistoryDispatch(editor, dispatch) {
+  if (!dispatch) return dispatch;
+
+  return (historyTr) => {
+    let cleared = historyTr.setMeta(CustomSelectionPluginKey, {
+      focused: false,
+      preservedSelection: null,
+      showVisualSelection: false,
+      skipFocusReset: false,
+    });
+
+    const sel = cleared.selection;
+    if (sel && sel instanceof TextSelection && !sel.empty) {
+      const headPos = typeof sel.head === 'number' ? sel.head : sel.to;
+      try {
+        const collapsed = TextSelection.create(cleared.doc, headPos);
+        cleared = cleared.setSelection(collapsed);
+      } catch {
+        // Ignore collapse failures and fall back to original selection
+      }
+    }
+
+    editor.setOptions({
+      preservedSelection: null,
+      lastSelection: null,
+    });
+
+    dispatch(cleared);
+  };
+}
 
 /**
  * Configuration options for History
@@ -55,7 +88,8 @@ export const History = Extension.create({
           return yUndo(state);
         }
         tr.setMeta('inputType', 'historyUndo');
-        return originalUndo(state, dispatch);
+        const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);
+        return originalUndo(state, wrappedDispatch);
       },
 
       /**
@@ -71,7 +105,8 @@ export const History = Extension.create({
           return yRedo(state);
         }
         tr.setMeta('inputType', 'historyRedo');
-        return originalRedo(state, dispatch);
+        const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);
+        return originalRedo(state, wrappedDispatch);
       },
     };
   },

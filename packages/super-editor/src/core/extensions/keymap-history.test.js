@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { TextSelection } from 'prosemirror-state';
 import { closeHistory, undoDepth } from 'prosemirror-history';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { handleEnter, handleBackspace, handleDelete } from './keymap.js';
@@ -98,6 +99,29 @@ describe('keymap history grouping', () => {
 
     editor.commands.undo();
     expect(editor.state.doc.textContent).toBe('hello');
+  });
+
+  it('collapses selection after undo so layout does not treat it as active range', () => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p>Hello world</p>' }));
+
+    // Select "Hello"
+    const from = 1;
+    const to = 6;
+    const sel = TextSelection.create(editor.state.doc, from, to);
+    editor.view.dispatch(editor.state.tr.setSelection(sel));
+
+    expect(editor.state.selection.from).toBe(from);
+    expect(editor.state.selection.to).toBe(to);
+    expect(editor.state.selection.empty).toBe(false);
+
+    // Simple edit to create an undo step
+    editor.view.dispatch(editor.state.tr.insertText('!', to));
+
+    // Undo should both revert the content change and collapse selection
+    editor.commands.undo();
+
+    const selectionAfterUndo = editor.state.selection;
+    expect(selectionAfterUndo.empty).toBe(true);
   });
 
   it('closeHistory before deletion creates its own undo step', () => {

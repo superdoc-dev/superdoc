@@ -253,6 +253,23 @@ describe('CommentDialog.vue', () => {
     });
   });
 
+  it('does not pass preferred thread override for resolved comments', async () => {
+    const { baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        resolvedTime: Date.now(),
+      },
+    });
+
+    await nextTick();
+
+    expect(baseComment.setActive).not.toHaveBeenCalled();
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(superdocStub.activeEditor.commands.setCursorById).not.toHaveBeenCalledWith(
+      baseComment.commentId,
+      expect.objectContaining({ preferredActiveThreadId: baseComment.commentId }),
+    );
+  });
+
   it('handles resolve and reject for tracked change comments', async () => {
     const { wrapper, baseComment, superdocStub } = await mountDialog({
       baseCommentOverrides: {

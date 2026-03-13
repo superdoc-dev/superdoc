@@ -11,6 +11,7 @@
 import type { TextRun, TabRun, RunMark, TrackedChangeMeta, TrackedChangeKind } from '@superdoc/contracts';
 import type { UnderlineStyle, PMMark, HyperlinkConfig, ThemeColorPalette } from '../types.js';
 import { normalizeColor, isFiniteNumber, ptToPx } from '../utilities.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '../constants.js';
 import { buildFlowRunLink, migrateLegacyLink } from './links.js';
 import { sanitizeHref } from '@superdoc/url-validation';
 import { resolveThemeColorValue } from './theme-color.js';
@@ -774,6 +775,24 @@ export const applyTextStyleMark = (
     if (transform === 'uppercase' || transform === 'lowercase' || transform === 'capitalize' || transform === 'none') {
       run.textTransform = transform;
     }
+  }
+  // Vertical alignment (superscript/subscript)
+  if (typeof attrs.vertAlign === 'string') {
+    const va = attrs.vertAlign;
+    if (va === 'superscript' || va === 'subscript' || va === 'baseline') {
+      run.vertAlign = va;
+    }
+  }
+  // Custom baseline shift (position) — takes precedence over vertAlign for positioning
+  if (attrs.position != null && typeof attrs.position === 'string') {
+    const parsed = parseFloat(attrs.position);
+    if (Number.isFinite(parsed)) {
+      run.baselineShift = parsed;
+    }
+  }
+  // Scale font size for superscript/subscript when no custom position override
+  if (run.baselineShift == null && (run.vertAlign === 'superscript' || run.vertAlign === 'subscript')) {
+    run.fontSize *= SUBSCRIPT_SUPERSCRIPT_SCALE;
   }
 };
 

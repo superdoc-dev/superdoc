@@ -20,6 +20,7 @@ import {
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
+import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
@@ -1094,6 +1095,7 @@ class SuperConverter {
       this.numbering = result.numbering;
       this.comments = result.comments;
       this.footnotes = result.footnotes;
+      this.endnotes = result.endnotes ?? [];
       this.linkedStyles = result.linkedStyles;
       this.translatedLinkedStyles = result.translatedLinkedStyles;
       this.translatedNumbering = result.translatedNumbering;
@@ -1549,6 +1551,28 @@ class SuperConverter {
     schema = normalizeDuplicateBlockIdentitiesInContent(schema);
 
     return { type: 'doc', content: [...schema] };
+  }
+
+  /**
+   * Re-import a notes part (footnotes.xml or endnotes.xml) from OOXML JSON
+   * to the derived NoteEntry[] cache.
+   *
+   * Used by the notes-part-descriptor afterCommit hook to rebuild
+   * `converter.footnotes` / `converter.endnotes` after a mutation.
+   *
+   * @param {string} partId - OOXML zip path ('word/footnotes.xml' or 'word/endnotes.xml')
+   * @returns {Array<{id: string, type?: string|null, content: any[], originalXml?: any}>}
+   */
+  reimportNotePart(partId) {
+    if (!this.convertedXml?.[partId]) return [];
+
+    const importFn = partId === 'word/endnotes.xml' ? importEndnoteData : importFootnoteData;
+    return importFn({
+      docx: this.convertedXml,
+      editor: {},
+      converter: this,
+      numbering: this.numbering,
+    });
   }
 
   /**

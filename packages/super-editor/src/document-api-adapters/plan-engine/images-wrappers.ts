@@ -54,7 +54,7 @@ import {
 import { DocumentApiAdapterError } from '../errors.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { resolveBlockInsertionPos } from './create-insertion.js';
+import { resolveCreateAnchor } from './create-insertion.js';
 import { readImageDimensionsFromDataUri } from '../../core/super-converter/image-dimensions.js';
 import { generateUniqueDocPrId } from '../../extensions/image/imageHelpers/startImageUpload.js';
 
@@ -172,9 +172,10 @@ function resolveImageInsertPosition(editor: Editor, location: ImageCreateLocatio
       return editor.state.doc.content.size;
     case 'before':
     case 'after':
-      return resolveBlockInsertionPos(editor, location.target.nodeId, location.kind);
+      return resolveCreateAnchor(editor, location.target, location.kind).pos;
     case 'inParagraph': {
-      const pos = resolveBlockInsertionPos(editor, location.target.nodeId, 'before');
+      // Pre-flight nodeType validation via resolveCreateAnchor, then compute inline offset
+      const { pos } = resolveCreateAnchor(editor, location.target, 'before');
       // pos points to the start of the paragraph node; +1 enters the inline content.
       // Add any caller-supplied character offset within the paragraph text.
       return pos + 1 + (location.offset ?? 0);

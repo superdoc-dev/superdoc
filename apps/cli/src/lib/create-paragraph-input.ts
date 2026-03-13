@@ -35,21 +35,29 @@ function ensureBlockTarget(value: unknown, path: string): BlockTarget {
 async function buildFlatInput(parsed: ParsedArgs, commandName: string): Promise<CreateParagraphInput> {
   const text = getStringOption(parsed, 'text');
   const at = parseAtFlag(getStringOption(parsed, 'at'), commandName);
+  const atJson = await resolveJsonInput(parsed, 'at');
   const beforePayload = await resolveJsonInput(parsed, 'before-address');
   const afterPayload = await resolveJsonInput(parsed, 'after-address');
 
-  if (beforePayload != null && afterPayload != null) {
+  // Count how many location forms were provided
+  const locationForms = [at, atJson, beforePayload, afterPayload].filter((v) => v != null);
+  if (locationForms.length > 1) {
     throw new CliError(
       'INVALID_ARGUMENT',
-      `${commandName}: use only one of --before-address-json or --after-address-json.`,
+      `${commandName}: use only one of --at, --at-json, --before-address-json, or --after-address-json.`,
     );
   }
 
-  if (at && (beforePayload != null || afterPayload != null)) {
-    throw new CliError(
-      'INVALID_ARGUMENT',
-      `${commandName}: --at cannot be combined with --before-address-json/--after-address-json.`,
-    );
+  // Canonical --at-json path (preferred)
+  if (atJson != null) {
+    const validated = validateCreateParagraphInput({ at: atJson, text }, 'input');
+    if (!validated.at) {
+      throw new CliError(
+        'VALIDATION_ERROR',
+        `${commandName}: --at-json produced an empty location. Provide a valid location object.`,
+      );
+    }
+    return validated;
   }
 
   if (beforePayload != null) {
@@ -87,6 +95,8 @@ export async function resolveCreateParagraphInput(
   const hasFlatFlags =
     getStringOption(parsed, 'text') != null ||
     getStringOption(parsed, 'at') != null ||
+    getStringOption(parsed, 'at-json') != null ||
+    getStringOption(parsed, 'at-file') != null ||
     getStringOption(parsed, 'before-address-json') != null ||
     getStringOption(parsed, 'before-address-file') != null ||
     getStringOption(parsed, 'after-address-json') != null ||

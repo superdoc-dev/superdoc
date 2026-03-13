@@ -85,7 +85,11 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import { computeTabWidth } from './utils/marker-helpers.js';
+import {
+  computeTabWidth,
+  resolvePainterListMarkerGeometry,
+  resolvePainterListTextStartPx,
+} from './utils/marker-helpers.js';
 import {
   applySdtContainerStyling,
   getSdtContainerKey,
@@ -774,6 +778,81 @@ const normalizeAnchor = (value: string | null | undefined): string | null => {
  */
 const isValidSafeFragment = (fragment: string): boolean => {
   return SAFE_ANCHOR_PATTERN.test(fragment);
+};
+
+type ImageFilterSource = Pick<ImageBlock, 'grayscale' | 'gain' | 'blacklevel' | 'lum'>;
+
+const clampLumUnit = (value: number): number => {
+  return Math.max(-100000, Math.min(100000, value));
+};
+
+const parseVmlFixedFraction = (value: string | number | undefined): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'string' || value.length === 0) {
+    return null;
+  }
+
+  if (value.endsWith('f')) {
+    const raw = Number.parseInt(value.slice(0, -1), 10);
+    return Number.isFinite(raw) ? raw / 65536 : null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const buildImageFilters = (source: ImageFilterSource): string[] => {
+  const filters: string[] = [];
+
+  if (source.grayscale) {
+    filters.push('grayscale(100%)');
+  }
+
+  if (source.gain != null || source.blacklevel != null) {
+    const gain = parseVmlFixedFraction(source.gain);
+    const blacklevel = parseVmlFixedFraction(source.blacklevel);
+
+    if (gain != null) {
+      const contrast = Math.max(0, gain);
+      if (contrast > 0) {
+        filters.push(`contrast(${contrast})`);
+      }
+    }
+
+    if (blacklevel != null) {
+      // CSS has no black-point control, so approximate VML blacklevel with a linear
+      // brightness shift using the same 0..32767 range Word's watermark UI uses.
+      const brightness = Math.max(0, 1 + blacklevel * (65536 / 32767));
+      if (brightness > 0) {
+        filters.push(`brightness(${brightness})`);
+      }
+    }
+  }
+
+  if (source.lum) {
+    // a:lum uses ST_FixedPercentage values expressed in thousandths of a percent.
+    // Convert those percentage deltas into CSS filter multipliers.
+    const contrastValue = typeof source.lum.contrast === 'number' ? clampLumUnit(source.lum.contrast) : null;
+    const brightValue = typeof source.lum.bright === 'number' ? clampLumUnit(source.lum.bright) : null;
+
+    if (contrastValue != null) {
+      const contrast = Math.max(0, 1 + contrastValue / 100000);
+      if (contrast >= 0) {
+        filters.push(`contrast(${contrast})`);
+      }
+    }
+
+    if (brightValue != null) {
+      const brightness = Math.max(0, 1 + brightValue / 100000);
+      if (brightness >= 0) {
+        filters.push(`brightness(${brightness})`);
+      }
+    }
+  }
+
+  return filters;
 };
 
 /**
@@ -1720,9 +1799,16 @@ export class DomPainter {
     const zoom = this.zoomFactor;
     let scrollY: number;
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
+    // Check if the external scroll container is actually scrollable (content overflows its
+    // visible area). An element can have overflow:auto but still not scroll if it's in an
+    // unconstrained flex layout where the parent has only min-height (no height). In that
+    // case the element grows to fit content and scrollTop stays 0 — fall through to the
+    // viewport-based calculation instead.
+    const scrollCont = this.scrollContainer;
+    const isScrollContainerActive = scrollCont != null && scrollCont.scrollHeight > scrollCont.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
-    } else if (this.scrollContainer) {
+    } else if (isScrollContainerActive) {
       // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
       // Use scrollContainer.scrollTop with a cached mount offset instead of
       // getBoundingClientRect(). Rects are affected by spacer DOM mutations
@@ -1732,10 +1818,10 @@ export class DomPainter {
       // Computed once and cached; invalidated on mount/container/zoom change.
       if (this.scrollContainerMountOffset == null) {
         const mountRect = this.mount.getBoundingClientRect();
-        const containerRect = this.scrollContainer.getBoundingClientRect();
-        this.scrollContainerMountOffset = mountRect.top - containerRect.top + this.scrollContainer.scrollTop;
+        const containerRect = scrollCont.getBoundingClientRect();
+        this.scrollContainerMountOffset = mountRect.top - containerRect.top + scrollCont.scrollTop;
       }
-      scrollY = Math.max(0, (this.scrollContainer.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
+      scrollY = Math.max(0, (scrollCont.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
       // rect.top is in screen space (affected by CSS transform: scale).
@@ -2670,13 +2756,38 @@ export class DomPainter {
       const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
       const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
-      // Pre-calculate actual marker+tab inline width for list first lines.
-      // The measurer uses textStartPx to calculate line.maxWidth, but the painter renders
-      // marker+tab as inline elements that may consume MORE space than textStartPx indicates.
-      // This causes justify overflow when line.maxWidth > (fragment.width - actualMarkerTabWidth).
-      let listFirstLineMarkerTabEndPx: number | null = null;
+      const listFirstLineTextStartPx =
+        !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
+          ? resolvePainterListTextStartPx({
+              wordLayout,
+              indentLeftPx: paraIndentLeft,
+              hangingIndentPx: paraIndent?.hanging ?? 0,
+              firstLineIndentPx: paraIndent?.firstLine ?? 0,
+              markerTextWidthPx: fragment.markerTextWidth,
+            })
+          : undefined;
+
+      const shouldUseSharedInlinePrefixGeometry =
+        !fragment.continuesFromPrev &&
+        fragment.markerWidth &&
+        wordLayout?.marker?.justification === 'left' &&
+        wordLayout.firstLineIndentMode !== true &&
+        typeof fragment.markerTextWidth === 'number' &&
+        Number.isFinite(fragment.markerTextWidth) &&
+        fragment.markerTextWidth >= 0;
+      const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
+        ? resolvePainterListMarkerGeometry({
+            wordLayout,
+            indentLeftPx: paraIndentLeft,
+            hangingIndentPx: paraIndent?.hanging ?? 0,
+            firstLineIndentPx: paraIndent?.firstLine ?? 0,
+            markerTextWidthPx: fragment.markerTextWidth,
+          })
+        : undefined;
+
+      // Pre-calculate marker geometry used later when painting the inline prefix.
       let listTabWidth = 0;
-      let markerStartPos: number;
+      let markerStartPos = 0;
       if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
         const markerTextWidth = fragment.markerTextWidth!;
         const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
@@ -2693,9 +2804,10 @@ export class DomPainter {
           currentPos = markerStartPos + markerTextWidth;
         }
 
-        // Calculate tab width using same logic as marker rendering section
         const suffix = wordLayout.marker.suffix ?? 'tab';
-        if (suffix === 'tab') {
+        if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
+          listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
+        } else if (suffix === 'tab') {
           listTabWidth = computeTabWidth(
             currentPos,
             markerJustification,
@@ -2707,10 +2819,15 @@ export class DomPainter {
         } else if (suffix === 'space') {
           listTabWidth = 4;
         }
-        listFirstLineMarkerTabEndPx = currentPos + listTabWidth;
       }
 
       lines.forEach((line, index) => {
+        const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+        const hasListFirstLineMarker =
+          index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+        const shouldUseResolvedListTextStart =
+          hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
+
         // Calculate available width from fragment dimensions (the actual rendered width).
         // This is the ground truth for justify calculations since it matches what's visible.
         // Only subtract positive indents - negative indents already expand fragment.width in layout
@@ -2722,13 +2839,11 @@ export class DomPainter {
         let availableWidthOverride =
           line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
 
-        // For list first lines, use the actual marker+tab inline width instead of line.maxWidth
-        // which is based on textStartPx and may not match the actual rendered inline width.
-        // Must also subtract paraIndentRight to match measurer's calculation:
-        // initialAvailableWidth = maxWidth - textStartPx - indentRight
-        // Only subtract positive paraIndentRight - negative indents already expand fragment.width
-        if (index === 0 && listFirstLineMarkerTabEndPx != null) {
-          availableWidthOverride = fragment.width - listFirstLineMarkerTabEndPx - Math.max(0, paraIndentRight);
+        // Only explicit-positioned list first lines need a painter-side width override.
+        // Inline list first lines already have the correct measured width in `line.maxWidth`,
+        // and second-guessing that width causes justified spacing regressions.
+        if (shouldUseResolvedListTextStart) {
+          availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
         }
 
         // Determine if this is the true last line of the paragraph that should skip justification.
@@ -2749,23 +2864,12 @@ export class DomPainter {
           availableWidthOverride,
           fragment.fromLine + index,
           shouldSkipJustifyForLastLine,
+          shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
         );
 
         // List first lines handle indentation via marker positioning and tab stops,
         // not CSS padding/text-indent. This matches Word's rendering model.
-        const isListFirstLine =
-          index === 0 &&
-          !fragment.continuesFromPrev &&
-          fragment.markerWidth &&
-          fragment.markerTextWidth &&
-          wordLayout?.marker;
-
-        /**
-         * Determines if this line contains segments with explicit X positioning (typically from tabs).
-         * When segments have explicit X positions, they are rendered with absolute positioning,
-         * which means CSS textIndent has no effect on their placement.
-         */
-        const hasExplicitSegmentPositioning = line.segments?.some((seg) => seg.x !== undefined);
+        const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
 
         /**
          * Identifies first lines that require special indent handling.
@@ -2851,8 +2955,11 @@ export class DomPainter {
         }
 
         if (isListFirstLine) {
-          const marker = wordLayout.marker!;
-          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
+          const marker = wordLayout?.marker;
+          if (!marker) {
+            return;
+          }
+          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
           // Skip marker rendering when hidden by vanish property (preserves list indentation)
           if (!marker.run.vanish) {
@@ -2875,10 +2982,10 @@ export class DomPainter {
             markerContainer.style.position = 'relative';
             if (markerJustification === 'right') {
               markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              markerContainer.style.left = `${markerStartPos}px`;
             } else if (markerJustification === 'center') {
               markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
               lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
             }
 
@@ -3254,36 +3361,7 @@ export class DomPainter {
         img.style.transformOrigin = 'center';
       }
 
-      // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
-      // conversion formulas calculated based on Libreoffice vml reader
-      // https://github.com/LibreOffice/core/blob/951a74d047cfddff78014225f55ecb2bbdcd9c4c/oox/source/vml/vmlshapecontext.cxx#L465C13-L493C1
-      const filters: string[] = [];
-
-      // Apply OOXML grayscale effect
-      if (block.grayscale) {
-        filters.push('grayscale(100%)');
-      }
-
-      if (block.gain != null || block.blacklevel != null) {
-        // Convert VML gain to CSS contrast
-        // VML gain is a hex string like "19661f" - higher = more contrast
-        if (block.gain && typeof block.gain === 'string' && block.gain.endsWith('f')) {
-          const contrast = Math.max(0, parseInt(block.gain) / 65536) * (2 / 3); // 2/3 factor based on visual comparison.
-          if (contrast > 0) {
-            filters.push(`contrast(${contrast})`);
-          }
-        }
-
-        // Convert VML blacklevel (brightness) to CSS brightness
-        // VML blacklevel is a hex string like "22938f" - lower = less brightness
-        if (block.blacklevel && typeof block.blacklevel === 'string' && block.blacklevel.endsWith('f')) {
-          const brightness = Math.max(0, 1 + parseInt(block.blacklevel) / 327 / 100) * 1.3; // 1.3 factor added based on visual comparison.
-          if (brightness > 0) {
-            filters.push(`brightness(${brightness})`);
-          }
-        }
-      }
-
+      const filters = buildImageFilters(block);
       if (filters.length > 0) {
         img.style.filter = filters.join(' ');
       }
@@ -4152,6 +4230,7 @@ export class DomPainter {
       ctx: FragmentRenderContext,
       lineIndex: number,
       isLastLine: boolean,
+      resolvedListTextStartPx?: number,
     ): HTMLElement => {
       // Check if paragraph ends with a line break
       const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
@@ -4160,7 +4239,7 @@ export class DomPainter {
       // Skip justify only on the last line, unless the paragraph ends with a line break
       const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify);
+      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
     };
 
     /**
@@ -4525,7 +4604,7 @@ export class DomPainter {
     const hasAnyComment = !!commentAnnotations?.length;
     const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
 
-    if (commentHighlight.color && !textRun.highlight && hasAnyComment) {
+    if (commentHighlight.color && hasAnyComment) {
       (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
       // Add thin visual indicator for nested comments when outer comment is selected
       // Use box-shadow instead of border to avoid affecting text layout
@@ -4744,32 +4823,7 @@ export class DomPainter {
       img.style.transformOrigin = 'center';
     }
 
-    // Apply image effects (grayscale, VML adjustments for watermarks)
-    const filters: string[] = [];
-
-    // Apply OOXML grayscale effect
-    if (run.grayscale) {
-      filters.push('grayscale(100%)');
-    }
-
-    if (run.gain != null || run.blacklevel != null) {
-      // Convert VML gain to CSS contrast
-      if (run.gain && typeof run.gain === 'string' && run.gain.endsWith('f')) {
-        const contrast = Math.max(0, parseInt(run.gain) / 65536) * (2 / 3);
-        if (contrast > 0) {
-          filters.push(`contrast(${contrast})`);
-        }
-      }
-
-      // Convert VML blacklevel to CSS brightness
-      if (run.blacklevel && typeof run.blacklevel === 'string' && run.blacklevel.endsWith('f')) {
-        const brightness = Math.max(0, 1 + parseInt(run.blacklevel) / 327 / 100) * 1.3;
-        if (brightness > 0) {
-          filters.push(`brightness(${brightness})`);
-        }
-      }
-    }
-
+    const filters = buildImageFilters(run);
     if (filters.length > 0) {
       img.style.filter = filters.join(' ');
     }
@@ -5155,6 +5209,7 @@ export class DomPainter {
    * @param availableWidthOverride - Optional override for available width used in justification calculations
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
+   * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @returns The rendered line element
    */
   private renderLine(
@@ -5164,6 +5219,7 @@ export class DomPainter {
     availableWidthOverride?: number,
     lineIndex?: number,
     skipJustify?: boolean,
+    resolvedListTextStartPx?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -5459,13 +5515,15 @@ export class DomPainter {
       const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
       const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
       const isListParagraph = Boolean(wordLayout?.marker);
-      const rawTextStartPx =
+      const fallbackListTextStartPx =
         typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
           ? wordLayout.marker.textStartX
           : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
             ? wordLayout.textStartPx
             : undefined;
-      const listIndentOffset = isFirstLineOfPara ? (rawTextStartPx ?? indentLeft) : indentLeft;
+      const listIndentOffset = isFirstLineOfPara
+        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+        : indentLeft;
       const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
       const segmentsByRun = new Map<number, LineSegment[]>();
@@ -6543,6 +6601,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.strike ? 1 : 0,
           textRun.highlight ?? '',
           textRun.letterSpacing != null ? textRun.letterSpacing : '',
+          textRun.vertAlign ?? '',
+          textRun.baselineShift != null ? textRun.baselineShift : '',
           // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           textRun.token ?? '',
           // Tracked changes - force re-render when added or removed tracked change
@@ -6784,6 +6844,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunUnderlineStyle(run));
               hash = hashString(hash, getRunUnderlineColor(run));
               hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
+              hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
+              hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
             }
           }
         }
@@ -6881,6 +6943,17 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
   }
   if (decorations.length > 0) {
     element.style.textDecorationLine = decorations.join(' ');
+  }
+
+  // Vertical alignment: custom baseline offset takes precedence over vertAlign
+  if (run.baselineShift != null && Number.isFinite(run.baselineShift)) {
+    element.style.verticalAlign = `${run.baselineShift}pt`;
+  } else if (run.vertAlign === 'superscript') {
+    element.style.verticalAlign = 'super';
+  } else if (run.vertAlign === 'subscript') {
+    element.style.verticalAlign = 'sub';
+  } else if (run.vertAlign === 'baseline') {
+    element.style.verticalAlign = 'baseline';
   }
 };
 

@@ -85,6 +85,8 @@ export type GoToAnchorDeps = {
   bookmarks: Map<string, number>;
   pageGeometryHelper?: PageGeometryHelper;
   painterHost: HTMLElement;
+  scrollContainer: Element | Window;
+  zoom: number;
   scrollPageIntoView: (pageIndex: number) => void;
   waitForPageMount: (pageIndex: number, timeoutMs: number) => Promise<boolean>;
   getActiveEditor: () => Editor;
@@ -99,6 +101,8 @@ export async function goToAnchor({
   bookmarks,
   pageGeometryHelper,
   painterHost,
+  scrollContainer,
+  zoom,
   scrollPageIntoView,
   waitForPageMount,
   getActiveEditor,
@@ -117,14 +121,18 @@ export async function goToAnchor({
   const rects = selectionToRects(layout, blocks, measures, pmPos, pmPos + 1, pageGeometryHelper) ?? [];
   const rect = rects[0];
 
-  // Find the page containing this position by scanning fragments
-  // Bookmarks often fall in gaps between fragments (e.g., at page/section breaks),
-  // so we also track the first fragment starting after the position as a fallback
+  // Find the page and fragment Y offset for the bookmark position.
+  // selectionToRects often returns empty for bookmarks (zero-width inline nodes),
+  // so we scan layout fragments to find the precise Y coordinate within the page.
+  // Note: rect?.y is document-absolute (not page-relative), so we only use pageIndex
+  // from the rect and always derive fragmentY from layout fragments.
   let pageIndex: number | null = rect?.pageIndex ?? null;
+  let fragmentY: number | null = null;
 
   if (pageIndex == null) {
     let nextFragmentPage: number | null = null;
     let nextFragmentStart: number | null = null;
+    let nextFragmentY: number | null = null;
 
     for (const page of layout.pages) {
       for (const fragment of page.fragments) {
@@ -136,6 +144,7 @@ export async function goToAnchor({
         // Exact match: position is within this fragment
         if (pmPos >= fragStart && pmPos < fragEnd) {
           pageIndex = page.number - 1;
+          fragmentY = fragment.y;
           break;
         }
 
@@ -143,6 +152,7 @@ export async function goToAnchor({
         if (fragStart > pmPos && (nextFragmentStart === null || fragStart < nextFragmentStart)) {
           nextFragmentPage = page.number - 1;
           nextFragmentStart = fragStart;
+          nextFragmentY = fragment.y;
         }
       }
       if (pageIndex != null) break;
@@ -151,6 +161,7 @@ export async function goToAnchor({
     // Use the page of the next fragment if bookmark is in a gap
     if (pageIndex == null && nextFragmentPage != null) {
       pageIndex = nextFragmentPage;
+      fragmentY = nextFragmentY;
     }
   }
 
@@ -160,9 +171,29 @@ export async function goToAnchor({
   scrollPageIntoView(pageIndex);
   await waitForPageMount(pageIndex, timeoutMs);
 
-  // Scroll the page element into view
+  // Scroll to the precise position within the page using the fragment Y offset.
+  // We use the passed-in scrollContainer rather than discovering it via DOM traversal,
+  // because intermediate elements (like painterHost) may have overflow CSS but are
+  // not the actual scroll viewport.
   const pageEl = getPageElementByIndex(painterHost, pageIndex);
-  if (pageEl) {
+
+  if (pageEl && fragmentY != null) {
+    // fragmentY is in layout-space (unscaled) pixels — scale to screen-space to match
+    // getBoundingClientRect() values which already account for CSS transform: scale(zoom).
+    const scaledY = fragmentY * zoom;
+
+    if (scrollContainer instanceof Element) {
+      const pageRect = pageEl.getBoundingClientRect();
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const targetY = pageRect.top - containerRect.top + scrollContainer.scrollTop + scaledY;
+      scrollContainer.scrollTo({ top: targetY, behavior: 'instant' });
+    } else {
+      // Window scroll
+      const pageRect = pageEl.getBoundingClientRect();
+      const targetY = pageRect.top + scrollContainer.scrollY + scaledY;
+      scrollContainer.scrollTo({ top: targetY, behavior: 'instant' });
+    }
+  } else if (pageEl) {
     pageEl.scrollIntoView({ behavior: 'instant', block: 'start' });
   }
 
@@ -171,8 +202,6 @@ export async function goToAnchor({
   if (activeEditor?.commands?.setTextSelection) {
     activeEditor.commands.setTextSelection({ from: pmPos, to: pmPos });
   } else {
-    // Navigation succeeded visually (page scrolled), but caret positioning is unavailable
-    // This is not an error - log a warning for debugging
     console.warn(
       '[PresentationEditor] goToAnchor: Navigation succeeded but could not move caret (editor commands unavailable)',
     );

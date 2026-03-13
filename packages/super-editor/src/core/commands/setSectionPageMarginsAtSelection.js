@@ -137,8 +137,7 @@ export const setSectionPageMarginsAtSelection =
     }
 
     // Write updated body sectPr onto the doc attrs so layout sees it immediately
-    const nextDocAttrs = { ...docAttrs, bodySectPr: sectPr };
-    tr.setNodeMarkup(0, undefined, nextDocAttrs);
+    tr.setDocAttribute('bodySectPr', sectPr);
 
     tr.setMeta('forceUpdatePagination', true);
     return true;

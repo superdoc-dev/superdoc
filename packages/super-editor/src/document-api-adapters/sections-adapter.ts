@@ -245,9 +245,8 @@ function applySectPrToProjection(editor: Editor, projection: SectionProjection, 
     return;
   }
 
-  const docAttrs = (editor.state.doc.attrs ?? {}) as Record<string, unknown>;
   const tr = applyDirectMutationMeta(editor.state.tr);
-  tr.setNodeMarkup(0, undefined, { ...docAttrs, bodySectPr: sectPr });
+  tr.setDocAttribute('bodySectPr', sectPr);
   tr.setMeta('forceUpdatePagination', true);
   editor.dispatch(tr);
   syncConverterBodySection(editor, sectPr);

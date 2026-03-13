@@ -2,6 +2,7 @@ import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
 import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
+import type { Doc as YDoc } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
@@ -62,6 +63,7 @@ import type { DocumentApi } from '@superdoc/document-api';
 import { createDocumentApi } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 import { initPartsRuntime } from './parts/init-parts-runtime.js';
+import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -1528,6 +1530,38 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Sync root-level document attrs without mutating the first top-level node.
+   */
+  #syncDocumentAttrs(nextAttrs: Record<string, unknown> = {}): void {
+    const currentAttrs = (this.state.doc?.attrs ?? {}) as Record<string, unknown>;
+    const docAttrSpecs = (this.schema?.topNodeType?.spec?.attrs ?? {}) as Record<string, { default?: unknown }>;
+    const attrKeys = new Set([...Object.keys(docAttrSpecs), ...Object.keys(currentAttrs), ...Object.keys(nextAttrs)]);
+
+    if (attrKeys.size === 0) return;
+
+    const valuesMatch = (a: unknown, b: unknown): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+    const tr = this.state.tr.setMeta('addToHistory', false);
+    let changed = false;
+
+    for (const key of attrKeys) {
+      const hasNextValue = Object.prototype.hasOwnProperty.call(nextAttrs, key);
+      const nextValue = hasNextValue ? nextAttrs[key] : docAttrSpecs[key]?.default;
+
+      if (valuesMatch(currentAttrs[key], nextValue)) {
+        continue;
+      }
+
+      tr.setDocAttribute(key, nextValue);
+      changed = true;
+    }
+
+    if (changed) {
+      this.#dispatchTransaction(tr);
+    }
+  }
+
+  /**
    * Replace the current document with new data. Necessary for initializing a new collaboration file,
    * since we need to insert the data only after the provider has synced.
    */
@@ -1535,9 +1569,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (!this.options.isNewFile) return;
     this.options.isNewFile = false;
     const doc = this.#generatePmData();
+    const nextBodySectPr = JSON.parse(JSON.stringify(doc.attrs?.bodySectPr ?? null));
     // hiding this transaction from history so it doesn't appear in undo stack
     const tr = this.state.tr.replaceWith(0, this.state.doc.content.size, doc).setMeta('addToHistory', false);
     this.#dispatchTransaction(tr);
+
+    const ydoc = this.options.ydoc as YDoc | null;
+    if (ydoc) {
+      ydoc.getMap('meta').set('bodySectPr', nextBodySectPr);
+    }
+
+    this.#syncDocumentAttrs((doc.attrs ?? {}) as Record<string, unknown>);
 
     setTimeout(() => {
       this.#initComments();
@@ -2742,6 +2784,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
           true,
           updatedDocs,
         );
+
+        // Reconcile package-level singleton metadata (content-type overrides
+        // and root relationships) against the final set of output entries.
+        // this.options.content is DocxFileEntry[] | Record<string, unknown> | string | null.
+        // The synchronizer accepts an array of {name, content} or a key→content map.
+        const content = this.options.content;
+        const baseFiles = Array.isArray(content) || (content && typeof content === 'object') ? content : null;
+        const { contentTypesXml, relsXml } = syncPackageMetadata({
+          baseFiles: baseFiles as Parameters<typeof syncPackageMetadata>[0]['baseFiles'],
+          updatedDocs,
+        });
+        updatedDocs['[Content_Types].xml'] = contentTypesXml;
+        updatedDocs['_rels/.rels'] = relsXml;
+
         return updatedDocs;
       }
 

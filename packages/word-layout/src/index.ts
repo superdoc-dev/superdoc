@@ -5,7 +5,7 @@
  */
 
 import type { WordParagraphLayoutInput, WordParagraphLayoutOutput, WordListSuffix } from './types.js';
-import { DEFAULT_LIST_HANGING_PX } from './marker-utils.js';
+import { DEFAULT_LIST_HANGING_PX, LIST_MARKER_GAP } from './marker-utils.js';
 import { twipsToPixels } from './unit-conversions.js';
 
 export * from './types.js';
@@ -130,11 +130,10 @@ export function computeWordParagraphLayout(input: WordParagraphLayoutInput): Wor
 
   layout.marker = {
     markerText: listRenderingAttrs.markerText,
-    // markerBoxWidthPx: markerBoxWidthPx + 1000,
-    // markerX,
-    // textStartX: layout.textStartPx,
-    // Gutter is the small gap between marker and text, not the full marker box width
-    // gutterWidthPx: LIST_MARKER_GAP,
+    markerBoxWidthPx,
+    markerX,
+    textStartX: layout.textStartPx,
+    gutterWidthPx: LIST_MARKER_GAP,
     justification: listRenderingAttrs.justification ?? 'left',
     suffix: normalizeSuffix(listRenderingAttrs.suffix),
     run: markerRun,

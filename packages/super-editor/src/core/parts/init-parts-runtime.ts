@@ -13,6 +13,7 @@ import { settingsPartDescriptor } from './adapters/settings-part-descriptor.js';
 import { relsPartDescriptor } from './adapters/rels-part-descriptor.js';
 import { numberingPartDescriptor } from './adapters/numbering-part-descriptor.js';
 import { contentTypesPartDescriptor } from './adapters/content-types-part-descriptor.js';
+import { footnotesPartDescriptor, endnotesPartDescriptor } from './adapters/notes-part-descriptor.js';
 import { registerStaticInvalidationHandlers } from './invalidation/invalidation-handlers.js';
 import { initRevision, trackRevisions } from '../../document-api-adapters/plan-engine/revision-tracker.js';
 
@@ -22,6 +23,8 @@ export function initPartsRuntime(editor: Editor): void {
   registerPartDescriptor(relsPartDescriptor);
   registerPartDescriptor(numberingPartDescriptor);
   registerPartDescriptor(contentTypesPartDescriptor);
+  registerPartDescriptor(footnotesPartDescriptor);
+  registerPartDescriptor(endnotesPartDescriptor);
   registerStaticInvalidationHandlers();
   initRevision(editor);
   trackRevisions(editor);

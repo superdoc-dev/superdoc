@@ -45,10 +45,12 @@ function createTestEditor(options: Partial<Parameters<(typeof Editor)['prototype
 describe('Editor.replaceFile', () => {
   let blankDocData: { docx: unknown; mediaFiles: unknown; fonts: unknown };
   let replacementBuffer: Buffer;
+  let multiSectionReplacementBuffer: Buffer;
 
   beforeAll(async () => {
     blankDocData = await loadTestDataForEditorTests('blank-doc.docx');
     replacementBuffer = await getTestDataAsFileBuffer('Hello docx world.docx');
+    multiSectionReplacementBuffer = await getTestDataAsFileBuffer('multi_section_doc.docx');
   });
 
   afterEach(() => {
@@ -181,6 +183,44 @@ describe('Editor.replaceFile', () => {
       }
       editor.destroy();
       expectedEditor.destroy();
+    }
+  });
+
+  it('seeds collaborative bodySectPr metadata when replacing a file with a final section', async () => {
+    const provider = createProviderStub();
+    const ydoc = new YDoc();
+
+    const editor = createTestEditor({
+      ydoc,
+      collaborationProvider: provider,
+    });
+
+    try {
+      await editor.open(undefined, {
+        mode: 'docx',
+        content: blankDocData.docx as any,
+        mediaFiles: blankDocData.mediaFiles as any,
+        fonts: blankDocData.fonts as any,
+      });
+
+      const replacePromise = editor.replaceFile(multiSectionReplacementBuffer);
+      await Promise.resolve();
+
+      provider.emit('synced', true);
+      await replacePromise;
+
+      const bodySectPr = editor.options.ydoc?.getMap('meta').get('bodySectPr') as any;
+      expect(bodySectPr).toBeTruthy();
+      const pageSize = bodySectPr.elements.find(
+        (element: { name?: string; attributes?: Record<string, string> }) => element.name === 'w:pgSz',
+      );
+      expect(pageSize).toBeTruthy();
+      expect(Number(pageSize.attributes['w:w'])).toBeGreaterThan(Number(pageSize.attributes['w:h']));
+    } finally {
+      if (editor.lifecycleState === 'ready') {
+        editor.close();
+      }
+      editor.destroy();
     }
   });
 });

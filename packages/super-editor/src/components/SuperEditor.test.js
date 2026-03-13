@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 
-const messageApi = vi.hoisted(() => ({
-  error: vi.fn(),
-  info: vi.fn(),
-  success: vi.fn(),
-}));
-
 const onMarginClickCursorChangeMock = vi.hoisted(() => vi.fn());
 const checkNodeSpecificClicksMock = vi.hoisted(() => vi.fn());
 const getFileObjectMock = vi.hoisted(() =>
@@ -30,11 +24,6 @@ const EditorConstructor = vi.hoisted(() => {
 
   return MockEditor;
 });
-
-vi.mock('naive-ui', () => ({
-  NSkeleton: { name: 'NSkeleton', render: () => null },
-  useMessage: () => messageApi,
-}));
 
 // pagination legacy removed; no pagination helpers
 
@@ -85,16 +74,19 @@ import SuperEditor from './SuperEditor.vue';
 
 const getEditorInstance = () => EditorConstructor.mock.results.at(-1)?.value;
 let consoleDebugSpy;
+let consoleWarnSpy;
 
 describe('SuperEditor.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.useRealTimers();
     consoleDebugSpy?.mockRestore();
+    consoleWarnSpy?.mockRestore();
     vi.clearAllMocks();
   });
 
@@ -519,7 +511,7 @@ describe('SuperEditor.vue', () => {
     await flushPromises();
 
     expect(onException).toHaveBeenCalledWith({ error, editor: null });
-    expect(messageApi.error).toHaveBeenCalledWith(
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
       'Unable to load the file. Please verify the .docx is valid and not password protected.',
     );
     expect(getFileObjectMock).toHaveBeenCalledWith('blank-docx-url', 'blank.docx', DOCX_MIME);

@@ -48,6 +48,7 @@ export type ResolvedRunProperties = {
   smallCaps?: boolean;
   allCaps?: boolean;
   baselineShift?: number;
+  vertAlign?: 'superscript' | 'subscript' | 'baseline';
   letterSpacing?: number;
   scale?: number;
   lang?: string;
@@ -90,9 +91,12 @@ export type WordParagraphLayoutInput = {
 
 export type WordListMarkerLayout = {
   markerText: string;
+  markerBoxWidthPx?: number;
   gutterWidthPx?: number;
   justification: WordListJustification;
+  markerX?: number;
   suffix: WordListSuffix;
+  textStartX?: number;
   run: ResolvedRunProperties;
 };
 

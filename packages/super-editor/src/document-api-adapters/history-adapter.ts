@@ -62,10 +62,15 @@ export function createHistoryAdapter(editor: Editor): HistoryAdapter {
         });
       }
       const revBefore = getRevision(editor);
+      const depth = getUndoDepth(editor);
+      if (depth === 0) {
+        return { noop: true, reason: 'EMPTY_UNDO_STACK', revision: { before: revBefore, after: revBefore } };
+      }
       const success = Boolean(editor.commands.undo());
       const revAfter = getRevision(editor);
       return {
         noop: !success,
+        reason: success ? undefined : 'NO_EFFECT',
         revision: { before: revBefore, after: revAfter },
       };
     },
@@ -77,10 +82,15 @@ export function createHistoryAdapter(editor: Editor): HistoryAdapter {
         });
       }
       const revBefore = getRevision(editor);
+      const depth = getRedoDepth(editor);
+      if (depth === 0) {
+        return { noop: true, reason: 'EMPTY_REDO_STACK', revision: { before: revBefore, after: revBefore } };
+      }
       const success = Boolean(editor.commands.redo());
       const revAfter = getRevision(editor);
       return {
         noop: !success,
+        reason: success ? undefined : 'NO_EFFECT',
         revision: { before: revBefore, after: revAfter },
       };
     },

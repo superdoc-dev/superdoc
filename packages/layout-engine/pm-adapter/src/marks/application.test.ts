@@ -824,6 +824,76 @@ describe('mark application', () => {
         expect(run.textTransform).toBe('uppercase');
       });
     });
+
+    describe('vertAlign', () => {
+      it('sets vertAlign for superscript', () => {
+        const run: TextRun = { text: '1st', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'superscript' });
+        expect(run.vertAlign).toBe('superscript');
+      });
+
+      it('sets vertAlign for subscript', () => {
+        const run: TextRun = { text: 'H2O', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'subscript' });
+        expect(run.vertAlign).toBe('subscript');
+      });
+
+      it('sets vertAlign for baseline', () => {
+        const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'baseline' });
+        expect(run.vertAlign).toBe('baseline');
+      });
+
+      it('ignores invalid vertAlign values', () => {
+        const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'invalid' });
+        expect(run.vertAlign).toBeUndefined();
+      });
+
+      it('scales fontSize by 0.65 for superscript', () => {
+        const run: TextRun = { text: '1st', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'superscript' });
+        expect(run.fontSize).toBeCloseTo(16 * 0.65);
+      });
+
+      it('scales fontSize by 0.65 for subscript', () => {
+        const run: TextRun = { text: 'H2O', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'subscript' });
+        expect(run.fontSize).toBeCloseTo(16 * 0.65);
+      });
+
+      it('does not scale fontSize for baseline', () => {
+        const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'baseline' });
+        expect(run.fontSize).toBe(16);
+      });
+
+      it('does not scale fontSize when baselineShift is set', () => {
+        const run: TextRun = { text: '1st', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { vertAlign: 'superscript', position: '3pt' });
+        expect(run.fontSize).toBe(16);
+      });
+    });
+
+    describe('position / baselineShift', () => {
+      it('parses position string to baselineShift number', () => {
+        const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { position: '3pt' });
+        expect(run.baselineShift).toBe(3);
+      });
+
+      it('handles negative position values', () => {
+        const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { position: '-1.5pt' });
+        expect(run.baselineShift).toBe(-1.5);
+      });
+
+      it('ignores non-numeric position', () => {
+        const run: TextRun = { text: 'text', fontFamily: 'Arial', fontSize: 16 };
+        applyTextStyleMark(run, { position: 'invalid' });
+        expect(run.baselineShift).toBeUndefined();
+      });
+    });
   });
 
   describe('applyMarksToRun', () => {

@@ -222,6 +222,16 @@ export const Image = Node.create({
 
       /**
        * @category Attribute
+       * @param {{bright?: number, contrast?: number}} [lum] - DrawingML luminance adjustment from a:lum
+       * @private
+       */
+      lum: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
        * @param {string|number} [gain] - VML gain for brightness/washout (watermark effect)
        * @private
        */

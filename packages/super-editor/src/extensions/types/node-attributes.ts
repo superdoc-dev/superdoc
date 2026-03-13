@@ -499,6 +499,11 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   clipPath?: string;
   /** @internal Raw a:srcRect element for lossless round-trip export */
   rawSrcRect?: Record<string, unknown> | null;
+  /** @internal DrawingML luminance adjustment from a:lum */
+  lum?: {
+    bright?: number;
+    contrast?: number;
+  } | null;
   /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
   lockAspectRatio?: boolean;
   /** Decorative image flag. Maps to OOXML adec:decorative. */

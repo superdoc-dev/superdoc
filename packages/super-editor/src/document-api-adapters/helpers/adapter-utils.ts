@@ -9,7 +9,13 @@ import type {
 } from '@superdoc/document-api';
 import { DocumentApiValidationError } from '@superdoc/document-api';
 import { getBlockIndex } from './index-cache.js';
-import { findBlockById, isTextBlockCandidate, type BlockCandidate, type BlockIndex } from './node-address-resolver.js';
+import {
+  findBlockById,
+  findBlockByNodeIdOnly,
+  isTextBlockCandidate,
+  type BlockCandidate,
+  type BlockIndex,
+} from './node-address-resolver.js';
 import { computeTextContentLength, resolveTextRangeInBlock } from './text-offset-resolver.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mutation-resolution.js';
 import type { Transaction } from 'prosemirror-state';
@@ -20,7 +26,24 @@ export type WithinResult = { ok: true; range: { start: number; end: number } | u
 export type ResolvedTextTarget = { from: number; to: number };
 
 function findTextBlockCandidates(index: BlockIndex, blockId: string): BlockCandidate[] {
-  return index.candidates.filter((candidate) => candidate.nodeId === blockId && isTextBlockCandidate(candidate));
+  // Primary: match by canonical nodeId
+  const primary = index.candidates.filter((c) => c.nodeId === blockId && isTextBlockCandidate(c));
+  if (primary.length > 0) return primary;
+
+  // Fallback: alias-aware lookup via the block index (resolves sdBlockId aliases).
+  // This ensures IDs returned by create/list mutations remain usable in follow-up
+  // text-targeted commands even if the canonical nodeId differs from the alias.
+  // AMBIGUOUS_TARGET is re-thrown so callers get precise diagnostics.
+  try {
+    const resolved = findBlockByNodeIdOnly(index, blockId);
+    if (isTextBlockCandidate(resolved)) return [resolved];
+  } catch (e) {
+    // Propagate ambiguity — callers depend on structured AMBIGUOUS_TARGET diagnostics
+    if (e instanceof DocumentApiAdapterError && e.code === 'AMBIGUOUS_TARGET') throw e;
+    // TARGET_NOT_FOUND is expected when the alias doesn't exist — fall through
+  }
+
+  return [];
 }
 
 function assertUnambiguous(matches: BlockCandidate[], blockId: string): void {

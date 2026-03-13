@@ -13,11 +13,14 @@ import { copyFileSync, readFileSync } from 'node:fs';
 import { OpenAI } from 'openai';
 import {
   PATHS,
+  cacheKey,
   loadSdk,
   createTempCopy,
   cleanupTemp,
+  readCache,
   resolveOutputPath,
   cleanArgs,
+  writeCache,
 } from './utils.mjs';
 
 const SYSTEM_PROMPT = readFileSync(PATHS.prompt, 'utf8');
@@ -148,6 +151,11 @@ export default class SuperDocAgentProvider {
     const keepFile = vars.keepFile === true || vars.keepFile === 'true';
     const task = vars.task || prompt;
 
+    // Check cache first
+    const key = cacheKey(model, fixture, task);
+    const cached = readCache(key);
+    if (cached) return cached;
+
     const { docPath, stateDir } = createTempCopy(fixture);
     const evalId = context?.evaluationId || `eval-${Date.now()}`;
     const outputPath = keepFile ? resolveOutputPath(evalId, fixture, task) : null;
@@ -181,7 +189,7 @@ export default class SuperDocAgentProvider {
       if (keepFile && outputPath) copyFileSync(docPath, outputPath);
       cleanupTemp(docPath, stateDir);
 
-      return {
+      const result = {
         output: JSON.stringify({
           documentText,
           outputFile: outputPath,
@@ -189,6 +197,8 @@ export default class SuperDocAgentProvider {
           turns: toolLog.length,
         }),
       };
+      writeCache(key, result);
+      return result;
     } catch (err) {
       await closeDocument(client);
       cleanupTemp(docPath, stateDir);

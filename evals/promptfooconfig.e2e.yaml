@@ -1,5 +1,5 @@
 # Execution tests via Vercel AI Gateway -- any model, one provider.
-# Run: pnpm run eval:gateway
+# Run: pnpm run eval:e2e
 #
 # Uses the AI SDK + AI Gateway as a unified router.
 # Add more providers below to test the same tasks across models.

@@ -16,11 +16,14 @@ import { generateText, jsonSchema, stepCountIs, tool } from 'ai';
 import { copyFileSync, readFileSync } from 'node:fs';
 import {
   PATHS,
+  cacheKey,
   cleanArgs,
   cleanupTemp,
   createTempCopy,
   loadSdk,
+  readCache,
   resolveOutputPath,
+  writeCache,
 } from './utils.mjs';
 
 const SYSTEM_PROMPT = readFileSync(PATHS.prompt, 'utf8');
@@ -121,7 +124,6 @@ async function buildTools(sdk, client) {
 
 export default class SuperDocAgentGatewayProvider {
   constructor(options) {
-    console.log('options', options);
     this.options = options || {};
   }
 
@@ -136,6 +138,11 @@ export default class SuperDocAgentGatewayProvider {
     const modelId = this.options.config?.modelId || 'openai/gpt-4o';
     const keepFile = vars.keepFile === true || vars.keepFile === 'true';
     const task = vars.task || prompt;
+
+    // Check cache first (skip CLI + LLM if we already have this result)
+    const key = cacheKey(modelId, fixture, task);
+    const cached = readCache(key);
+    if (cached) return cached;
 
     const { docPath, stateDir } = createTempCopy(fixture);
     const evalId = context?.evaluationId || `eval-${Date.now()}`;
@@ -176,7 +183,7 @@ export default class SuperDocAgentGatewayProvider {
       if (keepFile && outputPath) copyFileSync(docPath, outputPath);
       cleanupTemp(docPath, stateDir);
 
-      return {
+      const result = {
         output: JSON.stringify({
           documentText,
           outputFile: outputPath,
@@ -186,6 +193,8 @@ export default class SuperDocAgentGatewayProvider {
           steps: steps.length,
         }),
       };
+      writeCache(key, result);
+      return result;
     } catch (err) {
       await closeDocument(client);
       cleanupTemp(docPath, stateDir);

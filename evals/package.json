@@ -6,7 +6,7 @@
   "scripts": {
     "extract-tools": "node lib/extract.mjs",
     "eval": "npx promptfoo eval --env-file .env",
-    "eval:gateway": "npx promptfoo eval --env-file .env -c promptfooconfig.execution-gateway.yaml",
+    "eval:e2e": "npx promptfoo eval --env-file .env -c promptfooconfig.e2e.yaml",
     "eval:openai": "npx promptfoo eval --env-file .env --filter-providers 'GPT-*'",
     "eval:repeat": "npx promptfoo eval --env-file .env --repeat 3 --no-cache",
     "eval:view": "npx promptfoo view",

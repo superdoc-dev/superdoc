@@ -2,7 +2,8 @@
  * Shared utilities for the SuperDoc eval provider.
  */
 
-import { copyFileSync, mkdirSync, rmSync, unlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +14,7 @@ export const PATHS = {
   root: EVALS_ROOT,
   fixtures: resolve(EVALS_ROOT, 'fixtures'),
   output: resolve(EVALS_ROOT, 'results/output'),
+  cache: resolve(EVALS_ROOT, 'results/.cache'),
   prompt: resolve(EVALS_ROOT, 'prompts/agent.txt'),
   cliBin: resolve(EVALS_ROOT, '../apps/cli/dist/index.js'),
 };
@@ -61,6 +63,32 @@ export function cleanArgs(args) {
   // eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
   const { doc, sessionId, ...rest } = args;
   return rest;
+}
+
+// --- Cache ---
+
+/** Generate a cache key from model + fixture + task. */
+export function cacheKey(model, fixture, task) {
+  const hash = createHash('sha256').update(`${model}|${fixture}|${task}`).digest('hex').slice(0, 16);
+  return hash;
+}
+
+/** Read cached result. Returns null if not cached or if --no-cache flag is set. */
+export function readCache(key) {
+  if (process.env.PROMPTFOO_CACHE_ENABLED === 'false') return null;
+  const path = resolve(PATHS.cache, `${key}.json`);
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/** Write result to cache. */
+export function writeCache(key, result) {
+  mkdirSync(PATHS.cache, { recursive: true });
+  writeFileSync(resolve(PATHS.cache, `${key}.json`), JSON.stringify(result));
 }
 
 // --- String ---

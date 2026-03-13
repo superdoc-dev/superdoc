@@ -14,7 +14,7 @@ import {
   writeWrapper,
   insertStructuredWrapper,
   replaceStructuredWrapper,
-  styleApplyWrapper,
+  selectionMutationWrapper,
 } from './plan-engine/plan-wrappers.js';
 import { clearContentWrapper } from './plan-engine/clear-content-wrapper.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
@@ -364,8 +364,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       insertStructured: (input, options) => insertStructuredWrapper(editor, input, options),
       replaceStructured: (input, options) => replaceStructuredWrapper(editor, input, options),
     },
-    format: {
-      apply: (input, options) => styleApplyWrapper(editor, input, options),
+    selectionMutation: {
+      execute: (request, options) => selectionMutationWrapper(editor, request, options),
     },
     styles: {
       apply: (input, options) => stylesApplyAdapter(editor, input, options),

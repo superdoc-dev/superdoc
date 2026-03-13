@@ -420,11 +420,11 @@ export const OPERATION_DEFINITIONS = {
   replace: {
     memberPath: 'replace',
     description:
-      'Replace content at a target position with new content. ' +
-      'Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). ' +
-      'Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.).',
+      'Replace content at a contiguous document selection. ' +
+      'Text path accepts a SelectionTarget or ref plus replacement text. ' +
+      'Structural path accepts an SDAddress, SelectionTarget, or ref plus SDFragment content.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
+      'Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -460,16 +460,17 @@ export const OPERATION_DEFINITIONS = {
   },
   delete: {
     memberPath: 'delete',
-    description: 'Delete content at a target position.',
+    description:
+      'Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is already empty.',
+      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is collapsed or empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',

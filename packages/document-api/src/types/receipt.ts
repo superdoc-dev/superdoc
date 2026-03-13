@@ -1,4 +1,4 @@
-import type { EntityAddress, TextAddress, TrackedChangeAddress } from './address.js';
+import type { EntityAddress, SelectionTarget, TextAddress, TrackedChangeAddress } from './address.js';
 
 export type ReceiptInsert = TrackedChangeAddress;
 export type ReceiptEntity = EntityAddress;
@@ -85,6 +85,8 @@ export type TextMutationResolution = {
   requestedTarget?: TextAddress;
   /**
    * Effective target used by the adapter after canonical resolution.
+   * For cross-block selections this reflects the first block only —
+   * use {@link selectionTarget} for the full resolved range.
    */
   target: TextAddress;
   /**
@@ -96,6 +98,12 @@ export type TextMutationResolution = {
    * Empty for collapsed insert targets.
    */
   text: string;
+  /**
+   * Full selection target for cross-block mutations.
+   * Present when the resolved range spans more than one block.
+   * Single-block mutations omit this field.
+   */
+  selectionTarget?: SelectionTarget;
 };
 
 export type TextMutationReceipt =

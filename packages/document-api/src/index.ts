@@ -9,6 +9,7 @@ export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
 export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
 export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
@@ -60,7 +61,6 @@ import type { DeleteInput } from './delete/delete.js';
 import { executeFind, type FindAdapter } from './find/find.js';
 import type { SDFindInput, SDFindResult, SDGetInput, SDNodeResult } from './types/sd-envelope.js';
 import type {
-  FormatAdapter,
   FormatApi,
   FormatInlineAliasApi,
   FormatInlineAliasInput,
@@ -256,6 +256,7 @@ import {
   executeTrackChangesDecide,
 } from './track-changes/track-changes.js';
 import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
+import type { SelectionMutationAdapter } from './selection-mutation.js';
 import {
   executeCapabilities,
   type CapabilitiesAdapter,
@@ -1264,7 +1265,7 @@ export { textReceiptToSDReceipt } from './receipt-bridge.js';
 export { isSDAddress, isValidTarget } from './validation-primitives.js';
 export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
-export type { ReplaceInput, LegacyReplaceInput } from './replace/replace.js';
+export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
 export { isStructuralReplaceInput } from './replace/replace.js';
 export { validateDocumentFragment, validateSDFragment } from './validation/fragment-validator.js';
 export type { DeleteInput } from './delete/delete.js';
@@ -1544,7 +1545,7 @@ export interface DocumentApiAdapters {
   capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
   write: WriteAdapter;
-  format: FormatAdapter;
+  selectionMutation: SelectionMutationAdapter;
   styles: StylesAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
@@ -1604,7 +1605,7 @@ function requireAdapter<T>(adapter: T | undefined, namespace: string): T {
   return adapter;
 }
 
-function buildFormatInlineAliasApi(adapter: FormatAdapter): FormatInlineAliasApi {
+function buildFormatInlineAliasApi(adapter: SelectionMutationAdapter): FormatInlineAliasApi {
   return Object.fromEntries(
     INLINE_PROPERTY_REGISTRY.map((entry) => {
       const key = entry.key as InlineRunPatchKey;
@@ -1645,7 +1646,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     return caps;
   };
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
-  const inlineAliasApi = buildFormatInlineAliasApi(adapters.format);
+  const inlineAliasApi = buildFormatInlineAliasApi(adapters.selectionMutation);
 
   const api: DocumentApi = {
     get(input: SDGetInput): SDDocument {
@@ -1699,18 +1700,18 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeInsert(adapters.write, input, options);
     },
     replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
-      return executeReplace(adapters.write, input, options);
+      return executeReplace(adapters.selectionMutation, adapters.write, input, options);
     },
     delete(input: DeleteInput, options?: MutationOptions): TextMutationReceipt {
-      return executeDelete(adapters.write, input, options);
+      return executeDelete(adapters.selectionMutation, input, options);
     },
     format: {
       ...inlineAliasApi,
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeInlineAlias(adapters.format, 'strike', { ...input, value: true }, options);
+        return executeInlineAlias(adapters.selectionMutation, 'strike', { ...input, value: true }, options);
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, input, options);
+        return executeStyleApply(adapters.selectionMutation, input, options);
       },
       paragraph: {
         resetDirectFormatting(

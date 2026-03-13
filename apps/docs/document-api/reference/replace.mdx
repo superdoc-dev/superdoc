@@ -1,7 +1,7 @@
 ---
 title: replace
 sidebarTitle: replace
-description: "Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.)."
+description: Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts an SDAddress, SelectionTarget, or ref plus SDFragment content.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: "Replace content at a target position with new content. Accepts two
 
 ## Summary
 
-Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.).
+Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts an SDAddress, SelectionTarget, or ref plus SDFragment content.
 
 - Operation ID: `replace`
 - API member path: `editor.doc.replace(...)`
@@ -22,30 +22,45 @@ Replace content at a target position with new content. Accepts two input shapes:
 
 ## Expected result
 
-Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.
+Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.
 
 ## Input fields
 
+### Variant 1
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `target` | TextAddress | yes | TextAddress |
-| `target.blockId` | string | yes |  |
-| `target.kind` | `"text"` | yes | Constant: `"text"` |
-| `target.range` | Range | yes | Range |
-| `target.range.end` | integer | yes |  |
-| `target.range.start` | integer | yes |  |
+| `ref` | string | no |  |
+| `target` | SelectionTarget | no | SelectionTarget |
+| `target.end` | SelectionPoint | no | SelectionPoint |
+| `target.kind` | `"selection"` | no | Constant: `"selection"` |
+| `target.start` | SelectionPoint | no | SelectionPoint |
 | `text` | string | yes |  |
+
+### Variant 2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object | yes |  |
+| `nestingPolicy` | object | no |  |
+| `ref` | string | no |  |
+| `target` | object \\| TextAddress \\| SelectionTarget | no | One of: object, TextAddress, SelectionTarget |
 
 ### Example request
 
 ```json
 {
   "target": {
-    "blockId": "block-abc123",
-    "kind": "text",
-    "range": {
-      "end": 10,
-      "start": 0
+    "end": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
+    },
+    "kind": "selection",
+    "start": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
     }
   },
   "text": "Hello, world."
@@ -54,7 +69,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Output fields
 
-### Variant 1 (success=true)
+### Variant 1 (resolution.selectionTarget.kind="selection")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -75,6 +90,10 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.requestedTarget.nodeId` | string | no |  |
 | `resolution.requestedTarget.path` | string \\| integer[] | no |  |
 | `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | object | no |  |
 | `resolution.target.anchor` | object | no |  |
 | `resolution.target.anchor.end` | object | no |  |
@@ -90,7 +109,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
 | `success` | `true` | yes | Constant: `true` |
 
-### Variant 2 (success=false)
+### Variant 2 (resolution.selectionTarget.kind="selection")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -115,6 +134,10 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.requestedTarget.nodeId` | string | no |  |
 | `resolution.requestedTarget.path` | string \\| integer[] | no |  |
 | `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | object | no |  |
 | `resolution.target.anchor` | object | no |  |
 | `resolution.target.anchor.end` | object | no |  |
@@ -153,6 +176,19 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "kind": "content",
       "nodeId": "node-def456",
       "stability": "stable"
+    },
+    "selectionTarget": {
+      "end": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      },
+      "kind": "selection",
+      "start": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      }
     },
     "target": {
       "anchor": {
@@ -206,20 +242,256 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "target": {
-      "$ref": "#/$defs/TextAddress"
+  "oneOf": [
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/TargetLocator"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
     },
-    "text": {
-      "type": "string"
+    {
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "target": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "anchor": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "end": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "blockId": {
+                                  "type": "string"
+                                },
+                                "offset": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "blockId",
+                                "offset"
+                              ],
+                              "type": "object"
+                            },
+                            "start": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "blockId": {
+                                  "type": "string"
+                                },
+                                "offset": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "blockId",
+                                "offset"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "evaluatedRevision": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "content",
+                            "inline",
+                            "annotation",
+                            "section"
+                          ]
+                        },
+                        "nodeId": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "integer"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "stability": {
+                          "enum": [
+                            "stable",
+                            "ephemeral"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "stability"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "$ref": "#/$defs/TextAddress"
+                    },
+                    {
+                      "$ref": "#/$defs/SelectionTarget"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "target"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ref"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "type": "object"
+            },
+            "nestingPolicy": {
+              "type": "object"
+            },
+            "ref": {
+              "type": "string"
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "anchor": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "end": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "blockId": {
+                              "type": "string"
+                            },
+                            "offset": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "blockId",
+                            "offset"
+                          ],
+                          "type": "object"
+                        },
+                        "start": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "blockId": {
+                              "type": "string"
+                            },
+                            "offset": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "blockId",
+                            "offset"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "evaluatedRevision": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "content",
+                        "inline",
+                        "annotation",
+                        "section"
+                      ]
+                    },
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "stability": {
+                      "enum": [
+                        "stable",
+                        "ephemeral"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "stability"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "$ref": "#/$defs/TextAddress"
+                },
+                {
+                  "$ref": "#/$defs/SelectionTarget"
+                }
+              ]
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "type": "object"
+        }
+      ]
     }
-  },
-  "required": [
-    "target",
-    "text"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>
@@ -330,6 +602,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
                 "stability"
               ],
               "type": "object"
+            },
+            "selectionTarget": {
+              "$ref": "#/$defs/SelectionTarget"
             },
             "target": {
               "additionalProperties": false,
@@ -560,6 +835,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
               ],
               "type": "object"
             },
+            "selectionTarget": {
+              "$ref": "#/$defs/SelectionTarget"
+            },
             "target": {
               "additionalProperties": false,
               "properties": {
@@ -766,6 +1044,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
             "stability"
           ],
           "type": "object"
+        },
+        "selectionTarget": {
+          "$ref": "#/$defs/SelectionTarget"
         },
         "target": {
           "additionalProperties": false,
@@ -1000,6 +1281,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
             "stability"
           ],
           "type": "object"
+        },
+        "selectionTarget": {
+          "$ref": "#/$defs/SelectionTarget"
         },
         "target": {
           "additionalProperties": false,

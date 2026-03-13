@@ -17,16 +17,21 @@ const findTextRange = (doc, text) => {
   return range;
 };
 
-/** Dispatch a keyboard event on the editor's DOM and return whether it was consumed. */
-const dispatchKey = (editor, key, opts = {}) => {
+/**
+ * Test the handleKeyDown plugin handler directly via someProp.
+ * Returns true if the handler blocked the key, false if allowed.
+ */
+const isKeyBlocked = (editor, key, opts = {}) => {
   const event = new KeyboardEvent('keydown', {
     key,
     bubbles: true,
     cancelable: true,
     ...opts,
   });
-  editor.view.dom.dispatchEvent(event);
-  return event.defaultPrevented;
+  // someProp iterates through plugin props and returns the first truthy result.
+  // The Editable plugin's handleKeyDown returns true to block, false to allow.
+  const blocked = editor.view.someProp('handleKeyDown', (handler) => handler(editor.view, event));
+  return blocked === true;
 };
 
 describe('Editable extension backward replace handling', () => {
@@ -96,32 +101,32 @@ describe('Editable extension – allowSelectionInViewMode', () => {
       ['PageDown', {}],
     ])('allows navigation key %s', (key, opts) => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, key, opts);
-      expect(prevented).toBe(false);
+      const blocked = isKeyBlocked(editor, key, opts);
+      expect(blocked).toBe(false);
     });
 
     it('allows Cmd+C (copy)', () => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, 'c', { metaKey: true });
-      expect(prevented).toBe(false);
+      const blocked = isKeyBlocked(editor, 'c', { metaKey: true });
+      expect(blocked).toBe(false);
     });
 
     it('allows Ctrl+C (copy)', () => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, 'c', { ctrlKey: true });
-      expect(prevented).toBe(false);
+      const blocked = isKeyBlocked(editor, 'c', { ctrlKey: true });
+      expect(blocked).toBe(false);
     });
 
     it('allows Cmd+A (select all)', () => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, 'a', { metaKey: true });
-      expect(prevented).toBe(false);
+      const blocked = isKeyBlocked(editor, 'a', { metaKey: true });
+      expect(blocked).toBe(false);
     });
 
     it('allows Shift+Arrow for selection extending', () => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, 'ArrowRight', { shiftKey: true });
-      expect(prevented).toBe(false);
+      const blocked = isKeyBlocked(editor, 'ArrowRight', { shiftKey: true });
+      expect(blocked).toBe(false);
     });
 
     it.each([
@@ -133,26 +138,26 @@ describe('Editable extension – allowSelectionInViewMode', () => {
       ['Tab', {}],
     ])('blocks non-allowed key %s', (key, opts) => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, key, opts);
-      expect(prevented).toBe(true);
+      const blocked = isKeyBlocked(editor, key, opts);
+      expect(blocked).toBe(true);
     });
 
     it('blocks Cmd+V (paste shortcut)', () => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, 'v', { metaKey: true });
-      expect(prevented).toBe(true);
+      const blocked = isKeyBlocked(editor, 'v', { metaKey: true });
+      expect(blocked).toBe(true);
     });
 
     it('blocks Cmd+X (cut shortcut)', () => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, 'x', { metaKey: true });
-      expect(prevented).toBe(true);
+      const blocked = isKeyBlocked(editor, 'x', { metaKey: true });
+      expect(blocked).toBe(true);
     });
 
     it('blocks Cmd+B (bold shortcut)', () => {
       createViewModeEditor();
-      const prevented = dispatchKey(editor, 'b', { metaKey: true });
-      expect(prevented).toBe(true);
+      const blocked = isKeyBlocked(editor, 'b', { metaKey: true });
+      expect(blocked).toBe(true);
     });
   });
 

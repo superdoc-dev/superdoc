@@ -16,6 +16,7 @@ export const PATHS = {
   output: resolve(EVALS_ROOT, 'results/output'),
   cache: resolve(EVALS_ROOT, 'results/.cache'),
   prompt: resolve(EVALS_ROOT, 'prompts/agent.txt'),
+  essential: resolve(EVALS_ROOT, 'lib/essential.json'),
   cliBin: resolve(EVALS_ROOT, '../apps/cli/dist/index.js'),
 };
 

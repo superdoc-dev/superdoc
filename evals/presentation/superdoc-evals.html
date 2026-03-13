@@ -41,7 +41,8 @@
         .accent { color: var(--brand); } .red { color: var(--red); }
         code { font-family: var(--mono); font-size: 0.9em; background: var(--bg2); padding: 1px 5px; border-radius: 3px; }
         @media (max-height: 700px) { :root { --pad: clamp(0.75rem,3vw,2rem); --h1: clamp(1.5rem,5vw,3rem); --h2: clamp(1.2rem,3vw,2rem); } }
-        @media (max-height: 500px) { :root { --pad: clamp(0.5rem,2vw,1rem); --h1: clamp(1.2rem,4vw,2rem); --body: clamp(0.7rem,1.1vw,0.9rem); } .nav-dots{display:none;} }
+        @media (max-height: 600px) { :root { --pad: clamp(0.5rem,2.5vw,1.5rem); --gap: clamp(0.3rem,1vw,0.75rem); --h1: clamp(1.1rem,4vw,2rem); --body: clamp(0.7rem,1.2vw,0.95rem); } .nav-dots,.counter{display:none;} .cb{max-height:min(30vh,180px)} }
+        @media (max-height: 500px) { :root { --pad: clamp(0.4rem,2vw,1rem); --h1: clamp(1rem,3.5vw,1.5rem); --h2: clamp(0.9rem,2.5vw,1.25rem); --body: clamp(0.65rem,1vw,0.85rem); } }
         @media (max-width: 600px) { .cols { grid-template-columns: 1fr !important; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; } html { scroll-behavior: auto; } }
 
@@ -91,7 +92,7 @@
 </head>
 <body>
 <div class="progress" id="prog"></div>
-<nav class="nav-dots" id="dots"></nav>
+<nav class="nav-dots" id="dots" aria-label="Slide navigation"></nav>
 <div class="counter" id="ctr"></div>
 
 <!-- ========== 1: TITLE ========== -->
@@ -146,33 +147,37 @@
 <section class="slide grid-bg">
     <div class="sc mw">
         <div class="sec reveal">THE RISK</div>
-        <h2 class="reveal" style="margin-bottom:var(--gap)">This chain has <span class="red">four moving parts</span>.<br>Any one can break silently.</h2>
-        <div class="reveal" style="display:flex;gap:clamp(.4rem,.8vw,.6rem);justify-content:center;flex-wrap:wrap;margin-bottom:var(--gap)">
-            <div style="background:var(--brand-bg);border-radius:8px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center;flex:1;min-width:min(45%,200px)">
-                <p style="margin:0;font-weight:700;color:var(--brand);font-size:var(--body)">The model</p>
-                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">GPT-5.4 ships. Claude updates.<br>Tool selection changes overnight.</p>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">This chain has <span class="red">four moving parts</span>.</h2>
+        <!-- The chain visualization -->
+        <div class="reveal" style="display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:var(--gap)">
+            <div style="flex:1;border:2px solid var(--brand);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--brand)">01</div>
+                <p style="margin:0;font-weight:700;color:var(--brand);font-size:var(--body)">Model</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">GPT-5.4 ships. Claude updates. Tool selection changes overnight.</p>
             </div>
-            <div style="background:var(--purple-bg);border-radius:8px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center;flex:1;min-width:min(45%,200px)">
+            <div style="width:clamp(1rem,2vw,1.5rem);height:2px;background:var(--border);flex-shrink:0"></div>
+            <div style="flex:1;border:2px solid var(--purple);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50%);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--purple)">02</div>
                 <p style="margin:0;font-weight:700;color:var(--purple);font-size:var(--body)">Tool definitions</p>
-                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Rename a tool. Change a description.<br>Every agent breaks.</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Rename a tool. Rewrite a description. Every agent breaks.</p>
             </div>
-            <div style="background:var(--orange-bg);border-radius:8px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center;flex:1;min-width:min(45%,200px)">
-                <p style="margin:0;font-weight:700;color:var(--orange);font-size:var(--body)">The CLI</p>
-                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Refactor the execution layer.<br>Response format changes.</p>
+            <div style="width:clamp(1rem,2vw,1.5rem);height:2px;background:var(--border);flex-shrink:0"></div>
+            <div style="flex:1;border:2px solid var(--orange);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50%);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--orange)">03</div>
+                <p style="margin:0;font-weight:700;color:var(--orange);font-size:var(--body)">CLI</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Refactor execution. Change response format. New validation rules.</p>
             </div>
-            <div style="background:var(--green-bg);border-radius:8px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center;flex:1;min-width:min(45%,200px)">
+            <div style="width:clamp(1rem,2vw,1.5rem);height:2px;background:var(--border);flex-shrink:0"></div>
+            <div style="flex:1;border:2px solid var(--green);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50%);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--green)">04</div>
                 <p style="margin:0;font-weight:700;color:var(--green);font-size:var(--body)">System prompt</p>
-                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Tweak the instructions.<br>Model picks different tools.</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Tweak instructions. Model picks different tools entirely.</p>
             </div>
         </div>
-        <p class="reveal" style="font-size:var(--body);color:var(--fg);font-weight:500;text-align:center">The customer won't tell you it broke. Their $25M became $150M and nobody noticed.</p>
-    </div>
-</section>
-
-<!-- ========== 4: THE QUESTION (turning point) ========== -->
-<section class="slide glow">
-    <div class="sc mw" style="align-items:center;text-align:center">
-        <h2 class="reveal" style="font-size:var(--h1);max-width:18ch">How do we catch this<br><span class="accent">before the customer does?</span></h2>
+        <!-- Punchline -->
+        <div class="reveal" style="background:var(--red-bg);border:1px solid #fecaca;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+            <p style="margin:0;font-size:var(--body);color:var(--red);font-weight:600">Any one changes silently. The customer's $25M becomes $150M and nobody notices.</p>
+        </div>
     </div>
 </section>
 
@@ -180,72 +185,135 @@
      ACT 3: CLIMAX — The solution + proof
      ══════════════════════════════════════════ -->
 
-<!-- ========== 5: THE ANSWER ========== -->
+<!-- ========== 4: THE ANSWER ========== -->
 <section class="slide grid-bg">
-    <div class="sc mw">
-        <div class="sec reveal">THE ANSWER</div>
-        <h2 class="reveal" style="margin-bottom:var(--gap)">Two levels of automated testing</h2>
-        <div class="reveal cols cols-2" style="gap:clamp(.8rem,1.5vw,1.2rem)">
-            <div class="card card-brand" style="padding:clamp(.8rem,1.5vw,1.2rem)">
-                <span class="tag tag-b">LEVEL 1 &mdash; TOOL QUALITY</span>
-                <h3 style="margin:.4em 0 .2em">Test the decision</h3>
-                <p style="margin:0;font-size:var(--sm)">Give the LLM a task and tool definitions. Check: did it pick the <strong style="color:var(--fg)">right tool</strong> with <strong style="color:var(--fg)">valid arguments</strong>? No execution. No documents. Just the choice.</p>
-                <div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">
-                    <span class="tag tag-b">31 tests</span>
-                    <span class="tag tag-b">10 categories</span>
-                    <span class="tag tag-b">4 models</span>
-                    <span class="tag tag-b">17 seconds</span>
-                </div>
+    <div class="sc mw" style="align-items:center">
+        <p class="reveal" style="font:var(--sm) var(--mono);color:var(--fg3);letter-spacing:.1em;margin-bottom:clamp(.2rem,.5vw,.3rem)">HOW DO WE CATCH THIS BEFORE THE CUSTOMER DOES?</p>
+        <h2 class="reveal" style="margin-bottom:var(--gap);text-align:center">Run every task against every model<br>with every prompt. <span class="accent">Automatically.</span></h2>
+        <div class="reveal" style="display:flex;align-items:center;justify-content:center;gap:clamp(.5rem,1.2vw,1rem);flex-wrap:wrap">
+            <div style="background:var(--brand-bg);border:1px solid var(--brand-border);border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--brand)">31</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">tasks</div>
             </div>
-            <div class="card" style="padding:clamp(.8rem,1.5vw,1.2rem);border:2px solid var(--purple)">
-                <span class="tag tag-p">LEVEL 2 &mdash; EXECUTION</span>
-                <h3 style="margin:.4em 0 .2em">Test the result</h3>
-                <p style="margin:0;font-size:var(--sm)">Run the full agent loop on a real .docx. Open it, let the LLM pick tools, execute via CLI. Assert the <strong style="color:var(--fg)">document content actually changed</strong>.</p>
-                <div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">
-                    <span class="tag tag-p">21 tests</span>
-                    <span class="tag tag-p">3 DOCX fixtures</span>
-                    <span class="tag tag-p">AI Gateway</span>
-                    <span class="tag tag-p">any model</span>
-                </div>
+            <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--fg3)">&times;</div>
+            <div style="background:var(--purple-bg);border:1px solid #e9d5ff;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--purple)">5</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">models</div>
+            </div>
+            <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--fg3)">&times;</div>
+            <div style="background:var(--orange-bg);border:1px solid #fed7aa;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--orange)">2</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">prompts</div>
+            </div>
+            <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--fg3)">=</div>
+            <div style="background:var(--green-bg);border:1px solid #bbf7d0;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--green)">310</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">assertions</div>
             </div>
         </div>
-        <p class="reveal" style="margin-top:var(--gap);font-size:var(--sm);color:var(--fg3);text-align:center">Level 1 catches 90% of regressions at 1% of the cost. Level 2 proves it end-to-end.</p>
+        <div class="reveal cols cols-2" style="margin-top:var(--gap);gap:clamp(.5rem,1vw,.8rem)">
+            <div class="card card-brand" style="padding:.6em .8em">
+                <p style="margin:0;font:600 var(--sm) var(--sans);color:var(--brand)">Level 1: Tool Quality</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Did the LLM pick the right tool with valid args? No execution. 31 tests &times; 5 models &times; 2 prompts. 67 seconds.</p>
+            </div>
+            <div class="card" style="padding:.6em .8em;border:2px solid var(--purple)">
+                <p style="margin:0;font:600 var(--sm) var(--sans);color:var(--purple)">Level 2: Execution</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Full agent loop on real .docx files. 21 tests &times; 3 providers via AI Gateway. Assert content changed.</p>
+            </div>
+        </div>
+        <p class="reveal" style="margin-top:var(--gap);font-size:var(--sm);color:var(--fg3);text-align:center">Change any variable. Run the suite. See exactly what regressed and where.</p>
     </div>
 </section>
 
-<!-- ========== 6: THE PROOF ========== -->
+<!-- ========== 5: WHAT WE MEASURED ========== -->
 <section class="slide glow">
-    <div class="sc mw" style="align-items:center;text-align:center">
-        <div class="sec reveal">THE PROOF</div>
-        <h2 class="reveal" style="margin-bottom:var(--gap)">It works today. Across every model.</h2>
-        <div class="reveal cols cols-2" style="max-width:min(90vw,900px);margin:0 auto;gap:clamp(.8rem,1.5vw,1.2rem)">
-            <div class="card card-brand" style="padding:clamp(.8rem,1.5vw,1.2rem)">
-                <span class="tag tag-b" style="margin-bottom:.3em">LEVEL 1: TOOL QUALITY</span>
-                <div class="metric-val" style="color:var(--green);font-size:clamp(2rem,5vw,3.5rem)">119/124</div>
-                <div class="metric-label">96% across 4 models &middot; 31 tests</div>
-                <div style="display:flex;gap:.4em;flex-wrap:wrap;margin-top:.6em">
-                    <span class="tag tag-g">GPT-4o: 30/31</span>
-                    <span class="tag tag-g">GPT-4.1: 30/31</span>
-                    <span class="tag tag-g">GPT-5.4: 30/31</span>
-                    <span class="tag tag-g">4.1-mini: 29/31</span>
+    <div class="sc mw">
+        <div class="sec reveal">WHAT WE MEASURED</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">Same 31 tests, same 5 models.<br>Two very different prompts.</h2>
+        <div class="reveal cols cols-2" style="gap:clamp(1rem,2vw,1.5rem);align-items:stretch">
+            <div class="card card-brand" style="padding:clamp(1rem,2vw,1.5rem)">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6em">
+                    <span class="tag tag-b">FULL PROMPT</span>
+                    <span style="font:var(--xs) var(--mono);color:var(--fg3)">127 lines</span>
                 </div>
+                <div class="cb" style="font-size:clamp(.55rem,.85vw,.72rem);border:none;padding:.6em;background:var(--brand-bg);max-height:min(30vh,200px)">You edit .docx files using SuperDoc tools.
+Be efficient -- minimize tool calls.
+
+IMPORTANT: Never pass "doc" or "sessionId"...
+
+## Tool Categories
+## Recommended Workflow
+## query_match -- correct select formats
+## apply_mutations -- valid step ops
+## Standalone tools
+## Common Errors</div>
             </div>
-            <div class="card" style="padding:clamp(.8rem,1.5vw,1.2rem);border:2px solid var(--purple)">
-                <span class="tag tag-p" style="margin-bottom:.3em">LEVEL 2: EXECUTION</span>
-                <div class="metric-val" style="font-size:clamp(2rem,5vw,3.5rem)">51/64</div>
-                <div class="metric-label">80% across 3 providers &middot; 21 tests</div>
-                <div style="display:flex;gap:.4em;flex-wrap:wrap;margin-top:.6em">
-                    <span class="tag tag-g">GPT-5.4: 20/21</span>
-                    <span class="tag tag-g">Gemini: 19/22</span>
-                    <span class="tag tag-o">Claude Haiku: 12/21</span>
+            <div class="card" style="padding:clamp(1rem,2vw,1.5rem);border:2px solid var(--red)">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6em">
+                    <span class="tag tag-r">MINIMAL PROMPT</span>
+                    <span style="font:var(--xs) var(--mono);color:var(--fg3)">2 lines</span>
                 </div>
+                <div class="cb" style="font-size:clamp(.55rem,.85vw,.72rem);border:none;padding:.6em;background:var(--red-bg);max-height:min(30vh,200px)">You help users edit .docx documents
+using the provided tools.
+
+Task: {{task}}</div>
+                <p style="margin:.8em 0 0;font-size:var(--sm);color:var(--fg3)">This is what a customer would write. No tool guidance, no API examples, no rules.</p>
             </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========== 6: WHAT WE LEARNED ========== -->
+<section class="slide grid-bg">
+    <div class="sc mw">
+        <div class="sec reveal">WHAT WE LEARNED</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">A good prompt helps. But we <span class="red">can't control</span> what the customer writes.</h2>
+        <div class="reveal" style="display:flex;flex-direction:column;gap:clamp(.3rem,.6vw,.5rem)">
+            <!-- Chart rows: each model with two bars (full=blue, minimal=gray) and the gap highlighted -->
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:0;font:var(--xs) var(--mono);color:var(--fg3);padding:0 .5em .2em">
+                <span></span><span>Full prompt (127 lines)</span><span>Minimal prompt (2 lines)</span><span style="text-align:right;color:var(--red)">Gap</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">Gemini Flash</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:90%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">90%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:68%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--fg3)">68%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-22</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">GPT-4o</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:87%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">87%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:58%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--red)">58%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-29</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">GPT-4.1-mini</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:87%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">87%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:77%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--fg3)">77%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-10</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">GPT-5.4</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:87%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">87%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:74%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--fg3)">74%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-13</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">Claude Haiku</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:74%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--orange)">74%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:45%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--red)">45%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-29</span>
+            </div>
+        </div>
+        <!-- Takeaway -->
+        <div class="reveal card card-brand" style="margin-top:var(--gap);padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+            <p style="margin:0;font-size:var(--body);font-weight:600;color:var(--brand)">The gap is what we must close with better tool definitions.</p>
+            <p style="margin:.2em 0 0;font-size:var(--sm);color:var(--fg2)">Tool names, descriptions, and schemas are the only thing we control. The smaller the gap, the less our tools depend on prompt crutches.</p>
         </div>
     </div>
 </section>
 
 <!-- ========== 7: LEVEL 1 DETAIL ========== -->
-<section class="slide grid-bg">
+<section class="slide glow">
     <div class="sc mw">
         <div class="sec reveal">LEVEL 1 DETAIL</div>
         <h2 class="reveal" style="margin-bottom:var(--gap)">31 tests across 10 categories</h2>
@@ -280,7 +348,7 @@
 </section>
 
 <!-- ========== 8: LEVEL 2 DETAIL ========== -->
-<section class="slide glow">
+<section class="slide grid-bg">
     <div class="sc mw">
         <div class="sec reveal">LEVEL 2 DETAIL</div>
         <h2 class="reveal" style="margin-bottom:var(--gap)">21 execution tests on 3 real DOCX files</h2>
@@ -309,25 +377,28 @@
     </div>
 </section>
 
-<!-- ========== 9: COMMANDS ========== -->
-<section class="slide grid-bg">
-    <div class="sc mw">
-        <div class="sec reveal">RUN IT</div>
-        <h2 class="reveal" style="margin-bottom:var(--gap)">One command per layer</h2>
-        <div class="reveal cb" data-l="terminal" style="max-height:min(50vh,350px)">
-<span class="cm"># Level 1: Tool quality (4 OpenAI models, ~$1, 17s)</span>
-<span class="fn">pnpm run eval</span>
-
-<span class="cm"># E2E: Execution (real DOCX, AI Gateway, any model)</span>
-<span class="fn">pnpm run eval:e2e</span>
-
-<span class="cm"># View results in browser</span>
-<span class="fn">pnpm run eval:view</span></div>
+<!-- ========== 9: TECH DEMO ========== -->
+<section class="slide" style="background:var(--fg)">
+    <div class="sc mw" style="align-items:center;text-align:center">
+        <div class="reveal" style="font:var(--sm) var(--mono);color:rgba(255,255,255,.4);letter-spacing:.1em;margin-bottom:clamp(.3rem,.8vw,.6rem)">TECH DEMO</div>
+        <h2 class="reveal" style="color:#fff;margin-bottom:var(--gap)">Let's run it live.</h2>
+        <div class="reveal" style="display:flex;flex-direction:column;gap:clamp(.3rem,.6vw,.5rem);max-width:min(80vw,500px)">
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.5em 1em;font:var(--code) var(--mono);color:rgba(255,255,255,.7);text-align:left">
+                <span style="color:rgba(255,255,255,.3)">$</span> <span style="color:#86efac">pnpm run eval</span> <span style="color:rgba(255,255,255,.3)"># Level 1: 31 tests × 5 models × 2 prompts</span>
+            </div>
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.5em 1em;font:var(--code) var(--mono);color:rgba(255,255,255,.7);text-align:left">
+                <span style="color:rgba(255,255,255,.3)">$</span> <span style="color:#93c5fd">pnpm run eval:e2e</span> <span style="color:rgba(255,255,255,.3)"># Level 2: 21 tests × 3 providers</span>
+            </div>
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.5em 1em;font:var(--code) var(--mono);color:rgba(255,255,255,.7);text-align:left">
+                <span style="color:rgba(255,255,255,.3)">$</span> <span style="color:#c4b5fd">pnpm run eval:view</span> <span style="color:rgba(255,255,255,.3)"># open results in browser</span>
+            </div>
+        </div>
+        <p class="reveal" style="margin-top:var(--gap);color:rgba(255,255,255,.35);font-size:var(--sm);font-family:var(--mono)">switch to terminal ↓</p>
     </div>
 </section>
 
 <!-- ========== 10: WHAT'S NEXT ========== -->
-<section class="slide glow">
+<section class="slide grid-bg">
     <div class="sc mw">
         <div class="sec reveal">WHAT'S NEXT</div>
         <h2 class="reveal" style="margin-bottom:var(--gap)">Roadmap</h2>
@@ -353,7 +424,7 @@
     <div class="sc">
         <img class="reveal logo" src="https://www.superdoc.dev/logo.jpg" alt="SuperDoc" style="margin-bottom:clamp(.3rem,.6vw,.5rem)">
         <h1 class="reveal" style="max-width:16ch">Test the <span class="accent">tools</span>,<br>not the agent</h1>
-        <p class="reveal" style="margin-top:var(--gap);max-width:44ch;color:var(--fg3);font-size:var(--body);line-height:1.6">119/124 tool quality assertions pass across 4 models. 51/64 execution assertions pass across 3 providers via AI Gateway. Under 60 seconds total.</p>
+        <p class="reveal" style="margin-top:var(--gap);max-width:44ch;color:var(--fg3);font-size:var(--body);line-height:1.6">232/310 tool quality assertions pass across 5 models and 2 prompts. The full prompt lifts every model by 10-30%. Now we can measure it.</p>
         <div class="reveal" style="margin-top:clamp(.6rem,1.2vw,1rem);display:flex;gap:.5em">
             <span class="tag tag-b">SuperDoc/evals</span>
             <span class="tag tag-p">promptfoo</span>

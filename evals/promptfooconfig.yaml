@@ -10,6 +10,7 @@ description: 'SuperDoc Tool Evals'
 
 prompts:
   - file://prompts/agent.txt
+  - file://prompts/minimal.txt
 
 providers:
   # --- OpenAI ---

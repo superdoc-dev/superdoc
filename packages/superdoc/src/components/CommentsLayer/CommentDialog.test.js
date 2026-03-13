@@ -138,6 +138,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     deleteComment: vi.fn(),
     removePendingComment: vi.fn(),
     requestInstantSidebarAlignment: vi.fn(),
+    clearInstantSidebarAlignment: vi.fn(),
     setActiveComment: vi.fn(),
     getPendingComment: vi.fn(() => ({
       commentId: 'pending-1',

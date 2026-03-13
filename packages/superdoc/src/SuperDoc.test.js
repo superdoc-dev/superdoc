@@ -532,7 +532,7 @@ describe('SuperDoc.vue', () => {
 
     const handleToolClick = wrapper.vm.$.setupState.handleToolClick;
     handleToolClick('comments');
-    expect(commentsStoreStub.showAddComment).toHaveBeenCalledWith(superdocStub);
+    expect(commentsStoreStub.showAddComment).toHaveBeenCalledWith(superdocStub, 20);
 
     handleToolClick('ai');
     const aiMockResult = useAiMock.mock.results.at(-1)?.value;

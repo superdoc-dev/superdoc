@@ -157,32 +157,14 @@ describe('Editable extension – allowSelectionInViewMode', () => {
   });
 
   describe('composition event blocking', () => {
-    it('blocks compositionstart when not editable', () => {
+    it.each([
+      ['compositionstart', ''],
+      ['compositionupdate', 'あ'],
+      ['compositionend', '亜'],
+    ])('blocks %s when not editable', (type, data) => {
       createViewModeEditor();
-      const event = new CompositionEvent('compositionstart', {
-        data: '',
-        bubbles: true,
-        cancelable: true,
-      });
-      editor.view.dom.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
-    });
-
-    it('blocks compositionupdate when not editable', () => {
-      createViewModeEditor();
-      const event = new CompositionEvent('compositionupdate', {
-        data: 'あ',
-        bubbles: true,
-        cancelable: true,
-      });
-      editor.view.dom.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
-    });
-
-    it('blocks compositionend when not editable', () => {
-      createViewModeEditor();
-      const event = new CompositionEvent('compositionend', {
-        data: '亜',
+      const event = new CompositionEvent(type, {
+        data,
         bubbles: true,
         cancelable: true,
       });

@@ -27,6 +27,17 @@ const handleBackwardReplaceInsertText = (view, event) => {
   return true;
 };
 
+const NAVIGATION_KEYS = new Set([
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+]);
+
 /**
  * Editable extension controls whether the editor accepts user input.
  *
@@ -51,6 +62,19 @@ export const Editable = Extension.create({
 
   addPmPlugins() {
     const editor = this.editor;
+
+    /** True when all interaction should be blocked (not editable AND no selection-only override). */
+    const isFullyBlocked = () => !editor.options.editable && !editor.options.allowSelectionInViewMode;
+
+    /** Block an event when the editor is not editable (regardless of allowSelectionInViewMode). */
+    const blockWhenNotEditable = (_view, event) => {
+      if (!editor.options.editable) {
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    };
+
     const editablePlugin = new Plugin({
       key: new PluginKey('editable'),
       props: {
@@ -70,16 +94,14 @@ export const Editable = Extension.create({
             return false;
           },
           mousedown: (_view, event) => {
-            // Allow mousedown for selection when allowSelectionInViewMode is enabled
-            if (!editor.options.editable && !editor.options.allowSelectionInViewMode) {
+            if (isFullyBlocked()) {
               event.preventDefault();
               return true;
             }
             return false;
           },
           focus: (view, event) => {
-            // Allow focus when allowSelectionInViewMode is enabled
-            if (!editor.options.editable && !editor.options.allowSelectionInViewMode) {
+            if (isFullyBlocked()) {
               event.preventDefault();
               view.dom.blur();
               return true;
@@ -89,53 +111,21 @@ export const Editable = Extension.create({
           // Block IME composition events when not editable.
           // The input bridge forwards composition events when view.editable is true
           // (e.g. allowSelectionInViewMode), but we must prevent document mutations.
-          compositionstart: (_view, event) => {
-            if (!editor.options.editable) {
-              event.preventDefault();
-              return true;
-            }
-            return false;
-          },
-          compositionupdate: (_view, event) => {
-            if (!editor.options.editable) {
-              event.preventDefault();
-              return true;
-            }
-            return false;
-          },
-          compositionend: (_view, event) => {
-            if (!editor.options.editable) {
-              event.preventDefault();
-              return true;
-            }
-            return false;
-          },
+          compositionstart: blockWhenNotEditable,
+          compositionupdate: blockWhenNotEditable,
+          compositionend: blockWhenNotEditable,
         },
-        // Allow click events for selection when allowSelectionInViewMode is enabled
-        handleClick: () => !editor.options.editable && !editor.options.allowSelectionInViewMode,
-        handleDoubleClick: () => !editor.options.editable && !editor.options.allowSelectionInViewMode,
-        handleTripleClick: () => !editor.options.editable && !editor.options.allowSelectionInViewMode,
-        // Always block keyboard input, paste, and drop when not editable
+        handleClick: () => isFullyBlocked(),
+        handleDoubleClick: () => isFullyBlocked(),
+        handleTripleClick: () => isFullyBlocked(),
         handleKeyDown: (_view, event) => {
           if (!editor.options.editable) {
             if (editor.options.allowSelectionInViewMode) {
-              // Allow navigation keys for selection and cursor movement
-              const isNavigationKey = [
-                'ArrowLeft',
-                'ArrowRight',
-                'ArrowUp',
-                'ArrowDown',
-                'Home',
-                'End',
-                'PageUp',
-                'PageDown',
-              ].includes(event.key);
+              if (NAVIGATION_KEYS.has(event.key)) return false;
 
-              // Allow copy and select all
               const isCopyOrSelectAll =
                 (event.ctrlKey || event.metaKey) && ['c', 'a'].includes(event.key.toLowerCase());
-
-              if (isNavigationKey || isCopyOrSelectAll) return false;
+              if (isCopyOrSelectAll) return false;
             }
             return true;
           }

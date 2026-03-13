@@ -1,0 +1,98 @@
+---
+title: Theming
+sidebarTitle: Theming
+keywords: "superdoc theming, css variables, superdoc themes, custom theme, ui tokens"
+---
+
+Customize SuperDoc by overriding CSS variables.
+
+## What you can customize
+
+With CSS variables, you can change the look of SuperDoc without rebuilding the editor UI.
+
+Typical use cases:
+
+- Match your product brand colors
+- Style toolbar and menus to fit your app
+- Adjust page/canvas appearance
+- Customize comments and highlight colors
+- Create multiple themes (for example: default, legal, enterprise)
+
+## Quick start
+
+### 1. Define a theme class in your app CSS
+
+```css
+.sd-theme-custom {
+  --sd-ui-text: #1f2937;
+  --sd-ui-surface: #f6f8fb;
+  --sd-ui-border: #d1d5db;
+  --sd-ui-action: #2563eb;
+  --sd-ui-action-hover: #1d4ed8;
+
+  --sd-ui-toolbar-background: #eef2f7;
+  --sd-ui-dropdown-surface: #ffffff;
+  --sd-ui-dropdown-surface-hover: #e5edf8;
+}
+```
+
+### 2. Apply the theme class on `html`
+
+```html
+<html class="sd-theme-custom">
+  ...
+</html>
+```
+
+That’s it. SuperDoc will use your token values automatically.
+
+## Preset themes
+
+SuperDoc includes ready-to-use presets:
+
+- `sd-theme-docs` — Docs-like look
+- `sd-theme-word` — Microsoft Word-like look
+- `sd-theme-blueprint` — high-contrast technical preset
+
+Apply any preset by setting the class on `html`:
+
+```html
+<html class="sd-theme-word">
+  ...
+</html>
+```
+
+Remove the theme class (or use no class) to fall back to default token values from `:root`.
+
+## Recommended token groups
+
+Start with a small set of token groups. You don’t need to override everything.
+
+1. UI base  
+   `--sd-ui-text`, `--sd-ui-surface`, `--sd-ui-border`, `--sd-ui-action`, `--sd-ui-action-hover`
+
+2. Toolbar / dropdown / context menu  
+   `--sd-ui-toolbar-*`, `--sd-ui-dropdown-*`, `--sd-ui-context-menu-*`
+
+3. Layout  
+   `--sd-layout-page-*`
+
+4. Comments  
+   `--sd-ui-comments-panel-*`, `--sd-comments-highlight-*`
+
+5. Tracked changes  
+   `--sd-tracked-changes-*`
+
+## Best practices
+
+- Prefer token overrides over direct selector overrides.
+- Override the smallest token set that gives the visual result you need.
+- Keep your theme class on `html` so teleported UI (dropdowns, menus) stays themed.
+
+## Where to find the full token list
+
+For the complete, always-up-to-date token list, use source files:
+
+- [`variables.css`](https://github.com/superdoc-dev/superdoc/tree/main/packages/superdoc/src/assets/styles/helpers/variables.css) — default contract (`:root`)
+- [`themes.css`](https://github.com/superdoc-dev/superdoc/tree/main/packages/superdoc/src/assets/styles/helpers/themes.css) — preset theme overrides (`.sd-theme-*`)
+ 

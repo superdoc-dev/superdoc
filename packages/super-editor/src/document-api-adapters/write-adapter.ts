@@ -15,46 +15,17 @@ import { insertParagraphAtEnd, resolveWriteTarget, type ResolvedWrite } from './
 import { toCanonicalTrackedChangeId } from './helpers/tracked-change-resolver.js';
 
 function validateWriteRequest(request: WriteRequest, resolvedTarget: ResolvedWrite): ReceiptFailure | null {
-  if (request.kind === 'insert') {
-    if (!request.text) {
-      return {
-        code: 'INVALID_TARGET',
-        message: 'Insert operations require non-empty text.',
-      };
-    }
-
-    if (resolvedTarget.range.from !== resolvedTarget.range.to) {
-      return {
-        code: 'INVALID_TARGET',
-        message: 'Insert operations require a collapsed target range.',
-      };
-    }
-
-    return null;
-  }
-
-  if (request.kind === 'replace') {
-    if (request.text == null || request.text.length === 0) {
-      return {
-        code: 'INVALID_TARGET',
-        message: 'Replace operations require non-empty text. Use delete for removals.',
-      };
-    }
-
-    if (resolvedTarget.resolution.text === request.text) {
-      return {
-        code: 'NO_OP',
-        message: 'Replace operation produced no change.',
-      };
-    }
-
-    return null;
-  }
-
-  if (resolvedTarget.range.from === resolvedTarget.range.to) {
+  if (!request.text) {
     return {
-      code: 'NO_OP',
-      message: 'Delete operation produced no change for a collapsed range.',
+      code: 'INVALID_TARGET',
+      message: 'Insert operations require non-empty text.',
+    };
+  }
+
+  if (resolvedTarget.range.from !== resolvedTarget.range.to) {
+    return {
+      code: 'INVALID_TARGET',
+      message: 'Insert operations require a collapsed target range.',
     };
   }
 
@@ -65,105 +36,48 @@ function validateWriteRequest(request: WriteRequest, resolvedTarget: ResolvedWri
  * Normalize block-relative locator fields into a canonical TextAddress.
  * This runs inside the adapter layer so that the resolution uses engine-specific block lookup.
  *
- * - Insert: blockId + offset → collapsed TextAddress
- * - Replace/Delete: blockId + start + end → ranged TextAddress
+ * Insert: blockId + offset → collapsed TextAddress
  *
  * Returns the original request unchanged when no friendly locator is present.
  */
 function normalizeWriteLocator(request: WriteRequest): WriteRequest {
-  if (request.kind === 'insert') {
-    const hasBlockId = request.blockId !== undefined;
-    const hasOffset = request.offset !== undefined;
+  const hasBlockId = request.blockId !== undefined;
+  const hasOffset = request.offset !== undefined;
 
-    // Defensive: reject offset mixed with canonical target.
-    if (hasOffset && request.target) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
-        fields: ['target', 'offset'],
-      });
-    }
-
-    // Defensive: reject orphaned offset without blockId (safety net for direct adapter callers).
-    if (hasOffset && !hasBlockId) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
-        fields: ['offset', 'blockId'],
-      });
-    }
-
-    if (!hasBlockId) return request;
-
-    // Defensive: reject mixed locator modes at adapter boundary (safety net).
-    if (request.target) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
-        fields: ['target', 'blockId'],
-      });
-    }
-
-    const effectiveOffset = request.offset ?? 0;
-    const target: TextAddress = {
-      kind: 'text',
-      blockId: request.blockId!,
-      range: { start: effectiveOffset, end: effectiveOffset },
-    };
-
-    return { kind: 'insert', target, text: request.text };
+  // Defensive: reject offset mixed with canonical target.
+  if (hasOffset && request.target) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
+      fields: ['target', 'offset'],
+    });
   }
 
-  // replace / delete: range normalization (blockId + start + end → TextAddress)
-  if (request.kind === 'replace' || request.kind === 'delete') {
-    const hasBlockId = request.blockId !== undefined;
-    const hasStart = request.start !== undefined;
-    const hasEnd = request.end !== undefined;
-
-    // Defensive: reject range fields mixed with canonical target.
-    if (request.target && (hasBlockId || hasStart || hasEnd)) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        `Cannot combine target with blockId/start/end on ${request.kind} request.`,
-        { fields: ['target', 'blockId', 'start', 'end'] },
-      );
-    }
-
-    // Defensive: reject orphaned start/end without blockId.
-    if (!hasBlockId && (hasStart || hasEnd)) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', `start/end require blockId on ${request.kind} request.`, {
-        fields: ['blockId', 'start', 'end'],
-      });
-    }
-
-    if (!hasBlockId) return request;
-
-    // Defensive: reject incomplete range.
-    if (!hasStart || !hasEnd) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        `blockId requires both start and end on ${request.kind} request.`,
-        { fields: ['blockId', 'start', 'end'] },
-      );
-    }
-
-    const target: TextAddress = {
-      kind: 'text',
-      blockId: request.blockId!,
-      range: { start: request.start!, end: request.end! },
-    };
-
-    // Construct clean canonical objects — no leftover friendly fields.
-    if (request.kind === 'replace') {
-      return { kind: 'replace', target, text: request.text };
-    }
-    return { kind: 'delete', target, text: '' };
+  // Defensive: reject orphaned offset without blockId (safety net for direct adapter callers).
+  if (hasOffset && !hasBlockId) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
+      fields: ['offset', 'blockId'],
+    });
   }
 
-  return request;
+  if (!hasBlockId) return request;
+
+  // Defensive: reject mixed locator modes at adapter boundary (safety net).
+  if (request.target) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
+      fields: ['target', 'blockId'],
+    });
+  }
+
+  const effectiveOffset = request.offset ?? 0;
+  const target: TextAddress = {
+    kind: 'text',
+    blockId: request.blockId!,
+    range: { start: effectiveOffset, end: effectiveOffset },
+  };
+
+  return { kind: 'insert', target, text: request.text };
 }
 
 function applyDirectWrite(editor: Editor, request: WriteRequest, resolvedTarget: ResolvedWrite): TextMutationReceipt {
-  if (request.kind === 'delete') {
-    const tr = applyDirectMutationMeta(editor.state.tr.delete(resolvedTarget.range.from, resolvedTarget.range.to));
-    editor.dispatch(tr);
-    return { success: true, resolution: resolvedTarget.resolution };
-  }
-
   // Structural-end: create a paragraph at the document end, since raw
   // insertText cannot place text between block nodes.
   if (resolvedTarget.structuralEnd) {
@@ -171,7 +85,7 @@ function applyDirectWrite(editor: Editor, request: WriteRequest, resolvedTarget:
     return { success: true, resolution: resolvedTarget.resolution };
   }
 
-  // text is guaranteed non-empty for insert/replace after validateWriteRequest
+  // text is guaranteed non-empty for insert after validateWriteRequest
   const tr = applyDirectMutationMeta(
     editor.state.tr.insertText(request.text ?? '', resolvedTarget.range.from, resolvedTarget.range.to),
   );
@@ -192,13 +106,12 @@ function applyTrackedWrite(editor: Editor, request: WriteRequest, resolvedTarget
 
   // insertTrackedChange is guaranteed to exist after ensureTrackedCapability.
   const insertTrackedChange = editor.commands!.insertTrackedChange!;
-  const text = request.kind === 'delete' ? '' : (request.text ?? '');
 
   const changeId = uuidv4();
   const didApply = insertTrackedChange({
     from: resolvedTarget.range.from,
-    to: request.kind === 'insert' ? resolvedTarget.range.from : resolvedTarget.range.to,
-    text,
+    to: resolvedTarget.range.from,
+    text: request.text ?? '',
     id: changeId,
   });
 

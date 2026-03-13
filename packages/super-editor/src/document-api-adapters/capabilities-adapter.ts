@@ -16,7 +16,6 @@ import {
   OPERATION_IDS,
 } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
-import { isCollaborationActive } from './collaboration-detection.js';
 
 type EditorCommandName = string;
 type EditorWithBlockNodeHelper = Editor & {
@@ -246,6 +245,14 @@ const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>
   'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.setDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.clearDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  // headerFooters: refs.set and refs.setLinkedToPrevious require converter for relationship validation;
+  // parts.* operations require converter for relationship/part lifecycle management.
+  'headerFooters.refs.set': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.refs.setLinkedToPrevious': (editor) =>
+    Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.list': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.create': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.delete': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   // Picture bullet requires the numbering part to support lvlPicBulletId references.
   'lists.setLevelPictureBullet': (editor) => {
     const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
@@ -417,7 +424,6 @@ function isStylesApplyAvailable(editor: Editor): boolean {
   const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
   if (!converter?.convertedXml?.['word/styles.xml']) return false;
   if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return false;
-  if (isCollaborationActive(editor)) return false;
   return true;
 }
 
@@ -429,7 +435,6 @@ function getStylesApplyUnavailableReason(editor: Editor): CapabilityReasonCode |
   if (!converter) return 'OPERATION_UNAVAILABLE';
   if (!converter.convertedXml?.['word/styles.xml']) return 'STYLES_PART_MISSING';
   if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return 'STYLES_PART_MISSING';
-  if (isCollaborationActive(editor)) return 'COLLABORATION_ACTIVE';
   return undefined;
 }
 
@@ -445,7 +450,7 @@ function isOperationAvailable(editor: Editor, operationId: OperationId): boolean
     return isInlinePropertyAvailable(editor, INLINE_PROPERTY_BY_KEY[inlineKey]);
   }
 
-  // styles.apply requires converter + styles part + no collaboration
+  // styles.apply requires converter + styles part
   if (operationId === 'styles.apply') {
     return isStylesApplyAvailable(editor);
   }

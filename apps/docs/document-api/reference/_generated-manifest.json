@@ -207,6 +207,16 @@
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
     "apps/docs/document-api/reference/get.mdx",
+    "apps/docs/document-api/reference/header-footers/get.mdx",
+    "apps/docs/document-api/reference/header-footers/index.mdx",
+    "apps/docs/document-api/reference/header-footers/list.mdx",
+    "apps/docs/document-api/reference/header-footers/parts/create.mdx",
+    "apps/docs/document-api/reference/header-footers/parts/delete.mdx",
+    "apps/docs/document-api/reference/header-footers/parts/list.mdx",
+    "apps/docs/document-api/reference/header-footers/refs/clear.mdx",
+    "apps/docs/document-api/reference/header-footers/refs/set-linked-to-previous.mdx",
+    "apps/docs/document-api/reference/header-footers/refs/set.mdx",
+    "apps/docs/document-api/reference/header-footers/resolve.mdx",
     "apps/docs/document-api/reference/history/get.mdx",
     "apps/docs/document-api/reference/history/index.mdx",
     "apps/docs/document-api/reference/history/redo.mdx",
@@ -740,6 +750,23 @@
     },
     {
       "aliasMemberPaths": [],
+      "key": "headerFooters",
+      "operationIds": [
+        "headerFooters.list",
+        "headerFooters.get",
+        "headerFooters.resolve",
+        "headerFooters.refs.set",
+        "headerFooters.refs.clear",
+        "headerFooters.refs.setLinkedToPrevious",
+        "headerFooters.parts.list",
+        "headerFooters.parts.create",
+        "headerFooters.parts.delete"
+      ],
+      "pagePath": "apps/docs/document-api/reference/header-footers/index.mdx",
+      "title": "Headers & Footers"
+    },
+    {
+      "aliasMemberPaths": [],
       "key": "contentControls",
       "operationIds": [
         "create.contentControl",
@@ -913,5 +940,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "639c2de06d517ba8484f7cc5463ab0b8fc44770899faabf281298adfacae156f"
+  "sourceHash": "eef969b01d52d99044ea5eb9c17085c5e31768001ced01042c4ebd90e6f00a24"
 }

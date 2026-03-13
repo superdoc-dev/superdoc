@@ -9,13 +9,15 @@ export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
+export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
 export type {
   MarkdownToFragmentInput,
   MarkdownToFragmentAdapter,
 } from './markdown-to-fragment/markdown-to-fragment.js';
 export { executeMarkdownToFragment } from './markdown-to-fragment/markdown-to-fragment.js';
-export type { HistoryState, HistoryActionResult } from './history/history.types.js';
+export type { HistoryState, HistoryActionResult, HistoryNoopReason } from './history/history.types.js';
 
 import type {
   CreateParagraphInput,
@@ -181,8 +183,15 @@ import {
   executeCreateTableOfContents,
 } from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
-import { executeBlocksDelete } from './blocks/blocks.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from './types/blocks.types.js';
+import { executeBlocksList, executeBlocksDelete, executeBlocksDeleteRange } from './blocks/blocks.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
+} from './types/blocks.types.js';
 import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
   CreateTableInput,
@@ -306,6 +315,35 @@ import {
   executeParagraphsClearShading,
 } from './paragraphs/paragraphs.js';
 import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
+import type {
+  HeaderFootersAdapter,
+  HeaderFootersApi,
+  HeaderFootersListQuery,
+  HeaderFootersListResult,
+  HeaderFootersGetInput,
+  HeaderFooterSlotEntry,
+  HeaderFootersResolveInput,
+  HeaderFooterResolveResult,
+  HeaderFootersRefsSetInput,
+  HeaderFootersRefsClearInput,
+  HeaderFootersRefsSetLinkedToPreviousInput,
+  HeaderFootersPartsListQuery,
+  HeaderFootersPartsListResult,
+  HeaderFootersPartsCreateInput,
+  HeaderFootersPartsDeleteInput,
+  HeaderFooterPartsMutationResult,
+} from './header-footers/header-footers.js';
+import {
+  executeHeaderFootersList,
+  executeHeaderFootersGet,
+  executeHeaderFootersResolve,
+  executeHeaderFootersRefsSet,
+  executeHeaderFootersRefsClear,
+  executeHeaderFootersRefsSetLinkedToPrevious,
+  executeHeaderFootersPartsList,
+  executeHeaderFootersPartsCreate,
+  executeHeaderFootersPartsDelete,
+} from './header-footers/header-footers.js';
 import type {
   CreateSectionBreakInput,
   CreateSectionBreakResult,
@@ -1388,7 +1426,7 @@ export interface DocumentApi {
    */
   trackChanges: TrackChangesApi;
   /**
-   * Block-level structural operations (delete whole blocks).
+   * Block-level structural operations (list, delete, delete-range).
    */
   blocks: BlocksApi;
   /**
@@ -1419,6 +1457,10 @@ export interface DocumentApi {
    * Hyperlink discovery, creation, and metadata management.
    */
   hyperlinks: HyperlinksApi;
+  /**
+   * Header/footer structure, references, and part lifecycle operations.
+   */
+  headerFooters: HeaderFootersApi;
   /**
    * Content control (SDT) discovery, mutation, and typed-control operations.
    */
@@ -1514,6 +1556,7 @@ export interface DocumentApiAdapters {
   toc: TocAdapter;
   images: ImagesAdapter & CreateImageAdapter;
   hyperlinks: HyperlinksAdapter;
+  headerFooters: HeaderFootersAdapter;
   contentControls: ContentControlsAdapter & ContentControlsCreateAdapter;
   bookmarks?: BookmarksAdapter;
 
@@ -1751,8 +1794,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     blocks: {
+      list(input?: BlocksListInput): BlocksListResult {
+        return executeBlocksList(adapters.blocks, input);
+      },
       delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult {
         return executeBlocksDelete(adapters.blocks, input, options);
+      },
+      deleteRange(input: BlocksDeleteRangeInput, options?: MutationOptions): BlocksDeleteRangeResult {
+        return executeBlocksDeleteRange(adapters.blocks, input, options);
       },
     },
     create: {
@@ -2356,6 +2405,42 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       remove(input: HyperlinksRemoveInput, options?: MutationOptions): HyperlinkMutationResult {
         return executeHyperlinksRemove(adapters.hyperlinks, input, options);
+      },
+    },
+    headerFooters: {
+      list(query?: HeaderFootersListQuery): HeaderFootersListResult {
+        return executeHeaderFootersList(adapters.headerFooters, query);
+      },
+      get(input: HeaderFootersGetInput): HeaderFooterSlotEntry {
+        return executeHeaderFootersGet(adapters.headerFooters, input);
+      },
+      resolve(input: HeaderFootersResolveInput): HeaderFooterResolveResult {
+        return executeHeaderFootersResolve(adapters.headerFooters, input);
+      },
+      refs: {
+        set(input: HeaderFootersRefsSetInput, options?: MutationOptions): SectionMutationResult {
+          return executeHeaderFootersRefsSet(adapters.headerFooters, input, options);
+        },
+        clear(input: HeaderFootersRefsClearInput, options?: MutationOptions): SectionMutationResult {
+          return executeHeaderFootersRefsClear(adapters.headerFooters, input, options);
+        },
+        setLinkedToPrevious(
+          input: HeaderFootersRefsSetLinkedToPreviousInput,
+          options?: MutationOptions,
+        ): SectionMutationResult {
+          return executeHeaderFootersRefsSetLinkedToPrevious(adapters.headerFooters, input, options);
+        },
+      },
+      parts: {
+        list(query?: HeaderFootersPartsListQuery): HeaderFootersPartsListResult {
+          return executeHeaderFootersPartsList(adapters.headerFooters, query);
+        },
+        create(input: HeaderFootersPartsCreateInput, options?: MutationOptions): HeaderFooterPartsMutationResult {
+          return executeHeaderFootersPartsCreate(adapters.headerFooters, input, options);
+        },
+        delete(input: HeaderFootersPartsDeleteInput, options?: MutationOptions): HeaderFooterPartsMutationResult {
+          return executeHeaderFootersPartsDelete(adapters.headerFooters, input, options);
+        },
       },
     },
     contentControls: {

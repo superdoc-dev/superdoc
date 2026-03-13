@@ -4,6 +4,7 @@ import { getContentTypesFromXml, base64ToUint8Array, detectImageType } from './s
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
 import { DOCX } from '@superdoc/common';
 import { COMMENT_FILE_BASENAMES } from './super-converter/constants.js';
+import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 
 /** Image file extensions recognized during import and export. */
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
@@ -256,7 +257,7 @@ class DocxZipper {
     const beginningString = '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">';
     let updatedContentTypesXml = contentTypesXml.replace(beginningString, `${beginningString}${typesString}`);
 
-    // Remove Override elements for comment parts that no longer exist
+    // Remove Override elements for parts that no longer exist
     for (const partName of staleOverridePartNames) {
       const escapedPartName = partName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const overrideRegex = new RegExp(`\\s*<Override[^>]*PartName="${escapedPartName}"[^>]*/>`, 'g');
@@ -311,6 +312,47 @@ class DocxZipper {
     if (fromJson) return updatedContentTypesXml;
 
     docx.file(contentTypesPath, updatedContentTypesXml);
+  }
+
+  /**
+   * Run the OPC package metadata synchronizer against a JSZip instance.
+   *
+   * Reads [Content_Types].xml and _rels/.rels from the zip, reconciles
+   * managed package-level parts, and writes the corrected files back.
+   *
+   * The assembled zip is treated as the single source of truth — no stale
+   * updatedDocs are passed, so the synchronizer sees exactly what
+   * updateContentTypes() already wrote.
+   *
+   * @param {JSZip} zip - The fully assembled zip to reconcile.
+   */
+  async #syncPackageMetadataInZip(zip) {
+    // Build a base-files map from the zip's current listing.
+    // At this point the zip already contains all base + updated + media entries.
+    const baseForSync = {};
+    zip.forEach((path) => {
+      baseForSync[path] = ''; // non-null signals "exists"
+    });
+
+    // Read the two metadata files the synchronizer needs to parse.
+    // Use JSZip's async API to correctly handle all internal storage formats.
+    const ctEntry = zip.file('[Content_Types].xml');
+    if (ctEntry) {
+      baseForSync['[Content_Types].xml'] = await ctEntry.async('string');
+    }
+    const rlEntry = zip.file('_rels/.rels');
+    if (rlEntry) {
+      baseForSync['_rels/.rels'] = await rlEntry.async('string');
+    }
+
+    // Pass an empty updatedDocs — the zip is already the assembled truth.
+    const { contentTypesXml, relsXml } = syncPackageMetadata({
+      baseFiles: baseForSync,
+      updatedDocs: {},
+    });
+
+    zip.file('[Content_Types].xml', contentTypesXml);
+    zip.file('_rels/.rels', relsXml);
   }
 
   async unzip(file) {
@@ -374,6 +416,10 @@ class DocxZipper {
     }
 
     await this.updateContentTypes(zip, media, false, updatedDocs);
+
+    // Reconcile package-level singleton metadata as a final safety pass.
+    await this.#syncPackageMetadataInZip(zip);
+
     return zip;
   }
 
@@ -388,8 +434,11 @@ class DocxZipper {
     const unzippedOriginalDocx = await this.unzip(originalDocxFile);
     const filePromises = [];
     unzippedOriginalDocx.forEach((relativePath, zipEntry) => {
-      const promise = zipEntry.async('string').then((content) => {
-        unzippedOriginalDocx.file(zipEntry.name, content);
+      // Read as raw bytes to handle non-UTF-8 encodings (e.g. UTF-16 LE
+      // customXml parts). XML/rels files are decoded to valid UTF-8 strings;
+      // other entries are kept as raw bytes.
+      const promise = zipEntry.async('uint8array').then((u8) => {
+        unzippedOriginalDocx.file(zipEntry.name, isXmlLike(zipEntry.name) ? ensureXmlString(u8) : u8);
       });
       filePromises.push(promise);
     });
@@ -409,6 +458,9 @@ class DocxZipper {
     });
 
     await this.updateContentTypes(unzippedOriginalDocx, media, false, updatedDocs);
+
+    // Reconcile package-level singleton metadata as a final safety pass.
+    await this.#syncPackageMetadataInZip(unzippedOriginalDocx);
 
     return unzippedOriginalDocx;
   }

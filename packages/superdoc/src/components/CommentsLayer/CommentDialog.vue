@@ -301,7 +301,7 @@ const handleClickOutside = (e) => {
   const targetElement = e.target instanceof Element ? e.target : e.target?.parentElement;
   const clickedIgnoredTarget = targetElement?.closest?.(
     [
-      '.n-dropdown-option-body__label',
+      '.comments-dropdown__option-label',
       '.superdoc-comment-highlight',
       '.sd-editor-comment-highlight',
       '.sd-editor-tracked-change-highlight',
@@ -994,9 +994,6 @@ watch(editingCommentId, (commentId) => {
   margin-left: 5px;
 }
 
-.internal-dropdown {
-  display: inline-block;
-}
 .comment-editing {
   padding-bottom: 10px;
 }

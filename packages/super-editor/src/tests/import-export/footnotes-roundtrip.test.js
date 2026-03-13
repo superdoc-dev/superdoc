@@ -638,6 +638,46 @@ describe('customMarkFollows attribute', () => {
 });
 
 // ============================================
+// Bootstrap ID uniqueness regression
+// ============================================
+
+describe('bootstrapped notes part produces unique ids', () => {
+  it('creates separator=-1, continuationSeparator=0, first real note=1 with no duplicates', async () => {
+    // Import the bootstrap helper and the OOXML mutation helper
+    const { bootstrapNotesPart, getNotesConfig, addNoteElement } = await import(
+      '@core/parts/adapters/notes-part-descriptor.js'
+    );
+
+    // Simulate a fresh editor with no footnotes part
+    const editor = {
+      converter: {
+        convertedXml: {
+          'word/document.xml': {},
+        },
+      },
+      state: { doc: { descendants: () => {} } },
+    };
+
+    // Bootstrap the part (creates separator boilerplate)
+    bootstrapNotesPart(editor, 'footnote');
+
+    // Add a real note (simulates what footnotesInsertWrapper does)
+    const config = getNotesConfig('footnote');
+    const part = editor.converter.convertedXml['word/footnotes.xml'];
+    addNoteElement(part, config, '1', 'First real footnote');
+
+    // Extract all w:footnote ids from the OOXML
+    const root = part.elements[0];
+    const noteElements = root.elements.filter((el) => el.name === 'w:footnote');
+    const ids = noteElements.map((el) => el.attributes['w:id']);
+
+    // Must be -1, 0, 1 — all unique, no collisions
+    expect(ids).toEqual(expect.arrayContaining(['-1', '0', '1']));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+// ============================================
 // w:footnotePr Properties Tests
 // ============================================
 

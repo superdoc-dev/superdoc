@@ -18,7 +18,7 @@ import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumbe
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
-import { importFootnoteData } from './documentFootnotesImporter.js';
+import { importFootnoteData, importEndnoteData } from './documentFootnotesImporter.js';
 import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
@@ -150,6 +150,7 @@ export const createDocumentJson = (docx, converter, editor) => {
     const numbering = getNumberingDefinitions(docx);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
+    const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });
 
     const translatedLinkedStyles = translateStyleDefinitions(docx);
     const translatedNumbering = translateNumberingDefinitions(docx);
@@ -201,6 +202,7 @@ export const createDocumentJson = (docx, converter, editor) => {
       ),
       comments,
       footnotes,
+      endnotes,
       inlineDocumentFonts,
       linkedStyles: getStyleDefinitions(docx, converter, editor),
       translatedLinkedStyles,

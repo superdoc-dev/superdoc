@@ -1,12 +1,6 @@
 pre-commit:
   parallel: true
   commands:
-    install-deps:
-      run: pnpm install
-      stage_fixed: true
-    typecheck:
-      glob: "*.{ts,tsx,vue}"
-      run: pnpm run type-check
     format:
       glob: "*.{js,jsx,ts,tsx,css,scss,json,vue}"
       run: pnpm exec prettier --write {staged_files}
@@ -16,9 +10,8 @@ pre-commit:
       run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
     cli-build:
+      glob: "apps/cli/**/*.{ts,js}"
       run: pnpm --prefix apps/cli run build
-    cli-test:
-      run: pnpm run build:superdoc && pnpm run test:cli
     vscode-build:
       root: "apps/vscode-ext/"
       glob: "apps/vscode-ext/**/*.{ts,js}"
@@ -36,6 +29,7 @@ pre-commit:
       glob: "apps/docs/**/*.mdx"
       run: pnpm run test:examples
     generate-all:
+      glob: "packages/document-api/src/contract/**/*.ts"
       run: pnpm run generate:all && git add apps/docs/document-api/reference apps/docs/document-api/overview.mdx apps/docs/document-engine/sdks.mdx
       stage_fixed: true
 

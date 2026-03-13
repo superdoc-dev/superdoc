@@ -51,7 +51,7 @@ function getNumberingProperties(node: BlockCandidate['node']): { numId?: number;
 function deriveListKindFromDefinitions(editor: Editor, numId?: number, level?: number): ListKind | undefined {
   if (numId == null || level == null || !editor.converter) return undefined;
   try {
-    const details = ListHelpers.getListDefinitionDetails({ numId, level, editor });
+    const details = ListHelpers.getListDefinitionDetails({ numId, level, listType: undefined, editor });
     const numberingType = typeof details?.listNumberingType === 'string' ? details.listNumberingType : undefined;
     if (numberingType === 'bullet') return 'bullet';
     if (typeof numberingType === 'string' && numberingType.length > 0) return 'ordered';

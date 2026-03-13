@@ -92,20 +92,28 @@ describe('ensureXmlString', () => {
     expect(out).toContain('héllo');
   });
 
-  it('decodes UTF-16LE with BOM bytes', () => {
+  it('decodes UTF-16LE with BOM bytes and rewrites encoding to UTF-8', () => {
     const u8 = utf16leWithBOM('<?xml version="1.0" encoding="utf-16"?><props><k>v</k></props>');
     const out = ensureXmlString(u8);
-    expect(out.toLowerCase()).toContain('encoding="utf-16"');
+    expect(out).toContain('encoding="UTF-8"');
+    expect(out).not.toContain('encoding="utf-16"');
     expect(out).toContain('<props>');
     expect(out).not.toMatch(/\u0000/);
   });
 
-  it('decodes UTF-16BE with BOM bytes', () => {
+  it('decodes UTF-16BE with BOM bytes and rewrites encoding to UTF-8', () => {
     const u8 = utf16beWithBOM('<?xml version="1.0" encoding="utf-16"?><props><k>v</k></props>');
     const out = ensureXmlString(u8);
-    expect(out.toLowerCase()).toContain('encoding="utf-16"');
+    expect(out).toContain('encoding="UTF-8"');
+    expect(out).not.toContain('encoding="utf-16"');
     expect(out).toContain('<props>');
     expect(out).not.toMatch(/\u0000/);
+  });
+
+  it('does not rewrite encoding for UTF-8 input', () => {
+    const u8 = new TextEncoder().encode('<?xml version="1.0" encoding="UTF-8"?><root/>');
+    const out = ensureXmlString(u8);
+    expect(out).toContain('encoding="UTF-8"');
   });
 
   it('decodes UTF-16 (no BOM) via heuristic', () => {

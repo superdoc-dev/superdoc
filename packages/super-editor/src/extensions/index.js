@@ -3,6 +3,7 @@ import { History } from './history/index.js';
 import { Color } from './color/index.js';
 import { FontFamily } from './font-family/index.js';
 import { FontSize } from './font-size/index.js';
+import { LetterSpacing } from './letter-spacing/index.js';
 import { TextAlign } from './text-align/index.js';
 import { FormatCommands } from './format-commands/index.js';
 import { DropCursor } from './dropcursor/index.js';
@@ -95,6 +96,7 @@ const getRichTextExtensions = () => {
     Document,
     FontFamily,
     FontSize,
+    LetterSpacing,
     History,
     Heading,
     Italic,
@@ -143,6 +145,7 @@ const getStarterExtensions = () => {
     Document,
     FontFamily,
     FontSize,
+    LetterSpacing,
     History,
     Heading,
     Italic,
@@ -247,6 +250,7 @@ export {
   Color,
   FontFamily,
   FontSize,
+  LetterSpacing,
   TextAlign,
   TextStyle,
   FormatCommands,

@@ -171,7 +171,7 @@ function convertParagraph(node: PmNode, editor: Editor): BlockOrPending[] {
 
 function isOrderedList(numId: number, ilvl: number, editor: Editor): boolean {
   try {
-    const details = ListHelpers.getListDefinitionDetails({ numId, level: ilvl, editor });
+    const details = ListHelpers.getListDefinitionDetails({ numId, level: ilvl, listType: undefined, editor });
     if (!details?.numFmt) return false;
     return !BULLET_FORMATS.has(details.numFmt);
   } catch {

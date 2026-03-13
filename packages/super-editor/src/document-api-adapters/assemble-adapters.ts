@@ -48,7 +48,7 @@ import {
   trackChangesRejectAllWrapper,
 } from './plan-engine/track-changes-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from './plan-engine/create-wrappers.js';
-import { blocksDeleteWrapper } from './plan-engine/blocks-wrappers.js';
+import { blocksListWrapper, blocksDeleteWrapper, blocksDeleteRangeWrapper } from './plan-engine/blocks-wrappers.js';
 import {
   listsListWrapper,
   listsGetWrapper,
@@ -87,6 +87,11 @@ import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
+import { registerPartDescriptor } from '../core/parts/registry/part-registry.js';
+import { stylesPartDescriptor } from '../core/parts/adapters/styles-part-descriptor.js';
+import { settingsPartDescriptor } from '../core/parts/adapters/settings-part-descriptor.js';
+import { relsPartDescriptor } from '../core/parts/adapters/rels-part-descriptor.js';
+import { numberingPartDescriptor } from '../core/parts/adapters/numbering-part-descriptor.js';
 import { createTableWrapper } from './plan-engine/create-table-wrapper.js';
 import {
   createSectionBreakAdapter,
@@ -211,6 +216,17 @@ import {
 } from './plan-engine/hyperlinks-wrappers.js';
 import { createContentControlsAdapter } from './plan-engine/content-controls-wrappers.js';
 import {
+  headerFootersListAdapter,
+  headerFootersGetAdapter,
+  headerFootersResolveAdapter,
+  headerFootersRefsSetAdapter,
+  headerFootersRefsClearAdapter,
+  headerFootersRefsSetLinkedToPreviousAdapter,
+  headerFootersPartsListAdapter,
+  headerFootersPartsCreateAdapter,
+  headerFootersPartsDeleteAdapter,
+} from './header-footers-adapter.js';
+import {
   bookmarksListWrapper,
   bookmarksGetWrapper,
   bookmarksInsertWrapper,
@@ -302,6 +318,10 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   registerBuiltInExecutors();
   initRevision(editor);
   trackRevisions(editor);
+  registerPartDescriptor(stylesPartDescriptor);
+  registerPartDescriptor(settingsPartDescriptor);
+  registerPartDescriptor(relsPartDescriptor);
+  registerPartDescriptor(numberingPartDescriptor);
 
   const ccAdapter = createContentControlsAdapter(editor);
 
@@ -380,7 +400,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       rejectAll: (input, options) => trackChangesRejectAllWrapper(editor, input, options),
     },
     blocks: {
+      list: (input) => blocksListWrapper(editor, input),
       delete: (input, options) => blocksDeleteWrapper(editor, input, options),
+      deleteRange: (input, options) => blocksDeleteRangeWrapper(editor, input, options),
     },
     create: {
       paragraph: (input, options) => createParagraphWrapper(editor, input, options),
@@ -539,6 +561,21 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       insert: (input, options) => hyperlinksInsertWrapper(editor, input, options),
       patch: (input, options) => hyperlinksPatchWrapper(editor, input, options),
       remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
+    },
+    headerFooters: {
+      list: (query) => headerFootersListAdapter(editor, query),
+      get: (input) => headerFootersGetAdapter(editor, input),
+      resolve: (input) => headerFootersResolveAdapter(editor, input),
+      refs: {
+        set: (input, options) => headerFootersRefsSetAdapter(editor, input, options),
+        clear: (input, options) => headerFootersRefsClearAdapter(editor, input, options),
+        setLinkedToPrevious: (input, options) => headerFootersRefsSetLinkedToPreviousAdapter(editor, input, options),
+      },
+      parts: {
+        list: (query) => headerFootersPartsListAdapter(editor, query),
+        create: (input, options) => headerFootersPartsCreateAdapter(editor, input, options),
+        delete: (input, options) => headerFootersPartsDeleteAdapter(editor, input, options),
+      },
     },
     contentControls: ccAdapter,
     bookmarks: {

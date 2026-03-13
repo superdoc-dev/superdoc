@@ -41,11 +41,7 @@ export function handleDocPartObj(params) {
  */
 export const tableOfContentsHandler = (params) => {
   const node = params.nodes[0];
-  const translatedContent = params.nodeListHandler.handler({
-    ...params,
-    nodes: node.elements,
-    path: [...(params.path || []), node],
-  });
+  const translatedContent = translateTocSdtContent(node, params);
   const normalizedContent = normalizeDocPartContent(translatedContent);
   const sdtPr = params.extraParams.sdtPr;
   const id = sdtPr.elements?.find((el) => el.name === 'w:id')?.attributes['w:val'] || '';
@@ -114,10 +110,69 @@ const validGalleryTypeMap = {
 };
 
 const inlineNodeTypes = new Set(['bookmarkStart', 'bookmarkEnd']);
+const SD_TOC_XML_NAME = 'sd:tableOfContents';
+const PARAGRAPH_XML_NAME = 'w:p';
+const PARAGRAPH_PROPERTIES_XML_NAME = 'w:pPr';
 const wrapInlineNode = (node) => ({
   type: 'paragraph',
   content: [node],
 });
+
+const hasMeaningfulParagraphContent = (elements = []) =>
+  elements.some((element) => element?.name && element.name !== PARAGRAPH_PROPERTIES_XML_NAME);
+
+const translateNodes = (params, nodes, pathTail = []) =>
+  params.nodeListHandler.handler({
+    ...params,
+    nodes,
+    path: [...(params.path || []), ...pathTail],
+  });
+
+/**
+ * Hoists sd:tableOfContents blocks out of their wrapper paragraph so the
+ * resulting PM tree can represent them as block children of documentPartObject.
+ *
+ * @param {Object} sdtContent
+ * @param {Object} params
+ * @returns {Array}
+ */
+const translateTocSdtContent = (sdtContent, params) => {
+  const translatedContent = [];
+  const parentPath = [sdtContent];
+
+  (sdtContent?.elements || []).forEach((child) => {
+    const childElements = Array.isArray(child?.elements) ? child.elements : [];
+    const tocElements =
+      child?.name === PARAGRAPH_XML_NAME ? childElements.filter((el) => el?.name === SD_TOC_XML_NAME) : [];
+
+    if (tocElements.length === 0) {
+      translatedContent.push(...translateNodes(params, [child], parentPath));
+      return;
+    }
+
+    const remainingElements = childElements.filter((el) => el?.name !== SD_TOC_XML_NAME);
+    if (hasMeaningfulParagraphContent(remainingElements)) {
+      translatedContent.push(
+        ...translateNodes(
+          params,
+          [
+            {
+              ...child,
+              elements: remainingElements,
+            },
+          ],
+          parentPath,
+        ),
+      );
+    }
+
+    tocElements.forEach((tocElement) => {
+      translatedContent.push(...translateNodes(params, [tocElement], [...parentPath, child]));
+    });
+  });
+
+  return translatedContent;
+};
 
 export const normalizeDocPartContent = (nodes = []) => {
   const normalized = [];

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Mark, Attribute } from '@core/index.js';
 import { getMarkRange } from '@core/helpers/getMarkRange.js';
-import { insertNewRelationship } from '@core/super-converter/docx-helpers/document-rels.js';
+import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import { sanitizeHref, encodeTooltip, UrlValidationConstants } from '@superdoc/url-validation';
 
 /**
@@ -365,12 +365,8 @@ const trimRange = (doc, from, to) => {
 };
 
 function addLinkRelationship({ editor, href }) {
-  const target = href;
-  const type = 'hyperlink';
-  try {
-    const id = insertNewRelationship(target, type, editor);
-    return id;
-  } catch {
-    return null;
-  }
+  return findOrCreateRelationship(editor, 'link:addLinkRelationship', {
+    target: href,
+    type: 'hyperlink',
+  });
 }

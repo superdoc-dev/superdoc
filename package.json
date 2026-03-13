@@ -56,6 +56,7 @@
     "prepare": "if [ -z \"$CI\" ]; then lefthook install; fi",
     "test:layout": "bun scripts/test-layout.mjs",
     "test:visual": "bun scripts/test-visual.mjs",
+    "corpus:upload": "pnpm --filter @superdoc-testing/visual docs:upload",
     "layout:snapshots": "bun tests/layout/export-layout-snapshots.mjs",
     "layout:snapshots:npm": "bun tests/layout/export-layout-snapshots-npm.mjs",
     "layout:compare": "bun tests/layout/compare-layout-snapshots.mjs",

@@ -390,6 +390,15 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.hyperlinks.insert` | `hyperlinks insert` | Insert new linked text at a target position. |
 | `doc.hyperlinks.patch` | `hyperlinks patch` | Update hyperlink metadata (destination, tooltip, target, rel) without changing display text. |
 | `doc.hyperlinks.remove` | `hyperlinks remove` | Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely. |
+| `doc.headerFooters.list` | `header-footers list` | List header/footer slot entries across sections. |
+| `doc.headerFooters.get` | `header-footers get` | Get a single header/footer slot entry by address. |
+| `doc.headerFooters.resolve` | `header-footers resolve` | Resolve the effective header/footer reference for a slot, walking the section inheritance chain. |
+| `doc.headerFooters.refs.set` | `header-footers refs set` | Set an explicit header/footer reference on a section slot. |
+| `doc.headerFooters.refs.clear` | `header-footers refs clear` | Clear an explicit header/footer reference from a section slot. |
+| `doc.headerFooters.refs.setLinkedToPrevious` | `header-footers refs set-linked-to-previous` | Link or unlink a header/footer slot to/from the previous section. |
+| `doc.headerFooters.parts.list` | `header-footers parts list` | List unique header/footer part records from document relationships. |
+| `doc.headerFooters.parts.create` | `header-footers parts create` | Create a new independent header/footer part, optionally cloned from an existing part. |
+| `doc.headerFooters.parts.delete` | `header-footers parts delete` | Delete a header/footer part and its associated relationship when no section slots reference it. |
 | `doc.create.contentControl` | `create content-control` | Create a new content control (SDT) in the document. |
 | `doc.contentControls.list` | `content-controls list` | List all content controls in the document with optional type/tag filtering. |
 | `doc.contentControls.get` | `content-controls get` | Retrieve a single content control by target. |
@@ -813,6 +822,15 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.hyperlinks.insert` | `hyperlinks insert` | Insert new linked text at a target position. |
 | `doc.hyperlinks.patch` | `hyperlinks patch` | Update hyperlink metadata (destination, tooltip, target, rel) without changing display text. |
 | `doc.hyperlinks.remove` | `hyperlinks remove` | Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely. |
+| `doc.header_footers.list` | `header-footers list` | List header/footer slot entries across sections. |
+| `doc.header_footers.get` | `header-footers get` | Get a single header/footer slot entry by address. |
+| `doc.header_footers.resolve` | `header-footers resolve` | Resolve the effective header/footer reference for a slot, walking the section inheritance chain. |
+| `doc.header_footers.refs.set` | `header-footers refs set` | Set an explicit header/footer reference on a section slot. |
+| `doc.header_footers.refs.clear` | `header-footers refs clear` | Clear an explicit header/footer reference from a section slot. |
+| `doc.header_footers.refs.set_linked_to_previous` | `header-footers refs set-linked-to-previous` | Link or unlink a header/footer slot to/from the previous section. |
+| `doc.header_footers.parts.list` | `header-footers parts list` | List unique header/footer part records from document relationships. |
+| `doc.header_footers.parts.create` | `header-footers parts create` | Create a new independent header/footer part, optionally cloned from an existing part. |
+| `doc.header_footers.parts.delete` | `header-footers parts delete` | Delete a header/footer part and its associated relationship when no section slots reference it. |
 | `doc.create.content_control` | `create content-control` | Create a new content control (SDT) in the document. |
 | `doc.content_controls.list` | `content-controls list` | List all content controls in the document with optional type/tag filtering. |
 | `doc.content_controls.get` | `content-controls get` | Retrieve a single content control by target. |

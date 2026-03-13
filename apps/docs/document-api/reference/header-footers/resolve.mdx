@@ -1,0 +1,221 @@
+---
+title: headerFooters.resolve
+sidebarTitle: headerFooters.resolve
+description: Resolve the effective header/footer reference for a slot, walking the section inheritance chain.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Resolve the effective header/footer reference for a slot, walking the section inheritance chain.
+
+- Operation ID: `headerFooters.resolve`
+- API member path: `editor.doc.headerFooters.resolve(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HeaderFooterResolveResult indicating explicit, inherited, or none status with the resolved refId.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="headerFooterSlot") | yes |  |
+| `target.headerFooterKind` | enum | yes | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | yes | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | yes | SectionAddress |
+| `target.section.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.section.sectionId` | string | yes |  |
+| `target.variant` | enum | yes | `"default"`, `"first"`, `"even"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "headerFooterKind": "header",
+    "kind": "headerFooterSlot",
+    "section": {
+      "kind": "section",
+      "sectionId": "example"
+    },
+    "variant": "default"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (section.kind="section")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `refId` | string | yes |  |
+| `section` | SectionAddress | yes | SectionAddress |
+| `section.kind` | `"section"` | yes | Constant: `"section"` |
+| `section.sectionId` | string | yes |  |
+| `status` | `"explicit"` | yes | Constant: `"explicit"` |
+
+### Variant 2 (resolvedFromSection.kind="section")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `refId` | string | yes |  |
+| `resolvedFromSection` | SectionAddress | yes | SectionAddress |
+| `resolvedFromSection.kind` | `"section"` | yes | Constant: `"section"` |
+| `resolvedFromSection.sectionId` | string | yes |  |
+| `resolvedVariant` | enum | yes | `"default"`, `"first"`, `"even"` |
+| `status` | `"inherited"` | yes | Constant: `"inherited"` |
+
+### Variant 3 (status="none")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `"none"` | yes | Constant: `"none"` |
+
+### Example response
+
+```json
+{
+  "refId": "example",
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "status": "explicit"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "headerFooterKind": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "kind": {
+          "const": "headerFooterSlot"
+        },
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "variant": {
+          "enum": [
+            "default",
+            "first",
+            "even"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "section",
+        "headerFooterKind",
+        "variant"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "refId": {
+          "type": "string"
+        },
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "status": {
+          "const": "explicit"
+        }
+      },
+      "required": [
+        "status",
+        "refId",
+        "section"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "refId": {
+          "type": "string"
+        },
+        "resolvedFromSection": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "resolvedVariant": {
+          "enum": [
+            "default",
+            "first",
+            "even"
+          ]
+        },
+        "status": {
+          "const": "inherited"
+        }
+      },
+      "required": [
+        "status",
+        "refId",
+        "resolvedFromSection",
+        "resolvedVariant"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "none"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>

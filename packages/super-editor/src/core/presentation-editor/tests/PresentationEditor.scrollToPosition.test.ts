@@ -266,10 +266,6 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
-}));
-
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));

@@ -1,5 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
@@ -19,7 +19,7 @@ import {
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
-import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
+import { blocksDeleteWrapper, blocksDeleteRangeWrapper } from '../plan-engine/blocks-wrappers.js';
 import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
 import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import {
@@ -132,6 +132,13 @@ import {
 } from '../plan-engine/hyperlinks-wrappers.js';
 import { createContentControlsAdapter } from '../plan-engine/content-controls-wrappers.js';
 import {
+  headerFootersRefsSetAdapter,
+  headerFootersRefsClearAdapter,
+  headerFootersRefsSetLinkedToPreviousAdapter,
+  headerFootersPartsCreateAdapter,
+  headerFootersPartsDeleteAdapter,
+} from '../header-footers-adapter.js';
+import {
   listsInsertWrapper,
   listsIndentWrapper,
   listsOutdentWrapper,
@@ -222,6 +229,11 @@ import {
 } from '../plan-engine/authority-wrappers.js';
 import { registerBuiltInExecutors } from '../plan-engine/register-executors.js';
 import { getRevision, initRevision } from '../plan-engine/revision-tracker.js';
+import { registerPartDescriptor, clearPartDescriptors } from '../../core/parts/registry/part-registry.js';
+import { numberingPartDescriptor } from '../../core/parts/adapters/numbering-part-descriptor.js';
+import { settingsPartDescriptor } from '../../core/parts/adapters/settings-part-descriptor.js';
+import { stylesPartDescriptor } from '../../core/parts/adapters/styles-part-descriptor.js';
+import { clearInvalidationHandlers } from '../../core/parts/invalidation/part-invalidation-registry.js';
 import { executePlan } from '../plan-engine/executor.js';
 import { toCanonicalTrackedChangeId } from '../helpers/tracked-change-resolver.js';
 import { writeAdapter } from '../write-adapter.js';
@@ -809,16 +821,40 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
   return {
     state: { doc, tr },
     dispatch: vi.fn(),
+    emit: vi.fn(),
     view: { dispatch: vi.fn() },
     commands: {
       ...baseCommands,
       ...commandOverrides,
     },
     converter: {
+      convertedXml: {
+        'word/numbering.xml': {
+          elements: [{ type: 'element', name: 'w:numbering', elements: [] }],
+        },
+      },
       numbering: { definitions: {}, abstracts: {} },
       translatedNumbering: { definitions: {} },
+      documentModified: false,
+      documentGuid: 'test-guid',
     },
   } as unknown as Editor;
+}
+
+/**
+ * Modify `converter.numbering.abstracts` so that `syncNumberingToXmlTree`
+ * produces a detectable diff inside `mutatePart`. Without this, mocks that
+ * return `true` / `{ changed: true }` without touching numbering data cause
+ * `mutatePart` to see no change and return `{ changed: false }`.
+ */
+function injectNumberingChange(editor: unknown): void {
+  const ed = editor as { converter: { numbering: { abstracts: Record<number, unknown> } } };
+  ed.converter.numbering.abstracts[1] = {
+    type: 'element',
+    name: 'w:abstractNum',
+    attributes: { 'w:abstractNumId': '1' },
+    elements: [{ type: 'element', name: 'w:lvl', attributes: { 'w:ilvl': '0' }, elements: [] }],
+  };
 }
 
 function makeBlockDeleteEditor(
@@ -856,6 +892,94 @@ function makeBlockDeleteEditor(
         getBlockNodeById:
           overrides.getBlockNodeById ??
           vi.fn((id: string) => (id === 'p1' && hasParagraph ? [{ node: paragraph, pos: 0 }] : [])),
+      },
+    },
+  } as unknown as Editor;
+}
+
+function makeBlockRangeDeleteEditor(): Editor {
+  const p1 = createNode('paragraph', [createNode('text', [], { text: 'First' })], {
+    attrs: { paraId: 'p1', sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const p2 = createNode('paragraph', [createNode('text', [], { text: 'Second' })], {
+    attrs: { paraId: 'p2', sdBlockId: 'p2' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const children = [p1, p2];
+  const doc = createNode('doc', children, { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: false,
+    delete: vi.fn().mockImplementation(function (this: { docChanged: boolean }) {
+      this.docChanged = true;
+    }),
+  };
+
+  return {
+    state: { doc, tr },
+    dispatch,
+    commands: {
+      deleteBlockNodeById: vi.fn(() => true),
+    },
+    helpers: {
+      blockNode: {
+        getBlockNodeById: vi.fn((id: string) => {
+          const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
+          return match ? [{ node: match, pos: 0 }] : [];
+        }),
+      },
+    },
+  } as unknown as Editor;
+}
+
+function makeBlockRangeDeleteEditorWithSectionBreak(): Editor {
+  const p1 = createNode('paragraph', [createNode('text', [], { text: 'First' })], {
+    attrs: { paraId: 'p1', sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const sectBreakPara = createNode('paragraph', [createNode('text', [], { text: 'Section end' })], {
+    attrs: {
+      paraId: 'sect1',
+      sdBlockId: 'sect1',
+      paragraphProperties: { sectPr: { name: 'w:sectPr', elements: [] } },
+    },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const p3 = createNode('paragraph', [createNode('text', [], { text: 'Third' })], {
+    attrs: { paraId: 'p3', sdBlockId: 'p3' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const children = [p1, sectBreakPara, p3];
+  const doc = createNode('doc', children, { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: false,
+  };
+
+  return {
+    state: { doc, tr },
+    dispatch,
+    commands: {
+      deleteBlockNodeById: vi.fn(() => true),
+    },
+    helpers: {
+      blockNode: {
+        getBlockNodeById: vi.fn((id: string) => {
+          const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
+          return match ? [{ node: match, pos: 0 }] : [];
+        }),
       },
     },
   } as unknown as Editor;
@@ -1320,6 +1444,7 @@ function makeSectionsEditor(options: SectionEditorOptions = {}): Editor {
       return tr;
     }),
     setNodeMarkup: vi.fn(() => tr),
+    setDocAttribute: vi.fn(() => tr),
     setMeta: vi.fn(() => tr),
     mapping: {
       maps: [] as unknown[],
@@ -2776,13 +2901,63 @@ function makeRefEditor(
       },
     },
     converter: {
-      convertedXml: { 'word/document.xml': {} },
-      footnotes: { 'fn-1': { content: 'Footnote text' } },
-      endnotes: {},
+      convertedXml: {
+        'word/document.xml': {},
+        'word/footnotes.xml': {
+          declaration: { attributes: { version: '1.0', encoding: 'UTF-8', standalone: 'yes' } },
+          elements: [
+            {
+              type: 'element',
+              name: 'w:footnotes',
+              attributes: { 'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' },
+              elements: [
+                {
+                  type: 'element',
+                  name: 'w:footnote',
+                  attributes: { 'w:id': 'fn-1' },
+                  elements: [
+                    {
+                      type: 'element',
+                      name: 'w:p',
+                      elements: [
+                        {
+                          type: 'element',
+                          name: 'w:r',
+                          elements: [
+                            { type: 'element', name: 'w:t', elements: [{ type: 'text', text: 'Footnote text' }] },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        'word/endnotes.xml': {
+          declaration: { attributes: { version: '1.0', encoding: 'UTF-8', standalone: 'yes' } },
+          elements: [
+            {
+              type: 'element',
+              name: 'w:endnotes',
+              attributes: { 'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' },
+              elements: [],
+            },
+          ],
+        },
+        'word/settings.xml': {
+          elements: [{ type: 'element', name: 'w:settings', elements: [] }],
+        },
+      },
+      footnotes: [{ id: 'fn-1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Footnote text' }] }] }],
+      endnotes: [],
       ...overrides.converter,
     },
     options: {},
     on: () => {},
+    safeEmit: vi.fn(() => []),
+    emit: vi.fn(),
   } as unknown as Editor;
 }
 
@@ -3772,6 +3947,30 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return blocksDeleteWrapper(
         editor,
         { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'blocks.deleteRange': {
+    throwCase: () => {
+      const editor = makeBlockRangeDeleteEditor();
+      return blocksDeleteRangeWrapper(
+        editor,
+        {
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeBlockRangeDeleteEditor();
+      return blocksDeleteRangeWrapper(
+        editor,
+        {
+          start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+          end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+        },
         { changeMode: 'direct' },
       );
     },
@@ -4877,10 +5076,13 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const applySpy = vi
         .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
-        .mockReturnValue({ changed: true, levelsApplied: [0] });
-      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
       const result = listsApplyTemplateWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         template: { version: 1, levels: [{ level: 0, numFmt: 'upperRoman', lvlText: '%1.' }] },
@@ -4908,13 +5110,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const applySpy = vi
-        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
-        .mockReturnValue({ changed: true, levelsApplied: [0] });
       const presetSpy = vi
         .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
         .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
       const result = listsApplyPresetWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         preset: 'decimal',
@@ -4943,13 +5148,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const applySpy = vi
-        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
-        .mockReturnValue({ changed: true, levelsApplied: [0] });
       const presetSpy = vi
         .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
         .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
       const result = listsSetTypeWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         kind: 'ordered',
@@ -4986,8 +5194,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberingFormat').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberingFormat').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelNumberingWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5020,8 +5231,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelBulletMarker').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelBulletMarker').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelBulletWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5053,8 +5267,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelPictureBulletId').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelPictureBulletId').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelPictureBulletWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5086,8 +5303,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelAlignment').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelAlignment').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelAlignmentWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5120,8 +5340,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelIndents').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelIndents').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelIndentsWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5154,8 +5377,13 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelTrailingCharacter').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi
+        .spyOn(LevelFormattingHelpers, 'setLevelTrailingCharacter')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return true;
+        });
       const result = listsSetLevelTrailingCharacterWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5187,8 +5415,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelMarkerFont').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelMarkerFont').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
       const result = listsSetLevelMarkerFontWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -5218,8 +5449,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const hasSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevelOverride').mockReturnValue(true);
-      const clearSpy = vi.spyOn(LevelFormattingHelpers, 'clearLevelOverride').mockImplementation(() => {});
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const clearSpy = vi.spyOn(LevelFormattingHelpers, 'clearLevelOverride').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+      });
       const result = listsClearLevelOverridesWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         level: 0,
@@ -6703,6 +6936,208 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
   },
+  // SD-2162: Header/footer ref and part lifecycle operations
+  // -------------------------------------------------------------------------
+  'headerFooters.refs.set': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-missing' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          refId: 'rIdHeaderAlt',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          refId: 'rIdHeaderDefault',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          refId: 'rIdHeaderAlt',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'headerFooters.refs.clear': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsClearAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-missing' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsClearAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'even',
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsClearAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetLinkedToPreviousAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-missing' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          linked: true,
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersRefsSetLinkedToPreviousAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-0' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          linked: true,
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const bodyWithoutRefs = clone(BASE_SECTION_BODY_SECT_PR);
+      const filteredBodyElements = ((bodyWithoutRefs.elements ?? []) as Array<{ name?: string }>).filter(
+        (element) => element.name !== 'w:headerReference' && element.name !== 'w:footerReference',
+      );
+      bodyWithoutRefs.elements = filteredBodyElements as unknown as Record<string, unknown>[];
+
+      const editor = makeSectionsEditor({
+        paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
+        bodySectPr: bodyWithoutRefs,
+      });
+      return headerFootersRefsSetLinkedToPreviousAdapter(
+        editor,
+        {
+          target: {
+            kind: 'headerFooterSlot',
+            section: { kind: 'section', sectionId: 'section-1' },
+            headerFooterKind: 'header',
+            variant: 'default',
+          },
+          linked: false,
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'headerFooters.parts.create': {
+    throwCase: () => {
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsCreateAdapter(
+        editor,
+        { kind: 'header', sourceRefId: 'rIdNonExistent' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct' });
+    },
+  },
+  'headerFooters.parts.delete': {
+    throwCase: () => {
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return headerFootersPartsDeleteAdapter(
+        editor,
+        { target: { kind: 'headerFooterPart', refId: 'rIdHeaderDefault' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsDeleteAdapter(
+        editor,
+        { target: { kind: 'headerFooterPart', refId: 'rIdHeaderDefault' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return headerFootersPartsDeleteAdapter(
+        editor,
+        { target: { kind: 'headerFooterPart', refId: 'rIdHeaderAlt' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
   // -------------------------------------------------------------------------
   // Content control operations
   // -------------------------------------------------------------------------
@@ -7669,6 +8104,20 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(deleteBlockNodeById).not.toHaveBeenCalled();
     return result;
   },
+  'blocks.deleteRange': () => {
+    const editor = makeBlockRangeDeleteEditor();
+    const deleteCmd = editor.commands?.deleteBlockNodeById as ReturnType<typeof vi.fn>;
+    const result = blocksDeleteRangeWrapper(
+      editor,
+      {
+        start: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+        end: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(deleteCmd).not.toHaveBeenCalled();
+    return result;
+  },
   insert: () => {
     const { editor, dispatch, tr } = makeTextEditor();
     const result = textReceiptToSDReceipt(
@@ -7948,6 +8397,83 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
+  'headerFooters.refs.set': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = headerFootersRefsSetAdapter(
+      editor,
+      {
+        target: {
+          kind: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+        refId: 'rIdHeaderAlt',
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'headerFooters.refs.clear': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = headerFootersRefsClearAdapter(
+      editor,
+      {
+        target: {
+          kind: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'headerFooters.refs.setLinkedToPrevious': () => {
+    const bodyWithoutRefs = clone(BASE_SECTION_BODY_SECT_PR);
+    bodyWithoutRefs.elements = ((bodyWithoutRefs.elements ?? []) as Array<{ name?: string }>).filter(
+      (element) => element.name !== 'w:headerReference' && element.name !== 'w:footerReference',
+    ) as unknown as Record<string, unknown>[];
+    const editor = makeSectionsEditor({
+      paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
+      bodySectPr: bodyWithoutRefs,
+    });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = headerFootersRefsSetLinkedToPreviousAdapter(
+      editor,
+      {
+        target: {
+          kind: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-1' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+        linked: false,
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'headerFooters.parts.create': () => {
+    const editor = makeSectionsEditor();
+    const result = headerFootersPartsCreateAdapter(editor, { kind: 'header' }, { changeMode: 'direct', dryRun: true });
+    return result;
+  },
+  'headerFooters.parts.delete': () => {
+    const editor = makeSectionsEditor();
+    const result = headerFootersPartsDeleteAdapter(
+      editor,
+      { target: { kind: 'headerFooterPart', refId: 'rIdHeaderAlt' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    return result;
+  },
   'lists.insert': () => {
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'decimal' })]);
     const insertListItemAt = editor.commands!.insertListItemAt as ReturnType<typeof vi.fn>;
@@ -8147,6 +8673,9 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'lists.setType': () => {
     const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const presetSpy = vi
+      .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
+      .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetTypeWrapper(
       editor,
@@ -8154,6 +8683,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     abstractSpy.mockRestore();
+    presetSpy.mockRestore();
     return result;
   },
   'lists.setLevelNumbering': () => {
@@ -9380,6 +9910,9 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
 
 beforeEach(() => {
   registerBuiltInExecutors();
+  registerPartDescriptor(numberingPartDescriptor);
+  registerPartDescriptor(settingsPartDescriptor);
+  registerPartDescriptor(stylesPartDescriptor);
   vi.restoreAllMocks();
   mockedDeps.resolveCommentAnchorsById.mockReset();
   mockedDeps.resolveCommentAnchorsById.mockImplementation(() => []);
@@ -9407,6 +9940,11 @@ beforeEach(() => {
   refResolverMocks.findAllAuthorityEntries.mockImplementation(() => []);
 });
 
+afterEach(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
+});
+
 describe('document-api adapter conformance', () => {
   it('has schema coverage for every operation and mutation policy metadata', () => {
     for (const operationId of OPERATION_IDS) {
@@ -9421,7 +9959,12 @@ describe('document-api adapter conformance', () => {
         expect(schema.success).toBeDefined();
       }
       // Plan-engine meta-ops (mutations.apply) return PlanReceipt (always success) or throw — no failure schema.
-      if (!PLAN_ENGINE_META_OPS.has(operationId) && !NON_RECEIPT_MUTATION_OPS.has(operationId)) {
+      // Operations with no possibleFailureCodes also have no structured failure path.
+      if (
+        !PLAN_ENGINE_META_OPS.has(operationId) &&
+        !NON_RECEIPT_MUTATION_OPS.has(operationId) &&
+        HAS_STRUCTURED_FAILURE_RESULT(operationId)
+      ) {
         expect(schema.failure).toBeDefined();
       }
     }

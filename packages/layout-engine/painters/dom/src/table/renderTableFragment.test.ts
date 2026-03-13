@@ -105,6 +105,139 @@ describe('renderTableFragment', () => {
     };
   });
 
+  describe('merged-cell border ownership', () => {
+    it('renders the outer right border for a merged header cell in collapsed mode', () => {
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'merged-border-table' as BlockId,
+        attrs: {
+          borders: {
+            top: { style: 'single', width: 2, color: '#000000' },
+            right: { style: 'single', width: 2, color: '#000000' },
+            bottom: { style: 'single', width: 2, color: '#000000' },
+            left: { style: 'single', width: 2, color: '#000000' },
+            insideH: { style: 'single', width: 1, color: '#333333' },
+            insideV: { style: 'single', width: 1, color: '#333333' },
+          },
+        },
+        rows: [
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              {
+                id: 'cell-1' as BlockId,
+                colSpan: 2,
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-1' as BlockId,
+                  runs: [],
+                },
+              },
+            ],
+          },
+          {
+            id: 'row-2' as BlockId,
+            cells: [
+              {
+                id: 'cell-2-1' as BlockId,
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-2-1' as BlockId,
+                  runs: [],
+                },
+              },
+              {
+                id: 'cell-2-2' as BlockId,
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-2-2' as BlockId,
+                  runs: [],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+                width: 200,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 2,
+                rowSpan: 1,
+              },
+            ],
+            height: 20,
+          },
+          {
+            cells: [
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+                width: 100,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+              },
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+                width: 100,
+                height: 20,
+                gridColumnStart: 1,
+                colSpan: 1,
+                rowSpan: 1,
+              },
+            ],
+            height: 20,
+          },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 40,
+      };
+
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: block.id,
+        fromRow: 0,
+        toRow: 2,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 40,
+      };
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {
+          // Intentionally empty for test mock
+        },
+        applySdtDataset: () => {
+          // Intentionally empty for test mock
+        },
+        applyStyles: () => {
+          // Intentionally empty for test mock
+        },
+      });
+
+      const mergedHeaderCell = element.children[0] as HTMLElement;
+      expect(mergedHeaderCell.style.borderRightWidth).toBe('2px');
+      expect(mergedHeaderCell.style.borderRightStyle).toBe('solid');
+    });
+  });
+
   describe('metadata embedding', () => {
     it('should embed metadata in data-table-boundaries attribute', () => {
       const block = createTestTableBlock();

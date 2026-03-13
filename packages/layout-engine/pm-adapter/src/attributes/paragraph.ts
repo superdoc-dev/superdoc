@@ -17,6 +17,7 @@ import type { PMNode } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';
 import { computeWordParagraphLayout } from '@superdoc/word-layout';
 import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '../constants.js';
 import { normalizeAlignment, normalizeParagraphSpacing } from './spacing-indent.js';
 import { normalizeOoxmlTabs } from './tabs.js';
 import { normalizeParagraphBorders, normalizeParagraphShading } from './borders.js';
@@ -319,9 +320,18 @@ export const computeRunAttrs = (
     fontFamily =
       runProps.fontFamily?.ascii || runProps.fontFamily?.hAnsi || runProps.fontFamily?.eastAsia || defaultFontFamily;
   }
+  const vertAlign = runProps.vertAlign as 'superscript' | 'subscript' | 'baseline' | undefined;
+  const hasPosition = runProps.position != null && Number.isFinite(runProps.position);
+  let fontSize = runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx;
+
+  // Scale font size for superscript/subscript when no custom position override
+  if (!hasPosition && (vertAlign === 'superscript' || vertAlign === 'subscript')) {
+    fontSize *= SUBSCRIPT_SUPERSCRIPT_SCALE;
+  }
+
   return {
     fontFamily: toCssFontFamily(fontFamily)!,
-    fontSize: runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx,
+    fontSize,
     bold: runProps.bold,
     italic: runProps.italic,
     underline:
@@ -339,5 +349,7 @@ export const computeRunAttrs = (
     letterSpacing: runProps.letterSpacing ? twipsToPx(runProps.letterSpacing) : undefined,
     lang: runProps.lang?.val || undefined,
     vanish: runProps.vanish,
+    vertAlign,
+    baselineShift: hasPosition ? runProps.position! / 2 : undefined,
   };
 };

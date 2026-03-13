@@ -52,9 +52,10 @@ export type ReferenceGroupKey =
   | 'toc'
   | 'images'
   | 'hyperlinks'
+  | 'headerFooters'
   | 'contentControls'
-  | 'footnotes'
   | 'bookmarks'
+  | 'footnotes'
   | 'crossRefs'
   | 'index'
   | 'captions'
@@ -202,6 +203,13 @@ const T_SECTION_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 const T_SECTION_SETTINGS_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'] as const;
+const T_HEADER_FOOTER_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'INVALID_INPUT',
+  'CAPABILITY_UNAVAILABLE',
+  'INTERNAL_ERROR',
+] as const;
 
 // Reference-namespace throw-code shorthand arrays
 const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
@@ -262,7 +270,8 @@ export const OPERATION_DEFINITIONS = {
   },
   find: {
     memberPath: 'find',
-    description: 'Search the document for text or node matches using SDM/1 selectors.',
+    description:
+      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.',
     expectedResult:
       'Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).',
     requiresDocumentContext: true,
@@ -366,7 +375,8 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert content at a target position, or at the end of the document when target is omitted. ' +
+      'Insert inline content at a text position within an existing block, or at the end of the document when target is omitted. ' +
+      'This is NOT for creating sibling blocks — use create.paragraph, create.heading, or lists.insert for that. ' +
       'Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). ' +
       'Supports text (default), markdown, and html content types via the `type` field in legacy mode. ' +
       'Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).',
@@ -465,10 +475,26 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'core',
   },
 
+  'blocks.list': {
+    memberPath: 'blocks.list',
+    description:
+      'List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.',
+    expectedResult:
+      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['INVALID_INPUT'],
+    }),
+    referenceDocPath: 'blocks/list.mdx',
+    referenceGroup: 'blocks',
+    essential: true,
+  },
+
   'blocks.delete': {
     memberPath: 'blocks.delete',
     description: 'Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.',
-    expectedResult: 'Returns a BlocksDeleteResult receipt confirming the block was removed from the document.',
+    expectedResult:
+      'Returns a BlocksDeleteResult receipt confirming the block was removed, including a deletedBlock summary with ordinal, nodeType, and textPreview.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -485,6 +511,31 @@ export const OPERATION_DEFINITIONS = {
       ],
     }),
     referenceDocPath: 'blocks/delete.mdx',
+    referenceGroup: 'blocks',
+  },
+
+  'blocks.deleteRange': {
+    memberPath: 'blocks.deleteRange',
+    description:
+      'Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview.',
+    expectedResult:
+      'Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each with ordinal, nodeId, nodeType, textPreview), before/after revision, and dryRun flag.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: [
+        'TARGET_NOT_FOUND',
+        'AMBIGUOUS_TARGET',
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'CAPABILITY_UNAVAILABLE',
+        'INTERNAL_ERROR',
+      ],
+    }),
+    referenceDocPath: 'blocks/delete-range.mdx',
     referenceGroup: 'blocks',
   },
 
@@ -525,7 +576,7 @@ export const OPERATION_DEFINITIONS = {
 
   'create.paragraph': {
     memberPath: 'create.paragraph',
-    description: 'Create a new paragraph at the target position.',
+    description: 'Create a standalone paragraph at the target position. To add a list item, use lists.insert instead.',
     expectedResult: 'Returns a CreateParagraphResult with the new paragraph block ID and address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1178,7 +1229,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.insert': {
     memberPath: 'lists.insert',
-    description: 'Insert a new list at the target position.',
+    description:
+      'Insert a new list item before or after an existing list item. The new item inherits the target list context.',
     expectedResult: 'Returns a ListsInsertResult with the new list item address and block ID.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1707,7 +1759,8 @@ export const OPERATION_DEFINITIONS = {
 
   'query.match': {
     memberPath: 'query.match',
-    description: 'Deterministic selector-based search with cardinality contracts for mutation targeting.',
+    description:
+      'Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation.',
     expectedResult: 'Returns a QueryMatchOutput with the resolved target address and cardinality metadata.',
     requiresDocumentContext: true,
     metadata: readOperation({
@@ -2639,7 +2692,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'history.undo',
     description: 'Undo the most recent history-safe mutation in the active editor.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the undo stack is empty.',
+      'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -2657,7 +2710,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'history.redo',
     description: 'Redo the most recently undone action in the active editor.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the redo stack is empty.',
+      'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -3222,6 +3275,140 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'hyperlinks/remove.mdx',
     referenceGroup: 'hyperlinks',
+  },
+
+  // =========================================================================
+  // headerFooters.*
+  // =========================================================================
+
+  'headerFooters.list': {
+    memberPath: 'headerFooters.list',
+    description: 'List header/footer slot entries across sections.',
+    expectedResult: 'Returns a paginated DiscoveryOutput of HeaderFooterSlotEntry items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['INVALID_INPUT', 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'header-footers/list.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.get': {
+    memberPath: 'headerFooters.get',
+    description: 'Get a single header/footer slot entry by address.',
+    expectedResult: 'Returns a HeaderFooterSlotEntry for the targeted section slot.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/get.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.resolve': {
+    memberPath: 'headerFooters.resolve',
+    description: 'Resolve the effective header/footer reference for a slot, walking the section inheritance chain.',
+    expectedResult:
+      'Returns a HeaderFooterResolveResult indicating explicit, inherited, or none status with the resolved refId.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/resolve.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.set': {
+    memberPath: 'headerFooters.refs.set',
+    description: 'Set an explicit header/footer reference on a section slot.',
+    expectedResult:
+      'Returns a SectionMutationResult receipt; reports NO_OP if the reference already matches, INVALID_TARGET if the relationship does not exist.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/set.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.clear': {
+    memberPath: 'headerFooters.refs.clear',
+    description: 'Clear an explicit header/footer reference from a section slot.',
+    expectedResult: 'Returns a SectionMutationResult receipt; reports NO_OP if no explicit reference existed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/clear.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    memberPath: 'headerFooters.refs.setLinkedToPrevious',
+    description: 'Link or unlink a header/footer slot to/from the previous section.',
+    expectedResult:
+      'Returns a SectionMutationResult receipt; reports NO_OP if the link state already matches, INVALID_TARGET for the first section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/set-linked-to-previous.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.list': {
+    memberPath: 'headerFooters.parts.list',
+    description: 'List unique header/footer part records from document relationships.',
+    expectedResult: 'Returns a paginated DiscoveryOutput of HeaderFooterPartEntry items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/parts/list.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.create': {
+    memberPath: 'headerFooters.parts.create',
+    description: 'Create a new independent header/footer part, optionally cloned from an existing part.',
+    expectedResult:
+      'Returns a HeaderFooterPartsMutationResult with the new refId/partPath on success, INVALID_TARGET failure when sourceRefId is invalid or mismatched.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: ['INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/parts/create.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.delete': {
+    memberPath: 'headerFooters.parts.delete',
+    description: 'Delete a header/footer part and its associated relationship when no section slots reference it.',
+    expectedResult:
+      'Returns a HeaderFooterPartsMutationResult on success; INVALID_TARGET failure if sections still reference the part.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/parts/delete.mdx',
+    referenceGroup: 'headerFooters',
   },
 
   // =========================================================================

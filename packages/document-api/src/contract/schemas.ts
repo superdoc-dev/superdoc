@@ -2550,6 +2550,33 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: textMutationFailureSchemaFor('format.apply'),
   },
   ...formatInlineAliasOperationSchemas,
+  'blocks.list': {
+    input: objectSchema({
+      offset: { type: 'number', minimum: 0 },
+      limit: { type: 'number', minimum: 1 },
+      nodeTypes: { type: 'array', items: { enum: [...blockNodeTypeValues] } },
+    }),
+    output: objectSchema(
+      {
+        total: { type: 'number' },
+        blocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string' },
+              nodeType: { enum: [...blockNodeTypeValues] },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+              isEmpty: { type: 'boolean' },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'textPreview', 'isEmpty'],
+          ),
+        },
+        revision: { type: 'string' },
+      },
+      ['total', 'blocks', 'revision'],
+    ),
+  },
   'blocks.delete': {
     input: objectSchema(
       {
@@ -2561,6 +2588,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
@@ -2568,10 +2601,63 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
     failure: preApplyFailureResultSchemaFor('blocks.delete'),
+  },
+  'blocks.deleteRange': {
+    input: objectSchema(
+      {
+        start: blockNodeAddressSchema,
+        end: blockNodeAddressSchema,
+      },
+      ['start', 'end'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string' },
+              nodeType: { type: 'string' },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'textPreview'],
+          ),
+        },
+        revision: objectSchema(
+          {
+            before: { type: 'string' },
+            after: { type: 'string' },
+          },
+          ['before', 'after'],
+        ),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: { type: 'array' },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    failure: preApplyFailureResultSchemaFor('blocks.deleteRange'),
   },
 
   // --- styles.paragraph.* ---
@@ -5350,6 +5436,250 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: hyperlinkMutationResultSchema(),
     success: hyperlinkMutationSuccessSchema,
     failure: hyperlinkMutationFailureSchema,
+  },
+
+  // =========================================================================
+  // headerFooters.*
+  // =========================================================================
+
+  'headerFooters.list': {
+    input: objectSchema({
+      kind: { enum: ['header', 'footer'] },
+      section: sectionAddressSchema,
+      limit: { type: 'integer', minimum: 1 },
+      offset: { type: 'integer', minimum: 0 },
+    }),
+    output: discoveryResultSchema(
+      discoveryItemSchema(
+        {
+          section: sectionAddressSchema,
+          sectionIndex: { type: 'integer', minimum: 0 },
+          kind: { enum: ['header', 'footer'] },
+          variant: { enum: ['default', 'first', 'even'] },
+          refId: { type: ['string', 'null'] },
+          isExplicit: { type: 'boolean' },
+        },
+        ['section', 'sectionIndex', 'kind', 'variant', 'isExplicit'],
+      ),
+    ),
+  },
+  'headerFooters.get': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: objectSchema(
+      {
+        section: sectionAddressSchema,
+        sectionIndex: { type: 'integer', minimum: 0 },
+        kind: { enum: ['header', 'footer'] },
+        variant: { enum: ['default', 'first', 'even'] },
+        refId: { type: ['string', 'null'] },
+        isExplicit: { type: 'boolean' },
+      },
+      ['section', 'sectionIndex', 'kind', 'variant', 'isExplicit'],
+    ),
+  },
+  'headerFooters.resolve': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ status: { const: 'explicit' }, refId: { type: 'string' }, section: sectionAddressSchema }, [
+          'status',
+          'refId',
+          'section',
+        ]),
+        objectSchema(
+          {
+            status: { const: 'inherited' },
+            refId: { type: 'string' },
+            resolvedFromSection: sectionAddressSchema,
+            resolvedVariant: { enum: ['default', 'first', 'even'] },
+          },
+          ['status', 'refId', 'resolvedFromSection', 'resolvedVariant'],
+        ),
+        objectSchema({ status: { const: 'none' } }, ['status']),
+      ],
+    },
+  },
+  'headerFooters.refs.set': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+        refId: { type: 'string', minLength: 1 },
+      },
+      ['target', 'refId'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.set'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.set'),
+  },
+  'headerFooters.refs.clear': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.clear'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.clear'),
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+        linked: { type: 'boolean' },
+      },
+      ['target', 'linked'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.setLinkedToPrevious'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.setLinkedToPrevious'),
+  },
+  'headerFooters.parts.list': {
+    input: objectSchema({
+      kind: { enum: ['header', 'footer'] },
+      limit: { type: 'integer', minimum: 1 },
+      offset: { type: 'integer', minimum: 0 },
+    }),
+    output: discoveryResultSchema(
+      discoveryItemSchema(
+        {
+          refId: { type: 'string' },
+          kind: { enum: ['header', 'footer'] },
+          partPath: { type: 'string' },
+          referencedBySections: arraySchema(sectionAddressSchema),
+        },
+        ['refId', 'kind', 'partPath', 'referencedBySections'],
+      ),
+    ),
+  },
+  'headerFooters.parts.create': {
+    input: objectSchema(
+      {
+        kind: { enum: ['header', 'footer'] },
+        sourceRefId: { type: 'string', minLength: 1 },
+      },
+      ['kind'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+          'success',
+          'refId',
+          'partPath',
+        ]),
+        objectSchema(
+          {
+            success: { const: false },
+            failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+          },
+          ['success', 'failure'],
+        ),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+      'success',
+      'refId',
+      'partPath',
+    ]),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'headerFooters.parts.delete': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterPart' },
+            refId: { type: 'string', minLength: 1 },
+          },
+          ['kind', 'refId'],
+        ),
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+          'success',
+          'refId',
+          'partPath',
+        ]),
+        objectSchema(
+          {
+            success: { const: false },
+            failure: receiptFailureSchemaFor('headerFooters.parts.delete'),
+          },
+          ['success', 'failure'],
+        ),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+      'success',
+      'refId',
+      'partPath',
+    ]),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: receiptFailureSchemaFor('headerFooters.parts.delete'),
+      },
+      ['success', 'failure'],
+    ),
   },
 
   // =========================================================================

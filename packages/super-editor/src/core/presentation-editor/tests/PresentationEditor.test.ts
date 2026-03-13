@@ -307,10 +307,6 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
-}));
-
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -2421,6 +2417,34 @@ describe('PresentationEditor', () => {
 
       // Both types of updates should trigger layout updates independently
       expect(layoutUpdatedCount).toBeGreaterThan(afterDocUpdate);
+    });
+
+    it('clears flow-block cache when stylesDefaultsChanged event fires', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const flowBlockCache = mockFlowBlockCacheInstances.at(-1);
+      expect(flowBlockCache).toBeDefined();
+      flowBlockCache!.clear.mockClear();
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const stylesDefaultsChangedCall = onCalls.mock.calls.find((call) => call[0] === 'stylesDefaultsChanged');
+      expect(stylesDefaultsChangedCall).toBeDefined();
+
+      const handleStylesDefaultsChanged = stylesDefaultsChangedCall![1] as () => void;
+      handleStylesDefaultsChanged();
+
+      expect(flowBlockCache!.clear).toHaveBeenCalledTimes(1);
     });
 
     it('marks the flow-block cache dirty for history undo and redo updates', async () => {

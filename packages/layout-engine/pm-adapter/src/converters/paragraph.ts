@@ -326,7 +326,7 @@ export function paragraphToFlowBlocks({
       kind: 'paragraph',
       id: baseBlockId,
       runs: [emptyRun],
-      attrs: deepClone(paragraphAttrs),
+      attrs: emptyParagraphAttrs,
     });
     return blocks;
   }

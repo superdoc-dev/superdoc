@@ -105,6 +105,18 @@ The command automatically:
 - Runs pixel-level comparison against the same reference version
 - Generates an interactive HTML report in `devtools/visual-testing/results/`
 
+## Uploading Test Documents
+
+Upload a `.docx` file to the shared test corpus (used by layout, visual, and behavior tests):
+
+```bash
+pnpm corpus:upload ~/Downloads/my-file.docx
+# Prompts for: Linear issue ID, short description
+# → uploads as rendering/sd-1741-paragraph-between-borders.docx
+```
+
+After uploading, pull it locally with `pnpm corpus:pull` so it's available for all test suites.
+
 ## When to Run What
 
 | I changed... | Run |

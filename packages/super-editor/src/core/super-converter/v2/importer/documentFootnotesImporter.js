@@ -31,33 +31,45 @@ const stripFootnoteMarkerNodes = (nodes) => {
 };
 
 /**
- * Parse footnotes.xml into SuperDoc-ready footnote entries.
+ * Parse a notes part (footnotes.xml or endnotes.xml) into SuperDoc-ready note entries.
  *
- * These will be available on converter.footnotes and are used by PresentationEditor
- * to build a footnotes panel.
+ * Shared implementation for both footnotes and endnotes. The only structural
+ * difference between the two OOXML parts is the element names
+ * (w:footnote vs w:endnote), which are parameterized via `childElementName`.
  *
  * @param {Object} params
- * @param {ParsedDocx} params.docx The parsed docx object
- * @param {NodeListHandler} [params.nodeListHandler] Optional node list handler (defaults to docxImporter default)
+ * @param {Object} params.partXml        The parsed OOXML JSON for the notes part
+ * @param {string} params.childElementName  'w:footnote' or 'w:endnote'
+ * @param {string} params.filename       Filename for import context (e.g. 'footnotes.xml')
+ * @param {ParsedDocx} params.docx       The full parsed docx package
+ * @param {NodeListHandler} [params.nodeListHandler] Optional node list handler
  * @param {SuperConverter} params.converter The super converter instance
- * @param {Editor} params.editor The editor instance
- * @param {Object} [params.numbering] Numbering definitions (optional)
- * @returns {Array<{id: string, content: any[]}>}
+ * @param {Editor} params.editor         The editor instance
+ * @param {Object} [params.numbering]    Numbering definitions (optional)
+ * @returns {Array<{id: string, type?: string|null, content: any[], originalXml?: any}>}
  */
-export function importFootnoteData({ docx, editor, converter, nodeListHandler, numbering } = {}) {
+function importNoteEntries({
+  partXml,
+  childElementName,
+  filename,
+  docx,
+  editor,
+  converter,
+  nodeListHandler,
+  numbering,
+}) {
   const handler = nodeListHandler || defaultNodeListHandler();
-  const footnotes = docx?.['word/footnotes.xml'];
-  if (!footnotes?.elements?.length) return [];
+  if (!partXml?.elements?.length) return [];
 
-  const root = footnotes.elements[0];
+  const root = partXml.elements[0];
   const elements = Array.isArray(root?.elements) ? root.elements : [];
-  const footnoteElements = elements.filter((el) => el?.name === 'w:footnote');
-  if (footnoteElements.length === 0) return [];
+  const noteElements = elements.filter((el) => el?.name === childElementName);
+  if (noteElements.length === 0) return [];
 
   const results = [];
   const lists = {};
   const inlineDocumentFonts = [];
-  footnoteElements.forEach((el) => {
+  noteElements.forEach((el) => {
     const idRaw = el?.attributes?.['w:id'];
     if (idRaw === undefined || idRaw === null) return;
     const id = String(idRaw);
@@ -93,7 +105,7 @@ export function importFootnoteData({ docx, editor, converter, nodeListHandler, n
       numbering,
       lists,
       inlineDocumentFonts,
-      filename: 'footnotes.xml',
+      filename,
       path: [el],
     });
 
@@ -107,4 +119,53 @@ export function importFootnoteData({ docx, editor, converter, nodeListHandler, n
   });
 
   return results;
+}
+
+/**
+ * Parse footnotes.xml into SuperDoc-ready footnote entries.
+ *
+ * These will be available on converter.footnotes and are used by PresentationEditor
+ * to build a footnotes panel.
+ *
+ * @param {Object} params
+ * @param {ParsedDocx} params.docx The parsed docx object
+ * @param {NodeListHandler} [params.nodeListHandler] Optional node list handler (defaults to docxImporter default)
+ * @param {SuperConverter} params.converter The super converter instance
+ * @param {Editor} params.editor The editor instance
+ * @param {Object} [params.numbering] Numbering definitions (optional)
+ * @returns {Array<{id: string, content: any[]}>}
+ */
+export function importFootnoteData({ docx, editor, converter, nodeListHandler, numbering } = {}) {
+  return importNoteEntries({
+    partXml: docx?.['word/footnotes.xml'],
+    childElementName: 'w:footnote',
+    filename: 'footnotes.xml',
+    docx,
+    editor,
+    converter,
+    nodeListHandler,
+    numbering,
+  });
+}
+
+/**
+ * Parse endnotes.xml into SuperDoc-ready endnote entries.
+ *
+ * Identical structure to footnotes but reads from word/endnotes.xml
+ * and filters for w:endnote elements.
+ *
+ * @param {Object} params - Same as importFootnoteData
+ * @returns {Array<{id: string, content: any[]}>}
+ */
+export function importEndnoteData({ docx, editor, converter, nodeListHandler, numbering } = {}) {
+  return importNoteEntries({
+    partXml: docx?.['word/endnotes.xml'],
+    childElementName: 'w:endnote',
+    filename: 'endnotes.xml',
+    docx,
+    editor,
+    converter,
+    nodeListHandler,
+    numbering,
+  });
 }

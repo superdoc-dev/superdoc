@@ -84,6 +84,7 @@ devtools/visual-testing/pnpm-lock.yaml
 __pycache__/
 *.pyc
 *.pyo
+venv/
 # Generated platform companion build metadata (do not commit)
 packages/sdk/langs/python/platforms/**/*.egg-info/
 # Generated python packaging metadata (do not commit)

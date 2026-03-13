@@ -1,10 +1,8 @@
 import { PluginKey } from 'prosemirror-state';
 import { Editor as SuperEditor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import {
-  pushHeaderFooterToYjs,
-  isApplyingRemoteHeaderFooterChanges,
-} from '@extensions/collaboration/collaboration-helpers.js';
+import { isApplyingRemotePartChanges } from '@extensions/collaboration/part-sync/index.js';
+import { exportSubEditorToPart } from '@core/parts/adapters/header-footer-sync.js';
 import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
 import { isHeadless } from '@utils/headless-helpers.js';
 
@@ -305,15 +303,13 @@ export const toggleHeaderFooterEditMode = ({ editor, focusedSectionEditor, isEdi
 
 /**
  * Handle header/footer data updates.
- * Updates converter storage and syncs JSON to Yjs for real-time collaboration.
- * Note: Does NOT call updateYdocDocxData - that is handled by the debounced
- * main document listener to avoid excessive full DOCX broadcasts.
+ * Updates converter storage and syncs to Yjs via the parts publisher.
  */
 export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, sectionId, type) => {
   if (!type || !sectionId) return;
 
   // Skip if we're currently applying remote changes to prevent ping-pong loop
-  if (isApplyingRemoteHeaderFooterChanges()) {
+  if (isApplyingRemotePartChanges()) {
     return;
   }
 
@@ -343,14 +339,9 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, se
     mainEditor.converter.headerFooterModified = true;
   }
 
-  // Push header/footer JSON to Yjs for real-time sync with collaborators
-  // This is lightweight (~1KB) and provides immediate visual sync
-  pushHeaderFooterToYjs(mainEditor, type, sectionId, updatedData);
-
-  // NOTE: We intentionally do NOT call updateYdocDocxData here.
-  // The full DOCX sync is handled by the debounced main document listener
-  // which will pick up header/footer changes via the Y.Doc afterTransaction event.
-  // This prevents the ~80KB broadcast on every keystroke.
+  // Export sub-editor to OOXML JSON and commit via mutatePart. The publisher
+  // picks up the partChanged event and writes to Yjs automatically.
+  exportSubEditorToPart(mainEditor, editor, sectionId, type);
 };
 
 const setEditorToolbar = ({ editor }, mainEditor) => {

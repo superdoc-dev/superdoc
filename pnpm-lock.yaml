@@ -132,9 +132,6 @@ catalogs:
     lib0:
       specifier: ^0.2.114
       version: 0.2.117
-    naive-ui:
-      specifier: ^2.43.1
-      version: 2.43.2
     nodemon:
       specifier: ^3.1.10
       version: 3.1.11
@@ -837,6 +834,9 @@ importers:
 
   packages/layout-engine/painters/dom:
     dependencies:
+      '@superdoc/common':
+        specifier: workspace:*
+        version: link:../../../../shared/common
       '@superdoc/contracts':
         specifier: workspace:*
         version: link:../../contracts
@@ -1066,9 +1066,6 @@ importers:
       lodash:
         specifier: ^4.17.21
         version: 4.17.23
-      naive-ui:
-        specifier: ^2.38.2
-        version: 2.43.2(vue@3.5.25(typescript@5.9.3))
       prosemirror-commands:
         specifier: 'catalog:'
         version: 1.7.1
@@ -1238,9 +1235,6 @@ importers:
       konva:
         specifier: 'catalog:'
         version: 10.2.0
-      naive-ui:
-        specifier: 'catalog:'
-        version: 2.43.2(vue@3.5.25(typescript@5.9.3))
       pinia:
         specifier: 'catalog:'
         version: 2.3.1(typescript@5.9.3)(vue@3.5.25(typescript@5.9.3))

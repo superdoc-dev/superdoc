@@ -3234,7 +3234,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // In viewing mode, don't render caret or selection highlights
-    if (this.#isViewLocked()) {
+    // (unless allowSelectionInViewMode is enabled for read-only selection)
+    if (this.#isViewLocked() && !this.#options.allowSelectionInViewMode) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -4615,16 +4616,15 @@ export class PresentationEditor extends EventEmitter {
    * Determines whether the current viewing mode should block edits.
    * When documentMode is viewing but the active editor has been toggled
    * back to editable (e.g. permission ranges), we treat the view as editable.
-   * Also returns false when allowSelectionInViewMode is enabled, allowing
-   * text selection while still blocking actual edits.
+   *
+   * Note: This method controls input blocking. For selection visuals,
+   * check allowSelectionInViewMode separately.
    */
   #isViewLocked(): boolean {
     if (this.#documentMode !== 'viewing') return false;
     const hasPermissionOverride = !!(this.#editor as Editor & { storage?: Record<string, any> })?.storage
       ?.permissionRanges?.hasAllowedRanges;
     if (hasPermissionOverride) return false;
-    // Allow selection visuals when allowSelectionInViewMode is enabled
-    if (this.#options.allowSelectionInViewMode) return false;
     return this.#documentMode === 'viewing';
   }
 

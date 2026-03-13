@@ -16,7 +16,9 @@ import { Extension } from '../Extension.js';
  * - Mouse interactions are allowed for text selection
  * - Focus is allowed
  * - Click events are allowed for selection
- * - But text input, keyboard shortcuts, paste, and drop remain blocked
+ * - Navigation keys (arrows, Home/End, PageUp/PageDown) are allowed
+ * - Copy (Ctrl/Cmd+C) and Select All (Ctrl/Cmd+A) are allowed
+ * - But text input, other keyboard shortcuts, paste, and drop remain blocked
  */
 export const Editable = Extension.create({
   name: 'editable',
@@ -60,10 +62,18 @@ export const Editable = Extension.create({
         // Always block keyboard input, paste, and drop when not editable
         handleKeyDown: (_view, event) => {
           if (!editor.options.editable) {
-            // Allow Ctrl+C / Cmd+C for copy when allowSelectionInViewMode is enabled
             if (editor.options.allowSelectionInViewMode) {
-              const isCopy = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c';
-              if (isCopy) return false;
+              // Allow navigation keys for selection
+              const isNavigationKey = [
+                'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+                'Home', 'End', 'PageUp', 'PageDown'
+              ].includes(event.key);
+
+              // Allow copy and select all
+              const isCopyOrSelectAll = (event.ctrlKey || event.metaKey) &&
+                ['c', 'a'].includes(event.key.toLowerCase());
+
+              if (isNavigationKey || isCopyOrSelectAll) return false;
             }
             return true;
           }

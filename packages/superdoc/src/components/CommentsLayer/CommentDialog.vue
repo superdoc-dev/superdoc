@@ -31,8 +31,14 @@ const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
 /* Comments store refs */
-const { addComment, cancelComment, deleteComment, removePendingComment, requestInstantSidebarAlignment } =
-  commentsStore;
+const {
+  addComment,
+  cancelComment,
+  deleteComment,
+  removePendingComment,
+  requestInstantSidebarAlignment,
+  clearInstantSidebarAlignment,
+} = commentsStore;
 const {
   suppressInternalExternal,
   getConfig,
@@ -282,7 +288,12 @@ const hasTextContent = computed(() => {
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
   const targetClientY = commentDialogElement.value?.getBoundingClientRect?.()?.top;
-  requestInstantSidebarAlignment(targetClientY);
+  const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
+  if (willChangeActiveThread) {
+    requestInstantSidebarAlignment(targetClientY);
+  } else {
+    clearInstantSidebarAlignment();
+  }
 
   // Only set as active if not resolved (resolved comments can't be edited)
   if (!props.comment.resolvedTime) {

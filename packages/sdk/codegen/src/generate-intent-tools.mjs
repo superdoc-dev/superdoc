@@ -155,7 +155,7 @@ function buildIntentTools(contract) {
       /** @type {Map<string, { total: number, requiredCount: number }>} */
       const propPresence = new Map();
 
-      for (const { operationId, operation } of ops) {
+      for (const { operation } of ops) {
         const opSchema = buildInputSchemaFromParams(operation);
         const opRequired = new Set(opSchema.required ?? []);
 
@@ -411,7 +411,7 @@ export async function generateIntentTools(contract) {
     ),
   ];
 
-  for (const [providerName, { formatter, file }] of Object.entries(providers)) {
+  for (const { formatter, file } of Object.values(providers)) {
     const providerTools = tools.map(formatter);
     const bundle = {
       contractVersion: contract.contractVersion,

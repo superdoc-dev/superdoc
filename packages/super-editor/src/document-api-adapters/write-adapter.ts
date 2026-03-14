@@ -33,6 +33,20 @@ type LegacyDeleteWriteRequest = {
 
 type LegacyWriteRequest = WriteRequest | LegacyReplaceWriteRequest | LegacyDeleteWriteRequest;
 
+function resolveLegacyWriteTarget(editor: Editor, request: LegacyWriteRequest): ResolvedWrite | null {
+  if (request.kind === 'insert') {
+    return resolveWriteTarget(editor, request);
+  }
+
+  if (!request.target) return null;
+
+  return resolveWriteTarget(editor, {
+    kind: 'insert',
+    target: request.target,
+    text: '',
+  });
+}
+
 function validateWriteRequest(request: LegacyWriteRequest, resolvedTarget: ResolvedWrite): ReceiptFailure | null {
   if (request.kind === 'insert') {
     if (!request.text) {
@@ -201,7 +215,8 @@ function applyTrackedWrite(
   // insertTrackedChange cannot operate between block nodes, so we use
   // a direct tr.insert with tracked mutation meta instead.
   if (resolvedTarget.structuralEnd) {
-    insertParagraphAtEnd(editor, resolvedTarget.range.from, request.text ?? '', applyTrackedMutationMeta);
+    const text = request.kind === 'delete' ? '' : (request.text ?? '');
+    insertParagraphAtEnd(editor, resolvedTarget.range.from, text, applyTrackedMutationMeta);
     return { success: true, resolution: resolvedTarget.resolution };
   }
 
@@ -265,7 +280,7 @@ export function writeAdapter(editor: Editor, request: WriteRequest, options?: Mu
   // before resolution. This is the adapter-layer normalization per the contract.
   const normalizedRequest = normalizeWriteLocator(legacyRequest);
 
-  const resolvedTarget = resolveWriteTarget(editor, normalizedRequest);
+  const resolvedTarget = resolveLegacyWriteTarget(editor, normalizedRequest);
   if (!resolvedTarget) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {
       target: normalizedRequest.target,

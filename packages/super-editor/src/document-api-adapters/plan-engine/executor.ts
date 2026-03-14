@@ -128,7 +128,7 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
 // ---------------------------------------------------------------------------
 
 type InlineRunPatch = StyleApplyInput['inline'];
-type TextStylePatchKey = 'color' | 'fontSize' | 'letterSpacing' | 'vertAlign' | 'position';
+type TextStylePatchKey = 'color' | 'fontSize' | 'fontFamily' | 'letterSpacing' | 'vertAlign' | 'position';
 type TextStylePatch = Partial<Pick<InlineRunPatch, TextStylePatchKey>> & {
   /** Derived from `caps` boolean — mapped to the textStyle mark's `textTransform` attribute. */
   textTransform?: string | null;
@@ -145,7 +145,7 @@ interface OverlappingRun {
 }
 
 const BOOLEAN_INLINE_MARK_KEYS = ['bold', 'italic', 'strike'] as const;
-const TEXT_STYLE_KEYS = ['color', 'fontSize', 'letterSpacing', 'vertAlign', 'position'] as const;
+const TEXT_STYLE_KEYS = ['color', 'fontSize', 'fontFamily', 'letterSpacing', 'vertAlign', 'position'] as const;
 const PRESERVE_RUN_PROPERTIES_META_KEY = 'sdPreserveRunPropertiesKeys';
 
 function isRecord(value: unknown): value is Record<string, unknown> {

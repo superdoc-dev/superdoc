@@ -1245,7 +1245,10 @@ function resolveStructuralLocator(editor: Editor, input: SDReplaceInput): Resolv
 
       // Expand to full block boundaries for structural replace.
       const index = getBlockIndex(editor);
-      const expanded = expandToBlockBoundaries(index, resolved.absFrom, resolved.absTo);
+      const expanded = expandToBlockBoundaries(index, resolved.absFrom, resolved.absTo, {
+        startHint: resolveSelectionBoundaryHint(index, sel.start),
+        endHint: resolveSelectionBoundaryHint(index, sel.end),
+      });
 
       const textTarget: TextAddress = {
         kind: 'text',
@@ -1362,9 +1365,37 @@ interface ExpandedBlockRange {
   lastBlock: BlockCandidate;
 }
 
+interface BoundaryHints {
+  startHint?: BlockCandidate;
+  endHint?: BlockCandidate;
+}
+
 /** Container node types that should not be used as block boundaries — they
  *  enclose child blocks and would cause the expansion to swallow entire tables. */
 const CONTAINER_NODE_TYPES: ReadonlySet<string> = new Set(['table', 'tableRow', 'tableCell']);
+
+function resolveSelectionBoundaryHint(index: BlockIndex, point: SelectionPoint): BlockCandidate | undefined {
+  if (point.kind !== 'nodeEdge') return undefined;
+
+  const key = `${point.node.nodeType}:${point.node.nodeId}`;
+  if (index.ambiguous.has(key)) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share key "${key}".`, {
+      nodeType: point.node.nodeType,
+      nodeId: point.node.nodeId,
+    });
+  }
+
+  const candidate = index.byId.get(key);
+  if (!candidate) {
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Node "${point.node.nodeType}" with id "${point.node.nodeId}" not found.`,
+      { nodeType: point.node.nodeType, nodeId: point.node.nodeId },
+    );
+  }
+
+  return candidate;
+}
 
 /**
  * Expands a PM position range to encompass full block boundaries.
@@ -1376,21 +1407,28 @@ const CONTAINER_NODE_TYPES: ReadonlySet<string> = new Set(['table', 'tableRow', 
  * selection inside a table cell expands only to the cell's leaf blocks,
  * not to the entire table.
  */
-function expandToBlockBoundaries(index: BlockIndex, absFrom: number, absTo: number): ExpandedBlockRange {
-  let blockFrom = absFrom;
-  let blockTo = absTo;
-  let firstBlock: BlockCandidate | undefined;
-  let lastBlock: BlockCandidate | undefined;
+function expandToBlockBoundaries(
+  index: BlockIndex,
+  absFrom: number,
+  absTo: number,
+  hints?: BoundaryHints,
+): ExpandedBlockRange {
+  let blockFrom = hints?.startHint?.pos ?? absFrom;
+  let blockTo = hints?.endHint?.end ?? absTo;
+  let firstBlock: BlockCandidate | undefined = hints?.startHint;
+  let lastBlock: BlockCandidate | undefined = hints?.endHint;
+  const lockStart = firstBlock !== undefined;
+  const lockEnd = lastBlock !== undefined;
 
   for (const candidate of index.candidates) {
     if (CONTAINER_NODE_TYPES.has(candidate.nodeType)) continue;
     // Skip non-overlapping blocks.
     if (candidate.end <= absFrom || candidate.pos >= absTo) continue;
-    if (candidate.pos <= blockFrom) {
+    if (!lockStart && candidate.pos <= blockFrom) {
       blockFrom = candidate.pos;
       firstBlock = candidate;
     }
-    if (candidate.end >= blockTo) {
+    if (!lockEnd && candidate.end >= blockTo) {
       blockTo = candidate.end;
       lastBlock = candidate;
     }

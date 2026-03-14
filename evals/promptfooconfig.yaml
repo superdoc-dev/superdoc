@@ -32,26 +32,26 @@ providers:
     config: *openai-config
 
   # --- Anthropic ---
-  - id: anthropic:messages:claude-haiku-4-5-20251001
-    label: Claude Haiku 4.5
-    delay: 1000
-    config:
-      temperature: 0
-      tools: file://lib/essential.json
-      tool_choice: auto
-      timeout: 30000
-      max_tokens: 1024
-      maxRetries: 3
+  # - id: anthropic:messages:claude-haiku-4-5-20251001
+  #   label: Claude Haiku 4.5
+  #   delay: 1000
+  #   config:
+  #     temperature: 0
+  #     tools: file://lib/essential.json
+  #     tool_choice: auto
+  #     timeout: 30000
+  #     max_tokens: 1024
+  #     maxRetries: 3
 
-  # --- Google ---
-  - id: google:gemini-2.5-flash
-    label: Gemini 2.5 Flash
-    delay: 500
-    config:
-      temperature: 0
-      tools: file://lib/essential.json
-      maxOutputTokens: 1024
-      timeout: 30000
+  # # --- Google ---
+  # - id: google:gemini-2.5-flash
+  #   label: Gemini 2.5 Flash
+  #   delay: 500
+  #   config:
+  #     temperature: 0
+  #     tools: file://lib/essential.json
+  #     maxOutputTokens: 1024
+  #     timeout: 30000
 
 defaultTest:
   options:

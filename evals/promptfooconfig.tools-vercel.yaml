@@ -6,7 +6,7 @@
 # with tool calling support and returns structured tool calls.
 # This works with tool-call-f1 assertions unlike Promptfoo's built-in vercel: provider.
 
-description: 'SuperDoc Tool Evals'
+description: 'SuperDoc Tool Evals (Vercel AI SDK)'
 
 prompts:
   - file://prompts/agent.txt
@@ -40,6 +40,12 @@ providers:
     label: Gemini 2.5 Flash
     config:
       modelId: google/gemini-2.5-flash
+
+  # --- Amazon ---
+  - id: file://providers/vercel-tools.mjs
+    label: Amazon Nova 2.0-Lite
+    config:
+      modelId: amazon/nova-2-lite
 
 defaultTest:
   assert:

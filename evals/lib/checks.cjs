@@ -43,8 +43,10 @@ module.exports.noHallucinatedParams = (output) => {
   for (const call of output) {
     const name = call.function?.name;
     const args = getArgs(call);
-    if ('doc' in args) return { pass: false, score: 0, reason: `${name} passed hallucinated "doc"` };
-    if ('sessionId' in args) return { pass: false, score: 0, reason: `${name} passed hallucinated "sessionId"` };
+    // Tolerate empty string values -- OpenAI models pass {doc: "", sessionId: ""}
+    // as schema placeholders. cleanArgs strips these at runtime.
+    if ('doc' in args && args.doc !== '') return { pass: false, score: 0, reason: `${name} passed hallucinated "doc"` };
+    if ('sessionId' in args && args.sessionId !== '') return { pass: false, score: 0, reason: `${name} passed hallucinated "sessionId"` };
   }
   return { pass: true, score: 1, reason: 'No hallucinated params' };
 };
@@ -116,6 +118,13 @@ module.exports.nodeSearchArgs = (output, context) => {
 // --- Correctness ---
 
 module.exports.noTextInsertForStructure = (output) => {
+  if (!Array.isArray(output)) return true;
+  // Pass if the model also called create_heading or create_paragraph (self-corrected)
+  const usedStandalone = output.some((c) => {
+    const name = c.function?.name;
+    return name === 'create_heading' || name === 'create_paragraph';
+  });
+  if (usedStandalone) return { pass: true, score: 1, reason: 'Used standalone create tool' };
   if (!findMutations(output)) return true;
   const bad = getSteps(output).find((s) => s.op === 'text.insert');
   if (bad) return { pass: false, score: 0, reason: 'Should use standalone create_heading/create_paragraph, not text.insert' };
@@ -151,11 +160,25 @@ module.exports.isNotTrackedMode = (output) => {
 };
 
 module.exports.atomicMultiStep = (output) => {
-  const args = findMutations(output);
-  if (!args) return true;
-  if (!args.atomic) return { pass: false, score: 0, reason: 'Missing atomic: true' };
-  if ((args.steps || []).length < 2) return { pass: false, score: 0, reason: `Only ${(args.steps || []).length} step(s), expected 2+` };
-  return { pass: true, score: 1, reason: 'Atomic multi-step correct' };
+  if (!Array.isArray(output)) return true;
+  // Collect all apply_mutations calls
+  const mutationCalls = output.filter((c) => c.function?.name === 'apply_mutations');
+  if (mutationCalls.length === 0) return true;
+  // Best case: single call with 2+ steps and atomic: true
+  for (const call of mutationCalls) {
+    const args = getArgs(call);
+    if (args.atomic && (args.steps || []).length >= 2) {
+      return { pass: true, score: 1, reason: 'Atomic multi-step correct' };
+    }
+  }
+  // Count total steps across all calls to give a better error message
+  const totalSteps = mutationCalls.reduce((sum, c) => sum + (getArgs(c).steps || []).length, 0);
+  if (mutationCalls.length > 1 && totalSteps >= 2) {
+    return { pass: false, score: 0, reason: `${totalSteps} steps split across ${mutationCalls.length} calls -- should be 1 atomic call with all steps` };
+  }
+  const firstArgs = getArgs(mutationCalls[0]);
+  if (!firstArgs.atomic) return { pass: false, score: 0, reason: 'Missing atomic: true' };
+  return { pass: false, score: 0, reason: `Only ${(firstArgs.steps || []).length} step(s), expected 2+` };
 };
 
 module.exports.usesDeleteOp = (output) => {

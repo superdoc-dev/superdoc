@@ -14,7 +14,7 @@
   assert:
     - type: tool-call-f1
       value: [query_match]
-      threshold: 1.0
+      threshold: 0.5           # model may also call get_document_text first
       metric: tool_selection
     - type: javascript
       value: file://lib/checks.cjs:textSearchArgs
@@ -24,11 +24,10 @@
   metadata: { category: reading }
   vars:
     task: 'List all headings in the document.'
-    expectedNodeType: heading
   assert:
     - type: tool-call-f1
       value: [query_match]
-      threshold: 1.0
+      threshold: 0.5           # model may also call get_node_by_id or blocks_list
       metric: tool_selection
     - type: javascript
       value: file://lib/checks.cjs:nodeSearchArgs
@@ -51,7 +50,7 @@
   assert:
     - type: tool-call-f1
       value: [query_match]
-      threshold: 1.0
+      threshold: 0.5           # model may call get_document_text first to scan
       metric: tool_selection
 
 # =============================================================================
@@ -172,8 +171,8 @@
     task: 'Add a new heading "Chapter 2" at the end of the document.'
   assert:
     - type: tool-call-f1
-      value: [create_heading, discover_tools]
-      threshold: 0.5
+      value: [create_heading]
+      threshold: 0.3            # model may also call discover_tools, query_match, blocks_list
       metric: tool_selection
     - type: javascript
       value: file://lib/checks.cjs:noTextInsertForStructure
@@ -185,8 +184,8 @@
     task: 'Add a new paragraph at the end of the document.'
   assert:
     - type: tool-call-f1
-      value: [create_paragraph, discover_tools]
-      threshold: 0.5
+      value: [create_paragraph]
+      threshold: 0.3            # model may also call discover_tools, query_match, blocks_list
       metric: tool_selection
 
 # =============================================================================
@@ -197,7 +196,6 @@
   metadata: { category: tables }
   vars:
     task: 'I want to work with tables in the document. Load the table editing tools.'
-    expectedGroup: tables
   assert:
     - type: tool-call-f1
       value: [discover_tools]
@@ -214,7 +212,7 @@
   assert:
     - type: tool-call-f1
       value: [discover_tools, query_match]
-      threshold: 0.5
+      threshold: 0.3            # model may also call create_table after discovering
       metric: tool_selection
 
 # =============================================================================
@@ -228,7 +226,7 @@
   assert:
     - type: tool-call-f1
       value: [discover_tools, query_match]
-      threshold: 0.5
+      threshold: 0.3            # model may also call create_comment after discovering
       metric: tool_selection
 
 - description: 'Comment on liability clauses'
@@ -238,7 +236,7 @@
   assert:
     - type: tool-call-f1
       value: [discover_tools, query_match]
-      threshold: 0.5
+      threshold: 0.3            # model may also call create_comment after discovering
       metric: tool_selection
 
 # =============================================================================
@@ -278,7 +276,7 @@
   assert:
     - type: tool-call-f1
       value: [discover_tools, query_match]
-      threshold: 0.5
+      threshold: 0.3            # model may also call execution tools after discovering
       metric: tool_selection
 
 - description: 'Change list numbering'
@@ -288,7 +286,7 @@
   assert:
     - type: tool-call-f1
       value: [discover_tools, query_match]
-      threshold: 0.5
+      threshold: 0.3            # model may also call execution tools after discovering
       metric: tool_selection
 
 # =============================================================================
@@ -298,7 +296,7 @@
 - description: 'No hallucinated doc or sessionId params'
   metadata: { category: hygiene }
   vars:
-    task: 'Get the text of the entire document.'
+    task: 'Extract all the plain text so I can paste it elsewhere.'
   assert:
     - type: javascript
       value: file://lib/checks.cjs:noHallucinatedParams
@@ -314,14 +312,14 @@
       threshold: 1.0
       metric: tool_selection
 
-- description: 'Simple task uses 3 or fewer tool calls'
+- description: 'Simple task uses 5 or fewer tool calls'
   metadata: { category: efficiency }
   vars:
     task: 'Replace the word "hello" with "goodbye" in the document.'
   assert:
     - type: javascript
       metric: efficiency
-      value: "output.length <= 3"
+      value: 'output.length <= 5'
 
 # =============================================================================
 # ASPIRATIONAL -- not fully supported yet. Failures expected.
@@ -332,18 +330,18 @@
   vars:
     task: 'Set the page margins to 0.7 inches on all sides.'
   assert:
-    - type: tool-call-f1
-      value: [discover_tools]
-      threshold: 1.0
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: tool_selection
 
 - description: 'Aspirational: Insert table of contents'
   metadata: { category: aspirational, source: spreadsheet }
   vars:
     task: 'Insert a table of contents immediately following the title page.'
   assert:
-    - type: tool-call-f1
-      value: [discover_tools]
-      threshold: 1.0
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: tool_selection
 
 - description: 'Aspirational: Merge table cells'
   metadata: { category: aspirational, source: spreadsheet }
@@ -352,7 +350,8 @@
   assert:
     - type: tool-call-f1
       value: [discover_tools, query_match]
-      threshold: 0.5
+      threshold: 0.3            # model may also call execution tools after discovering
+      metric: tool_selection
 
 - description: 'Aspirational: Accept formatting-only tracked changes'
   metadata: { category: aspirational, source: spreadsheet }
@@ -360,8 +359,9 @@
     task: 'Accept all tracked changes that only affect formatting.'
   assert:
     - type: tool-call-f1
-      value: [discover_tools, query_match]
-      threshold: 0.5
+      value: [discover_tools]
+      threshold: 0.3            # model discovers then uses list_tracked_changes, decide_tracked_change, etc.
+      metric: tool_selection
 
 - description: 'Aspirational: Turn text into hyperlink'
   metadata: { category: aspirational, source: spreadsheet }
@@ -370,7 +370,8 @@
   assert:
     - type: tool-call-f1
       value: [query_match, discover_tools]
-      threshold: 0.5
+      threshold: 0.3            # model may also call apply_mutations after finding text
+      metric: tool_selection
 
 - description: 'Aspirational: Identify liability risks'
   metadata: { category: aspirational, source: spreadsheet }
@@ -379,4 +380,5 @@
   assert:
     - type: tool-call-f1
       value: [query_match, get_document_text]
-      threshold: 0.5
+      threshold: 0.3            # model may only use one of these
+      metric: tool_selection

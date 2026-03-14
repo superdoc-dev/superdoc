@@ -74,9 +74,14 @@ export function cacheKey(model, fixture, task) {
   return hash;
 }
 
-/** Read cached result. Returns null if not cached or if --no-cache flag is set. */
+function isCacheDisabled() {
+  return process.env.PROMPTFOO_CACHE_ENABLED === 'false'
+    || process.argv.includes('--no-cache');
+}
+
+/** Read cached result. Returns null if cache disabled or key not found. */
 export function readCache(key) {
-  if (process.env.PROMPTFOO_CACHE_ENABLED === 'false') return null;
+  if (isCacheDisabled()) return null;
   const path = resolve(PATHS.cache, `${key}.json`);
   if (!existsSync(path)) return null;
   try {
@@ -86,10 +91,16 @@ export function readCache(key) {
   }
 }
 
-/** Write result to cache. */
+/** Write result to cache. Skips when --no-cache is active. */
 export function writeCache(key, result) {
+  if (isCacheDisabled()) return;
   mkdirSync(PATHS.cache, { recursive: true });
   writeFileSync(resolve(PATHS.cache, `${key}.json`), JSON.stringify(result));
+}
+
+/** Clear the entire provider cache. */
+export function clearCache() {
+  rmSync(PATHS.cache, { recursive: true, force: true });
 }
 
 // --- String ---

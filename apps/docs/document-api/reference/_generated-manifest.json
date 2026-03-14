@@ -13,8 +13,10 @@
     "apps/docs/document-api/reference/authorities/list.mdx",
     "apps/docs/document-api/reference/authorities/rebuild.mdx",
     "apps/docs/document-api/reference/authorities/remove.mdx",
+    "apps/docs/document-api/reference/blocks/delete-range.mdx",
     "apps/docs/document-api/reference/blocks/delete.mdx",
     "apps/docs/document-api/reference/blocks/index.mdx",
+    "apps/docs/document-api/reference/blocks/list.mdx",
     "apps/docs/document-api/reference/bookmarks/get.mdx",
     "apps/docs/document-api/reference/bookmarks/index.mdx",
     "apps/docs/document-api/reference/bookmarks/insert.mdx",
@@ -417,7 +419,7 @@
     {
       "aliasMemberPaths": [],
       "key": "blocks",
-      "operationIds": ["blocks.delete"],
+      "operationIds": ["blocks.list", "blocks.delete", "blocks.deleteRange"],
       "pagePath": "apps/docs/document-api/reference/blocks/index.mdx",
       "title": "Blocks"
     },
@@ -940,5 +942,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "eef969b01d52d99044ea5eb9c17085c5e31768001ced01042c4ebd90e6f00a24"
+  "sourceHash": "3dba9d6e860a924f59b8c0170d766ffca76b08ef90cf13ef801073e0e7f18dd5"
 }

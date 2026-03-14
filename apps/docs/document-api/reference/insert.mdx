@@ -1,7 +1,7 @@
 ---
 title: insert
 sidebarTitle: insert
-description: "Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.)."
+description: "Insert inline content at a text position within an existing block, or at the end of the document when target is omitted. This is NOT for creating sibling blocks — use create.paragraph, create.heading, or lists.insert for that. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.)."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: "Insert content at a target position, or at the end of the document
 
 ## Summary
 
-Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).
+Insert inline content at a text position within an existing block, or at the end of the document when target is omitted. This is NOT for creating sibling blocks — use create.paragraph, create.heading, or lists.insert for that. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).
 
 - Operation ID: `insert`
 - API member path: `editor.doc.insert(...)`

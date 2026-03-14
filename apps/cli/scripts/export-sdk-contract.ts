@@ -16,7 +16,7 @@ import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
-import { COMMAND_CATALOG, INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
+import { COMMAND_CATALOG, INTENT_GROUP_META } from '@superdoc/document-api';
 
 import { CLI_OPERATION_METADATA } from '../src/cli/operation-params';
 import {
@@ -26,7 +26,6 @@ import {
   cliCommandTokens,
   cliRequiresDocumentContext,
   toDocApiId,
-  type DocBackedCliOpId,
 } from '../src/cli/operation-set';
 import type { CliOnlyOperation } from '../src/cli/types';
 import { CLI_ONLY_OPERATION_DEFINITIONS } from '../src/cli/cli-only-operation-definitions';
@@ -41,307 +40,6 @@ const CLI_DIR = resolve(ROOT, 'apps/cli');
 const CONTRACT_JSON_PATH = resolve(ROOT, 'packages/document-api/generated/schemas/document-api-contract.json');
 const OUTPUT_PATH = resolve(CLI_DIR, 'generated/sdk-contract.json');
 const CLI_PKG_PATH = resolve(CLI_DIR, 'package.json');
-
-// ---------------------------------------------------------------------------
-// Intent names — human-friendly tool names for doc-backed operations only.
-// CLI-only intent names live in CLI_ONLY_OPERATION_DEFINITIONS.
-// ---------------------------------------------------------------------------
-
-const INTENT_NAMES = {
-  'doc.get': 'get_document',
-  'doc.markdownToFragment': 'markdown_to_fragment',
-  'doc.find': 'find_content',
-  'doc.getNode': 'get_node',
-  'doc.getNodeById': 'get_node_by_id',
-  'doc.getText': 'get_document_text',
-  'doc.getMarkdown': 'get_document_markdown',
-  'doc.getHtml': 'get_document_html',
-  'doc.info': 'get_document_info',
-  'doc.capabilities.get': 'get_capabilities',
-  'doc.clearContent': 'clear_content',
-  'doc.insert': 'insert_content',
-  'doc.replace': 'replace_content',
-  'doc.delete': 'delete_content',
-  'doc.blocks.delete': 'delete_block',
-  'doc.format.apply': 'format_apply',
-  ...Object.fromEntries(
-    INLINE_PROPERTY_REGISTRY.map((entry) => [
-      `doc.format.${entry.key}`,
-      `format_${entry.key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}`,
-    ]),
-  ),
-  'doc.styles.paragraph.setStyle': 'set_paragraph_style',
-  'doc.styles.paragraph.clearStyle': 'clear_paragraph_style',
-  'doc.format.paragraph.resetDirectFormatting': 'reset_paragraph_direct_formatting',
-  'doc.format.paragraph.setAlignment': 'set_paragraph_alignment',
-  'doc.format.paragraph.clearAlignment': 'clear_paragraph_alignment',
-  'doc.format.paragraph.setIndentation': 'set_paragraph_indentation',
-  'doc.format.paragraph.clearIndentation': 'clear_paragraph_indentation',
-  'doc.format.paragraph.setSpacing': 'set_paragraph_spacing',
-  'doc.format.paragraph.clearSpacing': 'clear_paragraph_spacing',
-  'doc.format.paragraph.setKeepOptions': 'set_paragraph_keep_options',
-  'doc.format.paragraph.setOutlineLevel': 'set_paragraph_outline_level',
-  'doc.format.paragraph.setFlowOptions': 'set_paragraph_flow_options',
-  'doc.format.paragraph.setTabStop': 'set_paragraph_tab_stop',
-  'doc.format.paragraph.clearTabStop': 'clear_paragraph_tab_stop',
-  'doc.format.paragraph.clearAllTabStops': 'clear_all_paragraph_tab_stops',
-  'doc.format.paragraph.setBorder': 'set_paragraph_border',
-  'doc.format.paragraph.clearBorder': 'clear_paragraph_border',
-  'doc.format.paragraph.setShading': 'set_paragraph_shading',
-  'doc.format.paragraph.clearShading': 'clear_paragraph_shading',
-  'doc.styles.apply': 'styles_apply',
-  'doc.create.paragraph': 'create_paragraph',
-  'doc.create.heading': 'create_heading',
-  'doc.create.sectionBreak': 'create_section_break',
-  'doc.sections.list': 'list_sections',
-  'doc.sections.get': 'get_section',
-  'doc.sections.setBreakType': 'set_section_break_type',
-  'doc.sections.setPageMargins': 'set_section_page_margins',
-  'doc.sections.setHeaderFooterMargins': 'set_section_header_footer_margins',
-  'doc.sections.setPageSetup': 'set_section_page_setup',
-  'doc.sections.setColumns': 'set_section_columns',
-  'doc.sections.setLineNumbering': 'set_section_line_numbering',
-  'doc.sections.setPageNumbering': 'set_section_page_numbering',
-  'doc.sections.setTitlePage': 'set_section_title_page',
-  'doc.sections.setOddEvenHeadersFooters': 'set_section_odd_even_headers_footers',
-  'doc.sections.setVerticalAlign': 'set_section_vertical_align',
-  'doc.sections.setSectionDirection': 'set_section_direction',
-  'doc.sections.setHeaderFooterRef': 'set_section_header_footer_reference',
-  'doc.sections.clearHeaderFooterRef': 'clear_section_header_footer_reference',
-  'doc.sections.setLinkToPrevious': 'set_section_link_to_previous',
-  'doc.sections.setPageBorders': 'set_section_page_borders',
-  'doc.sections.clearPageBorders': 'clear_section_page_borders',
-  'doc.create.tableOfContents': 'create_table_of_contents',
-  'doc.lists.list': 'list_lists',
-  'doc.lists.get': 'get_list',
-  'doc.lists.insert': 'insert_list',
-  'doc.lists.indent': 'indent_list',
-  'doc.lists.outdent': 'outdent_list',
-  'doc.lists.create': 'create_list',
-  'doc.lists.attach': 'attach_to_list',
-  'doc.lists.detach': 'detach_from_list',
-  'doc.lists.join': 'join_lists',
-  'doc.lists.canJoin': 'can_join_lists',
-  'doc.lists.separate': 'separate_list',
-  'doc.lists.setLevel': 'set_list_level',
-  'doc.lists.setValue': 'set_list_value',
-  'doc.lists.continuePrevious': 'continue_previous_list',
-  'doc.lists.canContinuePrevious': 'can_continue_previous_list',
-  'doc.lists.setLevelRestart': 'set_list_level_restart',
-  'doc.lists.convertToText': 'convert_list_to_text',
-  'doc.lists.applyTemplate': 'apply_list_template',
-  'doc.lists.applyPreset': 'apply_list_preset',
-  'doc.lists.setType': 'set_list_type',
-  'doc.lists.captureTemplate': 'capture_list_template',
-  'doc.lists.setLevelNumbering': 'set_list_level_numbering',
-  'doc.lists.setLevelBullet': 'set_list_level_bullet',
-  'doc.lists.setLevelPictureBullet': 'set_list_level_picture_bullet',
-  'doc.lists.setLevelAlignment': 'set_list_level_alignment',
-  'doc.lists.setLevelIndents': 'set_list_level_indents',
-  'doc.lists.setLevelTrailingCharacter': 'set_list_level_trailing_character',
-  'doc.lists.setLevelMarkerFont': 'set_list_level_marker_font',
-  'doc.lists.clearLevelOverrides': 'clear_list_level_overrides',
-  'doc.comments.create': 'create_comment',
-  'doc.comments.patch': 'patch_comment',
-  'doc.comments.delete': 'delete_comment',
-  'doc.comments.get': 'get_comment',
-  'doc.comments.list': 'list_comments',
-  'doc.trackChanges.list': 'list_tracked_changes',
-  'doc.trackChanges.get': 'get_tracked_change',
-  'doc.trackChanges.decide': 'decide_tracked_change',
-  'doc.toc.list': 'list_table_of_contents',
-  'doc.toc.get': 'get_table_of_contents',
-  'doc.toc.configure': 'configure_table_of_contents',
-  'doc.toc.update': 'update_table_of_contents',
-  'doc.toc.remove': 'remove_table_of_contents',
-  'doc.toc.markEntry': 'mark_table_of_contents_entry',
-  'doc.toc.unmarkEntry': 'unmark_table_of_contents_entry',
-  'doc.toc.listEntries': 'list_table_of_contents_entries',
-  'doc.toc.getEntry': 'get_table_of_contents_entry',
-  'doc.toc.editEntry': 'edit_table_of_contents_entry',
-  'doc.hyperlinks.list': 'list_hyperlinks',
-  'doc.hyperlinks.get': 'get_hyperlink',
-  'doc.hyperlinks.wrap': 'wrap_hyperlink',
-  'doc.hyperlinks.insert': 'insert_hyperlink',
-  'doc.hyperlinks.patch': 'patch_hyperlink',
-  'doc.hyperlinks.remove': 'remove_hyperlink',
-  'doc.headerFooters.list': 'list_header_footer_slots',
-  'doc.headerFooters.get': 'get_header_footer_slot',
-  'doc.headerFooters.resolve': 'resolve_header_footer',
-  'doc.headerFooters.refs.set': 'set_header_footer_ref',
-  'doc.headerFooters.refs.clear': 'clear_header_footer_ref',
-  'doc.headerFooters.refs.setLinkedToPrevious': 'set_header_footer_linked_to_previous',
-  'doc.headerFooters.parts.list': 'list_header_footer_parts',
-  'doc.headerFooters.parts.create': 'create_header_footer_part',
-  'doc.headerFooters.parts.delete': 'delete_header_footer_part',
-  'doc.query.match': 'query_match',
-  'doc.mutations.preview': 'preview_mutations',
-  'doc.mutations.apply': 'apply_mutations',
-  'doc.create.table': 'create_table',
-  'doc.tables.convertFromText': 'convert_text_to_table',
-  'doc.tables.delete': 'delete_table',
-  'doc.tables.clearContents': 'clear_table_contents',
-  'doc.tables.move': 'move_table',
-  'doc.tables.split': 'split_table',
-  'doc.tables.convertToText': 'convert_table_to_text',
-  'doc.tables.setLayout': 'set_table_layout',
-  'doc.tables.insertRow': 'insert_table_row',
-  'doc.tables.deleteRow': 'delete_table_row',
-  'doc.tables.setRowHeight': 'set_table_row_height',
-  'doc.tables.distributeRows': 'distribute_table_rows',
-  'doc.tables.setRowOptions': 'set_table_row_options',
-  'doc.tables.insertColumn': 'insert_table_column',
-  'doc.tables.deleteColumn': 'delete_table_column',
-  'doc.tables.setColumnWidth': 'set_table_column_width',
-  'doc.tables.distributeColumns': 'distribute_table_columns',
-  'doc.tables.insertCell': 'insert_table_cell',
-  'doc.tables.deleteCell': 'delete_table_cell',
-  'doc.tables.mergeCells': 'merge_table_cells',
-  'doc.tables.unmergeCells': 'unmerge_table_cells',
-  'doc.tables.splitCell': 'split_table_cell',
-  'doc.tables.setCellProperties': 'set_table_cell_properties',
-  'doc.tables.sort': 'sort_table',
-  'doc.tables.setAltText': 'set_table_alt_text',
-  'doc.tables.setStyle': 'set_table_style',
-  'doc.tables.clearStyle': 'clear_table_style',
-  'doc.tables.setStyleOption': 'set_table_style_option',
-  'doc.tables.setBorder': 'set_table_border',
-  'doc.tables.clearBorder': 'clear_table_border',
-  'doc.tables.applyBorderPreset': 'apply_table_border_preset',
-  'doc.tables.setShading': 'set_table_shading',
-  'doc.tables.clearShading': 'clear_table_shading',
-  'doc.tables.setTablePadding': 'set_table_padding',
-  'doc.tables.setCellPadding': 'set_table_cell_padding',
-  'doc.tables.setCellSpacing': 'set_table_cell_spacing',
-  'doc.tables.clearCellSpacing': 'clear_table_cell_spacing',
-  'doc.tables.get': 'get_table',
-  'doc.tables.getCells': 'get_table_cells',
-  'doc.tables.getProperties': 'get_table_properties',
-  'doc.tables.getStyles': 'get_table_styles',
-  'doc.tables.setDefaultStyle': 'set_table_default_style',
-  'doc.tables.clearDefaultStyle': 'clear_table_default_style',
-  'doc.history.get': 'get_history',
-  'doc.history.undo': 'undo',
-  'doc.history.redo': 'redo',
-  'doc.create.image': 'create_image',
-  'doc.images.list': 'list_images',
-  'doc.images.get': 'get_image',
-  'doc.images.delete': 'delete_image',
-  'doc.images.move': 'move_image',
-  'doc.images.convertToInline': 'convert_image_to_inline',
-  'doc.images.convertToFloating': 'convert_image_to_floating',
-  'doc.images.setSize': 'set_image_size',
-  'doc.images.setWrapType': 'set_image_wrap_type',
-  'doc.images.setWrapSide': 'set_image_wrap_side',
-  'doc.images.setWrapDistances': 'set_image_wrap_distances',
-  'doc.images.setPosition': 'set_image_position',
-  'doc.images.setAnchorOptions': 'set_image_anchor_options',
-  'doc.images.setZOrder': 'set_image_z_order',
-  'doc.images.scale': 'scale_image',
-  'doc.images.setLockAspectRatio': 'set_image_lock_aspect_ratio',
-  'doc.images.rotate': 'rotate_image',
-  'doc.images.flip': 'flip_image',
-  'doc.images.crop': 'crop_image',
-  'doc.images.resetCrop': 'reset_image_crop',
-  'doc.images.replaceSource': 'replace_image_source',
-  'doc.images.setAltText': 'set_image_alt_text',
-  'doc.images.setDecorative': 'set_image_decorative',
-  'doc.images.setName': 'set_image_name',
-  'doc.images.setHyperlink': 'set_image_hyperlink',
-  'doc.images.insertCaption': 'insert_image_caption',
-  'doc.images.updateCaption': 'update_image_caption',
-  'doc.images.removeCaption': 'remove_image_caption',
-
-  // Bookmarks
-  'doc.bookmarks.list': 'list_bookmarks',
-  'doc.bookmarks.get': 'get_bookmark',
-  'doc.bookmarks.insert': 'insert_bookmark',
-  'doc.bookmarks.rename': 'rename_bookmark',
-  'doc.bookmarks.remove': 'remove_bookmark',
-
-  // Footnotes
-  'doc.footnotes.list': 'list_footnotes',
-  'doc.footnotes.get': 'get_footnote',
-  'doc.footnotes.insert': 'insert_footnote',
-  'doc.footnotes.update': 'update_footnote',
-  'doc.footnotes.remove': 'remove_footnote',
-  'doc.footnotes.configure': 'configure_footnote_numbering',
-
-  // Cross-References
-  'doc.crossRefs.list': 'list_cross_references',
-  'doc.crossRefs.get': 'get_cross_reference',
-  'doc.crossRefs.insert': 'insert_cross_reference',
-  'doc.crossRefs.rebuild': 'rebuild_cross_reference',
-  'doc.crossRefs.remove': 'remove_cross_reference',
-
-  // Index
-  'doc.index.list': 'list_indexes',
-  'doc.index.get': 'get_index',
-  'doc.index.insert': 'insert_index',
-  'doc.index.configure': 'configure_index',
-  'doc.index.rebuild': 'rebuild_index',
-  'doc.index.remove': 'remove_index',
-  'doc.index.entries.list': 'list_index_entries',
-  'doc.index.entries.get': 'get_index_entry',
-  'doc.index.entries.insert': 'insert_index_entry',
-  'doc.index.entries.update': 'update_index_entry',
-  'doc.index.entries.remove': 'remove_index_entry',
-
-  // Captions
-  'doc.captions.list': 'list_captions',
-  'doc.captions.get': 'get_caption',
-  'doc.captions.insert': 'insert_caption',
-  'doc.captions.update': 'update_caption',
-  'doc.captions.remove': 'remove_caption',
-  'doc.captions.configure': 'configure_caption_numbering',
-
-  // Fields
-  'doc.fields.list': 'list_fields',
-  'doc.fields.get': 'get_field',
-  'doc.fields.insert': 'insert_field',
-  'doc.fields.rebuild': 'rebuild_field',
-  'doc.fields.remove': 'remove_field',
-
-  // Citations
-  'doc.citations.list': 'list_citations',
-  'doc.citations.get': 'get_citation',
-  'doc.citations.insert': 'insert_citation',
-  'doc.citations.update': 'update_citation',
-  'doc.citations.remove': 'remove_citation',
-  'doc.citations.sources.list': 'list_citation_sources',
-  'doc.citations.sources.get': 'get_citation_source',
-  'doc.citations.sources.insert': 'insert_citation_source',
-  'doc.citations.sources.update': 'update_citation_source',
-  'doc.citations.sources.remove': 'remove_citation_source',
-  'doc.citations.bibliography.get': 'get_bibliography',
-  'doc.citations.bibliography.insert': 'insert_bibliography',
-  'doc.citations.bibliography.rebuild': 'rebuild_bibliography',
-  'doc.citations.bibliography.configure': 'configure_bibliography',
-  'doc.citations.bibliography.remove': 'remove_bibliography',
-
-  // Authorities (Table of Authorities)
-  'doc.authorities.list': 'list_authorities',
-  'doc.authorities.get': 'get_authority',
-  'doc.authorities.insert': 'insert_authority',
-  'doc.authorities.configure': 'configure_authority',
-  'doc.authorities.rebuild': 'rebuild_authority',
-  'doc.authorities.remove': 'remove_authority',
-  'doc.authorities.entries.list': 'list_authority_entries',
-  'doc.authorities.entries.get': 'get_authority_entry',
-  'doc.authorities.entries.insert': 'insert_authority_entry',
-  'doc.authorities.entries.update': 'update_authority_entry',
-  'doc.authorities.entries.remove': 'remove_authority_entry',
-} as const satisfies Partial<Record<DocBackedCliOpId, string>>;
-
-function deriveDocBackedIntentName(cliOpId: DocBackedCliOpId): string {
-  const mapped = INTENT_NAMES[cliOpId];
-  if (mapped) {
-    return mapped;
-  }
-
-  const docApiId = cliOpId.slice(4);
-  return docApiId.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`).replace(/\./g, '_');
-}
 
 // ---------------------------------------------------------------------------
 // Load inputs
@@ -378,12 +76,7 @@ function buildSdkContract() {
     const docApiId = toDocApiId(cliOpId);
     const stripped = cliOpId.slice(4) as CliOnlyOperation;
 
-    // Resolve intentName: doc-backed from INTENT_NAMES, CLI-only from definitions
     const cliOnlyDef = docApiId ? null : CLI_ONLY_OPERATION_DEFINITIONS[stripped];
-    const intentName = docApiId ? deriveDocBackedIntentName(cliOpId as DocBackedCliOpId) : cliOnlyDef?.intentName;
-    if (!intentName) {
-      throw new Error(`Missing intentName for ${cliOpId}`);
-    }
 
     // Base fields shared by all operations
     const entry: Record<string, unknown> = {
@@ -394,7 +87,6 @@ function buildSdkContract() {
       description: cliDescription(cliOpId),
       requiresDocumentContext: cliRequiresDocumentContext(cliOpId),
       docRequirement: metadata.docRequirement,
-      intentName,
 
       // Transport plane
       params: metadata.params.map((p) => {
@@ -430,7 +122,8 @@ function buildSdkContract() {
       if (docOp.successSchema) entry.successSchema = docOp.successSchema;
       if (docOp.failureSchema) entry.failureSchema = docOp.failureSchema;
       if (docOp.skipAsATool) entry.skipAsATool = true;
-      if (docOp.essential) entry.essential = true;
+      if (docOp.intentGroup) entry.intentGroup = docOp.intentGroup;
+      if (docOp.intentAction) entry.intentAction = docOp.intentAction;
     } else {
       // CLI-only operation — metadata from canonical definitions
       const def = cliOnlyDef!;
@@ -465,6 +158,7 @@ function buildSdkContract() {
       features: [...HOST_PROTOCOL_FEATURES],
       notifications: [...HOST_PROTOCOL_NOTIFICATIONS],
     },
+    intentGroupMeta: INTENT_GROUP_META,
     operations,
   };
 }

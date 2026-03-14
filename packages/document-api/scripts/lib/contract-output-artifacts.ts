@@ -22,7 +22,8 @@ function buildOperationContractMap() {
         successSchema: operation.schemas.success,
         failureSchema: operation.schemas.failure,
         ...(operation.skipAsATool ? { skipAsATool: true } : {}),
-        ...(operation.essential ? { essential: true } : {}),
+        ...(operation.intentGroup ? { intentGroup: operation.intentGroup } : {}),
+        ...(operation.intentAction ? { intentAction: operation.intentAction } : {}),
       },
     ]),
   );

@@ -1,7 +1,7 @@
 ---
 title: find
 sidebarTitle: find
-description: Search the document for nodes matching type, text, or attribute criteria.
+description: Search the document for text or node matches using SDM/1 selectors.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Search the document for nodes matching type, text, or attribute cri
 
 ## Summary
 
-Search the document for nodes matching type, text, or attribute criteria.
+Search the document for text or node matches using SDM/1 selectors.
 
 - Operation ID: `find`
 - API member path: `editor.doc.find(...)`
@@ -22,19 +22,32 @@ Search the document for nodes matching type, text, or attribute criteria.
 
 ## Expected result
 
-Returns a FindOutput with matched items array and total count, or an empty items array if no nodes match.
+Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item is an SDNodeResult (\{ node, address \}).
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `includeNodes` | boolean | no |  |
-| `includeUnknown` | boolean | no |  |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
-| `require` | enum | no | `"any"`, `"first"`, `"exactlyOne"`, `"all"` |
-| `select` | object(type="text") \\| object(type="node") \\| object | yes | One of: object(type="text"), object(type="node"), object |
-| `within` | NodeAddress | no | NodeAddress |
+| `options` | object | no |  |
+| `options.includeContext` | boolean | no |  |
+| `options.includeProvenance` | boolean | no |  |
+| `options.includeResolved` | boolean | no |  |
+| `select` | object(type="text") \\| object(type="node") | yes | One of: object(type="text"), object(type="node") |
+| `within` | object | no |  |
+| `within.anchor` | object | no |  |
+| `within.anchor.end` | object | no |  |
+| `within.anchor.end.blockId` | string | no |  |
+| `within.anchor.end.offset` | integer | no |  |
+| `within.anchor.start` | object | no |  |
+| `within.anchor.start.blockId` | string | no |  |
+| `within.anchor.start.offset` | integer | no |  |
+| `within.evaluatedRevision` | string | no |  |
+| `within.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `within.nodeId` | string | no |  |
+| `within.path` | string \\| integer[] | no |  |
+| `within.stability` | enum | no | `"stable"`, `"ephemeral"` |
 
 ### Example request
 
@@ -48,9 +61,19 @@ Returns a FindOutput with matched items array and total count, or an empty items
     "type": "text"
   },
   "within": {
-    "kind": "block",
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "content",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "stability": "stable"
   }
 }
 ```
@@ -59,82 +82,38 @@ Returns a FindOutput with matched items array and total count, or an empty items
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `diagnostics` | object[] | no |  |
-| `evaluatedRevision` | string | yes |  |
 | `items` | object[] | yes |  |
-| `page` | PageInfo | yes | PageInfo |
-| `page.limit` | integer | yes |  |
-| `page.offset` | integer | yes |  |
-| `page.returned` | integer | yes |  |
+| `limit` | integer | yes |  |
+| `offset` | integer | yes |  |
 | `total` | integer | yes |  |
 
 ### Example response
 
 ```json
 {
-  "diagnostics": [
-    {
-      "address": {
-        "kind": "block",
-        "nodeId": "node-def456",
-        "nodeType": "paragraph"
-      },
-      "hint": "example",
-      "message": "Operation failed."
-    }
-  ],
-  "evaluatedRevision": "rev-001",
   "items": [
     {
       "address": {
-        "kind": "block",
-        "nodeId": "node-def456",
-        "nodeType": "paragraph"
-      },
-      "context": {
-        "address": {
-          "kind": "block",
-          "nodeId": "node-def456",
-          "nodeType": "paragraph"
-        },
-        "highlightRange": {
-          "end": 10,
-          "start": 0
-        },
-        "snippet": "...the quick brown fox...",
-        "textRanges": [
-          {
+        "anchor": {
+          "end": {
             "blockId": "block-abc123",
-            "kind": "text",
-            "range": {
-              "end": 10,
-              "start": 0
-            }
+            "offset": 0
+          },
+          "start": {
+            "blockId": "block-abc123",
+            "offset": 0
           }
-        ]
-      },
-      "handle": {
-        "ref": "handle:abc123",
-        "refStability": "stable",
-        "targetKind": "text"
-      },
-      "id": "id-001",
-      "node": {
-        "kind": "block",
-        "nodeType": "paragraph",
-        "summary": {
-          "label": "Paragraph 1",
-          "text": "Hello, world."
         },
-        "text": "Hello, world."
-      }
+        "kind": "content",
+        "nodeId": "node-def456",
+        "stability": "stable"
+      },
+      "context": {},
+      "node": {}
     }
   ],
-  "page": {
-    "limit": 50,
-    "offset": 0,
-    "returned": 1
-  },
+  "limit": 50,
+  "offset": 0,
   "total": 1
 }
 ```
@@ -143,6 +122,7 @@ Returns a FindOutput with matched items array and total count, or an empty items
 
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_INPUT`
+- `ADDRESS_STALE`
 
 ## Non-applied failure codes
 
@@ -155,28 +135,29 @@ Returns a FindOutput with matched items array and total count, or an empty items
 {
   "additionalProperties": false,
   "properties": {
-    "includeNodes": {
-      "type": "boolean"
-    },
-    "includeUnknown": {
-      "type": "boolean"
-    },
     "limit": {
       "type": "integer"
     },
     "offset": {
       "type": "integer"
     },
-    "require": {
-      "enum": [
-        "any",
-        "first",
-        "exactlyOne",
-        "all"
-      ]
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "includeContext": {
+          "type": "boolean"
+        },
+        "includeProvenance": {
+          "type": "boolean"
+        },
+        "includeResolved": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "select": {
-      "anyOf": [
+      "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
@@ -207,29 +188,12 @@ Returns a FindOutput with matched items array and total count, or an empty items
           "properties": {
             "kind": {
               "enum": [
-                "block",
+                "content",
                 "inline"
               ]
             },
-            "nodeType": {
-              "enum": [
-                "paragraph",
-                "heading",
-                "listItem",
-                "table",
-                "tableRow",
-                "tableCell",
-                "tableOfContents",
-                "image",
-                "sdt",
-                "run",
-                "bookmark",
-                "comment",
-                "hyperlink",
-                "footnoteRef",
-                "tab",
-                "lineBreak"
-              ]
+            "nodeKind": {
+              "type": "string"
             },
             "type": {
               "const": "node"
@@ -239,40 +203,89 @@ Returns a FindOutput with matched items array and total count, or an empty items
             "type"
           ],
           "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "nodeType": {
-              "enum": [
-                "paragraph",
-                "heading",
-                "listItem",
-                "table",
-                "tableRow",
-                "tableCell",
-                "tableOfContents",
-                "image",
-                "sdt",
-                "run",
-                "bookmark",
-                "comment",
-                "hyperlink",
-                "footnoteRef",
-                "tab",
-                "lineBreak"
-              ]
-            }
-          },
-          "required": [
-            "nodeType"
-          ],
-          "type": "object"
         }
       ]
     },
     "within": {
-      "$ref": "#/$defs/NodeAddress"
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "blockId",
+                "offset"
+              ],
+              "type": "object"
+            },
+            "start": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "blockId",
+                "offset"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "evaluatedRevision": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "content",
+            "inline",
+            "annotation",
+            "section"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "path": {
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "stability": {
+          "enum": [
+            "stable",
+            "ephemeral"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "stability"
+      ],
+      "type": "object"
     }
   },
   "required": [
@@ -288,150 +301,113 @@ Returns a FindOutput with matched items array and total count, or an empty items
 {
   "additionalProperties": false,
   "properties": {
-    "diagnostics": {
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "address": {
-            "$ref": "#/$defs/NodeAddress"
-          },
-          "hint": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "message"
-        ],
-        "type": "object"
-      },
-      "type": "array"
-    },
-    "evaluatedRevision": {
-      "type": "string"
-    },
     "items": {
       "items": {
         "additionalProperties": false,
         "properties": {
           "address": {
-            "$ref": "#/$defs/NodeAddress"
-          },
-          "context": {
             "additionalProperties": false,
             "properties": {
-              "address": {
-                "$ref": "#/$defs/NodeAddress"
-              },
-              "highlightRange": {
-                "$ref": "#/$defs/Range"
-              },
-              "snippet": {
-                "type": "string"
-              },
-              "textRanges": {
-                "items": {
-                  "$ref": "#/$defs/TextAddress"
-                },
-                "type": "array"
-              }
-            },
-            "required": [
-              "address",
-              "snippet",
-              "highlightRange"
-            ],
-            "type": "object"
-          },
-          "handle": {
-            "$ref": "#/$defs/ResolvedHandle"
-          },
-          "id": {
-            "type": "string"
-          },
-          "node": {
-            "additionalProperties": false,
-            "properties": {
-              "bodyNodes": {
-                "items": {
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "bodyText": {
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "block",
-                  "inline"
-                ]
-              },
-              "nodes": {
-                "items": {
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "nodeType": {
-                "enum": [
-                  "paragraph",
-                  "heading",
-                  "listItem",
-                  "table",
-                  "tableRow",
-                  "tableCell",
-                  "tableOfContents",
-                  "image",
-                  "sdt",
-                  "run",
-                  "bookmark",
-                  "comment",
-                  "hyperlink",
-                  "footnoteRef",
-                  "tab",
-                  "lineBreak"
-                ]
-              },
-              "properties": {
-                "type": "object"
-              },
-              "summary": {
+              "anchor": {
                 "additionalProperties": false,
                 "properties": {
-                  "label": {
-                    "type": "string"
+                  "end": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "offset": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "blockId",
+                      "offset"
+                    ],
+                    "type": "object"
                   },
-                  "text": {
-                    "type": "string"
+                  "start": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "offset": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "blockId",
+                      "offset"
+                    ],
+                    "type": "object"
                   }
                 },
                 "type": "object"
               },
-              "text": {
+              "evaluatedRevision": {
                 "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "content",
+                  "inline",
+                  "annotation",
+                  "section"
+                ]
+              },
+              "nodeId": {
+                "type": "string"
+              },
+              "path": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "stability": {
+                "enum": [
+                  "stable",
+                  "ephemeral"
+                ]
               }
             },
             "required": [
-              "nodeType",
-              "kind"
+              "kind",
+              "stability"
             ],
+            "type": "object"
+          },
+          "context": {
+            "type": "object"
+          },
+          "node": {
             "type": "object"
           }
         },
         "required": [
-          "id",
-          "handle",
+          "node",
           "address"
         ],
         "type": "object"
       },
       "type": "array"
     },
-    "page": {
-      "$ref": "#/$defs/PageInfo"
+    "limit": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "integer"
     },
     "total": {
       "minimum": 0,
@@ -439,10 +415,10 @@ Returns a FindOutput with matched items array and total count, or an empty items
     }
   },
   "required": [
-    "evaluatedRevision",
     "total",
-    "items",
-    "page"
+    "limit",
+    "offset",
+    "items"
   ],
   "type": "object"
 }

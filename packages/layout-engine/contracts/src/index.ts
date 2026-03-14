@@ -180,6 +180,10 @@ export type RunMarks = {
   highlight?: string;
   /** Text transformation (case modification). */
   textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
+  /** Vertical alignment for superscript/subscript text. */
+  vertAlign?: 'superscript' | 'subscript' | 'baseline';
+  /** Custom baseline shift in points (positive = raise, negative = lower). Takes precedence over vertAlign for positioning. */
+  baselineShift?: number;
 };
 
 export type TextRun = RunMarks & {
@@ -243,6 +247,13 @@ export type LineBreakRun = {
   };
   pmStart?: number;
   pmEnd?: number;
+};
+
+export type ImageLuminanceAdjustment = {
+  /** OOXML a:lum/@bright in raw units (-100000..100000). */
+  bright?: number;
+  /** OOXML a:lum/@contrast in raw units (-100000..100000). */
+  contrast?: number;
 };
 
 /**
@@ -318,6 +329,7 @@ export type ImageRun = {
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
+  lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
 };
 
 export type BreakRun = {
@@ -569,13 +581,14 @@ export type ImageBlock = {
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
+  lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip
   flipV?: boolean; // Vertical flip
 };
 
-export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup';
+export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
 
 export type DrawingContentSnapshot = {
   name: string;
@@ -816,7 +829,63 @@ export type ImageDrawing = DrawingBlockBase &
     drawingKind: 'image';
   };
 
-export type DrawingBlock = VectorShapeDrawing | ShapeGroupDrawing | ImageDrawing;
+// ============================================================================
+// Chart Drawing Types
+// ============================================================================
+
+/** A single data series in a chart (e.g., one set of bars in a bar chart). */
+export type ChartSeriesData = {
+  /** Display name for the series (from c:tx). */
+  name: string;
+  /** Category labels (from c:cat / c:strCache). */
+  categories: string[];
+  /** Numeric values (from c:val / c:numCache). */
+  values: number[];
+  /** Optional X-axis values for XY charts (scatter/bubble). */
+  xValues?: number[];
+  /** Optional bubble radius/size values for bubble charts. */
+  bubbleSizes?: number[];
+};
+
+/** Axis configuration extracted from c:catAx / c:valAx. */
+export type ChartAxisConfig = {
+  title?: string;
+  orientation?: 'minMax' | 'maxMin';
+};
+
+/** Normalized chart data model parsed from OOXML chart XML. */
+export type ChartModel = {
+  /** OOXML chart element name (e.g., 'barChart', 'lineChart', 'pieChart'). */
+  chartType: string;
+  /** Sub-type qualifier (e.g., 'clustered', 'stacked', 'percentStacked'). */
+  subType?: string;
+  /** Bar direction — 'col' for vertical columns, 'bar' for horizontal bars. */
+  barDirection?: 'col' | 'bar';
+  /** Data series in the chart. */
+  series: ChartSeriesData[];
+  /** Category axis config. */
+  categoryAxis?: ChartAxisConfig;
+  /** Value axis config. */
+  valueAxis?: ChartAxisConfig;
+  /** Legend position (e.g., 'r', 'b', 't', 'l'). */
+  legendPosition?: string;
+  /** OOXML chart style ID. */
+  styleId?: number;
+};
+
+/** Chart drawing block. */
+export type ChartDrawing = DrawingBlockBase & {
+  drawingKind: 'chart';
+  geometry: DrawingGeometry;
+  /** Parsed chart data for rendering. */
+  chartData: ChartModel;
+  /** Relationship ID for the chart part in the docx package. */
+  chartRelId?: string;
+  /** Path to the chart XML part (e.g., 'word/charts/chart1.xml'). */
+  chartPartPath?: string;
+};
+
+export type DrawingBlock = VectorShapeDrawing | ShapeGroupDrawing | ImageDrawing | ChartDrawing;
 
 /**
  * Vertical alignment of content within a section/page.
@@ -1041,6 +1110,7 @@ export type ParagraphBorders = {
   right?: ParagraphBorder;
   bottom?: ParagraphBorder;
   left?: ParagraphBorder;
+  between?: ParagraphBorder;
 };
 
 export type ParagraphShading = {

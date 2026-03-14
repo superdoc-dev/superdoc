@@ -58,6 +58,7 @@ export interface GlobalOptions {
   timeoutMs?: number;
   sessionId?: string;
   help: boolean;
+  version: boolean;
 }
 
 export interface CliIO {

@@ -84,17 +84,24 @@ if (preview.valid) {
 
 ## Quick search and single edit
 
-For lightweight tasks, `find` is still a good option:
+For lightweight text edits, use `query.match` and apply against the matched block range:
 
 ```ts
-const result = editor.doc.find({
+const match = editor.doc.query.match({
   select: { type: 'text', pattern: 'foo' },
   require: 'first',
 });
 
-const target = result.items?.[0]?.context?.textRanges?.[0];
-if (target) {
-  editor.doc.replace({ target, text: 'bar' });
+const firstBlock = match.items?.[0]?.blocks?.[0];
+if (firstBlock) {
+  editor.doc.replace({
+    target: {
+      kind: 'text',
+      blockId: firstBlock.blockId,
+      range: { start: firstBlock.range.start, end: firstBlock.range.end },
+    },
+    text: 'bar',
+  });
 }
 ```
 
@@ -133,7 +140,7 @@ if (caps.global.trackChanges.enabled) {
 
 ## Cross-session block addressing
 
-When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. The Document API's `find` operation returns addresses whose `nodeId` prefers DOCX-native `paraId`, which is usually stable when reopening the same unchanged DOCX.
+When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. For cross-session block targeting, use `query.match` addresses (`NodeAddress` with `kind: 'block'`), which carry DOCX-native `paraId`-derived IDs when available.
 
 This pattern is common in headless pipelines: extract block references in one session, then apply edits in another.
 
@@ -145,15 +152,14 @@ const docx = await readFile('./contract.docx');
 
 // Session 1: extract block addresses
 const editor1 = await Editor.open(docx);
-const result = editor1.doc.find({
+const result = editor1.doc.query.match({
   select: { type: 'node', nodeType: 'paragraph' },
-  includeNodes: true,
+  require: 'any',
 });
 
 // Save addresses — for DOCX-imported blocks, nodeId uses paraId when available
 const addresses = result.items.map((item) => ({
   address: item.address,
-  text: item.node?.text,
 }));
 await writeFile('./blocks.json', JSON.stringify(addresses));
 editor1.destroy();

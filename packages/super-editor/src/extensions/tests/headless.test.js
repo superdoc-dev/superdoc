@@ -166,7 +166,7 @@ describe('Headless Mode Optimization', () => {
     editor.destroy();
   });
 
-  it('updates paragraph runProperties for first runs nested in inline wrappers in headless mode', async () => {
+  it('does not sync paragraph runProperties for first runs nested in inline wrappers in headless mode', async () => {
     const buffer = await getTestDataAsFileBuffer('blank-doc.docx');
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -206,7 +206,7 @@ describe('Headless Mode Optimization', () => {
       editor.dispatch(tr);
 
       const updatedParagraph = editor.state.doc.firstChild;
-      expect(updatedParagraph?.attrs?.paragraphProperties).toEqual({ runProperties: { bold: true } });
+      expect(updatedParagraph?.attrs?.paragraphProperties).toBeNull();
       expect(hasInvalidParagraphRangeError(logSpy.mock.calls)).toBe(false);
     } finally {
       logSpy.mockRestore();

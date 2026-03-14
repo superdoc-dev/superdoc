@@ -14,18 +14,29 @@ import type {
   TextAddress,
   TextMutationReceipt,
   TextMutationResolution,
+  SDMutationReceipt,
   WriteRequest,
   StyleApplyInput,
   InlineRunPatchKey,
   PlanReceipt,
   ReceiptFailure,
+  SDInsertInput,
+  SDReplaceInput,
+  ReplaceInput,
+  SDAddress,
 } from '@superdoc/document-api';
-import { INLINE_PROPERTY_BY_KEY } from '@superdoc/document-api';
+import {
+  isStructuralInsertInput,
+  isStructuralReplaceInput,
+  textReceiptToSDReceipt,
+  INLINE_PROPERTY_BY_KEY,
+} from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
 import { getRevision } from './revision-tracker.js';
+import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import {
   insertParagraphAtEnd,
@@ -45,6 +56,13 @@ import {
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
+import {
+  executeStructuralInsert as executeStructuralInsertEngine,
+  executeStructuralReplace as executeStructuralReplaceEngine,
+  resolveReplaceTarget as resolveStructuralReplaceTarget,
+  resolveInsertTarget as resolveStructuralInsertTarget,
+  resolvePlacement,
+} from '../structural-write-engine/index.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,6 +139,26 @@ function ensureTableSeparators(jsonNodes: Record<string, unknown>[]): void {
       jsonNodes.splice(i + 1, 0, { type: 'paragraph' });
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// SDAddress → TextAddress bridge (transitional — SDAddress resolution in Phase 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Narrows an `SDAddress | TextAddress` union to `TextAddress` for the current
+ * adapter layer, which only handles TextAddress-based resolution.
+ *
+ * SDAddress inputs are bridged using `nodeId → blockId` and `anchor → range`.
+ */
+function narrowToTextAddress(target: SDAddress | TextAddress): TextAddress {
+  if (target.kind === 'text') return target;
+  const sd = target as SDAddress;
+  return {
+    kind: 'text',
+    blockId: sd.nodeId ?? '',
+    range: sd.anchor ? { start: sd.anchor.start.offset, end: sd.anchor.end.offset } : { start: 0, end: 0 },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +322,7 @@ function toCompiledTarget(stepId: string, op: string, resolved: ResolvedWrite): 
 export function executeDomainCommand(
   editor: Editor,
   handler: () => boolean,
-  options?: { expectedRevision?: string },
+  options?: { expectedRevision?: string; changeMode?: 'direct' | 'tracked' },
 ): PlanReceipt {
   const stepId = uuidv4();
   const step = {
@@ -299,7 +337,10 @@ export function executeDomainCommand(
     assertSteps: [],
     compiledRevision: getRevision(editor),
   };
-  return executeCompiledPlan(editor, compiled, { expectedRevision: options?.expectedRevision });
+  return executeCompiledPlan(editor, compiled, {
+    expectedRevision: options?.expectedRevision,
+    changeMode: options?.changeMode,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -578,7 +619,21 @@ export function insertStructuredWrapper(
   editor: Editor,
   input: InsertInput,
   options?: MutationOptions,
-): TextMutationReceipt {
+): SDMutationReceipt {
+  return textReceiptToSDReceipt(insertStructuredInner(editor, input, options));
+}
+
+/**
+ * Inner implementation for insertStructuredWrapper.
+ * Returns a TextMutationReceipt that the public wrapper converts to SDMutationReceipt.
+ */
+function insertStructuredInner(editor: Editor, input: InsertInput, options?: MutationOptions): TextMutationReceipt {
+  // Structural SDFragment path — delegate to the structural write engine
+  if (isStructuralInsertInput(input)) {
+    return executeStructuralInsertWrapper(editor, input, options);
+  }
+
+  // Legacy markdown/html path
   const contentType = input.type ?? 'text';
   const { value, target } = input;
 
@@ -679,117 +734,109 @@ export function insertStructuredWrapper(
 
   // Convert and insert inside executeDomainCommand so the revision guard
   // runs before any conversion side effects (e.g. list numbering allocation).
+  // compoundMutation provides automatic rollback of numbering state, revision,
+  // and converter metadata if the insert fails.
   let insertFailure: ReceiptFailure | undefined;
 
-  // Snapshot numbering state so we can roll back if the insert fails.
-  // List conversion allocates IDs and definitions on editor.converter — these
-  // mutations sit outside the ProseMirror transaction and aren't auto-reverted.
-  const converter = (editor as any).converter;
-  const numberingSnapshot = converter?.numbering ? JSON.parse(JSON.stringify(converter.numbering)) : undefined;
-  const translatedNumberingSnapshot = converter?.translatedNumbering
-    ? JSON.parse(JSON.stringify(converter.translatedNumbering))
-    : undefined;
-
-  const receipt = executeDomainCommand(
+  const { success: commandSucceeded } = compoundMutation({
     editor,
-    (): boolean => {
-      if (contentType === 'markdown') {
-        const { fragment } = markdownToPmFragment(value, editor);
+    source: 'doc.insert:structured',
+    affectedParts: ['word/numbering.xml'],
+    execute() {
+      const receipt = executeDomainCommand(
+        editor,
+        (): boolean => {
+          if (contentType === 'markdown') {
+            const { fragment } = markdownToPmFragment(value, editor);
 
-        if (fragment.childCount === 0) {
-          insertFailure = { code: 'NO_OP', message: 'Markdown produced no content to insert.' };
-          return false;
-        }
-
-        // Convert Fragment to a JSON array — insertContentAt routes arrays
-        // through Fragment.fromArray(content.map(schema.nodeFromJSON)), which
-        // correctly materializes the nodes. Passing a Fragment directly fails
-        // because createNodeFromContent treats it as a single JSON object.
-        const jsonNodes: Record<string, unknown>[] = [];
-        fragment.forEach((node) => jsonNodes.push(node.toJSON()));
-        ensureMarkdownImageIds(jsonNodes);
-
-        // Word always separates adjacent tables with a paragraph. Without a
-        // trailing separator, consecutive markdown inserts produce adjacent
-        // <w:tbl> elements that Word merges into one visual table.
-        ensureTableSeparators(jsonNodes);
-
-        // insertContentAt replaces empty textblocks when inserting block
-        // content. Check whether the replaced paragraph's neighbors are tables
-        // and add separators to prevent adjacency in the result.
-        if (from === to) {
-          const $pos = editor.state.doc.resolve(from);
-          const parent = $pos.parent;
-          if (parent.isTextblock && !parent.childCount) {
-            const grandparent = $pos.node($pos.depth - 1);
-            const idx = $pos.index($pos.depth - 1);
-            const prevIsTable = idx > 0 && grandparent.child(idx - 1).type.name === 'table';
-            const nextIsTable = idx + 1 < grandparent.childCount && grandparent.child(idx + 1).type.name === 'table';
-            const atEnd = idx + 1 >= grandparent.childCount;
-
-            if (jsonNodes[0]?.type === 'table' && prevIsTable) {
-              jsonNodes.unshift({ type: 'paragraph' });
+            if (fragment.childCount === 0) {
+              insertFailure = { code: 'NO_OP', message: 'Markdown produced no content to insert.' };
+              return false;
             }
-            if (jsonNodes[jsonNodes.length - 1]?.type === 'table' && (nextIsTable || atEnd)) {
-              jsonNodes.push({ type: 'paragraph' });
+
+            // Convert Fragment to a JSON array — insertContentAt routes arrays
+            // through Fragment.fromArray(content.map(schema.nodeFromJSON)), which
+            // correctly materializes the nodes. Passing a Fragment directly fails
+            // because createNodeFromContent treats it as a single JSON object.
+            const jsonNodes: Record<string, unknown>[] = [];
+            fragment.forEach((node) => jsonNodes.push(node.toJSON()));
+            ensureMarkdownImageIds(jsonNodes);
+
+            // Word always separates adjacent tables with a paragraph. Without a
+            // trailing separator, consecutive markdown inserts produce adjacent
+            // <w:tbl> elements that Word merges into one visual table.
+            ensureTableSeparators(jsonNodes);
+
+            // insertContentAt replaces empty textblocks when inserting block
+            // content. Check whether the replaced paragraph's neighbors are tables
+            // and add separators to prevent adjacency in the result.
+            if (from === to) {
+              const $pos = editor.state.doc.resolve(from);
+              const parent = $pos.parent;
+              if (parent.isTextblock && !parent.childCount) {
+                const grandparent = $pos.node($pos.depth - 1);
+                const idx = $pos.index($pos.depth - 1);
+                const prevIsTable = idx > 0 && grandparent.child(idx - 1).type.name === 'table';
+                const nextIsTable =
+                  idx + 1 < grandparent.childCount && grandparent.child(idx + 1).type.name === 'table';
+                const atEnd = idx + 1 >= grandparent.childCount;
+
+                if (jsonNodes[0]?.type === 'table' && prevIsTable) {
+                  jsonNodes.unshift({ type: 'paragraph' });
+                }
+                if (jsonNodes[jsonNodes.length - 1]?.type === 'table' && (nextIsTable || atEnd)) {
+                  jsonNodes.push({ type: 'paragraph' });
+                }
+              }
+            }
+
+            const ok = insertContentAtWithRetry(editor, { from, to }, jsonNodes);
+            if (!ok) {
+              insertFailure = {
+                code: 'INVALID_TARGET',
+                message: 'Structured content could not be inserted at the target position.',
+              };
+            }
+            return ok;
+          } else if (contentType === 'html') {
+            // Pass HTML string directly to insertContentAt. This avoids a
+            // prosemirror-model dual-copy issue: calling processContent from this
+            // source file imports DOMParser from node_modules, but the Editor's
+            // schema uses the bundled copy from the superdoc dist. Routing through
+            // the Editor's command infrastructure uses the same bundled copy for
+            // both DOMParser and the schema — avoiding the mismatch.
+            if (!editorHasDom(editor)) {
+              insertFailure = {
+                code: 'UNSUPPORTED_ENVIRONMENT',
+                message: 'HTML insert requires a DOM environment. Provide { document } in editor options.',
+              };
+              return false;
+            }
+            try {
+              const ok = insertContentAtWithRetry(editor, { from, to }, value);
+              if (!ok) {
+                insertFailure = {
+                  code: 'INVALID_TARGET',
+                  message: 'HTML content could not be inserted at the target position.',
+                };
+              }
+              return ok;
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              insertFailure = {
+                code: 'UNSUPPORTED_ENVIRONMENT',
+                message: `HTML structured insert requires a DOM environment. ${message}`,
+              };
+              return false;
             }
           }
-        }
-
-        const ok = insertContentAtWithRetry(editor, { from, to }, jsonNodes);
-        if (!ok) {
-          insertFailure = {
-            code: 'INVALID_TARGET',
-            message: 'Structured content could not be inserted at the target position.',
-          };
-        }
-        return ok;
-      } else if (contentType === 'html') {
-        // Pass HTML string directly to insertContentAt. This avoids a
-        // prosemirror-model dual-copy issue: calling processContent from this
-        // source file imports DOMParser from node_modules, but the Editor's
-        // schema uses the bundled copy from the superdoc dist. Routing through
-        // the Editor's command infrastructure uses the same bundled copy for
-        // both DOMParser and the schema — avoiding the mismatch.
-        if (!editorHasDom(editor)) {
-          insertFailure = {
-            code: 'UNSUPPORTED_ENVIRONMENT',
-            message: 'HTML insert requires a DOM environment. Provide { document } in editor options.',
-          };
           return false;
-        }
-        try {
-          const ok = insertContentAtWithRetry(editor, { from, to }, value);
-          if (!ok) {
-            insertFailure = {
-              code: 'INVALID_TARGET',
-              message: 'HTML content could not be inserted at the target position.',
-            };
-          }
-          return ok;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          insertFailure = {
-            code: 'UNSUPPORTED_ENVIRONMENT',
-            message: `HTML structured insert requires a DOM environment. ${message}`,
-          };
-          return false;
-        }
-      }
-      return false;
+        },
+        { expectedRevision: options?.expectedRevision },
+      );
+      return receipt.steps[0]?.effect === 'changed';
     },
-    { expectedRevision: options?.expectedRevision },
-  );
-
-  const commandSucceeded = receipt.steps[0]?.effect === 'changed';
-
-  // Roll back numbering side effects if the insert failed.
-  // The ProseMirror transaction is only dispatched on success, but list ID
-  // allocations mutate converter state directly and need manual rollback.
-  if (!commandSucceeded && converter) {
-    if (numberingSnapshot !== undefined) converter.numbering = numberingSnapshot;
-    if (translatedNumberingSnapshot !== undefined) converter.translatedNumbering = translatedNumberingSnapshot;
-  }
+  });
 
   // Schedule list migration after successful html/markdown insert,
   // matching the insertContent command's post-insert hook.
@@ -808,4 +855,222 @@ export function insertStructuredWrapper(
   }
 
   return { success: true, resolution };
+}
+
+// ---------------------------------------------------------------------------
+// Structural SDFragment insert wrapper
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles structural insert (SDFragment content).
+ * Wraps the structural write engine to produce a TextMutationReceipt.
+ */
+function executeStructuralInsertWrapper(
+  editor: Editor,
+  input: SDInsertInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const { content, target, placement, nestingPolicy } = input;
+  const mode = options?.changeMode ?? 'direct';
+
+  // Narrow SDAddress | TextAddress → TextAddress for the current adapter layer.
+  const textTarget = target ? narrowToTextAddress(target) : undefined;
+
+  // Block-level resolution for metadata — uses the structural engine's resolver
+  // so ALL block types (tables, images, etc.) are addressable, not just text blocks.
+  let resolved;
+  try {
+    resolved = resolveStructuralInsertTarget(editor, textTarget);
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Cannot resolve insert target${textTarget ? ` for block "${textTarget.blockId}"` : ''}.`,
+    );
+  }
+
+  const effectiveTarget: TextAddress = resolved.effectiveTarget ?? {
+    kind: 'text',
+    blockId: '',
+    range: { start: 0, end: 0 },
+  };
+
+  // Compute the placement-adjusted insertion position (same logic as the engine).
+  // Without this, the receipt would report the pre-placement position, which differs
+  // from the actual insertion point for 'before', 'insideStart', 'insideEnd'.
+  let insertPos: number;
+  if (resolved.targetNode && resolved.targetNodePos !== undefined) {
+    insertPos = resolvePlacement(editor.state.doc, resolved.targetNodePos, resolved.targetNode, placement);
+  } else {
+    insertPos = resolved.insertPos;
+  }
+
+  const resolvedRange = { from: insertPos, to: insertPos };
+  const resolution = buildTextMutationResolution({
+    requestedTarget: textTarget,
+    target: effectiveTarget,
+    range: resolvedRange,
+    text: '',
+  });
+
+  try {
+    // Dry-run: run full structural engine validation (target, materialization, nesting),
+    // but skip dispatch.
+    if (options?.dryRun) {
+      executeStructuralInsertEngine(editor, {
+        target: textTarget,
+        content,
+        placement,
+        nestingPolicy,
+        changeMode: mode,
+        dryRun: true,
+      });
+      return { success: true, resolution };
+    }
+
+    const receipt = executeDomainCommand(
+      editor,
+      () => {
+        const result = executeStructuralInsertEngine(editor, {
+          target: textTarget,
+          content,
+          placement,
+          nestingPolicy,
+          changeMode: mode,
+        });
+        return result.success;
+      },
+      { expectedRevision: options?.expectedRevision, changeMode: mode },
+    );
+
+    const succeeded = receipt.steps[0]?.effect === 'changed';
+    if (!succeeded) {
+      return {
+        success: false,
+        resolution,
+        failure: { code: 'INVALID_TARGET', message: 'Structural insert failed.' },
+      };
+    }
+
+    return { success: true, resolution };
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      resolution,
+      failure: { code: 'INVALID_TARGET', message: `Structural insert failed: ${message}` },
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Structural SDFragment replace wrapper
+// ---------------------------------------------------------------------------
+
+/**
+ * Entry point for structural replace operations.
+ *
+ * Detects structural (SDFragment) input and delegates to the structural
+ * replace engine. Non-structural input is rejected (legacy replace uses writeWrapper).
+ */
+export function replaceStructuredWrapper(
+  editor: Editor,
+  input: ReplaceInput,
+  options?: MutationOptions,
+): SDMutationReceipt {
+  if (!isStructuralReplaceInput(input)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_INPUT',
+      'replaceStructured requires structural content input with a "content" field.',
+    );
+  }
+  return textReceiptToSDReceipt(executeStructuralReplaceWrapper(editor, input, options));
+}
+
+/**
+ * Handles structural replace (SDFragment content).
+ * Wraps the structural replace engine to produce a TextMutationReceipt.
+ */
+function executeStructuralReplaceWrapper(
+  editor: Editor,
+  input: SDReplaceInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const { content, target, nestingPolicy } = input;
+  const mode = options?.changeMode ?? 'direct';
+
+  // Narrow SDAddress | TextAddress → TextAddress for the current adapter layer.
+  const textTarget = narrowToTextAddress(target);
+
+  // Block-level resolution for metadata — uses the same block lookup as the engine.
+  // This supports non-text blocks (tables, images) that resolveTextTarget would miss.
+  let resolvedBlock;
+  try {
+    resolvedBlock = resolveStructuralReplaceTarget(editor, textTarget);
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Cannot resolve replace target for block "${textTarget.blockId}".`,
+    );
+  }
+
+  const resolvedRange = { from: resolvedBlock.from, to: resolvedBlock.to };
+  // Snapshot the text currently covered by the target block (contract: non-empty for non-collapsed ranges).
+  const coveredText = editor.state.doc.textBetween(resolvedBlock.from, resolvedBlock.to, '\n', '\ufffc');
+  const resolution = buildTextMutationResolution({
+    requestedTarget: textTarget,
+    target: textTarget,
+    range: resolvedRange,
+    text: coveredText,
+  });
+
+  try {
+    // Dry-run: run full structural engine validation (target, materialization, nesting),
+    // but skip dispatch.
+    if (options?.dryRun) {
+      executeStructuralReplaceEngine(editor, {
+        target: textTarget,
+        content,
+        nestingPolicy,
+        changeMode: mode,
+        dryRun: true,
+      });
+      return { success: true, resolution };
+    }
+
+    const receipt = executeDomainCommand(
+      editor,
+      () => {
+        const result = executeStructuralReplaceEngine(editor, {
+          target: textTarget,
+          content,
+          nestingPolicy,
+          changeMode: mode,
+        });
+        return result.success;
+      },
+      { expectedRevision: options?.expectedRevision, changeMode: mode },
+    );
+
+    const succeeded = receipt.steps[0]?.effect === 'changed';
+    if (!succeeded) {
+      return {
+        success: false,
+        resolution,
+        failure: { code: 'INVALID_TARGET', message: 'Structural replace failed.' },
+      };
+    }
+
+    return { success: true, resolution };
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      resolution,
+      failure: { code: 'INVALID_TARGET', message: `Structural replace failed: ${message}` },
+    };
+  }
 }

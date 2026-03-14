@@ -115,6 +115,7 @@
                 "group": "AI Agents",
                 "pages": [
                   "document-engine/ai-agents/llm-tools",
+                  "document-engine/ai-agents/integrations",
                   "document-engine/ai-agents/skills",
                   "document-engine/ai-agents/mcp-server"
                 ]
@@ -317,6 +318,10 @@
     {
       "source": "/document-engine/mcp",
       "destination": "/document-engine/ai-agents/mcp-server"
+    },
+    {
+      "source": "/document-engine/ai-agents/providers",
+      "destination": "/document-engine/ai-agents/integrations"
     },
     {
       "source": "/core/superdoc/properties",

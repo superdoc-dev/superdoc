@@ -385,6 +385,11 @@ def dispatch_superdoc_tool(
     if not isinstance(payload, dict):
         raise SuperDocError('Tool arguments must be an object.', code='INVALID_ARGUMENT', details={'toolName': tool_name})
 
+    # Strip doc/sessionId — the SDK client manages session targeting after doc.open().
+    # Models fill these in because the tool schemas expose them, but passing them
+    # alongside an active session causes errors.
+    payload = {k: v for k, v in payload.items() if k not in ('doc', 'sessionId')}
+
     _validate_dispatch_args(operation_id, payload)
     method = _resolve_doc_method(client, operation_id)
 
@@ -412,6 +417,9 @@ async def dispatch_superdoc_tool_async(
     payload = args or {}
     if not isinstance(payload, dict):
         raise SuperDocError('Tool arguments must be an object.', code='INVALID_ARGUMENT', details={'toolName': tool_name})
+
+    # Strip doc/sessionId — same as sync version above.
+    payload = {k: v for k, v in payload.items() if k not in ('doc', 'sessionId')}
 
     _validate_dispatch_args(operation_id, payload)
     method = _resolve_doc_method(client, operation_id)

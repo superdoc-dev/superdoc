@@ -11,6 +11,7 @@
 import type { TextRun, TabRun, RunMark, TrackedChangeMeta, TrackedChangeKind } from '@superdoc/contracts';
 import type { UnderlineStyle, PMMark, HyperlinkConfig, ThemeColorPalette } from '../types.js';
 import { normalizeColor, isFiniteNumber, ptToPx } from '../utilities.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '../constants.js';
 import { buildFlowRunLink, migrateLegacyLink } from './links.js';
 import { sanitizeHref } from '@superdoc/url-validation';
 import { resolveThemeColorValue } from './theme-color.js';
@@ -698,14 +699,14 @@ const sanitizeFontFamily = (fontFamily: string): string | undefined => {
 };
 
 /**
- * Converts a font size value to pixels.
+ * Converts a CSS-like length value to pixels.
  *
  * - Numbers are treated as pixel values
  * - Strings ending with "pt" are converted to px (96 DPI)
  * - Strings ending with "px" or without a unit are treated as px
  * - Unknown units fall back to the numeric value (px) for backward compatibility
  */
-const normalizeFontSizePx = (value: unknown): number | undefined => {
+const normalizeLengthPx = (value: unknown): number | undefined => {
   if (isFiniteNumber(value)) return value;
   if (typeof value !== 'string') return undefined;
 
@@ -736,7 +737,9 @@ const normalizeFontSizePx = (value: unknown): number | undefined => {
  *   - fontSize: Numeric pixel value or string with units (e.g., 12, "12pt", "24px").
  *     Point values are converted to pixels (96 DPI); unitless/px values are treated as pixels.
  *     Valid range after conversion: 1-1000px. Values outside this range are ignored.
- *   - letterSpacing: Numeric spacing value in pixels. Range: -100 to 100.
+ *   - letterSpacing: Numeric pixel value or string with units (e.g., 2, "0.75pt", "-1px").
+ *     Point values are converted to pixels (96 DPI); unitless/px values are treated as pixels.
+ *     Valid range after conversion: -100 to 100px. Values outside this range are ignored.
  * @param themeColors - Optional theme color palette for color resolution
  */
 export const applyTextStyleMark = (
@@ -754,17 +757,17 @@ export const applyTextStyleMark = (
       run.fontFamily = sanitized;
     }
   }
-  const fontSizePx = normalizeFontSizePx(attrs.fontSize);
+  const fontSizePx = normalizeLengthPx(attrs.fontSize);
   if (fontSizePx !== undefined && fontSizePx >= 1 && fontSizePx <= 1000) {
     run.fontSize = fontSizePx;
   } else if (attrs.fontSize !== undefined) {
     // invalid or out-of-range size ignored
   }
-  if (isFiniteNumber(attrs.letterSpacing)) {
-    const spacing = Number(attrs.letterSpacing);
+  const letterSpacingPx = normalizeLengthPx(attrs.letterSpacing);
+  if (letterSpacingPx !== undefined) {
     // Apply reasonable bounds (-100 to 100px) to prevent extreme values
-    if (spacing >= -100 && spacing <= 100) {
-      run.letterSpacing = spacing;
+    if (letterSpacingPx >= -100 && letterSpacingPx <= 100) {
+      run.letterSpacing = letterSpacingPx;
     }
   }
   if (typeof attrs.textTransform === 'string') {
@@ -772,6 +775,24 @@ export const applyTextStyleMark = (
     if (transform === 'uppercase' || transform === 'lowercase' || transform === 'capitalize' || transform === 'none') {
       run.textTransform = transform;
     }
+  }
+  // Vertical alignment (superscript/subscript)
+  if (typeof attrs.vertAlign === 'string') {
+    const va = attrs.vertAlign;
+    if (va === 'superscript' || va === 'subscript' || va === 'baseline') {
+      run.vertAlign = va;
+    }
+  }
+  // Custom baseline shift (position) — takes precedence over vertAlign for positioning
+  if (attrs.position != null && typeof attrs.position === 'string') {
+    const parsed = parseFloat(attrs.position);
+    if (Number.isFinite(parsed)) {
+      run.baselineShift = parsed;
+    }
+  }
+  // Scale font size for superscript/subscript when no custom position override
+  if (run.baselineShift == null && (run.vertAlign === 'superscript' || run.vertAlign === 'subscript')) {
+    run.fontSize *= SUBSCRIPT_SUPERSCRIPT_SCALE;
   }
 };
 

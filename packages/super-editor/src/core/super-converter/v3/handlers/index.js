@@ -5,6 +5,12 @@ import { translator as sd_tableOfContents_translator } from './sd/tableOfContent
 import { translator as sd_index_translator } from './sd/index/index-translator.js';
 import { translator as sd_indexEntry_translator } from './sd/indexEntry/indexEntry-translator.js';
 import { translator as sd_tableOfContentsEntry_translator } from './sd/tableOfContentsEntry/tableOfContentsEntry-translator.js';
+import { translator as sd_crossReference_translator } from './sd/crossReference/crossReference-translator.js';
+import { translator as sd_sequenceField_translator } from './sd/sequenceField/sequenceField-translator.js';
+import { translator as sd_citation_translator } from './sd/citation/citation-translator.js';
+import { translator as sd_bibliography_translator } from './sd/bibliography/bibliography-translator.js';
+import { translator as sd_authorityEntry_translator } from './sd/authorityEntry/authorityEntry-translator.js';
+import { translator as sd_tableOfAuthorities_translator } from './sd/tableOfAuthorities/tableOfAuthorities-translator.js';
 import { translator as sd_autoPageNumber_translator } from './sd/autoPageNumber/autoPageNumber-translator.js';
 import { translator as sd_totalPageNumber_translator } from './sd/totalPageNumber/totalPageNumber-translator.js';
 import { translator as w_abstractNum_translator } from './w/abstractNum/abstractNum-translator.js';
@@ -33,6 +39,7 @@ import {
   commentRangeEndTranslator as w_commentRangeEnd_translator,
 } from './w/commentRange/comment-range-translator.js';
 import { translator as w_footnoteReference_translator } from './w/footnoteReference/footnoteReference-translator.js';
+import { translator as w_endnoteReference_translator } from './w/endnoteReference/endnoteReference-translator.js';
 import { translator as w_contextualSpacing } from './w/contextualSpacing/contextualSpacing-translator.js';
 import { translator as w_cs } from './w/cs/cs-translator.js';
 import { translator as w_del_translator } from './w/del/del-translator.js';
@@ -207,6 +214,12 @@ const translatorList = Array.from(
     sd_index_translator,
     sd_indexEntry_translator,
     sd_tableOfContentsEntry_translator,
+    sd_crossReference_translator,
+    sd_sequenceField_translator,
+    sd_citation_translator,
+    sd_bibliography_translator,
+    sd_authorityEntry_translator,
+    sd_tableOfAuthorities_translator,
     sd_autoPageNumber_translator,
     sd_totalPageNumber_translator,
     w_abstractNum_translator,
@@ -243,6 +256,7 @@ const translatorList = Array.from(
     w_emboss_translator,
     w_end_translator,
     w_footnoteReference_translator,
+    w_endnoteReference_translator,
     w_fitText_translator,
     w_framePr_translator,
     w_gridAfter_translator,

@@ -249,6 +249,28 @@ function createNoopAdapters(): DocumentApiAdapters {
         item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
       }),
     },
+    headerFooters: {
+      list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 250, offset: 0, returned: 0 } }),
+      get: () => ({
+        section: { kind: 'section', sectionId: 's0' },
+        sectionIndex: 0,
+        kind: 'header',
+        variant: 'default',
+        refId: null,
+        isExplicit: false,
+      }),
+      resolve: () => ({ status: 'none' }),
+      refs: {
+        set: () => ({ success: true, section: { kind: 'section', sectionId: 's0' } }),
+        clear: () => ({ success: true, section: { kind: 'section', sectionId: 's0' } }),
+        setLinkedToPrevious: () => ({ success: true, section: { kind: 'section', sectionId: 's0' } }),
+      },
+      parts: {
+        list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 250, offset: 0, returned: 0 } }),
+        create: () => ({ success: true, refId: 'rId99', partPath: 'word/header99.xml' }),
+        delete: () => ({ success: true, refId: 'rId99', partPath: 'word/header99.xml' }),
+      },
+    },
   };
 }
 

@@ -489,6 +489,7 @@ function resolveTextSelector(
   selector: TextSelector | NodeSelector,
   within: import('@superdoc/document-api').NodeAddress | undefined,
   stepId: string,
+  options?: { allBlockTypes?: boolean },
 ): { addresses: ResolvedAddress[] } {
   if (selector.type === 'text') {
     const query = {
@@ -533,22 +534,39 @@ function resolveTextSelector(
     includeNodes: false,
   };
   const result = executeBlockSelector(index, query, []);
-  const textBlocks = index.candidates.filter(isTextBlockCandidate);
+
+  // When allBlockTypes is set, allow non-text blocks (tables, images) through.
+  // Structural operations need this because they target whole blocks, not text ranges.
+  const eligibleCandidates = options?.allBlockTypes ? index.candidates : index.candidates.filter(isTextBlockCandidate);
 
   const addresses: ResolvedAddress[] = [];
   for (const match of result.matches) {
     if (match.kind !== 'block') continue;
-    const candidate = textBlocks.find((c) => c.nodeId === match.nodeId);
+    const candidate = eligibleCandidates.find((c) => c.nodeId === match.nodeId);
     if (!candidate) continue;
-    const blockText = getBlockText(editor, candidate);
-    addresses.push({
-      blockId: match.nodeId,
-      from: 0,
-      to: blockText.length,
-      text: blockText,
-      marks: [],
-      blockPos: candidate.pos,
-    });
+
+    if (isTextBlockCandidate(candidate)) {
+      const blockText = getBlockText(editor, candidate);
+      addresses.push({
+        blockId: match.nodeId,
+        from: 0,
+        to: blockText.length,
+        text: blockText,
+        marks: [],
+        blockPos: candidate.pos,
+      });
+    } else {
+      // Non-text block (table, image wrapper, etc.): no text offsets needed.
+      // Structural executors resolve targets by blockId, ignoring from/to.
+      addresses.push({
+        blockId: match.nodeId,
+        from: 0,
+        to: 0,
+        text: '',
+        marks: [],
+        blockPos: candidate.pos,
+      });
+    }
   }
 
   return { addresses };
@@ -722,12 +740,34 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
   if (refWhere) {
     targets = resolveRefTargets(editor, index, step, refWhere);
   } else if (selectWhere) {
-    const resolved = resolveTextSelector(editor, index, selectWhere.select, selectWhere.within, step.id);
+    const isStructuralOp = step.op === 'structural.insert' || step.op === 'structural.replace';
+    const resolved = resolveTextSelector(editor, index, selectWhere.select, selectWhere.within, step.id, {
+      allBlockTypes: isStructuralOp,
+    });
     targets = resolved.addresses.map((addr) => {
       const candidate = index.candidates.find((c) => c.nodeId === addr.blockId);
       if (!candidate) {
         throw planError('TARGET_NOT_FOUND', `block "${addr.blockId}" not in index`, step.id);
       }
+
+      // Non-text blocks (tables, images): build target directly from block range.
+      // Structural executors resolve by blockId — text offsets are unused.
+      if (isStructuralOp && !isTextBlockCandidate(candidate)) {
+        return {
+          kind: 'range' as const,
+          stepId: step.id,
+          op: step.op,
+          blockId: addr.blockId,
+          from: 0,
+          to: 0,
+          absFrom: candidate.pos,
+          absTo: candidate.pos + candidate.node.nodeSize,
+          text: '',
+          marks: [] as readonly import('prosemirror-model').Mark[],
+          capturedStyle: undefined,
+        };
+      }
+
       return buildRangeTarget(editor, step, addr, candidate);
     });
   } else {

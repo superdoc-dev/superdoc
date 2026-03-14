@@ -217,14 +217,20 @@ describe('document-api story: all lists commands', () => {
   async function discoverParagraph(docPath: string): Promise<{ kind: 'block'; nodeType: 'paragraph'; nodeId: string }> {
     const findResult = await callDocOperation<any>('find', {
       doc: docPath,
-      type: 'node',
-      nodeType: 'paragraph',
+      query: { select: { type: 'node', nodeType: 'paragraph' } },
     });
     const paragraphs = findResult?.items ?? [];
-    if (paragraphs.length === 0 || !paragraphs[0]?.address?.nodeId) {
+    const paragraphItem =
+      paragraphs.find((item: any) => item?.node?.paragraph?.props?.numbering == null) ?? paragraphs[0];
+    const nodeId = paragraphItem?.address?.nodeId;
+    if (paragraphs.length === 0 || typeof nodeId !== 'string' || nodeId.length === 0) {
       throw new Error('discoverParagraph: no paragraph found.');
     }
-    return paragraphs[0].address;
+    return {
+      kind: 'block',
+      nodeType: 'paragraph',
+      nodeId,
+    };
   }
 
   // ---------------------------------------------------------------------------

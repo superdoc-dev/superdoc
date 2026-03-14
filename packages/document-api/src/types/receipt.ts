@@ -34,7 +34,23 @@ export type ReceiptFailureCode =
   | 'ALREADY_SAME_SEQUENCE'
   | 'LEVEL_OUT_OF_RANGE'
   // SD-1973 formatting failure codes
-  | 'LEVEL_NOT_FOUND';
+  | 'LEVEL_NOT_FOUND'
+  // Structural content failure codes
+  | 'INVALID_NESTING'
+  | 'INVALID_PLACEMENT'
+  | 'EMPTY_FRAGMENT'
+  | 'INVALID_FRAGMENT'
+  // SDM/1 structural failure codes
+  | 'INVALID_PAYLOAD'
+  | 'CAPABILITY_UNSUPPORTED'
+  | 'ADDRESS_STALE'
+  | 'DUPLICATE_ID'
+  | 'INVALID_CONTEXT'
+  | 'RAW_MODE_REQUIRED'
+  | 'PRESERVE_ONLY_VIOLATION'
+  // SD-2070 content controls failure codes
+  | 'LOCK_VIOLATION'
+  | 'TYPE_MISMATCH';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

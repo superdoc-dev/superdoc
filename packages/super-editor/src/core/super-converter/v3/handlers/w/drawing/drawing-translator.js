@@ -62,6 +62,11 @@ function decode(params) {
     return null;
   }
 
+  // Chart nodes preserve original XML for lossless round-trip export.
+  if (node.type === 'chart' && node.attrs.originalXml) {
+    return wrapTextInRun(carbonCopy(node.attrs.originalXml), []);
+  }
+
   const childTranslator = node.attrs.isAnchor ? wpAnchorTranslator : wpInlineTranslator;
   const resultNode = childTranslator.decode(params);
 

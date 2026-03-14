@@ -70,6 +70,14 @@ function yamlQuote(value: string): string {
   return value;
 }
 
+/**
+ * Escape MDX expression delimiters in plain prose so generated docs don't
+ * evaluate `{ ... }` fragments as JavaScript at runtime.
+ */
+function escapeMdxText(value: string): string {
+  return value.replace(/[{}]/gu, '\\$&');
+}
+
 function renderList(values: readonly string[]): string {
   if (values.length === 0) return '- None';
   return values.map((value) => `- \`${value}\``).join('\n');
@@ -606,7 +614,9 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
   const title = operation.operationId;
   const metadata = operation.metadata;
   const description = OPERATION_DESCRIPTION_MAP[operation.operationId];
+  const escapedDescription = escapeMdxText(description);
   const expectedResult = OPERATION_EXPECTED_RESULT_MAP[operation.operationId];
+  const escapedExpectedResult = escapeMdxText(expectedResult);
 
   const inputFields = renderFieldSections(operation.schemas.input, $defs);
   const outputFields = renderFieldSections(operation.schemas.output, $defs);
@@ -614,7 +624,7 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
   const inputExample = generateExample(operation.schemas.input, $defs);
   const outputExample = generateExample(operation.schemas.output, $defs);
   const stepOpsSection = renderStepOpsSection(operation);
-  const expectedResultSection = `${expectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
+  const expectedResultSection = `${escapedExpectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
 
   // -- Build raw-schema accordion blocks --
   const rawSchemaBlocks: string[] = [];
@@ -639,7 +649,7 @@ ${GENERATED_MARKER}
 
 ## Summary
 
-${description}
+${escapedDescription}
 
 - Operation ID: \`${operation.operationId}\`
 - API member path: \`${formatMemberPath(operation.memberPath)}\`

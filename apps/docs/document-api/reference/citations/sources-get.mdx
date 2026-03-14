@@ -1,0 +1,109 @@
+---
+title: citations.sources.get
+sidebarTitle: citations.sources.get
+description: Get detailed information about a specific citation source.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get detailed information about a specific citation source.
+
+- Operation ID: `citations.sources.get`
+- API member path: `editor.doc.citations.sources.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CitationSourceInfo object with the source's type, fields, and metadata.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="entity") | yes |  |
+| `target.entityType` | `"citationSource"` | yes | Constant: `"citationSource"` |
+| `target.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `target.sourceId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "target": {
+    "entityType": "citationSource",
+    "kind": "entity",
+    "sourceId": "example"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "citationSource"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "sourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "sourceId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

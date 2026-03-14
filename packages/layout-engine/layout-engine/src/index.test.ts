@@ -13,6 +13,7 @@ import type {
   DrawingMeasure,
   SectionBreakBlock,
   ColumnBreakBlock,
+  PageBreakBlock,
   TableBlock,
   TableMeasure,
 } from '@superdoc/contracts';
@@ -1863,6 +1864,57 @@ describe('layoutDocument', () => {
       const pageWithP2 = layout.pages[2];
       expect(pageWithP2.number).toBe(3);
       expect(pageWithP2.fragments.some((f) => f.blockId === 'p2')).toBe(true);
+    });
+  });
+
+  describe('pageBreak handling at fresh page boundaries', () => {
+    const pageBreakBoundaryOptions: LayoutOptions = {
+      pageSize: { w: 400, h: 400 },
+      margins: { top: 40, right: 30, bottom: 40, left: 30 },
+    };
+
+    it('does not add a blank page when pageBreakBefore is already satisfied by a section break', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'sectionBreak', id: 'sb-next', type: 'nextPage', margins: {} } as SectionBreakBlock,
+        { kind: 'pageBreak', id: 'pb-before-exhibit', attrs: { source: 'pageBreakBefore' } } as PageBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        { kind: 'pageBreak' },
+        makeMeasure([40]),
+      ];
+
+      const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
+      expect(layout.pages[1].fragments).toHaveLength(1);
+    });
+
+    it('still honors manual page breaks after a fresh page boundary', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'sectionBreak', id: 'sb-next', type: 'nextPage', margins: {} } as SectionBreakBlock,
+        { kind: 'pageBreak', id: 'pb-manual', attrs: { lineBreakType: 'page' } } as PageBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        { kind: 'pageBreak' },
+        makeMeasure([40]),
+      ];
+
+      const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+      expect(layout.pages).toHaveLength(3);
+      expect(pageContainsBlock(layout.pages[2], 'p2')).toBe(true);
+      expect(layout.pages[1].fragments).toHaveLength(0);
     });
   });
 

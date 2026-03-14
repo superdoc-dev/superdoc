@@ -1,7 +1,7 @@
 ---
 title: insert
 sidebarTitle: insert
-description: "Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field."
+description: "Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.)."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: "Insert content at a target position, or at the end of the document
 
 ## Summary
 
-Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field.
+Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).
 
 - Operation ID: `insert`
 - API member path: `editor.doc.insert(...)`
@@ -56,101 +56,123 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `inserted` | EntityAddress[] | no |  |
-| `removed` | EntityAddress[] | no |  |
-| `resolution` | TextMutationResolution | yes | TextMutationResolution |
-| `resolution.range` | TextMutationRange | yes | TextMutationRange |
-| `resolution.range.from` | integer | yes |  |
-| `resolution.range.to` | integer | yes |  |
-| `resolution.requestedTarget` | TextAddress | no | TextAddress |
-| `resolution.requestedTarget.blockId` | string | no |  |
-| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
-| `resolution.requestedTarget.range` | Range | no | Range |
-| `resolution.requestedTarget.range.end` | integer | no |  |
-| `resolution.requestedTarget.range.start` | integer | no |  |
-| `resolution.target` | TextAddress | yes | TextAddress |
-| `resolution.target.blockId` | string | yes |  |
-| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
-| `resolution.target.range` | Range | yes | Range |
-| `resolution.target.range.end` | integer | yes |  |
-| `resolution.target.range.start` | integer | yes |  |
-| `resolution.text` | string | yes |  |
+| `evaluatedRevision` | object | no |  |
+| `evaluatedRevision.after` | string | no |  |
+| `evaluatedRevision.before` | string | no |  |
+| `resolution` | object | no |  |
+| `resolution.requestedTarget` | object | no |  |
+| `resolution.requestedTarget.anchor` | object | no |  |
+| `resolution.requestedTarget.anchor.end` | object | no |  |
+| `resolution.requestedTarget.anchor.end.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.end.offset` | integer | no |  |
+| `resolution.requestedTarget.anchor.start` | object | no |  |
+| `resolution.requestedTarget.anchor.start.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.start.offset` | integer | no |  |
+| `resolution.requestedTarget.evaluatedRevision` | string | no |  |
+| `resolution.requestedTarget.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.requestedTarget.nodeId` | string | no |  |
+| `resolution.requestedTarget.path` | string \\| integer[] | no |  |
+| `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.target` | object | no |  |
+| `resolution.target.anchor` | object | no |  |
+| `resolution.target.anchor.end` | object | no |  |
+| `resolution.target.anchor.end.blockId` | string | no |  |
+| `resolution.target.anchor.end.offset` | integer | no |  |
+| `resolution.target.anchor.start` | object | no |  |
+| `resolution.target.anchor.start.blockId` | string | no |  |
+| `resolution.target.anchor.start.offset` | integer | no |  |
+| `resolution.target.evaluatedRevision` | string | no |  |
+| `resolution.target.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.target.nodeId` | string | no |  |
+| `resolution.target.path` | string \\| integer[] | no |  |
+| `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
 | `success` | `true` | yes | Constant: `true` |
-| `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `evaluatedRevision` | object | no |  |
+| `evaluatedRevision.after` | string | no |  |
+| `evaluatedRevision.before` | string | no |  |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"`, `"CAPABILITY_UNAVAILABLE"`, `"UNSUPPORTED_ENVIRONMENT"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"`, `"CAPABILITY_UNAVAILABLE"`, `"UNSUPPORTED_ENVIRONMENT"`, `"INVALID_NESTING"`, `"INVALID_PLACEMENT"`, `"INVALID_PAYLOAD"`, `"CAPABILITY_UNSUPPORTED"`, `"ADDRESS_STALE"`, `"DUPLICATE_ID"`, `"INVALID_CONTEXT"`, `"RAW_MODE_REQUIRED"`, `"PRESERVE_ONLY_VIOLATION"`, `"INVALID_INPUT"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
-| `resolution` | TextMutationResolution | yes | TextMutationResolution |
-| `resolution.range` | TextMutationRange | yes | TextMutationRange |
-| `resolution.range.from` | integer | yes |  |
-| `resolution.range.to` | integer | yes |  |
-| `resolution.requestedTarget` | TextAddress | no | TextAddress |
-| `resolution.requestedTarget.blockId` | string | no |  |
-| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
-| `resolution.requestedTarget.range` | Range | no | Range |
-| `resolution.requestedTarget.range.end` | integer | no |  |
-| `resolution.requestedTarget.range.start` | integer | no |  |
-| `resolution.target` | TextAddress | yes | TextAddress |
-| `resolution.target.blockId` | string | yes |  |
-| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
-| `resolution.target.range` | Range | yes | Range |
-| `resolution.target.range.end` | integer | yes |  |
-| `resolution.target.range.start` | integer | yes |  |
-| `resolution.text` | string | yes |  |
+| `resolution` | object | no |  |
+| `resolution.requestedTarget` | object | no |  |
+| `resolution.requestedTarget.anchor` | object | no |  |
+| `resolution.requestedTarget.anchor.end` | object | no |  |
+| `resolution.requestedTarget.anchor.end.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.end.offset` | integer | no |  |
+| `resolution.requestedTarget.anchor.start` | object | no |  |
+| `resolution.requestedTarget.anchor.start.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.start.offset` | integer | no |  |
+| `resolution.requestedTarget.evaluatedRevision` | string | no |  |
+| `resolution.requestedTarget.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.requestedTarget.nodeId` | string | no |  |
+| `resolution.requestedTarget.path` | string \\| integer[] | no |  |
+| `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.target` | object | no |  |
+| `resolution.target.anchor` | object | no |  |
+| `resolution.target.anchor.end` | object | no |  |
+| `resolution.target.anchor.end.blockId` | string | no |  |
+| `resolution.target.anchor.end.offset` | integer | no |  |
+| `resolution.target.anchor.start` | object | no |  |
+| `resolution.target.anchor.start.blockId` | string | no |  |
+| `resolution.target.anchor.start.offset` | integer | no |  |
+| `resolution.target.evaluatedRevision` | string | no |  |
+| `resolution.target.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.target.nodeId` | string | no |  |
+| `resolution.target.path` | string \\| integer[] | no |  |
+| `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
 ```json
 {
-  "inserted": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ],
+  "evaluatedRevision": {
+    "after": "example",
+    "before": "example"
+  },
   "resolution": {
-    "range": {
-      "from": 0,
-      "to": 10
-    },
     "requestedTarget": {
-      "blockId": "block-abc123",
-      "kind": "text",
-      "range": {
-        "end": 10,
-        "start": 0
-      }
+      "anchor": {
+        "end": {
+          "blockId": "block-abc123",
+          "offset": 0
+        },
+        "start": {
+          "blockId": "block-abc123",
+          "offset": 0
+        }
+      },
+      "kind": "content",
+      "nodeId": "node-def456",
+      "stability": "stable"
     },
     "target": {
-      "blockId": "block-abc123",
-      "kind": "text",
-      "range": {
-        "end": 10,
-        "start": 0
-      }
-    },
-    "text": "Hello, world."
-  },
-  "success": true,
-  "updated": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
+      "anchor": {
+        "end": {
+          "blockId": "block-abc123",
+          "offset": 0
+        },
+        "start": {
+          "blockId": "block-abc123",
+          "offset": 0
+        }
+      },
+      "kind": "content",
+      "nodeId": "node-def456",
+      "stability": "stable"
     }
-  ]
+  },
+  "success": true
 }
 ```
 
@@ -159,6 +181,12 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
+- `ADDRESS_STALE`
+- `DUPLICATE_ID`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `CAPABILITY_UNSUPPORTED`
 
 ## Non-applied failure codes
 
@@ -166,6 +194,16 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 - `NO_OP`
 - `CAPABILITY_UNAVAILABLE`
 - `UNSUPPORTED_ENVIRONMENT`
+- `INVALID_NESTING`
+- `INVALID_PLACEMENT`
+- `INVALID_PAYLOAD`
+- `CAPABILITY_UNSUPPORTED`
+- `ADDRESS_STALE`
+- `DUPLICATE_ID`
+- `INVALID_CONTEXT`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `INVALID_INPUT`
 
 ## Raw schemas
 
@@ -202,11 +240,223 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 {
   "oneOf": [
     {
-      "$ref": "#/$defs/TextMutationSuccess"
+      "additionalProperties": false,
+      "properties": {
+        "evaluatedRevision": {
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "type": "string"
+            },
+            "before": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "before",
+            "after"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "requestedTarget": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
     },
     {
       "additionalProperties": false,
       "properties": {
+        "evaluatedRevision": {
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "type": "string"
+            },
+            "before": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "before",
+            "after"
+          ],
+          "type": "object"
+        },
         "failure": {
           "additionalProperties": false,
           "properties": {
@@ -215,7 +465,17 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
                 "INVALID_TARGET",
                 "NO_OP",
                 "CAPABILITY_UNAVAILABLE",
-                "UNSUPPORTED_ENVIRONMENT"
+                "UNSUPPORTED_ENVIRONMENT",
+                "INVALID_NESTING",
+                "INVALID_PLACEMENT",
+                "INVALID_PAYLOAD",
+                "CAPABILITY_UNSUPPORTED",
+                "ADDRESS_STALE",
+                "DUPLICATE_ID",
+                "INVALID_CONTEXT",
+                "RAW_MODE_REQUIRED",
+                "PRESERVE_ONLY_VIOLATION",
+                "INVALID_INPUT"
               ]
             },
             "details": {},
@@ -230,7 +490,175 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
           "type": "object"
         },
         "resolution": {
-          "$ref": "#/$defs/TextMutationResolution"
+          "additionalProperties": false,
+          "properties": {
+            "requestedTarget": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
         },
         "success": {
           "const": false
@@ -238,8 +666,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       },
       "required": [
         "success",
-        "failure",
-        "resolution"
+        "failure"
       ],
       "type": "object"
     }
@@ -251,7 +678,203 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 <Accordion title="Raw success schema">
 ```json
 {
-  "$ref": "#/$defs/TextMutationSuccess"
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "requestedTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
 }
 ```
 </Accordion>
@@ -261,6 +884,22 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 {
   "additionalProperties": false,
   "properties": {
+    "evaluatedRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
     "failure": {
       "additionalProperties": false,
       "properties": {
@@ -269,7 +908,17 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
             "INVALID_TARGET",
             "NO_OP",
             "CAPABILITY_UNAVAILABLE",
-            "UNSUPPORTED_ENVIRONMENT"
+            "UNSUPPORTED_ENVIRONMENT",
+            "INVALID_NESTING",
+            "INVALID_PLACEMENT",
+            "INVALID_PAYLOAD",
+            "CAPABILITY_UNSUPPORTED",
+            "ADDRESS_STALE",
+            "DUPLICATE_ID",
+            "INVALID_CONTEXT",
+            "RAW_MODE_REQUIRED",
+            "PRESERVE_ONLY_VIOLATION",
+            "INVALID_INPUT"
           ]
         },
         "details": {},
@@ -284,7 +933,175 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "type": "object"
     },
     "resolution": {
-      "$ref": "#/$defs/TextMutationResolution"
+      "additionalProperties": false,
+      "properties": {
+        "requestedTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
     },
     "success": {
       "const": false
@@ -292,8 +1109,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
   },
   "required": [
     "success",
-    "failure",
-    "resolution"
+    "failure"
   ],
   "type": "object"
 }

@@ -637,6 +637,7 @@ const init = async () => {
     // format: 'docx',
     // html: '<p>Hello world</p>',
     // isDev: true,
+    // allowSelectionInViewMode: true,
     user,
     title: 'Test document',
     users: [

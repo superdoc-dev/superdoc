@@ -30,6 +30,16 @@ export const PRE_APPLY_THROW_CODES = [
   'INVALID_INSERTION_CONTEXT',
   'DOCUMENT_IDENTITY_CONFLICT',
   'INTERNAL_ERROR',
+  // SDM/1 structural throw codes
+  'ADDRESS_STALE',
+  'DUPLICATE_ID',
+  'INVALID_CONTEXT',
+  'RAW_MODE_REQUIRED',
+  'PRESERVE_ONLY_VIOLATION',
+  'CAPABILITY_UNSUPPORTED',
+  // SD-2070 content controls throw codes
+  'LOCK_VIOLATION',
+  'TYPE_MISMATCH',
 ] as const;
 
 export type PreApplyThrowCode = (typeof PRE_APPLY_THROW_CODES)[number];

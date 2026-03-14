@@ -226,17 +226,21 @@ Tools are organized into 11 groups. In essential mode, the LLM can load any grou
 
 ## The discover_tools pattern
 
-When the LLM needs tools beyond the essential set, it calls `discover_tools` with the groups it wants. Your agentic loop handles this like any other tool call — `dispatchSuperDocTool` returns the new tool definitions, and you merge them into the next request.
+When the LLM needs tools beyond the essential set, it calls `discover_tools` with the groups it wants. Since `discover_tools` is a meta-tool (not a document operation), intercept it before `dispatchSuperDocTool` and handle it client-side via `chooseTools`:
 
 ```typescript
-for (const call of message.tool_calls) {
-  const result = await dispatchSuperDocTool(
-    client, call.function.name, JSON.parse(call.function.arguments),
-  );
+import { chooseTools } from '@superdoc-dev/sdk';
 
-  // discover_tools returns new tool definitions — merge them
+for (const call of message.tool_calls) {
+  let result;
+  const args = JSON.parse(call.function.arguments);
+
   if (call.function.name === 'discover_tools') {
+    // Meta-tool — resolve client-side, then merge new tools
+    result = await chooseTools({ provider: 'openai', groups: args.groups });
     tools.push(...result.tools);
+  } else {
+    result = await dispatchSuperDocTool(client, call.function.name, args);
   }
 
   messages.push({

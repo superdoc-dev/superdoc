@@ -93,12 +93,6 @@ vi.mock('@superdoc/components/CommentsLayer/CommentHeader.vue', () => ({ default
 vi.mock('@superdoc/components/CommentsLayer/CommentInput.vue', () => ({ default: CommentInputStub }));
 vi.mock('@superdoc/components/general/Avatar.vue', () => ({ default: AvatarStub }));
 
-vi.mock('naive-ui', () => ({
-  NDropdown: simpleStub('NDropdown'),
-  NTooltip: simpleStub('NTooltip'),
-  NSelect: simpleStub('NSelect'),
-}));
-
 vi.mock('@superdoc/core/collaboration/permissions.js', () => ({
   PERMISSIONS: { MANAGE_COMMENTS: 'manage' },
   isAllowed: () => true,

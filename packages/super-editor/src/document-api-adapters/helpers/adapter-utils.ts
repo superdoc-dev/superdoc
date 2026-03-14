@@ -2,12 +2,20 @@ import type {
   Query,
   TextAddress,
   TextMutationResolution,
+  TextTarget,
+  TocCreateLocation,
   UnknownNodeDiagnostic,
   WriteRequest,
 } from '@superdoc/document-api';
 import { DocumentApiValidationError } from '@superdoc/document-api';
 import { getBlockIndex } from './index-cache.js';
-import { findBlockById, isTextBlockCandidate, type BlockCandidate, type BlockIndex } from './node-address-resolver.js';
+import {
+  findBlockById,
+  findBlockByNodeIdOnly,
+  isTextBlockCandidate,
+  type BlockCandidate,
+  type BlockIndex,
+} from './node-address-resolver.js';
 import { computeTextContentLength, resolveTextRangeInBlock } from './text-offset-resolver.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mutation-resolution.js';
 import type { Transaction } from 'prosemirror-state';
@@ -18,7 +26,24 @@ export type WithinResult = { ok: true; range: { start: number; end: number } | u
 export type ResolvedTextTarget = { from: number; to: number };
 
 function findTextBlockCandidates(index: BlockIndex, blockId: string): BlockCandidate[] {
-  return index.candidates.filter((candidate) => candidate.nodeId === blockId && isTextBlockCandidate(candidate));
+  // Primary: match by canonical nodeId
+  const primary = index.candidates.filter((c) => c.nodeId === blockId && isTextBlockCandidate(c));
+  if (primary.length > 0) return primary;
+
+  // Fallback: alias-aware lookup via the block index (resolves sdBlockId aliases).
+  // This ensures IDs returned by create/list mutations remain usable in follow-up
+  // text-targeted commands even if the canonical nodeId differs from the alias.
+  // AMBIGUOUS_TARGET is re-thrown so callers get precise diagnostics.
+  try {
+    const resolved = findBlockByNodeIdOnly(index, blockId);
+    if (isTextBlockCandidate(resolved)) return [resolved];
+  } catch (e) {
+    // Propagate ambiguity — callers depend on structured AMBIGUOUS_TARGET diagnostics
+    if (e instanceof DocumentApiAdapterError && e.code === 'AMBIGUOUS_TARGET') throw e;
+    // TARGET_NOT_FOUND is expected when the alias doesn't exist — fall through
+  }
+
+  return [];
 }
 
 function assertUnambiguous(matches: BlockCandidate[], blockId: string): void {
@@ -55,6 +80,42 @@ export function resolveTextTarget(editor: Editor, target: TextAddress): Resolved
   const block = matches[0];
   if (!block) return null;
   return resolveTextRangeInBlock(block.node, block.pos, target.range);
+}
+
+/**
+ * Resolves a {@link TextTarget} to absolute ProseMirror positions for inline insertion.
+ * Extracts the first segment and delegates to {@link resolveTextTarget}.
+ */
+export function resolveInlineInsertPosition(editor: Editor, at: TextTarget, operationName: string): ResolvedTextTarget {
+  const firstSegment = at.segments[0];
+  const textAddress: TextAddress = {
+    kind: 'text',
+    blockId: firstSegment.blockId,
+    range: firstSegment.range,
+  };
+  const resolved = resolveTextTarget(editor, textAddress);
+  if (!resolved) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: target block not found.`, {
+      target: at,
+    });
+  }
+  return resolved;
+}
+
+/**
+ * Resolves a {@link TocCreateLocation} to an absolute block insertion position.
+ */
+export function resolveBlockCreatePosition(editor: Editor, at: TocCreateLocation): number {
+  if (at.kind === 'documentStart') return 0;
+  if (at.kind === 'documentEnd') return editor.state.doc.content.size;
+  const index = getBlockIndex(editor);
+  const candidate = findBlockById(index, at.target);
+  if (!candidate) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block "${at.target.nodeId}" not found.`, {
+      target: at.target,
+    });
+  }
+  return at.kind === 'before' ? candidate.pos : candidate.end;
 }
 
 /**

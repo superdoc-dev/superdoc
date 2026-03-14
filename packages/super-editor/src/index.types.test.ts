@@ -438,7 +438,6 @@ const {
   mockEditorConverterStore,
   mockCreateHeaderFooterEditor,
   mockOnHeaderFooterDataUpdate,
-  mockUpdateYdocDocxData,
   mockEditorOverlayManager,
   mockClickToPosition,
 } = vi.hoisted(() => {
@@ -541,7 +540,6 @@ const {
       return editorStub;
     }),
     mockOnHeaderFooterDataUpdate: vi.fn(),
-    mockUpdateYdocDocxData: vi.fn(() => Promise.resolve()),
     mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
       showEditingOverlay: vi.fn(() => ({ success: true, editorHost: document.createElement('div'), reason: null })),
       hideEditingOverlay: vi.fn(),
@@ -653,10 +651,6 @@ vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: mockMeasureBlock }));
 vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   createHeaderFooterEditor: mockCreateHeaderFooterEditor,
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
-}));
-
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
 }));
 
 vi.mock('./core/header-footer/EditorOverlayManager', () => ({

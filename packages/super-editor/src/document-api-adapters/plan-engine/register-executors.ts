@@ -20,6 +20,9 @@ import type {
   TextInsertStep,
   TextDeleteStep,
   StyleApplyStep,
+  StructuralInsertStep,
+  StructuralReplaceStep,
+  StructuralStepData,
   DomainStepData,
   TableStepData,
   TableMutationResult,
@@ -48,6 +51,7 @@ import {
   executeSpanStyleApply,
   executeCreateStep,
 } from './executor.js';
+import { executeStructuralInsert, executeStructuralReplace } from '../structural-write-engine/index.js';
 import {
   tablesDeleteAdapter,
   tablesClearContentsAdapter,
@@ -436,6 +440,130 @@ export function registerBuiltInExecutors(): void {
         effect: (result.success ? 'changed' : 'noop') as StepEffect,
         matchCount: result.success ? 1 : 0,
         data: { domain: 'table', tableId: targetBlockId(targets[0]) } as TableStepData,
+      };
+    },
+  });
+
+  // Structural insert — materializes SDFragment content at a target position
+  registerStepExecutor('structural.insert', {
+    execute(ctx, targets, step) {
+      if (ctx.isPreview) {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: targets.length,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const structuralStep = step as StructuralInsertStep;
+
+      // Structural insert is single-target — reject multi-target to prevent silent data loss
+      if (targets.length > 1) {
+        throw planError(
+          'INVALID_INPUT',
+          `structural.insert requires at most one target, got ${targets.length}`,
+          step.id,
+        );
+      }
+
+      // Guard: if the step's where clause expected targets but none resolved,
+      // return noop rather than silently falling back to document-end insertion.
+      if (targets.length === 0) {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: 0,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const target = targets[0];
+      const targetAddress =
+        target?.kind === 'range'
+          ? {
+              kind: 'text' as const,
+              blockId: target.blockId,
+              range: { start: target.from, end: target.to },
+            }
+          : undefined;
+
+      const result = executeStructuralInsert(ctx.editor, {
+        target: targetAddress,
+        content: structuralStep.args.content,
+        placement: structuralStep.args.placement,
+        nestingPolicy: structuralStep.args.nestingPolicy,
+        changeMode: ctx.changeMode,
+      });
+
+      if (result.success) ctx.commandDispatched = true;
+
+      return {
+        stepId: step.id,
+        op: step.op,
+        effect: result.success ? ('changed' as StepEffect) : ('noop' as StepEffect),
+        matchCount: result.success ? 1 : 0,
+        data: { domain: 'structural', insertedBlockIds: result.insertedBlockIds } as StructuralStepData,
+      };
+    },
+  });
+
+  // Structural replace — materializes SDFragment and replaces target range
+  registerStepExecutor('structural.replace', {
+    execute(ctx, targets, step) {
+      if (ctx.isPreview) {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: targets.length,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const structuralStep = step as StructuralReplaceStep;
+
+      // Structural replace is single-target — reject multi-target to prevent silent data loss
+      if (targets.length > 1) {
+        throw planError(
+          'INVALID_INPUT',
+          `structural.replace requires exactly one target, got ${targets.length}`,
+          step.id,
+        );
+      }
+
+      const target = targets[0];
+      if (!target || target.kind !== 'range') {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: 0,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const result = executeStructuralReplace(ctx.editor, {
+        target: {
+          kind: 'text',
+          blockId: target.blockId,
+          range: { start: target.from, end: target.to },
+        },
+        content: structuralStep.args.content,
+        nestingPolicy: structuralStep.args.nestingPolicy,
+        changeMode: ctx.changeMode,
+      });
+
+      if (result.success) ctx.commandDispatched = true;
+
+      return {
+        stepId: step.id,
+        op: step.op,
+        effect: result.success ? ('changed' as StepEffect) : ('noop' as StepEffect),
+        matchCount: result.success ? 1 : 0,
+        data: { domain: 'structural', insertedBlockIds: result.insertedBlockIds } as StructuralStepData,
       };
     },
   });

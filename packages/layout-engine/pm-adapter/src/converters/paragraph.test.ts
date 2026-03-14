@@ -1959,6 +1959,78 @@ describe('paragraph converters', () => {
         expect(shapeTextboxNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
+      it('should handle chart node', () => {
+        const chartNode: PMNode = {
+          type: 'chart',
+          attrs: {
+            width: 576,
+            height: 588,
+            chartData: {
+              chartType: 'barChart',
+              barDirection: 'col',
+              series: [{ name: 'Series 1', categories: ['A', 'B'], values: [10, 20] }],
+            },
+          },
+        };
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [chartNode],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        const chartBlock = blocks.find((block) => block.kind === 'drawing' && block.drawingKind === 'chart');
+        expect(chartBlock).toBeDefined();
+      });
+
+      it('should handle chart node nested inside run', () => {
+        const chartNode: PMNode = {
+          type: 'chart',
+          attrs: {
+            width: 576,
+            height: 588,
+            chartData: {
+              chartType: 'barChart',
+              barDirection: 'col',
+              series: [{ name: 'Series 1', categories: ['A', 'B'], values: [10, 20] }],
+            },
+          },
+        };
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'run',
+                attrs: { runProperties: null },
+                content: [chartNode],
+              },
+            ],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        const chartBlock = blocks.find((block) => block.kind === 'drawing' && block.drawingKind === 'chart');
+        expect(chartBlock).toBeDefined();
+      });
+
       it('should handle table node', () => {
         const tableNode: PMNode = { type: 'table' };
         const para: PMNode = {

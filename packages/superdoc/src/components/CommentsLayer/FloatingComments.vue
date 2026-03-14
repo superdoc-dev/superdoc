@@ -66,6 +66,7 @@ const props = defineProps({
 
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
+const { getCommentAliasIds, getCommentPositionKey, resolveCommentPositionEntry } = commentsStore;
 
 const { getFloatingComments, activeComment, editorCommentPositions, pendingComment } = storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
@@ -76,10 +77,15 @@ const commentsRenderKey = ref(0);
 // Resolve activeComment (which stores commentId) to the position key used by allPositions
 // (which prefers importedId). Without this, imported Word comments where importedId !== commentId
 // would fail the template guard and could unmount when scrolled out of the observer viewport.
+const resolveLayoutKey = (commentOrId, preferredId) => {
+  const { key } = resolveCommentPositionEntry(commentOrId, preferredId);
+  if (key) return key;
+  return getCommentAliasIds(commentOrId)[0] ?? getCommentPositionKey(commentOrId);
+};
+
 const activeCommentKey = computed(() => {
   if (!activeComment.value) return null;
-  const comment = commentsStore.getComment(activeComment.value);
-  return comment ? commentsStore.getCommentPositionKey(comment) : null;
+  return resolveLayoutKey(activeComment.value);
 });
 
 // Heights: measured (actual) or estimated. Seeded from module-level cache to
@@ -98,8 +104,7 @@ const observedElements = new Set();
 
 // Compute anchor position for a comment from editor position data
 const getAnchorTop = (comment) => {
-  const key = commentsStore.getCommentPositionKey(comment);
-  const positionEntry = editorCommentPositions.value[key];
+  const { entry: positionEntry } = resolveCommentPositionEntry(comment);
 
   if (props.currentDocument.type === 'application/pdf') {
     const zoom = (activeZoom.value ?? 100) / 100;
@@ -131,7 +136,7 @@ const allPositions = computed(() => {
 
   const positions = [];
   for (const comment of comments) {
-    const key = commentsStore.getCommentPositionKey(comment);
+    const key = resolveLayoutKey(comment);
     const top = getAnchorTop(comment);
     if (!key || typeof top !== 'number' || isNaN(top)) continue;
 
@@ -246,14 +251,14 @@ const handleDialog = (dialog) => {
   nextTick(() => {
     const bounds = elementRef.value?.getBoundingClientRect();
     if (!bounds || bounds.height <= 0) return;
-    const key = commentsStore.getCommentPositionKey(rawId);
+    const key = resolveLayoutKey(rawId, rawId);
     if (key) storeHeight(key, bounds.height);
   });
 };
 
 // Re-measure a specific comment dialog when it signals a resize (e.g. text truncation toggle)
 const handleResize = (comment) => {
-  const key = commentsStore.getCommentPositionKey(comment);
+  const key = resolveLayoutKey(comment);
   if (!key) return;
   nextTick(() => {
     const el = placeholderRefs.value[key];
@@ -319,7 +324,7 @@ watch(activeComment, () => {
   if (!activeComment.value) return;
   const comment = commentsStore.getComment(activeComment.value);
   if (!comment) return;
-  const key = commentsStore.getCommentPositionKey(comment);
+  const key = resolveLayoutKey(comment);
   if (!key) return;
 
   nextTick(() => {

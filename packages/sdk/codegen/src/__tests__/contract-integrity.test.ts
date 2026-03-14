@@ -348,7 +348,7 @@ describe('Intent name integrity', () => {
 });
 
 describe('agentVisible param annotation integrity', () => {
-  const EXPECTED_HIDDEN = new Set(['out', 'expectedRevision', 'dryRun']);
+  const EXPECTED_HIDDEN = new Set(['out']);
 
   test('expected transport-envelope params are agentVisible: false', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);

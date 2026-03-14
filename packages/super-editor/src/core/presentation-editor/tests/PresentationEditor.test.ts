@@ -25,6 +25,8 @@ const {
   mockOnHeaderFooterDataUpdate,
   mockUpdateYdocDocxData,
   mockEditorOverlayManager,
+  mockFlowBlockCacheInstances,
+  MockFlowBlockCache,
 } = vi.hoisted(() => {
   const createDefaultConverter = () => ({
     headers: {
@@ -106,6 +108,19 @@ const {
   };
 
   const editors: Array<{ editor: ReturnType<typeof createSectionEditor> }> = [];
+  const mockFlowBlockCacheInstances: Array<{
+    clear: ReturnType<typeof vi.fn>;
+    setHasExternalChanges: ReturnType<typeof vi.fn>;
+  }> = [];
+
+  class MockFlowBlockCache {
+    clear = vi.fn();
+    setHasExternalChanges = vi.fn();
+
+    constructor() {
+      mockFlowBlockCacheInstances.push(this);
+    }
+  }
 
   return {
     createDefaultConverter,
@@ -145,6 +160,8 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
+    mockFlowBlockCacheInstances,
+    MockFlowBlockCache,
   };
 });
 
@@ -219,6 +236,7 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   return {
     ...actual,
     toFlowBlocks: mockToFlowBlocks,
+    FlowBlockCache: MockFlowBlockCache,
   };
 });
 
@@ -289,10 +307,6 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
-}));
-
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -319,6 +333,7 @@ describe('PresentationEditor', () => {
     };
     mockEditorConverterStore.mediaFiles = {};
     createdSectionEditors.length = 0;
+    mockFlowBlockCacheInstances.length = 0;
 
     // Reset static instances
     (PresentationEditor as typeof PresentationEditor & { instances: Map<string, unknown> }).instances = new Map();
@@ -2402,6 +2417,76 @@ describe('PresentationEditor', () => {
 
       // Both types of updates should trigger layout updates independently
       expect(layoutUpdatedCount).toBeGreaterThan(afterDocUpdate);
+    });
+
+    it('clears flow-block cache when stylesDefaultsChanged event fires', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const flowBlockCache = mockFlowBlockCacheInstances.at(-1);
+      expect(flowBlockCache).toBeDefined();
+      flowBlockCache!.clear.mockClear();
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const stylesDefaultsChangedCall = onCalls.mock.calls.find((call) => call[0] === 'stylesDefaultsChanged');
+      expect(stylesDefaultsChangedCall).toBeDefined();
+
+      const handleStylesDefaultsChanged = stylesDefaultsChangedCall![1] as () => void;
+      handleStylesDefaultsChanged();
+
+      expect(flowBlockCache!.clear).toHaveBeenCalledTimes(1);
+    });
+
+    it('marks the flow-block cache dirty for history undo and redo updates', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const flowBlockCache = mockFlowBlockCacheInstances.at(-1);
+      expect(flowBlockCache).toBeDefined();
+      flowBlockCache!.setHasExternalChanges.mockClear();
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const updateCall = onCalls.mock.calls.find((call) => call[0] === 'update');
+      expect(updateCall).toBeDefined();
+
+      const handleUpdate = updateCall![1] as (payload: { transaction: { docChanged: boolean; getMeta: Mock } }) => void;
+      const makeTransaction = (inputType: string) => ({
+        docChanged: true,
+        getMeta: vi.fn((key: string) => (key === 'inputType' ? inputType : undefined)),
+        mapping: {
+          appendMapping: vi.fn(),
+          slice: vi.fn(() => ({
+            appendMapping: vi.fn(),
+          })),
+        },
+      });
+
+      handleUpdate({ transaction: makeTransaction('historyUndo') });
+      handleUpdate({ transaction: makeTransaction('historyRedo') });
+
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenCalledTimes(2);
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenNthCalledWith(1, true);
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenNthCalledWith(2, true);
     });
 
     it('should remove pageStyleUpdate listener on destroy', () => {

@@ -21,7 +21,6 @@ import type {
   ParagraphNodeInfo,
   ParagraphProperties,
   RunNodeInfo,
-  SdtNodeInfo,
   TabNodeInfo,
   TableCellNodeInfo,
   TableNodeInfo,
@@ -37,6 +36,7 @@ import type {
   TableMeasurement,
 } from '../../extensions/types/node-attributes.js';
 import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
+import { buildContentControlInfoFromAttrs } from './content-controls/sdt-info-builder.js';
 
 function resolveMeasurement(value: number | TableMeasurement | null | undefined): number | undefined {
   if (typeof value === 'number') return value;
@@ -323,19 +323,6 @@ function buildImageInfo(
   };
 }
 
-function buildSdtInfo(attrs: StructuredContentBlockAttrs | undefined, kind: 'block' | 'inline'): SdtNodeInfo {
-  const properties = {
-    tag: attrs?.tag ?? undefined,
-    alias: attrs?.alias ?? undefined,
-  };
-
-  return {
-    nodeType: 'sdt',
-    kind,
-    properties,
-  };
-}
-
 function mapHyperlinkNode(candidate: InlineCandidate): HyperlinkNodeInfo {
   const attrs = (candidate.mark?.attrs ?? candidate.attrs ?? {}) as Record<string, unknown>;
   const properties = {
@@ -579,7 +566,7 @@ export function mapNodeInfo(
     }
     case 'sdt': {
       const attrs = candidate.node?.attrs as StructuredContentBlockAttrs | undefined;
-      return buildSdtInfo(attrs, kind);
+      return buildContentControlInfoFromAttrs(attrs as Record<string, unknown> | undefined, kind);
     }
     case 'tableOfContents':
       if (kind !== 'block')

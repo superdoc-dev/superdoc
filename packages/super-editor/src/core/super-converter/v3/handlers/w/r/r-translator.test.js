@@ -298,4 +298,49 @@ describe('w:r r-translator (node)', () => {
       }),
     );
   });
+
+  it('emits inline w:sdt as a paragraph-level sibling instead of wrapping it in w:r', () => {
+    const params = {
+      node: {
+        type: 'run',
+        attrs: { runProperties: [] },
+        content: [
+          {
+            type: 'structuredContent',
+            attrs: {
+              id: '123',
+              controlType: 'checkbox',
+              type: 'checkbox',
+            },
+            content: [{ type: 'text', text: ' ' }],
+          },
+        ],
+      },
+      editor: { extensionService: { extensions: [] } },
+    };
+
+    const result = translator.decode(params);
+    expect(result).toBeDefined();
+    expect(result.name).toBe('w:sdt');
+  });
+
+  it('adds superscript reference run properties when decoding footnote references', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {},
+        content: [{ type: 'footnoteReference', attrs: { id: '1' } }],
+      },
+    });
+
+    expect(result?.name).toBe('w:r');
+    const runProperties = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(runProperties).toBeDefined();
+
+    const runStyle = runProperties?.elements?.find((el) => el?.name === 'w:rStyle');
+    expect(runStyle?.attributes?.['w:val']).toBe('FootnoteReference');
+
+    const vertAlign = runProperties?.elements?.find((el) => el?.name === 'w:vertAlign');
+    expect(vertAlign?.attributes?.['w:val']).toBe('superscript');
+  });
 });

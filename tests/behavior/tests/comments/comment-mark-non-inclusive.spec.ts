@@ -13,15 +13,17 @@ test.describe('comment mark non-inclusive boundary', () => {
     await superdoc.assertTextContains('Commented');
 
     // 2. Add a comment on the word "Commented"
-    const commentId = await addCommentByText(superdoc.page, {
+    await addCommentByText(superdoc.page, {
       pattern: 'Commented',
       text: 'Test comment',
     });
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ text: 'Commented', commentId, timeoutMs: 20_000 });
+
+    // Verify comment mark exists in PM state (avoids slow DOM highlight polling on WebKit)
+    const pos = await superdoc.findTextPos('Commented');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     // 3. Place cursor right after the commented text and type new text
-    const pos = await superdoc.findTextPos('Commented');
     await superdoc.setTextSelection(pos + 'Commented'.length);
     await superdoc.waitForStable();
 
@@ -52,15 +54,17 @@ test.describe('comment mark non-inclusive boundary', () => {
     await superdoc.waitForStable();
 
     // 2. Add a comment on the word "Commented"
-    const commentId = await addCommentByText(superdoc.page, {
+    await addCommentByText(superdoc.page, {
       pattern: 'Commented',
       text: 'Test comment',
     });
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ text: 'Commented', commentId, timeoutMs: 20_000 });
+
+    // Verify comment mark exists in PM state (avoids slow DOM highlight polling on WebKit)
+    const pos = await superdoc.findTextPos('Commented');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     // 3. Place cursor right before the commented text and type new text
-    const pos = await superdoc.findTextPos('Commented');
     await superdoc.setTextSelection(pos);
     await superdoc.waitForStable();
 

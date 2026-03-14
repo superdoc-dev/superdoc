@@ -205,10 +205,14 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
 - `INVALID_INSERTION_CONTEXT`
 - `DOCUMENT_IDENTITY_CONFLICT`
 - `CAPABILITY_UNAVAILABLE`
+- `DUPLICATE_ID`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `CAPABILITY_UNSUPPORTED`
 
 ## Non-applied failure codes
 
-- None
+- `INVALID_CONTEXT`
 
 ## Raw schemas
 
@@ -449,6 +453,12 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                   "comment",
                                   "hyperlink",
                                   "footnoteRef",
+                                  "endnoteRef",
+                                  "crossRef",
+                                  "indexEntry",
+                                  "citation",
+                                  "authorityEntry",
+                                  "sequenceField",
                                   "tab",
                                   "lineBreak"
                                 ]
@@ -669,6 +679,12 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                               "comment",
                               "hyperlink",
                               "footnoteRef",
+                              "endnoteRef",
+                              "crossRef",
+                              "indexEntry",
+                              "citation",
+                              "authorityEntry",
+                              "sequenceField",
                               "tab",
                               "lineBreak"
                             ]
@@ -787,6 +803,12 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                   "comment",
                                   "hyperlink",
                                   "footnoteRef",
+                                  "endnoteRef",
+                                  "crossRef",
+                                  "indexEntry",
+                                  "citation",
+                                  "authorityEntry",
+                                  "sequenceField",
                                   "tab",
                                   "lineBreak"
                                 ]
@@ -1740,6 +1762,12 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                   "comment",
                                   "hyperlink",
                                   "footnoteRef",
+                                  "endnoteRef",
+                                  "crossRef",
+                                  "indexEntry",
+                                  "citation",
+                                  "authorityEntry",
+                                  "sequenceField",
                                   "tab",
                                   "lineBreak"
                                 ]
@@ -1878,6 +1906,12 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                               "comment",
                               "hyperlink",
                               "footnoteRef",
+                              "endnoteRef",
+                              "crossRef",
+                              "indexEntry",
+                              "citation",
+                              "authorityEntry",
+                              "sequenceField",
                               "tab",
                               "lineBreak"
                             ]
@@ -2065,7 +2099,11 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
             "REVISION_CHANGED_SINCE_COMPILE",
             "INVALID_INSERTION_CONTEXT",
             "DOCUMENT_IDENTITY_CONFLICT",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "DUPLICATE_ID",
+            "RAW_MODE_REQUIRED",
+            "PRESERVE_ONLY_VIOLATION",
+            "CAPABILITY_UNSUPPORTED"
           ]
         },
         "details": {},

@@ -27,6 +27,12 @@ export type NodeType =
   | 'comment'
   | 'hyperlink'
   | 'footnoteRef'
+  | 'endnoteRef'
+  | 'crossRef'
+  | 'indexEntry'
+  | 'citation'
+  | 'authorityEntry'
+  | 'sequenceField'
   | 'tab'
   | 'lineBreak'
 
@@ -49,6 +55,12 @@ export const NODE_TYPES = [
   'comment',
   'hyperlink',
   'footnoteRef',
+  'endnoteRef',
+  'crossRef',
+  'indexEntry',
+  'citation',
+  'authorityEntry',
+  'sequenceField',
   'tab',
   'lineBreak',
 ] as const satisfies readonly NodeType[];
@@ -77,10 +89,8 @@ export const BLOCK_NODE_TYPES = [
 /**
  * Block node types that `blocks.delete` can target in this release.
  * Excludes `tableRow` and `tableCell` (row/column semantics are out of scope).
- * Excludes `image` — the ProseMirror image node is inline, so the adapter
- * cannot resolve block-level image targets.
  */
-export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'image' | 'tableOfContents'>;
+export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'tableOfContents' | 'image'>;
 
 export const DELETABLE_BLOCK_NODE_TYPES = [
   'paragraph',
@@ -96,7 +106,21 @@ export const DELETABLE_BLOCK_NODE_TYPES = [
  */
 export type InlineNodeType = Extract<
   NodeType,
-  'run' | 'bookmark' | 'comment' | 'hyperlink' | 'sdt' | 'image' | 'footnoteRef' | 'tab' | 'lineBreak'
+  | 'run'
+  | 'bookmark'
+  | 'comment'
+  | 'hyperlink'
+  | 'sdt'
+  | 'image'
+  | 'footnoteRef'
+  | 'endnoteRef'
+  | 'crossRef'
+  | 'indexEntry'
+  | 'citation'
+  | 'authorityEntry'
+  | 'sequenceField'
+  | 'tab'
+  | 'lineBreak'
 >;
 
 export const INLINE_NODE_TYPES = [
@@ -107,6 +131,12 @@ export const INLINE_NODE_TYPES = [
   'sdt',
   'image',
   'footnoteRef',
+  'endnoteRef',
+  'crossRef',
+  'indexEntry',
+  'citation',
+  'authorityEntry',
+  'sequenceField',
   'tab',
   'lineBreak',
 ] as const satisfies readonly InlineNodeType[];

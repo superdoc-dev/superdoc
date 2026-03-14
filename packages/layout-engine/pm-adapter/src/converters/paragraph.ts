@@ -28,6 +28,7 @@ import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
+import { endnoteReferenceToBlock } from './inline-converters/endnote-reference.js';
 import {
   HiddenByVanishError,
   NotInlineNodeError,
@@ -42,6 +43,10 @@ import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js
 import { tabNodeToRun } from './inline-converters/tab.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
+import { crossReferenceNodeToRun } from './inline-converters/cross-reference.js';
+import { sequenceFieldNodeToRun } from './inline-converters/sequence-field.js';
+import { citationNodeToRun } from './inline-converters/citation.js';
+import { authorityEntryNodeToRun } from './inline-converters/authority-entry.js';
 import { lineBreakNodeToRun } from './inline-converters/line-break.js';
 import { lineBreakNodeToBreakBlock } from './break.js';
 import { inlineContentBlockConverter } from './inline-converters/content-block.js';
@@ -54,6 +59,7 @@ import {
   shapeTextboxNodeToDrawingBlock,
   vectorShapeNodeToDrawingBlock,
 } from './shapes.js';
+import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
 
 // ============================================================================
@@ -819,6 +825,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   footnoteReference: {
     inlineConverter: footnoteReferenceToBlock,
   },
+  endnoteReference: {
+    inlineConverter: endnoteReferenceToBlock,
+  },
   text: {
     inlineConverter: textNodeToRun,
     extraCheck: (node: PMNode) => Boolean(node.text),
@@ -836,6 +845,18 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   pageReference: {
     inlineConverter: pageReferenceNodeToBlock,
+  },
+  crossReference: {
+    inlineConverter: crossReferenceNodeToRun,
+  },
+  sequenceField: {
+    inlineConverter: sequenceFieldNodeToRun,
+  },
+  citation: {
+    inlineConverter: citationNodeToRun,
+  },
+  authorityEntry: {
+    inlineConverter: authorityEntryNodeToRun,
   },
   bookmarkStart: {
     inlineConverter: bookmarkStartNodeToBlocks,
@@ -877,6 +898,7 @@ const SHAPE_CONVERTERS_REGISTRY: Record<
   shapeGroup: shapeGroupNodeToDrawingBlock,
   shapeContainer: shapeContainerNodeToDrawingBlock,
   shapeTextbox: shapeTextboxNodeToDrawingBlock,
+  chart: chartNodeToDrawingBlock,
 };
 
 /**

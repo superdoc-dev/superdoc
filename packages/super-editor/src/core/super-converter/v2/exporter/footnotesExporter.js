@@ -26,7 +26,10 @@ const insertFootnoteRefIntoParagraph = (paragraph) => {
       {
         type: 'element',
         name: 'w:rPr',
-        elements: [{ type: 'element', name: 'w:rStyle', attributes: { 'w:val': 'FootnoteReference' } }],
+        elements: [
+          { type: 'element', name: 'w:rStyle', attributes: { 'w:val': 'FootnoteReference' } },
+          { type: 'element', name: 'w:vertAlign', attributes: { 'w:val': 'superscript' } },
+        ],
       },
       footnoteRef,
     ],

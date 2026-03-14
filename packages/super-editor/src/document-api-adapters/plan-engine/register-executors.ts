@@ -104,7 +104,13 @@ import {
  */
 function selectionTargetToRange(t: CompiledSelectionTarget): CompiledRangeTarget {
   const startPoint = t.normalizedTarget.start;
-  const blockId = startPoint.kind === 'text' ? startPoint.blockId : '__selection__';
+  const endPoint = t.normalizedTarget.end;
+
+  // Derive a real blockId from the nearest text point so fallback lookups
+  // (e.g. style capture in resolveMarksForRange) never hit a synthetic id.
+  const blockId =
+    startPoint.kind === 'text' ? startPoint.blockId : endPoint.kind === 'text' ? endPoint.blockId : '__selection__';
+
   return {
     kind: 'range',
     stepId: t.stepId,

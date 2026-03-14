@@ -76,10 +76,17 @@ function resolveMarksForRange(editor: Editor, target: CompiledRangeTarget, step:
   const rewriteStep = step as TextRewriteStep;
   const policy = rewriteStep.args.style?.inline ?? DEFAULT_INLINE_POLICY;
 
-  const captured =
-    target.capturedStyle ??
-    captureRunsInRange(editor, toAbsoluteBlockPos(editor, target.blockId), target.from, target.to);
+  // capturedStyle is populated at compile time for selection targets.
+  // Fall back to live capture only for range targets with a real blockId.
+  if (target.capturedStyle) {
+    return resolveInlineStyle(editor, target.capturedStyle, policy, step.id);
+  }
 
+  // Synthetic blockId ('__selection__') means both selection endpoints were
+  // nodeEdge anchors with no text block — no inline style to preserve.
+  if (target.blockId === '__selection__') return [];
+
+  const captured = captureRunsInRange(editor, toAbsoluteBlockPos(editor, target.blockId), target.from, target.to);
   return resolveInlineStyle(editor, captured, policy, step.id);
 }
 

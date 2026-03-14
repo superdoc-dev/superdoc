@@ -788,7 +788,8 @@ function buildSelectionResolutionFromOutcome(
   if (stepOutcome?.data) {
     const data = stepOutcome.data;
 
-    // Prefer selection-aware resolutions when available.
+    // Prefer selection-aware resolutions when available — these carry
+    // absolute ranges and full SelectionTarget metadata.
     if (
       'selectionResolutions' in data &&
       Array.isArray(data.selectionResolutions) &&
@@ -798,13 +799,9 @@ function buildSelectionResolutionFromOutcome(
       return selectionTargetToResolution(selRes.selectionTarget, selRes.range, selRes.text);
     }
 
-    // Fall back to plain range resolutions.
-    if ('resolutions' in data && Array.isArray(data.resolutions) && data.resolutions.length > 0) {
-      const planRes = data.resolutions[0] as TextMutationResolution;
-      if (planRes.target?.blockId !== '__selection__') {
-        return planRes;
-      }
-    }
+    // Skip data.resolutions — TextStepResolution.range carries block-relative
+    // offsets, but TextMutationResolution.range requires absolute document
+    // positions. The compiled target fallback always has correct absolute ranges.
   }
 
   // Fall back to the compiled target data, which is always correct.

@@ -1,8 +1,15 @@
 import { TrackDeleteMarkName, TrackFormatMarkName } from '../constants.js';
 import { v4 as uuidv4 } from 'uuid';
-import { objectIncludes } from '@core/utilities/objectIncludes.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
+import {
+  hasMatchingMark,
+  markSnapshotMatchesStepMark,
+  upsertMarkSnapshotByType,
+  isTrackFormatNoOp,
+  getTypeName,
+} from './markSnapshotHelpers.js';
+import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
 
 /**
  * Add mark step.
@@ -17,9 +24,10 @@ import { CommentsPluginKey } from '../../comment/comments-plugin.js';
  */
 export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
   const meta = {};
+  let sharedWid = null;
 
   doc.nodesBetween(step.from, step.to, (node, pos) => {
-    if (!node.isInline) {
+    if (!node.isInline || node.type.name === 'run') {
       return;
     }
 
@@ -27,48 +35,57 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
       return false;
     }
 
-    const existingChangeMark = node.marks.find((mark) =>
+    const rangeFrom = Math.max(step.from, pos);
+    const rangeTo = Math.min(step.to, pos + node.nodeSize);
+
+    const liveMarks = getLiveInlineMarksInRange({
+      doc: newTr.doc,
+      from: rangeFrom,
+      to: rangeTo,
+    });
+    const existingChangeMark = liveMarks.find((mark) =>
       [TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
     );
-    const wid = existingChangeMark ? existingChangeMark.attrs.id : uuidv4();
+    const wid = existingChangeMark ? existingChangeMark.attrs.id : (sharedWid ?? (sharedWid = uuidv4()));
     newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
-    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle'];
+    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight'];
 
     // ![TrackDeleteMarkName].includes(step.mark.type.name)
-    if (allowedMarks.includes(step.mark.type.name) && !node.marks.find((mark) => mark.type === step.mark.type)) {
-      const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
+    if (allowedMarks.includes(step.mark.type.name) && !hasMatchingMark(liveMarks, step.mark)) {
+      const formatChangeMark = liveMarks.find((mark) => mark.type.name === TrackFormatMarkName);
 
       let after = [];
       let before = [];
 
       if (formatChangeMark) {
-        let foundBefore = formatChangeMark.attrs.before.find((mark) => {
-          if (mark.type === 'textStyle') {
-            return mark.type === step.mark.type.name && objectIncludes(mark.attrs, step.mark.attrs);
-          }
-          return mark.type === step.mark.type.name;
-        });
+        let foundBefore = formatChangeMark.attrs.before.find((mark) =>
+          markSnapshotMatchesStepMark(mark, step.mark, true),
+        );
 
         if (foundBefore) {
-          before = [...formatChangeMark.attrs.before.filter((mark) => mark.type !== step.mark.type.name)];
-          after = [...formatChangeMark.attrs.after];
+          before = [
+            ...formatChangeMark.attrs.before.filter((mark) => !markSnapshotMatchesStepMark(mark, step.mark, true)),
+          ];
+          // The step restores the original mark for this type — remove the
+          // corresponding "after" entry since the change has been reverted.
+          after = formatChangeMark.attrs.after.filter((mark) => getTypeName(mark) !== step.mark.type.name);
         } else {
           before = [...formatChangeMark.attrs.before];
-          after = [
-            ...formatChangeMark.attrs.after,
-            {
-              type: step.mark.type.name,
-              attrs: { ...step.mark.attrs },
-            },
-          ];
+          after = upsertMarkSnapshotByType(formatChangeMark.attrs.after, {
+            type: step.mark.type.name,
+            attrs: { ...step.mark.attrs },
+          });
         }
       } else {
-        // before = [];
-        before = node.marks.map((mark) => ({
-          type: mark.type.name,
-          attrs: { ...mark.attrs },
-        }));
+        const existingMarkOfSameType = liveMarks.find(
+          (mark) =>
+            mark.type.name === step.mark.type.name &&
+            ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
+        );
+        before = existingMarkOfSameType
+          ? [{ type: existingMarkOfSameType.type.name, attrs: { ...existingMarkOfSameType.attrs } }]
+          : [];
 
         after = [
           {
@@ -76,6 +93,15 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
             attrs: { ...step.mark.attrs },
           },
         ];
+      }
+
+      // Check if the format change is effectively a no-op (e.g., reverting
+      // vertAlign to 'baseline' when the original had no vertAlign).
+      if (isTrackFormatNoOp(before, after)) {
+        if (formatChangeMark) {
+          newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);
+        }
+        return;
       }
 
       if (after.length || before.length) {
@@ -88,11 +114,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
           before,
           after,
         });
-        newTr.addMark(
-          step.from, // Math.max(step.from, pos)
-          step.to, // Math.min(step.to, pos + node.nodeSize),
-          newFormatMark,
-        );
+        newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), newFormatMark);
 
         meta.formatMark = newFormatMark;
         meta.step = step;

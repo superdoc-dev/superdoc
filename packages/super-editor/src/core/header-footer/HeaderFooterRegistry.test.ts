@@ -19,89 +19,84 @@ type MockSectionEditor = MockEditorEmitter & {
   getJSON?: () => unknown;
 };
 
-const {
-  mockCreateHeaderFooterEditor,
-  mockOnHeaderFooterDataUpdate,
-  mockUpdateYdocDocxData,
-  mockToFlowBlocks,
-  createdEditors,
-} = vi.hoisted(() => {
-  const editors: Array<{ editor: MockSectionEditor; emit: (event: string, payload?: unknown) => void }> = [];
+const { mockCreateHeaderFooterEditor, mockOnHeaderFooterDataUpdate, mockToFlowBlocks, createdEditors } = vi.hoisted(
+  () => {
+    const editors: Array<{ editor: MockSectionEditor; emit: (event: string, payload?: unknown) => void }> = [];
 
-  const createEmitter = (): MockEditorEmitter => {
-    const listeners = new Map<string, Set<(payload?: unknown) => void>>();
+    const createEmitter = (): MockEditorEmitter => {
+      const listeners = new Map<string, Set<(payload?: unknown) => void>>();
 
-    const on = (event: string, handler: (payload?: unknown) => void) => {
-      if (!listeners.has(event)) listeners.set(event, new Set());
-      listeners.get(event)!.add(handler);
-    };
-
-    const off = (event: string, handler: (payload?: unknown) => void) => {
-      listeners.get(event)?.delete(handler);
-    };
-
-    const once = (event: string, handler: (payload?: unknown) => void) => {
-      const wrapper = (payload?: unknown) => {
-        off(event, wrapper);
-        handler(payload);
+      const on = (event: string, handler: (payload?: unknown) => void) => {
+        if (!listeners.has(event)) listeners.set(event, new Set());
+        listeners.get(event)!.add(handler);
       };
-      on(event, wrapper);
+
+      const off = (event: string, handler: (payload?: unknown) => void) => {
+        listeners.get(event)?.delete(handler);
+      };
+
+      const once = (event: string, handler: (payload?: unknown) => void) => {
+        const wrapper = (payload?: unknown) => {
+          off(event, wrapper);
+          handler(payload);
+        };
+        on(event, wrapper);
+      };
+
+      const emit = (event: string, payload?: unknown) => {
+        listeners.get(event)?.forEach((handler) => handler(payload));
+      };
+
+      return { on, off, once, emit };
     };
 
-    const emit = (event: string, payload?: unknown) => {
-      listeners.get(event)?.forEach((handler) => handler(payload));
+    const createSectionEditor = (): MockSectionEditor => {
+      const emitter = createEmitter();
+      const editorStub: MockSectionEditor = {
+        on: emitter.on,
+        off: emitter.off,
+        once: emitter.once,
+        emit: emitter.emit,
+        destroy: vi.fn(),
+        view: {
+          dom: document.createElement('div'),
+          focus: vi.fn(),
+        },
+        options: {},
+      };
+      return editorStub;
     };
 
-    return { on, off, once, emit };
-  };
-
-  const createSectionEditor = (): MockSectionEditor => {
-    const emitter = createEmitter();
-    const editorStub: MockSectionEditor = {
-      on: emitter.on,
-      off: emitter.off,
-      once: emitter.once,
-      emit: emitter.emit,
-      destroy: vi.fn(),
-      view: {
-        dom: document.createElement('div'),
-        focus: vi.fn(),
-      },
-      options: {},
-    };
-    return editorStub;
-  };
-
-  const mockCreateHeaderFooterEditor = vi.fn(() => {
-    const editor = createSectionEditor();
-    editors.push({ editor, emit: editor.emit });
-    queueMicrotask(() => {
-      editor.emit('create');
+    const mockCreateHeaderFooterEditor = vi.fn(() => {
+      const editor = createSectionEditor();
+      editors.push({ editor, emit: editor.emit });
+      queueMicrotask(() => {
+        editor.emit('create');
+      });
+      return editor;
     });
-    return editor;
-  });
 
-  return {
-    mockCreateHeaderFooterEditor,
-    mockOnHeaderFooterDataUpdate: vi.fn(),
-    mockUpdateYdocDocxData: vi.fn(() => Promise.resolve()),
-    mockToFlowBlocks: vi.fn(() => ({ blocks: [{ id: 'hf-block', kind: 'paragraph' }], bookmarks: new Map() })),
-    createdEditors: editors,
-  };
-});
+    return {
+      mockCreateHeaderFooterEditor,
+      mockOnHeaderFooterDataUpdate: vi.fn(),
+      mockToFlowBlocks: vi.fn(() => ({ blocks: [{ id: 'hf-block', kind: 'paragraph' }], bookmarks: new Map() })),
+      createdEditors: editors,
+    };
+  },
+);
 
 vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   createHeaderFooterEditor: mockCreateHeaderFooterEditor,
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
-}));
-
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+  };
+});
 
 const createConverter = () => ({
   headers: {
@@ -158,7 +153,6 @@ describe('HeaderFooterEditorManager', () => {
   beforeEach(() => {
     mockCreateHeaderFooterEditor.mockClear();
     mockOnHeaderFooterDataUpdate.mockClear();
-    mockUpdateYdocDocxData.mockClear();
     createdEditors.length = 0;
   });
 
@@ -218,7 +212,6 @@ describe('HeaderFooterEditorManager', () => {
       'rId-header-default',
       'header',
     );
-    expect(mockUpdateYdocDocxData).toHaveBeenCalledWith(editor, undefined);
   });
 
   it('tears down editors on destroy without throwing', async () => {
@@ -424,8 +417,10 @@ describe('HeaderFooterEditorManager', () => {
     const syncErrorHandler = vi.fn();
     manager.on('syncError', syncErrorHandler);
 
-    // Mock updateYdocDocxData to throw an error
-    mockUpdateYdocDocxData.mockRejectedValueOnce(new Error('Sync failed'));
+    // Mock onHeaderFooterDataUpdate to throw an error
+    mockOnHeaderFooterDataUpdate.mockImplementationOnce(() => {
+      throw new Error('Sync failed');
+    });
 
     await manager.ensureEditor(descriptor);
     const sectionEditor = createdEditors.at(-1)?.editor;
@@ -433,9 +428,6 @@ describe('HeaderFooterEditorManager', () => {
 
     // Trigger update which should fail during sync
     sectionEditor?.emit('update', { transaction: { docChanged: true } });
-
-    // Wait for async error handling
-    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(syncErrorHandler).toHaveBeenCalledWith({
       descriptor,
@@ -544,7 +536,6 @@ describe('HeaderFooterEditorManager error scenarios', () => {
   beforeEach(() => {
     mockCreateHeaderFooterEditor.mockClear();
     mockOnHeaderFooterDataUpdate.mockClear();
-    mockUpdateYdocDocxData.mockClear();
     createdEditors.length = 0;
   });
 

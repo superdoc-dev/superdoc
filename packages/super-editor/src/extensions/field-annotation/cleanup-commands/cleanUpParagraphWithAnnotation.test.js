@@ -27,6 +27,10 @@ const textContent = (docNode) => docNode.textContent;
 const mockHelperPath = '../fieldAnnotationHelpers/index.js';
 
 describe('cleanUpParagraphWithAnnotations - test range error crash', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
   /** Test to fix error in position out of range in original */
   it('throws RangeError "Position … out of range" on single-paragraph doc', async () => {
     const doc = schema.node('doc', null, [p.createAndFill(null, [text('A')])]);
@@ -48,15 +52,6 @@ describe('cleanUpParagraphWithAnnotations - test range error crash', () => {
     expect(run).not.toThrow(/Position\s+\d+\s+out of range/i);
   });
 });
-
-if (!Object.getOwnPropertyDescriptor(PMNode.prototype, 'children')) {
-  Object.defineProperty(PMNode.prototype, 'children', {
-    get() {
-      return { length: this.childCount };
-    },
-    configurable: true,
-  });
-}
 
 describe('cleanUpParagraphWithAnnotations – original behavior', () => {
   beforeEach(() => {

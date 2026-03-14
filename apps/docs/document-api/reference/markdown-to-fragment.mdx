@@ -1,0 +1,147 @@
+---
+title: markdownToFragment
+sidebarTitle: markdownToFragment
+description: Convert a Markdown string into an SDM/1 structural fragment.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Convert a Markdown string into an SDM/1 structural fragment.
+
+- Operation ID: `markdownToFragment`
+- API member path: `editor.doc.markdownToFragment(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an SDMarkdownToFragmentResult with the converted fragment, lossy flag, and diagnostics.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `markdown` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "markdown": "example"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `diagnostics` | object[] | yes |  |
+| `fragment` | any | yes |  |
+| `lossy` | boolean | yes |  |
+
+### Example response
+
+```json
+{
+  "diagnostics": [
+    {
+      "code": "INVALID_TARGET",
+      "message": "Operation failed.",
+      "path": [
+        "example"
+      ],
+      "severity": "error"
+    }
+  ],
+  "fragment": {},
+  "lossy": true
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "markdown": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "markdown"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "diagnostics": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "fragment": {},
+    "lossy": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "fragment",
+    "lossy",
+    "diagnostics"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -2,7 +2,28 @@
 import { NodeSelection, TextSelection, AllSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
+import { clearInheritedLinkedStyleId } from '@core/commands/linkedStyleSplitHelpers.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
+import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
+
+function isHeadingStyleId(styleId) {
+  return typeof styleId === 'string' && /^heading\s*[1-6]$/i.test(styleId.trim());
+}
+
+function clearHeadingStyleId(attrs) {
+  if (!attrs || typeof attrs !== 'object') return attrs;
+  const paragraphProperties = attrs.paragraphProperties;
+  const styleId = paragraphProperties?.styleId;
+  if (!isHeadingStyleId(styleId)) return attrs;
+
+  const nextParagraphProperties = { ...paragraphProperties };
+  delete nextParagraphProperties.styleId;
+
+  return {
+    ...attrs,
+    paragraphProperties: nextParagraphProperties,
+  };
+}
 
 /**
  * Splits a run node at the current selection into two paragraphs.
@@ -58,18 +79,32 @@ export function splitBlockPatch(state, dispatch, editor) {
     deflt,
     paragraphAttrs = null,
     atEnd = false,
-    atStart = false;
-  for (let d = $from.depth; ; d--) {
+    atStart = false,
+    tableInfo = null;
+  for (let d = $from.depth; d > 0; d--) {
     let node = $from.node(d);
     if (node.isBlock) {
-      atEnd = $from.end(d) == $from.pos + ($from.depth - d);
-      atStart = $from.start(d) == $from.pos - ($from.depth - d);
-      deflt = defaultBlockAt($from.node(d - 1).contentMatchAt($from.indexAfter(d - 1)));
-      paragraphAttrs = { ...node.attrs };
-      types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
-      splitDepth = d;
-      break;
-    } else {
+      if (node.type.name === 'paragraph') {
+        atEnd = $from.end(d) == $from.pos + ($from.depth - d);
+        atStart = $from.start(d) == $from.pos - ($from.depth - d);
+        deflt = defaultBlockAt($from.node(d - 1).contentMatchAt($from.indexAfter(d - 1)));
+        paragraphAttrs = /** @type {Record<string, unknown>} */ ({
+          ...node.attrs,
+          // Ensure newly created block gets a fresh ID (block-node plugin assigns one)
+          sdBlockId: null,
+          sdBlockRev: null,
+          // Reset DOCX identifiers on split to avoid duplicate paragraph IDs
+          paraId: null,
+          textId: null,
+        });
+        paragraphAttrs = clearInheritedLinkedStyleId(paragraphAttrs, editor, { emptyParagraph: atEnd });
+        types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
+        splitDepth = d;
+      } else if (node.type.name === 'tableCell') {
+        tableInfo = extractTableInfo($from, d);
+        break;
+      }
+    } else if (paragraphAttrs == null) {
       if (d == 1) return false;
       types.unshift(null);
     }
@@ -85,14 +120,27 @@ export function splitBlockPatch(state, dispatch, editor) {
   }
   if (!can) return false;
   tr.split(splitPos, types.length, types);
-  if (!atEnd && atStart && $from.node(splitDepth).type != deflt) {
-    let first = tr.mapping.map($from.before(splitDepth)),
-      $first = tr.doc.resolve(first);
-    if (deflt && $from.node(splitDepth - 1).canReplaceWith($first.index(), $first.index() + 1, deflt))
-      tr.setNodeMarkup(tr.mapping.map($from.before(splitDepth)), deflt);
+  if (!atEnd && atStart) {
+    const first = tr.mapping.map($from.before(splitDepth));
+    const $first = tr.doc.resolve(first);
+    const sourceNode = $from.node(splitDepth);
+    const shouldChangeType = sourceNode.type != deflt;
+    const normalizedAttrs = clearHeadingStyleId(sourceNode.attrs);
+    const shouldNormalizeAttrs = normalizedAttrs !== sourceNode.attrs;
+
+    if (
+      deflt &&
+      $from.node(splitDepth - 1).canReplaceWith($first.index(), $first.index() + 1, deflt) &&
+      (shouldChangeType || shouldNormalizeAttrs)
+    ) {
+      tr.setNodeMarkup(first, deflt, normalizedAttrs);
+      if (shouldNormalizeAttrs) {
+        paragraphAttrs = normalizedAttrs;
+      }
+    }
   }
 
-  applyStyleMarks(state, tr, editor, paragraphAttrs);
+  applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo);
 
   if (dispatch) dispatch(tr.scrollIntoView());
   return true;
@@ -106,7 +154,14 @@ export function splitBlockPatch(state, dispatch, editor) {
  * @param {import('prosemirror-state').EditorState} state - The current editor state.
  * @param {import('prosemirror-state').Transaction} tr - The transaction to modify with marks.
  * @param {Object} editor - The editor instance containing the converter.
- * @param {{ paragraphProperties?: { styleId?: string } } | null} paragraphAttrs - The paragraph attributes containing style information.
+ * @param {{ paragraphProperties?: { styleId?: string, numberingProperties?: Record<string, unknown> } } | null} paragraphAttrs - The paragraph attributes containing style information.
+ * @param {{
+ *   tableProperties: Record<string, any>|null,
+ *   rowIndex: number,
+ *   cellIndex: number,
+ *   numCells: number,
+ *   numRows: number,
+ * }|null} tableInfo - Information about the table context if the split is occurring within a table cell.
  * @returns {void}
  *
  * @remarks
@@ -121,16 +176,41 @@ export function splitBlockPatch(state, dispatch, editor) {
  * Error handling: Failures are silently ignored to ensure typing continues to work
  * even if style resolution fails. This is intentional defensive programming.
  */
-function applyStyleMarks(state, tr, editor, paragraphAttrs) {
+function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
   const styleId = paragraphAttrs?.paragraphProperties?.styleId;
+  const hasExplicitStyleReset =
+    paragraphAttrs?.paragraphProperties &&
+    Object.prototype.hasOwnProperty.call(paragraphAttrs.paragraphProperties, 'styleId') &&
+    paragraphAttrs.paragraphProperties.styleId == null;
+
+  if (hasExplicitStyleReset) {
+    tr.setStoredMarks([]);
+    tr.setMeta('sdStyleMarks', []);
+    return;
+  }
+
   if (!editor?.converter && !styleId) {
     return;
   }
 
   try {
-    const params = { docx: editor?.converter?.convertedXml ?? {}, numbering: editor?.converter?.numbering ?? {} };
+    const params = {
+      docx: editor?.converter?.convertedXml ?? {},
+      numbering: editor?.converter?.numbering ?? {},
+      translatedNumbering: editor?.converter?.translatedNumbering ?? {},
+      translatedLinkedStyles: editor?.converter?.translatedLinkedStyles ?? {},
+    };
     const resolvedPpr = styleId ? { styleId } : {};
-    const runProperties = styleId ? resolveRunProperties(params, {}, resolvedPpr, false, false) : {};
+    const runProperties = styleId
+      ? resolveRunProperties(
+          params,
+          {},
+          resolvedPpr,
+          tableInfo,
+          false,
+          Boolean(paragraphAttrs.paragraphProperties?.numberingProperties),
+        )
+      : {};
     /** @type {Array<{type: string, attrs: Record<string, unknown>}>} */
     const markDefsFromStyle = styleId
       ? /** @type {Array<{type: string, attrs: Record<string, unknown>}>} */ (
@@ -160,6 +240,10 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs) {
   }
 }
 
+/**
+ * Splits the current run node into two sibling runs at the cursor position.
+ * @returns {import('@core/commands/types').Command}
+ */
 export const splitRunAtCursor = () => (props) => {
   let { state, dispatch, tr } = props;
   const sel = state.selection;

@@ -2,9 +2,9 @@
  * Tests for table layout with column boundary metadata generation
  */
 
-import { describe, it, expect } from 'vitest';
+import type { BlockId, TableAttrs, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
+import { describe, expect, it } from 'vitest';
 import { layoutTableBlock } from './layout-table.js';
-import type { TableBlock, TableMeasure, TableFragment, BlockId, TableAttrs } from '@superdoc/contracts';
 
 /**
  * Creates a dummy table fragment for test scenarios where prior page content is needed.
@@ -82,14 +82,17 @@ function createMockTableBlock(
  *   Format: lineHeightsPerRow[rowIndex] = [lineHeight1, lineHeight2, ...]
  *   If omitted, cells will have no lines. This parameter enables testing of mid-row
  *   splitting behavior where rows are split at line boundaries.
+ * @param cellSpacingPx - Optional cell spacing in pixels (border-spacing). When set,
+ *   column boundary x positions and fragment height include spacing.
  * @returns A TableMeasure object with mocked cell, row, and line data
  */
 function createMockTableMeasure(
   columnWidths: number[],
   rowHeights: number[],
   lineHeightsPerRow?: number[][],
+  cellSpacingPx?: number,
 ): TableMeasure {
-  return {
+  const base = {
     kind: 'table',
     rows: rowHeights.map((height, rowIdx) => ({
       cells: columnWidths.map((width) => ({
@@ -116,6 +119,10 @@ function createMockTableMeasure(
     totalWidth: columnWidths.reduce((sum, w) => sum + w, 0),
     totalHeight: rowHeights.reduce((sum, h) => sum + h, 0),
   };
+  if (cellSpacingPx !== undefined) {
+    return { ...base, cellSpacingPx };
+  }
+  return base;
 }
 
 describe('layoutTableBlock', () => {
@@ -244,10 +251,8 @@ describe('layoutTableBlock', () => {
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toBeDefined();
 
-      // All columns should have minWidth >= 25 (absolute minimum)
-      boundaries?.forEach((boundary) => {
-        expect(boundary.minWidth).toBeGreaterThanOrEqual(25);
-      });
+      // minWidth is clamped to [COLUMN_MIN_WIDTH_PX, COLUMN_MAX_WIDTH_PX] (25–200)
+      expect(boundaries?.map((b) => b.minWidth)).toEqual([100, 150, 200]);
     });
 
     it('should mark all columns as resizable', () => {
@@ -309,7 +314,7 @@ describe('layoutTableBlock', () => {
       });
     });
 
-    it('should not include rowBoundaries metadata (Phase 1 scope)', () => {
+    it('should include rowBoundaries metadata', () => {
       const block = createMockTableBlock(3);
       const measure = createMockTableMeasure([100, 150], [20, 25, 30]);
 
@@ -331,7 +336,361 @@ describe('layoutTableBlock', () => {
       });
 
       const fragment = fragments[0];
-      expect(fragment.metadata?.rowBoundaries).toBeUndefined();
+      const rowBoundaries = fragment.metadata?.rowBoundaries;
+      expect(rowBoundaries).toBeDefined();
+      expect(rowBoundaries).toHaveLength(3);
+
+      // Each boundary should have required fields
+      expect(rowBoundaries![0]).toMatchObject({
+        index: 0,
+        y: 0,
+        height: 20,
+        resizable: true,
+      });
+      expect(rowBoundaries![1]).toMatchObject({
+        index: 1,
+        y: 20,
+        height: 25,
+        resizable: true,
+      });
+      expect(rowBoundaries![2]).toMatchObject({
+        index: 2,
+        y: 45,
+        height: 30,
+        resizable: true,
+      });
+
+      // minHeight should be at least ROW_MIN_HEIGHT_PX (10)
+      rowBoundaries!.forEach((rb) => {
+        expect(rb.minHeight).toBeGreaterThanOrEqual(10);
+      });
+    });
+
+    it('uses partial row height in rowBoundaries and marks it non-resizable', () => {
+      const block = createMockTableBlock(1, [{ cantSplit: false }]);
+      const measure = createMockTableMeasure([100], [200], [[10, 10, 10, 10, 10, 10]]);
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      let contentBottom = 40; // Force a partial-row first fragment
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY,
+          contentBottom,
+        }),
+        advanceColumn: () => {
+          cursorY = 0;
+          contentBottom = 300;
+          return {
+            page: { fragments },
+            columnIndex: 0,
+            cursorY,
+            contentBottom,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      const partialFragment = fragments.find((fragment) => fragment.partialRow != null);
+      expect(partialFragment).toBeDefined();
+      expect(partialFragment!.partialRow).toBeTruthy();
+
+      const rowBoundaries = partialFragment!.metadata?.rowBoundaries;
+      expect(rowBoundaries).toHaveLength(1);
+      expect(rowBoundaries![0].height).toBe(partialFragment!.partialRow!.partialHeight);
+      expect(rowBoundaries![0].resizable).toBe(false);
+      expect(rowBoundaries![0].minHeight).toBe(partialFragment!.partialRow!.partialHeight);
+    });
+
+    it('marks repeated header row boundaries as non-resizable on continuation fragments', () => {
+      const block = createMockTableBlock(4, [
+        { repeatHeader: true },
+        { repeatHeader: false },
+        { repeatHeader: false },
+        { repeatHeader: false },
+      ]);
+      const measure = createMockTableMeasure([100], [20, 20, 20, 20]);
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      let contentBottom = 60; // First page fits 3 rows; continuation should repeat header
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY,
+          contentBottom,
+        }),
+        advanceColumn: () => {
+          cursorY = 0;
+          contentBottom = 60;
+          return {
+            page: { fragments },
+            columnIndex: 0,
+            cursorY,
+            contentBottom,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      const continuation = fragments.find((fragment) => (fragment.repeatHeaderCount ?? 0) > 0);
+      expect(continuation).toBeDefined();
+
+      const rowBoundaries = continuation!.metadata?.rowBoundaries;
+      expect(rowBoundaries).toBeDefined();
+      expect(rowBoundaries!.length).toBeGreaterThanOrEqual(2);
+      expect(rowBoundaries![0].index).toBe(0);
+      expect(rowBoundaries![0].resizable).toBe(false);
+      expect(rowBoundaries![1].resizable).toBe(true);
+    });
+
+    it('marks row boundaries as non-resizable when a rowspan from a prior fragment crosses them', () => {
+      // 5 rows, 2 columns. First cell in row 0 has rowSpan=4, covering rows 0-3.
+      // When the table splits so a continuation fragment renders rows 2-4,
+      // the boundary after row 2 must be blocked because the span from row 0
+      // still extends through it (the span covers rows 0,1,2,3).
+      // The boundary after row 3 (end of span) and row 4 should be resizable.
+      const block = createMockTableBlock(5);
+      const measure = createMockTableMeasure([100, 100], [30, 30, 30, 30, 30]);
+
+      // Inject rowSpan=4 on the first cell of row 0
+      (measure.rows[0].cells[0] as any).rowSpan = 4;
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      let contentBottom = 65; // Fits rows 0-1 (30+30=60 < 65), forces split before row 2
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY,
+          contentBottom,
+        }),
+        advanceColumn: () => {
+          cursorY = 0;
+          contentBottom = 200; // continuation page has room for remaining rows
+          return {
+            page: { fragments },
+            columnIndex: 0,
+            cursorY,
+            contentBottom,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      // Collect all row boundaries across continuation fragments (fromRow >= 2)
+      const continuationFragments = fragments.filter((f) => f.fromRow >= 2);
+      expect(continuationFragments.length).toBeGreaterThan(0);
+
+      const allRowBoundaries = continuationFragments.flatMap((f) => f.metadata?.rowBoundaries ?? []);
+
+      // Row 2 boundary should be blocked (rowSpan from row 0 extends through row 3)
+      const row2 = allRowBoundaries.find((rb) => rb.index === 2);
+      expect(row2).toBeDefined();
+      expect(row2!.resizable).toBe(false);
+
+      // Row 3 is the last row of the span — its bottom boundary is NOT blocked
+      const row3 = allRowBoundaries.find((rb) => rb.index === 3);
+      expect(row3).toBeDefined();
+      expect(row3!.resizable).toBe(true);
+
+      // Row 4 is entirely outside the span (may be in a later fragment)
+      const row4 = allRowBoundaries.find((rb) => rb.index === 4);
+      expect(row4).toBeDefined();
+      expect(row4!.resizable).toBe(true);
+    });
+  });
+
+  describe('cellSpacing', () => {
+    it('should position column boundaries with cellSpacingPx (space before first column and between columns)', () => {
+      const block = createMockTableBlock(1);
+      const measure = createMockTableMeasure([100, 150, 200], [20], undefined, 4);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 458, // 4 + 100 + 4 + 150 + 4 + 200 + 4
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      const boundaries = fragments[0].metadata?.columnBoundaries;
+      expect(boundaries).toBeDefined();
+      expect(boundaries!.length).toBe(3);
+      // First column: x = cellSpacingPx
+      expect(boundaries![0].x).toBe(4);
+      expect(boundaries![0].width).toBe(100);
+      // Second column: x = cellSpacingPx + col0 + cellSpacingPx
+      expect(boundaries![1].x).toBe(108); // 4 + 100 + 4
+      expect(boundaries![1].width).toBe(150);
+      // Third column: x = prev + col1 + cellSpacingPx
+      expect(boundaries![2].x).toBe(262); // 108 + 150 + 4
+      expect(boundaries![2].width).toBe(200);
+    });
+
+    it('should use zero column boundary offset when cellSpacingPx is 0', () => {
+      const block = createMockTableBlock(1);
+      const measure = createMockTableMeasure([100, 150], [20], undefined, 0);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      const boundaries = fragments[0].metadata?.columnBoundaries;
+      expect(boundaries).toBeDefined();
+      expect(boundaries![0].x).toBe(0);
+      expect(boundaries![1].x).toBe(100);
+    });
+
+    it('should include vertical cell spacing in fragment height', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150], [20, 25], undefined, 4);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 50,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 10,
+      });
+
+      expect(fragments).toHaveLength(1);
+      // Row heights 20 + 25 = 45; vertical gaps (rowCount+1)*cellSpacingPx = 3*4 = 12
+      expect(fragments[0].height).toBe(57); // 45 + 12
+    });
+
+    it('should not add vertical spacing when cellSpacingPx is 0', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150], [20, 25], undefined, 0);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 50,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 10,
+      });
+
+      expect(fragments).toHaveLength(1);
+      expect(fragments[0].height).toBe(45); // 20 + 25 only
+    });
+
+    it('should not add vertical spacing when measure.cellSpacingPx is undefined', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150], [20, 25]);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 250,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 50,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 10,
+      });
+
+      expect(fragments).toHaveLength(1);
+      expect(fragments[0].height).toBe(45);
+    });
+
+    it('should include cell spacing in fragment height when table splits across pages', () => {
+      const block = createMockTableBlock(4);
+      const measure = createMockTableMeasure([100], [20, 20, 20, 20], undefined, 2);
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY,
+          contentBottom: 50, // Fits 2 rows + spacing (2+20+2+20+2 = 46), not 3 rows (68)
+        }),
+        advanceColumn: (state) => {
+          cursorY = 0;
+          return {
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 50,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      expect(fragments.length).toBeGreaterThan(1);
+      // First fragment: 2 rows => height = 20+20 + (2+1)*2 = 46
+      expect(fragments[0].height).toBe(46);
+      // Second fragment: 2 rows => height = 46
+      expect(fragments[1].height).toBe(46);
     });
   });
 
@@ -602,8 +961,8 @@ describe('layoutTableBlock', () => {
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
       expect(boundaries).toHaveLength(1);
-      expect(boundaries![0].minWidth).toBeGreaterThanOrEqual(25);
-      expect(boundaries![0].minWidth).toBeLessThanOrEqual(200);
+      // Column width 300 is clamped to COLUMN_MAX_WIDTH_PX (200)
+      expect(boundaries![0].minWidth).toBe(200);
     });
 
     it('should handle very wide column (> 200px)', () => {
@@ -628,7 +987,6 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Min width should be capped at 200px
       expect(boundaries![0].minWidth).toBe(200);
     });
 
@@ -654,7 +1012,6 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Min width should be at least 25px
       expect(boundaries![0].minWidth).toBe(25);
     });
 
@@ -707,7 +1064,6 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Should default to minimum 25px for negative widths
       expect(boundaries![0].minWidth).toBe(25);
     });
 
@@ -733,7 +1089,6 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Should default to minimum 25px for zero width
       expect(boundaries![0].minWidth).toBe(25);
     });
 
@@ -760,12 +1115,8 @@ describe('layoutTableBlock', () => {
       });
 
       const boundaries = fragments[0].metadata?.columnBoundaries;
-      // Column 0: 10px -> should be 25px (minimum)
-      expect(boundaries![0].minWidth).toBe(25);
-      // Column 1: 100px -> should be 100px (within range)
-      expect(boundaries![1].minWidth).toBe(100);
-      // Column 2: 500px -> should be 200px (capped)
-      expect(boundaries![2].minWidth).toBe(200);
+      // [10, 100, 500] → clamped to [25, 100, 200]
+      expect(boundaries?.map((b) => b.minWidth)).toEqual([25, 100, 200]);
     });
   });
 
@@ -1068,6 +1419,43 @@ describe('layoutTableBlock', () => {
       });
 
       expect(fragments.length).toBeGreaterThan(1);
+    });
+
+    it('should use correct remainingHeight when first row exceeds availableHeight (cellSpacing)', () => {
+      // When the first row does not fit, remainingHeight must subtract vertical space before
+      // the first row (cellSpacing + top border), not use full availableHeight.
+      const block = createMockTableBlock(1, undefined, { cellSpacing: { value: 4, type: 'px' } });
+      const measure = createMockTableMeasure(
+        [100],
+        [60],
+        [[15, 15, 15, 15]], // 4 lines × 15px = 60px row height
+        4,
+      );
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 40, // Less than first row (60) + top spacing (4) = 64
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      // With the fix, remainingHeight = 40 - 4 = 36 (not 40), so we get a partial first row
+      // and a continuation fragment on the next page.
+      expect(fragments.length).toBeGreaterThanOrEqual(1);
+      expect(fragments[0].partialRow).not.toBeNull();
+      expect(fragments[0].toRow).toBe(1);
+      if (fragments.length > 1) {
+        expect(fragments[1].continuesFromPrev).toBe(true);
+      }
     });
 
     it('should handle cantSplit row that does not fit (move to next page)', () => {
@@ -1815,22 +2203,46 @@ describe('layoutTableBlock', () => {
       expect(fragmentsWithPartialRow.length).toBeGreaterThan(0);
     });
 
-    it('should maintain minimum line advancement across all cells', () => {
-      // Test that the minimum line advancement algorithm correctly identifies
-      // and applies the minimum advancement across all cells
+    it('should maintain monotonic per-cell advancement across continuation fragments', () => {
+      // Verify continuation fragments keep per-cell line progress monotonic
+      // when cells have different line heights.
       const block = createMockTableBlock(1);
 
-      // Create cells with different line heights where the minimum advancement
-      // will be determined by the cell with the tallest lines
-      const measure = createMockTableMeasure(
-        [100, 100, 100],
-        [120],
-        [
-          [10, 10, 10, 10, 10], // Cell 0: 5 lines of 10px (total 50px)
-          [20, 20, 20, 20, 20], // Cell 1: 5 lines of 20px (total 100px)
-          [40, 40, 40], // Cell 2: 3 lines of 40px (total 120px)
-        ],
-      );
+      // createMockTableMeasure applies line data per row (not per cell), so seed with
+      // row defaults then override each cell explicitly.
+      const measure = createMockTableMeasure([100, 100, 100], [120], [[10, 10, 10, 10, 10]]);
+      if (measure.rows[0].cells[1]) {
+        measure.rows[0].cells[1].paragraph = {
+          kind: 'paragraph',
+          lines: [20, 20, 20, 20, 20].map((lineHeight) => ({
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: 100,
+            ascent: lineHeight * 0.75,
+            descent: lineHeight * 0.25,
+            lineHeight,
+          })),
+          totalHeight: 100,
+        };
+      }
+      if (measure.rows[0].cells[2]) {
+        measure.rows[0].cells[2].paragraph = {
+          kind: 'paragraph',
+          lines: [40, 40, 40].map((lineHeight) => ({
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: 100,
+            ascent: lineHeight * 0.75,
+            descent: lineHeight * 0.25,
+            lineHeight,
+          })),
+          totalHeight: 120,
+        };
+      }
 
       const fragments: TableFragment[] = [];
       let cursorY = 0;
@@ -1861,24 +2273,21 @@ describe('layoutTableBlock', () => {
       // Should create multiple fragments
       expect(fragments.length).toBeGreaterThan(1);
 
-      // Verify line advancement consistency
-      for (const fragment of fragments) {
-        if ('partialRow' in fragment && fragment.partialRow && !fragment.partialRow.isLastPart) {
-          const { toLineByCell, fromLineByCell } = fragment.partialRow;
-          const advancements = toLineByCell.map((to, idx) => to - fromLineByCell[idx]);
+      const partialFragments = fragments.filter((f) => 'partialRow' in f && Boolean(f.partialRow));
+      expect(partialFragments.length).toBeGreaterThan(1);
 
-          // All cells that have remaining lines should advance by the same amount
-          // (this is the core of the line advancement algorithm)
-          const positiveAdvancements = advancements.filter((a) => a > 0);
-          if (positiveAdvancements.length > 0) {
-            const minAdvancement = Math.min(...positiveAdvancements);
-            // In the second pass, all cells should be normalized to minAdvancement
-            // (unless they've already completed)
-            positiveAdvancements.forEach((adv) => {
-              expect(adv).toBe(minAdvancement);
-            });
-          }
-        }
+      // First fragment should show uneven (independent) advancement.
+      const firstPartial = partialFragments[0].partialRow!;
+      const firstAdvancements = firstPartial.toLineByCell.map((to, idx) => to - firstPartial.fromLineByCell[idx]);
+      expect(new Set(firstAdvancements.filter((a) => a > 0)).size).toBeGreaterThan(1);
+
+      // Continuations must not regress per-cell line indices.
+      for (let i = 1; i < partialFragments.length; i += 1) {
+        const prev = partialFragments[i - 1].partialRow!;
+        const current = partialFragments[i].partialRow!;
+        current.fromLineByCell.forEach((fromLine, idx) => {
+          expect(fromLine).toBe(prev.toLineByCell[idx]);
+        });
       }
     });
 
@@ -2334,6 +2743,60 @@ describe('layoutTableBlock', () => {
         expect(fragments[0].width).toBe(170); // 200 - 30
       });
 
+      it('should not shrink width when table already fits after positive indent', () => {
+        const block = createMockTableBlock(1);
+        block.attrs = { tableIndent: { width: 30 } } as TableAttrs;
+        const measure = createMockTableMeasure([100], [20]);
+
+        const fragments: TableFragment[] = [];
+        const mockPage = { fragments };
+
+        layoutTableBlock({
+          block,
+          measure,
+          columnWidth: 200,
+          ensurePage: () => ({
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 1000,
+          }),
+          advanceColumn: (state) => state,
+          columnX: () => 0,
+        });
+
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0].x).toBe(30);
+        expect(fragments[0].width).toBe(100);
+      });
+
+      it('should avoid double-shrinking when measure width already reflects tblGrid with tblInd', () => {
+        const block = createMockTableBlock(1);
+        block.attrs = { tableIndent: { width: 1440 } } as TableAttrs;
+        const measure = createMockTableMeasure([7910], [20]);
+
+        const fragments: TableFragment[] = [];
+        const mockPage = { fragments };
+
+        layoutTableBlock({
+          block,
+          measure,
+          columnWidth: 9350,
+          ensurePage: () => ({
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 1000,
+          }),
+          advanceColumn: (state) => state,
+          columnX: () => 0,
+        });
+
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0].x).toBe(1440);
+        expect(fragments[0].width).toBe(7910);
+      });
+
       it('should apply negative indent correctly (extends into margin)', () => {
         const block = createMockTableBlock(1);
         block.attrs = { tableIndent: { width: -40 } } as TableAttrs;
@@ -2452,7 +2915,7 @@ describe('layoutTableBlock', () => {
         expect(fragments.length).toBeGreaterThan(1);
         fragments.forEach((fragment) => {
           expect(fragment.x).toBe(25);
-          expect(fragment.width).toBe(75); // 100 - 25 (measure totalWidth is used, not columnWidth)
+          expect(fragment.width).toBe(100);
         });
       });
 
@@ -2520,7 +2983,7 @@ describe('layoutTableBlock', () => {
 
         expect(fragments).toHaveLength(1);
         expect(fragments[0].x).toBe(40);
-        expect(fragments[0].width).toBe(60); // 100 - 40
+        expect(fragments[0].width).toBe(100);
       });
 
       it('should apply tableIndent to tables with no rows but non-zero totalHeight', () => {
@@ -2548,7 +3011,7 @@ describe('layoutTableBlock', () => {
 
         expect(fragments).toHaveLength(1);
         expect(fragments[0].x).toBe(20);
-        expect(fragments[0].width).toBe(80); // 100 - 20
+        expect(fragments[0].width).toBe(100);
       });
 
       it('should apply tableIndent to partial row fragments', () => {
@@ -2587,7 +3050,7 @@ describe('layoutTableBlock', () => {
         expect(fragments.length).toBeGreaterThan(1);
         fragments.forEach((fragment) => {
           expect(fragment.x).toBe(30);
-          expect(fragment.width).toBe(70); // 100 - 30
+          expect(fragment.width).toBe(100);
         });
       });
     });
@@ -3165,6 +3628,152 @@ describe('layoutTableBlock', () => {
         // Second fragment should start from row 2 or 3 (not row 0)
         expect(fragments[1].pmStart).toBeGreaterThan(15); // After first page content
       }
+    });
+  });
+
+  describe('column width rescaling (SD-1859)', () => {
+    it('should rescale column widths when table is wider than section content width', () => {
+      // Simulate a table measured at landscape width (700px) but rendered in
+      // a portrait section (450px). Column widths should be rescaled to fit.
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
+      // measure.totalWidth = 700
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450, // Portrait section width (narrower than table)
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      const fragment = fragments[0];
+
+      // Fragment width should be clamped to section width
+      expect(fragment.width).toBe(450);
+
+      // Column widths should be rescaled proportionally
+      expect(fragment.columnWidths).toBeDefined();
+      expect(fragment.columnWidths!.length).toBe(3);
+
+      // Sum of rescaled column widths should equal fragment width
+      const sum = fragment.columnWidths!.reduce((a, b) => a + b, 0);
+      expect(sum).toBe(450);
+
+      // Proportions should be maintained (250:200:250 → ~161:129:161)
+      expect(fragment.columnWidths![0]).toBeGreaterThan(fragment.columnWidths![1]);
+      expect(fragment.columnWidths![0]).toBeCloseTo(fragment.columnWidths![2], -1);
+    });
+
+    it('should not set fragment columnWidths when table fits within section width', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150, 100], [30, 30]);
+      // measure.totalWidth = 350
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450, // Section is wider than table
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      // No rescaling needed — columnWidths should be undefined
+      expect(fragments[0].columnWidths).toBeUndefined();
+    });
+
+    it('should rescale column widths on paginated table fragments', () => {
+      // Table that splits across pages should have rescaled column widths on each fragment
+      const block = createMockTableBlock(4);
+      const measure = createMockTableMeasure([300, 300], [200, 200, 200, 200]);
+      // totalWidth = 600, each row = 200px
+
+      const fragments: TableFragment[] = [];
+      let pageIndex = 0;
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 400, // Narrower than table
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 500, // Only fits ~2 rows per page
+        }),
+        advanceColumn: (state) => {
+          pageIndex++;
+          return {
+            ...state,
+            cursorY: 0,
+            contentBottom: 500,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      // Should have multiple fragments (table paginated)
+      expect(fragments.length).toBeGreaterThanOrEqual(1);
+
+      // Every fragment should have rescaled column widths
+      for (const fragment of fragments) {
+        expect(fragment.columnWidths).toBeDefined();
+        const sum = fragment.columnWidths!.reduce((a, b) => a + b, 0);
+        expect(sum).toBe(400);
+      }
+    });
+
+    it('should generate metadata boundaries from rescaled column widths when table is clamped', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      const fragment = fragments[0];
+      const boundaries = fragment.metadata?.columnBoundaries;
+
+      expect(fragment.columnWidths).toBeDefined();
+      expect(boundaries).toBeDefined();
+      expect(boundaries!.map((boundary) => boundary.width)).toEqual(fragment.columnWidths);
+
+      const lastBoundary = boundaries![boundaries!.length - 1];
+      expect(lastBoundary.x + lastBoundary.width).toBe(fragment.width);
     });
   });
 });

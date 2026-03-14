@@ -1,0 +1,156 @@
+---
+title: Integrations
+sidebarTitle: Integrations
+tag: NEW
+description: Connect SuperDoc tools to AWS Bedrock and other LLM providers
+keywords: "ai integrations, ai providers, aws bedrock, openai, anthropic, tool use, function calling, superdoc sdk"
+---
+
+SuperDoc tools work with any LLM provider or agent framework that supports tool use. The SDK provides tool definitions, schema formatting, and a dispatch function — you write the conversation loop.
+
+<Info>
+LLM tools are in <strong>alpha</strong>. Tool names and schemas may change between releases.
+</Info>
+
+## AWS Bedrock
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    npm install @superdoc-dev/sdk @aws-sdk/client-bedrock-runtime
+    ```
+
+    ```typescript
+    import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+    import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+    const client = createSuperDocClient();
+    await client.connect();
+    await client.doc.open({ doc: './contract.docx' });
+
+    // Get tools in Anthropic format, convert to Bedrock toolSpec shape
+    const { tools } = await chooseTools({ provider: 'anthropic' });
+    const toolConfig = {
+      tools: tools.map((t) => ({
+        toolSpec: {
+          name: t.name,
+          description: t.description,
+          inputSchema: { json: t.input_schema },
+        },
+      })),
+    };
+
+    const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' });
+    const messages = [
+      { role: 'user', content: [{ text: 'Review this contract.' }] },
+    ];
+
+    while (true) {
+      const res = await bedrock.send(new ConverseCommand({
+        modelId: 'us.anthropic.claude-sonnet-4-6',
+        messages,
+        system: [{ text: 'You edit .docx files using SuperDoc tools. Use tracked changes for all edits.' }],
+        toolConfig,
+      }));
+
+      const output = res.output?.message;
+      if (!output) break;
+      messages.push(output);
+
+      const toolUses = output.content?.filter((b) => b.toolUse) ?? [];
+      if (!toolUses.length) break;
+
+      const results = [];
+      for (const block of toolUses) {
+        const { name, input, toolUseId } = block.toolUse;
+        const result = await dispatchSuperDocTool(client, name, input ?? {});
+        const json = typeof result === 'object' && result !== null ? result : { result };
+        results.push({ toolResult: { toolUseId, content: [{ json }] } });
+      }
+      messages.push({ role: 'user', content: results });
+    }
+
+    await client.doc.save();
+    await client.dispose();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install superdoc-sdk boto3
+    ```
+
+    ```python
+    import boto3
+    from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+
+    client = SuperDocClient()
+    client.connect()
+    client.doc.open({"doc": "./contract.docx"})
+
+    # Get tools in Anthropic format, convert to Bedrock toolSpec shape
+    sd_tools = choose_tools({"provider": "anthropic"})
+    tool_config = {
+        "tools": [
+            {
+                "toolSpec": {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "inputSchema": {"json": t.get("input_schema", {})},
+                }
+            }
+            for t in sd_tools["tools"]
+        ]
+    }
+
+    bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+    messages = [{"role": "user", "content": [{"text": "Review this contract."}]}]
+
+    while True:
+        response = bedrock.converse(
+            modelId="us.anthropic.claude-sonnet-4-6",
+            messages=messages,
+            system=[{"text": "You edit .docx files using SuperDoc tools. Use tracked changes for all edits."}],
+            toolConfig=tool_config,
+        )
+
+        output = response["output"]["message"]
+        messages.append(output)
+
+        tool_uses = [b for b in output.get("content", []) if "toolUse" in b]
+        if not tool_uses:
+            break
+
+        tool_results = []
+        for block in tool_uses:
+            tu = block["toolUse"]
+            result = dispatch_superdoc_tool(client, tu["name"], tu.get("input", {}))
+            json_result = result if isinstance(result, dict) else {"result": result}
+            tool_results.append(
+                {"toolResult": {"toolUseId": tu["toolUseId"], "content": [{"json": json_result}]}}
+            )
+        messages.append({"role": "user", "content": tool_results})
+
+    client.doc.save()
+    client.dispose()
+    ```
+  </Tab>
+</Tabs>
+
+**Auth**: AWS credentials via `aws configure`, env vars, or IAM role. No API key needed.
+
+## Best practices
+
+- **Feed errors back.** When a tool call fails, return the error as a tool result. Most models self-correct on the next turn.
+- **Pin your model version.** Use a specific model ID (e.g. `us.anthropic.claude-sonnet-4-6`) rather than an alias to avoid behavior changes between releases.
+- **Use tracked changes for review workflows.** Add "Use tracked changes for all edits" to the system prompt so a human can accept or reject each change.
+
+## Example repository
+
+Complete, runnable examples are available at [`examples/ai/`](https://github.com/superdoc-dev/superdoc/tree/main/examples/ai).
+
+## Related
+
+- [LLM Tools](/document-engine/ai-agents/llm-tools) — tool selection, dispatch, and the full API
+- [Skills](/document-engine/ai-agents/skills) — reusable prompt templates
+- [MCP Server](/document-engine/ai-agents/mcp-server) — Model Context Protocol integration
+- [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers

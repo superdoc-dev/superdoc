@@ -96,7 +96,7 @@ describe('computeParagraphAttrs', () => {
       attrs: {
         paragraphProperties: {
           justification: 'center',
-          spacing: { before: 240, after: 120, line: 2, lineRule: 'auto' },
+          spacing: { before: 240, after: 120, line: 210, lineRule: 'exact' },
           indent: { left: 720, hanging: 360 },
           tabStops: [{ val: 'left', pos: 48 }],
         },
@@ -108,7 +108,9 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.alignment).toBe('center');
     expect(paragraphAttrs.spacing?.before).toBe(twipsToPx(240));
     expect(paragraphAttrs.spacing?.after).toBe(twipsToPx(120));
-    expect(paragraphAttrs.spacing?.line).toBe(2);
+    expect(paragraphAttrs.spacing?.line).toBe(twipsToPx(210));
+    expect(paragraphAttrs.spacing?.lineRule).toBe('exact');
+    expect(paragraphAttrs.spacing?.lineUnit).toBe('px');
     expect(paragraphAttrs.indent?.left).toBe(twipsToPx(720));
     expect(paragraphAttrs.indent?.hanging).toBe(twipsToPx(360));
     expect(paragraphAttrs.tabs?.[0]).toEqual({ val: 'start', pos: 720 });
@@ -140,5 +142,48 @@ describe('computeRunAttrs', () => {
     expect(result.fontFamily).toContain('Arial');
     expect(result.fontSize).toBeGreaterThan(0);
     expect(result.color).toBe('#FF0000');
+  });
+
+  it('includes the vanish property', () => {
+    const runProps = {
+      vanish: true,
+    };
+
+    const result = computeRunAttrs(runProps as never);
+
+    expect(result.vanish).toBe(true);
+  });
+
+  it('passes through vertAlign', () => {
+    const result = computeRunAttrs({ vertAlign: 'superscript', fontSize: 24 } as never);
+    expect(result.vertAlign).toBe('superscript');
+  });
+
+  it('scales fontSize by 0.65 for superscript', () => {
+    const base = computeRunAttrs({ fontSize: 24 } as never);
+    const sup = computeRunAttrs({ fontSize: 24, vertAlign: 'superscript' } as never);
+    expect(sup.fontSize).toBeCloseTo(base.fontSize * 0.65);
+  });
+
+  it('scales fontSize by 0.65 for subscript', () => {
+    const base = computeRunAttrs({ fontSize: 24 } as never);
+    const sub = computeRunAttrs({ fontSize: 24, vertAlign: 'subscript' } as never);
+    expect(sub.fontSize).toBeCloseTo(base.fontSize * 0.65);
+  });
+
+  it('does not scale fontSize when position is set', () => {
+    const base = computeRunAttrs({ fontSize: 24 } as never);
+    const result = computeRunAttrs({ fontSize: 24, vertAlign: 'superscript', position: 6 } as never);
+    expect(result.fontSize).toBe(base.fontSize);
+  });
+
+  it('converts position from half-points to points as baselineShift', () => {
+    const result = computeRunAttrs({ position: 6 } as never);
+    expect(result.baselineShift).toBe(3);
+  });
+
+  it('does not set baselineShift when position is absent', () => {
+    const result = computeRunAttrs({ fontSize: 24 } as never);
+    expect(result.baselineShift).toBeUndefined();
   });
 });

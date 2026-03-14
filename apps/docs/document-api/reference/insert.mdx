@@ -1,0 +1,1117 @@
+---
+title: insert
+sidebarTitle: insert
+description: "Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.)."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).
+
+- Operation ID: `insert`
+- API member path: `editor.doc.insert(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `yes`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | TextAddress | no | TextAddress |
+| `target.blockId` | string | no |  |
+| `target.kind` | `"text"` | no | Constant: `"text"` |
+| `target.range` | Range | no | Range |
+| `target.range.end` | integer | no |  |
+| `target.range.start` | integer | no |  |
+| `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
+| `value` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "target": {
+    "blockId": "block-abc123",
+    "kind": "text",
+    "range": {
+      "end": 10,
+      "start": 0
+    }
+  },
+  "type": "text",
+  "value": "example"
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | object | no |  |
+| `evaluatedRevision.after` | string | no |  |
+| `evaluatedRevision.before` | string | no |  |
+| `resolution` | object | no |  |
+| `resolution.requestedTarget` | object | no |  |
+| `resolution.requestedTarget.anchor` | object | no |  |
+| `resolution.requestedTarget.anchor.end` | object | no |  |
+| `resolution.requestedTarget.anchor.end.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.end.offset` | integer | no |  |
+| `resolution.requestedTarget.anchor.start` | object | no |  |
+| `resolution.requestedTarget.anchor.start.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.start.offset` | integer | no |  |
+| `resolution.requestedTarget.evaluatedRevision` | string | no |  |
+| `resolution.requestedTarget.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.requestedTarget.nodeId` | string | no |  |
+| `resolution.requestedTarget.path` | string \\| integer[] | no |  |
+| `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.target` | object | no |  |
+| `resolution.target.anchor` | object | no |  |
+| `resolution.target.anchor.end` | object | no |  |
+| `resolution.target.anchor.end.blockId` | string | no |  |
+| `resolution.target.anchor.end.offset` | integer | no |  |
+| `resolution.target.anchor.start` | object | no |  |
+| `resolution.target.anchor.start.blockId` | string | no |  |
+| `resolution.target.anchor.start.offset` | integer | no |  |
+| `resolution.target.evaluatedRevision` | string | no |  |
+| `resolution.target.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.target.nodeId` | string | no |  |
+| `resolution.target.path` | string \\| integer[] | no |  |
+| `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | object | no |  |
+| `evaluatedRevision.after` | string | no |  |
+| `evaluatedRevision.before` | string | no |  |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"`, `"CAPABILITY_UNAVAILABLE"`, `"UNSUPPORTED_ENVIRONMENT"`, `"INVALID_NESTING"`, `"INVALID_PLACEMENT"`, `"INVALID_PAYLOAD"`, `"CAPABILITY_UNSUPPORTED"`, `"ADDRESS_STALE"`, `"DUPLICATE_ID"`, `"INVALID_CONTEXT"`, `"RAW_MODE_REQUIRED"`, `"PRESERVE_ONLY_VIOLATION"`, `"INVALID_INPUT"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | object | no |  |
+| `resolution.requestedTarget` | object | no |  |
+| `resolution.requestedTarget.anchor` | object | no |  |
+| `resolution.requestedTarget.anchor.end` | object | no |  |
+| `resolution.requestedTarget.anchor.end.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.end.offset` | integer | no |  |
+| `resolution.requestedTarget.anchor.start` | object | no |  |
+| `resolution.requestedTarget.anchor.start.blockId` | string | no |  |
+| `resolution.requestedTarget.anchor.start.offset` | integer | no |  |
+| `resolution.requestedTarget.evaluatedRevision` | string | no |  |
+| `resolution.requestedTarget.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.requestedTarget.nodeId` | string | no |  |
+| `resolution.requestedTarget.path` | string \\| integer[] | no |  |
+| `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.target` | object | no |  |
+| `resolution.target.anchor` | object | no |  |
+| `resolution.target.anchor.end` | object | no |  |
+| `resolution.target.anchor.end.blockId` | string | no |  |
+| `resolution.target.anchor.end.offset` | integer | no |  |
+| `resolution.target.anchor.start` | object | no |  |
+| `resolution.target.anchor.start.blockId` | string | no |  |
+| `resolution.target.anchor.start.offset` | integer | no |  |
+| `resolution.target.evaluatedRevision` | string | no |  |
+| `resolution.target.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `resolution.target.nodeId` | string | no |  |
+| `resolution.target.path` | string \\| integer[] | no |  |
+| `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": {
+    "after": "example",
+    "before": "example"
+  },
+  "resolution": {
+    "requestedTarget": {
+      "anchor": {
+        "end": {
+          "blockId": "block-abc123",
+          "offset": 0
+        },
+        "start": {
+          "blockId": "block-abc123",
+          "offset": 0
+        }
+      },
+      "kind": "content",
+      "nodeId": "node-def456",
+      "stability": "stable"
+    },
+    "target": {
+      "anchor": {
+        "end": {
+          "blockId": "block-abc123",
+          "offset": 0
+        },
+        "start": {
+          "blockId": "block-abc123",
+          "offset": 0
+        }
+      },
+      "kind": "content",
+      "nodeId": "node-def456",
+      "stability": "stable"
+    }
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `ADDRESS_STALE`
+- `DUPLICATE_ID`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `CAPABILITY_UNSUPPORTED`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `NO_OP`
+- `CAPABILITY_UNAVAILABLE`
+- `UNSUPPORTED_ENVIRONMENT`
+- `INVALID_NESTING`
+- `INVALID_PLACEMENT`
+- `INVALID_PAYLOAD`
+- `CAPABILITY_UNSUPPORTED`
+- `ADDRESS_STALE`
+- `DUPLICATE_ID`
+- `INVALID_CONTEXT`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "$ref": "#/$defs/TextAddress"
+    },
+    "type": {
+      "enum": [
+        "text",
+        "markdown",
+        "html"
+      ],
+      "type": "string"
+    },
+    "value": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "value"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "evaluatedRevision": {
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "type": "string"
+            },
+            "before": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "before",
+            "after"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "requestedTarget": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "evaluatedRevision": {
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "type": "string"
+            },
+            "before": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "before",
+            "after"
+          ],
+          "type": "object"
+        },
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET",
+                "NO_OP",
+                "CAPABILITY_UNAVAILABLE",
+                "UNSUPPORTED_ENVIRONMENT",
+                "INVALID_NESTING",
+                "INVALID_PLACEMENT",
+                "INVALID_PAYLOAD",
+                "CAPABILITY_UNSUPPORTED",
+                "ADDRESS_STALE",
+                "DUPLICATE_ID",
+                "INVALID_CONTEXT",
+                "RAW_MODE_REQUIRED",
+                "PRESERVE_ONLY_VIOLATION",
+                "INVALID_INPUT"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "requestedTarget": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            },
+            "target": {
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    },
+                    "start": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "blockId": {
+                          "type": "string"
+                        },
+                        "offset": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "blockId",
+                        "offset"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "evaluatedRevision": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "content",
+                    "inline",
+                    "annotation",
+                    "section"
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "path": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "stability": {
+                  "enum": [
+                    "stable",
+                    "ephemeral"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "stability"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "requestedTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET",
+            "NO_OP",
+            "CAPABILITY_UNAVAILABLE",
+            "UNSUPPORTED_ENVIRONMENT",
+            "INVALID_NESTING",
+            "INVALID_PLACEMENT",
+            "INVALID_PAYLOAD",
+            "CAPABILITY_UNSUPPORTED",
+            "ADDRESS_STALE",
+            "DUPLICATE_ID",
+            "INVALID_CONTEXT",
+            "RAW_MODE_REQUIRED",
+            "PRESERVE_ONLY_VIOLATION",
+            "INVALID_INPUT"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "requestedTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "evaluatedRevision": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "content",
+                "inline",
+                "annotation",
+                "section"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "stability": {
+              "enum": [
+                "stable",
+                "ephemeral"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "stability"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -1,7 +1,6 @@
 // @ts-check
 import { getNodeType } from '@core/helpers/getNodeType.js';
 import { createCell } from './createCell.js';
-import { createTableBorders } from './createTableBorders.js';
 
 /**
  * Create a new table with specified dimensions
@@ -12,13 +11,25 @@ import { createTableBorders } from './createTableBorders.js';
  * @param {number} colsCount - Number of columns
  * @param {boolean} withHeaderRow - Create first row as header
  * @param {Object} [cellContent=null] - Initial cell content
- * @returns {Object} Complete table node with borders
+ * @param {number[]} [columnWidths=null] - Array of pixel widths per column
+ * @param {Object} [tableAttrsOverride=null] - Table attributes (tableStyleId, borders, tableProperties, etc.)
+ * @returns {Object} Complete table node
  * @example
  * const table = createTable(schema, 3, 3, true)
  * @example
  * const table = createTable(schema, 2, 4, false, paragraphNode)
+ * @example
+ * const table = createTable(schema, 3, 3, false, null, [200, 100, 200])
  */
-export const createTable = (schema, rowsCount, colsCount, withHeaderRow, cellContent = null) => {
+export const createTable = (
+  schema,
+  rowsCount,
+  colsCount,
+  withHeaderRow,
+  cellContent = null,
+  columnWidths = null,
+  tableAttrsOverride = null,
+) => {
   const types = {
     table: getNodeType('table', schema),
     tableRow: getNodeType('tableRow', schema),
@@ -30,10 +41,11 @@ export const createTable = (schema, rowsCount, colsCount, withHeaderRow, cellCon
   const cells = [];
 
   for (let index = 0; index < colsCount; index++) {
-    const cell = createCell(types.tableCell, cellContent);
+    const cellAttrs = columnWidths ? { colwidth: [columnWidths[index]] } : null;
+    const cell = createCell(types.tableCell, cellContent, cellAttrs);
     if (cell) cells.push(cell);
     if (withHeaderRow) {
-      const headerCell = createCell(types.tableHeader, cellContent);
+      const headerCell = createCell(types.tableHeader, cellContent, cellAttrs);
       if (headerCell) {
         headerCells.push(headerCell);
       }
@@ -43,11 +55,11 @@ export const createTable = (schema, rowsCount, colsCount, withHeaderRow, cellCon
   const rows = [];
 
   for (let index = 0; index < rowsCount; index++) {
-    const cellsToInsert = withHeaderRow && index === 0 ? headerCells : cells;
-    rows.push(types.tableRow.createChecked(null, cellsToInsert));
+    const isHeader = withHeaderRow && index === 0;
+    const cellsToInsert = isHeader ? headerCells : cells;
+    const rowAttrs = isHeader ? { tableRowProperties: { repeatHeader: true } } : null;
+    rows.push(types.tableRow.createChecked(rowAttrs, cellsToInsert));
   }
 
-  const tableBorders = createTableBorders();
-
-  return types.table.createChecked({ borders: tableBorders }, rows);
+  return types.table.createChecked(tableAttrsOverride, rows);
 };

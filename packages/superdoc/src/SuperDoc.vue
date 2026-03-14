@@ -15,13 +15,14 @@ import {
   watch,
   defineAsyncComponent,
 } from 'vue';
-import { NConfigProvider, NMessageProvider } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 
 import CommentsLayer from './components/CommentsLayer/CommentsLayer.vue';
 import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue';
 import FloatingComments from '@superdoc/components/CommentsLayer/FloatingComments.vue';
 import HrbrFieldsLayer from '@superdoc/components/HrbrFieldsLayer/HrbrFieldsLayer.vue';
+import WhiteboardLayer from './components/Whiteboard/WhiteboardLayer.vue';
+import { useWhiteboard } from './components/Whiteboard/use-whiteboard';
 import useSelection from '@superdoc/helpers/use-selection';
 
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
@@ -55,6 +56,17 @@ const {
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
 
+/*
+NOTE: new PdfViewer does not emit page-loaded. Hrbr fields/annotations
+rely on handlePageReady; revisit when wiring fields for PDF.
+
+From the old code:
+const containerBounds = container.getBoundingClientRect();
+containerBounds.originalWidth = width;
+containerBounds.originalHeight = height;
+emit('page-loaded', documentId, index, containerBounds);
+*/
+
 //prettier-ignore
 const {
   getConfig,
@@ -77,6 +89,7 @@ const {
   showAddComment,
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
+  syncTrackedChangePositionsWithDocument,
   addComment,
   getComment,
   COMMENT_EVENTS,
@@ -88,6 +101,7 @@ const { isHighContrastMode } = useHighContrastMode();
 const { uiFontFamily } = useUiFontFamily();
 
 const isViewingMode = () => proxy?.$superdoc?.config?.documentMode === 'viewing';
+const allowSelectionInViewMode = () => !!proxy?.$superdoc?.config?.allowSelectionInViewMode;
 const isViewingCommentsVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.comments?.visible === true,
 );
@@ -133,6 +147,7 @@ const superdocStyleVars = computed(() => {
 
 // Refs
 const layers = ref(null);
+const pdfViewerRef = ref(null);
 
 // Comments layer
 const commentsLayer = ref(null);
@@ -196,7 +211,7 @@ const handleDocumentMouseDown = (e) => {
 
 const handleHighlightClick = () => (toolsMenuPosition.top = null);
 const cancelPendingComment = (e) => {
-  if (e.target.classList.contains('n-dropdown-option-body__label')) return;
+  if (e.target.classList.contains('comments-dropdown__option-label')) return;
   commentsStore.removePendingComment(proxy.$superdoc);
 };
 
@@ -250,7 +265,6 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   presentationEditor.on('commentPositions', ({ positions }) => {
     const commentsConfig = proxy.$superdoc.config.modules?.comments;
     if (!commentsConfig || commentsConfig === false) return;
-    if (!positions || Object.keys(positions).length === 0) return;
     if (!shouldRenderCommentsInViewing.value) {
       commentsStore.clearEditorCommentPositions?.();
       return;
@@ -259,6 +273,18 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // Map PM positions to visual layout coordinates
     const mappedPositions = presentationEditor.getCommentBounds(positions, layers.value);
     handleEditorLocationsUpdate(mappedPositions);
+
+    // Ensure floating comments can render once the layout engine starts emitting positions.
+    // For DOCX, handleDocumentReady doesn't fire (it's wired to PDFViewer), so this is
+    // the primary trigger for hasInitializedLocations in editor-based documents.
+    if (!hasInitializedLocations.value) {
+      hasInitializedLocations.value = true;
+    }
+  });
+
+  presentationEditor.on('paginationUpdate', ({ layout }) => {
+    const totalPages = layout.pages.length;
+    proxy.$superdoc.emit('pagination-update', { totalPages, superdoc: proxy.$superdoc });
   });
 };
 
@@ -278,22 +304,49 @@ const onEditorUpdate = ({ editor }) => {
   proxy.$superdoc.emit('editor-update', { editor });
 };
 
-const onEditorSelectionChange = ({ editor, transaction }) => {
+let selectionUpdateRafId = null;
+const onEditorSelectionChange = ({ editor }) => {
+  // Always cancel any pending RAF first — a queued callback from a previous
+  // call could fire after mode switches and repopulate stale selection state.
+  if (selectionUpdateRafId != null) {
+    cancelAnimationFrame(selectionUpdateRafId);
+    selectionUpdateRafId = null;
+  }
+
   if (skipSelectionUpdate.value) {
     // When comment is added selection will be equal to comment text
     // Should skip calculations to keep text selection for comments correct
     skipSelectionUpdate.value = false;
-    if (isViewingMode()) {
+    if (isViewingMode() && !allowSelectionInViewMode()) {
       resetSelection();
     }
     return;
   }
 
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }
 
+  // Defer selection-related Vue reactive updates to the next animation frame.
+  // Without this, each PM transaction synchronously mutates reactive refs (selectionPosition,
+  // activeSelection, toolsMenuPosition), which triggers Vue's flushJobs microtask to re-evaluate
+  // hundreds of components — blocking the main thread for ~300ms per keystroke.
+  // RAF batches this work with the layout pipeline rerender, keeping typing responsive.
+  // Note: we capture only `editor` (not `transaction`) — by the time RAF fires,
+  // ProseMirror may have processed more keystrokes, making the transaction stale.
+  // processSelectionChange already reads editor.state.selection as the primary source.
+  selectionUpdateRafId = requestAnimationFrame(() => {
+    selectionUpdateRafId = null;
+    if (isViewingMode() && !allowSelectionInViewMode()) {
+      resetSelection();
+      return;
+    }
+    processSelectionChange(editor);
+  });
+};
+
+const processSelectionChange = (editor, transaction) => {
   const { documentId } = editor.options;
   const txnSelection = transaction?.selection;
   const stateSelection = editor.state?.selection ?? editor.view?.state?.selection;
@@ -453,6 +506,14 @@ const editorOptions = (doc) => {
     proxy.$superdoc.listeners?.('fonts-resolved')?.length > 0 ? proxy.$superdoc.listeners('fonts-resolved')[0] : null;
   const useLayoutEngine = proxy.$superdoc.config.useLayoutEngine !== false;
 
+  const ydocFragment = doc.ydoc?.getXmlFragment?.('supereditor');
+  const ydocParts = doc.ydoc?.getMap?.('parts');
+  const ydocMeta = doc.ydoc?.getMap?.('meta');
+  const legacyContent = ydocMeta?.has('docx');
+  const ydocHasContent =
+    (ydocFragment && ydocFragment.length > 0) || (ydocParts && ydocParts.size > 0) || legacyContent;
+  const isNewFile = doc.isNewFile && !ydocHasContent;
+
   const options = {
     isDebug: proxy.$superdoc.config.isDebug || false,
     documentId: doc.id,
@@ -463,13 +524,21 @@ const editorOptions = (doc) => {
     html: doc.html,
     markdown: doc.markdown,
     documentMode: proxy.$superdoc.config.documentMode,
+    allowSelectionInViewMode: proxy.$superdoc.config.allowSelectionInViewMode,
     rulers: doc.rulers,
     rulerContainer: proxy.$superdoc.config.rulerContainer,
     isInternal: proxy.$superdoc.config.isInternal,
     annotations: proxy.$superdoc.config.annotations,
     isCommentsEnabled: Boolean(commentsModuleConfig.value),
     isAiEnabled: proxy.$superdoc.config.modules?.ai,
-    slashMenuConfig: proxy.$superdoc.config.modules?.slashMenu,
+    contextMenuConfig: (() => {
+      if (proxy.$superdoc.config.modules?.slashMenu && !proxy.$superdoc.config.modules?.contextMenu) {
+        console.warn('[SuperDoc] modules.slashMenu is deprecated. Use modules.contextMenu instead.');
+      }
+      return proxy.$superdoc.config.modules?.contextMenu ?? proxy.$superdoc.config.modules?.slashMenu;
+    })(),
+    /** @deprecated Use contextMenuConfig instead */
+    slashMenuConfig: proxy.$superdoc.config.modules?.contextMenu ?? proxy.$superdoc.config.modules?.slashMenu,
     comments: {
       highlightColors: commentsModuleConfig.value?.highlightColors,
       highlightOpacity: commentsModuleConfig.value?.highlightOpacity,
@@ -493,13 +562,14 @@ const editorOptions = (doc) => {
     onTransaction: onEditorTransaction,
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
-    isNewFile: doc.isNewFile || false,
+    isNewFile,
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],
     suppressDefaultDocxStyles: proxy.$superdoc.config.suppressDefaultDocxStyles,
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,
     jsonOverride: proxy.$superdoc.config.jsonOverride,
     viewOptions: proxy.$superdoc.config.viewOptions,
+    linkPopoverResolver: proxy.$superdoc.config.modules?.links?.popoverResolver,
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),
@@ -515,6 +585,15 @@ const editorOptions = (doc) => {
         isInternal: proxy.$superdoc.config.isInternal,
         ...payload,
       }),
+    licenseKey: proxy.$superdoc.config.licenseKey,
+    telemetry: proxy.$superdoc.config.telemetry?.enabled
+      ? {
+          enabled: true,
+          endpoint: proxy.$superdoc.config.telemetry?.endpoint,
+          metadata: proxy.$superdoc.config.telemetry?.metadata,
+          licenseKey: proxy.$superdoc.config.telemetry?.licenseKey,
+        }
+      : null,
   };
 
   return options;
@@ -596,7 +675,13 @@ const onEditorCommentsUpdate = (params = {}) => {
   nextTick(() => {
     if (pendingComment.value) return;
     commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    // Briefly suppress click-outside so the same click that selected the comment
+    // highlight in the editor doesn't immediately deactivate it via the sidebar.
+    // Reset after the event loop settles so subsequent outside clicks work normally.
     isCommentHighlighted.value = true;
+    setTimeout(() => {
+      isCommentHighlighted.value = false;
+    }, 0);
   });
 
   // Bubble up the event to the user, if handled
@@ -606,6 +691,15 @@ const onEditorCommentsUpdate = (params = {}) => {
 };
 
 const onEditorTransaction = ({ editor, transaction, duration }) => {
+  const inputType = transaction?.getMeta?.('inputType');
+
+  // Call sync on editor transaction but only if it's undo or redo
+  // This could be extended to other listeners in the future
+  if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+    const documentId = editor?.options?.documentId;
+    syncTrackedChangePositionsWithDocument({ documentId, editor });
+  }
+
   if (typeof proxy.$superdoc.config.onTransaction === 'function') {
     proxy.$superdoc.config.onTransaction({ editor, transaction, duration });
   }
@@ -662,6 +756,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown);
+  if (selectionUpdateRafId != null) {
+    cancelAnimationFrame(selectionUpdateRafId);
+    selectionUpdateRafId = null;
+  }
 });
 
 const selectionLayer = ref(null);
@@ -672,10 +770,12 @@ const getSelectionPosition = computed(() => {
     return { x: null, y: null };
   }
 
-  const top = selectionPosition.value.top;
-  const left = selectionPosition.value.left;
-  const right = selectionPosition.value.right;
-  const bottom = selectionPosition.value.bottom;
+  const isPdf = selectionPosition.value.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = selectionPosition.value.top * zoom;
+  const left = selectionPosition.value.left * zoom;
+  const right = selectionPosition.value.right * zoom;
+  const bottom = selectionPosition.value.bottom * zoom;
   const style = {
     zIndex: 500,
     borderRadius: '4px',
@@ -688,7 +788,7 @@ const getSelectionPosition = computed(() => {
 });
 
 const handleSelectionChange = (selection) => {
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }
@@ -718,7 +818,9 @@ const handleSelectionChange = (selection) => {
   activeSelection.value = selection;
 
   // Place the tools menu at the level of the selection
-  let top = selection.selectionBounds.top;
+  const isPdf = selection.source === 'pdf' || selection.source?.value === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = selection.selectionBounds.top * zoom;
   toolsMenuPosition.top = top + 'px';
   toolsMenuPosition.right = isMobileView ? '0' : '-25px';
 };
@@ -728,7 +830,7 @@ const resetSelection = () => {
   toolsMenuPosition.top = null;
 };
 
-const updateSelection = ({ startX, startY, x, y, source }) => {
+const updateSelection = ({ startX, startY, x, y, source, page }) => {
   const hasStartCoords = typeof startX === 'number' || typeof startY === 'number';
   const hasEndCoords = typeof x === 'number' || typeof y === 'number';
 
@@ -748,6 +850,7 @@ const updateSelection = ({ startX, startY, x, y, source }) => {
       startX,
       startY,
       source,
+      page: page ?? null,
     };
   }
 
@@ -774,23 +877,48 @@ const updateSelection = ({ startX, startY, x, y, source }) => {
   }
 };
 
+const getPdfPageNumberFromEvent = (event) => {
+  const x = event?.clientX;
+  const y = event?.clientY;
+  if (typeof x !== 'number' || typeof y !== 'number') return null;
+  const elements = document.elementsFromPoint(x, y);
+  const pageEl = elements.find((el) => el?.dataset?.pdfPage != null);
+  if (pageEl) {
+    const pageNumber = Number(pageEl.dataset?.pageNumber);
+    return Number.isFinite(pageNumber) ? pageNumber : null;
+  }
+  return null;
+};
+
 const handleSelectionStart = (e) => {
   resetSelection();
   selectionLayer.value.style.pointerEvents = 'auto';
 
   nextTick(() => {
     isDragging.value = true;
-    const y = e.offsetY / (activeZoom.value / 100);
-    const x = e.offsetX / (activeZoom.value / 100);
-    updateSelection({ startX: x, startY: y });
+    selectionLayer.value.style.pointerEvents = 'none';
+    const pageNumber = getPdfPageNumberFromEvent(e);
+    selectionLayer.value.style.pointerEvents = 'auto';
+    if (!pageNumber) {
+      isDragging.value = false;
+      selectionLayer.value.style.pointerEvents = 'none';
+      return;
+    }
+    const layerBounds = selectionLayer.value.getBoundingClientRect();
+    const zoom = activeZoom.value / 100;
+    const x = (e.clientX - layerBounds.left) / zoom;
+    const y = (e.clientY - layerBounds.top) / zoom;
+    updateSelection({ startX: x, startY: y, page: pageNumber, source: 'pdf' });
     selectionLayer.value.addEventListener('mousemove', handleDragMove);
   });
 };
 
 const handleDragMove = (e) => {
   if (!isDragging.value) return;
-  const y = e.offsetY / (activeZoom.value / 100);
-  const x = e.offsetX / (activeZoom.value / 100);
+  const layerBounds = selectionLayer.value.getBoundingClientRect();
+  const zoom = activeZoom.value / 100;
+  const x = (e.clientX - layerBounds.left) / zoom;
+  const y = (e.clientY - layerBounds.top) / zoom;
   updateSelection({ x, y });
 };
 
@@ -799,6 +927,7 @@ const handleDragEnd = (e) => {
   selectionLayer.value.removeEventListener('mousemove', handleDragMove);
 
   if (!selectionPosition.value) return;
+  const pageNumber = selectionPosition.value.page ?? getPdfPageNumberFromEvent(e);
   const selection = useSelection({
     selectionBounds: {
       top: selectionPosition.value.top,
@@ -806,7 +935,9 @@ const handleDragEnd = (e) => {
       right: selectionPosition.value.right,
       bottom: selectionPosition.value.bottom,
     },
+    page: pageNumber ?? 1,
     documentId: documents.value[0].id,
+    source: 'pdf',
   });
 
   handleSelectionChange(selection);
@@ -830,163 +961,207 @@ const handlePdfClick = (e) => {
   handleSelectionStart(e);
 };
 
+const handlePdfSelectionRaw = ({ selectionBounds, documentId, page }) => {
+  if (!selectionBounds || !documentId) return;
+  const selection = useSelection({
+    selectionBounds,
+    documentId,
+    page,
+    source: 'pdf',
+  });
+  handleSelectionChange(selection);
+};
+
 watch(
   () => activeZoom.value,
   (zoom) => {
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
       PresentationEditor.setGlobalZoom((zoom ?? 100) / 100);
     }
+
+    const pdfViewer = getPDFViewer();
+    pdfViewer?.updateScale((zoom ?? 100) / 100);
+
+    nextTick(() => {
+      updateWhiteboardPageSizes();
+      updateWhiteboardPageOffsets();
+    });
   },
 );
 
+// Ensure hasInitializedLocations is set when comments arrive (backup for cases
+// where handleDocumentReady hasn't fired yet). Never toggle false→true→false —
+// the virtualized FloatingComments reacts to comment changes via computed properties.
 watch(getFloatingComments, () => {
-  hasInitializedLocations.value = false;
-  nextTick(() => {
+  if (!hasInitializedLocations.value) {
     hasInitializedLocations.value = true;
-  });
+  }
 });
+
+const {
+  whiteboardModuleConfig,
+  whiteboard,
+  whiteboardPages,
+  whiteboardPageSizes,
+  whiteboardPageOffsets,
+  whiteboardEnabled,
+  whiteboardOpacity,
+  handleWhiteboardPageReady,
+  updateWhiteboardPageSizes,
+  updateWhiteboardPageOffsets,
+} = useWhiteboard({
+  proxy,
+  layers,
+  documents,
+  modules,
+});
+
+const getPDFViewer = () => {
+  return Array.isArray(pdfViewerRef.value) ? pdfViewerRef.value[0] : pdfViewerRef.value;
+};
 </script>
 
 <template>
-  <n-config-provider abstract preflight-style-disabled>
-    <div
-      class="superdoc"
-      :class="{
-        'superdoc--with-sidebar': showCommentsSidebar,
-        'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
-        'high-contrast': isHighContrastMode,
-      }"
-      :style="superdocStyleVars"
-    >
-      <div class="superdoc__layers layers" ref="layers" role="group">
-        <!-- Floating tools menu (shows up when user has text selection)-->
-        <div v-if="showToolsFloatingMenu" class="superdoc__tools tools" :style="toolsMenuPosition">
-          <div class="tools-item" data-id="is-tool" @mousedown.stop.prevent="handleToolClick('comments')">
-            <div class="superdoc__tools-icon" v-html="superdocIcons.comment"></div>
-          </div>
-          <!-- AI tool button -->
-          <div
-            v-if="proxy.$superdoc.config.modules.ai"
-            class="tools-item"
-            data-id="is-tool"
-            @mousedown.stop.prevent="handleToolClick('ai')"
-          >
-            <div class="superdoc__tools-icon ai-tool"></div>
-          </div>
+  <div
+    class="superdoc"
+    :class="{
+      'superdoc--with-sidebar': showCommentsSidebar,
+      'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
+      'high-contrast': isHighContrastMode,
+    }"
+    :style="superdocStyleVars"
+  >
+    <div class="superdoc__layers layers" ref="layers" role="group">
+      <!-- Floating tools menu (shows up when user has text selection)-->
+      <div v-if="showToolsFloatingMenu" class="superdoc__tools tools" :style="toolsMenuPosition">
+        <div class="tools-item" data-id="is-tool" @mousedown.stop.prevent="handleToolClick('comments')">
+          <div class="superdoc__tools-icon" v-html="superdocIcons.comment"></div>
         </div>
-
-        <div class="superdoc__document document">
-          <div
-            v-if="isCommentsEnabled"
-            class="superdoc__selection-layer selection-layer"
-            @mousedown="handleSelectionStart"
-            @mouseup="handleDragEnd"
-            ref="selectionLayer"
-          >
-            <div
-              :style="getSelectionPosition"
-              class="superdoc__temp-selection temp-selection sd-highlight sd-initial-highlight"
-              v-if="selectionPosition && shouldShowSelection"
-            ></div>
-          </div>
-
-          <!-- Fields layer -->
-          <HrbrFieldsLayer
-            v-if="'hrbr-fields' in modules && layers"
-            :fields="modules['hrbr-fields']"
-            class="superdoc__comments-layer comments-layer"
-            style="z-index: 2"
-            ref="hrbrFieldsLayer"
-          />
-
-          <!-- On-document comments layer -->
-          <CommentsLayer
-            v-if="layers"
-            class="superdoc__comments-layer comments-layer"
-            style="z-index: 3"
-            ref="commentsLayer"
-            :parent="layers"
-            :user="user"
-            @highlight-click="handleHighlightClick"
-          />
-
-          <!-- AI Layer for temporary highlights -->
-          <AiLayer
-            v-if="showAiLayer"
-            class="ai-layer"
-            style="z-index: 4"
-            ref="aiLayer"
-            :editor="proxy.$superdoc.activeEditor"
-          />
-
-          <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
-            <!-- PDF renderer -->
-
-            <PdfViewer
-              v-if="doc.type === PDF"
-              :document-data="doc"
-              :config="pdfConfig"
-              @selection-change="handleSelectionChange"
-              @ready="handleDocumentReady"
-              @page-loaded="handlePageReady"
-              @bypass-selection="handlePdfClick"
-            />
-
-            <n-message-provider>
-              <SuperEditor
-                v-if="doc.type === DOCX"
-                :file-source="doc.data"
-                :state="doc.state"
-                :document-id="doc.id"
-                :options="{ ...editorOptions(doc), rulers: doc.rulers }"
-                @editor-ready="onEditorReady"
-                @pageMarginsChange="handleSuperEditorPageMarginsChange(doc, $event)"
-              />
-            </n-message-provider>
-
-            <!-- omitting field props -->
-            <HtmlViewer
-              v-if="doc.type === HTML"
-              @ready="(id) => handleDocumentReady(id, null)"
-              @selection-change="handleSelectionChange"
-              :file-source="doc.data"
-              :document-id="doc.id"
-            />
-          </div>
+        <!-- AI tool button -->
+        <div
+          v-if="proxy.$superdoc.config.modules.ai"
+          class="tools-item"
+          data-id="is-tool"
+          @mousedown.stop.prevent="handleToolClick('ai')"
+        >
+          <div class="superdoc__tools-icon ai-tool"></div>
         </div>
       </div>
 
-      <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
-        <CommentDialog
-          v-if="pendingComment"
-          :comment="pendingComment"
-          :auto-focus="true"
-          :is-floating="true"
-          v-click-outside="cancelPendingComment"
+      <div class="superdoc__document document">
+        <div
+          v-if="isCommentsEnabled"
+          class="superdoc__selection-layer selection-layer"
+          @mousedown="handleSelectionStart"
+          @mouseup="handleDragEnd"
+          ref="selectionLayer"
+        >
+          <div
+            :style="getSelectionPosition"
+            class="superdoc__temp-selection temp-selection sd-highlight sd-initial-highlight"
+            v-if="selectionPosition && shouldShowSelection"
+          ></div>
+        </div>
+
+        <!-- Fields layer -->
+        <HrbrFieldsLayer
+          v-if="'hrbr-fields' in modules && layers"
+          :fields="modules['hrbr-fields']"
+          class="superdoc__comments-layer comments-layer"
+          style="z-index: 2"
+          ref="hrbrFieldsLayer"
         />
 
-        <div class="floating-comments">
-          <FloatingComments
-            v-if="hasInitializedLocations && getFloatingComments.length > 0"
-            v-for="doc in documentsWithConverations"
-            :parent="layers"
-            :current-document="doc"
+        <!-- On-document comments layer -->
+        <CommentsLayer
+          v-if="layers"
+          class="superdoc__comments-layer comments-layer"
+          style="z-index: 3"
+          ref="commentsLayer"
+          :parent="layers"
+          :user="user"
+          @highlight-click="handleHighlightClick"
+        />
+
+        <!-- AI Layer for temporary highlights -->
+        <AiLayer
+          v-if="showAiLayer"
+          class="ai-layer"
+          style="z-index: 4"
+          ref="aiLayer"
+          :editor="proxy.$superdoc.activeEditor"
+        />
+
+        <!-- Whiteboard Layer -->
+        <WhiteboardLayer
+          v-if="layers && whiteboardModuleConfig"
+          style="z-index: 3"
+          :whiteboard="whiteboard"
+          :pages="whiteboardPages"
+          :page-sizes="whiteboardPageSizes"
+          :page-offsets="whiteboardPageOffsets"
+          :enabled="whiteboardEnabled"
+          :opacity="whiteboardOpacity"
+        />
+
+        <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
+          <!-- PDF renderer -->
+          <PdfViewer
+            v-if="doc.type === PDF"
+            :file="doc.data"
+            :file-id="doc.id"
+            :config="pdfConfig"
+            @selection-raw="handlePdfSelectionRaw"
+            @bypass-selection="handlePdfClick"
+            @page-rendered="handleWhiteboardPageReady"
+            @document-ready="({ documentId, viewerContainer }) => handleDocumentReady(documentId, viewerContainer)"
+            ref="pdfViewerRef"
+          />
+
+          <SuperEditor
+            v-if="doc.type === DOCX"
+            :file-source="doc.data"
+            :state="doc.state"
+            :document-id="doc.id"
+            :options="{ ...editorOptions(doc), rulers: doc.rulers }"
+            @editor-ready="onEditorReady"
+            @pageMarginsChange="handleSuperEditorPageMarginsChange(doc, $event)"
+          />
+
+          <!-- omitting field props -->
+          <HtmlViewer
+            v-if="doc.type === HTML"
+            @ready="(id) => handleDocumentReady(id, null)"
+            @selection-change="handleSelectionChange"
+            :file-source="doc.data"
+            :document-id="doc.id"
           />
         </div>
       </div>
+    </div>
 
-      <!-- AI Writer at cursor position -->
-      <div class="ai-writer-container" v-if="showAiWriter" :style="aiWriterPosition">
-        <AIWriter
-          :selected-text="selectedText"
-          :handle-close="handleAiWriterClose"
-          :editor="proxy.$superdoc.activeEditor"
-          :api-key="proxy.$superdoc.toolbar?.config?.aiApiKey"
-          :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
+    <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
+      <div class="floating-comments">
+        <FloatingComments
+          v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
+          v-for="doc in documentsWithConverations"
+          :parent="layers"
+          :current-document="doc"
         />
       </div>
     </div>
-  </n-config-provider>
+
+    <!-- AI Writer at cursor position -->
+    <div class="ai-writer-container" v-if="showAiWriter" :style="aiWriterPosition">
+      <AIWriter
+        :selected-text="selectedText"
+        :handle-close="handleAiWriterClose"
+        :editor="proxy.$superdoc.activeEditor"
+        :api-key="proxy.$superdoc.toolbar?.config?.aiApiKey"
+        :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
+      />
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -1074,6 +1249,7 @@ watch(getFloatingComments, () => {
   background-color: rgba(219, 219, 219, 0.6);
   border-radius: 12px;
   cursor: pointer;
+  position: relative;
 }
 
 .tools-item i {

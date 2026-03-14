@@ -109,7 +109,7 @@
  * @property {TableMeasurement} [tableCellSpacing] - Cell spacing
  * @property {TableMeasurement} [tableIndent] - Table indentation
  * @property {"fixed" | "autofit"} [tableLayout] - Table layout algorithm
- * @property {TableLook} [tableLook] - Various boolean flags that affect the rendering of the table
+ * @property {TableLook} [tblLook] - Various boolean flags that affect the rendering of the table
  * @property {"never" | "overlap"} [overlap] - Specifies whether the current table should allow other floating tables to overlap its extents when the tables are displayed in a document
  * @property {string} [tableStyleId] - Reference to table style ID
  * @property {number} [tableStyleColBandSize] - Number of columns for which the table style is applied
@@ -169,6 +169,8 @@
  * @property {import('prosemirror-model').Node[]} rows - Row nodes to append
  */
 
+import { v4 as uuidv4 } from 'uuid';
+import { Fragment } from 'prosemirror-model';
 import { Node, Attribute } from '@core/index.js';
 import { callOrGet } from '@core/utilities/callOrGet.js';
 import { getExtensionConfigField } from '@core/helpers/getExtensionConfigField.js';
@@ -176,11 +178,16 @@ import { /* TableView */ createTableView } from './TableView.js';
 import { createTable } from './tableHelpers/createTable.js';
 import { createColGroup } from './tableHelpers/createColGroup.js';
 import { deleteTableWhenSelected } from './tableHelpers/deleteTableWhenSelected.js';
-import { isInTable } from '@helpers/isInTable.js';
-import { createCellBorders } from '../table-cell/helpers/createCellBorders.js';
+import { normalizeNewTableAttrs } from './tableHelpers/normalizeNewTableAttrs.js';
+import { computeColumnWidths } from './tableHelpers/computeColumnWidths.js';
 import { createTableBorders } from './tableHelpers/createTableBorders.js';
+import {
+  isLegacySchemaDefaultBorders,
+  convertBordersToOoxmlFormat,
+} from '../table-cell/helpers/legacyBorderMigration.js';
+import { isInTable } from '@helpers/isInTable.js';
 import { findParentNode } from '@helpers/findParentNode.js';
-import { TextSelection } from 'prosemirror-state';
+import { TextSelection, Plugin, PluginKey } from 'prosemirror-state';
 import { isCellSelection } from './tableHelpers/isCellSelection.js';
 import {
   addColumnBefore as originalAddColumnBefore,
@@ -207,6 +214,7 @@ import {
 } from 'prosemirror-tables';
 import { cellAround } from './tableHelpers/cellAround.js';
 import { cellWrapping } from './tableHelpers/cellWrapping.js';
+import { toggleHeaderRow as toggleHeaderRowCommand } from './tableHelpers/toggleHeaderRow.js';
 import {
   resolveTable,
   pickTemplateRowForAppend,
@@ -216,11 +224,46 @@ import {
 } from './tableHelpers/appendRows.js';
 
 /**
+ * Determines which sides of a table inserted at `pos` need a separator
+ * paragraph to prevent adjacency with an existing table.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} pos - Absolute insertion position (between top-level blocks)
+ * @returns {{ before: boolean, after: boolean }}
+ */
+function tableSeparatorNeeds(doc, pos) {
+  const $pos = doc.resolve(pos);
+  if ($pos.depth !== 0) return { before: false, after: false };
+
+  const indexAfter = $pos.index(0);
+  const nodeAfter = indexAfter < doc.childCount ? doc.child(indexAfter) : null;
+  const nodeBefore = indexAfter > 0 ? doc.child(indexAfter - 1) : null;
+
+  return {
+    before: nodeBefore?.type.name === 'table',
+    after: !nodeAfter || nodeAfter.type.name === 'table',
+  };
+}
+
+const IMPORT_CONTEXT_SELECTOR = '[data-superdoc-import="true"]';
+const IMPORT_DEFAULT_TABLE_WIDTH_PCT = 5000; // OOXML percent units where 5000 == 100%
+
+/**
+ * Detects whether a table element is being parsed from imported content
+ * (e.g. insertContent with contentType "html"/"markdown").
+ *
+ * @param {Element} element
+ * @returns {boolean}
+ */
+const isImportedTableElement = (element) => Boolean(element?.closest?.(IMPORT_CONTEXT_SELECTOR));
+
+/**
  * Table configuration options
  * @typedef {Object} TableConfig
  * @property {number} [rows=3] - Number of rows to create
  * @property {number} [cols=3] - Number of columns to create
  * @property {boolean} [withHeaderRow=false] - Create first row as header row
+ * @property {number[]} [columnWidths] - Explicit column widths in pixels
  */
 
 /**
@@ -257,7 +300,7 @@ import {
  * @property {import("./tableHelpers/createTableBorders.js").TableBorders} [borders] - Border styling for this table
  * @property {string} [borderCollapse='collapse'] - CSS border-collapse property
  * @property {string} [justification] - Table alignment ('left', 'center', 'right')
- * @property {number} [tableCellSpacing] - Cell spacing in pixels for this table
+ * @property {TableMeasurement} [tableCellSpacing] - Cell spacing for this table
  * @property {string} [sdBlockId] @internal - Internal block tracking ID
  * @property {string} [tableStyleId] @internal - Internal reference to table style
  * @property {string} [tableLayout] @internal - CSS table-layout property (advanced usage)
@@ -332,6 +375,30 @@ export const Table = Node.create({
       },
 
       /**
+       * @private
+       * @category Attribute
+       * @param {string} [paraId] - OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips
+       */
+      paraId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
+      },
+
+      /**
+       * @private
+       * @category Attribute
+       * @param {string} [textId] - OOXML text identifier (w14:textId), preserved across DOCX roundtrips
+       */
+      textId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
+      },
+
+      /**
        * @category Attribute
        * @param {TableIndent} [tableIndent] - Table indentation configuration
        */
@@ -354,6 +421,17 @@ export const Table = Node.create({
        */
       borders: {
         default: {},
+        renderDOM({ borders, borderCollapse, tableCellSpacing }) {
+          if (!Object.keys(borders).length && borderCollapse !== 'separate' && !tableCellSpacing) return {};
+
+          const style = Object.entries(borders).reduce((acc, [key, { size, color }]) => {
+            return `${acc}border-${key}: ${Math.ceil(size)}px solid ${color || 'black'};`;
+          }, '');
+
+          return {
+            style,
+          };
+        },
       },
 
       /**
@@ -392,15 +470,6 @@ export const Table = Node.create({
       /**
        * @private
        * @category Attribute
-       * @param {string} [tableStyleId] - Internal reference to table style (not user-configurable)
-       */
-      tableStyleId: {
-        rendered: false,
-      },
-
-      /**
-       * @private
-       * @category Attribute
        * @param {string} [tableLayout] - CSS table-layout property (advanced usage)
        */
       tableLayout: {
@@ -409,11 +478,16 @@ export const Table = Node.create({
 
       /**
        * @category Attribute
-       * @param {number} [tableCellSpacing] - Cell spacing in pixels for this table
+       * @param {TableMeasurement} [tableCellSpacing] - Cell spacing for this table
        */
       tableCellSpacing: {
         default: null,
-        rendered: false,
+        renderDOM({ tableCellSpacing }) {
+          if (!tableCellSpacing?.value) return {};
+          return {
+            style: `border-spacing: ${tableCellSpacing.value}px`,
+          };
+        },
       },
 
       /**
@@ -427,6 +501,44 @@ export const Table = Node.create({
             value: null,
             type: 'auto',
           },
+        },
+        rendered: false,
+        parseDOM: (element) => {
+          if (!isImportedTableElement(element)) return undefined;
+
+          // Imported HTML tables usually have no structural width metadata.
+          // Default them to 100% so visual rendering matches DOCX export behavior.
+          return {
+            tableWidth: {
+              value: IMPORT_DEFAULT_TABLE_WIDTH_PCT,
+              type: 'pct',
+            },
+          };
+        },
+      },
+
+      /**
+       * Table style reference. HTML-parsed tables get null here; the actual
+       * style is resolved via normalizeNewTableAttrs only when
+       * needsTableStyleNormalization=true.
+       */
+      tableStyleId: {
+        parseDOM: (element) => {
+          if (!isImportedTableElement(element)) return undefined;
+          return null;
+        },
+        rendered: false,
+      },
+
+      /**
+       * Marker for imported/non-DOCX tables that still need style normalization.
+       * Existing DOCX tables may legitimately have tableStyleId=null.
+       */
+      needsTableStyleNormalization: {
+        default: false,
+        parseDOM: (element) => {
+          if (!isImportedTableElement(element)) return undefined;
+          return true;
         },
         rendered: false,
       },
@@ -530,11 +642,21 @@ export const Table = Node.create({
        * @example
        * editor.commands.insertTable()
        * editor.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+       * editor.commands.insertTable({ rows: 3, cols: 3, columnWidths: [200, 100, 200] })
        */
       insertTable:
-        ({ rows = 3, cols = 3, withHeaderRow = false } = {}) =>
+        ({ rows = 3, cols = 3, withHeaderRow = false, columnWidths = null } = {}) =>
         ({ tr, dispatch, editor }) => {
-          const node = createTable(editor.schema, rows, cols, withHeaderRow);
+          const widths = columnWidths ?? computeColumnWidths(editor, cols);
+
+          const resolved = normalizeNewTableAttrs(editor);
+          const tableAttrs = {
+            ...(resolved.tableStyleId ? { tableStyleId: resolved.tableStyleId } : {}),
+            ...(resolved.borders ? { borders: resolved.borders } : {}),
+            ...(resolved.tableProperties ? { tableProperties: resolved.tableProperties } : {}),
+          };
+
+          const node = createTable(editor.schema, rows, cols, withHeaderRow, null, widths, tableAttrs);
 
           if (dispatch) {
             let offset = tr.selection.$from.end() + 1;
@@ -548,6 +670,92 @@ export const Table = Node.create({
           }
 
           return true;
+        },
+
+      /**
+       * Insert a table at a specific document position.
+       * Used by the document API's create.table operation.
+       *
+       * Mirrors the logic of `core/commands/insertTableAt.js` but adapted
+       * for the extension command interface (shared `tr`, `dispatch` as gate).
+       *
+       * @category Command
+       * @param {Object} options
+       * @param {number} options.pos - Absolute document position to insert at
+       * @param {number} options.rows - Number of rows
+       * @param {number} options.columns - Number of columns
+       * @param {string} [options.sdBlockId] - Stable block ID for the created table
+       * @param {string} [options.paraId] - OOXML-compatible identifier (w14:paraId) that survives DOCX roundtrips
+       * @param {boolean} [options.tracked] - When true, sets forceTrackChanges meta; when false, sets skipTrackChanges meta
+       */
+      insertTableAt:
+        ({ pos, rows, columns, sdBlockId, paraId, tracked } = {}) =>
+        ({ tr, state, dispatch, editor }) => {
+          const tableType = state.schema.nodes.table;
+          const tableRowType = state.schema.nodes.tableRow;
+          const tableCellType = state.schema.nodes.tableCell;
+          if (!tableType || !tableRowType || !tableCellType) return false;
+          if (!Number.isInteger(pos) || pos < 0 || pos > state.doc.content.size) return false;
+          if (!Number.isInteger(rows) || rows < 1) return false;
+          if (!Number.isInteger(columns) || columns < 1) return false;
+
+          try {
+            const genParaId = () =>
+              Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
+                .join('')
+                .toUpperCase();
+            const widths = computeColumnWidths(editor, columns);
+            const rowNodes = [];
+            for (let r = 0; r < rows; r++) {
+              const cellNodes = [];
+              for (let c = 0; c < columns; c++) {
+                const cellAttrs = { paraId: genParaId(), ...(widths ? { colwidth: [widths[c]] } : {}) };
+                const cell = tableCellType.createAndFill(cellAttrs);
+                if (!cell) return false;
+                cellNodes.push(cell);
+              }
+              const row = tableRowType.createChecked(null, cellNodes);
+              rowNodes.push(row);
+            }
+            const resolved = normalizeNewTableAttrs(editor);
+            const tableAttrs = {
+              ...(resolved.tableStyleId ? { tableStyleId: resolved.tableStyleId } : {}),
+              ...(resolved.borders ? { borders: resolved.borders } : {}),
+              ...(resolved.tableProperties ? { tableProperties: resolved.tableProperties } : {}),
+              ...(sdBlockId ? { sdBlockId } : {}),
+              ...(paraId ? { paraId } : {}),
+            };
+            const tableNode = tableType.createChecked(tableAttrs, rowNodes);
+
+            if (dispatch) {
+              const sep = tableSeparatorNeeds(state.doc, pos);
+              const makeSep = () => {
+                const attrs = { sdBlockId: uuidv4(), paraId: genParaId() };
+                return state.schema.nodes.paragraph.createAndFill(attrs);
+              };
+              if (sep.before || sep.after) {
+                const nodes = [];
+                if (sep.before) {
+                  const s = makeSep();
+                  if (s) nodes.push(s);
+                }
+                nodes.push(tableNode);
+                if (sep.after) {
+                  const s = makeSep();
+                  if (s) nodes.push(s);
+                }
+                tr.insert(pos, Fragment.from(nodes));
+              } else {
+                tr.insert(pos, tableNode);
+              }
+              tr.setMeta('inputType', 'programmatic');
+              if (tracked === true) tr.setMeta('forceTrackChanges', true);
+              else if (tracked === false) tr.setMeta('skipTrackChanges', true);
+            }
+            return true;
+          } catch {
+            return false;
+          }
         },
 
       /**
@@ -912,7 +1120,14 @@ export const Table = Node.create({
         },
 
       /**
-       * Toggle the first row as header row
+       * Toggle header-row status on the row(s) under the cursor or CellSelection.
+       *
+       * Sets both the cell node type (`tableHeader` ↔ `tableCell`) **and** the
+       * OOXML repeat-header flag (`tableRowProperties.repeatHeader`) in a single
+       * transaction so that undo reverts both changes atomically.
+       *
+       * Does NOT modify `tblLook.firstRow` (first-row style option).
+       *
        * @category Command
        * @returns {Function} Command
        * @example
@@ -921,7 +1136,7 @@ export const Table = Node.create({
       toggleHeaderRow:
         () =>
         ({ state, dispatch }) => {
-          return toggleHeader('row')(state, dispatch);
+          return toggleHeaderRowCommand(state, dispatch);
         },
 
       /**
@@ -1065,12 +1280,22 @@ export const Table = Node.create({
           const from = table.pos;
           const to = table.pos + table.node.nodeSize;
 
-          // remove from cells
+          // remove from cells — write nil borders to tableCellProperties.borders (canonical source)
+          const nilBorder = { val: 'nil', size: 0, space: 0, color: 'auto' };
           state.doc.nodesBetween(from, to, (node, pos) => {
             if (['tableCell', 'tableHeader'].includes(node.type.name)) {
               tr.setNodeMarkup(pos, undefined, {
                 ...node.attrs,
-                borders: createCellBorders({ size: 0, space: 0, val: 'none', color: 'auto' }),
+                borders: null,
+                tableCellProperties: {
+                  ...(node.attrs.tableCellProperties ?? {}),
+                  borders: {
+                    top: { ...nilBorder },
+                    bottom: { ...nilBorder },
+                    left: { ...nilBorder },
+                    right: { ...nilBorder },
+                  },
+                },
               });
             }
           });
@@ -1114,6 +1339,7 @@ export const Table = Node.create({
 
   addPmPlugins() {
     const resizable = this.options.resizable && this.editor.isEditable;
+    const editor = this.editor;
 
     return [
       ...(resizable
@@ -1141,6 +1367,116 @@ export const Table = Node.create({
         // @ts-expect-error - Options types will be fixed in TS migration
         allowTableNodeSelection: this.options.allowTableNodeSelection,
       }),
+
+      // Normalize table style on paste / setContent / insertContent.
+      // Only tables explicitly marked with needsTableStyleNormalization
+      // are normalized, so DOCX-imported tables with tableStyleId=null keep
+      // their original semantics.
+      //
+      // The plugin applies the resolved style via
+      // normalizeNewTableAttrs, so every creation path is covered.
+      //
+      // On the first call, scans the entire document to catch tables
+      // present in the initial content (which don't come through a
+      // docChanged transaction). Subsequent calls only scan changed ranges.
+      (() => {
+        let initialScanDone = false;
+        return new Plugin({
+          key: new PluginKey('tableStyleNormalization'),
+          appendTransaction(transactions, _oldState, newState) {
+            const needsInitialScan = !initialScanDone;
+            initialScanDone = true;
+
+            const hasDocChange = transactions.some((t) => t.docChanged);
+            if (!hasDocChange && !needsInitialScan) return null;
+
+            // Build scan ranges: full document on first call, changed ranges thereafter.
+            const ranges = [];
+            if (needsInitialScan) {
+              ranges.push(0, newState.doc.content.size);
+            } else {
+              const allMaps = [];
+              for (const t of transactions) {
+                for (let i = 0; i < t.mapping.maps.length; i++) {
+                  allMaps.push(t.mapping.maps[i]);
+                }
+              }
+              for (let i = 0; i < allMaps.length; i++) {
+                allMaps[i].forEach((_oldFrom, _oldTo, newFrom, newTo) => {
+                  for (let j = i + 1; j < allMaps.length; j++) {
+                    newFrom = allMaps[j].map(newFrom, 1);
+                    newTo = allMaps[j].map(newTo, -1);
+                  }
+                  ranges.push(newFrom, Math.max(newFrom, newTo));
+                });
+              }
+            }
+            if (ranges.length === 0) return null;
+
+            let tr = null;
+            for (let r = 0; r < ranges.length; r += 2) {
+              const from = ranges[r];
+              const to = Math.min(ranges[r + 1], newState.doc.content.size);
+              if (from >= to) continue;
+              newState.doc.nodesBetween(from, to, (node, pos) => {
+                if (node.type.name === 'table' && node.attrs.needsTableStyleNormalization === true) {
+                  const attrs = {
+                    ...node.attrs,
+                    needsTableStyleNormalization: false,
+                  };
+
+                  // Respect explicit table borders from imported content.
+                  if (!Object.keys(node.attrs.borders ?? {}).length) {
+                    const resolved = normalizeNewTableAttrs(editor);
+                    // Use undefined as sentinel for "normalized, no style found"
+                    attrs.tableStyleId = resolved.tableStyleId ?? undefined;
+                    if (resolved.borders) {
+                      attrs.borders = resolved.borders;
+                    }
+                    if (resolved.tableProperties) {
+                      attrs.tableProperties = { ...(node.attrs.tableProperties ?? {}), ...resolved.tableProperties };
+                    }
+                  }
+
+                  if (!tr) tr = newState.tr;
+                  tr.setNodeMarkup(pos, undefined, attrs);
+                }
+
+                // Migrate legacy attrs.borders on cells to tableCellProperties.borders
+                if (
+                  (node.type.name === 'tableCell' || node.type.name === 'tableHeader') &&
+                  node.attrs.borders != null
+                ) {
+                  const tcpBorders = node.attrs.tableCellProperties?.borders;
+                  const cellAttrs = { ...node.attrs };
+
+                  if (tcpBorders && typeof tcpBorders === 'object' && Object.keys(tcpBorders).length > 0) {
+                    // Cell already has canonical inline borders — clear legacy attrs.borders
+                    cellAttrs.borders = null;
+                  } else if (isLegacySchemaDefaultBorders(node.attrs.borders)) {
+                    // Matches old schema-default shape — drop; style cascade owns borders
+                    cellAttrs.borders = null;
+                  } else {
+                    // Non-default borders from a prior session — migrate to tableCellProperties.borders
+                    cellAttrs.tableCellProperties = {
+                      ...(node.attrs.tableCellProperties ?? {}),
+                      borders: convertBordersToOoxmlFormat(node.attrs.borders),
+                    };
+                    cellAttrs.borders = null;
+                  }
+
+                  if (cellAttrs.borders !== node.attrs.borders) {
+                    if (!tr) tr = newState.tr;
+                    tr.setNodeMarkup(pos, undefined, cellAttrs);
+                  }
+                }
+              });
+            }
+
+            return tr;
+          },
+        });
+      })(),
     ];
   },
 

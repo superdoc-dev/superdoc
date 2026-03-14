@@ -1,11 +1,12 @@
 /**
  * Generate a string ID following docx ID format (see: paraId, rsidR etc.)
- * @returns {string} - 8 character random string
+ * Returns uppercase hex to match the OOXML spec (e.g. w14:paraId values).
+ * @returns {string} - 8 character uppercase hex string
  */
 export function generateDocxRandomId(length = 8) {
   const max = 0x7fffffff;
   const value = Math.floor(Math.random() * (max + 1));
-  return value.toString(16).padStart(length, '0').slice(0, length);
+  return value.toString(16).toUpperCase().padStart(length, '0').slice(0, length);
 }
 
 /**
@@ -15,9 +16,4 @@ export function generateDocxRandomId(length = 8) {
 export function generateRandomSigned32BitIntStrId() {
   const val = Math.floor(Math.random() * 0x7fffffff);
   return val.toString();
-}
-
-export function generateRandom32BitHex() {
-  const val = Math.floor(Math.random() * 0x7fffffff);
-  return val.toString(16).toUpperCase().padStart(8, '0');
 }

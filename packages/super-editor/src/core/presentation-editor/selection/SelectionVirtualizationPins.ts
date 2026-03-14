@@ -47,6 +47,7 @@ export function computeSelectionVirtualizationPins(options: {
 
     const anchorFrag = getFragmentAtPosition(options.layout, options.blocks, options.measures, anchorPos);
     const headFrag = getFragmentAtPosition(options.layout, options.blocks, options.measures, headPos);
+
     if (anchorFrag) add(anchorFrag.pageIndex);
     if (headFrag) add(headFrag.pageIndex);
 

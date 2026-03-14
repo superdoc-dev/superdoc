@@ -60,8 +60,7 @@ export const getHTMLFromNode = (node, editor) => {
   const container = tempDocument.createElement('div');
   const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(node.content);
   container.appendChild(fragment);
-  let html = container.innerHTML;
-  return html;
+  return container.innerHTML;
 };
 
 /**
@@ -106,11 +105,15 @@ export const getLinkedSectionEditor = (id, options, editor) => {
   const child = editor.createChildEditor({
     ...options,
     onUpdate: ({ editor: childEditor, transaction }) => {
-      const isFromtLinkedParent = transaction.getMeta('fromLinkedParent');
-      if (isFromtLinkedParent) return; // Prevent feedback loop
+      const isFromLinkedParent = transaction.getMeta('fromLinkedParent');
+      if (isFromLinkedParent) return; // Prevent feedback loop
 
-      // 1. Get updated content from child editor
-      const updatedContent = childEditor.state.doc.content;
+      // 1. Get updated content from child editor, converted to parent schema
+      const childDocJson = childEditor.state.doc.toJSON();
+      const updatedContent = editor.schema.nodeFromJSON({
+        type: 'doc',
+        content: childDocJson.content ?? [],
+      }).content;
 
       // 2. Find the section node and its position in the parent
       const sectionNode = getAllSections(editor)?.find((s) => s.node.attrs.id === id);

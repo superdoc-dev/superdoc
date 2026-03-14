@@ -7,13 +7,17 @@
  */
 
 /**
+ * @typedef {InstructionToken | string} InstructionTokenLike
+ */
+
+/**
  * Builds OOXML instruction elements from instruction text and tokens.
  *
  * This function handles the conversion of instruction data back to OOXML format,
  * preserving tab tokens that may appear in INDEX field switches.
  *
  * @param {string | null | undefined} instruction - The instruction text string
- * @param {InstructionToken[] | null | undefined} instructionTokens - Raw instruction tokens preserving tabs
+ * @param {InstructionTokenLike[] | null | undefined} instructionTokens - Raw instruction tokens preserving tabs
  * @returns {Array<Object>} Array of OOXML instruction elements
  *
  * @example
@@ -32,7 +36,16 @@ export const buildInstructionElements = (instruction, instructionTokens) => {
   const tokens = Array.isArray(instructionTokens) ? instructionTokens : [];
 
   if (tokens.length > 0) {
-    return tokens.map((token) => {
+    return tokens.map((tokenLike) => {
+      if (typeof tokenLike === 'string') {
+        return {
+          name: 'w:instrText',
+          attributes: { 'xml:space': 'preserve' },
+          elements: [{ type: 'text', text: tokenLike }],
+        };
+      }
+
+      const token = tokenLike;
       if (token?.type === 'tab') {
         return { name: 'w:tab', elements: [] };
       }

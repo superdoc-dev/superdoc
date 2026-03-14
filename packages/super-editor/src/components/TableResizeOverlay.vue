@@ -1,6 +1,12 @@
 <template>
   <!-- Prevent mousedown from propagating to editor - critical for clean resize handle drags -->
-  <div v-if="visible && tableMetadata" class="superdoc-table-resize-overlay" :style="overlayStyle" @mousedown.stop>
+  <div
+    ref="overlayEl"
+    v-if="visible && tableMetadata"
+    class="superdoc-table-resize-overlay"
+    :style="overlayStyle"
+    @mousedown.stop
+  >
     <!-- Resize handles for each column boundary segment -->
     <template
       v-for="(boundary, resizableBoundaryIndex) in resizableBoundaries"
@@ -21,8 +27,24 @@
       ></div>
     </template>
 
-    <!-- Visual guideline during drag -->
+    <!-- Visual guideline during column drag -->
     <div v-if="dragState" class="resize-guideline" :style="guidelineStyle"></div>
+
+    <!-- Resize handles for each row boundary -->
+    <div
+      v-for="(rowBoundary, rowBoundaryIndex) in resizableRowBoundaries"
+      :key="`row-handle-${rowBoundary.i}`"
+      class="resize-handle resize-handle--row"
+      :class="{
+        'resize-handle--active': rowDragState && rowDragState.rowBoundaryIndex === rowBoundaryIndex,
+      }"
+      :data-row-boundary-index="rowBoundaryIndex"
+      :style="getRowHandleStyle(rowBoundary)"
+      @mousedown="onRowHandleMouseDown($event, rowBoundaryIndex)"
+    ></div>
+
+    <!-- Visual guideline during row drag -->
+    <div v-if="rowDragState" class="resize-guideline resize-guideline--row" :style="rowGuidelineStyle"></div>
   </div>
 </template>
 
@@ -54,12 +76,34 @@ const props = defineProps({
 
 const emit = defineEmits(['resize-start', 'resize-move', 'resize-end', 'resize-success', 'resize-error']);
 
+const overlayEl = ref(null);
 const overlayRect = ref(null);
 /**
  * Parsed table metadata from data-table-boundaries attribute
  * @type {import('vue').Ref<{columns: Array<{i: number, x: number, w: number, min: number, r?: number}>} | null>}
  */
 const tableMetadata = ref(null);
+
+/**
+ * Normalize metadata-provided minimum width so resize remains possible.
+ * Some imported tables report min == current width (e.g. 100/100), which
+ * clamps drag delta to zero and makes columns feel "stuck".
+ *
+ * @param {number} width - Current column width in layout pixels
+ * @param {number} rawMin - Raw minimum width from metadata
+ * @returns {number}
+ */
+function normalizeColumnMinWidth(width, rawMin) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeMin = Math.max(1, Number(rawMin) || 1);
+  if (safeMin < safeWidth) return safeMin;
+
+  // Keep at least a practical shrink budget while guaranteeing min < width.
+  if (safeWidth <= 2) return 1;
+
+  const candidate = Math.max(1, Math.max(25, Math.floor(safeWidth * 0.5)));
+  return Math.min(safeWidth - 1, candidate);
+}
 
 /**
  * Get the editor's zoom level for coordinate transformations.
@@ -126,6 +170,19 @@ const getZoom = () => {
 const dragState = ref(null);
 
 /**
+ * Row drag state tracking (mutually exclusive with column drag)
+ * @type {import('vue').Ref<{
+ *   rowIndex: number,
+ *   rowBoundaryIndex: number,
+ *   initialY: number,
+ *   initialHeight: number,
+ *   minHeight: number,
+ *   constrainedDelta: number
+ * } | null>}
+ */
+const rowDragState = ref(null);
+
+/**
  * Flag to track forced cleanup (overlay hidden during drag)
  */
 const forcedCleanup = ref(false);
@@ -147,6 +204,9 @@ const forcedCleanup = ref(false);
  * but the handle width stays 9 screen pixels for easy interaction.
  */
 const RESIZE_HANDLE_WIDTH_PX = 9;
+
+/** Height of the row resize handle hit area in pixels (screen space) */
+const RESIZE_HANDLE_HEIGHT_PX = 9;
 
 /**
  * Horizontal offset to center the resize handle on the boundary line.
@@ -231,9 +291,13 @@ const overlayStyle = computed(() => {
   // During any drag operation, use a very large overlay to ensure smooth mouse tracking
   // This prevents issues when the mouse moves beyond the original table bounds
   let overlayWidth = rect.width;
+  let overlayHeight = rect.height;
+  const isDragging = dragState.value || rowDragState.value;
   if (dragState.value) {
-    // Set a fixed large width during drag to avoid reactive resize triggering re-renders
     overlayWidth = Math.max(rect.width + DRAG_OVERLAY_EXTENSION_PX, MIN_DRAG_OVERLAY_WIDTH_PX);
+  }
+  if (rowDragState.value) {
+    overlayHeight = Math.max(rect.height + DRAG_OVERLAY_EXTENSION_PX, MIN_DRAG_OVERLAY_WIDTH_PX);
   }
 
   return {
@@ -241,14 +305,14 @@ const overlayStyle = computed(() => {
     left: `${rect.left}px`,
     top: `${rect.top}px`,
     width: `${overlayWidth}px`,
-    height: `${rect.height}px`,
-    pointerEvents: dragState.value ? 'auto' : 'none',
+    height: `${overlayHeight}px`,
+    pointerEvents: isDragging ? 'auto' : 'none',
     zIndex: 10,
   };
 });
 
 /**
- * Recompute overlay position/size relative to the table's offset parent.
+ * Recompute overlay position/size relative to the overlay's own offset parent.
  * Keeps handles aligned when the table moves (scroll, relayout, pagination shifts).
  */
 function updateOverlayRect() {
@@ -257,7 +321,6 @@ function updateOverlayRect() {
     return;
   }
 
-  const parent = props.tableElement.offsetParent;
   const tableRect = props.tableElement.getBoundingClientRect();
 
   // Validate rect has non-zero dimensions
@@ -266,10 +329,16 @@ function updateOverlayRect() {
     return;
   }
 
-  if (parent) {
-    const parentRect = parent.getBoundingClientRect();
-    const left = tableRect.left - parentRect.left + (parent.scrollLeft || 0);
-    const top = tableRect.top - parentRect.top + (parent.scrollTop || 0);
+  // Position overlay relative to its own offset parent (the element that
+  // position:absolute resolves against), NOT the table's offset parent.
+  // The table's offsetParent is its .superdoc-page, but the overlay is rendered
+  // as a child of .super-editor — a different coordinate space. Using the table's
+  // page as reference caused the overlay to be mispositioned on pages after the first.
+  const referenceEl = overlayEl.value?.offsetParent;
+  if (referenceEl) {
+    const referenceRect = referenceEl.getBoundingClientRect();
+    const left = tableRect.left - referenceRect.left + (referenceEl.scrollLeft || 0);
+    const top = tableRect.top - referenceRect.top + (referenceEl.scrollTop || 0);
     overlayRect.value = {
       left,
       top,
@@ -277,7 +346,7 @@ function updateOverlayRect() {
       height: tableRect.height,
     };
   } else {
-    // Fallback to offsets if no positioned parent is found
+    // Fallback: use table's own offset position
     overlayRect.value = {
       left: props.tableElement.offsetLeft,
       top: props.tableElement.offsetTop,
@@ -324,6 +393,23 @@ const resizableBoundaries = computed(() => {
   });
 
   return boundaries;
+});
+
+/**
+ * Filter to only resizable row boundaries.
+ * Adds a computed handleY (bottom edge of the row) for positioning.
+ */
+const resizableRowBoundaries = computed(() => {
+  if (!tableMetadata.value?.rows || !Array.isArray(tableMetadata.value.rows)) {
+    return [];
+  }
+
+  return tableMetadata.value.rows
+    .filter((row) => row.r === 1)
+    .map((row) => ({
+      ...row,
+      handleY: row.y + row.h, // bottom edge of the row
+    }));
 });
 
 /**
@@ -479,6 +565,51 @@ const guidelineStyle = computed(() => {
 });
 
 /**
+ * Generates CSS styles for positioning a row resize handle at the bottom edge of a row.
+ * @param {{handleY: number}} rowBoundary - Row boundary with handleY in layout coords
+ * @returns {Record<string, string>} CSS style object
+ */
+function getRowHandleStyle(rowBoundary) {
+  const zoom = getZoom();
+  const scaledY = rowBoundary.handleY * zoom;
+
+  return {
+    position: 'absolute',
+    left: '0',
+    top: `${scaledY}px`,
+    width: '100%',
+    height: `${RESIZE_HANDLE_HEIGHT_PX}px`,
+    transform: `translateY(-${RESIZE_HANDLE_OFFSET_PX}px)`,
+    cursor: 'row-resize',
+    pointerEvents: 'auto',
+  };
+}
+
+/**
+ * Style for the row drag guideline (horizontal line)
+ */
+const rowGuidelineStyle = computed(() => {
+  if (!rowDragState.value || !tableMetadata.value) return { display: 'none' };
+
+  const rowBoundary = resizableRowBoundaries.value[rowDragState.value.rowBoundaryIndex];
+  if (!rowBoundary) return { display: 'none' };
+
+  const zoom = getZoom();
+  const newY = (rowBoundary.handleY + rowDragState.value.constrainedDelta) * zoom;
+
+  return {
+    position: 'absolute',
+    left: '0',
+    top: `${newY}px`,
+    width: '100%',
+    height: '2px',
+    backgroundColor: '#4A90E2',
+    pointerEvents: 'none',
+    zIndex: 20,
+  };
+});
+
+/**
  * Parses table metadata from the `data-table-boundaries` attribute on the table element.
  *
  * Extracts column boundary information including positions, widths, and minimum widths.
@@ -538,10 +669,10 @@ function parseTableMetadata() {
         );
       })
       .map((col) => ({
+        w: Math.max(1, col.w),
+        min: normalizeColumnMinWidth(col.w, col.min),
         i: col.i,
         x: Math.max(0, col.x),
-        w: Math.max(1, col.w),
-        min: Math.max(1, col.min),
         r: col.r,
       }));
 
@@ -560,7 +691,24 @@ function parseTableMetadata() {
     // Each segment has {c: columnIndex, y: yPosition, h: height}
     const segments = Array.isArray(parsed.segments) ? parsed.segments : undefined;
 
-    tableMetadata.value = { columns: validatedColumns, segments };
+    // Extract row boundaries if present (for row resizing)
+    const rows = Array.isArray(parsed.rows)
+      ? parsed.rows.filter(
+          (row) =>
+            typeof row === 'object' &&
+            Number.isFinite(row.i) &&
+            row.i >= 0 &&
+            Number.isFinite(row.y) &&
+            row.y >= 0 &&
+            Number.isFinite(row.h) &&
+            row.h > 0 &&
+            Number.isFinite(row.min) &&
+            row.min > 0 &&
+            (row.r === 0 || row.r === 1),
+        )
+      : undefined;
+
+    tableMetadata.value = { columns: validatedColumns, segments, rows };
   } catch (error) {
     tableMetadata.value = null;
     emit('resize-error', {
@@ -954,6 +1102,164 @@ function updateCellColwidths(tr, tableNode, tablePos, affectedColumns, newWidths
   });
 }
 
+// ============================================================================
+// Row Resize Drag Handlers
+// ============================================================================
+
+/**
+ * Handle mouse down on a row resize handle
+ * @param {MouseEvent} event - Mouse event
+ * @param {number} rowBoundaryIndex - Index in the resizableRowBoundaries array
+ */
+function onRowHandleMouseDown(event, rowBoundaryIndex) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const rowBoundary = resizableRowBoundaries.value[rowBoundaryIndex];
+  if (!rowBoundary) return;
+
+  rowDragState.value = {
+    rowIndex: rowBoundary.i,
+    rowBoundaryIndex,
+    initialY: event.clientY,
+    initialHeight: rowBoundary.h,
+    minHeight: rowBoundary.min,
+    constrainedDelta: 0,
+  };
+
+  if (!props.editor?.view?.dom) {
+    emit('resize-error', { error: 'Editor view not available' });
+    rowDragState.value = null;
+    return;
+  }
+  props.editor.view.dom.style.pointerEvents = 'none';
+
+  document.addEventListener('mousemove', onRowDocumentMouseMove);
+  document.addEventListener('mouseup', onRowDocumentMouseUp);
+
+  emit('resize-start', { rowIndex: rowBoundary.i });
+}
+
+// Throttled row mouse move handler
+const rowMouseMoveThrottle = throttle((event) => {
+  if (isUnmounted || !rowDragState.value) return;
+
+  const zoom = getZoom();
+  const screenDelta = event.clientY - rowDragState.value.initialY;
+  const delta = screenDelta / zoom;
+
+  // Constrain: can't shrink below minHeight, no upper limit
+  const minDelta = -(rowDragState.value.initialHeight - rowDragState.value.minHeight);
+  const constrainedDelta = Math.max(minDelta, delta);
+
+  rowDragState.value.constrainedDelta = constrainedDelta;
+
+  emit('resize-move', { rowIndex: rowDragState.value.rowIndex, delta: constrainedDelta });
+}, THROTTLE_INTERVAL_MS);
+
+const onRowDocumentMouseMove = rowMouseMoveThrottle.throttled;
+
+/**
+ * Handle mouse up to end row drag
+ */
+function onRowDocumentMouseUp() {
+  if (!rowDragState.value) return;
+
+  const finalDelta = rowDragState.value.constrainedDelta;
+  const rowIndex = rowDragState.value.rowIndex;
+  const newHeight = rowDragState.value.initialHeight + finalDelta;
+
+  document.removeEventListener('mousemove', onRowDocumentMouseMove);
+  document.removeEventListener('mouseup', onRowDocumentMouseUp);
+
+  if (props.editor?.view?.dom) {
+    props.editor.view.dom.style.pointerEvents = 'auto';
+  }
+
+  if (!forcedCleanup.value && Math.abs(finalDelta) > MIN_RESIZE_DELTA_PX) {
+    dispatchRowResizeTransaction(rowIndex, newHeight);
+    emit('resize-end', { rowIndex, newHeight, delta: finalDelta });
+  }
+
+  rowDragState.value = null;
+}
+
+/**
+ * Dispatch ProseMirror transaction to update row height.
+ * Updates both rowHeight (pixels) and tableRowProperties.rowHeight (twips) attributes.
+ *
+ * @param {number} rowIndex - Index of the resized row
+ * @param {number} newHeightPx - New row height in pixels
+ */
+function dispatchRowResizeTransaction(rowIndex, newHeightPx) {
+  if (!props.editor?.view || !props.tableElement) return;
+
+  try {
+    const { state, dispatch } = props.editor.view;
+    const tr = state.tr;
+
+    const tablePos = findTablePosition(state, props.tableElement);
+    if (tablePos === null) {
+      emit('resize-error', { rowIndex, error: 'Table position not found' });
+      return;
+    }
+
+    const tableNode = state.doc.nodeAt(tablePos);
+    if (!tableNode || tableNode.type.name !== 'table') {
+      emit('resize-error', { rowIndex, error: 'Invalid table node' });
+      return;
+    }
+
+    // Walk table children to find the tableRow at rowIndex
+    let currentRowIdx = 0;
+    let rowPos = null;
+    let rowNode = null;
+
+    tableNode.forEach((child, offset) => {
+      if (child.type.name === 'tableRow' && currentRowIdx === rowIndex) {
+        rowPos = tablePos + 1 + offset;
+        rowNode = child;
+      }
+      if (child.type.name === 'tableRow') {
+        currentRowIdx++;
+      }
+    });
+
+    if (rowPos === null || !rowNode) {
+      emit('resize-error', { rowIndex, error: 'Row not found at index' });
+      return;
+    }
+
+    const heightTwips = pixelsToTwips(newHeightPx);
+    const existingRowProps = rowNode.attrs.tableRowProperties || {};
+
+    const newAttrs = {
+      ...rowNode.attrs,
+      rowHeight: newHeightPx,
+      tableRowProperties: {
+        ...existingRowProps,
+        rowHeight: { value: heightTwips, rule: 'atLeast' },
+      },
+    };
+
+    tr.setNodeMarkup(rowPos, null, newAttrs);
+    dispatch(tr);
+
+    // Invalidate measure cache
+    const blockId = props.tableElement?.getAttribute('data-sd-block-id');
+    if (blockId && blockId.trim()) {
+      measureCache.invalidate([blockId]);
+    }
+
+    emit('resize-success', { rowIndex, newHeight: newHeightPx });
+  } catch (error) {
+    emit('resize-error', {
+      rowIndex,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /**
  * Watch for changes to table element and reparse metadata
  */
@@ -989,6 +1295,11 @@ watch(
         onDocumentMouseUp(new MouseEvent('mouseup'));
         forcedCleanup.value = false;
       }
+      if (rowDragState.value) {
+        forcedCleanup.value = true;
+        onRowDocumentMouseUp();
+        forcedCleanup.value = false;
+      }
     }
   },
 );
@@ -1008,16 +1319,22 @@ onBeforeUnmount(() => {
 
   // Cancel any pending throttled calls to prevent memory leaks
   mouseMoveThrottle.cancel();
+  rowMouseMoveThrottle.cancel();
   stopOverlayTracking();
 
   if (dragState.value) {
     document.removeEventListener('mousemove', onDocumentMouseMove);
     document.removeEventListener('mouseup', onDocumentMouseUp);
+  }
 
-    // Re-enable PM pointer events
-    if (props.editor?.view?.dom) {
-      props.editor.view.dom.style.pointerEvents = 'auto';
-    }
+  if (rowDragState.value) {
+    document.removeEventListener('mousemove', onRowDocumentMouseMove);
+    document.removeEventListener('mouseup', onRowDocumentMouseUp);
+  }
+
+  // Re-enable PM pointer events
+  if ((dragState.value || rowDragState.value) && props.editor?.view?.dom) {
+    props.editor.view.dom.style.pointerEvents = 'auto';
   }
 
   window.removeEventListener('scroll', updateOverlayRect, true);
@@ -1063,6 +1380,30 @@ onBeforeUnmount(() => {
   background-color: #4a90e2;
   width: 2px;
   transform: translateX(-1px);
+}
+
+.resize-handle--row {
+  cursor: row-resize;
+}
+
+.resize-handle--row::before {
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 2px;
+  transform: translateY(-1px);
+}
+
+.resize-handle--row:hover::before {
+  height: 3px;
+  width: 100%;
+  transform: translateY(-1.5px);
+}
+
+.resize-handle--row.resize-handle--active::before {
+  height: 2px;
+  width: 100%;
+  transform: translateY(-1px);
 }
 
 .resize-guideline {

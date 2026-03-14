@@ -24,6 +24,7 @@ import { handleTrackChangeNode } from '@converter/v2/importer/trackChangesImport
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { findTextPos } from './testUtils.js';
 
 describe('trackChangesHelpers', () => {
   let editor;
@@ -170,6 +171,128 @@ describe('trackChangesHelpers', () => {
     expect(hasDelete).toBe(true);
   });
 
+  it('markDeletion reassigns existing deletions and removes own insertions for replacements', () => {
+    const ownInsertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ins-own',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    const oldDeleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-old',
+      author: 'Other User',
+      authorEmail: 'other@example.com',
+      date,
+    });
+
+    const run = schema.nodes.run.create({}, [
+      schema.text('Keep '),
+      schema.text('OwnInsert', [ownInsertMark]),
+      schema.text(' OldDelete', [oldDeleteMark]),
+      schema.text(' Plain'),
+    ]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    const state = createState(doc);
+    const tr = state.tr;
+
+    const ownInsertPos = findTextPos(state.doc, 'OwnInsert');
+    const plainPos = findTextPos(state.doc, ' Plain');
+    expect(ownInsertPos).toBeTypeOf('number');
+    expect(plainPos).toBeTypeOf('number');
+
+    const replacementId = 'replacement-id';
+    const result = markDeletion({
+      tr,
+      from: ownInsertPos,
+      to: plainPos + ' Plain'.length,
+      user,
+      date,
+      id: replacementId,
+    });
+    const finalState = state.apply(tr);
+
+    expect(result.deletionMark.attrs.id).toBe(replacementId);
+    expect(result.nodes.some((node) => node.text?.includes('OldDelete'))).toBe(true);
+    expect(result.nodes.some((node) => node.text?.includes('Plain'))).toBe(true);
+    expect(result.deletionMap.maps.length).toBeGreaterThan(0);
+
+    expect(finalState.doc.textContent).not.toContain('OwnInsert');
+
+    let reassignedDeletedText = '';
+    let hasOldDeletionId = false;
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name !== TrackDeleteMarkName) return;
+        if (mark.attrs.id === replacementId) {
+          reassignedDeletedText += node.text;
+        }
+        if (mark.attrs.id === 'del-old') {
+          hasOldDeletionId = true;
+        }
+      });
+    });
+
+    expect(reassignedDeletedText).toContain('OldDelete');
+    expect(reassignedDeletedText).toContain('Plain');
+    expect(hasOldDeletionId).toBe(false);
+  });
+
+  it('markDeletion preserves existing deletions on plain delete actions', () => {
+    const oldDeleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-old',
+      author: 'Other User',
+      authorEmail: 'other@example.com',
+      date,
+    });
+
+    const run = schema.nodes.run.create({}, [
+      schema.text('Keep '),
+      schema.text('OldDelete', [oldDeleteMark]),
+      schema.text(' Plain'),
+    ]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    const state = createState(doc);
+    const tr = state.tr;
+
+    const oldDeletePos = findTextPos(state.doc, 'OldDelete');
+    const plainPos = findTextPos(state.doc, ' Plain');
+    expect(oldDeletePos).toBeTypeOf('number');
+    expect(plainPos).toBeTypeOf('number');
+
+    markDeletion({
+      tr,
+      from: oldDeletePos,
+      to: plainPos + ' Plain'.length,
+      user,
+      date,
+    });
+    const finalState = state.apply(tr);
+
+    let hasOldDeleteId = false;
+    let plainHasDeleteMark = false;
+    let plainHasOldDeleteId = false;
+
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      const deleteMarks = node.marks.filter((mark) => mark.type.name === TrackDeleteMarkName);
+      if (!deleteMarks.length) return;
+
+      if (deleteMarks.some((mark) => mark.attrs.id === 'del-old')) {
+        hasOldDeleteId = true;
+      }
+
+      if (node.text.includes('Plain')) {
+        plainHasDeleteMark = true;
+        plainHasOldDeleteId = deleteMarks.some((mark) => mark.attrs.id === 'del-old');
+      }
+    });
+
+    expect(hasOldDeleteId).toBe(true);
+    expect(plainHasDeleteMark).toBe(true);
+    expect(plainHasOldDeleteId).toBe(false);
+  });
+
   it('removes Word-imported insertions without authorEmail when deleted', () => {
     const insertXml = `<w:ins w:id="1" w:author="Word Author" w:date="2024-09-02T15:56:00Z">
         <w:r>
@@ -223,6 +346,196 @@ describe('trackChangesHelpers', () => {
     expect(newTr.getMeta(CommentsPluginKey)).toEqual({ type: 'force' });
   });
 
+  it('addMarkStep tracks textStyle attr changes on imported-like marks', () => {
+    const importedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#112233',
+    });
+    const doc = createDocWithText('Format me', [importedTextStyle]);
+    const state = createState(doc);
+    const changedTextStyle = schema.marks.textStyle.create({
+      styleId: 'Emphasis',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+      color: '#FF0000',
+    });
+    const step = new AddMarkStep(1, 9, changedTextStyle);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.before).toEqual([{ type: 'textStyle', attrs: importedTextStyle.attrs }]);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'textStyle', attrs: changedTextStyle.attrs }]);
+  });
+
+  it('addMarkStep tracks highlight mark changes', () => {
+    const state = createState(createDocWithText('Highlight me'));
+    const highlightMark = schema.marks.highlight.create({ color: '#E4668C' });
+    const step = new AddMarkStep(1, 12, highlightMark);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'highlight', attrs: { color: '#E4668C' } }]);
+  });
+
+  it('addMarkStep does not include unrelated marks in before (SD-2077)', () => {
+    const highlight = schema.marks.highlight.create({ color: '#FFFF00' });
+    const doc = createDocWithText('Hello', [highlight]);
+    const state = createState(doc);
+    const boldMark = schema.marks.bold.create();
+    const step = new AddMarkStep(1, 6, boldMark);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.before).toEqual([]);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'bold', attrs: boldMark.attrs }]);
+  });
+
+  it('addMarkStep only captures same-type mark in before when replacing (SD-2077)', () => {
+    const highlight = schema.marks.highlight.create({ color: '#FFFF00' });
+    const textStyle = schema.marks.textStyle.create({ color: '#112233', fontSize: '11pt' });
+    const doc = createDocWithText('Hello', [highlight, textStyle]);
+    const state = createState(doc);
+    const changedTextStyle = schema.marks.textStyle.create({ color: '#FF0000', fontSize: '11pt' });
+    const step = new AddMarkStep(1, 6, changedTextStyle);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.before).toEqual([{ type: 'textStyle', attrs: textStyle.attrs }]);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'textStyle', attrs: changedTextStyle.attrs }]);
+  });
+
+  it('addMarkStep removes trackFormat when reverting to original state (SD-2181)', () => {
+    // Step 1: Plain text, apply superscript → creates trackFormat
+    const state = createState(createDocWithText('Hello'));
+    const superscriptMark = schema.marks.textStyle.create({ vertAlign: 'superscript' });
+    const step1 = new AddMarkStep(2, 6, superscriptMark);
+    const newTr1 = state.tr;
+
+    addMarkStep({
+      state,
+      step: step1,
+      newTr: newTr1,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta1 = newTr1.getMeta(TrackChangesBasePluginKey);
+    expect(meta1?.formatMark?.type.name).toBe(TrackFormatMarkName);
+
+    // Step 2: Apply baseline (revert) on the tracked state
+    const state2 = state.apply(newTr1);
+    const baselineMark = schema.marks.textStyle.create({ vertAlign: 'baseline' });
+    const step2 = new AddMarkStep(2, 6, baselineMark);
+    const newTr2 = state2.tr;
+
+    addMarkStep({
+      state: state2,
+      step: step2,
+      newTr: newTr2,
+      doc: state2.doc,
+      user,
+      date,
+    });
+
+    // The trackFormat mark should be removed (no-op), no metadata set
+    const meta2 = newTr2.getMeta(TrackChangesBasePluginKey);
+    expect(meta2).toBeUndefined();
+
+    // Verify no trackFormat mark remains in the document
+    const finalState = state2.apply(newTr2);
+    let hasTrackFormat = false;
+    finalState.doc.descendants((node) => {
+      if (node.marks?.some((m) => m.type.name === TrackFormatMarkName)) {
+        hasTrackFormat = true;
+      }
+    });
+    expect(hasTrackFormat).toBe(false);
+  });
+
+  it('addMarkStep preserves other tracked types when partially reverting (SD-2181)', () => {
+    // Step 1: Apply bold on plain text → creates trackFormat with after: [bold]
+    const state = createState(createDocWithText('Hello'));
+    const boldMark = schema.marks.bold.create();
+    const step1 = new AddMarkStep(2, 6, boldMark);
+    const newTr1 = state.tr;
+
+    addMarkStep({
+      state,
+      step: step1,
+      newTr: newTr1,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const state2 = state.apply(newTr1);
+
+    // Step 2: Also change textStyle color → trackFormat now has after: [bold, textStyle]
+    const colorMark = schema.marks.textStyle.create({ color: '#FF0000' });
+    const step2 = new AddMarkStep(2, 6, colorMark);
+    const newTr2 = state2.tr;
+
+    addMarkStep({
+      state: state2,
+      step: step2,
+      newTr: newTr2,
+      doc: state2.doc,
+      user,
+      date,
+    });
+
+    const meta2 = newTr2.getMeta(TrackChangesBasePluginKey);
+    expect(meta2?.formatMark?.attrs?.after).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'bold' }),
+        expect.objectContaining({ type: 'textStyle' }),
+      ]),
+    );
+  });
+
   it('removeMarkStep records previous formatting when mark removed', () => {
     const bold = schema.marks.bold.create();
     const doc = createDocWithText('Styled', [bold]);
@@ -242,6 +555,27 @@ describe('trackChangesHelpers', () => {
     expect(newTr.steps.length).toBeGreaterThan(0);
     const meta = newTr.getMeta(TrackChangesBasePluginKey);
     expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+  });
+
+  it('removeMarkStep tracks removed highlight mark', () => {
+    const highlight = schema.marks.highlight.create({ color: '#E4668C' });
+    const doc = createDocWithText('Styled', [highlight]);
+    const state = createState(doc);
+    const step = new RemoveMarkStep(1, 7, highlight);
+    const newTr = state.tr;
+
+    removeMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.before).toEqual([{ type: 'highlight', attrs: { color: '#E4668C' } }]);
   });
 
   it('getTrackChanges enumerates marks with optional filtering', () => {
@@ -362,7 +696,6 @@ describe('trackChangesHelpers', () => {
 
   it('no-op helpers exist for future implementations', () => {
     expect(markWrapping()).toBeUndefined();
-    expect(replaceAroundStep()).toBeUndefined();
   });
 
   it('trackedTransaction keeps selection in sync', () => {

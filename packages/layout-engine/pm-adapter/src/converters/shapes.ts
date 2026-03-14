@@ -5,7 +5,14 @@
  * to DrawingBlocks
  */
 
-import type { DrawingBlock, ImageBlock, VectorShapeDrawing, ShapeGroupDrawing, ImageAnchor } from '@superdoc/contracts';
+import type {
+  DrawingBlock,
+  ImageBlock,
+  VectorShapeDrawing,
+  ShapeGroupDrawing,
+  ImageAnchor,
+  CustomGeometryData,
+} from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import type { EffectExtent, LineEnds } from '../utilities.js';
 import {
@@ -28,6 +35,7 @@ import {
   normalizeTextVerticalAlign,
   normalizeTextInsets,
   normalizeZIndex,
+  resolveFloatingZIndex,
 } from '../utilities.js';
 
 // ============================================================================
@@ -337,9 +345,10 @@ export const buildDrawingBlock = (
     attrsWithPm.pmEnd = pos.end;
   }
 
+  const behindDoc = baseAnchor?.behindDoc === true || normalizedWrap?.behindDoc === true;
   // Try to get zIndex from relativeHeight first, fallback to direct zIndex attribute
   const zIndexFromRelativeHeight = normalizeZIndex(rawAttrs.originalAttributes);
-  const finalZIndex = zIndexFromRelativeHeight ?? coerceNumber(rawAttrs.zIndex);
+  const resolvedZIndex = resolveFloatingZIndex(behindDoc, zIndexFromRelativeHeight, coerceNumber(rawAttrs.zIndex) ?? 1);
 
   return {
     kind: 'drawing',
@@ -351,12 +360,13 @@ export const buildDrawingBlock = (
       toBoxSpacing(rawAttrs.margin as Record<string, unknown> | undefined),
     anchor: baseAnchor,
     wrap: normalizedWrap,
-    zIndex: finalZIndex,
+    zIndex: resolvedZIndex,
     drawingContentId: typeof rawAttrs.drawingContentId === 'string' ? rawAttrs.drawingContentId : undefined,
     drawingContent: toDrawingContentSnapshot(rawAttrs.drawingContent),
     attrs: attrsWithPm,
     geometry,
     shapeKind: typeof rawAttrs.kind === 'string' ? rawAttrs.kind : undefined,
+    customGeometry: rawAttrs.customGeometry != null ? (rawAttrs.customGeometry as CustomGeometryData) : undefined,
     fillColor: normalizeFillColor(rawAttrs.fillColor),
     strokeColor: normalizeStrokeColor(rawAttrs.strokeColor),
     strokeWidth: coerceNumber(rawAttrs.strokeWidth),
@@ -519,7 +529,7 @@ export function handleVectorShapeNode(node: PMNode, context: NodeHandlerContext)
   const drawingBlock = vectorShapeNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -536,7 +546,7 @@ export function handleShapeGroupNode(node: PMNode, context: NodeHandlerContext):
   const drawingBlock = shapeGroupNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -553,7 +563,7 @@ export function handleShapeContainerNode(node: PMNode, context: NodeHandlerConte
   const drawingBlock = shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }
 
@@ -570,6 +580,6 @@ export function handleShapeTextboxNode(node: PMNode, context: NodeHandlerContext
   const drawingBlock = shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
   if (drawingBlock) {
     blocks.push(drawingBlock);
-    recordBlockKind(drawingBlock.kind);
+    recordBlockKind?.(drawingBlock.kind);
   }
 }

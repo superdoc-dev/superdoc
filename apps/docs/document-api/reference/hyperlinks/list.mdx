@@ -1,0 +1,224 @@
+---
+title: hyperlinks.list
+sidebarTitle: hyperlinks.list
+description: List all hyperlinks in the document, with optional filtering by href, anchor, or display text.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List all hyperlinks in the document, with optional filtering by href, anchor, or display text.
+
+- Operation ID: `hyperlinks.list`
+- API member path: `editor.doc.hyperlinks.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HyperlinksListResult with an array of hyperlink discovery items and pagination metadata.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `anchor` | string | no |  |
+| `hrefPattern` | string | no |  |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `textPattern` | string | no |  |
+| `within` | NodeAddress | no | NodeAddress |
+
+### Example request
+
+```json
+{
+  "hrefPattern": "example",
+  "within": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `page.limit` | integer | yes |  |
+| `page.offset` | integer | yes |  |
+| `page.returned` | integer | yes |  |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "anchor": {
+          "end": {
+            "blockId": "block-abc123",
+            "offset": 0
+          },
+          "start": {
+            "blockId": "block-abc123",
+            "offset": 0
+          }
+        },
+        "kind": "inline",
+        "nodeType": "hyperlink"
+      },
+      "properties": {
+        "anchor": "example",
+        "href": "example"
+      },
+      "text": "Hello, world."
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "anchor": {
+      "type": "string"
+    },
+    "hrefPattern": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    },
+    "textPattern": {
+      "type": "string"
+    },
+    "within": {
+      "$ref": "#/$defs/NodeAddress"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "additionalProperties": false,
+            "properties": {
+              "anchor": {
+                "$ref": "#/$defs/InlineAnchor"
+              },
+              "kind": {
+                "const": "inline"
+              },
+              "nodeType": {
+                "const": "hyperlink"
+              }
+            },
+            "required": [
+              "kind",
+              "nodeType",
+              "anchor"
+            ],
+            "type": "object"
+          },
+          "properties": {
+            "additionalProperties": false,
+            "properties": {
+              "anchor": {
+                "type": "string"
+              },
+              "docLocation": {
+                "type": "string"
+              },
+              "href": {
+                "type": "string"
+              },
+              "rel": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              },
+              "tooltip": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "properties"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "page": {
+      "$ref": "#/$defs/PageInfo"
+    },
+    "total": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "total",
+    "items",
+    "page"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

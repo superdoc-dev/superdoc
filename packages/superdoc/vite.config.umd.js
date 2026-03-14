@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => {
   return {
     define: {
       __APP_VERSION__: JSON.stringify(version),
-      process: JSON.stringify({ env: { NODE_ENV: 'production' } }),
+      'process.env.NODE_ENV': JSON.stringify('production'),
     },
     plugins,
     resolve: {
@@ -19,6 +19,7 @@ export default defineConfig(({ command }) => {
       conditions: ['source'],
     },
     build: {
+      ...(process.argv.includes('--watch') && { watch: { buildDelay: 300 } }),
       emptyOutDir: false,
       target: 'es2022',
       cssCodeSplit: false,
@@ -35,7 +36,6 @@ export default defineConfig(({ command }) => {
         external: [
           'yjs',
           '@hocuspocus/provider',
-          'vite-plugin-node-polyfills',
           'pdfjs-dist',
           'pdfjs-dist/build/pdf.mjs',
           'pdfjs-dist/legacy/build/pdf.mjs',
@@ -46,7 +46,6 @@ export default defineConfig(({ command }) => {
             yjs: 'Yjs',
             '@hocuspocus/provider': 'HocuspocusProvider',
             'pdfjs-dist': 'PDFJS',
-            'vite-plugin-node-polyfills': 'NodePolyfills',
           },
         },
       },

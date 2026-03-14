@@ -61,17 +61,17 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
       return;
     }
 
-    if (sectionState?.ranges?.length > 0) {
-      const nextSection = sectionState.ranges[sectionState.currentSectionIndex + 1];
-      if (nextSection && sectionState.currentParagraphIndex === nextSection.startParagraphIndex) {
-        const currentSection = sectionState.ranges[sectionState.currentSectionIndex];
+    if ((sectionState?.ranges?.length ?? 0) > 0) {
+      const nextSection = sectionState!.ranges[sectionState!.currentSectionIndex + 1];
+      if (nextSection && sectionState!.currentParagraphIndex === nextSection.startParagraphIndex) {
+        const currentSection = sectionState!.ranges[sectionState!.currentSectionIndex];
         const requiresPageBoundary =
           shouldRequirePageBoundary(currentSection, nextSection) || hasIntrinsicBoundarySignals(nextSection);
         const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
         const sectionBreak = createSectionBreakBlock(nextSection, nextBlockId, extraAttrs);
         blocks.push(sectionBreak);
-        recordBlockKind(sectionBreak.kind);
-        sectionState.currentSectionIndex++;
+        recordBlockKind?.(sectionBreak.kind);
+        sectionState!.currentSectionIndex++;
       }
     }
 
@@ -90,9 +90,9 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);
-      recordBlockKind(block.kind);
+      recordBlockKind?.(block.kind);
     });
 
-    sectionState.currentParagraphIndex++;
+    sectionState!.currentParagraphIndex++;
   });
 }

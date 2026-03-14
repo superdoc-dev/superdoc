@@ -1,18 +1,18 @@
 logs
 *.log
 .cache
+.vite
 .DS_Store
 .temp
 node_modules
 dist
 dist-ssr
 dist-types
+companion-dist
 *.local
 .env
 .npmrc
 .eslintcache
-CLAUDE.md
-
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -65,8 +65,40 @@ reports/
 
 # Planning and progress tracking documents
 **/plan/progress.md
-
-AGENTS.md
+wrangler/
 codex.config.json
 perf-baseline-results.json
 .claude
+plans/
+
+tests/layout/candidate/
+tests/layout/reference/
+tests/layout/reports/
+test-corpus/
+.pnpm-store
+devtools/visual-testing/pnpm-lock.yaml
+
+.bun-cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+# Generated platform companion build metadata (do not commit)
+packages/sdk/langs/python/platforms/**/*.egg-info/
+# Generated python packaging metadata (do not commit)
+packages/sdk/langs/python/**/*.egg-info/
+
+# Local runtime state for collaboration examples
+examples/collaboration/fastapi/.superdoc-state/
+
+# Generated artifacts — run `pnpm run generate:all` to produce
+packages/document-api/generated/
+packages/document-api/.generated-internal/
+apps/cli/generated/
+packages/sdk/langs/node/src/generated/
+packages/sdk/langs/python/superdoc/generated/
+packages/sdk/tools/*.json
+# Note: apps/docs/document-api/reference/ stays committed because Mintlify
+# deploys directly from git with no pre-build hook support.

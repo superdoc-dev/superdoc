@@ -25,6 +25,8 @@ const {
   mockOnHeaderFooterDataUpdate,
   mockUpdateYdocDocxData,
   mockEditorOverlayManager,
+  mockFlowBlockCacheInstances,
+  MockFlowBlockCache,
 } = vi.hoisted(() => {
   const createDefaultConverter = () => ({
     headers: {
@@ -106,6 +108,19 @@ const {
   };
 
   const editors: Array<{ editor: ReturnType<typeof createSectionEditor> }> = [];
+  const mockFlowBlockCacheInstances: Array<{
+    clear: ReturnType<typeof vi.fn>;
+    setHasExternalChanges: ReturnType<typeof vi.fn>;
+  }> = [];
+
+  class MockFlowBlockCache {
+    clear = vi.fn();
+    setHasExternalChanges = vi.fn();
+
+    constructor() {
+      mockFlowBlockCacheInstances.push(this);
+    }
+  }
 
   return {
     createDefaultConverter,
@@ -145,6 +160,8 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
+    mockFlowBlockCacheInstances,
+    MockFlowBlockCache,
   };
 });
 
@@ -160,7 +177,14 @@ vi.mock('../../Editor', () => {
       getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
       isEditable: true,
       state: {
-        selection: { from: 0, to: 0 },
+        selection: {
+          from: 0,
+          to: 0,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        },
         doc: {
           nodeSize: 100,
           content: {
@@ -207,13 +231,20 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+    FlowBlockCache: MockFlowBlockCache,
+  };
+});
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
   incrementalLayout: mockIncrementalLayout,
+  normalizeMargin: (value: number | undefined, fallback: number) =>
+    Number.isFinite(value) ? (value as number) : fallback,
   selectionToRects: mockSelectionToRects,
   clickToPosition: mockClickToPosition,
   createDragHandler: vi.fn(() => {
@@ -276,10 +307,6 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
-}));
-
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -306,6 +333,7 @@ describe('PresentationEditor', () => {
     };
     mockEditorConverterStore.mediaFiles = {};
     createdSectionEditors.length = 0;
+    mockFlowBlockCacheInstances.length = 0;
 
     // Reset static instances
     (PresentationEditor as typeof PresentationEditor & { instances: Map<string, unknown> }).instances = new Map();
@@ -375,6 +403,553 @@ describe('PresentationEditor', () => {
       expect(didScroll).toBe(true);
       expect(pageEl.scrollIntoView).toHaveBeenCalled();
     });
+  });
+
+  describe('semantic flow mode configuration', () => {
+    it('forces vertical layout and disables virtualization when flowMode is semantic', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-config-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          layoutMode: 'book',
+          virtualization: { enabled: true, window: 7, overscan: 2 },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = editor.getLayoutOptions();
+      expect(layoutOptions.flowMode).toBe('semantic');
+      expect(layoutOptions.layoutMode).toBe('vertical');
+      expect(layoutOptions.virtualization?.enabled).toBe(false);
+
+      expect(mockCreateDomPainter).toHaveBeenCalled();
+      const painterOptions = mockCreateDomPainter.mock.calls[0]?.[0];
+      expect(painterOptions?.flowMode).toBe('semantic');
+      expect(painterOptions?.virtualization?.enabled).toBe(false);
+    });
+
+    it('ignores setLayoutMode requests while semantic flow mode is active', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-layout-mode-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          layoutMode: 'vertical',
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      editor.setLayoutMode('book');
+      const layoutOptions = editor.getLayoutOptions();
+      expect(layoutOptions.layoutMode).toBe('vertical');
+    });
+
+    it('uses host width for semantic flow without forcing a wide minimum', async () => {
+      Object.defineProperty(container, 'clientWidth', {
+        configurable: true,
+        value: 120,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-width-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          semanticOptions: { marginsMode: 'none' },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockIncrementalLayout).toHaveBeenCalled();
+      const layoutOptions = mockIncrementalLayout.mock.calls[0]?.[3] as {
+        flowMode?: string;
+        semantic?: { contentWidth?: number };
+        pageSize?: { w?: number };
+      };
+      expect(layoutOptions.flowMode).toBe('semantic');
+      expect(layoutOptions.semantic?.contentWidth).toBe(120);
+      expect(layoutOptions.pageSize?.w).toBe(120);
+    });
+
+    it('defaults semantic flow to zero vertical margins to avoid page seam gaps', async () => {
+      Object.defineProperty(container, 'clientWidth', {
+        configurable: true,
+        value: 420,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-default-margins-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        margins?: { top?: number; bottom?: number };
+        semantic?: { marginTop?: number; marginBottom?: number };
+      };
+
+      expect(layoutOptions.margins?.top).toBe(0);
+      expect(layoutOptions.margins?.bottom).toBe(0);
+      expect(layoutOptions.semantic?.marginTop).toBe(0);
+      expect(layoutOptions.semantic?.marginBottom).toBe(0);
+    });
+
+    it('clamps semantic custom margins to finite non-negative values', async () => {
+      Object.defineProperty(container, 'clientWidth', {
+        configurable: true,
+        value: 500,
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'semantic-custom-margins-doc',
+        mode: 'docx',
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+          semanticOptions: {
+            marginsMode: 'custom',
+            customMargins: {
+              left: -10,
+              right: Number.NaN,
+              top: 24,
+              bottom: -1,
+            },
+          },
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        margins?: { left?: number; right?: number; top?: number; bottom?: number };
+        semantic?: { marginLeft?: number; marginRight?: number; marginTop?: number; marginBottom?: number };
+        pageSize?: { w?: number };
+      };
+
+      expect(layoutOptions.margins?.left).toBe(72);
+      expect(layoutOptions.margins?.right).toBe(72);
+      expect(layoutOptions.margins?.top).toBe(24);
+      expect(layoutOptions.margins?.bottom).toBe(72);
+
+      expect(layoutOptions.semantic?.marginLeft).toBe(72);
+      expect(layoutOptions.semantic?.marginRight).toBe(72);
+      expect(layoutOptions.semantic?.marginTop).toBe(24);
+      expect(layoutOptions.semantic?.marginBottom).toBe(72);
+      expect(layoutOptions.pageSize?.w).toBe(500);
+    });
+
+    it('relayouts semantic flow when host width changes', async () => {
+      const originalResizeObserver = window.ResizeObserver;
+      let resizeCallback: ResizeObserverCallback | null = null;
+      class ResizeObserverMock {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+        unobserve(): void {}
+      }
+
+      Object.defineProperty(window, 'ResizeObserver', {
+        configurable: true,
+        value: ResizeObserverMock,
+      });
+
+      try {
+        Object.defineProperty(container, 'clientWidth', {
+          configurable: true,
+          value: 240,
+        });
+
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'semantic-resize-doc',
+          mode: 'docx',
+          layoutEngineOptions: {
+            flowMode: 'semantic',
+            semanticOptions: { marginsMode: 'none' },
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        let layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+          semantic?: { contentWidth?: number };
+        };
+        expect(layoutOptions.semantic?.contentWidth).toBe(240);
+
+        Object.defineProperty(container, 'clientWidth', {
+          configurable: true,
+          value: 360,
+        });
+        resizeCallback?.([], {} as ResizeObserver);
+
+        await new Promise((resolve) => setTimeout(resolve, 180));
+
+        layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+          semantic?: { contentWidth?: number };
+        };
+        expect(mockIncrementalLayout.mock.calls.length).toBeGreaterThan(1);
+        expect(layoutOptions.semantic?.contentWidth).toBe(360);
+      } finally {
+        Object.defineProperty(window, 'ResizeObserver', {
+          configurable: true,
+          value: originalResizeObserver,
+        });
+      }
+    });
+
+    it('clears semantic debounce with the owner window when rescheduling', async () => {
+      const originalResizeObserver = window.ResizeObserver;
+      const ownerDocument = container.ownerDocument;
+      const originalDefaultView = ownerDocument.defaultView;
+      let resizeCallback: ResizeObserverCallback | null = null;
+
+      class ResizeObserverMock {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+        unobserve(): void {}
+      }
+
+      Object.defineProperty(window, 'ResizeObserver', {
+        configurable: true,
+        value: ResizeObserverMock,
+      });
+
+      const ownerSetTimeout = vi.fn(() => 1);
+      const ownerClearTimeout = vi.fn();
+      const ownerWindow = {
+        setTimeout: ownerSetTimeout,
+        clearTimeout: ownerClearTimeout,
+        requestAnimationFrame: (callback: FrameRequestCallback) => window.requestAnimationFrame(callback),
+        cancelAnimationFrame: (handle: number) => window.cancelAnimationFrame(handle),
+        getComputedStyle: window.getComputedStyle.bind(window),
+        addEventListener: window.addEventListener.bind(window),
+        removeEventListener: window.removeEventListener.bind(window),
+        performance: window.performance,
+      } as unknown as Window;
+
+      try {
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'semantic-resize-owner-window-clear-doc',
+          mode: 'docx',
+          layoutEngineOptions: {
+            flowMode: 'semantic',
+            semanticOptions: { marginsMode: 'none' },
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        expect(resizeCallback).toBeTypeOf('function');
+
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: ownerWindow,
+        });
+
+        resizeCallback?.([], {} as ResizeObserver);
+        resizeCallback?.([], {} as ResizeObserver);
+
+        expect(ownerSetTimeout).toHaveBeenCalledTimes(2);
+        expect(ownerClearTimeout).toHaveBeenCalledTimes(1);
+      } finally {
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: originalDefaultView,
+        });
+        Object.defineProperty(window, 'ResizeObserver', {
+          configurable: true,
+          value: originalResizeObserver,
+        });
+      }
+    });
+
+    it('clears semantic debounce with the owner window during destroy', async () => {
+      const originalResizeObserver = window.ResizeObserver;
+      const ownerDocument = container.ownerDocument;
+      const originalDefaultView = ownerDocument.defaultView;
+      let resizeCallback: ResizeObserverCallback | null = null;
+
+      class ResizeObserverMock {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+        unobserve(): void {}
+      }
+
+      Object.defineProperty(window, 'ResizeObserver', {
+        configurable: true,
+        value: ResizeObserverMock,
+      });
+
+      const ownerSetTimeout = vi.fn(() => 1);
+      const ownerClearTimeout = vi.fn();
+      const ownerWindow = {
+        setTimeout: ownerSetTimeout,
+        clearTimeout: ownerClearTimeout,
+        requestAnimationFrame: (callback: FrameRequestCallback) => window.requestAnimationFrame(callback),
+        cancelAnimationFrame: (handle: number) => window.cancelAnimationFrame(handle),
+        getComputedStyle: window.getComputedStyle.bind(window),
+        addEventListener: window.addEventListener.bind(window),
+        removeEventListener: window.removeEventListener.bind(window),
+        performance: window.performance,
+      } as unknown as Window;
+
+      try {
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'semantic-resize-owner-window-destroy-doc',
+          mode: 'docx',
+          layoutEngineOptions: {
+            flowMode: 'semantic',
+            semanticOptions: { marginsMode: 'none' },
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        expect(resizeCallback).toBeTypeOf('function');
+
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: ownerWindow,
+        });
+
+        resizeCallback?.([], {} as ResizeObserver);
+
+        expect(ownerSetTimeout).toHaveBeenCalledTimes(1);
+
+        editor.destroy();
+        editor = null as unknown as PresentationEditor;
+
+        expect(ownerClearTimeout).toHaveBeenCalledTimes(1);
+      } finally {
+        Object.defineProperty(ownerDocument, 'defaultView', {
+          configurable: true,
+          value: originalDefaultView,
+        });
+        Object.defineProperty(window, 'ResizeObserver', {
+          configurable: true,
+          value: originalResizeObserver,
+        });
+      }
+    });
+  });
+
+  describe('scrollToPage', () => {
+    const buildMixedPageLayout = () => ({
+      layout: {
+        pageSize: { w: 612, h: 600 },
+        pageGap: 10,
+        pages: [
+          {
+            number: 1,
+            size: { w: 612, h: 600 },
+            fragments: [],
+          },
+          {
+            number: 2,
+            size: { w: 612, h: 1200 },
+            fragments: [],
+          },
+          {
+            number: 3,
+            size: { w: 612, h: 400 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    it('mounts and scrolls to virtualized pages using cumulative mixed-height offsets', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-to-page-mixed-heights',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const expectedPageTop = 600 + 10 + 1200 + 10;
+      let mountedPageEl: HTMLElement | null = null;
+      let scrollTopValue = 0;
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (next) => {
+          scrollTopValue = Number(next);
+          if (!mountedPageEl && Math.abs(scrollTopValue - expectedPageTop) < 0.5) {
+            mountedPageEl = document.createElement('div');
+            mountedPageEl.setAttribute('data-page-index', '2');
+            Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+              value: vi.fn(),
+              configurable: true,
+            });
+            pagesHost.appendChild(mountedPageEl);
+          }
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        expect(mountedPageEl).not.toBeNull();
+        expect(mountedPageEl!.scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+      }
+    });
+
+    it('uses effective virtualization default gap when pre-scrolling to unmounted pages', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-to-page-default-virtual-gap',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          // Intentionally omit `gap` so editor must rely on the effective default.
+          virtualization: { enabled: true, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const layoutGap = editor.getLayoutSnapshot().layout?.pageGap ?? 0;
+      const expectedPageTop = 600 + layoutGap + 1200 + layoutGap;
+      let mountedPageEl: HTMLElement | null = null;
+      let scrollTopValue = 0;
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (next) => {
+          scrollTopValue = Number(next);
+          if (!mountedPageEl && Math.abs(scrollTopValue - expectedPageTop) < 0.5) {
+            mountedPageEl = document.createElement('div');
+            mountedPageEl.setAttribute('data-page-index', '2');
+            Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+              value: vi.fn(),
+              configurable: true,
+            });
+            pagesHost.appendChild(mountedPageEl);
+          }
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        expect(mountedPageEl).not.toBeNull();
+        expect(mountedPageEl!.scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+      }
+    });
+
+    it.each([Number.NaN, 1.5])(
+      'rejects invalid pageNumber %p before attempting pre-scroll or mount polling',
+      async (invalidPageNumber) => {
+        mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'test-scroll-to-page-invalid-input',
+          content: { type: 'doc', content: [{ type: 'paragraph' }] },
+          mode: 'docx',
+          layoutEngineOptions: {
+            virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+          },
+        });
+
+        await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+        let scrollTopValue = 0;
+        let scrollWrites = 0;
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (next) => {
+            scrollWrites += 1;
+            scrollTopValue = Number(next);
+          },
+          configurable: true,
+        });
+
+        let now = 0;
+        const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+        const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+          now += 2500;
+          cb(now);
+          return 1;
+        });
+
+        try {
+          const didScroll = await editor.scrollToPage(invalidPageNumber, 'auto');
+          expect(didScroll).toBe(false);
+          expect(scrollWrites).toBe(0);
+          expect(rafSpy).not.toHaveBeenCalled();
+        } finally {
+          rafSpy.mockRestore();
+          performanceNowSpy.mockRestore();
+        }
+      },
+    );
   });
 
   describe('setDocumentMode', () => {
@@ -1844,6 +2419,76 @@ describe('PresentationEditor', () => {
       expect(layoutUpdatedCount).toBeGreaterThan(afterDocUpdate);
     });
 
+    it('clears flow-block cache when stylesDefaultsChanged event fires', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const flowBlockCache = mockFlowBlockCacheInstances.at(-1);
+      expect(flowBlockCache).toBeDefined();
+      flowBlockCache!.clear.mockClear();
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const stylesDefaultsChangedCall = onCalls.mock.calls.find((call) => call[0] === 'stylesDefaultsChanged');
+      expect(stylesDefaultsChangedCall).toBeDefined();
+
+      const handleStylesDefaultsChanged = stylesDefaultsChangedCall![1] as () => void;
+      handleStylesDefaultsChanged();
+
+      expect(flowBlockCache!.clear).toHaveBeenCalledTimes(1);
+    });
+
+    it('marks the flow-block cache dirty for history undo and redo updates', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+
+      await waitForLayoutUpdate();
+
+      const flowBlockCache = mockFlowBlockCacheInstances.at(-1);
+      expect(flowBlockCache).toBeDefined();
+      flowBlockCache!.setHasExternalChanges.mockClear();
+
+      const onCalls = mockEditorInstance.on as unknown as Mock;
+      const updateCall = onCalls.mock.calls.find((call) => call[0] === 'update');
+      expect(updateCall).toBeDefined();
+
+      const handleUpdate = updateCall![1] as (payload: { transaction: { docChanged: boolean; getMeta: Mock } }) => void;
+      const makeTransaction = (inputType: string) => ({
+        docChanged: true,
+        getMeta: vi.fn((key: string) => (key === 'inputType' ? inputType : undefined)),
+        mapping: {
+          appendMapping: vi.fn(),
+          slice: vi.fn(() => ({
+            appendMapping: vi.fn(),
+          })),
+        },
+      });
+
+      handleUpdate({ transaction: makeTransaction('historyUndo') });
+      handleUpdate({ transaction: makeTransaction('historyRedo') });
+
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenCalledTimes(2);
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenNthCalledWith(1, true);
+      expect(flowBlockCache!.setHasExternalChanges).toHaveBeenNthCalledWith(2, true);
+    });
+
     it('should remove pageStyleUpdate listener on destroy', () => {
       editor = new PresentationEditor({
         element: container,
@@ -2262,7 +2907,7 @@ describe('PresentationEditor', () => {
 
   describe('Selection update mechanisms', () => {
     describe('#scheduleSelectionUpdate race condition guards', () => {
-      it('should skip scheduling when already scheduled', async () => {
+      it('should render synchronously with immediate mode when safe', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2290,12 +2935,13 @@ describe('PresentationEditor', () => {
         expect(selectionUpdateCall).toBeDefined();
         const handleSelection = selectionUpdateCall![1] as () => void;
 
-        // Call twice - should only schedule once
+        // Call twice - with immediate mode, renders synchronously when safe
+        // so no RAF scheduling is needed
         handleSelection();
         handleSelection();
 
-        // Should only call requestAnimationFrame once (second call is deduplicated)
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2384,7 +3030,7 @@ describe('PresentationEditor', () => {
         rafSpy.mockRestore();
       });
 
-      it('should successfully schedule when no guards are active', async () => {
+      it('should render synchronously when no guards are active', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2413,11 +3059,12 @@ describe('PresentationEditor', () => {
         // Clear RAF spy to track new calls
         rafSpy.mockClear();
 
-        // Schedule selection update with no guards active
+        // Selection update with no guards active — renders synchronously via
+        // immediate mode, bypassing RAF
         handleSelection();
 
-        // Should schedule RAF successfully
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2441,6 +3088,7 @@ describe('PresentationEditor', () => {
         const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
           (Editor as unknown as MockedEditor).mock.results.length - 1
         ].value;
+        mockEditorInstance.view.hasFocus = vi.fn(() => true);
 
         // Mock editor state with valid selection at position 5
         mockEditorInstance.state = {
@@ -2963,7 +3611,14 @@ describe('PresentationEditor', () => {
         // Wait for initial render to complete so timers/RAF have settled.
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        mockEditorInstance.state.selection = { from: 5, to: 5 };
+        mockEditorInstance.state.selection = {
+          from: 5,
+          to: 5,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        };
 
         const onCalls = mockEditorInstance.on as unknown as Mock;
         const selectionUpdateCall = onCalls.mock.calls.find((call) => call[0] === 'selectionUpdate');
@@ -2996,7 +3651,14 @@ describe('PresentationEditor', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        mockEditorInstance.state.selection = { from: 1, to: 6 };
+        mockEditorInstance.state.selection = {
+          from: 1,
+          to: 6,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        };
         (mockEditorInstance.state.doc as unknown as { textBetween?: () => string }).textBetween = () => 'Hello world';
 
         const onCalls = mockEditorInstance.on as unknown as Mock;

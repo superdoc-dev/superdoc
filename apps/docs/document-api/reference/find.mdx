@@ -1,0 +1,426 @@
+---
+title: find
+sidebarTitle: find
+description: Search the document for text or node matches using SDM/1 selectors.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Search the document for text or node matches using SDM/1 selectors.
+
+- Operation ID: `find`
+- API member path: `editor.doc.find(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `no`
+
+## Expected result
+
+Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item is an SDNodeResult (\{ node, address \}).
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `options` | object | no |  |
+| `options.includeContext` | boolean | no |  |
+| `options.includeProvenance` | boolean | no |  |
+| `options.includeResolved` | boolean | no |  |
+| `select` | object(type="text") \\| object(type="node") | yes | One of: object(type="text"), object(type="node") |
+| `within` | object | no |  |
+| `within.anchor` | object | no |  |
+| `within.anchor.end` | object | no |  |
+| `within.anchor.end.blockId` | string | no |  |
+| `within.anchor.end.offset` | integer | no |  |
+| `within.anchor.start` | object | no |  |
+| `within.anchor.start.blockId` | string | no |  |
+| `within.anchor.start.offset` | integer | no |  |
+| `within.evaluatedRevision` | string | no |  |
+| `within.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `within.nodeId` | string | no |  |
+| `within.path` | string \\| integer[] | no |  |
+| `within.stability` | enum | no | `"stable"`, `"ephemeral"` |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "select": {
+    "caseSensitive": true,
+    "mode": "contains",
+    "pattern": "hello world",
+    "type": "text"
+  },
+  "within": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "content",
+    "nodeId": "node-def456",
+    "stability": "stable"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | object[] | yes |  |
+| `limit` | integer | yes |  |
+| `offset` | integer | yes |  |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "items": [
+    {
+      "address": {
+        "anchor": {
+          "end": {
+            "blockId": "block-abc123",
+            "offset": 0
+          },
+          "start": {
+            "blockId": "block-abc123",
+            "offset": 0
+          }
+        },
+        "kind": "content",
+        "nodeId": "node-def456",
+        "stability": "stable"
+      },
+      "context": {},
+      "node": {}
+    }
+  ],
+  "limit": 50,
+  "offset": 0,
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_INPUT`
+- `ADDRESS_STALE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "includeContext": {
+          "type": "boolean"
+        },
+        "includeProvenance": {
+          "type": "boolean"
+        },
+        "includeResolved": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "select": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "mode": {
+              "enum": [
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "type": {
+              "const": "text"
+            }
+          },
+          "required": [
+            "type",
+            "pattern"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "content",
+                "inline"
+              ]
+            },
+            "nodeKind": {
+              "type": "string"
+            },
+            "type": {
+              "const": "node"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "within": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "blockId",
+                "offset"
+              ],
+              "type": "object"
+            },
+            "start": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "blockId",
+                "offset"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "evaluatedRevision": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "content",
+            "inline",
+            "annotation",
+            "section"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "path": {
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "stability": {
+          "enum": [
+            "stable",
+            "ephemeral"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "stability"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "select"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "additionalProperties": false,
+            "properties": {
+              "anchor": {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "offset": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "blockId",
+                      "offset"
+                    ],
+                    "type": "object"
+                  },
+                  "start": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockId": {
+                        "type": "string"
+                      },
+                      "offset": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "blockId",
+                      "offset"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "evaluatedRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "content",
+                  "inline",
+                  "annotation",
+                  "section"
+                ]
+              },
+              "nodeId": {
+                "type": "string"
+              },
+              "path": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "stability": {
+                "enum": [
+                  "stable",
+                  "ephemeral"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "stability"
+            ],
+            "type": "object"
+          },
+          "context": {
+            "type": "object"
+          },
+          "node": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "node",
+          "address"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "limit": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "total": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "total",
+    "limit",
+    "offset",
+    "items"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

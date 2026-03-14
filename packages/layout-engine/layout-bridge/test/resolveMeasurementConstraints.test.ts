@@ -277,6 +277,54 @@ describe('resolveMeasurementConstraints', () => {
     });
   });
 
+  describe('semantic flow constraints', () => {
+    it('uses semantic content width directly when provided', () => {
+      const options: LayoutOptions = {
+        flowMode: 'semantic',
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        semantic: {
+          contentWidth: 530,
+          marginTop: 40,
+          marginBottom: 50,
+        },
+      };
+
+      const result = resolveMeasurementConstraints(options);
+      expect(result.measurementWidth).toBe(530);
+      expect(result.measurementHeight).toBe(999910); // 1_000_000 - (40 + 50)
+    });
+
+    it('normalizes fractional semantic content width to match layout rounding', () => {
+      const options: LayoutOptions = {
+        flowMode: 'semantic',
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        semantic: {
+          contentWidth: 530.9,
+          marginTop: 40,
+          marginBottom: 50,
+        },
+      };
+
+      const result = resolveMeasurementConstraints(options);
+      expect(result.measurementWidth).toBe(530);
+      expect(result.measurementHeight).toBe(999910);
+    });
+
+    it('falls back to paginated constraints when semantic content width is missing', () => {
+      const options: LayoutOptions = {
+        flowMode: 'semantic',
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const result = resolveMeasurementConstraints(options);
+      expect(result.measurementWidth).toBe(468);
+      expect(result.measurementHeight).toBe(648);
+    });
+  });
+
   describe('column width calculations', () => {
     it('handles zero gap in multi-column layout', () => {
       const options: LayoutOptions = {
@@ -449,6 +497,58 @@ describe('resolveMeasurementConstraints', () => {
       // Content: 200 - 180 = 20
       expect(result.measurementWidth).toBe(20);
       expect(result.measurementHeight).toBe(20);
+    });
+  });
+
+  describe('mixed-orientation documents (SD-1859)', () => {
+    it('takes max width across portrait and landscape sections', () => {
+      // First section: portrait (612 x 792)
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      // Second section: landscape (792 x 612)
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-1',
+          pageSize: { w: 792, h: 612 },
+          margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        } as SectionBreakBlock,
+      ];
+
+      const result = resolveMeasurementConstraints(options, blocks);
+
+      // Portrait content width: 612 - 144 = 468
+      // Landscape content width: 792 - 144 = 648
+      // Should take MAX: 648 (landscape width)
+      expect(result.measurementWidth).toBe(648);
+    });
+
+    it('takes max width across sections with different margins', () => {
+      // First section: narrow margins (content width = 612 - 100 = 512)
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 50, bottom: 72, left: 50 },
+      };
+
+      // Second section: wider margins (content width = 612 - 200 = 412)
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-1',
+          pageSize: { w: 612, h: 792 },
+          margins: { top: 72, right: 100, bottom: 72, left: 100 },
+        } as SectionBreakBlock,
+      ];
+
+      const result = resolveMeasurementConstraints(options, blocks);
+
+      // First section content width: 612 - 100 = 512
+      // Second section content width: 612 - 200 = 412
+      // Should take MAX: 512 (first section is wider)
+      expect(result.measurementWidth).toBe(512);
     });
   });
 });

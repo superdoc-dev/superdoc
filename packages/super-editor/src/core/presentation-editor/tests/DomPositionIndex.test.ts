@@ -600,6 +600,110 @@ describe('DomPositionIndex', () => {
     });
   });
 
+  describe('findEntryClosestToPosition', () => {
+    it('returns null for non-finite positions', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">test</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(NaN)).toBe(null);
+      expect(index.findEntryClosestToPosition(Infinity)).toBe(null);
+      expect(index.findEntryClosestToPosition(-Infinity)).toBe(null);
+    });
+
+    it('returns entry that contains the position', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">alpha</span>
+          <span data-pm-start="10" data-pm-end="15">beta</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(3)?.el.textContent).toBe('alpha');
+      expect(index.findEntryClosestToPosition(12)?.el.textContent).toBe('beta');
+    });
+
+    it('returns closest entry before the position when after all entries', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="10" data-pm-end="15">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(20)?.el.textContent).toBe('second');
+    });
+
+    it('returns closest entry after the position when before all entries', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="10" data-pm-end="15">first</span>
+          <span data-pm-start="20" data-pm-end="25">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(3)?.el.textContent).toBe('first');
+    });
+
+    it('returns the closer entry when position is between ranges', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="20" data-pm-end="25">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(8)?.el.textContent).toBe('first');
+      expect(index.findEntryClosestToPosition(18)?.el.textContent).toBe('second');
+    });
+
+    it('prefers the previous entry when equidistant between ranges', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="11" data-pm-end="15">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      // Distance to first: 8 - 5 = 3, distance to second: 11 - 8 = 3
+      expect(index.findEntryClosestToPosition(8)?.el.textContent).toBe('first');
+    });
+
+    it('returns null when index is empty', () => {
+      const container = document.createElement('div');
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(5)).toBe(null);
+    });
+  });
+
   describe('edge cases - findElementsInRange', () => {
     it('returns empty array for NaN from parameter', () => {
       const container = document.createElement('div');
@@ -779,6 +883,76 @@ describe('DomPositionIndex', () => {
       index.rebuild(container);
 
       const result = index.findElementsInRange(3, 12).map((el) => el.textContent);
+      expect(result).toEqual(['first', 'second']);
+    });
+
+    it('excludes boundary entries by default (half-open semantics)', () => {
+      // Default behavior: [start, end) half-open range — entries touching the boundary
+      // at exactly start or end are excluded. This is correct for decorations.
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="7" data-pm-end="12">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      // Range [5, 7] touches both boundaries but overlaps neither in half-open mode
+      expect(index.findElementsInRange(5, 7)).toEqual([]);
+    });
+
+    it('includes adjacent entries at run boundaries with boundaryInclusive', () => {
+      // Simulates two adjacent text runs with different marks (e.g., bold → italic).
+      // ProseMirror run nodes create a 2-position gap between spans (close + open tokens).
+      // The range [5, 7] spans exactly this gap. With boundaryInclusive, both boundary
+      // entries are included to prevent selection overlay flicker during drag.
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">bold</span>
+          <span data-pm-start="7" data-pm-end="12">italic</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      const result = index.findEntriesInRange(5, 7, { boundaryInclusive: true }).map((e) => e.el.textContent);
+      expect(result).toEqual(['bold', 'italic']);
+    });
+
+    it('includes entry whose pmEnd equals query start with boundaryInclusive', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="7" data-pm-end="12">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      const result = index.findEntriesInRange(5, 10, { boundaryInclusive: true }).map((e) => e.el.textContent);
+      expect(result).toEqual(['first', 'second']);
+    });
+
+    it('includes entry whose pmStart equals query end with boundaryInclusive', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="7" data-pm-end="12">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      const result = index.findEntriesInRange(3, 7, { boundaryInclusive: true }).map((e) => e.el.textContent);
       expect(result).toEqual(['first', 'second']);
     });
   });

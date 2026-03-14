@@ -1,10 +1,10 @@
-.sd-document-section-block {
+.super-editor .sd-document-section-block {
   background-color: #fafafa;
   border: 1px solid #ababab;
   border-radius: 4px;
   position: relative;
 }
-.sd-document-section-block-info {
+.super-editor .sd-document-section-block-info {
   position: absolute;
   top: -19px;
   left: -1px;
@@ -22,27 +22,27 @@
   background-color: #fafafa;
 }
 
-.sd-document-section-block:hover {
+.super-editor .sd-document-section-block:hover {
   border-radius: 0 4px 4px 4px;
 }
 
-.sd-document-section-block:hover .sd-document-section-block-info {
+.super-editor .sd-document-section-block:hover .sd-document-section-block-info {
   display: flex;
   align-items: center;
 }
 
-.sd-document-section-block-info span {
+.super-editor .sd-document-section-block-info span {
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.ProseMirror.view-mode .sd-document-section-block {
+.super-editor .ProseMirror.view-mode .sd-document-section-block {
   background: none;
   border: none;
 }
 
-.ProseMirror.view-mode .sd-document-section-block-info {
+.super-editor .ProseMirror.view-mode .sd-document-section-block-info {
   display: none;
 }

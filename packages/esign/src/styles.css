@@ -1,0 +1,77 @@
+/**
+ * SuperDoc eSign - Default Styles
+ *
+ * These styles provide sensible defaults for the eSign component.
+ * Import this file to get a basic layout, or skip it and write your own CSS.
+ *
+ * Usage:
+ *   import '@superdoc-dev/esign/styles.css';
+ *
+ * All classes can be customized with standard CSS:
+ *
+ *   .superdoc-esign-container          - Root container (also accepts className prop)
+ *   .superdoc-esign-document           - Document section wrapper
+ *   .superdoc-esign-document-toolbar   - Toolbar with download button
+ *   .superdoc-esign-document-controls  - Control buttons container
+ *   .superdoc-esign-document-viewer    - Scroll container (SuperDoc mounts inside)
+ *   .superdoc-esign-controls           - Bottom section with fields + submit
+ *   .superdoc-esign-fields             - Signer fields container
+ *   .superdoc-esign-actions            - Action buttons container
+ *   .superdoc-esign-form-actions       - Form submit button container (alias for actions)
+ */
+
+.superdoc-esign-document {
+  display: flex;
+  flex-direction: column;
+}
+
+.superdoc-esign-document-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.superdoc-esign-document-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.superdoc-esign-controls {
+  margin-top: 20px;
+}
+
+.superdoc-esign-fields {
+  margin-bottom: 20px;
+}
+
+.superdoc-esign-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Button loading state */
+.superdoc-esign-btn--loading {
+  position: relative;
+}
+
+/* Spinner */
+.superdoc-esign-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d0d5dd;
+  border-top-color: #333;
+  border-radius: 50%;
+  animation: superdoc-esign-spin 0.8s linear infinite;
+}
+
+.superdoc-esign-spinner--light {
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+}
+
+@keyframes superdoc-esign-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

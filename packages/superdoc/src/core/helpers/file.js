@@ -84,7 +84,6 @@ export const normalizeDocumentEntry = (entry) => {
       type,
       data: maybeFile,
       name,
-      isNewFile: true,
     };
   }
 

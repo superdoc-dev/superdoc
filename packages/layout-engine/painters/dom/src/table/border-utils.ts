@@ -6,6 +6,7 @@ import type {
   TableBorders,
   TableFragment,
 } from '@superdoc/contracts';
+import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
 
 const ALLOWED_BORDER_STYLES = new Set<BorderStyle>([
   'none',
@@ -253,10 +254,7 @@ export const createTableBorderOverlay = (
  * shared edge.
  *
  * @param tableBorders - Table-level border definitions
- * @param rowIndex - Zero-based row index of the cell
- * @param colIndex - Zero-based column index of the cell
- * @param totalRows - Total number of rows in the table
- * @param totalCols - Total number of columns in the table
+ * @param cellPosition - Cell position and span within the table grid
  * @returns CellBorders object with resolved borders for all four sides
  *
  * @example
@@ -267,6 +265,25 @@ export const createTableBorderOverlay = (
  * // Cell (2,2): top=insideH, left=insideV, bottom=table.bottom, right=table.right
  * ```
  */
+/**
+ * Checks whether a CellBorders object has at least one explicitly defined side.
+ *
+ * Returns false when borders is undefined/null or when all four sides are undefined.
+ * Used to distinguish "no borders attribute" from "borders attribute present but empty"
+ * (intentionally borderless).
+ *
+ * @param cellBorders - Cell border definitions to check
+ * @returns True if at least one side (top, right, bottom, left) is defined
+ */
+export const hasExplicitCellBorders = (cellBorders?: CellBorders): cellBorders is CellBorders =>
+  Boolean(
+    cellBorders &&
+      (cellBorders.top !== undefined ||
+        cellBorders.right !== undefined ||
+        cellBorders.bottom !== undefined ||
+        cellBorders.left !== undefined),
+  );
+
 export const resolveTableCellBorders = (
   tableBorders: {
     top?: TableBorderValue;
@@ -276,25 +293,19 @@ export const resolveTableCellBorders = (
     insideH?: TableBorderValue;
     insideV?: TableBorderValue;
   },
-  rowIndex: number,
-  colIndex: number,
-  totalRows: number,
-  totalCols: number,
+  cellPosition: TableCellGridPosition,
 ): CellBorders => {
-  const isFirstRow = rowIndex === 0;
-  const isLastRow = rowIndex === totalRows - 1;
-  const isFirstCol = colIndex === 0;
-  const isLastCol = colIndex === totalCols - 1;
+  const cellBounds = getTableCellGridBounds(cellPosition);
 
   // Single-owner model: each cell owns TOP and LEFT, only edge cells own BOTTOM and RIGHT
   return {
     // Top: first row gets table.top, interior rows get insideH
-    top: borderValueToSpec(isFirstRow ? tableBorders?.top : tableBorders?.insideH),
+    top: borderValueToSpec(cellBounds.touchesTopEdge ? tableBorders?.top : tableBorders?.insideH),
     // Bottom: ONLY last row gets table.bottom (interior cells don't render bottom - it comes from cell below's top)
-    bottom: borderValueToSpec(isLastRow ? tableBorders?.bottom : null),
+    bottom: borderValueToSpec(cellBounds.touchesBottomEdge ? tableBorders?.bottom : null),
     // Left: first col gets table.left, interior cols get insideV
-    left: borderValueToSpec(isFirstCol ? tableBorders?.left : tableBorders?.insideV),
+    left: borderValueToSpec(cellBounds.touchesLeftEdge ? tableBorders?.left : tableBorders?.insideV),
     // Right: ONLY last col gets table.right (interior cells don't render right - it comes from cell to right's left)
-    right: borderValueToSpec(isLastCol ? tableBorders?.right : null),
+    right: borderValueToSpec(cellBounds.touchesRightEdge ? tableBorders?.right : null),
   };
 };

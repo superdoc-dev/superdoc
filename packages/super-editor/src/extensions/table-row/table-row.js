@@ -85,6 +85,16 @@ export const TableRow = Node.create({
 
   addAttributes() {
     return {
+      /** @private */
+      sdBlockId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: (elem) => elem.getAttribute('data-sd-block-id'),
+        renderDOM: (attrs) => {
+          return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
+        },
+      },
+
       rowHeight: {
         renderDOM({ rowHeight }) {
           if (!rowHeight) return {};

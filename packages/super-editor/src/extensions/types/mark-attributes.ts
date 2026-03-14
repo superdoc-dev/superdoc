@@ -58,6 +58,12 @@ export interface UnderlineAttrs {
   underlineType?: UnderlineStyle | null;
   /** Underline color (hex, 'auto', etc.) */
   underlineColor?: string | null;
+  /** Underline theme color token (e.g., 'accent1') */
+  underlineThemeColor?: string | null;
+  /** Underline theme tint value */
+  underlineThemeTint?: string | null;
+  /** Underline theme shade value */
+  underlineThemeShade?: string | null;
 }
 
 // ============================================

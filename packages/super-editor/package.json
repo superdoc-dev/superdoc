@@ -9,12 +9,12 @@
   "exports": {
     ".": {
       "source": "./src/index.js",
-      "types": "./dist/index.d.ts",
+      "types": "./dist/src/index.d.ts",
       "import": "./dist/super-editor.es.js"
     },
     "./types": {
       "source": "./src/types.ts",
-      "types": "./dist/types.d.ts",
+      "types": "./dist/src/types.d.ts",
       "import": "./dist/types.js"
     },
     "./*": {
@@ -81,7 +81,7 @@
     "eventemitter3": "catalog:",
     "he": "catalog:",
     "jszip": "catalog:",
-    "marked": "catalog:",
+    "lodash": "^4.17.21",
     "prosemirror-commands": "catalog:",
     "prosemirror-dropcursor": "catalog:",
     "prosemirror-gapcursor": "catalog:",
@@ -98,22 +98,25 @@
     "rehype-parse": "catalog:",
     "rehype-remark": "catalog:",
     "remark-gfm": "catalog:",
+    "remark-parse": "catalog:",
     "remark-stringify": "catalog:",
     "unified": "catalog:",
+    "utif2": "catalog:",
     "uuid": "catalog:",
     "vue": "catalog:",
     "xml-js": "catalog:"
   },
   "peerDependencies": {
     "@floating-ui/dom": "^1.7.0",
-    "naive-ui": "^2.38.2",
     "tippy.js": "^6.3.7",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
   },
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
+    "@types/mdast": "catalog:",
     "@superdoc/common": "workspace:*",
+    "@superdoc/document-api": "workspace:*",
     "@superdoc/contracts": "workspace:*",
     "@superdoc/layout-bridge": "workspace:*",
     "@superdoc/measuring-dom": "workspace:*",

@@ -8,6 +8,10 @@
  */
 export function ensureClipboardPermission(): Promise<boolean>;
 /**
+ * Reads raw HTML and text from the system clipboard (for use in paste actions).
+ */
+export function readClipboardRaw(): Promise<{ html: string; text: string }>;
+/**
  * Reads content from the system clipboard and parses it into a ProseMirror fragment.
  * Attempts to read HTML first, falling back to plain text if necessary.
  * @param {EditorState} state - The ProseMirror editor state, used for schema and parsing.

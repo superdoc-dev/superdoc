@@ -37,10 +37,26 @@ pnpm dev
 
 ## Development
 
+### Developing with local SuperDoc changes
+
+To preview docs with your local SuperDoc source (instead of the published npm version), run from the **repo root**:
+
+```bash
+pnpm dev:docs
+```
+
+This starts three processes:
+
+- **Vite dev server** (port 9094) — serves the built UMD bundle at `/dist`
+- **UMD watcher** — rebuilds `dist/superdoc.umd.js` automatically when source files change
+- **Mintlify** (port 3001) — the docs dev server
+
+The `<SuperDocEditor>` widget detects `localhost` and loads SuperDoc from the local Vite server instead of unpkg. After saving a source file, the UMD watcher rebuilds automatically — refresh the docs page to see the changes.
+
 ### Available Scripts
 
-- `pnpm dev` - Start Mintlify development server
-- `pnpm build` - Build documentation for production
+- `pnpm dev` - Start Mintlify development server (uses unpkg, no local changes)
+- `pnpm dev:docs` - Start full local dev environment (**run from repo root**)
 - `pnpm sync:api` - Sync API documentation from OpenAPI spec
 - `pnpm sync:sdk` - Sync SDK documentation from TypeDoc
 - `pnpm sync:all` - Sync both API and SDK documentation

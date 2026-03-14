@@ -8,6 +8,10 @@ beforeAll(() => {
 });
 
 describe('encodeMarksFromRPr', () => {
+  it('returns empty marks for undefined run properties', () => {
+    expect(encodeMarksFromRPr(undefined, {})).toEqual([]);
+  });
+
   it('should encode bold, italic, and strike properties', () => {
     const rPr = { bold: true, italic: true, strike: true };
     const marks = encodeMarksFromRPr(rPr, {});
@@ -141,6 +145,16 @@ describe('decodeRPrFromMarks', () => {
   it('decodes vertAlign and position from textStyle mark', () => {
     const marks = [{ type: { name: 'textStyle' }, attrs: { vertAlign: 'subscript', position: '1.5pt' } }];
     expect(decodeRPrFromMarks(marks)).toMatchObject({ vertAlign: 'subscript', position: 3 });
+  });
+
+  it('does not write debug output while decoding marks', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      decodeRPrFromMarks([{ type: { name: 'bold' }, attrs: { value: true } }]);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
@@ -430,6 +444,12 @@ describe('decodeRPrFromMarks', () => {
     const marks = [{ type: 'textStyle', attrs: { textTransform: 'uppercase' } }];
     const rPr = decodeRPrFromMarks(marks);
     expect(rPr).toEqual({ textTransform: 'uppercase' });
+  });
+
+  it('should decode link mark into Hyperlink styleId', () => {
+    const marks = [{ type: 'link', attrs: { href: 'https://example.com' } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr).toEqual({ styleId: 'Hyperlink' });
   });
 });
 

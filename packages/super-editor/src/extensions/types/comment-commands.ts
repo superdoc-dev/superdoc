@@ -8,6 +8,8 @@
 export type AddCommentOptions = {
   /** The comment content (text or HTML) */
   content?: string;
+  /** Explicit comment ID (defaults to a new UUID) */
+  commentId?: string;
   /** Author name (defaults to user from editor config) */
   author?: string;
   /** Author email (defaults to user from editor config) */
@@ -59,13 +61,17 @@ export type RemoveCommentOptions = {
 /** Options for setActiveComment command */
 export type SetActiveCommentOptions = {
   /** The comment ID to set as active */
-  commentId: string;
+  commentId: string | null;
+  /** The imported comment ID */
+  importedId?: string;
 };
 
 /** Options for setCommentInternal command */
 export type SetCommentInternalOptions = {
   /** The comment ID to update */
   commentId: string;
+  /** The imported comment ID */
+  importedId?: string;
   /** Whether the comment should be internal */
   isInternal: boolean;
 };
@@ -74,12 +80,38 @@ export type SetCommentInternalOptions = {
 export type ResolveCommentOptions = {
   /** The comment ID to resolve */
   commentId: string;
+  /** The imported comment ID */
+  importedId?: string;
+};
+
+/** Options for editComment command */
+export type EditCommentOptions = {
+  /** The comment ID to edit */
+  commentId: string;
+  /** The imported comment ID */
+  importedId?: string;
+  /** Updated content (text or HTML) */
+  content?: string;
+  /** Updated content alias */
+  text?: string;
+};
+
+/** Options for moveComment command */
+export type MoveCommentOptions = {
+  /** The comment ID to move */
+  commentId: string;
+  /** Absolute ProseMirror start position */
+  from: number;
+  /** Absolute ProseMirror end position */
+  to: number;
 };
 
 /** Options for addCommentReply command */
 export type AddCommentReplyOptions = {
   /** The ID of the parent comment or tracked change to reply to */
   parentId: string;
+  /** Optional explicit comment ID for deterministic callers */
+  commentId?: string;
   /** The reply content (text or HTML) */
   content?: string;
   /** Author name (defaults to user from editor config) */
@@ -155,6 +187,18 @@ export interface CommentCommands {
    * editor.commands.resolveComment({ commentId: 'comment-123' })
    */
   resolveComment: (options: ResolveCommentOptions) => boolean;
+
+  /**
+   * Edit an existing comment payload.
+   * @param options - Object containing comment id and updated content
+   */
+  editComment: (options: EditCommentOptions) => boolean;
+
+  /**
+   * Move a comment anchor to a new document range.
+   * @param options - Object containing comment id and absolute target positions
+   */
+  moveComment: (options: MoveCommentOptions) => boolean;
 
   /**
    * Set cursor position to a comment by ID

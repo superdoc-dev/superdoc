@@ -59,6 +59,7 @@ export type DirtyRegion = {
   lastStableIndex: number;
   insertedBlockIds: string[];
   deletedBlockIds: string[];
+  stableBlockIds: Set<string>;
 };
 
 /**
@@ -85,6 +86,7 @@ export type DirtyRegion = {
 export const computeDirtyRegions = (previous: FlowBlock[], next: FlowBlock[]): DirtyRegion => {
   const prevMap = new Map(previous.map((block, index) => [block.id, { block, index }]));
   const nextMap = new Map(next.map((block, index) => [block.id, { block, index }]));
+  const stableBlockIds = new Set<string>();
 
   let firstDirtyIndex = next.length;
   let lastStableIndex = -1;
@@ -97,6 +99,7 @@ export const computeDirtyRegions = (previous: FlowBlock[], next: FlowBlock[]): D
 
     if (prevBlock.id === nextBlock.id && shallowEqual(prevBlock, nextBlock)) {
       lastStableIndex = nextPointer;
+      stableBlockIds.add(prevBlock.id);
       prevPointer += 1;
       nextPointer += 1;
       continue;
@@ -127,6 +130,7 @@ export const computeDirtyRegions = (previous: FlowBlock[], next: FlowBlock[]): D
     lastStableIndex,
     insertedBlockIds,
     deletedBlockIds,
+    stableBlockIds,
   };
 };
 
@@ -471,6 +475,14 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
       shapeGroupTransformEqual(a.groupTransform, b.groupTransform) &&
       shapeGroupSizeEqual(a.size, b.size) &&
       shapeGroupChildrenEqual(a.shapes, b.shapes)
+    );
+  }
+
+  if (a.drawingKind === 'chart' && b.drawingKind === 'chart') {
+    return (
+      drawingGeometryEqual(a.geometry, b.geometry) &&
+      a.chartRelId === b.chartRelId &&
+      jsonEqual(a.chartData, b.chartData)
     );
   }
 

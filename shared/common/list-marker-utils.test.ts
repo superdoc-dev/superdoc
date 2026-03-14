@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { resolveListTextStartPx, type MinimalWordLayout, type MinimalMarker } from './list-marker-utils.js';
+import {
+  resolveListMarkerGeometry,
+  resolveListTextStartPx,
+  type MinimalWordLayout,
+  type MinimalMarker,
+} from './list-marker-utils.js';
 import { LIST_MARKER_GAP, SPACE_SUFFIX_GAP_PX, DEFAULT_TAB_INTERVAL_PX } from './layout-constants.js';
 
 describe('resolveListTextStartPx', () => {
@@ -131,11 +136,11 @@ describe('resolveListTextStartPx', () => {
         const hanging = 18;
         // markerStartPos = 36 - 18 + 0 = 18
         // currentPos = 18 + 20 = 38
-        // textStartTarget undefined, gap uses gutterWidthPx (8)
-        // tabWidth = gutterWidthPx (8) because textStart < currentPos
-        // result = 38 + 8 = 46
+        // textStart = 36, tabWidth = 36 - 38 = -2 → overflow
+        // nextDefaultTab = 38 + 48 - (38 % 48) = 48
+        // result = 48
         const result = resolveListTextStartPx(wordLayout, indentLeft, firstLine, hanging, mockMeasureMarkerText);
-        expect(result).toBe(46);
+        expect(result).toBe(48);
       });
 
       it('uses textStartPx when provided even in standard mode', () => {
@@ -239,6 +244,29 @@ describe('resolveListTextStartPx', () => {
       expect(result).toBe(26);
     });
 
+    it('prefers the next explicit tab stop over a stale first-line text start target', () => {
+      const wordLayout: MinimalWordLayout = {
+        firstLineIndentMode: true,
+        textStartPx: 48,
+        tabsPx: [144],
+        marker: {
+          markerX: 0,
+          glyphWidthPx: 20,
+          suffix: 'tab',
+        },
+      };
+
+      const geometry = resolveListMarkerGeometry(wordLayout, 0, 0, 0, mockMeasureMarkerText);
+
+      expect(geometry).toEqual({
+        markerStartPx: 0,
+        markerTextWidthPx: 20,
+        textStartPx: 144,
+        suffixWidthPx: 124,
+      });
+      expect(resolveListTextStartPx(wordLayout, 0, 0, 0, mockMeasureMarkerText)).toBe(144);
+    });
+
     it('uses textStartX when no tab stop found', () => {
       const wordLayout: MinimalWordLayout = {
         firstLineIndentMode: true,
@@ -312,6 +340,76 @@ describe('resolveListTextStartPx', () => {
   });
 
   describe('standard hanging indent mode', () => {
+    it('ignores paragraph tab stops when textStartPx is present', () => {
+      // Regression: tabsPx must NOT override textStartPx in standard hanging-indent mode.
+      // Paragraph tabs are for inline w:tab characters, not list-prefix positioning.
+      const wordLayout: MinimalWordLayout = {
+        marker: { glyphWidthPx: 10, suffix: 'tab' },
+        textStartPx: 24,
+        tabsPx: [48, 96],
+      };
+      // markerStart = 24 - 18 = 6, markerContentEnd = 16
+      // textStartPx = 24 clears the glyph → used directly
+      const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+      expect(result).toBe(24);
+    });
+
+    it('ignores numbering-tab metadata drift in tabsPx', () => {
+      // Regression (list-mixed-abstract-ids): numbering tab metadata in tabsPx
+      // must not nudge text a few px past the hanging-indent text start.
+      const wordLayout: MinimalWordLayout = {
+        marker: { glyphWidthPx: 8, suffix: 'tab' },
+        textStartPx: 24,
+        tabsPx: [26], // numbering tab slightly past textStartPx
+      };
+      const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+      expect(result).toBe(24);
+    });
+
+    it('leaves later inline tabs alone when resolving list prefix', () => {
+      // Regression (HVY-20): a later paragraph tab stop (e.g. after "Payment.")
+      // must not be consumed by the list-prefix helper.
+      const wordLayout: MinimalWordLayout = {
+        marker: { glyphWidthPx: 6, suffix: 'tab' },
+        textStartPx: 24,
+        tabsPx: [192], // far-right tab for inline w:tab use
+      };
+      const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+      expect(result).toBe(24);
+    });
+
+    it('uses the explicit text start when a wide marker box still leaves clear space after the glyph', () => {
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 5,
+          markerBoxWidthPx: 24,
+          suffix: 'tab',
+        },
+        textStartPx: 24,
+      };
+
+      const result = resolveListTextStartPx(wordLayout, 24, 0, 24, mockMeasureMarkerText);
+
+      expect(result).toBe(24);
+    });
+
+    it('uses markerBoxWidthPx to advance a zero-indent heading marker to the next default tab stop', () => {
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 11,
+          markerBoxWidthPx: 18,
+          suffix: 'tab',
+        },
+      };
+
+      const result = resolveListTextStartPx(wordLayout, 0, 0, 0, mockMeasureMarkerText);
+
+      expect(result).toBe(DEFAULT_TAB_INTERVAL_PX);
+    });
+
     it('calculates marker start from indents', () => {
       const wordLayout: MinimalWordLayout = {
         marker: {
@@ -325,11 +423,11 @@ describe('resolveListTextStartPx', () => {
       // markerStartPos = indentLeft - hanging + firstLine = 36 - 18 + 0 = 18
       // currentPos = 18 + 18 = 36
       // textStart = indentLeft + firstLine = 36 + 0 = 36
-      // tabWidth = textStart - currentPos = 36 - 36 = 0 (falls to gutterWidth)
-      // Since tabWidth <= 0, use gutter width (LIST_MARKER_GAP = 8px):
-      // result = markerStartPos + glyphWidth + gutterWidth = 18 + 18 + 8 = 44
+      // tabWidth = textStart - currentPos = 36 - 36 = 0 → overflow
+      // nextDefaultTab = 36 + 48 - (36 % 48) = 48
+      // result = 48
       const result = resolveListTextStartPx(wordLayout, indentLeft, firstLine, hanging, mockMeasureMarkerText);
-      expect(result).toBe(44); // 18 + 18 + 8
+      expect(result).toBe(48);
     });
 
     it('uses minimum gutter when currentPos exceeds textStart', () => {
@@ -345,11 +443,11 @@ describe('resolveListTextStartPx', () => {
       // markerStartPos = 36 - 18 + 0 = 18
       // currentPos = 18 + 30 = 48
       // textStart = 36 + 0 = 36
-      // tabWidth = textStart - currentPos = 36 - 48 = -12 (negative, falls to gutterWidth)
-      // Since tabWidth <= 0, use gutter width (LIST_MARKER_GAP = 8px):
-      // result = markerStartPos + glyphWidth + gutterWidth = 18 + 30 + 8 = 56
+      // tabWidth = textStart - currentPos = 36 - 48 = -12 → overflow
+      // nextDefaultTab = 48 + 48 - (48 % 48) = 96
+      // result = 96
       const result = resolveListTextStartPx(wordLayout, indentLeft, firstLine, hanging, mockMeasureMarkerText);
-      expect(result).toBe(56); // 18 + 30 + 8
+      expect(result).toBe(96);
     });
 
     it('enforces minimum LIST_MARKER_GAP tab width', () => {
@@ -370,7 +468,7 @@ describe('resolveListTextStartPx', () => {
       expect(result).toBe(36); // textStart
     });
 
-    it('enforces minimum when calculated tab width is too small', () => {
+    it('uses actual tab width when positive (matches renderer)', () => {
       const wordLayout: MinimalWordLayout = {
         marker: {
           glyphWidthPx: 12,
@@ -383,9 +481,383 @@ describe('resolveListTextStartPx', () => {
       // markerStartPos = 36 - 18 + 0 = 18
       // currentPos = 18 + 12 = 30
       // textStart = 36 + 0 = 36
-      // tabWidth = 36 - 30 = 6 (less than LIST_MARKER_GAP, so enforce minimum)
+      // tabWidth = 36 - 30 = 6 (positive, used as-is to match renderer)
       const result = resolveListTextStartPx(wordLayout, indentLeft, firstLine, hanging, mockMeasureMarkerText);
-      expect(result).toBe(30 + LIST_MARKER_GAP); // 30 + 8 = 38
+      expect(result).toBe(36); // text starts at textStart position
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Step 8 hotfix regression guards
+  //
+  // These tests lock the hanging-overflow safeguard behavior that prevents
+  // the 48px DEFAULT_TAB_INTERVAL_PX jump. Each test targets a specific
+  // branch in Step 8 (standard hanging mode, lines 318–346).
+  // ---------------------------------------------------------------------------
+
+  describe('Step 8: hanging-overflow advances to next default tab stop', () => {
+    it('advances to next default tab stop when marker overruns hanging space', () => {
+      // Marker wider than hanging indent, no textStartPx.
+      // Must advance to next 48px-aligned tab stop, matching the renderer's computeTabWidth().
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 25, // wider than hanging (18px)
+          suffix: 'tab',
+        },
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 36 - 18 = 18
+      // currentPosStandard = 18 + 25 = 43 (past indentLeft 36)
+      // textStart = 36, tabWidth = 36 - 43 = -7 → overflow
+      // nextDefaultTab = 43 + 48 - (43 % 48) = 48
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(48); // advances to next default tab stop
+    });
+
+    it('advances to next default tab stop when marker exactly fills hanging space', () => {
+      // Edge case: marker width === hanging indent → tabWidth = 0 → overflow branch
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 18, // exactly equals hanging
+          suffix: 'tab',
+        },
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 36 - 18 = 18
+      // currentPosStandard = 18 + 18 = 36 (exactly at indentLeft)
+      // textStart = 36, tabWidth = 36 - 36 = 0 → overflow
+      // nextDefaultTab = 36 + 48 - (36 % 48) = 48
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(48); // advances to next default tab stop
+    });
+
+    it('advances to next default tab stop when hanging is zero and no textStartPx', () => {
+      // hanging=0 → markerStartPos = indentLeft, textStart = indentLeft → tabWidth = -markerWidth
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 10,
+          suffix: 'tab',
+        },
+      };
+      const indentLeft = 24;
+      const hanging = 0;
+      // markerStartPos = 24 - 0 = 24
+      // currentPosStandard = 24 + 10 = 34
+      // textStart = 24, tabWidth = 24 - 34 = -10 → overflow
+      // nextDefaultTab = 34 + 48 - (34 % 48) = 48
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(48); // advances to next default tab stop
+    });
+  });
+
+  describe('Step 8: textStartPx target branch', () => {
+    it('uses textStartPx when it exceeds currentPosStandard', () => {
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 10,
+          suffix: 'tab',
+        },
+        textStartPx: 36,
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 36 - 18 = 18
+      // currentPosStandard = 18 + 10 = 28
+      // gap = max(36 - 28, 8) = max(8, 8) = 8
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(36); // 28 + 8 = 36
+    });
+
+    it('uses textStartPx directly when it already clears the visible marker glyph', () => {
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 15,
+          suffix: 'tab',
+        },
+        textStartPx: 36,
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 36 - 18 = 18
+      // markerContentEnd = 18 + 15 = 33
+      // textStartPx = 36 already clears the visible marker glyph, so it is used as-is
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(36);
+    });
+
+    it('enforces minimum gutterWidth when textStartPx is behind currentPosStandard', () => {
+      // Overflow: marker extends past the target text start
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 25, // wider than hanging
+          suffix: 'tab',
+        },
+        textStartPx: 36,
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 36 - 18 = 18
+      // currentPosStandard = 18 + 25 = 43
+      // gap = max(36 - 43, 8) = max(-7, 8) = 8
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(43 + LIST_MARKER_GAP); // 43 + 8 = 51
+      expect(result).not.toBe(43 + DEFAULT_TAB_INTERVAL_PX);
+    });
+
+    it('uses custom gutterWidthPx when larger than LIST_MARKER_GAP', () => {
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 25,
+          suffix: 'tab',
+          gutterWidthPx: 12,
+        },
+        textStartPx: 36,
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 18, currentPosStandard = 18 + 25 = 43
+      // gap = max(36 - 43, 12) = max(-7, 12) = 12
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(43 + 12); // 55
+    });
+  });
+
+  describe('Step 8: implicit indent fallback', () => {
+    it('uses indentLeft + firstLine when no textStartPx provided', () => {
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 8,
+          suffix: 'tab',
+        },
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 36 - 18 = 18
+      // currentPosStandard = 18 + 8 = 26
+      // textStart = 36, tabWidth = 36 - 26 = 10 (>= LIST_MARKER_GAP, used as-is)
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(36); // 26 + 10 = 36
+    });
+
+    it('uses actual tab width for small positive gap (matches renderer)', () => {
+      const wordLayout: MinimalWordLayout = {
+        marker: {
+          glyphWidthPx: 14,
+          suffix: 'tab',
+        },
+      };
+      const indentLeft = 36;
+      const hanging = 18;
+      // markerStartPos = 18, currentPosStandard = 18 + 14 = 32
+      // textStart = 36, tabWidth = 36 - 32 = 4 (used as-is, matching renderer)
+      const result = resolveListTextStartPx(wordLayout, indentLeft, 0, hanging, mockMeasureMarkerText);
+
+      expect(result).toBe(36); // text starts at textStart position (indentLeft)
+    });
+  });
+
+  describe('Step 7: first-line indent mode preserves floor on all branches', () => {
+    it('floors real tab stop gap to LIST_MARKER_GAP when tab is very close to marker', () => {
+      // Step 7 floors even real tab stops — this is intentional current behavior.
+      // A tab stop 2px past the marker still gets floored to LIST_MARKER_GAP.
+      const wordLayout: MinimalWordLayout = {
+        firstLineIndentMode: true,
+        tabsPx: [22], // tab at 22, just 2px past marker end at 20
+        marker: {
+          markerX: 0,
+          glyphWidthPx: 20, // currentPos = 20
+          suffix: 'tab',
+        },
+      };
+      const result = resolveListTextStartPx(wordLayout, 0, 0, 0, mockMeasureMarkerText);
+
+      // tabWidth = 22 - 20 = 2, which is < LIST_MARKER_GAP (8), so floored to 8
+      expect(result).toBe(20 + LIST_MARKER_GAP); // 28
+    });
+
+    it('uses real tab stop gap when it exceeds LIST_MARKER_GAP', () => {
+      const wordLayout: MinimalWordLayout = {
+        firstLineIndentMode: true,
+        tabsPx: [36], // tab at 36, 16px past marker end at 20
+        marker: {
+          markerX: 0,
+          glyphWidthPx: 20, // currentPos = 20
+          suffix: 'tab',
+        },
+      };
+      const result = resolveListTextStartPx(wordLayout, 0, 0, 0, mockMeasureMarkerText);
+
+      // tabWidth = 36 - 20 = 16, which is >= LIST_MARKER_GAP → used as-is
+      expect(result).toBe(36);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Regression-value tests
+  //
+  // These use representative indent/hanging/marker-width values from common
+  // DOCX list patterns to guard against regressions in real-world documents.
+  // Values derived from word-layout defaults:
+  //   DEFAULT_LIST_INDENT_BASE_PX = 24
+  //   DEFAULT_LIST_INDENT_STEP_PX = 24
+  //   DEFAULT_LIST_HANGING_PX = 18
+  // ---------------------------------------------------------------------------
+
+  describe('regression-value tests (representative doc patterns)', () => {
+    // Pattern: standard level-1 list (indentLeft=24, hanging=18)
+    // Common in most DOCX files. Marker sits in the 18px hanging area.
+    describe('standard level-1 list (indentLeft=24, hanging=18)', () => {
+      it('short numbered marker "1." fits in hanging area', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 8, suffix: 'tab' },
+          textStartPx: 24,
+        };
+        // markerStartPos = 24 - 18 = 6, currentPosStandard = 6 + 8 = 14
+        // gap = max(24 - 14, 8) = max(10, 8) = 10
+        const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(24); // text starts at indentLeft
+      });
+
+      it('wide numbered marker "viii." overflows hanging area with minimum gap', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 22, suffix: 'tab' },
+          textStartPx: 24,
+        };
+        // markerStartPos = 6, currentPosStandard = 6 + 22 = 28
+        // gap = max(24 - 28, 8) = max(-4, 8) = 8
+        const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(28 + LIST_MARKER_GAP); // 36, not 28 + 48 = 76
+        expect(result).not.toBe(28 + DEFAULT_TAB_INTERVAL_PX);
+      });
+
+      it('bullet marker "•" fits comfortably in hanging area', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 6, suffix: 'tab' },
+          textStartPx: 24,
+        };
+        // markerStartPos = 6, currentPosStandard = 6 + 6 = 12
+        // gap = max(24 - 12, 8) = max(12, 8) = 12
+        const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(24); // text starts at indentLeft
+      });
+    });
+
+    // Pattern: level-2 list (indentLeft=48, hanging=18)
+    describe('level-2 list (indentLeft=48, hanging=18)', () => {
+      it('sub-item marker fits in hanging area', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 12, suffix: 'tab' },
+          textStartPx: 48,
+        };
+        // markerStartPos = 48 - 18 = 30, markerContentEnd = 30 + 12 = 42
+        // textStartPx = 48 already clears the visible marker glyph, so it is used as-is
+        const result = resolveListTextStartPx(wordLayout, 48, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(48);
+      });
+    });
+
+    // Pattern: tiny spacing (small indents, marker nearly fills available space)
+    // Representative of tight-spacing documents like tiny-spacing.docx
+    describe('tiny spacing pattern (small indents)', () => {
+      it('marker fills entire indent with no overflow', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 10, suffix: 'tab' },
+          textStartPx: 12,
+        };
+        // indentLeft=12, hanging=12 → markerStartPos = 0
+        // markerContentEnd = 10, so textStartPx = 12 is valid and used directly
+        const result = resolveListTextStartPx(wordLayout, 12, 0, 12, mockMeasureMarkerText);
+
+        expect(result).toBe(12);
+      });
+
+      it('marker overflows tiny hanging space', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 15, suffix: 'tab' },
+          textStartPx: 12,
+        };
+        // indentLeft=12, hanging=10 → markerStartPos = 2
+        // currentPosStandard = 2 + 15 = 17
+        // gap = max(12 - 17, 8) = max(-5, 8) = 8
+        const result = resolveListTextStartPx(wordLayout, 12, 0, 10, mockMeasureMarkerText);
+
+        expect(result).toBe(17 + LIST_MARKER_GAP); // 25
+        expect(result).not.toBe(17 + DEFAULT_TAB_INTERVAL_PX);
+      });
+    });
+
+    // Pattern: legal numbering (wider markers like "(a)", "1.1.1")
+    // Representative of template_format.docx and sd-1356 patterns
+    describe('legal numbering pattern (wide markers)', () => {
+      it('compound marker "1.1.1" overflows standard hanging with minimum gap', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 30, suffix: 'tab' },
+          textStartPx: 36,
+        };
+        // indentLeft=36, hanging=18 → markerStartPos = 18
+        // currentPosStandard = 18 + 30 = 48
+        // gap = max(36 - 48, 8) = max(-12, 8) = 8
+        const result = resolveListTextStartPx(wordLayout, 36, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(48 + LIST_MARKER_GAP); // 56
+        expect(result).not.toBe(48 + DEFAULT_TAB_INTERVAL_PX); // not 96
+      });
+
+      it('parenthetical marker "(a)" fits in standard hanging', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 16, suffix: 'tab' },
+          textStartPx: 36,
+        };
+        // indentLeft=36, hanging=18 → markerStartPos = 18
+        // markerContentEnd = 18 + 16 = 34
+        // textStartPx = 36 already clears the visible marker glyph, so it is used directly
+        const result = resolveListTextStartPx(wordLayout, 36, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(36);
+      });
+    });
+
+    // Pattern: no textStartPx (wordLayout missing or textStartPx absent)
+    // Falls to implicit indent fallback in Step 8
+    describe('implicit indent fallback (no textStartPx)', () => {
+      it('level-1 list with no textStartPx uses indentLeft', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 8, suffix: 'tab' },
+          // textStartPx intentionally omitted
+        };
+        // markerStartPos = 24 - 18 = 6, currentPosStandard = 6 + 8 = 14
+        // textStart = 24, tabWidth = 24 - 14 = 10 (>= LIST_MARKER_GAP)
+        const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(24); // text at indentLeft
+      });
+
+      it('wide marker with no textStartPx advances to next default tab stop', () => {
+        const wordLayout: MinimalWordLayout = {
+          marker: { glyphWidthPx: 25, suffix: 'tab' },
+          // textStartPx intentionally omitted
+        };
+        // markerStartPos = 24 - 18 = 6, currentPosStandard = 6 + 25 = 31
+        // textStart = 24, tabWidth = 24 - 31 = -7 → overflow
+        // nextDefaultTab = 31 + 48 - (31 % 48) = 48
+        const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
+
+        expect(result).toBe(48); // advances to next default tab stop
+      });
     });
   });
 

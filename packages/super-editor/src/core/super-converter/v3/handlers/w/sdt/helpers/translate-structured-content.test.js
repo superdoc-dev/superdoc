@@ -95,4 +95,151 @@ describe('translateStructuredContent', () => {
     expect(translateChildNodes).toHaveBeenCalledWith({ ...params, node });
     expect(result).toEqual(childElements[0]);
   });
+
+  describe('w:lock export', () => {
+    it('exports w:lock element for sdtLocked mode', () => {
+      const node = {
+        content: [{ type: 'text', text: 'Test' }],
+        attrs: { id: '123', lockMode: 'sdtLocked' },
+      };
+      const params = { node };
+
+      const result = translateStructuredContent(params);
+
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const lockElement = sdtPr.elements.find((el) => el.name === 'w:lock');
+
+      expect(lockElement).toBeDefined();
+      expect(lockElement.attributes['w:val']).toBe('sdtLocked');
+    });
+
+    it('exports w:lock element for contentLocked mode', () => {
+      const node = {
+        content: [{ type: 'text', text: 'Test' }],
+        attrs: { id: '123', lockMode: 'contentLocked' },
+      };
+      const params = { node };
+
+      const result = translateStructuredContent(params);
+
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const lockElement = sdtPr.elements.find((el) => el.name === 'w:lock');
+
+      expect(lockElement).toBeDefined();
+      expect(lockElement.attributes['w:val']).toBe('contentLocked');
+    });
+
+    it('exports w:lock element for sdtContentLocked mode', () => {
+      const node = {
+        content: [{ type: 'text', text: 'Test' }],
+        attrs: { id: '123', lockMode: 'sdtContentLocked' },
+      };
+      const params = { node };
+
+      const result = translateStructuredContent(params);
+
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const lockElement = sdtPr.elements.find((el) => el.name === 'w:lock');
+
+      expect(lockElement).toBeDefined();
+      expect(lockElement.attributes['w:val']).toBe('sdtContentLocked');
+    });
+
+    it('does not export w:lock element for unlocked mode', () => {
+      const node = {
+        content: [{ type: 'text', text: 'Test' }],
+        attrs: { id: '123', lockMode: 'unlocked' },
+      };
+      const params = { node };
+
+      const result = translateStructuredContent(params);
+
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const lockElement = sdtPr.elements.find((el) => el.name === 'w:lock');
+
+      expect(lockElement).toBeUndefined();
+    });
+
+    it('does not export w:lock element when lockMode is not set', () => {
+      const node = {
+        content: [{ type: 'text', text: 'Test' }],
+        attrs: { id: '123' },
+      };
+      const params = { node };
+
+      const result = translateStructuredContent(params);
+
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const lockElement = sdtPr.elements.find((el) => el.name === 'w:lock');
+
+      expect(lockElement).toBeUndefined();
+    });
+
+    it('excludes w:lock from passthrough sdtPr elements to avoid duplication', () => {
+      const originalSdtPr = {
+        name: 'w:sdtPr',
+        elements: [
+          { name: 'w:lock', attributes: { 'w:val': 'contentLocked' } },
+          { name: 'w:placeholder', elements: [] },
+        ],
+      };
+      const node = {
+        content: [{ type: 'text', text: 'Test' }],
+        attrs: { id: '123', lockMode: 'sdtContentLocked', sdtPr: originalSdtPr },
+      };
+      const params = { node };
+
+      const result = translateStructuredContent(params);
+
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const lockElements = sdtPr.elements.filter((el) => el.name === 'w:lock');
+
+      // Should only have one w:lock element with the new value
+      expect(lockElements.length).toBe(1);
+      expect(lockElements[0].attributes['w:val']).toBe('sdtContentLocked');
+    });
+  });
+
+  describe('default type element export when sdtPr is absent', () => {
+    it('exports checkbox defaults with checked + symbol state metadata', () => {
+      const node = {
+        type: 'structuredContent',
+        attrs: {
+          id: '101',
+          controlType: 'checkbox',
+        },
+        content: [{ type: 'text', text: ' ' }],
+      };
+
+      const result = translateStructuredContent({ node });
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const checkbox = sdtPr.elements.find((el) => el.name === 'w14:checkbox');
+
+      expect(checkbox).toBeDefined();
+      expect(checkbox.elements.some((el) => el.name === 'w14:checked')).toBe(true);
+      expect(checkbox.elements.some((el) => el.name === 'w14:checkedState')).toBe(true);
+      expect(checkbox.elements.some((el) => el.name === 'w14:uncheckedState')).toBe(true);
+    });
+
+    it('exports date defaults with format/locale/storage/calendar metadata', () => {
+      const node = {
+        type: 'structuredContent',
+        attrs: {
+          id: '102',
+          controlType: 'date',
+        },
+        content: [{ type: 'text', text: '3/7/2026' }],
+      };
+
+      const result = translateStructuredContent({ node });
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const dateEl = sdtPr.elements.find((el) => el.name === 'w:date');
+
+      expect(dateEl).toBeDefined();
+      expect(dateEl.elements.some((el) => el.name === 'w:dateFormat')).toBe(true);
+      expect(dateEl.elements.some((el) => el.name === 'w:lid')).toBe(true);
+      expect(dateEl.elements.some((el) => el.name === 'w:storeMappedDataAs')).toBe(true);
+      expect(dateEl.elements.some((el) => el.name === 'w:calendar')).toBe(true);
+    });
+  });
 });

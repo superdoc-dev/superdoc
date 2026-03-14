@@ -9,6 +9,12 @@ import { isRegExp } from './utilities/isRegExp.js';
 import { handleDocxPaste, wrapTextsInRuns } from './inputRules/docx-paste/docx-paste.js';
 import { flattenListsInHtml } from './inputRules/html/html-helpers.js';
 import { handleGoogleDocsHtml } from './inputRules/google-docs-paste/google-docs-paste.js';
+import {
+  detectPasteUrl,
+  handlePlainTextUrlPaste,
+  normalizePastedLinks,
+  resolveLinkProtocols,
+} from './inputRules/paste-link-normalizer.js';
 
 export class InputRule {
   match;
@@ -221,6 +227,7 @@ export const inputRulesPlugin = ({ editor, rules }) => {
       handlePaste(view, event, slice) {
         const clipboard = event.clipboardData;
         const html = clipboard.getData('text/html');
+        const plainText = clipboard.getData('text/plain');
 
         // Allow specialised plugins (e.g., field-annotation) first shot.
         const fieldAnnotationContent = slice.content.content.filter((item) => item.type.name === 'fieldAnnotation');
@@ -228,7 +235,7 @@ export const inputRulesPlugin = ({ editor, rules }) => {
           return false;
         }
 
-        const result = handleClipboardPaste({ editor, view }, html);
+        const result = handleClipboardPaste({ editor, view }, html, plainText);
         return result;
       },
     },
@@ -265,6 +272,64 @@ function findParagraphAncestor($from) {
 }
 
 /**
+ * @param {import('prosemirror-model').Node} tableRow
+ * @returns {string}
+ */
+function getTableRowSignature(tableRow) {
+  const parts = [];
+  tableRow.forEach((cell) => {
+    parts.push(`${cell.attrs?.colspan ?? 1}:${cell.attrs?.rowspan ?? 1}`);
+  });
+  return parts.join('|');
+}
+
+/**
+ * Browser "highlight copy" can emit table-like HTML where each visual row
+ * becomes an independent table element. Merge adjacent compatible tables back
+ * into one table so table editing features (cell selection, resizing) work.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @returns {import('prosemirror-model').Node}
+ */
+function mergeAdjacentTableFragments(doc) {
+  if (!doc?.childCount) return doc;
+
+  /** @type {import('prosemirror-model').Node[]} */
+  const mergedChildren = [];
+
+  doc.forEach((child) => {
+    const previous = mergedChildren[mergedChildren.length - 1];
+
+    if (child.type.name !== 'table' || previous?.type.name !== 'table') {
+      mergedChildren.push(child);
+      return;
+    }
+
+    const previousFirstRow = previous.firstChild;
+    const currentFirstRow = child.firstChild;
+    if (!previousFirstRow || !currentFirstRow) {
+      mergedChildren.push(child);
+      return;
+    }
+
+    const previousColumnShape = getTableRowSignature(previousFirstRow);
+    const currentColumnShape = getTableRowSignature(currentFirstRow);
+    if (previousColumnShape !== currentColumnShape) {
+      mergedChildren.push(child);
+      return;
+    }
+
+    const combinedRows = [];
+    previous.forEach((row) => combinedRows.push(row));
+    child.forEach((row) => combinedRows.push(row));
+
+    mergedChildren[mergedChildren.length - 1] = previous.type.create(previous.attrs, combinedRows, previous.marks);
+  });
+
+  return doc.copy(Fragment.fromArray(mergedChildren));
+}
+
+/**
  * Handle HTML paste events.
  *
  * @param {String} html The HTML string to be pasted.
@@ -277,7 +342,14 @@ export function handleHtmlPaste(html, editor, source) {
   if (source === 'google-docs') cleanedHtml = handleGoogleDocsHtml(html, editor);
   else cleanedHtml = htmlHandler(html, editor);
 
+  // Mark pasted HTML as import content so table parseDOM rules can apply
+  // import defaults (e.g., default table width to 100%).
+  if (cleanedHtml?.dataset) {
+    cleanedHtml.dataset.superdocImport = 'true';
+  }
+
   let doc = PMDOMParser.fromSchema(editor.schema).parse(cleanedHtml);
+  doc = mergeAdjacentTableFragments(doc);
 
   doc = wrapTextsInRuns(doc);
 
@@ -302,6 +374,7 @@ export function handleHtmlPaste(html, editor, source) {
     // Extract the contents of the paragraph and paste only those
     const paragraphContent = doc.firstChild.content;
     const tr = state.tr.replaceSelectionWith(paragraphContent, false);
+    normalizePastedLinks(tr, editor);
     dispatch(tr);
   } else if (isInParagraph) {
     // For multi-paragraph paste, use replaceSelection with a proper Slice
@@ -310,10 +383,13 @@ export function handleHtmlPaste(html, editor, source) {
     const slice = new Slice(doc.content, 0, 0);
 
     const tr = state.tr.replaceSelection(slice);
+    normalizePastedLinks(tr, editor);
     dispatch(tr);
   } else {
     // Use the original behavior for other cases
-    dispatch(state.tr.replaceSelectionWith(doc, true));
+    const tr = state.tr.replaceSelectionWith(doc, true);
+    normalizePastedLinks(tr, editor);
+    dispatch(tr);
   }
 
   return true;
@@ -392,9 +468,12 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
         continue;
       }
 
-      // Remove linebreaktype here - we don't want it when pasting HTML
+      // Internal/runtime-only attributes must not be preserved across paste.
       if (child.hasAttribute('linebreaktype')) {
         child.removeAttribute('linebreaktype');
+      }
+      if (child.hasAttribute('data-sd-block-id')) {
+        child.removeAttribute('data-sd-block-id');
       }
 
       walkAndClean(child);
@@ -408,16 +487,17 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
 /**
  * Reusable paste-handling utility that replicates the logic formerly held only
  * inside the `inputRulesPlugin` paste handler. This allows other components
- * (e.g. slash-menu items) to invoke the same paste logic without duplicating
+ * (e.g. context-menu items) to invoke the same paste logic without duplicating
  * code.
  *
  * @param {Object}   params
  * @param {Editor}   params.editor  The SuperEditor instance.
  * @param {View}     params.view    The ProseMirror view associated with the editor.
  * @param {String}   html           HTML clipboard content (may be empty).
+ * @param {String}   [plainText]    Plain-text clipboard content (may be empty).
  * @returns {Boolean}               Whether the paste was handled.
  */
-export function handleClipboardPaste({ editor, view }, html) {
+export function handleClipboardPaste({ editor, view }, html, plainText) {
   let source;
 
   if (!html) {
@@ -431,10 +511,12 @@ export function handleClipboardPaste({ editor, view }, html) {
   }
 
   switch (source) {
-    case 'plain-text':
-      // Let native/plain text paste fall through so ProseMirror handles it.
-      // Will hit the Fallback when boolean is returned false
-      return false;
+    case 'plain-text': {
+      const protocols = resolveLinkProtocols(editor);
+      const detected = detectPasteUrl(plainText, protocols);
+      if (!detected) return false;
+      return handlePlainTextUrlPaste(editor, view, plainText, detected);
+    }
     case 'word-html':
       if (editor.options.mode === 'docx') {
         return handleDocxPaste(html, editor, view);

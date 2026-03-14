@@ -1,6 +1,7 @@
 import type { Transaction } from 'prosemirror-state';
 import type { Editor } from '../Editor.js';
 import type { DefaultEventMap } from '../EventEmitter.js';
+import type { PartChangedEvent } from '../parts/types.js';
 
 /**
  * Payload for fonts-resolved events
@@ -50,7 +51,7 @@ export interface PaginationPayload {
  * Payload for list definitions change
  */
 export interface ListDefinitionsPayload {
-  change: unknown;
+  change?: unknown;
   numbering?: unknown;
   editor?: unknown;
 }
@@ -129,4 +130,7 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when page styles are updated */
   pageStyleUpdate: [{ pageMargins?: Record<string, unknown>; pageStyles: Record<string, unknown> }];
+
+  /** Called when non-document.xml parts are mutated via the parts system. */
+  partChanged: [PartChangedEvent];
 }

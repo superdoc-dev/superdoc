@@ -1,4 +1,5 @@
 // @ts-check
+import { findOrCreateRelationship } from '../../../../../../parts/adapters/relationships-mutation.js';
 
 /**
  * @typedef {import('prosemirror-state').Transaction} Transaction
@@ -24,17 +25,14 @@ export function ensureValidLinkRID(links, editor, tr, logger) {
     const { rId, href, anchor } = mark.attrs;
 
     if (!rId && href && !anchor) {
-      let newId = editor.converter.docxHelpers.findRelationshipIdFromTarget(href, editor);
-      if (newId) logger.debug('Reusing existing rId for link:', newId, 'from pos:', from, 'to pos:', to);
-
-      // If we still don't have an rId, create a new relationship
-      if (!newId) {
-        newId = editor.converter.docxHelpers.insertNewRelationship(href, 'hyperlink', editor);
-        logger.debug('Creating new rId for link from pos:', from, 'to pos:', to, 'with href:', href);
-      }
+      const newId = findOrCreateRelationship(editor, 'link-rid:ensureValidLinkRID', {
+        target: href,
+        type: 'hyperlink',
+      });
 
       if (newId) {
-        // Remove the old mark and add a new one with the rId
+        logger.debug('Assigned rId for link:', newId, 'from pos:', from, 'to pos:', to);
+
         const linkMarkType = editor.schema.marks.link;
         const newMark = linkMarkType.create({
           ...mark.attrs,

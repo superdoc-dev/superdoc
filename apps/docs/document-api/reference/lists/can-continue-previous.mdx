@@ -1,0 +1,120 @@
+---
+title: lists.canContinuePrevious
+sidebarTitle: lists.canContinuePrevious
+description: Check whether the target sequence can continue numbering from a previous compatible sequence.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Check whether the target sequence can continue numbering from a previous compatible sequence.
+
+- Operation ID: `lists.canContinuePrevious`
+- API member path: `editor.doc.lists.canContinuePrevious(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsCanContinuePreviousResult indicating feasibility.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `canContinue` | boolean | yes |  |
+| `previousListId` | string | no |  |
+| `reason` | enum | no | `"NO_PREVIOUS_LIST"`, `"INCOMPATIBLE_DEFINITIONS"`, `"ALREADY_CONTINUOUS"` |
+
+### Example response
+
+```json
+{
+  "canContinue": true,
+  "previousListId": "example",
+  "reason": "NO_PREVIOUS_LIST"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "$ref": "#/$defs/ListItemAddress"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "canContinue": {
+      "type": "boolean"
+    },
+    "previousListId": {
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "NO_PREVIOUS_LIST",
+        "INCOMPATIBLE_DEFINITIONS",
+        "ALREADY_CONTINUOUS"
+      ]
+    }
+  },
+  "required": [
+    "canContinue"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

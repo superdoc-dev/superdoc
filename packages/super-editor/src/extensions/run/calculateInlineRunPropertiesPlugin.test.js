@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Schema } from 'prosemirror-model';
-import { EditorState } from 'prosemirror-state';
+import { EditorState, TextSelection } from 'prosemirror-state';
 
 const decodeRPrFromMarksMock = vi.hoisted(() =>
   vi.fn((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') })),
 );
+const encodeMarksFromRPrMock = vi.hoisted(() => vi.fn(() => []));
 const resolveRunPropertiesMock = vi.hoisted(() => vi.fn(() => ({ bold: false })));
 const calculateResolvedParagraphPropertiesMock = vi.hoisted(() => vi.fn(() => ({ paragraph: 'calculated' })));
 const getResolvedParagraphPropertiesMock = vi.hoisted(() => vi.fn(() => null));
 
 vi.mock('@converter/styles.js', () => ({
   decodeRPrFromMarks: decodeRPrFromMarksMock,
+  encodeMarksFromRPr: encodeMarksFromRPrMock,
   resolveRunProperties: resolveRunPropertiesMock,
 }));
 
@@ -25,14 +27,56 @@ const makeSchema = () =>
   new Schema({
     nodes: {
       doc: { content: 'block+' },
-      paragraph: { group: 'block', content: 'inline*' },
+      paragraph: {
+        group: 'block',
+        content: 'inline*',
+        attrs: {
+          paragraphProperties: { default: null },
+        },
+      },
+      table: {
+        tableRole: 'table',
+        group: 'block',
+        content: 'tableRow+',
+        attrs: {
+          tableProperties: { default: null },
+        },
+      },
+      tableRow: {
+        tableRole: 'row',
+        content: 'tableCell+',
+      },
+      tableCell: {
+        tableRole: 'cell',
+        content: 'block+',
+        attrs: {
+          colspan: { default: 1 },
+          rowspan: { default: 1 },
+        },
+      },
       run: {
         inline: true,
         group: 'inline',
         content: 'inline*',
         attrs: {
           runProperties: { default: null },
+          rsidR: { default: null },
+          rsidRPr: { default: null },
+          rsidDel: { default: null },
         },
+      },
+      pageReference: {
+        inline: true,
+        group: 'inline',
+        content: 'run+',
+        attrs: {
+          instruction: { default: null },
+        },
+      },
+      bookmarkStart: {
+        inline: true,
+        group: 'inline',
+        content: 'inline*',
       },
       text: { group: 'inline' },
     },
@@ -48,10 +92,8 @@ const makeSchema = () =>
     },
   });
 
-const paragraphDoc = (schema, runAttrs = null, marks = []) =>
-  schema.node('doc', null, [
-    schema.node('paragraph', null, [schema.node('run', runAttrs, schema.text('Hello', marks))]),
-  ]);
+const paragraphDoc = (schema, runAttrs = null, marks = [], text = 'Hello') =>
+  schema.node('doc', null, [schema.node('paragraph', null, [schema.node('run', runAttrs, schema.text(text, marks))])]);
 
 const runPos = (doc) => {
   let pos = null;
@@ -65,10 +107,46 @@ const runPos = (doc) => {
   return pos;
 };
 
+const runPositions = (doc) => {
+  const positions = [];
+  doc.descendants((node, nodePos) => {
+    if (node.type.name === 'run') {
+      positions.push(nodePos);
+    }
+    return true;
+  });
+  return positions;
+};
+
 const runTextRange = (doc, startIndex, endIndex) => {
   const base = runPos(doc);
   if (base == null) throw new Error('Run not found');
   return { from: base + 1 + startIndex, to: base + 1 + endIndex };
+};
+
+const runTextRangeAtPos = (runNodePos, startIndex, endIndex) => ({
+  from: runNodePos + 1 + startIndex,
+  to: runNodePos + 1 + endIndex,
+});
+
+const positionAtTextOffset = (doc, offset) => {
+  let remaining = offset;
+  let pos = null;
+
+  doc.descendants((node, nodePos) => {
+    if (!node.isText || pos != null) return true;
+    if (remaining <= node.text.length) {
+      pos = nodePos + remaining;
+      return false;
+    }
+    remaining -= node.text.length;
+    return true;
+  });
+
+  if (pos == null) {
+    throw new Error('Offset exceeds text length');
+  }
+  return pos;
 };
 
 const createState = (schema, doc) =>
@@ -81,6 +159,11 @@ const createState = (schema, doc) =>
 describe('calculateInlineRunPropertiesPlugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    decodeRPrFromMarksMock.mockImplementation((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') }));
+    encodeMarksFromRPrMock.mockImplementation(() => []);
+    resolveRunPropertiesMock.mockImplementation(() => ({ bold: false }));
+    calculateResolvedParagraphPropertiesMock.mockImplementation(() => ({ paragraph: 'calculated' }));
+    getResolvedParagraphPropertiesMock.mockImplementation(() => null);
   });
 
   it('stores inline run properties when marks differ from paragraph styles', () => {
@@ -95,8 +178,8 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(transactions.length).toBeGreaterThan(1);
     const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
     expect(runNode?.attrs.runProperties).toEqual({ bold: true });
-    expect(decodeRPrFromMarksMock).toHaveBeenCalledTimes(1);
-    expect(calculateResolvedParagraphPropertiesMock).toHaveBeenCalledTimes(1);
+    expect(decodeRPrFromMarksMock).toHaveBeenCalled();
+    expect(calculateResolvedParagraphPropertiesMock).toHaveBeenCalled();
   });
 
   it('removes inline run properties when marks align with paragraph styles', () => {
@@ -137,5 +220,306 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(runNode?.attrs.runProperties).toEqual({ italic: true });
     expect(getResolvedParagraphPropertiesMock).toHaveBeenCalled();
     expect(calculateResolvedParagraphPropertiesMock).not.toHaveBeenCalled();
+  });
+
+  it('passes null tableInfo to resolveRunProperties for runs outside tables', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, null, [], 'Hello');
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    state.applyTransaction(tr);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalled();
+    expect(resolveRunPropertiesMock.mock.calls[0][3]).toBeNull();
+  });
+
+  it('passes tableInfo to resolveRunProperties for runs inside table cells', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('table', { tableProperties: { tableStyleId: 'TableGrid' } }, [
+        schema.node('tableRow', null, [
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('A1'))]),
+          ]),
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('A2'))]),
+          ]),
+        ]),
+        schema.node('tableRow', null, [
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('B1'))]),
+          ]),
+          schema.node('tableCell', null, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('B2'))]),
+          ]),
+        ]),
+      ]),
+    ]);
+    const state = createState(schema, doc);
+    const runs = runPositions(state.doc);
+    const targetRunPos = runs[runs.length - 1];
+    const { from, to } = runTextRangeAtPos(targetRunPos, 0, 2);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    state.applyTransaction(tr);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalled();
+    expect(resolveRunPropertiesMock.mock.calls[0][3]).toEqual({
+      tableProperties: { tableStyleId: 'TableGrid' },
+      rowIndex: 1,
+      cellIndex: 1,
+      numCells: 2,
+      numRows: 2,
+    });
+  });
+
+  it('uses logical table coordinates for rows affected by rowspan', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('table', { tableProperties: { tableStyleId: 'TableGrid' } }, [
+        schema.node('tableRow', null, [
+          schema.node('tableCell', { rowspan: 2, colspan: 1 }, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('A1'))]),
+          ]),
+          schema.node('tableCell', { rowspan: 1, colspan: 1 }, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('B1'))]),
+          ]),
+          schema.node('tableCell', { rowspan: 1, colspan: 1 }, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('C1'))]),
+          ]),
+        ]),
+        schema.node('tableRow', null, [
+          schema.node('tableCell', { rowspan: 1, colspan: 1 }, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('B2'))]),
+          ]),
+          schema.node('tableCell', { rowspan: 1, colspan: 1 }, [
+            schema.node('paragraph', null, [schema.node('run', null, schema.text('C2'))]),
+          ]),
+        ]),
+      ]),
+    ]);
+    const state = createState(schema, doc);
+    const runs = runPositions(state.doc);
+    const targetRunPos = runs[runs.length - 1];
+    const { from, to } = runTextRangeAtPos(targetRunPos, 0, 2);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    state.applyTransaction(tr);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalled();
+    expect(resolveRunPropertiesMock.mock.calls[0][3]).toEqual({
+      tableProperties: { tableStyleId: 'TableGrid' },
+      rowIndex: 1,
+      cellIndex: 2,
+      numCells: 3,
+      numRows: 2,
+    });
+  });
+
+  it('does not sync paragraph runProperties with the first run', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema);
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 2);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const paragraph = nextState.doc.firstChild;
+    expect(paragraph.attrs.paragraphProperties).toBeNull();
+  });
+
+  it("does not update a paragraph's runProperties using the run's properties", () => {
+    const schema = makeSchema();
+    const paragraphRunProperties = { italic: true, styleId: 'ParagraphDefault' };
+    const doc = schema.node('doc', null, [
+      schema.node(
+        'paragraph',
+        {
+          paragraphProperties: {
+            alignment: 'center',
+            runProperties: paragraphRunProperties,
+          },
+        },
+        [schema.node('run', null, schema.text('Hello')), schema.node('run', null, schema.text('World'))],
+      ),
+    ]);
+    const state = createState(schema, doc);
+    const [firstRunPos] = runPositions(state.doc);
+    const { from, to } = runTextRangeAtPos(firstRunPos, 0, 2);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const paragraph = nextState.doc.firstChild;
+    expect(paragraph.attrs.paragraphProperties).toEqual({
+      alignment: 'center',
+      runProperties: paragraphRunProperties,
+    });
+
+    const updatedRuns = runPositions(nextState.doc);
+    const updatedRun = nextState.doc.nodeAt(updatedRuns[0]);
+    expect(updatedRun?.attrs.runProperties).toEqual({ bold: true });
+  });
+
+  it('does not update paragraph runProperties when a nested run changes', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [
+        schema.node('run', null, schema.text('Lead ')),
+        schema.node('pageReference', { instruction: 'PAGEREF _Toc123456789 h' }, [
+          schema.node('run', null, schema.text('Ref')),
+        ]),
+      ]),
+    ]);
+    const state = createState(schema, doc);
+    const [, nestedRunPos] = runPositions(state.doc);
+    const from = nestedRunPos + 1;
+    const to = nestedRunPos + 4;
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const paragraph = nextState.doc.firstChild;
+    expect(paragraph.attrs.paragraphProperties).toBeNull();
+  });
+
+  it('splits runs when inline properties differ', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, null, [], 'HelloWorld');
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const [firstRunPos, secondRunPos] = runPositions(nextState.doc);
+    expect(firstRunPos).not.toBeNull();
+    expect(secondRunPos).not.toBeNull();
+
+    const firstRun = nextState.doc.nodeAt(firstRunPos);
+    const secondRun = nextState.doc.nodeAt(secondRunPos);
+
+    expect(firstRun?.textContent).toBe('Hello');
+    expect(secondRun?.textContent).toBe('World');
+    expect(firstRun?.attrs.runProperties).toEqual({ bold: true });
+    expect(secondRun?.attrs.runProperties).toBeNull();
+  });
+
+  it('preserves run attributes when splitting runs', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(
+      schema,
+      { runProperties: null, rsidR: 'r1', rsidRPr: 'p1', rsidDel: 'd1' },
+      [],
+      'HelloWorld',
+    );
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const [firstRunPos, secondRunPos] = runPositions(nextState.doc);
+    const firstRun = nextState.doc.nodeAt(firstRunPos);
+    const secondRun = nextState.doc.nodeAt(secondRunPos);
+
+    expect(firstRun?.attrs.rsidR).toBe('r1');
+    expect(firstRun?.attrs.rsidRPr).toBe('p1');
+    expect(firstRun?.attrs.rsidDel).toBe('d1');
+    expect(secondRun?.attrs.rsidR).toBe('r1');
+    expect(secondRun?.attrs.rsidRPr).toBe('p1');
+    expect(secondRun?.attrs.rsidDel).toBe('d1');
+  });
+
+  it('preserves selection when runs are split', () => {
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, null, [], 'HelloWorld');
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 5); // "Hello"
+    const cursorPos = positionAtTextOffset(state.doc, 7); // inside "World"
+
+    const tr = state.tr.setSelection(TextSelection.create(state.doc, cursorPos));
+    tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const expectedPos = positionAtTextOffset(nextState.doc, 7);
+    expect(nextState.selection.from).toBe(expectedPos);
+    expect(nextState.selection.to).toBe(expectedPos);
+  });
+
+  it('preserves non-mark-derived runProperties while removing mark-derived ones', () => {
+    const schema = makeSchema();
+    const boldMark = schema.marks.bold.create();
+    const doc = paragraphDoc(schema, { runProperties: { bold: true, styleId: 'Style1' } }, [boldMark]);
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, doc.textContent.length);
+
+    const tr = state.tr.removeMark(from, to, schema.marks.bold);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({ styleId: 'Style1' });
+  });
+
+  it('does not carry over mark-derived properties from existing runProperties', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: { ascii: 'Times' }, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 1);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
+  });
+
+  it('avoids inline fontFamily when mark-derived values match after encoding', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Times' } }));
+    encodeMarksFromRPrMock.mockImplementation(() => [{ attrs: { fontFamily: 'Same' } }]);
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: { ascii: 'Times' }, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 1);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
+  });
+
+  it('maps changed ranges through later transactions', () => {
+    const schema = makeSchema();
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [schema.node('run', null, schema.text('AAA'))]),
+      schema.node('paragraph', null, [schema.node('run', null, schema.text('Hello'))]),
+    ]);
+    const state = createState(schema, doc);
+    const [firstRunPos, secondRunPos] = runPositions(state.doc);
+    const { from, to } = runTextRangeAtPos(secondRunPos, 0, 2); // "He"
+
+    const tr1 = state.tr.addMark(from, to, schema.marks.bold.create());
+    const state1 = state.apply(tr1);
+
+    const [firstRunPosAfter] = runPositions(state1.doc);
+    const tr2 = state1.tr.insertText('BBB', firstRunPosAfter + 1);
+    const state2 = state1.apply(tr2);
+
+    const plugin = calculateInlineRunPropertiesPlugin({ converter: { convertedXml: {}, numbering: {} } });
+    const appended = plugin.spec.appendTransaction([tr1, tr2], state, state2);
+    const finalState = appended ? state2.apply(appended) : state2;
+
+    const runs = runPositions(finalState.doc);
+    const boldRun = finalState.doc.nodeAt(runs[1]);
+    expect(boldRun?.attrs.runProperties).toEqual({ bold: true });
   });
 });

@@ -37,6 +37,8 @@ vi.mock('./sdt/index.js', () => ({
   handleStructuredContentBlockNode: vi.fn(),
   handleDocumentSectionNode: vi.fn(),
   handleDocumentPartObjectNode: vi.fn(),
+  handleBibliographyNode: vi.fn(),
+  handleTableOfAuthoritiesNode: vi.fn(),
 }));
 
 vi.mock('./sections/index.js', () => {
@@ -62,15 +64,7 @@ vi.mock('./sections/index.js', () => {
 });
 
 vi.mock('./utilities.js', () => ({
-  pxToPt: vi.fn((px) => (px != null ? px / 1.333 : undefined)),
   pickNumber: vi.fn((value) => (typeof value === 'number' ? value : undefined)),
-  pickDecimalSeparator: vi.fn((value) => {
-    if (typeof value === 'string' && (value.trim() === '.' || value.trim() === ',')) {
-      return value.trim();
-    }
-    return undefined;
-  }),
-  pickLang: vi.fn((value) => (typeof value === 'string' ? value.toLowerCase() : undefined)),
   normalizePrefix: vi.fn((value) => (value ? String(value) : '')),
   buildPositionMap: vi.fn(() => new WeakMap()),
   createBlockIdGenerator: vi.fn((prefix = '') => {
@@ -104,6 +98,8 @@ import {
   handleStructuredContentBlockNode,
   handleDocumentSectionNode,
   handleDocumentPartObjectNode,
+  handleBibliographyNode,
+  handleTableOfAuthoritiesNode,
 } from './sdt/index.js';
 import { analyzeSectionRanges, createSectionBreakBlock, publishSectionMetadata } from './sections/index.js';
 import { isValidTrackedMode } from './tracked-changes.js';
@@ -123,6 +119,8 @@ describe('internal', () => {
         'documentSection',
         'table',
         'documentPartObject',
+        'bibliography',
+        'tableOfAuthorities',
         'image',
         'vectorShape',
         'shapeGroup',
@@ -165,6 +163,8 @@ describe('internal', () => {
       expect(nodeHandlers.structuredContentBlock).toBe(handleStructuredContentBlockNode);
       expect(nodeHandlers.documentSection).toBe(handleDocumentSectionNode);
       expect(nodeHandlers.documentPartObject).toBe(handleDocumentPartObjectNode);
+      expect(nodeHandlers.bibliography).toBe(handleBibliographyNode);
+      expect(nodeHandlers.tableOfAuthorities).toBe(handleTableOfAuthoritiesNode);
     });
   });
 
@@ -646,7 +646,6 @@ describe('internal', () => {
 
         toFlowBlocks(doc);
 
-        // pickLang should be called with the lang value
         expect(handleParagraphNode).toHaveBeenCalled();
       });
 

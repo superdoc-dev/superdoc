@@ -37,7 +37,7 @@ export const DEFAULT_UI_FONT_FAMILY = 'Arial, Helvetica, sans-serif';
  *
  * @example
  * // In a template
- * <n-dropdown :content-style="{ fontFamily: uiFontFamily }" />
+ * <CommentsDropdown :content-style="{ fontFamily: uiFontFamily }" />
  */
 export function useUiFontFamily() {
   const instance = getCurrentInstance();

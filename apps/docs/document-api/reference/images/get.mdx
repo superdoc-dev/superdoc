@@ -1,0 +1,85 @@
+---
+title: images.get
+sidebarTitle: images.get
+description: Get details for a specific image by its stable ID.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get details for a specific image by its stable ID.
+
+- Operation ID: `images.get`
+- API member path: `editor.doc.images.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ImageSummary with full image properties.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "imageId": "example"
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "imageId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "imageId"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

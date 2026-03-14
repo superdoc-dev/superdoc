@@ -2,6 +2,7 @@ import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
+import { markRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
@@ -14,6 +15,8 @@ import { initSuperdocYdoc, initCollaborationComments, makeDocumentsCollaborative
 import { setupAwarenessHandler } from './collaboration/collaboration.js';
 import { normalizeDocumentEntry } from './helpers/file.js';
 import { isAllowed } from './collaboration/permissions.js';
+import { Whiteboard } from './whiteboard/Whiteboard';
+import { WhiteboardRenderer } from './whiteboard/WhiteboardRenderer';
 
 const DEFAULT_USER = Object.freeze({
   name: 'Default SuperDoc user',
@@ -42,6 +45,9 @@ export class SuperDoc extends EventEmitter {
   /** @type {boolean} */
   #destroyed = false;
 
+  /** @type {HTMLDivElement | null} */
+  #mountWrapper = null;
+
   /** @type {string} */
   version;
 
@@ -54,11 +60,15 @@ export class SuperDoc extends EventEmitter {
   /** @type {import('@hocuspocus/provider').HocuspocusProvider | undefined} */
   provider;
 
+  /** @type {Whiteboard | null} */
+  whiteboard;
+
   /** @type {Config} */
   config = {
     superdocId: null,
     selector: '#superdoc',
     documentMode: 'editing',
+    allowSelectionInViewMode: false,
     role: 'editor',
     document: {},
     documents: [],
@@ -71,6 +81,12 @@ export class SuperDoc extends EventEmitter {
 
     modules: {}, // Optional: Modules to load. Use modules.ai.{your_key} to pass in your key
     permissionResolver: null, // Optional: Override for permission checks
+
+    // License key (resolved downstream; undefined means "not explicitly set")
+    licenseKey: undefined,
+
+    // Telemetry settings
+    telemetry: { enabled: true },
 
     title: 'SuperDoc',
     conversations: [],
@@ -89,6 +105,8 @@ export class SuperDoc extends EventEmitter {
 
     isDev: false,
 
+    disablePiniaDevtools: false,
+
     // Events
     onEditorBeforeCreate: () => null,
     onEditorCreate: () => null,
@@ -105,8 +123,15 @@ export class SuperDoc extends EventEmitter {
     onCommentsListChange: () => null,
     onException: () => null,
     onListDefinitionsChange: () => null,
+    onPaginationUpdate: () => null,
     onTransaction: () => null,
     onFontsResolved: null,
+
+    // Tracked change bubble handlers - replace default accept/reject behavior
+    // Only fires from bubble buttons, not toolbar or context menu
+    // Signature: (comment, editor) => void
+    onTrackedChangeBubbleAccept: null,
+    onTrackedChangeBubbleReject: null,
     // Image upload handler
     // async (file) => url;
     handleImageUpload: null,
@@ -128,10 +153,21 @@ export class SuperDoc extends EventEmitter {
    */
   constructor(config) {
     super();
-    this.#init(config);
+
+    if (!config.selector) {
+      throw new Error('SuperDoc: selector is required');
+    }
+
+    const container = typeof config.selector === 'string' ? document.querySelector(config.selector) : config.selector;
+
+    if (!(container instanceof HTMLElement)) {
+      throw new Error('SuperDoc: selector must be a valid CSS selector string or DOM element');
+    }
+
+    this.#init(config, container);
   }
 
-  async #init(config) {
+  async #init(config, container) {
     this.config = {
       ...this.config,
       ...config,
@@ -147,12 +183,21 @@ export class SuperDoc extends EventEmitter {
       this.config.trackChanges.visible = false;
     }
 
-    // Web layout mode requires layout engine to be disabled (content reflows vs pagination)
-    if (this.config.viewOptions?.layout === 'web' && this.config.useLayoutEngine) {
+    // Web layout behavior:
+    // - Backward compatible default: web layout still uses PM rendering.
+    // - Opt-in semantic path: allow layout engine only when flowMode === 'semantic'.
+    const isWebLayout = this.config.viewOptions?.layout === 'web';
+    const requestedFlowMode = this.config.layoutEngineOptions?.flowMode;
+    const isSemanticFlow = requestedFlowMode === 'semantic';
+    if (isWebLayout && this.config.useLayoutEngine && !isSemanticFlow) {
       console.warn(
-        '[SuperDoc] Web layout mode requires useLayoutEngine: false. Automatically disabling layout engine.',
+        "[SuperDoc] Web layout uses PM fallback unless layoutEngineOptions.flowMode is set to 'semantic'. Automatically disabling layout engine.",
       );
       this.config.useLayoutEngine = false;
+    }
+    if (!isWebLayout && isSemanticFlow) {
+      console.warn("[SuperDoc] flowMode 'semantic' is only valid with web layout. Coercing to 'paginated'.");
+      this.config.layoutEngineOptions.flowMode = 'paginated';
     }
 
     const incomingUser = this.config.user;
@@ -180,6 +225,16 @@ export class SuperDoc extends EventEmitter {
       this.config.layoutEngineOptions.trackedChanges = {
         mode: isViewingMode ? (viewingTrackedChangesVisible ? 'review' : 'original') : 'review',
         enabled: true,
+      };
+    }
+
+    // Enable virtualization by default for better performance on large documents.
+    // Only renders visible pages (~5) instead of all pages.
+    if (!this.config.layoutEngineOptions.virtualization) {
+      this.config.layoutEngineOptions.virtualization = {
+        enabled: true,
+        window: 5,
+        overscan: 1,
       };
     }
 
@@ -216,6 +271,7 @@ export class SuperDoc extends EventEmitter {
 
     this.#initVueApp();
     this.#initListeners();
+    this.#initWhiteboard();
 
     this.user = this.config.user; // The current user
     this.users = this.config.users || []; // All users who have access to this superdoc
@@ -227,11 +283,13 @@ export class SuperDoc extends EventEmitter {
     this.activeEditor = null;
     this.comments = [];
 
-    if (!this.config.selector) {
-      throw new Error('SuperDoc: selector is required');
-    }
-
-    this.app.mount(this.config.selector);
+    // Mount Vue into a child wrapper element instead of directly on the user's
+    // container. This prevents conflicts with host frameworks (React, Angular)
+    // that manage the container's DOM. See SD-1832.
+    this.#mountWrapper = document.createElement('div');
+    this.#mountWrapper.style.display = 'contents';
+    container.appendChild(this.#mountWrapper);
+    this.app.mount(this.#mountWrapper);
 
     // Required editors
     this.readyEditors = 0;
@@ -241,6 +299,18 @@ export class SuperDoc extends EventEmitter {
 
     // If a toolbar element is provided, render a toolbar
     this.#addToolbar();
+  }
+
+  #initWhiteboard() {
+    const config = this.config.modules?.whiteboard ?? {};
+    const enabled = config.enabled ?? false;
+
+    this.whiteboard = new Whiteboard({
+      Renderer: WhiteboardRenderer,
+      superdoc: this,
+      enabled,
+    });
+    this.emit('whiteboard:init', { whiteboard: this.whiteboard });
   }
 
   /**
@@ -309,7 +379,6 @@ export class SuperDoc extends EventEmitter {
           type: DOCX,
           url: this.config.document,
           name: 'document.docx',
-          isNewFile: true,
         },
       ];
     } else if (hasDocumentFile) {
@@ -352,7 +421,9 @@ export class SuperDoc extends EventEmitter {
   }
 
   #initVueApp() {
-    const { app, pinia, superdocStore, commentsStore, highContrastModeStore } = createSuperdocVueApp();
+    const { app, pinia, superdocStore, commentsStore, highContrastModeStore } = createSuperdocVueApp({
+      disablePiniaDevtools: Boolean(this.config.disablePiniaDevtools),
+    });
     this.app = app;
     this.pinia = pinia;
     this.app.config.globalProperties.$config = this.config;
@@ -368,6 +439,9 @@ export class SuperDoc extends EventEmitter {
     this.superdocStore.init(this.config);
     const commentsModuleConfig = this.config.modules.comments;
     this.commentsStore.init(commentsModuleConfig && commentsModuleConfig !== false ? commentsModuleConfig : {});
+    if (this.isCollaborative) {
+      initCollaborationComments(this);
+    }
     this.#syncViewingVisibility();
   }
 
@@ -379,13 +453,14 @@ export class SuperDoc extends EventEmitter {
     this.on('comments-update', this.config.onCommentsUpdate);
     this.on('awareness-update', this.config.onAwarenessUpdate);
     this.on('locked', this.config.onLocked);
-    this.on('pdf-document-ready', this.config.onPdfDocumentReady);
+    this.on('pdf:document-ready', this.config.onPdfDocumentReady);
     this.on('sidebar-toggle', this.config.onSidebarToggle);
     this.on('collaboration-ready', this.config.onCollaborationReady);
     this.on('editor-update', this.config.onEditorUpdate);
     this.on('content-error', this.onContentError);
     this.on('exception', this.config.onException);
     this.on('list-definitions-change', this.config.onListDefinitionsChange);
+    this.on('pagination-update', this.config.onPaginationUpdate);
 
     if (this.config.onFontsResolved) {
       this.on('fonts-resolved', this.config.onFontsResolved);
@@ -408,8 +483,56 @@ export class SuperDoc extends EventEmitter {
 
     if (externalYdoc && externalProvider) {
       // Use external provider - wire up awareness for SuperDoc events
-      this.ydoc = externalYdoc;
-      this.provider = externalProvider;
+      // Mark Y.js objects as raw to prevent Vue's deep reactive traversal
+      // from hitting circular references inside Y.js internals (causes stack overflow).
+      this.ydoc = markRaw(externalYdoc);
+      this.provider = markRaw(externalProvider);
+
+      // Assign a stable color to the local user so awareness broadcasts it.
+      // Without this, y-prosemirror's cursor plugin mutates user.color to '#ffa500'
+      // (orange) as a default, causing color flickering between that default and
+      // the fallback colors used by RemoteCursorAwareness.
+      // Use a hash of the user identity to pick a deterministic color from the
+      // palette so that different users get different colors.
+      if (!this.config.user.color) {
+        // 24 visually distinct hex colors — large enough palette to minimize
+        // collisions (~4% for two users) while staying within y-prosemirror's
+        // hex-only color format requirement.
+        const defaultPalette = [
+          '#FF6B6B',
+          '#4ECDC4',
+          '#45B7D1',
+          '#FFA07A',
+          '#98D8C8',
+          '#F7DC6F',
+          '#BB8FCE',
+          '#85C1E2',
+          '#F1948A',
+          '#82E0AA',
+          '#F8C471',
+          '#AED6F1',
+          '#D7BDE2',
+          '#A3E4D7',
+          '#F0B27A',
+          '#AEB6BF',
+          '#E74C3C',
+          '#2ECC71',
+          '#3498DB',
+          '#E67E22',
+          '#1ABC9C',
+          '#9B59B6',
+          '#34495E',
+          '#F39C12',
+        ];
+        const palette = this.colors.length > 0 ? this.colors : defaultPalette;
+        const userKey = this.config.user.email || this.config.user.name || '';
+        let hash = 5381;
+        for (let i = 0; i < userKey.length; i++) {
+          hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
+        }
+        this.config.user.color = palette[Math.abs(hash) % palette.length];
+      }
+
       setupAwarenessHandler(externalProvider, this, this.config.user);
 
       // If no documents provided, create a default blank document
@@ -450,11 +573,11 @@ export class SuperDoc extends EventEmitter {
     // Optionally, initialize separate superdoc sync - for comments, view, etc.
     if (commentsConfig.useInternalExternalComments && !commentsConfig.suppressInternalExternalComments) {
       const { ydoc: sdYdoc, provider: sdProvider } = initSuperdocYdoc(this);
-      this.ydoc = sdYdoc;
-      this.provider = sdProvider;
+      this.ydoc = markRaw(sdYdoc);
+      this.provider = markRaw(sdProvider);
     } else {
-      this.ydoc = processedDocuments[0].ydoc;
-      this.provider = processedDocuments[0].provider;
+      this.ydoc = markRaw(processedDocuments[0].ydoc);
+      this.provider = markRaw(processedDocuments[0].provider);
     }
 
     // Initialize comments sync, if enabled
@@ -499,7 +622,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {void}
    */
   broadcastPdfDocumentReady() {
-    this.emit('pdf-document-ready');
+    this.emit('pdf:document-ready');
   }
 
   /**
@@ -623,9 +746,9 @@ export class SuperDoc extends EventEmitter {
     this.toolbarElement = this.config.modules?.toolbar?.selector || this.config.toolbar;
     this.toolbar = null;
 
-    // Build excludeItems list - hide ruler button if rulers not configured
+    // Build excludeItems list - hide ruler button if rulers not configured or in web layout
     const excludeItems = [...(moduleConfig.excludeItems || [])];
-    if (!this.config.rulers) {
+    if (!this.config.rulers || this.config.viewOptions?.layout === 'web') {
       excludeItems.push('ruler');
     }
 
@@ -894,6 +1017,45 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Get the current zoom level as a percentage (e.g., 100 for 100%)
+   * @returns {number} The current zoom level as a percentage
+   * @example
+   * const zoom = superdoc.getZoom(); // Returns 100, 150, 200, etc.
+   */
+  getZoom() {
+    return this.superdocStore?.activeZoom ?? 100;
+  }
+
+  /**
+   * Set the zoom level for all documents.
+   * Updates the centralized activeZoom state, which propagates to all
+   * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
+   * @param {number} percent - The zoom level as a percentage (e.g., 100, 150, 200)
+   * @example
+   * superdoc.setZoom(150); // Set zoom to 150%
+   * superdoc.setZoom(50);  // Set zoom to 50%
+   */
+  setZoom(percent) {
+    if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0) {
+      console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
+      return;
+    }
+
+    // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
+    // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
+    if (this.superdocStore) {
+      this.superdocStore.activeZoom = percent;
+    }
+
+    // Update toolbar UI so the dropdown label reflects the new zoom level
+    if (this.toolbar && typeof this.toolbar.setZoom === 'function') {
+      this.toolbar.setZoom(percent);
+    }
+
+    this.emit('zoomChange', { zoom: percent });
+  }
+
+  /**
    * Set the document to locked or unlocked
    * @param {boolean} lock
    */
@@ -984,7 +1146,7 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Export editors to DOCX format.
-   * @param {{ commentsType?: string, isFinalDoc?: boolean }} [options]
+   * @param {{ commentsType?: string, isFinalDoc?: boolean, fieldsHighlightColor?: string }} [options]
    * @returns {Promise<Array<Blob>>}
    */
   async exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor } = {}) {
@@ -1096,20 +1258,25 @@ export class SuperDoc extends EventEmitter {
     // Mark as destroyed early to prevent in-flight init from mounting
     this.#destroyed = true;
 
-    this.#cleanupCollaboration();
-
-    if (!this.app) {
-      return;
+    // Unmount the app FIRST so editors are destroyed — this triggers each
+    // extension's onDestroy() which cancels debounced Y.js writes and
+    // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.
+    if (this.app) {
+      this.#log('[superdoc] Unmounting app');
+      this.superdocStore.reset();
+      this.app.unmount();
+      this.removeAllListeners();
+      delete this.app.config.globalProperties.$config;
+      delete this.app.config.globalProperties.$superdoc;
     }
 
-    this.#log('[superdoc] Unmounting app');
+    this.#cleanupCollaboration();
 
-    this.superdocStore.reset();
-
-    this.app.unmount();
-    this.removeAllListeners();
-    delete this.app.config.globalProperties.$config;
-    delete this.app.config.globalProperties.$superdoc;
+    // Remove the internal wrapper element from the user's container
+    if (this.#mountWrapper) {
+      this.#mountWrapper.remove();
+      this.#mountWrapper = null;
+    }
   }
 
   /**

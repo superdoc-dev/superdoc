@@ -2,6 +2,7 @@ import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { preProcessNodesForFldChar } from '@converter/field-references/preProcessNodesForFldChar.js';
 import { preProcessPageFieldsOnly } from '@converter/field-references/preProcessPageFieldsOnly.js';
 import { resolveParagraphProperties, resolveRunProperties } from '@converter/styles';
+import { twipsToPixels } from '@converter/helpers.js';
 import { translator as w_pPrTranslator } from '@converter/v3/handlers/w/pPr';
 import { translator as w_rPrTranslator } from '@converter/v3/handlers/w/rpr';
 import { resolveDocxFontFamily } from '@superdoc/style-engine/ooxml';
@@ -151,6 +152,13 @@ export function extractRunFormatting(rPr, paragraphProperties, params) {
   const fontFamily = resolveFontFamilyForTextBox(resolvedRunProperties.fontFamily, params.docx);
   if (fontFamily) formatting.fontFamily = fontFamily;
 
+  if (resolvedRunProperties.letterSpacing != null) {
+    const letterSpacingPx = Number(twipsToPixels(resolvedRunProperties.letterSpacing));
+    if (Number.isFinite(letterSpacingPx) && letterSpacingPx !== 0) {
+      formatting.letterSpacing = letterSpacingPx;
+    }
+  }
+
   return formatting;
 }
 
@@ -182,7 +190,9 @@ export function extractBodyPrProperties(bodyPr) {
   const bodyPrAttrs = bodyPr?.attributes || {};
 
   // Extract vertical alignment from anchor attribute (t=top, ctr=center, b=bottom)
-  let verticalAlign = 'center'; // Default to center
+  // Per OOXML spec, when anchor is not specified, text box defaults to top alignment
+  // (confirmed by Word's VML fallback which shows v-text-anchor:top)
+  let verticalAlign = 'top'; // Default to top (OOXML spec default)
   const anchorAttr = bodyPrAttrs['anchor'];
   if (anchorAttr === 't') verticalAlign = 'top';
   else if (anchorAttr === 'ctr') verticalAlign = 'center';

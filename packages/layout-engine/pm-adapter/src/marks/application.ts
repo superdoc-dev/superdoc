@@ -11,8 +11,10 @@
 import type { TextRun, TabRun, RunMark, TrackedChangeMeta, TrackedChangeKind } from '@superdoc/contracts';
 import type { UnderlineStyle, PMMark, HyperlinkConfig, ThemeColorPalette } from '../types.js';
 import { normalizeColor, isFiniteNumber, ptToPx } from '../utilities.js';
+import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '../constants.js';
 import { buildFlowRunLink, migrateLegacyLink } from './links.js';
 import { sanitizeHref } from '@superdoc/url-validation';
+import { resolveThemeColorValue } from './theme-color.js';
 
 /**
  * Track change mark type constants from ProseMirror schema.
@@ -58,12 +60,21 @@ const MAX_RUN_MARK_ARRAY_LENGTH = 100;
  * Protects against stack overflow from deeply nested structures.
  */
 const MAX_RUN_MARK_DEPTH = 5;
+const RANDOM_ID_LENGTH = 9;
 
 type CommentAnnotation = {
   commentId: string;
   importedId?: string;
   internal?: boolean;
   trackedChange?: boolean;
+};
+
+const generateRandomBase36Id = (length: number): string => {
+  let randomId = '';
+  while (randomId.length < length) {
+    randomId += Math.random().toString(36).slice(2);
+  }
+  return randomId.slice(0, length);
 };
 
 /**
@@ -89,15 +100,6 @@ const validateDepth = (obj: unknown, currentDepth = 0): boolean => {
   return true;
 };
 
-const parseThemePercentage = (value: unknown): number | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number.parseInt(trimmed, 16);
-  if (Number.isNaN(parsed)) return undefined;
-  return Math.max(0, Math.min(parsed / 255, 1));
-};
-
 const expandHex = (hex: string): string => {
   const normalized = hex.replace('#', '');
   if (normalized.length === 3) {
@@ -117,36 +119,6 @@ const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
   const b = Number.parseInt(cleaned.slice(4, 6), 16);
   if ([r, g, b].some((channel) => Number.isNaN(channel))) return null;
   return { r, g, b };
-};
-
-const rgbToHex = (value: { r: number; g: number; b: number }): string => {
-  const toHex = (channel: number) => {
-    const normalized = Math.max(0, Math.min(255, channel));
-    return normalized.toString(16).padStart(2, '0').toUpperCase();
-  };
-  return `#${toHex(value.r)}${toHex(value.g)}${toHex(value.b)}`;
-};
-
-const applyThemeTint = (baseHex: string, ratio: number): string => {
-  const rgb = hexToRgb(baseHex);
-  if (!rgb) return baseHex;
-  const tinted = {
-    r: Math.round(rgb.r + (255 - rgb.r) * ratio),
-    g: Math.round(rgb.g + (255 - rgb.g) * ratio),
-    b: Math.round(rgb.b + (255 - rgb.b) * ratio),
-  };
-  return rgbToHex(tinted);
-};
-
-const applyThemeShade = (baseHex: string, ratio: number): string => {
-  const rgb = hexToRgb(baseHex);
-  if (!rgb) return baseHex;
-  const shaded = {
-    r: Math.round(rgb.r * ratio),
-    g: Math.round(rgb.g * ratio),
-    b: Math.round(rgb.b * ratio),
-  };
-  return rgbToHex(shaded);
 };
 
 /**
@@ -238,20 +210,12 @@ const resolveThemeColor = (
   if (!attrs || !themeColors) return undefined;
   const rawKey = attrs.themeColor;
   if (typeof rawKey !== 'string') return undefined;
-  const key = rawKey.trim();
-  if (!key) return undefined;
-  const base = themeColors[key];
-  if (!base) return undefined;
-  const tint = parseThemePercentage(attrs.themeTint);
-  const shade = parseThemePercentage(attrs.themeShade);
-  let computed = base;
-  if (tint != null) {
-    computed = applyThemeTint(computed, tint);
-  }
-  if (shade != null) {
-    computed = applyThemeShade(computed, shade);
-  }
-  return computed;
+  return resolveThemeColorValue(
+    rawKey,
+    attrs.themeTint as string | undefined,
+    attrs.themeShade as string | undefined,
+    themeColors,
+  );
 };
 
 const resolveColorFromAttributes = (
@@ -469,7 +433,7 @@ const deriveTrackedChangeId = (kind: TrackedChangeKind, attrs: Record<string, un
   const authorEmail = attrs && typeof attrs.authorEmail === 'string' ? attrs.authorEmail : 'unknown';
   const date = attrs && typeof attrs.date === 'string' ? attrs.date : 'unknown';
   // Add timestamp and random component to ensure uniqueness when author/date are missing
-  const unique = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  const unique = `${Date.now()}-${generateRandomBase36Id(RANDOM_ID_LENGTH)}`;
   return `${kind}-${authorEmail}-${date}-${unique}`;
 };
 
@@ -735,14 +699,14 @@ const sanitizeFontFamily = (fontFamily: string): string | undefined => {
 };
 
 /**
- * Converts a font size value to pixels.
+ * Converts a CSS-like length value to pixels.
  *
  * - Numbers are treated as pixel values
  * - Strings ending with "pt" are converted to px (96 DPI)
  * - Strings ending with "px" or without a unit are treated as px
  * - Unknown units fall back to the numeric value (px) for backward compatibility
  */
-const normalizeFontSizePx = (value: unknown): number | undefined => {
+const normalizeLengthPx = (value: unknown): number | undefined => {
   if (isFiniteNumber(value)) return value;
   if (typeof value !== 'string') return undefined;
 
@@ -773,7 +737,9 @@ const normalizeFontSizePx = (value: unknown): number | undefined => {
  *   - fontSize: Numeric pixel value or string with units (e.g., 12, "12pt", "24px").
  *     Point values are converted to pixels (96 DPI); unitless/px values are treated as pixels.
  *     Valid range after conversion: 1-1000px. Values outside this range are ignored.
- *   - letterSpacing: Numeric spacing value in pixels. Range: -100 to 100.
+ *   - letterSpacing: Numeric pixel value or string with units (e.g., 2, "0.75pt", "-1px").
+ *     Point values are converted to pixels (96 DPI); unitless/px values are treated as pixels.
+ *     Valid range after conversion: -100 to 100px. Values outside this range are ignored.
  * @param themeColors - Optional theme color palette for color resolution
  */
 export const applyTextStyleMark = (
@@ -791,17 +757,17 @@ export const applyTextStyleMark = (
       run.fontFamily = sanitized;
     }
   }
-  const fontSizePx = normalizeFontSizePx(attrs.fontSize);
+  const fontSizePx = normalizeLengthPx(attrs.fontSize);
   if (fontSizePx !== undefined && fontSizePx >= 1 && fontSizePx <= 1000) {
     run.fontSize = fontSizePx;
   } else if (attrs.fontSize !== undefined) {
     // invalid or out-of-range size ignored
   }
-  if (isFiniteNumber(attrs.letterSpacing)) {
-    const spacing = Number(attrs.letterSpacing);
+  const letterSpacingPx = normalizeLengthPx(attrs.letterSpacing);
+  if (letterSpacingPx !== undefined) {
     // Apply reasonable bounds (-100 to 100px) to prevent extreme values
-    if (spacing >= -100 && spacing <= 100) {
-      run.letterSpacing = spacing;
+    if (letterSpacingPx >= -100 && letterSpacingPx <= 100) {
+      run.letterSpacing = letterSpacingPx;
     }
   }
   if (typeof attrs.textTransform === 'string') {
@@ -809,6 +775,24 @@ export const applyTextStyleMark = (
     if (transform === 'uppercase' || transform === 'lowercase' || transform === 'capitalize' || transform === 'none') {
       run.textTransform = transform;
     }
+  }
+  // Vertical alignment (superscript/subscript)
+  if (typeof attrs.vertAlign === 'string') {
+    const va = attrs.vertAlign;
+    if (va === 'superscript' || va === 'subscript' || va === 'baseline') {
+      run.vertAlign = va;
+    }
+  }
+  // Custom baseline shift (position) — takes precedence over vertAlign for positioning
+  if (attrs.position != null && typeof attrs.position === 'string') {
+    const parsed = parseFloat(attrs.position);
+    if (Number.isFinite(parsed)) {
+      run.baselineShift = parsed;
+    }
+  }
+  // Scale font size for superscript/subscript when no custom position override
+  if (run.baselineShift == null && (run.vertAlign === 'superscript' || run.vertAlign === 'subscript')) {
+    run.fontSize *= SUBSCRIPT_SUPERSCRIPT_SCALE;
   }
 };
 

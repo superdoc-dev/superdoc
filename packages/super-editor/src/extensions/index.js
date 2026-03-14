@@ -3,6 +3,7 @@ import { History } from './history/index.js';
 import { Color } from './color/index.js';
 import { FontFamily } from './font-family/index.js';
 import { FontSize } from './font-size/index.js';
+import { LetterSpacing } from './letter-spacing/index.js';
 import { TextAlign } from './text-align/index.js';
 import { FormatCommands } from './format-commands/index.js';
 import { DropCursor } from './dropcursor/index.js';
@@ -10,7 +11,7 @@ import { Gapcursor } from './gapcursor/index.js';
 import { Collaboration } from './collaboration/index.js';
 import { CollaborationCursor } from './collaboration-cursor/index.js';
 import { AiPlugin, AiMark, AiAnimationMark, AiLoaderNode } from './ai/index.js';
-import { SlashMenu } from './slash-menu';
+import { ContextMenu } from './context-menu';
 import {
   StructuredContentCommands,
   StructuredContent,
@@ -27,6 +28,7 @@ import { Paragraph } from './paragraph/index.js';
 import { Heading } from './heading/index.js';
 import { CommentRangeStart, CommentRangeEnd, CommentReference, CommentsMark } from './comment/index.js';
 import { FootnoteReference } from './footnote/index.js';
+import { EndnoteReference } from './endnote/index.js';
 import { TabNode } from './tab/index.js';
 import { LineBreak, HardBreak } from './line-break/index.js';
 import { Table } from './table/index.js';
@@ -43,12 +45,20 @@ import { ShapeContainer } from './shape-container/index.js';
 import { ShapeTextbox } from './shape-textbox/index.js';
 import { ContentBlock } from './content-block/index.js';
 import { BlockNode } from './block-node/index.js';
-import { TableOfContents } from './table-of-contents/index.js';
+import { TableOfContents, TocPageNumber } from './table-of-contents/index.js';
 import { DocumentIndex } from './document-index/index.js';
 import { VectorShape } from './vector-shape/index.js';
 import { ShapeGroup } from './shape-group/index.js';
+import { Chart } from './chart/index.js';
 import { PassthroughBlock, PassthroughInline } from '@extensions/passthrough/index.js';
 import { IndexEntry } from './index-entry/index.js';
+import { TableOfContentsEntry } from './table-of-contents-entry/index.js';
+import { CrossReference } from './cross-reference/index.js';
+import { SequenceField } from './sequence-field/index.js';
+import { Citation } from './citation/index.js';
+import { Bibliography } from './bibliography/index.js';
+import { AuthorityEntry } from './authority-entry/index.js';
+import { TableOfAuthorities } from './table-of-authorities/index.js';
 
 // Marks extensions
 import { TextStyle } from './text-style/text-style.js';
@@ -70,10 +80,11 @@ import { Search } from './search/index.js';
 import { NodeResizer } from './noderesizer/index.js';
 import { CustomSelection } from './custom-selection/index.js';
 import { PermissionRanges } from './permission-ranges/index.js';
+import { VerticalNavigation } from './vertical-navigation/index.js';
 
 // Permissions
-import { PermStart } from './perm-start/index.js';
-import { PermEnd } from './perm-end/index.js';
+import { PermStart, PermStartBlock } from './perm-start/index.js';
+import { PermEnd, PermEndBlock } from './perm-end/index.js';
 
 // Helpers
 import { trackChangesHelpers } from './track-changes/index.js';
@@ -85,11 +96,14 @@ const getRichTextExtensions = () => {
     Document,
     FontFamily,
     FontSize,
+    LetterSpacing,
     History,
     Heading,
     Italic,
     Link,
     Paragraph,
+    TableOfContents,
+    DocumentIndex,
     Strike,
     Text,
     TextAlign,
@@ -127,9 +141,11 @@ const getStarterExtensions = () => {
     CommentRangeEnd,
     CommentReference,
     FootnoteReference,
+    EndnoteReference,
     Document,
     FontFamily,
     FontSize,
+    LetterSpacing,
     History,
     Heading,
     Italic,
@@ -138,10 +154,11 @@ const getStarterExtensions = () => {
     LineBreak,
     HardBreak,
     Run,
-    SlashMenu,
+    ContextMenu,
     Strike,
     TabNode,
     TableOfContents,
+    TocPageNumber,
     DocumentIndex,
     Text,
     TextAlign,
@@ -177,6 +194,13 @@ const getStarterExtensions = () => {
     TotalPageCount,
     PageReference,
     IndexEntry,
+    TableOfContentsEntry,
+    CrossReference,
+    SequenceField,
+    Citation,
+    Bibliography,
+    AuthorityEntry,
+    TableOfAuthorities,
     ShapeContainer,
     ShapeTextbox,
     ContentBlock,
@@ -191,9 +215,13 @@ const getStarterExtensions = () => {
     TextTransform,
     VectorShape,
     ShapeGroup,
+    Chart,
     PermStart,
     PermEnd,
+    PermStartBlock,
+    PermEndBlock,
     PermissionRanges,
+    VerticalNavigation,
     PassthroughInline,
     PassthroughBlock,
   ];
@@ -210,6 +238,7 @@ export {
   CommentRangeEnd,
   CommentReference,
   FootnoteReference,
+  EndnoteReference,
   TabNode,
   LineBreak,
   HardBreak,
@@ -221,6 +250,7 @@ export {
   Color,
   FontFamily,
   FontSize,
+  LetterSpacing,
   TextAlign,
   TextStyle,
   FormatCommands,
@@ -232,6 +262,8 @@ export {
   TableHeader,
   DocumentIndex,
   IndexEntry,
+  TableOfContentsEntry,
+  TocPageNumber,
   Placeholder,
   DropCursor,
   BlockNode,
@@ -266,7 +298,14 @@ export {
   TextTransform,
   VectorShape,
   ShapeGroup,
+  Chart,
   PassthroughInline,
   PassthroughBlock,
   PermissionRanges,
+  CrossReference,
+  SequenceField,
+  Citation,
+  Bibliography,
+  AuthorityEntry,
+  TableOfAuthorities,
 };

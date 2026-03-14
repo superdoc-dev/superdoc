@@ -8,23 +8,18 @@ import type { FlowBlock, ParagraphIndent } from '@superdoc/contracts';
 import {
   twipsToPx,
   ptToPx,
-  pxToPt,
-  convertIndentTwipsToPx,
   isFiniteNumber,
   isPlainObject,
   normalizePrefix,
   pickNumber,
-  pickDecimalSeparator,
-  pickLang,
   normalizeColor,
   normalizeString,
   coerceNumber,
   coercePositiveNumber,
   coerceBoolean,
   toBoolean,
-  isTruthy,
-  isExplicitFalse,
   toBoxSpacing,
+  normalizeCellPaddingTopBottom,
   normalizeMediaKey,
   inferExtensionFromPath,
   hydrateImageBlocks,
@@ -37,6 +32,11 @@ import {
   normalizeShapeGroupChildren,
   normalizeLineEnds,
   normalizeEffectExtent,
+  coerceRelativeHeight,
+  normalizeZIndex,
+  getFragmentZIndex,
+  resolveFloatingZIndex,
+  OOXML_Z_INDEX_BASE,
 } from './utilities.js';
 
 // ============================================================================
@@ -76,72 +76,6 @@ describe('Unit Conversion', () => {
       expect(ptToPx(NaN)).toBeUndefined();
       expect(ptToPx(Infinity)).toBeUndefined();
       expect(ptToPx(-Infinity)).toBeUndefined();
-    });
-  });
-
-  describe('pxToPt', () => {
-    it('converts pixels to points', () => {
-      expect(pxToPt(16)).toBeCloseTo(12, 1);
-      expect(pxToPt(0)).toBe(0);
-      expect(pxToPt(96)).toBe(72); // 96px = 1 inch = 72pt
-    });
-
-    it('returns undefined for null/undefined/non-finite', () => {
-      expect(pxToPt(null)).toBeUndefined();
-      expect(pxToPt(undefined)).toBeUndefined();
-      expect(pxToPt(NaN)).toBeUndefined();
-      expect(pxToPt(Infinity)).toBeUndefined();
-    });
-  });
-
-  describe('convertIndentTwipsToPx', () => {
-    it('converts all indent properties', () => {
-      const result = convertIndentTwipsToPx({
-        left: 1440,
-        right: 720,
-        firstLine: 360,
-        hanging: 180,
-      });
-      expect(result).toEqual({
-        left: 96,
-        right: 48,
-        firstLine: 24,
-        hanging: 12,
-      });
-    });
-
-    it('handles partial indent objects', () => {
-      const result = convertIndentTwipsToPx({ left: 1440 });
-      expect(result).toEqual({ left: 96 });
-    });
-
-    it('returns undefined for null/undefined', () => {
-      expect(convertIndentTwipsToPx(null)).toBeUndefined();
-      expect(convertIndentTwipsToPx(undefined)).toBeUndefined();
-    });
-
-    it('returns undefined for empty indent', () => {
-      expect(convertIndentTwipsToPx({})).toBeUndefined();
-    });
-
-    it('ignores non-finite values', () => {
-      const result = convertIndentTwipsToPx({
-        left: 1440,
-        right: NaN,
-        firstLine: Infinity,
-      } as ParagraphIndent);
-      expect(result).toEqual({ left: 96 });
-    });
-
-    it('handles multiple valid properties', () => {
-      const result = convertIndentTwipsToPx({
-        left: 720,
-        hanging: 360,
-      });
-      expect(result).toEqual({
-        left: 48,
-        hanging: 24,
-      });
     });
   });
 });
@@ -241,47 +175,6 @@ describe('Normalization', () => {
       expect(pickNumber('abc')).toBeUndefined(); // Fixed: now filters out NaN from parseFloat
       expect(pickNumber(null)).toBeUndefined();
       expect(pickNumber(undefined)).toBeUndefined();
-    });
-  });
-
-  describe('pickDecimalSeparator', () => {
-    it('accepts valid decimal separators', () => {
-      expect(pickDecimalSeparator('.')).toBe('.');
-      expect(pickDecimalSeparator(',')).toBe(',');
-    });
-
-    it('trims whitespace', () => {
-      expect(pickDecimalSeparator('  .  ')).toBe('.');
-      expect(pickDecimalSeparator('  ,  ')).toBe(',');
-    });
-
-    it('returns undefined for invalid values', () => {
-      expect(pickDecimalSeparator(';')).toBeUndefined();
-      expect(pickDecimalSeparator('.')).toBe('.');
-      expect(pickDecimalSeparator(42 as never)).toBeUndefined();
-      expect(pickDecimalSeparator(null as never)).toBeUndefined();
-    });
-  });
-
-  describe('pickLang', () => {
-    it('normalizes language codes', () => {
-      expect(pickLang('en-US')).toBe('en-us');
-      expect(pickLang('FR')).toBe('fr');
-    });
-
-    it('trims whitespace', () => {
-      expect(pickLang('  en  ')).toBe('en');
-    });
-
-    it('returns undefined for non-strings', () => {
-      expect(pickLang(null as never)).toBeUndefined();
-      expect(pickLang(undefined as never)).toBeUndefined();
-      expect(pickLang(42 as never)).toBeUndefined();
-    });
-
-    it('returns undefined for empty strings', () => {
-      expect(pickLang('')).toBeUndefined();
-      expect(pickLang('   ')).toBeUndefined();
     });
   });
 
@@ -486,45 +379,6 @@ describe('Coercion', () => {
       expect(toBoolean(undefined)).toBeUndefined();
     });
   });
-
-  describe('isTruthy', () => {
-    it('returns true for explicit truthy values', () => {
-      expect(isTruthy(true)).toBe(true);
-      expect(isTruthy(1)).toBe(true);
-      expect(isTruthy('true')).toBe(true);
-      expect(isTruthy('1')).toBe(true);
-      expect(isTruthy('on')).toBe(true);
-    });
-
-    it('returns false for falsy and unknown values', () => {
-      expect(isTruthy(false)).toBe(false);
-      expect(isTruthy(0)).toBe(false);
-      expect(isTruthy('false')).toBe(false);
-      expect(isTruthy('no')).toBe(false);
-      expect(isTruthy('yes')).toBe(false); // Only recognizes true/1/on
-      expect(isTruthy(null)).toBe(false);
-      expect(isTruthy(undefined)).toBe(false);
-    });
-  });
-
-  describe('isExplicitFalse', () => {
-    it('returns true for explicit false values', () => {
-      expect(isExplicitFalse(false)).toBe(true);
-      expect(isExplicitFalse(0)).toBe(true);
-      expect(isExplicitFalse('false')).toBe(true);
-      expect(isExplicitFalse('FALSE')).toBe(true);
-      expect(isExplicitFalse('0')).toBe(true);
-      expect(isExplicitFalse('off')).toBe(true);
-    });
-
-    it('returns false for non-false values', () => {
-      expect(isExplicitFalse(true)).toBe(false);
-      expect(isExplicitFalse(1)).toBe(false);
-      expect(isExplicitFalse('true')).toBe(false);
-      expect(isExplicitFalse(null)).toBe(false);
-      expect(isExplicitFalse(undefined)).toBe(false);
-    });
-  });
 });
 
 // ============================================================================
@@ -568,6 +422,51 @@ describe('toBoxSpacing', () => {
       left: 'invalid' as never,
     });
     expect(result).toEqual({ top: 10 });
+  });
+});
+
+describe('normalizeCellPaddingTopBottom', () => {
+  it('raises top padding in (0, 2) to 2px', () => {
+    expect(normalizeCellPaddingTopBottom({ top: 0.5 })).toEqual({ top: 2 });
+    expect(normalizeCellPaddingTopBottom({ top: 1 })).toEqual({ top: 2 });
+    expect(normalizeCellPaddingTopBottom({ top: 1.99 })).toEqual({ top: 2 });
+  });
+
+  it('raises bottom padding in (0, 2) to 2px', () => {
+    expect(normalizeCellPaddingTopBottom({ bottom: 0.5 })).toEqual({ bottom: 2 });
+    expect(normalizeCellPaddingTopBottom({ bottom: 1.5 })).toEqual({ bottom: 2 });
+  });
+
+  it('leaves zero top/bottom unchanged', () => {
+    expect(normalizeCellPaddingTopBottom({ top: 0 })).toEqual({ top: 0 });
+    expect(normalizeCellPaddingTopBottom({ bottom: 0 })).toEqual({ bottom: 0 });
+    expect(normalizeCellPaddingTopBottom({ top: 0, bottom: 0 })).toEqual({ top: 0, bottom: 0 });
+  });
+
+  it('leaves top/bottom >= 2 unchanged', () => {
+    expect(normalizeCellPaddingTopBottom({ top: 2 })).toEqual({ top: 2 });
+    expect(normalizeCellPaddingTopBottom({ top: 5, bottom: 10 })).toEqual({ top: 5, bottom: 10 });
+  });
+
+  it('does not modify left/right', () => {
+    const padding = { top: 1, right: 3, bottom: 1, left: 4 };
+    expect(normalizeCellPaddingTopBottom(padding)).toEqual({
+      top: 2,
+      right: 3,
+      bottom: 2,
+      left: 4,
+    });
+  });
+
+  it('returns a shallow copy and normalizes only top/bottom', () => {
+    const padding = { top: 1, left: 8 };
+    const result = normalizeCellPaddingTopBottom(padding);
+    expect(result).toEqual({ top: 2, left: 8 });
+    expect(result).not.toBe(padding);
+  });
+
+  it('handles padding with only left/right unchanged', () => {
+    expect(normalizeCellPaddingTopBottom({ left: 5, right: 5 })).toEqual({ left: 5, right: 5 });
   });
 });
 
@@ -933,6 +832,40 @@ describe('Media Utilities', () => {
       ];
       // Media value is raw base64 without prefix
       const mediaFiles = { 'media/image.png': 'iVBORw0KGgoAAAANS' };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
+    });
+
+    it('handles Uint8Array media values from persistence layers', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'media/image.png',
+          runs: [],
+        },
+      ];
+      // Persistence layers (e.g., Y.js binary encoding) may return Uint8Array
+      const base64String = 'iVBORw0KGgoAAAANS';
+      const mediaFiles = { 'media/image.png': new TextEncoder().encode(base64String) };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
+    });
+
+    it('handles Uint8Array data URI values from persistence layers', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'media/image.png',
+          runs: [],
+        },
+      ];
+      // Data URI stored as Uint8Array
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANS';
+      const mediaFiles = { 'media/image.png': new TextEncoder().encode(dataUri) };
 
       const result = hydrateImageBlocks(blocks, mediaFiles);
       expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
@@ -1646,153 +1579,191 @@ describe('normalizeEffectExtent', () => {
 });
 
 // ============================================================================
-// OOXML Utilities Tests
+// Z-Index Utilities (OOXML relativeHeight)
 // ============================================================================
 
-import {
-  asOoxmlElement,
-  findOoxmlChild,
-  getOoxmlAttribute,
-  parseOoxmlNumber,
-  hasOwnProperty,
-  type OoxmlElement,
-} from './utilities.js';
-
-describe('OOXML Utilities', () => {
-  describe('asOoxmlElement', () => {
-    it('returns undefined for null/undefined', () => {
-      expect(asOoxmlElement(null)).toBeUndefined();
-      expect(asOoxmlElement(undefined)).toBeUndefined();
+describe('z-index utilities', () => {
+  describe('coerceRelativeHeight', () => {
+    it('returns number when given a finite number', () => {
+      expect(coerceRelativeHeight(251658240)).toBe(251658240);
+      expect(coerceRelativeHeight(0)).toBe(0);
     });
 
-    it('returns undefined for non-objects', () => {
-      expect(asOoxmlElement('string')).toBeUndefined();
-      expect(asOoxmlElement(42)).toBeUndefined();
+    it('returns number when given a numeric string', () => {
+      expect(coerceRelativeHeight('251658240')).toBe(251658240);
+      expect(coerceRelativeHeight('251659318')).toBe(251659318);
     });
 
-    it('returns undefined for empty objects', () => {
-      expect(asOoxmlElement({})).toBeUndefined();
+    it('returns undefined for non-finite number', () => {
+      expect(coerceRelativeHeight(NaN)).toBeUndefined();
+      expect(coerceRelativeHeight(Infinity)).toBeUndefined();
     });
 
-    it('returns element with name property', () => {
-      const element = { name: 'w:p' };
-      expect(asOoxmlElement(element)).toBe(element);
+    it('returns undefined for empty or invalid string', () => {
+      expect(coerceRelativeHeight('')).toBeUndefined();
+      expect(coerceRelativeHeight('   ')).toBeUndefined();
+      expect(coerceRelativeHeight('abc')).toBeUndefined();
     });
 
-    it('returns element with attributes property', () => {
-      const element = { attributes: { 'w:val': '240' } };
-      expect(asOoxmlElement(element)).toBe(element);
+    it('returns undefined for null, undefined, or non-number/string', () => {
+      expect(coerceRelativeHeight(null)).toBeUndefined();
+      expect(coerceRelativeHeight(undefined)).toBeUndefined();
+      expect(coerceRelativeHeight({})).toBeUndefined();
+    });
+  });
+
+  describe('normalizeZIndex', () => {
+    it('returns 0 for OOXML base relativeHeight', () => {
+      expect(normalizeZIndex({ relativeHeight: OOXML_Z_INDEX_BASE })).toBe(0);
+      expect(normalizeZIndex({ relativeHeight: '251658240' })).toBe(0);
     });
 
-    it('returns element with elements property', () => {
-      const element = { elements: [] };
-      expect(asOoxmlElement(element)).toBe(element);
+    it('returns positive z-index for relativeHeight above base', () => {
+      expect(normalizeZIndex({ relativeHeight: OOXML_Z_INDEX_BASE + 2 })).toBe(2);
+      expect(normalizeZIndex({ relativeHeight: OOXML_Z_INDEX_BASE + 51 })).toBe(51);
+      expect(normalizeZIndex({ relativeHeight: '251658291' })).toBe(51);
     });
 
-    it('returns full OOXML element', () => {
-      const element: OoxmlElement = {
-        name: 'w:pPr',
-        attributes: { 'w:rsidR': '00A77B3E' },
-        elements: [{ name: 'w:spacing', attributes: { 'w:before': '240' } }],
+    it('returns undefined when relativeHeight is missing or invalid', () => {
+      expect(normalizeZIndex({})).toBeUndefined();
+      expect(normalizeZIndex(null)).toBeUndefined();
+      expect(normalizeZIndex(undefined)).toBeUndefined();
+      expect(normalizeZIndex({ relativeHeight: '' })).toBeUndefined();
+    });
+  });
+
+  describe('resolveFloatingZIndex', () => {
+    it('returns 0 when behindDoc is true', () => {
+      expect(resolveFloatingZIndex(true, 42)).toBe(0);
+      expect(resolveFloatingZIndex(true, undefined)).toBe(0);
+      expect(resolveFloatingZIndex(true, 0)).toBe(0);
+    });
+
+    it('returns raw value when non-behindDoc and raw >= 1', () => {
+      expect(resolveFloatingZIndex(false, 5)).toBe(5);
+      expect(resolveFloatingZIndex(false, 100)).toBe(100);
+    });
+
+    it('clamps raw 0 to 1 for non-behindDoc', () => {
+      expect(resolveFloatingZIndex(false, 0)).toBe(1);
+    });
+
+    it('returns fallback when raw is undefined', () => {
+      expect(resolveFloatingZIndex(false, undefined)).toBe(1);
+      expect(resolveFloatingZIndex(false, undefined, 5)).toBe(5);
+    });
+
+    it('clamps fallback to at least 1', () => {
+      expect(resolveFloatingZIndex(false, undefined, 0)).toBe(1);
+      expect(resolveFloatingZIndex(false, undefined, -1)).toBe(1);
+    });
+  });
+
+  describe('getFragmentZIndex', () => {
+    it('uses block.zIndex when set', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        zIndex: 42,
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE } },
       };
-      expect(asOoxmlElement(element)).toBe(element);
-    });
-  });
-
-  describe('findOoxmlChild', () => {
-    it('returns undefined for undefined parent', () => {
-      expect(findOoxmlChild(undefined, 'w:spacing')).toBeUndefined();
+      expect(getFragmentZIndex(block)).toBe(42);
     });
 
-    it('returns undefined for parent without elements', () => {
-      expect(findOoxmlChild({ name: 'w:pPr' }, 'w:spacing')).toBeUndefined();
-    });
-
-    it('returns undefined when child not found', () => {
-      const parent: OoxmlElement = {
-        name: 'w:pPr',
-        elements: [{ name: 'w:jc' }],
+    it('derives z-index from attrs.originalAttributes.relativeHeight (number)', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 10 } },
       };
-      expect(findOoxmlChild(parent, 'w:spacing')).toBeUndefined();
+      expect(getFragmentZIndex(block)).toBe(10);
     });
 
-    it('finds child element by name', () => {
-      const spacingEl: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
-      const parent: OoxmlElement = {
-        name: 'w:pPr',
-        elements: [{ name: 'w:jc' }, spacingEl, { name: 'w:ind' }],
+    it('derives z-index from attrs.originalAttributes.relativeHeight (string)', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        attrs: { originalAttributes: { relativeHeight: '251658250' } },
       };
-      expect(findOoxmlChild(parent, 'w:spacing')).toBe(spacingEl);
-    });
-  });
-
-  describe('getOoxmlAttribute', () => {
-    it('returns undefined for undefined element', () => {
-      expect(getOoxmlAttribute(undefined, 'w:before')).toBeUndefined();
+      expect(getFragmentZIndex(block)).toBe(10);
     });
 
-    it('returns undefined for element without attributes', () => {
-      expect(getOoxmlAttribute({ name: 'w:spacing' }, 'w:before')).toBeUndefined();
+    it('preserves high z-index for wrapped anchored objects', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: false },
+        wrap: { type: 'Through' as const },
+        zIndex: 7168,
+      };
+      expect(getFragmentZIndex(block)).toBe(7168);
     });
 
-    it('gets attribute with w: prefix', () => {
-      const element: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
-      expect(getOoxmlAttribute(element, 'w:before')).toBe('240');
+    it('preserves relativeHeight z-index for wrap None anchored objects', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: false },
+        wrap: { type: 'None' as const },
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 10 } },
+      };
+      expect(getFragmentZIndex(block)).toBe(10);
     });
 
-    it('gets attribute without prefix when prefixed key requested', () => {
-      const element: OoxmlElement = { name: 'w:spacing', attributes: { before: '240' } };
-      expect(getOoxmlAttribute(element, 'w:before')).toBe('240');
+    it('returns 0 when anchor.behindDoc is true and no zIndex/originalAttributes', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: true },
+      };
+      expect(getFragmentZIndex(block)).toBe(0);
     });
 
-    it('gets attribute with prefix when unprefixed key requested', () => {
-      const element: OoxmlElement = { name: 'w:spacing', attributes: { 'w:before': '240' } };
-      expect(getOoxmlAttribute(element, 'before')).toBe('240');
-    });
-  });
-
-  describe('parseOoxmlNumber', () => {
-    it('returns undefined for null/undefined', () => {
-      expect(parseOoxmlNumber(null)).toBeUndefined();
-      expect(parseOoxmlNumber(undefined)).toBeUndefined();
+    it('returns 1 when not behindDoc and no zIndex/originalAttributes', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+      };
+      expect(getFragmentZIndex(block)).toBe(1);
     });
 
-    it('returns number for number input', () => {
-      expect(parseOoxmlNumber(240)).toBe(240);
-      expect(parseOoxmlNumber(0)).toBe(0);
-      expect(parseOoxmlNumber(-100)).toBe(-100);
+    it('does not treat base relativeHeight as behindDoc when behindDoc is false', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: false },
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE } },
+      };
+      expect(getFragmentZIndex(block)).toBeGreaterThan(0);
     });
 
-    it('parses string to integer', () => {
-      expect(parseOoxmlNumber('240')).toBe(240);
-      expect(parseOoxmlNumber('0')).toBe(0);
-      expect(parseOoxmlNumber('-100')).toBe(-100);
+    it('forces behindDoc fragments to zIndex 0 even with relativeHeight', () => {
+      const block = {
+        kind: 'image' as const,
+        id: 'img-1',
+        src: 'x.png',
+        anchor: { isAnchored: true, behindDoc: true },
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 5 } },
+      };
+      expect(getFragmentZIndex(block)).toBe(0);
     });
 
-    it('returns undefined for non-numeric strings', () => {
-      expect(parseOoxmlNumber('abc')).toBeUndefined();
-      expect(parseOoxmlNumber('')).toBeUndefined();
-    });
-
-    it('returns undefined for non-finite results', () => {
-      expect(parseOoxmlNumber(NaN)).toBeUndefined();
-      expect(parseOoxmlNumber(Infinity)).toBeUndefined();
-    });
-  });
-
-  describe('hasOwnProperty', () => {
-    it('returns true for own properties', () => {
-      expect(hasOwnProperty({ a: 1 }, 'a')).toBe(true);
-      expect(hasOwnProperty({ a: undefined }, 'a')).toBe(true);
-    });
-
-    it('returns false for missing properties', () => {
-      expect(hasOwnProperty({ a: 1 }, 'b')).toBe(false);
-    });
-
-    it('returns false for inherited properties', () => {
-      expect(hasOwnProperty({ a: 1 }, 'toString')).toBe(false);
-      expect(hasOwnProperty({ a: 1 }, 'hasOwnProperty')).toBe(false);
+    it('works for drawing blocks', () => {
+      const block = {
+        kind: 'drawing' as const,
+        id: 'd-1',
+        drawingKind: 'vectorShape' as const,
+        attrs: { originalAttributes: { relativeHeight: OOXML_Z_INDEX_BASE + 5 } },
+      };
+      expect(getFragmentZIndex(block)).toBe(5);
     });
   });
 });

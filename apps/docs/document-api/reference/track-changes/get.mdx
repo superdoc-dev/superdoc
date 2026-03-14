@@ -1,0 +1,142 @@
+---
+title: trackChanges.get
+sidebarTitle: trackChanges.get
+description: Retrieve a single tracked change by ID.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Retrieve a single tracked change by ID.
+
+- Operation ID: `trackChanges.get`
+- API member path: `editor.doc.trackChanges.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TrackChangeInfo object with the change type, author, date, and affected content.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "id": "id-001"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | TrackedChangeAddress | yes | TrackedChangeAddress |
+| `address.entityId` | string | yes |  |
+| `address.entityType` | `"trackedChange"` | yes | Constant: `"trackedChange"` |
+| `address.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `author` | string | no |  |
+| `authorEmail` | string | no |  |
+| `authorImage` | string | no |  |
+| `date` | string | no |  |
+| `excerpt` | string | no |  |
+| `id` | string | yes |  |
+| `type` | enum | yes | `"insert"`, `"delete"`, `"format"` |
+
+### Example response
+
+```json
+{
+  "address": {
+    "entityId": "entity-789",
+    "entityType": "trackedChange",
+    "kind": "entity"
+  },
+  "author": "Jane Doe",
+  "authorEmail": "jane@example.com",
+  "id": "id-001",
+  "type": "insert"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "$ref": "#/$defs/TrackedChangeAddress"
+    },
+    "author": {
+      "type": "string"
+    },
+    "authorEmail": {
+      "type": "string"
+    },
+    "authorImage": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string"
+    },
+    "excerpt": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "insert",
+        "delete",
+        "format"
+      ]
+    }
+  },
+  "required": [
+    "address",
+    "id",
+    "type"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

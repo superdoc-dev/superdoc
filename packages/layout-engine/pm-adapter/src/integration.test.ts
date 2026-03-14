@@ -547,7 +547,9 @@ describe('PM → FlowBlock → Measure integration', () => {
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
     expect(shadingLayer).toBeTruthy();
-    expect(shadingLayer.style.backgroundColor).toBe('rgb(170, 187, 204)');
+    // Accept both rgb and hex formats (jsdom uses rgb, happy-dom uses hex)
+    const bgColor = shadingLayer.style.backgroundColor.toLowerCase();
+    expect(bgColor === 'rgb(170, 187, 204)' || bgColor === '#aabbcc').toBe(true);
 
     document.body.removeChild(mount);
   });
@@ -884,5 +886,90 @@ describe('page break integration tests', () => {
     expect(previousPageIndex).toBeGreaterThanOrEqual(0);
     expect(targetPageIndex).toBeGreaterThanOrEqual(0);
     expect(targetPageIndex).toBeGreaterThan(previousPageIndex);
+  });
+
+  it('does not add a blank page when pageBreakBefore begins a page-forcing section', async () => {
+    const createSectPr = (attrs: {
+      type?: 'nextPage' | 'continuous' | 'evenPage' | 'oddPage';
+      pgSz?: Record<string, string>;
+      pgMar?: Record<string, string>;
+    }) => {
+      const elements: Array<{ name: string; attributes?: Record<string, string> }> = [];
+
+      if (attrs.type) {
+        elements.push({ name: 'w:type', attributes: { 'w:val': attrs.type } });
+      }
+      if (attrs.pgSz) {
+        elements.push({ name: 'w:pgSz', attributes: attrs.pgSz });
+      }
+      if (attrs.pgMar) {
+        elements.push({ name: 'w:pgMar', attributes: attrs.pgMar });
+      }
+
+      return {
+        type: 'element',
+        name: 'w:sectPr',
+        elements,
+      };
+    };
+
+    const portraitPgSz = { 'w:w': '12240', 'w:h': '15840' };
+    const landscapePgSz = { 'w:w': '15840', 'w:h': '12240', 'w:orient': 'landscape' };
+    const pgMar = { 'w:top': '1440', 'w:right': '1440', 'w:bottom': '1440', 'w:left': '1440' };
+
+    const pmDoc: PMNode = {
+      type: 'doc',
+      attrs: {
+        bodySectPr: createSectPr({
+          pgSz: landscapePgSz,
+          pgMar,
+        }),
+      },
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              sectPr: createSectPr({
+                type: 'nextPage',
+                pgSz: portraitPgSz,
+                pgMar,
+              }),
+            },
+          },
+          content: [{ type: 'text', text: 'Main body content' }],
+        },
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              pageBreakBefore: true,
+            },
+          },
+          content: [{ type: 'text', text: 'EXHIBIT A' }],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+    const contentWidth = LETTER.pageSize.w - (LETTER.margins.left + LETTER.margins.right);
+    const measures = await Promise.all(blocks.map((block) => measureBlock(block, contentWidth)));
+    const layout = layoutDocument(blocks, measures, LETTER);
+
+    const exhibitBlock = blocks.find(
+      (block) =>
+        block.kind === 'paragraph' &&
+        block.runs.some((run) => typeof run.text === 'string' && run.text.includes('EXHIBIT A')),
+    );
+
+    expect(exhibitBlock).toBeDefined();
+    expect(layout.pages).toHaveLength(2);
+
+    const exhibitPageIndex = layout.pages.findIndex((page) =>
+      page.fragments.some((fragment) => fragment.blockId === exhibitBlock?.id),
+    );
+
+    expect(exhibitPageIndex).toBe(1);
+    expect(layout.pages[1].fragments.length).toBeGreaterThan(0);
   });
 });

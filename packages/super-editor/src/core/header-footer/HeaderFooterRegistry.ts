@@ -5,7 +5,6 @@ import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
-import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
@@ -351,6 +350,10 @@ export class HeaderFooterEditorManager extends EventEmitter {
         }
         if (Object.keys(updateOptions).length > 0) {
           existing.editor.setOptions(updateOptions);
+          // Refresh page number display after option changes.
+          // NodeViews read editor.options but PM doesn't re-render them
+          // when only options change (no document transaction).
+          this.#refreshPageNumberDisplay(existing.editor);
         }
       }
 
@@ -394,6 +397,31 @@ export class HeaderFooterEditorManager extends EventEmitter {
 
     this.#pendingCreations.set(descriptor.id, creationPromise);
     return creationPromise;
+  }
+
+  /**
+   * Updates page number DOM elements to reflect current editor options.
+   * Called after setOptions to sync NodeViews that read editor.options.
+   */
+  #refreshPageNumberDisplay(editor: Editor): void {
+    const container = editor.view?.dom;
+    if (!container) return;
+
+    const opts = editor.options as Record<string, unknown>;
+    const parentEditor = opts.parentEditor as Record<string, unknown> | undefined;
+
+    const currentPage = String(opts.currentPageNumber || '1');
+    const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
+
+    const pageNumberEls = container.querySelectorAll('[data-id="auto-page-number"]');
+    const totalPagesEls = container.querySelectorAll('[data-id="auto-total-pages"]');
+
+    pageNumberEls.forEach((el) => {
+      if (el.textContent !== currentPage) el.textContent = currentPage;
+    });
+    totalPagesEls.forEach((el) => {
+      if (el.textContent !== totalPages) el.textContent = totalPages;
+    });
   }
 
   /**
@@ -673,13 +701,10 @@ export class HeaderFooterEditorManager extends EventEmitter {
     const handleUpdate = async ({ transaction }: { transaction?: unknown }) => {
       this.emit('contentChanged', { descriptor } as ContentChangedPayload);
       try {
-        // Update the converter data structures with the latest content
+        // Update the converter data structures with the latest content.
+        // onHeaderFooterDataUpdate syncs via exportSubEditorToPart → mutatePart,
+        // and the parts publisher propagates to Yjs automatically.
         onHeaderFooterDataUpdate({ editor, transaction }, this.#editor, descriptor.id, descriptor.kind);
-
-        // Fix Issue #2: Sync changes to Yjs document for collaboration and export
-        // This ensures header/footer changes propagate to collaborators and are included in exports
-        // The second parameter (ydoc) is optional and will be retrieved from editor.options.ydoc if not provided
-        await updateYdocDocxData(this.#editor, undefined);
       } catch (error) {
         console.error('[HeaderFooterEditorManager] Failed to sync header/footer update', { descriptor, error });
         // Emit error event so consumers can handle sync failures

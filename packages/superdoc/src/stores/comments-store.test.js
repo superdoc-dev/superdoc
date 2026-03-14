@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createPinia, setActivePinia, defineStore } from 'pinia';
-import { ref, reactive } from 'vue';
+import { ref, reactive, nextTick } from 'vue';
 
 vi.mock('./superdoc-store.js', () => {
   const documents = ref([]);
@@ -86,9 +86,11 @@ import { __mockSuperdoc } from './superdoc-store.js';
 import { comments_module_events } from '@superdoc/common';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { syncCommentsToClients } from '../core/collaboration/helpers.js';
+import { trackChangesHelpers } from '@superdoc/super-editor';
 
 const useCommentMock = useComment;
 const syncCommentsToClientsMock = syncCommentsToClients;
+const getTrackChangesMock = trackChangesHelpers.getTrackChanges;
 
 describe('comments-store', () => {
   let store;
@@ -152,6 +154,39 @@ describe('comments-store', () => {
     expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: null });
   });
 
+  it('does not throw when superdoc is unavailable during active comment updates', () => {
+    const comment = { commentId: 'comment-2' };
+    store.commentsList = [comment];
+
+    expect(() => store.setActiveComment(undefined, 'comment-2')).not.toThrow();
+    expect(store.activeComment).toBe('comment-2');
+
+    expect(() => store.setActiveComment(undefined, null)).not.toThrow();
+    expect(store.activeComment).toBeNull();
+  });
+
+  it('still syncs editor active comment when store was pre-updated by caller', () => {
+    const setActiveCommentSpy = vi.fn();
+    const superdoc = {
+      activeEditor: {
+        commands: {
+          setActiveComment: setActiveCommentSpy,
+        },
+      },
+    };
+
+    store.commentsList = [{ commentId: 'comment-3' }];
+
+    // Simulate UI flow that pre-updates store state before syncing editor/plugin state.
+    store.setActiveComment(undefined, 'comment-3');
+    expect(store.activeComment).toBe('comment-3');
+
+    store.setActiveComment(superdoc, 'comment-3');
+
+    expect(setActiveCommentSpy).toHaveBeenCalledTimes(1);
+    expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: 'comment-3' });
+  });
+
   it('updates tracked change comments and emits events', () => {
     const superdoc = {
       emit: vi.fn(),
@@ -160,6 +195,8 @@ describe('comments-store', () => {
     const existingComment = {
       commentId: 'change-1',
       trackedChangeText: 'old',
+      trackedChangeType: 'both',
+      deletedText: 'removed earlier',
       getValues: vi.fn(() => ({ commentId: 'change-1' })),
     };
 
@@ -183,6 +220,7 @@ describe('comments-store', () => {
     });
 
     expect(existingComment.trackedChangeText).toBe('new text');
+    expect(existingComment.trackedChangeType).toBe('insert');
     expect(existingComment.deletedText).toBe('removed');
     expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
       superdoc,
@@ -203,6 +241,376 @@ describe('comments-store', () => {
     );
   });
 
+  it('clears stale tracked-change metadata when an update removes one side of a replacement', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-clear-1',
+      trackedChangeText: 'replacement',
+      trackedChangeType: 'both',
+      deletedText: 'original',
+      getValues: vi.fn(() => ({ commentId: 'change-clear-1' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'change-clear-1',
+        trackedChangeText: 'remaining insert',
+        trackedChangeType: 'insert',
+        deletedText: null,
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.trackedChangeText).toBe('remaining insert');
+    expect(existingComment.trackedChangeType).toBe('insert');
+    expect(existingComment.deletedText).toBeNull();
+  });
+
+  it('resolves tracked change comments on resolve events', () => {
+    const superdoc = {
+      emit: vi.fn(),
+      user: { email: 'reviewer@example.com', name: 'Reviewer' },
+    };
+
+    const existingComment = {
+      commentId: 'change-resolve-1',
+      trackedChange: true,
+      resolvedTime: null,
+      resolvedByEmail: null,
+      resolvedByName: null,
+      getValues: vi.fn(() => ({ commentId: 'change-resolve-1', resolvedTime: Date.now() })),
+      resolveComment: vi.fn(function ({ email, name }) {
+        this.resolvedTime = Date.now();
+        this.resolvedByEmail = email;
+        this.resolvedByName = name;
+        const emitData = { type: comments_module_events.RESOLVED, comment: this.getValues() };
+        syncCommentsToClientsMock(superdoc, emitData);
+        superdoc.emit('comments-update', emitData);
+      }),
+    };
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'resolve',
+        changeId: 'change-resolve-1',
+      },
+    });
+
+    expect(existingComment.resolveComment).toHaveBeenCalledWith({
+      email: 'reviewer@example.com',
+      name: 'Reviewer',
+      superdoc,
+    });
+    expect(existingComment.resolvedTime).not.toBeNull();
+    expect(existingComment.resolvedByEmail).toBe('reviewer@example.com');
+    expect(existingComment.resolvedByName).toBe('Reviewer');
+    expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
+      superdoc,
+      expect.objectContaining({ type: comments_module_events.RESOLVED }),
+    );
+    expect(superdoc.emit).toHaveBeenCalledWith(
+      'comments-update',
+      expect.objectContaining({ type: comments_module_events.RESOLVED }),
+    );
+  });
+
+  it('syncs and emits an update when add event dedupes an existing tracked change', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-1',
+      trackedChangeText: 'old',
+      deletedText: '',
+      getValues: vi.fn(() => ({ commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' })),
+    };
+
+    store.commentsList = [existingComment];
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'change-1',
+        trackedChangeText: 'new text',
+        trackedChangeType: 'insert',
+        deletedText: 'removed',
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.trackedChangeText).toBe('new text');
+    expect(existingComment.deletedText).toBe('removed');
+    expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
+      superdoc,
+      expect.objectContaining({
+        type: comments_module_events.UPDATE,
+        comment: { commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' },
+      }),
+    );
+
+    expect(superdoc.emit).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(superdoc.emit).toHaveBeenCalledWith(
+      'comments-update',
+      expect.objectContaining({
+        type: comments_module_events.UPDATE,
+        comment: { commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' },
+      }),
+    );
+  });
+
+  it('creates tracked-change comments with super-editor source', () => {
+    const superdoc = {
+      emit: vi.fn(),
+      config: { isInternal: false },
+    };
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'change-add-1',
+        trackedChangeText: 'Inserted text',
+        trackedChangeType: 'trackInsert',
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: Date.now(),
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: { top: 10, left: 10, right: 20, bottom: 20 },
+      },
+    });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(store.commentsList[0].selection.source).toBe('super-editor');
+  });
+
+  it('clears stale tracked-change positions when editor sends empty positions', async () => {
+    const trackedComment = {
+      commentId: 'change-1',
+      fileId: 'doc-1',
+      trackedChange: true,
+      resolvedTime: null,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-1': { start: 1, end: 10, bounds: { top: 0, left: 0 } },
+    };
+
+    store.handleEditorLocationsUpdate({});
+    await nextTick();
+
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.getFloatingComments).toEqual([]);
+  });
+
+  it('updates tracked-change positions with the latest editor payload', async () => {
+    const trackedComment = {
+      commentId: 'change-2',
+      fileId: 'doc-1',
+      trackedChange: true,
+      resolvedTime: null,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-2': { start: 1, end: 3, bounds: { top: 0, left: 0 } },
+    };
+
+    const nextPositions = {
+      'change-2': { start: 5, end: 8, bounds: { top: 12, left: 34 } },
+    };
+
+    store.handleEditorLocationsUpdate(nextPositions);
+    await nextTick();
+
+    expect(store.editorCommentPositions).toEqual(nextPositions);
+    expect(store.getFloatingComments).toHaveLength(1);
+  });
+
+  it('keeps imported comments with both ids visible when the live anchor uses importedId', () => {
+    store.commentsList = [
+      {
+        commentId: 'comment-2a',
+        importedId: 'import-2a',
+        fileId: 'doc-1',
+        resolvedTime: null,
+        selection: { source: 'super-editor', selectionBounds: {} },
+      },
+    ];
+    store.editorCommentPositions = {
+      'import-2a': { start: 5, end: 8, bounds: { top: 10, left: 20 } },
+    };
+
+    expect(store.getFloatingComments).toEqual([
+      expect.objectContaining({ commentId: 'comment-2a', importedId: 'import-2a' }),
+    ]);
+  });
+
+  it('removes stale tracked-change anchors when tracked marks no longer exist', () => {
+    const trackedComment = {
+      commentId: 'change-3',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    const regularComment = {
+      commentId: 'comment-1',
+      fileId: 'doc-1',
+      trackedChange: false,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment, regularComment];
+    store.editorCommentPositions = {
+      'change-3': { start: 1, end: 5 },
+      'comment-1': { start: 10, end: 15 },
+    };
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({
+      'comment-1': { start: 10, end: 15 },
+    });
+    expect(store.commentsList).toEqual([trackedComment, regularComment]);
+  });
+
+  it('clears active tracked-change thread when stale root uses importedId position key', () => {
+    const trackedComment = {
+      commentId: 'change-5',
+      importedId: 'import-change-5',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'import-change-5': { start: 1, end: 5 },
+    };
+    store.activeComment = 'change-5';
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.activeComment).toBeNull();
+  });
+
+  it('removes stale tracked-change anchor when live position key is commentId', () => {
+    const trackedComment = {
+      commentId: 'change-5b',
+      importedId: 'import-change-5b',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-5b': { start: 1, end: 5 },
+    };
+    store.activeComment = 'change-5b';
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.activeComment).toBeNull();
+  });
+
+  it('removes child anchors when stale importedId root is referenced by commentId', () => {
+    const trackedComment = {
+      commentId: 'change-6',
+      importedId: 'import-change-6',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    const replyComment = {
+      commentId: 'reply-1',
+      parentCommentId: 'change-6',
+      fileId: 'doc-1',
+      trackedChange: false,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment, replyComment];
+    store.editorCommentPositions = {
+      'import-change-6': { start: 1, end: 5 },
+      'reply-1': { start: 6, end: 9 },
+    };
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(2);
+    expect(store.editorCommentPositions).toEqual({});
+  });
+
+  it('keeps tracked-change anchors when tracked marks still exist', () => {
+    const trackedComment = {
+      commentId: 'change-4',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-4': { start: 5, end: 9 },
+    };
+
+    getTrackChangesMock.mockReturnValueOnce([
+      {
+        mark: { attrs: { id: 'change-4' } },
+        from: 5,
+        to: 9,
+      },
+    ]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(0);
+    expect(store.editorCommentPositions).toEqual({
+      'change-4': { start: 5, end: 9 },
+    });
+  });
+
   it('should load comments with correct created time', () => {
     store.init({
       readOnly: true,
@@ -219,46 +627,49 @@ describe('comments-store', () => {
           commentId: 'c-1',
           createdTime: now,
           creatorName: 'Gabriel',
-          textJson: {
-            content: [
-              {
-                type: 'run',
-                content: [],
-                attrs: {
-                  runProperties: [
-                    {
-                      xmlName: 'w:rStyle',
-                      attributes: {
-                        'w:val': 'CommentReference',
-                      },
-                    },
-                  ],
-                },
-              },
-              {
-                type: 'run',
-                content: [
-                  {
-                    type: 'text',
-                    text: 'I am a comment~!',
-                    attrs: {
-                      type: 'element',
-                      attributes: {},
-                    },
-                    marks: [
+          elements: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [],
+                  attrs: {
+                    runProperties: [
                       {
-                        type: 'textStyle',
-                        attrs: {
-                          fontSize: '10pt',
-                          fontSizeCs: '10pt',
+                        xmlName: 'w:rStyle',
+                        attributes: {
+                          'w:val': 'CommentReference',
                         },
                       },
                     ],
                   },
-                ],
-              },
-            ],
-          },
+                },
+                {
+                  type: 'run',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'I am a comment~!',
+                      attrs: {
+                        type: 'element',
+                        attributes: {},
+                      },
+                      marks: [
+                        {
+                          type: 'textStyle',
+                          attrs: {
+                            fontSize: '10pt',
+                            fontSizeCs: '10pt',
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
       ],
       documentId: 'doc-1',
@@ -343,6 +754,32 @@ describe('comments-store', () => {
       // Clear again - should not throw
       expect(() => store.clearEditorCommentPositions()).not.toThrow();
       expect(store.editorCommentPositions).toEqual({});
+    });
+  });
+
+  describe('handleEditorLocationsUpdate', () => {
+    it('clears stale positions when editor emits an empty positions payload', () => {
+      store.commentsList = [{ commentId: 'tc-1', trackedChange: true }];
+      store.editorCommentPositions = {
+        'tc-1': { from: 1, to: 5 },
+      };
+
+      store.handleEditorLocationsUpdate({});
+
+      expect(store.editorCommentPositions).toEqual({});
+    });
+
+    it('ignores nullish payloads to avoid clobbering valid positions', () => {
+      store.editorCommentPositions = {
+        'tc-1': { from: 1, to: 5 },
+      };
+
+      store.handleEditorLocationsUpdate(undefined);
+      store.handleEditorLocationsUpdate(null);
+
+      expect(store.editorCommentPositions).toEqual({
+        'tc-1': { from: 1, to: 5 },
+      });
     });
   });
 
@@ -560,6 +997,17 @@ describe('comments-store', () => {
       expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
     });
 
+    it('returns comment position through imported aliases when the lookup uses commentId', () => {
+      const comment = { commentId: 'uuid-1', importedId: 'imported-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'imported-1': { start: 20, end: 30 },
+      };
+
+      expect(store.getCommentPosition('uuid-1')).toEqual({ start: 20, end: 30 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
+    });
+
     it('returns anchored text when editor and positions are available', () => {
       const textBetween = vi.fn(() => 'Anchored text');
       const editorStub = { state: { doc: { textBetween } } };
@@ -638,6 +1086,168 @@ describe('comments-store', () => {
       };
 
       expect(store.getCommentAnchoredText('c-1')).toBe('');
+    });
+  });
+
+  describe('document-driven resolution state', () => {
+    it('clears resolved metadata when document anchors reappear', async () => {
+      const comment = {
+        commentId: 'reopen-1',
+        resolvedTime: 123,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'reopen-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBeNull();
+      expect(comment.resolvedByEmail).toBeNull();
+      expect(comment.resolvedByName).toBeNull();
+    });
+
+    it('preserves resolved metadata for non-editor comments', async () => {
+      const comment = useCommentMock({
+        commentId: 'pdf-1',
+        fileType: 'pdf',
+        selection: { source: 'pdf', selectionBounds: {} },
+        resolvedTime: 555,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      });
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'pdf-1': { start: 1, end: 2, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(555);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
+    });
+
+    it('preserves resolved metadata for tracked-change comments', async () => {
+      const comment = {
+        commentId: 'tc-1',
+        trackedChange: true,
+        resolvedTime: 999,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'tc-1': { start: 3, end: 6, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(999);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
+    });
+
+    it('preserves resolved metadata for replies to tracked-change comments', async () => {
+      const comment = {
+        commentId: 'tc-reply-1',
+        trackedChangeParentId: 'tc-parent',
+        resolvedTime: 888,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'tc-reply-1': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(888);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
+    });
+  });
+
+  describe('getFloatingComments filters resolved tracked changes', () => {
+    it('includes unresolved tracked changes that have position keys', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: null, createdTime: 2 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['tc-1', 'tc-2']);
+    });
+
+    it('excludes tracked changes once resolvedTime is set', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: null, createdTime: 2 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['tc-2']);
+    });
+
+    it('excludes the last tracked change when resolved (regression: SD-2049)', () => {
+      store.commentsList = [{ commentId: 'tc-only', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 }];
+      // Position key still present (editor doesn't fire update for last mark removal)
+      store.editorCommentPositions = {
+        'tc-only': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('returns empty when all tracked changes are resolved', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: Date.now(), createdTime: 2 },
+        { commentId: 'tc-3', trackedChange: true, resolvedTime: Date.now(), createdTime: 3 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+        'tc-3': { start: 20, end: 25, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('excludes unresolved tracked change when positions are cleared (regression: SD-2071)', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1, selection: {} },
+      ];
+      // Undo removed the mark — positions are now empty
+      store.editorCommentPositions = {};
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('keeps PDF comments visible when editor positions are empty (SD-2071)', () => {
+      store.commentsList = [{ commentId: 'pdf-1', createdTime: 1, selection: { source: 'pdf', selectionBounds: {} } }];
+      store.editorCommentPositions = {};
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['pdf-1']);
     });
   });
 });

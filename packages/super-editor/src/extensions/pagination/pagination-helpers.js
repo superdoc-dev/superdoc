@@ -1,11 +1,8 @@
 import { PluginKey } from 'prosemirror-state';
 import { Editor as SuperEditor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import {
-  updateYdocDocxData,
-  pushHeaderFooterToYjs,
-  isApplyingRemoteHeaderFooterChanges,
-} from '@extensions/collaboration/collaboration-helpers.js';
+import { isApplyingRemotePartChanges } from '@extensions/collaboration/part-sync/index.js';
+import { exportSubEditorToPart } from '@core/parts/adapters/header-footer-sync.js';
 import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
 import { isHeadless } from '@utils/headless-helpers.js';
 
@@ -246,6 +243,11 @@ export const createHeaderFooterEditor = ({
     pm.style.outline = 'none';
     pm.style.border = 'none';
 
+    // CSS class scopes header/footer-specific table rules (prosemirror.css).
+    // Using a class instead of inline styles because TableView.updateTable()
+    // does `table.style.cssText = …` which wipes all inline styles on updates.
+    pm.classList.add('sd-header-footer');
+
     pm.setAttribute('role', 'textbox');
     pm.setAttribute('aria-multiline', true);
     pm.setAttribute('aria-label', `${type} content area. Double click to start typing.`);
@@ -299,11 +301,15 @@ export const toggleHeaderFooterEditMode = ({ editor, focusedSectionEditor, isEdi
   }
 };
 
-export const onHeaderFooterDataUpdate = async ({ editor, transaction }, mainEditor, sectionId, type) => {
+/**
+ * Handle header/footer data updates.
+ * Updates converter storage and syncs to Yjs via the parts publisher.
+ */
+export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, sectionId, type) => {
   if (!type || !sectionId) return;
 
   // Skip if we're currently applying remote changes to prevent ping-pong loop
-  if (isApplyingRemoteHeaderFooterChanges()) {
+  if (isApplyingRemotePartChanges()) {
     return;
   }
 
@@ -333,10 +339,9 @@ export const onHeaderFooterDataUpdate = async ({ editor, transaction }, mainEdit
     mainEditor.converter.headerFooterModified = true;
   }
 
-  // Push header/footer JSON to Yjs for real-time sync with collaborators
-  pushHeaderFooterToYjs(mainEditor, type, sectionId, updatedData);
-
-  await updateYdocDocxData(mainEditor);
+  // Export sub-editor to OOXML JSON and commit via mutatePart. The publisher
+  // picks up the partChanged event and writes to Yjs automatically.
+  exportSubEditorToPart(mainEditor, editor, sectionId, type);
 };
 
 const setEditorToolbar = ({ editor }, mainEditor) => {

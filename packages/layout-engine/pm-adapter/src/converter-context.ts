@@ -11,19 +11,6 @@
 import type { ParagraphSpacing } from '@superdoc/contracts';
 import type { NumberingProperties, StylesDocumentProperties, TableInfo } from '@superdoc/style-engine/ooxml';
 
-export type ConverterNumberingContext = {
-  definitions?: Record<string, unknown>;
-  abstracts?: Record<string, unknown>;
-};
-
-export type ConverterLinkedStyle = {
-  id: string;
-  definition?: {
-    styles?: Record<string, unknown>;
-    attrs?: Record<string, unknown>;
-  };
-};
-
 /**
  * Paragraph properties from a table style that should be applied to
  * paragraphs inside table cells as part of the OOXML style cascade.
@@ -34,8 +21,6 @@ export type TableStyleParagraphProps = {
 
 export type ConverterContext = {
   docx?: Record<string, unknown>;
-  numbering?: ConverterNumberingContext;
-  linkedStyles?: ConverterLinkedStyle[];
   translatedNumbering: NumberingProperties;
   translatedLinkedStyles: StylesDocumentProperties;
   /**
@@ -44,6 +29,11 @@ export type ConverterContext = {
    * matching Word's visible numbering behavior even when ids are non-contiguous or start at 0.
    */
   footnoteNumberById?: Record<string, number>;
+  /**
+   * Optional mapping from OOXML endnote id -> display number.
+   * Same semantics as footnoteNumberById but for endnotes.
+   */
+  endnoteNumberById?: Record<string, number>;
   /**
    * Paragraph properties inherited from the containing table's style.
    * Per OOXML spec, table styles can define pPr that applies to all
@@ -59,20 +49,11 @@ export type ConverterContext = {
    * contrast with the cell background per WCAG guidelines.
    */
   backgroundColor?: string;
-};
-
-/**
- * Guard that checks whether the converter context includes DOCX data
- * required for paragraph style hydration.
- *
- * Paragraph hydration needs DOCX structures so it can follow style
- * inheritance chains via resolveParagraphProperties. Numbering is optional
- * since documents without lists should still get docDefaults spacing.
- */
-export const hasParagraphStyleContext = (
-  context?: ConverterContext,
-): context is ConverterContext & { docx: Record<string, unknown> } => {
-  return Boolean(context?.docx);
+  /**
+   * Default table style ID from `w:defaultTableStyle` in document settings.
+   * Used by table creation paths to determine which style to apply to new tables.
+   */
+  defaultTableStyleId?: string;
 };
 
 /**

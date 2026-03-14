@@ -1,0 +1,26 @@
+---
+title: Headers & Footers operations
+sidebarTitle: Headers & Footers
+description: Headers & Footers operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Structure, references, and part lifecycle for document headers and footers.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/list"><code>headerFooters.list</code></a></span> | `headerFooters.list` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/get"><code>headerFooters.get</code></a></span> | `headerFooters.get` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/resolve"><code>headerFooters.resolve</code></a></span> | `headerFooters.resolve` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/refs/set"><code>headerFooters.refs.set</code></a></span> | `headerFooters.refs.set` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/refs/clear"><code>headerFooters.refs.clear</code></a></span> | `headerFooters.refs.clear` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/refs/set-linked-to-previous"><code>headerFooters.refs.setLinkedToPrevious</code></a></span> | `headerFooters.refs.setLinkedToPrevious` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/parts/list"><code>headerFooters.parts.list</code></a></span> | `headerFooters.parts.list` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/parts/create"><code>headerFooters.parts.create</code></a></span> | `headerFooters.parts.create` | Yes | `non-idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/header-footers/parts/delete"><code>headerFooters.parts.delete</code></a></span> | `headerFooters.parts.delete` | Yes | `conditional` | No | Yes |
+

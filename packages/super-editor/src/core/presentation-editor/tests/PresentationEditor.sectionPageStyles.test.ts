@@ -192,9 +192,13 @@ vi.mock('../../Editor', () => {
 });
 
 // Mock pm-adapter functions
-vi.mock('@superdoc/pm-adapter', () => ({
-  toFlowBlocks: mockToFlowBlocks,
-}));
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
+  return {
+    ...actual,
+    toFlowBlocks: mockToFlowBlocks,
+  };
+});
 
 // Mock layout-bridge functions
 vi.mock('@superdoc/layout-bridge', () => ({
@@ -255,10 +259,6 @@ vi.mock('@superdoc/measuring-dom', () => ({
 vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   createHeaderFooterEditor: mockCreateHeaderFooterEditor,
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
-}));
-
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
 }));
 
 vi.mock('../../header-footer/EditorOverlayManager', () => ({

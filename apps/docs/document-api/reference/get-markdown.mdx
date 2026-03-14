@@ -1,0 +1,73 @@
+---
+title: getMarkdown
+sidebarTitle: getMarkdown
+description: Extract the document content as a Markdown string.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Extract the document content as a Markdown string.
+
+- Operation ID: `getMarkdown`
+- API member path: `editor.doc.getMarkdown(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns the full document content as a Markdown-formatted string.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+"example"
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "string"
+}
+```
+</Accordion>

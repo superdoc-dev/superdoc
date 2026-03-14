@@ -96,7 +96,7 @@ export function findParagraphsWithSectPr(doc: PMNode): {
       return;
     }
 
-    if (node.type === 'index') {
+    if (node.type === 'index' || node.type === 'bibliography' || node.type === 'tableOfAuthorities') {
       getNodeChildren(node).forEach(visitNode);
     }
   };
@@ -204,6 +204,8 @@ export function publishSectionMetadata(sectionRanges: SectionRange[], options?: 
       numbering: section.numbering,
       titlePg: section.titlePg,
       vAlign: section.vAlign,
+      margins: section.margins,
+      pageSize: section.pageSize,
     });
   });
 }

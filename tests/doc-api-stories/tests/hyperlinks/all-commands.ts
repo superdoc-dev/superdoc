@@ -149,10 +149,14 @@ describe('document-api story: all hyperlinks commands', () => {
     const insertResult = await callDocOperation<any>('insert', { sessionId, value: WRAP_PARAGRAPH_TEXT });
     expect(insertResult?.receipt?.success).toBe(true);
 
-    const blockId = insertResult?.target?.blockId;
+    const resolutionTarget = insertResult?.receipt?.resolution?.target;
+    const blockId =
+      insertResult?.target?.blockId ?? resolutionTarget?.anchor?.start?.blockId ?? resolutionTarget?.nodeId;
     if (typeof blockId !== 'string' || blockId.length === 0) {
       throw new Error('Wrap setup failed: insert did not return a blockId.');
     }
+    const baseOffset =
+      typeof resolutionTarget?.anchor?.start?.offset === 'number' ? resolutionTarget.anchor.start.offset : 0;
 
     const start = WRAP_PARAGRAPH_TEXT.indexOf(WRAP_PHRASE);
     if (start < 0) throw new Error('Wrap setup failed: phrase was not found in seed text.');
@@ -161,7 +165,7 @@ describe('document-api story: all hyperlinks commands', () => {
     return {
       kind: 'text',
       blockId,
-      range: { start, end },
+      range: { start: baseOffset + start, end: baseOffset + end },
     };
   }
 
@@ -318,8 +322,7 @@ describe('document-api story: all hyperlinks commands', () => {
         if (typeof f.removedText === 'string' && f.removedText.length > 0) {
           const textResult = await callDocOperation<any>('find', {
             sessionId,
-            type: 'text',
-            pattern: f.removedText,
+            query: { select: { type: 'text', pattern: f.removedText } },
           });
           expect(textResult?.total).toBeGreaterThanOrEqual(1);
         }

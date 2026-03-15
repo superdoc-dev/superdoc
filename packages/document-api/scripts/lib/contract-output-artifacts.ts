@@ -110,6 +110,16 @@ const DEFAULT_REMEDIATION_BY_CODE: Record<string, string> = {
   CAPABILITY_UNAVAILABLE: 'Check runtime capabilities and switch to supported mode or operation.',
   INVALID_TARGET: 'Confirm the target shape and operation compatibility, then retry with a valid target.',
   NO_OP: 'Treat as idempotent no-op and avoid retry loops unless inputs change.',
+  // SDM/1 structural codes
+  INVALID_PAYLOAD: 'Check fragment structure: every node needs a valid kind and required payload fields.',
+  CAPABILITY_UNSUPPORTED: 'This node kind or operation is not supported by the current engine. Check capabilities.',
+  ADDRESS_STALE: 'The SDAddress was obtained before a mutation and is no longer valid. Re-resolve the address.',
+  DUPLICATE_ID: 'A node ID in the fragment conflicts with an existing document node. Use unique IDs or omit them.',
+  INVALID_CONTEXT:
+    'The target context does not allow this content (e.g., inserting block content inside an inline context).',
+  RAW_MODE_REQUIRED: 'This node kind requires raw mode opt-in. Set rawMode: true in the operation options.',
+  PRESERVE_ONLY_VIOLATION:
+    'This node family is preserve-only and cannot be inserted or replaced via the structural API.',
 };
 
 export function buildAgentArtifacts(): GeneratedFile[] {

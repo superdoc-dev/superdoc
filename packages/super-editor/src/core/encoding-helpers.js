@@ -76,5 +76,14 @@ export function ensureXmlString(content) {
 
   const enc = sniffEncoding(u8);
   let xml = new TextDecoder(enc).decode(u8);
-  return stripBOM(xml);
+  xml = stripBOM(xml);
+
+  // After converting from non-UTF-8 to a JS string, the XML declaration's
+  // encoding attribute is stale (e.g. encoding="utf-16"). The output will
+  // be serialized as UTF-8, so update or remove the declaration to match.
+  if (enc !== 'utf-8') {
+    xml = xml.replace(/(<\?xml\b[^?]*?)\bencoding\s*=\s*["'][^"']*["']/i, '$1encoding="UTF-8"');
+  }
+
+  return xml;
 }

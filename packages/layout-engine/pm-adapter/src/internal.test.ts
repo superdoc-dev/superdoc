@@ -37,6 +37,8 @@ vi.mock('./sdt/index.js', () => ({
   handleStructuredContentBlockNode: vi.fn(),
   handleDocumentSectionNode: vi.fn(),
   handleDocumentPartObjectNode: vi.fn(),
+  handleBibliographyNode: vi.fn(),
+  handleTableOfAuthoritiesNode: vi.fn(),
 }));
 
 vi.mock('./sections/index.js', () => {
@@ -96,6 +98,8 @@ import {
   handleStructuredContentBlockNode,
   handleDocumentSectionNode,
   handleDocumentPartObjectNode,
+  handleBibliographyNode,
+  handleTableOfAuthoritiesNode,
 } from './sdt/index.js';
 import { analyzeSectionRanges, createSectionBreakBlock, publishSectionMetadata } from './sections/index.js';
 import { isValidTrackedMode } from './tracked-changes.js';
@@ -115,6 +119,8 @@ describe('internal', () => {
         'documentSection',
         'table',
         'documentPartObject',
+        'bibliography',
+        'tableOfAuthorities',
         'image',
         'vectorShape',
         'shapeGroup',
@@ -157,6 +163,8 @@ describe('internal', () => {
       expect(nodeHandlers.structuredContentBlock).toBe(handleStructuredContentBlockNode);
       expect(nodeHandlers.documentSection).toBe(handleDocumentSectionNode);
       expect(nodeHandlers.documentPartObject).toBe(handleDocumentPartObjectNode);
+      expect(nodeHandlers.bibliography).toBe(handleBibliographyNode);
+      expect(nodeHandlers.tableOfAuthorities).toBe(handleTableOfAuthoritiesNode);
     });
   });
 

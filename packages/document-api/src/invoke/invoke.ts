@@ -58,13 +58,14 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
   return {
     // --- Singleton reads ---
-    find: (input, options) =>
-      api.find(input as Parameters<typeof api.find>[0], options as Parameters<typeof api.find>[1]),
+    get: (input) => api.get(input),
+    find: (input) => api.find(input),
     getNode: (input) => api.getNode(input),
     getNodeById: (input) => api.getNodeById(input),
     getText: (input) => api.getText(input),
     getMarkdown: (input) => api.getMarkdown(input),
     getHtml: (input) => api.getHtml(input),
+    markdownToFragment: (input) => api.markdownToFragment(input),
     info: (input) => api.info(input),
 
     // --- Singleton mutations ---
@@ -74,7 +75,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     delete: (input, options) => api.delete(input, options),
 
     // --- blocks.* ---
+    'blocks.list': (input) => api.blocks.list(input),
     'blocks.delete': (input, options) => api.blocks.delete(input, options),
+    'blocks.deleteRange': (input, options) => api.blocks.deleteRange(input, options),
 
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),
@@ -178,6 +181,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- query.* ---
     'query.match': (input) => api.query.match(input),
+
+    // --- ranges.* ---
+    'ranges.resolve': (input) => api.ranges.resolve(input),
 
     // --- mutations.* ---
     'mutations.preview': (input) => api.mutations.preview(input),
@@ -300,5 +306,189 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'hyperlinks.insert': (input, options) => api.hyperlinks.insert(input, options),
     'hyperlinks.patch': (input, options) => api.hyperlinks.patch(input, options),
     'hyperlinks.remove': (input, options) => api.hyperlinks.remove(input, options),
+
+    // --- headerFooters.* ---
+    'headerFooters.list': (input) => api.headerFooters.list(input),
+    'headerFooters.get': (input) => api.headerFooters.get(input),
+    'headerFooters.resolve': (input) => api.headerFooters.resolve(input),
+    'headerFooters.refs.set': (input, options) => api.headerFooters.refs.set(input, options),
+    'headerFooters.refs.clear': (input, options) => api.headerFooters.refs.clear(input, options),
+    'headerFooters.refs.setLinkedToPrevious': (input, options) =>
+      api.headerFooters.refs.setLinkedToPrevious(input, options),
+    'headerFooters.parts.list': (input) => api.headerFooters.parts.list(input),
+    'headerFooters.parts.create': (input, options) => api.headerFooters.parts.create(input, options),
+    'headerFooters.parts.delete': (input, options) => api.headerFooters.parts.delete(input, options),
+
+    // --- create.contentControl ---
+    'create.contentControl': (input, options) => api.create.contentControl(input, options),
+
+    // --- contentControls.* core CRUD + discovery ---
+    'contentControls.list': (input) => api.contentControls.list(input),
+    'contentControls.get': (input) => api.contentControls.get(input),
+    'contentControls.listInRange': (input) => api.contentControls.listInRange(input),
+    'contentControls.selectByTag': (input) => api.contentControls.selectByTag(input),
+    'contentControls.selectByTitle': (input) => api.contentControls.selectByTitle(input),
+    'contentControls.listChildren': (input) => api.contentControls.listChildren(input),
+    'contentControls.getParent': (input) => api.contentControls.getParent(input),
+    'contentControls.wrap': (input, options) => api.contentControls.wrap(input, options),
+    'contentControls.unwrap': (input, options) => api.contentControls.unwrap(input, options),
+    'contentControls.delete': (input, options) => api.contentControls.delete(input, options),
+    'contentControls.copy': (input, options) => api.contentControls.copy(input, options),
+    'contentControls.move': (input, options) => api.contentControls.move(input, options),
+    'contentControls.patch': (input, options) => api.contentControls.patch(input, options),
+    'contentControls.setLockMode': (input, options) => api.contentControls.setLockMode(input, options),
+    'contentControls.setType': (input, options) => api.contentControls.setType(input, options),
+    'contentControls.getContent': (input) => api.contentControls.getContent(input),
+    'contentControls.replaceContent': (input, options) => api.contentControls.replaceContent(input, options),
+    'contentControls.clearContent': (input, options) => api.contentControls.clearContent(input, options),
+    'contentControls.appendContent': (input, options) => api.contentControls.appendContent(input, options),
+    'contentControls.prependContent': (input, options) => api.contentControls.prependContent(input, options),
+    'contentControls.insertBefore': (input, options) => api.contentControls.insertBefore(input, options),
+    'contentControls.insertAfter': (input, options) => api.contentControls.insertAfter(input, options),
+
+    // --- contentControls.* data binding + raw ---
+    'contentControls.getBinding': (input) => api.contentControls.getBinding(input),
+    'contentControls.setBinding': (input, options) => api.contentControls.setBinding(input, options),
+    'contentControls.clearBinding': (input, options) => api.contentControls.clearBinding(input, options),
+    'contentControls.getRawProperties': (input) => api.contentControls.getRawProperties(input),
+    'contentControls.patchRawProperties': (input, options) => api.contentControls.patchRawProperties(input, options),
+    'contentControls.validateWordCompatibility': (input) => api.contentControls.validateWordCompatibility(input),
+    'contentControls.normalizeWordCompatibility': (input, options) =>
+      api.contentControls.normalizeWordCompatibility(input, options),
+    'contentControls.normalizeTagPayload': (input, options) => api.contentControls.normalizeTagPayload(input, options),
+
+    // --- contentControls.text.* ---
+    'contentControls.text.setMultiline': (input, options) => api.contentControls.text.setMultiline(input, options),
+    'contentControls.text.setValue': (input, options) => api.contentControls.text.setValue(input, options),
+    'contentControls.text.clearValue': (input, options) => api.contentControls.text.clearValue(input, options),
+
+    // --- contentControls.date.* ---
+    'contentControls.date.setValue': (input, options) => api.contentControls.date.setValue(input, options),
+    'contentControls.date.clearValue': (input, options) => api.contentControls.date.clearValue(input, options),
+    'contentControls.date.setDisplayFormat': (input, options) =>
+      api.contentControls.date.setDisplayFormat(input, options),
+    'contentControls.date.setDisplayLocale': (input, options) =>
+      api.contentControls.date.setDisplayLocale(input, options),
+    'contentControls.date.setStorageFormat': (input, options) =>
+      api.contentControls.date.setStorageFormat(input, options),
+    'contentControls.date.setCalendar': (input, options) => api.contentControls.date.setCalendar(input, options),
+
+    // --- contentControls.checkbox.* ---
+    'contentControls.checkbox.getState': (input) => api.contentControls.checkbox.getState(input),
+    'contentControls.checkbox.setState': (input, options) => api.contentControls.checkbox.setState(input, options),
+    'contentControls.checkbox.toggle': (input, options) => api.contentControls.checkbox.toggle(input, options),
+    'contentControls.checkbox.setSymbolPair': (input, options) =>
+      api.contentControls.checkbox.setSymbolPair(input, options),
+
+    // --- contentControls.choiceList.* ---
+    'contentControls.choiceList.getItems': (input) => api.contentControls.choiceList.getItems(input),
+    'contentControls.choiceList.setItems': (input, options) => api.contentControls.choiceList.setItems(input, options),
+    'contentControls.choiceList.setSelected': (input, options) =>
+      api.contentControls.choiceList.setSelected(input, options),
+
+    // --- contentControls.repeatingSection.* ---
+    'contentControls.repeatingSection.listItems': (input) => api.contentControls.repeatingSection.listItems(input),
+    'contentControls.repeatingSection.insertItemBefore': (input, options) =>
+      api.contentControls.repeatingSection.insertItemBefore(input, options),
+    'contentControls.repeatingSection.insertItemAfter': (input, options) =>
+      api.contentControls.repeatingSection.insertItemAfter(input, options),
+    'contentControls.repeatingSection.cloneItem': (input, options) =>
+      api.contentControls.repeatingSection.cloneItem(input, options),
+    'contentControls.repeatingSection.deleteItem': (input, options) =>
+      api.contentControls.repeatingSection.deleteItem(input, options),
+    'contentControls.repeatingSection.setAllowInsertDelete': (input, options) =>
+      api.contentControls.repeatingSection.setAllowInsertDelete(input, options),
+
+    // --- contentControls.group.* ---
+    'contentControls.group.wrap': (input, options) => api.contentControls.group.wrap(input, options),
+    'contentControls.group.ungroup': (input, options) => api.contentControls.group.ungroup(input, options),
+
+    // --- bookmarks.* ---
+    'bookmarks.list': (input) => api.bookmarks.list(input),
+    'bookmarks.get': (input) => api.bookmarks.get(input),
+    'bookmarks.insert': (input, options) => api.bookmarks.insert(input, options),
+    'bookmarks.rename': (input, options) => api.bookmarks.rename(input, options),
+    'bookmarks.remove': (input, options) => api.bookmarks.remove(input, options),
+
+    // --- footnotes.* ---
+    'footnotes.list': (input) => api.footnotes.list(input),
+    'footnotes.get': (input) => api.footnotes.get(input),
+    'footnotes.insert': (input, options) => api.footnotes.insert(input, options),
+    'footnotes.update': (input, options) => api.footnotes.update(input, options),
+    'footnotes.remove': (input, options) => api.footnotes.remove(input, options),
+    'footnotes.configure': (input, options) => api.footnotes.configure(input, options),
+
+    // --- crossRefs.* ---
+    'crossRefs.list': (input) => api.crossRefs.list(input),
+    'crossRefs.get': (input) => api.crossRefs.get(input),
+    'crossRefs.insert': (input, options) => api.crossRefs.insert(input, options),
+    'crossRefs.rebuild': (input, options) => api.crossRefs.rebuild(input, options),
+    'crossRefs.remove': (input, options) => api.crossRefs.remove(input, options),
+
+    // --- index.* ---
+    'index.list': (input) => api.index.list(input),
+    'index.get': (input) => api.index.get(input),
+    'index.insert': (input, options) => api.index.insert(input, options),
+    'index.configure': (input, options) => api.index.configure(input, options),
+    'index.rebuild': (input, options) => api.index.rebuild(input, options),
+    'index.remove': (input, options) => api.index.remove(input, options),
+
+    // --- index.entries.* ---
+    'index.entries.list': (input) => api.index.entries.list(input),
+    'index.entries.get': (input) => api.index.entries.get(input),
+    'index.entries.insert': (input, options) => api.index.entries.insert(input, options),
+    'index.entries.update': (input, options) => api.index.entries.update(input, options),
+    'index.entries.remove': (input, options) => api.index.entries.remove(input, options),
+
+    // --- captions.* ---
+    'captions.list': (input) => api.captions.list(input),
+    'captions.get': (input) => api.captions.get(input),
+    'captions.insert': (input, options) => api.captions.insert(input, options),
+    'captions.update': (input, options) => api.captions.update(input, options),
+    'captions.remove': (input, options) => api.captions.remove(input, options),
+    'captions.configure': (input, options) => api.captions.configure(input, options),
+
+    // --- fields.* ---
+    'fields.list': (input) => api.fields.list(input),
+    'fields.get': (input) => api.fields.get(input),
+    'fields.insert': (input, options) => api.fields.insert(input, options),
+    'fields.rebuild': (input, options) => api.fields.rebuild(input, options),
+    'fields.remove': (input, options) => api.fields.remove(input, options),
+
+    // --- citations.* ---
+    'citations.list': (input) => api.citations.list(input),
+    'citations.get': (input) => api.citations.get(input),
+    'citations.insert': (input, options) => api.citations.insert(input, options),
+    'citations.update': (input, options) => api.citations.update(input, options),
+    'citations.remove': (input, options) => api.citations.remove(input, options),
+
+    // --- citations.sources.* ---
+    'citations.sources.list': (input) => api.citations.sources.list(input),
+    'citations.sources.get': (input) => api.citations.sources.get(input),
+    'citations.sources.insert': (input, options) => api.citations.sources.insert(input, options),
+    'citations.sources.update': (input, options) => api.citations.sources.update(input, options),
+    'citations.sources.remove': (input, options) => api.citations.sources.remove(input, options),
+
+    // --- citations.bibliography.* ---
+    'citations.bibliography.get': (input) => api.citations.bibliography.get(input),
+    'citations.bibliography.insert': (input, options) => api.citations.bibliography.insert(input, options),
+    'citations.bibliography.rebuild': (input, options) => api.citations.bibliography.rebuild(input, options),
+    'citations.bibliography.configure': (input, options) => api.citations.bibliography.configure(input, options),
+    'citations.bibliography.remove': (input, options) => api.citations.bibliography.remove(input, options),
+
+    // --- authorities.* ---
+    'authorities.list': (input) => api.authorities.list(input),
+    'authorities.get': (input) => api.authorities.get(input),
+    'authorities.insert': (input, options) => api.authorities.insert(input, options),
+    'authorities.configure': (input, options) => api.authorities.configure(input, options),
+    'authorities.rebuild': (input, options) => api.authorities.rebuild(input, options),
+    'authorities.remove': (input, options) => api.authorities.remove(input, options),
+
+    // --- authorities.entries.* ---
+    'authorities.entries.list': (input) => api.authorities.entries.list(input),
+    'authorities.entries.get': (input) => api.authorities.entries.get(input),
+    'authorities.entries.insert': (input, options) => api.authorities.entries.insert(input, options),
+    'authorities.entries.update': (input, options) => api.authorities.entries.update(input, options),
+    'authorities.entries.remove': (input, options) => api.authorities.entries.remove(input, options),
   };
 }

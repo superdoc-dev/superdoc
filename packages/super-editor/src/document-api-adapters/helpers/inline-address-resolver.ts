@@ -15,6 +15,12 @@ const SUPPORTED_INLINE_TYPES: ReadonlySet<InlineNodeType> = new Set<InlineNodeTy
   'sdt',
   'image',
   'footnoteRef',
+  'endnoteRef',
+  'crossRef',
+  'indexEntry',
+  'citation',
+  'authorityEntry',
+  'sequenceField',
   'tab',
   'lineBreak',
 ]);
@@ -74,6 +80,18 @@ function mapInlineNodeType(node: ProseMirrorNode): InlineNodeType | undefined {
       return 'lineBreak';
     case 'footnoteReference':
       return 'footnoteRef';
+    case 'endnoteReference':
+      return 'endnoteRef';
+    case 'crossReference':
+      return 'crossRef';
+    case 'indexEntry':
+      return 'indexEntry';
+    case 'citation':
+      return 'citation';
+    case 'authorityEntry':
+      return 'authorityEntry';
+    case 'sequenceField':
+      return 'sequenceField';
     case 'structuredContent':
       return 'sdt';
     default:

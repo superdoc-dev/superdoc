@@ -49,6 +49,44 @@ const collectTrackMarkIds = (doc) => {
   };
 };
 
+const collectTrackFormatMarkIds = (doc) => {
+  const formatIds = new Set();
+
+  doc.descendants((node) => {
+    node.marks?.forEach((mark) => {
+      if (mark.type.name === 'trackFormat') {
+        formatIds.add(String(mark.attrs.id));
+      }
+    });
+  });
+
+  return [...formatIds];
+};
+
+const collectTextsWithTrackFormatId = (doc, targetId) => {
+  const matchingTexts = [];
+
+  doc.descendants((node) => {
+    if (!node.isText) return;
+
+    const hasTargetMark = node.marks?.some(
+      (mark) => mark.type.name === 'trackFormat' && String(mark.attrs.id) === String(targetId),
+    );
+
+    if (hasTargetMark && node.text) {
+      matchingTexts.push(node.text);
+    }
+  });
+
+  return matchingTexts;
+};
+
+const replaceEditorDocumentContent = (editor, docJson) => {
+  const replacementDoc = editor.schema.nodeFromJSON(docJson);
+  const transaction = editor.state.tr.replaceWith(0, editor.state.doc.content.size, replacementDoc.content);
+  editor.dispatch(transaction);
+};
+
 const collectTrackIdsFromXml = (rootNode) => {
   const ids = { insert: new Set(), delete: new Set() };
   const visit = (node) => {
@@ -68,6 +106,22 @@ const collectTrackIdsFromXml = (rootNode) => {
     insert: [...ids.insert],
     delete: [...ids.delete],
   };
+};
+
+const collectRunPropertyChangeIdsFromXml = (rootNode) => {
+  const ids = new Set();
+
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.name === 'w:rPrChange') {
+      const id = node.attributes?.['w:id'];
+      if (id !== undefined) ids.add(String(id));
+    }
+    if (Array.isArray(node.elements)) node.elements.forEach(visit);
+  };
+
+  visit(rootNode);
+  return [...ids];
 };
 
 const loadExportedDocumentBody = async (exportedBuffer) => {
@@ -177,14 +231,14 @@ describe('msword tracked changes import/export round trip', () => {
     ({ docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(filename));
   });
 
-  it('preserves separate add and delete revisions through export', async () => {
+  it('combines Word replacements internally while preserving separate OOXML ids on export', async () => {
     const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     try {
       const initialMarks = collectTrackMarkIds(editor.state.doc);
       expect(initialMarks.insert.length).toBeGreaterThan(0);
       expect(initialMarks.delete.length).toBeGreaterThan(0);
-      expect(getIntersection(initialMarks.insert, initialMarks.delete)).toHaveLength(0);
+      expect(getIntersection(initialMarks.insert, initialMarks.delete).length).toBeGreaterThan(0);
 
       const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
       const exportedBody = await loadExportedDocumentBody(exportedBuffer);
@@ -192,6 +246,101 @@ describe('msword tracked changes import/export round trip', () => {
       expect(exportedIds.insert.length).toBeGreaterThan(0);
       expect(exportedIds.delete.length).toBeGreaterThan(0);
       expect(getIntersection(exportedIds.insert, exportedIds.delete)).toHaveLength(0);
+    } finally {
+      editor.destroy();
+    }
+  });
+});
+
+describe('tracked format import/export round trip', () => {
+  const createTrackedFormatDoc = () => {
+    const trackFormatMark = {
+      type: 'trackFormat',
+      attrs: {
+        id: 'format-1',
+        author: 'Missy Fox',
+        authorEmail: '',
+        date: '2026-01-07T20:24:39Z',
+        before: [],
+        after: [
+          { type: 'bold', attrs: { value: true } },
+          { type: 'italic', attrs: { value: true } },
+        ],
+      },
+    };
+
+    return {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Here is some text with updated ',
+                },
+              ],
+            },
+            {
+              type: 'run',
+              content: [
+                {
+                  type: 'text',
+                  text: 'styles',
+                  marks: [
+                    { type: 'bold', attrs: { value: true } },
+                    { type: 'italic', attrs: { value: true } },
+                    trackFormatMark,
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+  };
+
+  it('exports and reimports trackFormat marks as w:rPrChange revisions', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
+    const { editor } = await initTestEditor({
+      content: docx,
+      media,
+      mediaFiles,
+      fonts,
+      isHeadless: true,
+    });
+
+    try {
+      replaceEditorDocumentContent(editor, createTrackedFormatDoc());
+      expect(collectTrackFormatMarkIds(editor.state.doc)).toEqual(['format-1']);
+      expect(collectTextsWithTrackFormatId(editor.state.doc, 'format-1')).toEqual(['styles']);
+
+      const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
+      const exportedBody = await loadExportedDocumentBody(exportedBuffer);
+      expect(collectRunPropertyChangeIdsFromXml(exportedBody)).toEqual(['format-1']);
+
+      const [reimportedDocx, reimportedMedia, reimportedMediaFiles, reimportedFonts] = await Editor.loadXmlData(
+        exportedBuffer,
+        true,
+      );
+      const { editor: reimportedEditor } = await initTestEditor({
+        content: reimportedDocx,
+        media: reimportedMedia,
+        mediaFiles: reimportedMediaFiles,
+        fonts: reimportedFonts,
+        isHeadless: true,
+      });
+
+      try {
+        expect(collectTrackFormatMarkIds(reimportedEditor.state.doc)).toEqual(['format-1']);
+        expect(collectTextsWithTrackFormatId(reimportedEditor.state.doc, 'format-1')).toEqual(['styles']);
+      } finally {
+        reimportedEditor.destroy();
+      }
     } finally {
       editor.destroy();
     }

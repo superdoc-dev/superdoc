@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
 import type { Editor } from '../core/Editor.js';
@@ -13,6 +13,9 @@ import {
   sectionsSetPageSetupAdapter,
 } from './sections-adapter.js';
 import { resolveSectionProjections } from './helpers/sections-resolver.js';
+import { registerPartDescriptor, clearPartDescriptors } from '../core/parts/registry/part-registry.js';
+import { settingsPartDescriptor } from '../core/parts/adapters/settings-part-descriptor.js';
+import { clearInvalidationHandlers } from '../core/parts/invalidation/part-invalidation-registry.js';
 
 type LoadedDocData = Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -49,9 +52,15 @@ describe('sections adapter DOCX integration', () => {
     docData = await loadTestDataForEditorTests('blank-doc.docx');
   });
 
+  beforeEach(() => {
+    registerPartDescriptor(settingsPartDescriptor);
+  });
+
   afterEach(() => {
     editor?.destroy();
     editor = undefined;
+    clearPartDescriptors();
+    clearInvalidationHandlers();
   });
 
   it('persists odd/even header-footer settings to word/settings.xml', async () => {

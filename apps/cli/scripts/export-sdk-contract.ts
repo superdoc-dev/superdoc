@@ -45,10 +45,11 @@ const CLI_PKG_PATH = resolve(CLI_DIR, 'package.json');
 // ---------------------------------------------------------------------------
 // Intent names — human-friendly tool names for doc-backed operations only.
 // CLI-only intent names live in CLI_ONLY_OPERATION_DEFINITIONS.
-// Typed exhaustively: missing entry = compile error.
 // ---------------------------------------------------------------------------
 
 const INTENT_NAMES = {
+  'doc.get': 'get_document',
+  'doc.markdownToFragment': 'markdown_to_fragment',
   'doc.find': 'find_content',
   'doc.getNode': 'get_node',
   'doc.getNodeById': 'get_node_by_id',
@@ -164,6 +165,15 @@ const INTENT_NAMES = {
   'doc.hyperlinks.insert': 'insert_hyperlink',
   'doc.hyperlinks.patch': 'patch_hyperlink',
   'doc.hyperlinks.remove': 'remove_hyperlink',
+  'doc.headerFooters.list': 'list_header_footer_slots',
+  'doc.headerFooters.get': 'get_header_footer_slot',
+  'doc.headerFooters.resolve': 'resolve_header_footer',
+  'doc.headerFooters.refs.set': 'set_header_footer_ref',
+  'doc.headerFooters.refs.clear': 'clear_header_footer_ref',
+  'doc.headerFooters.refs.setLinkedToPrevious': 'set_header_footer_linked_to_previous',
+  'doc.headerFooters.parts.list': 'list_header_footer_parts',
+  'doc.headerFooters.parts.create': 'create_header_footer_part',
+  'doc.headerFooters.parts.delete': 'delete_header_footer_part',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',
@@ -241,7 +251,97 @@ const INTENT_NAMES = {
   'doc.images.insertCaption': 'insert_image_caption',
   'doc.images.updateCaption': 'update_image_caption',
   'doc.images.removeCaption': 'remove_image_caption',
-} as const satisfies Record<DocBackedCliOpId, string>;
+
+  // Bookmarks
+  'doc.bookmarks.list': 'list_bookmarks',
+  'doc.bookmarks.get': 'get_bookmark',
+  'doc.bookmarks.insert': 'insert_bookmark',
+  'doc.bookmarks.rename': 'rename_bookmark',
+  'doc.bookmarks.remove': 'remove_bookmark',
+
+  // Footnotes
+  'doc.footnotes.list': 'list_footnotes',
+  'doc.footnotes.get': 'get_footnote',
+  'doc.footnotes.insert': 'insert_footnote',
+  'doc.footnotes.update': 'update_footnote',
+  'doc.footnotes.remove': 'remove_footnote',
+  'doc.footnotes.configure': 'configure_footnote_numbering',
+
+  // Cross-References
+  'doc.crossRefs.list': 'list_cross_references',
+  'doc.crossRefs.get': 'get_cross_reference',
+  'doc.crossRefs.insert': 'insert_cross_reference',
+  'doc.crossRefs.rebuild': 'rebuild_cross_reference',
+  'doc.crossRefs.remove': 'remove_cross_reference',
+
+  // Index
+  'doc.index.list': 'list_indexes',
+  'doc.index.get': 'get_index',
+  'doc.index.insert': 'insert_index',
+  'doc.index.configure': 'configure_index',
+  'doc.index.rebuild': 'rebuild_index',
+  'doc.index.remove': 'remove_index',
+  'doc.index.entries.list': 'list_index_entries',
+  'doc.index.entries.get': 'get_index_entry',
+  'doc.index.entries.insert': 'insert_index_entry',
+  'doc.index.entries.update': 'update_index_entry',
+  'doc.index.entries.remove': 'remove_index_entry',
+
+  // Captions
+  'doc.captions.list': 'list_captions',
+  'doc.captions.get': 'get_caption',
+  'doc.captions.insert': 'insert_caption',
+  'doc.captions.update': 'update_caption',
+  'doc.captions.remove': 'remove_caption',
+  'doc.captions.configure': 'configure_caption_numbering',
+
+  // Fields
+  'doc.fields.list': 'list_fields',
+  'doc.fields.get': 'get_field',
+  'doc.fields.insert': 'insert_field',
+  'doc.fields.rebuild': 'rebuild_field',
+  'doc.fields.remove': 'remove_field',
+
+  // Citations
+  'doc.citations.list': 'list_citations',
+  'doc.citations.get': 'get_citation',
+  'doc.citations.insert': 'insert_citation',
+  'doc.citations.update': 'update_citation',
+  'doc.citations.remove': 'remove_citation',
+  'doc.citations.sources.list': 'list_citation_sources',
+  'doc.citations.sources.get': 'get_citation_source',
+  'doc.citations.sources.insert': 'insert_citation_source',
+  'doc.citations.sources.update': 'update_citation_source',
+  'doc.citations.sources.remove': 'remove_citation_source',
+  'doc.citations.bibliography.get': 'get_bibliography',
+  'doc.citations.bibliography.insert': 'insert_bibliography',
+  'doc.citations.bibliography.rebuild': 'rebuild_bibliography',
+  'doc.citations.bibliography.configure': 'configure_bibliography',
+  'doc.citations.bibliography.remove': 'remove_bibliography',
+
+  // Authorities (Table of Authorities)
+  'doc.authorities.list': 'list_authorities',
+  'doc.authorities.get': 'get_authority',
+  'doc.authorities.insert': 'insert_authority',
+  'doc.authorities.configure': 'configure_authority',
+  'doc.authorities.rebuild': 'rebuild_authority',
+  'doc.authorities.remove': 'remove_authority',
+  'doc.authorities.entries.list': 'list_authority_entries',
+  'doc.authorities.entries.get': 'get_authority_entry',
+  'doc.authorities.entries.insert': 'insert_authority_entry',
+  'doc.authorities.entries.update': 'update_authority_entry',
+  'doc.authorities.entries.remove': 'remove_authority_entry',
+} as const satisfies Partial<Record<DocBackedCliOpId, string>>;
+
+function deriveDocBackedIntentName(cliOpId: DocBackedCliOpId): string {
+  const mapped = INTENT_NAMES[cliOpId];
+  if (mapped) {
+    return mapped;
+  }
+
+  const docApiId = cliOpId.slice(4);
+  return docApiId.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`).replace(/\./g, '_');
+}
 
 // ---------------------------------------------------------------------------
 // Load inputs
@@ -280,7 +380,7 @@ function buildSdkContract() {
 
     // Resolve intentName: doc-backed from INTENT_NAMES, CLI-only from definitions
     const cliOnlyDef = docApiId ? null : CLI_ONLY_OPERATION_DEFINITIONS[stripped];
-    const intentName = docApiId ? INTENT_NAMES[cliOpId as DocBackedCliOpId] : cliOnlyDef!.intentName;
+    const intentName = docApiId ? deriveDocBackedIntentName(cliOpId as DocBackedCliOpId) : cliOnlyDef?.intentName;
     if (!intentName) {
       throw new Error(`Missing intentName for ${cliOpId}`);
     }

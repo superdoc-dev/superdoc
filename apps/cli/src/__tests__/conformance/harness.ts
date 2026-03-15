@@ -210,17 +210,40 @@ export class ConformanceHarness {
     const data = envelope.data as {
       result?: {
         items?: Array<{
-          context?: {
-            textRanges?: TextRangeAddress[];
-          };
+          node?: { kind?: string; [key: string]: unknown };
+          address?: { kind?: string; nodeId?: string };
         }>;
       };
     };
-    const range = data.result?.items?.[0]?.context?.textRanges?.[0];
-    if (!range) {
-      throw new Error(`No text range found for pattern "${pattern}" in ${docPath}`);
+    const item = data.result?.items?.[0];
+    const address = item?.address;
+    if (!address?.nodeId) {
+      throw new Error(`No text match found for pattern "${pattern}" in ${docPath}`);
     }
-    return range;
+
+    // Extract concatenated text from the SDM/1 node's inline content
+    const node = item?.node as Record<string, unknown> | undefined;
+    const nodeKind = node?.kind as string | undefined;
+    const kindData = nodeKind ? (node?.[nodeKind] as Record<string, unknown> | undefined) : undefined;
+    const inlines = Array.isArray(kindData?.inlines) ? kindData!.inlines : [];
+    let fullText = '';
+    for (const inline of inlines) {
+      if (typeof inline === 'object' && inline != null && (inline as Record<string, unknown>).kind === 'run') {
+        const runData = (inline as Record<string, unknown>).run as Record<string, unknown> | undefined;
+        if (typeof runData?.text === 'string') fullText += runData.text as string;
+      }
+    }
+
+    // Find the pattern within the text for a precise range
+    const matchIndex = fullText.indexOf(pattern);
+    const start = matchIndex >= 0 ? matchIndex : 0;
+    const end = matchIndex >= 0 ? matchIndex + pattern.length : Math.max(fullText.length, 1);
+
+    return {
+      kind: 'text',
+      blockId: address.nodeId,
+      range: { start, end },
+    };
   }
 
   async firstBlockMatch(
@@ -239,19 +262,28 @@ export class ConformanceHarness {
     const data = envelope.data as {
       result?: {
         items?: Array<{
+          node?: { kind?: string };
           address?: Record<string, unknown>;
         }>;
       };
     };
     const item = data.result?.items?.[0];
-    const address = item?.address;
-    if (!address || typeof address.nodeId !== 'string' || typeof address.nodeType !== 'string') {
+    const sdAddress = item?.address;
+    const nodeKind = item?.node?.kind;
+    if (!sdAddress || typeof sdAddress.nodeId !== 'string') {
       throw new Error(`No block match found in ${docPath}`);
     }
+    const nodeType = typeof nodeKind === 'string' ? nodeKind : 'paragraph';
+    // Build a legacy NodeAddress for consumers that still expect { kind: 'block', nodeType, nodeId }
+    const legacyAddress: Record<string, unknown> = {
+      kind: 'block',
+      nodeType,
+      nodeId: sdAddress.nodeId as string,
+    };
     return {
-      nodeId: address.nodeId as string,
-      nodeType: address.nodeType as string,
-      address,
+      nodeId: sdAddress.nodeId as string,
+      nodeType,
+      address: legacyAddress,
     };
   }
 
@@ -381,6 +413,36 @@ export class ConformanceHarness {
     }
 
     return { docPath: outDoc, changeId, target: collapsedTarget };
+  }
+
+  async firstTwoBlockAddresses(
+    docPath: string,
+    stateDir: string,
+  ): Promise<{ first: { nodeId: string; nodeType: string }; second: { nodeId: string; nodeType: string } }> {
+    const { result, envelope } = await this.runCli(['blocks', 'list', docPath, '--limit', '5'], stateDir);
+    if (result.code !== 0) {
+      throw new Error(`Unable to list blocks for ${docPath}`);
+    }
+
+    assertSuccessEnvelope(envelope);
+    const data = envelope.data as {
+      result?: {
+        blocks?: Array<{ nodeId?: string; nodeType?: string }>;
+      };
+    };
+    const blocks = data.result?.blocks ?? [];
+    if (blocks.length < 2) {
+      throw new Error(`Need at least 2 blocks in ${docPath}, found ${blocks.length}`);
+    }
+    const first = blocks[0]!;
+    const second = blocks[1]!;
+    if (!first.nodeId || !first.nodeType || !second.nodeId || !second.nodeType) {
+      throw new Error(`Block entries missing nodeId or nodeType in ${docPath}`);
+    }
+    return {
+      first: { nodeId: first.nodeId, nodeType: first.nodeType },
+      second: { nodeId: second.nodeId, nodeType: second.nodeType },
+    };
   }
 
   async openSessionFixture(

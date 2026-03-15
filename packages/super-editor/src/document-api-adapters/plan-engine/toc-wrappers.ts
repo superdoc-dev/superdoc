@@ -43,7 +43,7 @@ import { getRevision } from './revision-tracker.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { resolveBlockInsertionPos } from './create-insertion.js';
+import { resolveCreateAnchor } from './create-insertion.js';
 
 // ---------------------------------------------------------------------------
 // Typed patch helper
@@ -636,7 +636,7 @@ export function createTableOfContentsWrapper(
   } else if (at.kind === 'documentEnd') {
     pos = editor.state.doc.content.size;
   } else {
-    pos = resolveBlockInsertionPos(editor, at.target.nodeId, at.kind);
+    pos = resolveCreateAnchor(editor, at.target, at.kind).pos;
   }
 
   // Build instruction from config patch or use defaults

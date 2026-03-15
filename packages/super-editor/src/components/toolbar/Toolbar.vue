@@ -1,5 +1,4 @@
 <script setup>
-import { NConfigProvider } from 'naive-ui';
 import { ref, getCurrentInstance, onMounted, onDeactivated, nextTick, computed } from 'vue';
 import { throttle } from './helpers.js';
 import ButtonGroup from './ButtonGroup.vue';
@@ -82,37 +81,35 @@ const restoreSelection = () => {
 
 <template>
   <div class="superdoc-toolbar" :key="toolbarKey" role="toolbar" aria-label="Toolbar" data-editor-ui-surface>
-    <n-config-provider abstract preflight-style-disabled>
-      <ButtonGroup
-        tabindex="0"
-        v-if="showLeftSide"
-        :toolbar-items="getFilteredItems('left')"
-        :ui-font-family="uiFontFamily"
-        position="left"
-        @command="handleCommand"
-        @item-clicked="restoreSelection"
-        class="superdoc-toolbar-group-side"
-      />
-      <ButtonGroup
-        tabindex="0"
-        :toolbar-items="getFilteredItems('center')"
-        :overflow-items="proxy.$toolbar.overflowItems"
-        :ui-font-family="uiFontFamily"
-        position="center"
-        @command="handleCommand"
-        @item-clicked="restoreSelection"
-      />
-      <ButtonGroup
-        tabindex="0"
-        v-if="showRightSide"
-        :toolbar-items="getFilteredItems('right')"
-        :ui-font-family="uiFontFamily"
-        position="right"
-        @command="handleCommand"
-        @item-clicked="restoreSelection"
-        class="superdoc-toolbar-group-side"
-      />
-    </n-config-provider>
+    <ButtonGroup
+      tabindex="0"
+      v-if="showLeftSide"
+      :toolbar-items="getFilteredItems('left')"
+      :ui-font-family="uiFontFamily"
+      position="left"
+      @command="handleCommand"
+      @item-clicked="restoreSelection"
+      class="superdoc-toolbar-group-side"
+    />
+    <ButtonGroup
+      tabindex="0"
+      :toolbar-items="getFilteredItems('center')"
+      :overflow-items="proxy.$toolbar.overflowItems"
+      :ui-font-family="uiFontFamily"
+      position="center"
+      @command="handleCommand"
+      @item-clicked="restoreSelection"
+    />
+    <ButtonGroup
+      tabindex="0"
+      v-if="showRightSide"
+      :toolbar-items="getFilteredItems('right')"
+      :ui-font-family="uiFontFamily"
+      position="right"
+      @command="handleCommand"
+      @item-clicked="restoreSelection"
+      class="superdoc-toolbar-group-side"
+    />
   </div>
 </template>
 

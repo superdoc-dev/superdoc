@@ -48,6 +48,7 @@ describe('manual command allowlist', () => {
       'session-list.ts',
       'session-save.ts',
       'session-set-default.ts',
+      'skill-targets.ts',
       'uninstall.ts',
     ]);
   });

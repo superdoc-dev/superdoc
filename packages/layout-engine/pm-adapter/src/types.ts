@@ -16,6 +16,7 @@ import type {
   shapeTextboxNodeToDrawingBlock,
   vectorShapeNodeToDrawingBlock,
 } from './converters/shapes.js';
+import type { chartNodeToDrawingBlock } from './converters/chart.js';
 export type { ConverterContext } from './converter-context.js';
 export type StyleContext = StyleEngineContext;
 export type { ComputedParagraphStyle };
@@ -307,6 +308,10 @@ export interface NodeHandlerContext {
   themeColors?: ThemeColorPalette;
   // FlowBlock cache for incremental conversion (optional)
   flowBlockCache?: import('./cache.js').FlowBlockCache;
+  // Per-list marker offsets caused by suppressed tracked-change ghost items
+  trackedListMarkerOffsets?: Map<string, number>;
+  // Last seen source ordinal per list key for restart detection
+  trackedListLastOrdinals?: Map<string, number>;
 }
 
 /**
@@ -395,6 +400,7 @@ export type NestedConverters = {
   shapeGroupNodeToDrawingBlock: typeof shapeGroupNodeToDrawingBlock;
   shapeContainerNodeToDrawingBlock: typeof shapeContainerNodeToDrawingBlock;
   shapeTextboxNodeToDrawingBlock: typeof shapeTextboxNodeToDrawingBlock;
+  chartNodeToDrawingBlock: typeof chartNodeToDrawingBlock;
 };
 
 /**

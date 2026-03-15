@@ -18,8 +18,18 @@ export const SuperDocEditor = ({
     if (isDev) {
       try {
         const res = await fetch(`${DEV_DIST_URL}/superdoc.umd.js`, { method: 'HEAD' });
-        if (res.ok) return DEV_DIST_URL;
-      } catch {}
+        if (res.ok) {
+          console.info('[SuperDoc Docs] Using local build from', DEV_DIST_URL);
+          return DEV_DIST_URL;
+        }
+        console.warn('[SuperDoc Docs] Local dev server returned', res.status, '— falling back to unpkg');
+      } catch (err) {
+        console.warn(
+          '[SuperDoc Docs] Local dev server not reachable — falling back to unpkg.',
+          'Run `pnpm dev:docs` from the repo root to use your local build.',
+          err.message,
+        );
+      }
     }
 
     return UNPKG_DIST_URL;

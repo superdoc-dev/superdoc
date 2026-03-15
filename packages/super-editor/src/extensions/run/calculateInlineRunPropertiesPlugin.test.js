@@ -318,7 +318,7 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     });
   });
 
-  it('keeps paragraph runProperties in sync with the first run', () => {
+  it('does not sync paragraph runProperties with the first run', () => {
     const schema = makeSchema();
     const doc = paragraphDoc(schema);
     const state = createState(schema, doc);
@@ -328,73 +328,43 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     const { state: nextState } = state.applyTransaction(tr);
 
     const paragraph = nextState.doc.firstChild;
-    expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
-  });
-
-  it('treats the first run inside inline wrappers as the paragraph first run', () => {
-    const schema = makeSchema();
-    const doc = schema.node('doc', null, [
-      schema.node('paragraph', null, [
-        schema.node('bookmarkStart', null, [schema.node('run', null, schema.text('Wrapped'))]),
-      ]),
-    ]);
-    const state = createState(schema, doc);
-    const [wrappedRunPos] = runPositions(state.doc);
-    const from = wrappedRunPos + 1;
-    const to = wrappedRunPos + 3;
-
-    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
-    const { state: nextState } = state.applyTransaction(tr);
-
-    const paragraph = nextState.doc.firstChild;
-    expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
-  });
-
-  it('does not update paragraph runProperties when a non-first run changes', () => {
-    const schema = makeSchema();
-    const doc = schema.node('doc', null, [
-      schema.node('paragraph', null, [
-        schema.node('run', null, schema.text('First')),
-        schema.node('run', null, schema.text('Second')),
-      ]),
-    ]);
-    const state = createState(schema, doc);
-    const [firstRunPos, secondRunPos] = runPositions(state.doc);
-    const from = secondRunPos + 1;
-    const to = secondRunPos + 3;
-
-    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
-    const { state: nextState } = state.applyTransaction(tr);
-
-    const paragraph = nextState.doc.firstChild;
     expect(paragraph.attrs.paragraphProperties).toBeNull();
-    const firstRun = nextState.doc.nodeAt(firstRunPos);
-    expect(firstRun?.attrs.runProperties).toBeNull();
   });
 
-  it('updates paragraph runProperties when first run is nested inside an inline container', () => {
+  it("does not update a paragraph's runProperties using the run's properties", () => {
     const schema = makeSchema();
+    const paragraphRunProperties = { italic: true, styleId: 'ParagraphDefault' };
     const doc = schema.node('doc', null, [
-      schema.node('paragraph', null, [
-        schema.node('pageReference', { instruction: 'PAGEREF _Toc123456789 h' }, [
-          schema.node('run', null, schema.text('Ref')),
-        ]),
-        schema.node('run', null, schema.text(' tail')),
-      ]),
+      schema.node(
+        'paragraph',
+        {
+          paragraphProperties: {
+            alignment: 'center',
+            runProperties: paragraphRunProperties,
+          },
+        },
+        [schema.node('run', null, schema.text('Hello')), schema.node('run', null, schema.text('World'))],
+      ),
     ]);
     const state = createState(schema, doc);
-    const [nestedRunPos] = runPositions(state.doc);
-    const from = nestedRunPos + 1;
-    const to = nestedRunPos + 4;
+    const [firstRunPos] = runPositions(state.doc);
+    const { from, to } = runTextRangeAtPos(firstRunPos, 0, 2);
 
     const tr = state.tr.addMark(from, to, schema.marks.bold.create());
     const { state: nextState } = state.applyTransaction(tr);
 
     const paragraph = nextState.doc.firstChild;
-    expect(paragraph.attrs.paragraphProperties).toEqual({ runProperties: { bold: true } });
+    expect(paragraph.attrs.paragraphProperties).toEqual({
+      alignment: 'center',
+      runProperties: paragraphRunProperties,
+    });
+
+    const updatedRuns = runPositions(nextState.doc);
+    const updatedRun = nextState.doc.nodeAt(updatedRuns[0]);
+    expect(updatedRun?.attrs.runProperties).toEqual({ bold: true });
   });
 
-  it('does not update paragraph runProperties when nested run is not first in paragraph', () => {
+  it('does not update paragraph runProperties when a nested run changes', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [
       schema.node('paragraph', null, [

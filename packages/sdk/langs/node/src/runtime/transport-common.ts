@@ -117,7 +117,9 @@ export function buildOperationArgv(
         }
         break;
       case 'jsonFlag':
-        argv.push(flag, typeof value === 'string' ? value : JSON.stringify(value));
+        // CLI always parses --*-json values via JSON.parse, so even scalar
+        // strings must be serialized as JSON string literals.
+        argv.push(flag, JSON.stringify(value));
         break;
     }
   }

@@ -175,6 +175,17 @@ describe('document-api contract catalog', () => {
       'toc',
       'images',
       'hyperlinks',
+      'headerFooters',
+      'contentControls',
+      'bookmarks',
+      'footnotes',
+      'crossRefs',
+      'index',
+      'captions',
+      'fields',
+      'citations',
+      'authorities',
+      'ranges',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);
@@ -244,6 +255,7 @@ describe('document-api contract catalog', () => {
     for (const id of historyUnsafeOps) {
       expect(
         id.startsWith('sections.') ||
+          id.startsWith('headerFooters.') ||
           id === 'styles.apply' ||
           id === 'tables.setDefaultStyle' ||
           id === 'tables.clearDefaultStyle',

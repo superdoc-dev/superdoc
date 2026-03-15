@@ -8,22 +8,32 @@
 
 import type { OperationId } from './types.js';
 
-import type { NodeAddress, NodeInfo, FindOutput, Selector, Query } from '../types/index.js';
+import type { NodeAddress } from '../types/index.js';
+import type { SDNodeResult, SDFindInput, SDFindResult, SDGetInput } from '../types/sd-envelope.js';
 import type { TextMutationReceipt, Receipt } from '../types/receipt.js';
+import type { SDMutationReceipt, SDMarkdownToFragmentResult } from '../types/sd-contract.js';
 import type { DocumentInfo } from '../types/info.types.js';
+import type { SDDocument } from '../types/fragment.js';
 import type {
   CreateParagraphInput,
   CreateParagraphResult,
   CreateHeadingInput,
   CreateHeadingResult,
 } from '../types/create.types.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
+} from '../types/blocks.types.js';
 
-import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
 import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
 import type { GetHtmlInput } from '../get-html/get-html.js';
+import type { MarkdownToFragmentInput } from '../markdown-to-fragment/markdown-to-fragment.js';
 import type { InfoInput } from '../info/info.js';
 import type { ClearContentInput } from '../clear-content/clear-content.js';
 import type { InsertInput } from '../insert/insert.js';
@@ -135,6 +145,7 @@ import type {
   SectionsSetVerticalAlignInput,
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
+import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -196,6 +207,124 @@ import type {
   TocEntryMutationResult,
 } from '../toc/toc.types.js';
 import type {
+  BookmarkListInput,
+  BookmarksListResult,
+  BookmarkGetInput,
+  BookmarkInfo,
+  BookmarkInsertInput,
+  BookmarkRenameInput,
+  BookmarkRemoveInput,
+  BookmarkMutationResult,
+} from '../bookmarks/bookmarks.types.js';
+
+import type {
+  FootnoteListInput,
+  FootnotesListResult,
+  FootnoteGetInput,
+  FootnoteInfo,
+  FootnoteInsertInput,
+  FootnoteUpdateInput,
+  FootnoteRemoveInput,
+  FootnoteMutationResult,
+  FootnoteConfigureInput,
+  FootnoteConfigResult,
+} from '../footnotes/footnotes.types.js';
+import type {
+  CrossRefListInput,
+  CrossRefsListResult,
+  CrossRefGetInput,
+  CrossRefInfo,
+  CrossRefInsertInput,
+  CrossRefRebuildInput,
+  CrossRefRemoveInput,
+  CrossRefMutationResult,
+} from '../cross-refs/cross-refs.types.js';
+import type {
+  IndexListInput,
+  IndexListResult,
+  IndexGetInput,
+  IndexInfo,
+  IndexInsertInput,
+  IndexConfigureInput,
+  IndexRebuildInput,
+  IndexRemoveInput,
+  IndexMutationResult,
+  IndexEntryListInput,
+  IndexEntryListResult,
+  IndexEntryGetInput,
+  IndexEntryInfo,
+  IndexEntryInsertInput,
+  IndexEntryUpdateInput,
+  IndexEntryRemoveInput,
+  IndexEntryMutationResult,
+} from '../index/index.types.js';
+import type {
+  CaptionListInput,
+  CaptionsListResult,
+  CaptionGetInput,
+  CaptionInfo,
+  CaptionInsertInput,
+  CaptionUpdateInput,
+  CaptionRemoveInput,
+  CaptionMutationResult,
+  CaptionConfigureInput,
+  CaptionConfigResult,
+} from '../captions/captions.types.js';
+import type {
+  FieldListInput,
+  FieldsListResult,
+  FieldGetInput,
+  FieldInfo,
+  FieldInsertInput,
+  FieldRebuildInput,
+  FieldRemoveInput,
+  FieldMutationResult,
+} from '../fields/fields.types.js';
+import type {
+  CitationListInput,
+  CitationsListResult,
+  CitationGetInput,
+  CitationInfo,
+  CitationInsertInput,
+  CitationUpdateInput,
+  CitationRemoveInput,
+  CitationMutationResult,
+  CitationSourceListInput,
+  CitationSourcesListResult,
+  CitationSourceGetInput,
+  CitationSourceInfo,
+  CitationSourceInsertInput,
+  CitationSourceUpdateInput,
+  CitationSourceRemoveInput,
+  CitationSourceMutationResult,
+  BibliographyGetInput,
+  BibliographyInfo,
+  BibliographyInsertInput,
+  BibliographyRebuildInput,
+  BibliographyConfigureInput,
+  BibliographyRemoveInput,
+  BibliographyMutationResult,
+} from '../citations/citations.types.js';
+import type {
+  AuthoritiesListInput,
+  AuthoritiesListResult,
+  AuthoritiesGetInput,
+  AuthoritiesInfo,
+  AuthoritiesInsertInput,
+  AuthoritiesConfigureInput,
+  AuthoritiesRebuildInput,
+  AuthoritiesRemoveInput,
+  AuthoritiesMutationResult,
+  AuthorityEntryListInput,
+  AuthorityEntryListResult,
+  AuthorityEntryGetInput,
+  AuthorityEntryInfo,
+  AuthorityEntryInsertInput,
+  AuthorityEntryUpdateInput,
+  AuthorityEntryRemoveInput,
+  AuthorityEntryMutationResult,
+} from '../authorities/authorities.types.js';
+import type {
   CreateTableInput,
   CreateTableResult,
   TablesConvertFromTextInput,
@@ -256,6 +385,89 @@ import type {
   HyperlinksRemoveInput,
   HyperlinkMutationResult,
 } from '../hyperlinks/hyperlinks.types.js';
+import type {
+  HeaderFootersListQuery,
+  HeaderFootersListResult,
+  HeaderFootersGetInput,
+  HeaderFooterSlotEntry,
+  HeaderFootersResolveInput,
+  HeaderFooterResolveResult,
+  HeaderFootersRefsSetInput,
+  HeaderFootersRefsClearInput,
+  HeaderFootersRefsSetLinkedToPreviousInput,
+  HeaderFootersPartsListQuery,
+  HeaderFootersPartsListResult,
+  HeaderFootersPartsCreateInput,
+  HeaderFootersPartsDeleteInput,
+  HeaderFooterPartsMutationResult,
+} from '../header-footers/header-footers.types.js';
+import type {
+  ContentControlInfo,
+  ContentControlMutationResult,
+  ContentControlsListResult,
+  ContentControlsListQuery,
+  ContentControlsGetInput,
+  ContentControlsListInRangeInput,
+  ContentControlsSelectByTagInput,
+  ContentControlsSelectByTitleInput,
+  ContentControlsListChildrenInput,
+  ContentControlsGetParentInput,
+  ContentControlsWrapInput,
+  ContentControlsUnwrapInput,
+  ContentControlsDeleteInput,
+  ContentControlsCopyInput,
+  ContentControlsMoveInput,
+  ContentControlsPatchInput,
+  ContentControlsSetLockModeInput,
+  ContentControlsSetTypeInput,
+  ContentControlsGetContentInput,
+  ContentControlsGetContentResult,
+  ContentControlsReplaceContentInput,
+  ContentControlsClearContentInput,
+  ContentControlsAppendContentInput,
+  ContentControlsPrependContentInput,
+  ContentControlsInsertBeforeInput,
+  ContentControlsInsertAfterInput,
+  ContentControlsGetBindingInput,
+  ContentControlBinding,
+  ContentControlsSetBindingInput,
+  ContentControlsClearBindingInput,
+  ContentControlsGetRawPropertiesInput,
+  ContentControlsGetRawPropertiesResult,
+  ContentControlsPatchRawPropertiesInput,
+  ContentControlsValidateWordCompatibilityInput,
+  ContentControlsValidateWordCompatibilityResult,
+  ContentControlsNormalizeWordCompatibilityInput,
+  ContentControlsNormalizeTagPayloadInput,
+  ContentControlsTextSetMultilineInput,
+  ContentControlsTextSetValueInput,
+  ContentControlsTextClearValueInput,
+  ContentControlsDateSetValueInput,
+  ContentControlsDateClearValueInput,
+  ContentControlsDateSetDisplayFormatInput,
+  ContentControlsDateSetDisplayLocaleInput,
+  ContentControlsDateSetStorageFormatInput,
+  ContentControlsDateSetCalendarInput,
+  ContentControlsCheckboxGetStateInput,
+  ContentControlsCheckboxGetStateResult,
+  ContentControlsCheckboxSetStateInput,
+  ContentControlsCheckboxToggleInput,
+  ContentControlsCheckboxSetSymbolPairInput,
+  ContentControlsChoiceListGetItemsInput,
+  ContentControlsChoiceListGetItemsResult,
+  ContentControlsChoiceListSetItemsInput,
+  ContentControlsChoiceListSetSelectedInput,
+  ContentControlsRepeatingSectionListItemsInput,
+  ContentControlsRepeatingSectionListItemsResult,
+  ContentControlsRepeatingSectionInsertItemBeforeInput,
+  ContentControlsRepeatingSectionInsertItemAfterInput,
+  ContentControlsRepeatingSectionCloneItemInput,
+  ContentControlsRepeatingSectionDeleteItemInput,
+  ContentControlsRepeatingSectionSetAllowInsertDeleteInput,
+  ContentControlsGroupWrapInput,
+  ContentControlsGroupUngroupInput,
+  CreateContentControlInput,
+} from '../content-controls/content-controls.types.js';
 
 type FormatInlineAliasOperationRegistry = {
   [K in InlineRunPatchKey as `format.${K}`]: {
@@ -267,22 +479,26 @@ type FormatInlineAliasOperationRegistry = {
 
 export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- Singleton reads ---
-  find: { input: Selector | Query; options: FindOptions; output: FindOutput };
-  getNode: { input: NodeAddress; options: never; output: NodeInfo };
-  getNodeById: { input: GetNodeByIdInput; options: never; output: NodeInfo };
+  get: { input: SDGetInput; options: never; output: SDDocument };
+  find: { input: SDFindInput; options: never; output: SDFindResult };
+  getNode: { input: NodeAddress; options: never; output: SDNodeResult };
+  getNodeById: { input: GetNodeByIdInput; options: never; output: SDNodeResult };
   getText: { input: GetTextInput; options: never; output: string };
   getMarkdown: { input: GetMarkdownInput; options: never; output: string };
   getHtml: { input: GetHtmlInput; options: never; output: string };
+  markdownToFragment: { input: MarkdownToFragmentInput; options: never; output: SDMarkdownToFragmentResult };
   info: { input: InfoInput; options: never; output: DocumentInfo };
 
   // --- Singleton mutations ---
   clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };
-  insert: { input: InsertInput; options: MutationOptions; output: TextMutationReceipt };
-  replace: { input: ReplaceInput; options: MutationOptions; output: TextMutationReceipt };
+  insert: { input: InsertInput; options: MutationOptions; output: SDMutationReceipt };
+  replace: { input: ReplaceInput; options: MutationOptions; output: SDMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- blocks.* ---
+  'blocks.list': { input: BlocksListInput | undefined; options: never; output: BlocksListResult };
   'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
+  'blocks.deleteRange': { input: BlocksDeleteRangeInput; options: MutationOptions; output: BlocksDeleteRangeResult };
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
@@ -561,6 +777,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };
 
+  // --- ranges.* ---
+  'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
+
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };
   'mutations.apply': { input: MutationsApplyInput; options: never; output: PlanReceipt };
@@ -722,6 +941,478 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'hyperlinks.insert': { input: HyperlinksInsertInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.patch': { input: HyperlinksPatchInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.remove': { input: HyperlinksRemoveInput; options: MutationOptions; output: HyperlinkMutationResult };
+
+  // --- headerFooters.* ---
+  'headerFooters.list': {
+    input: HeaderFootersListQuery | undefined;
+    options: never;
+    output: HeaderFootersListResult;
+  };
+  'headerFooters.get': { input: HeaderFootersGetInput; options: never; output: HeaderFooterSlotEntry };
+  'headerFooters.resolve': { input: HeaderFootersResolveInput; options: never; output: HeaderFooterResolveResult };
+  'headerFooters.refs.set': {
+    input: HeaderFootersRefsSetInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.refs.clear': {
+    input: HeaderFootersRefsClearInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.refs.setLinkedToPrevious': {
+    input: HeaderFootersRefsSetLinkedToPreviousInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.parts.list': {
+    input: HeaderFootersPartsListQuery | undefined;
+    options: never;
+    output: HeaderFootersPartsListResult;
+  };
+  'headerFooters.parts.create': {
+    input: HeaderFootersPartsCreateInput;
+    options: MutationOptions;
+    output: HeaderFooterPartsMutationResult;
+  };
+  'headerFooters.parts.delete': {
+    input: HeaderFootersPartsDeleteInput;
+    options: MutationOptions;
+    output: HeaderFooterPartsMutationResult;
+  };
+
+  // --- create.contentControl ---
+  'create.contentControl': {
+    input: CreateContentControlInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.* core CRUD + discovery ---
+  'contentControls.list': {
+    input: ContentControlsListQuery | undefined;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.get': { input: ContentControlsGetInput; options: never; output: ContentControlInfo };
+  'contentControls.listInRange': {
+    input: ContentControlsListInRangeInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.selectByTag': {
+    input: ContentControlsSelectByTagInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.selectByTitle': {
+    input: ContentControlsSelectByTitleInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.listChildren': {
+    input: ContentControlsListChildrenInput;
+    options: never;
+    output: ContentControlsListResult;
+  };
+  'contentControls.getParent': {
+    input: ContentControlsGetParentInput;
+    options: never;
+    output: ContentControlInfo | null;
+  };
+  'contentControls.wrap': {
+    input: ContentControlsWrapInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.unwrap': {
+    input: ContentControlsUnwrapInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.delete': {
+    input: ContentControlsDeleteInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.copy': {
+    input: ContentControlsCopyInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.move': {
+    input: ContentControlsMoveInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.patch': {
+    input: ContentControlsPatchInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.setLockMode': {
+    input: ContentControlsSetLockModeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.setType': {
+    input: ContentControlsSetTypeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.getContent': {
+    input: ContentControlsGetContentInput;
+    options: never;
+    output: ContentControlsGetContentResult;
+  };
+  'contentControls.replaceContent': {
+    input: ContentControlsReplaceContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.clearContent': {
+    input: ContentControlsClearContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.appendContent': {
+    input: ContentControlsAppendContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.prependContent': {
+    input: ContentControlsPrependContentInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.insertBefore': {
+    input: ContentControlsInsertBeforeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.insertAfter': {
+    input: ContentControlsInsertAfterInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.* data binding + raw ---
+  'contentControls.getBinding': {
+    input: ContentControlsGetBindingInput;
+    options: never;
+    output: ContentControlBinding | null;
+  };
+  'contentControls.setBinding': {
+    input: ContentControlsSetBindingInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.clearBinding': {
+    input: ContentControlsClearBindingInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.getRawProperties': {
+    input: ContentControlsGetRawPropertiesInput;
+    options: never;
+    output: ContentControlsGetRawPropertiesResult;
+  };
+  'contentControls.patchRawProperties': {
+    input: ContentControlsPatchRawPropertiesInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.validateWordCompatibility': {
+    input: ContentControlsValidateWordCompatibilityInput;
+    options: never;
+    output: ContentControlsValidateWordCompatibilityResult;
+  };
+  'contentControls.normalizeWordCompatibility': {
+    input: ContentControlsNormalizeWordCompatibilityInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.normalizeTagPayload': {
+    input: ContentControlsNormalizeTagPayloadInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.text.* ---
+  'contentControls.text.setMultiline': {
+    input: ContentControlsTextSetMultilineInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.text.setValue': {
+    input: ContentControlsTextSetValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.text.clearValue': {
+    input: ContentControlsTextClearValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.date.* ---
+  'contentControls.date.setValue': {
+    input: ContentControlsDateSetValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.clearValue': {
+    input: ContentControlsDateClearValueInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setDisplayFormat': {
+    input: ContentControlsDateSetDisplayFormatInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setDisplayLocale': {
+    input: ContentControlsDateSetDisplayLocaleInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setStorageFormat': {
+    input: ContentControlsDateSetStorageFormatInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.date.setCalendar': {
+    input: ContentControlsDateSetCalendarInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.checkbox.* ---
+  'contentControls.checkbox.getState': {
+    input: ContentControlsCheckboxGetStateInput;
+    options: never;
+    output: ContentControlsCheckboxGetStateResult;
+  };
+  'contentControls.checkbox.setState': {
+    input: ContentControlsCheckboxSetStateInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.checkbox.toggle': {
+    input: ContentControlsCheckboxToggleInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.checkbox.setSymbolPair': {
+    input: ContentControlsCheckboxSetSymbolPairInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.choiceList.* ---
+  'contentControls.choiceList.getItems': {
+    input: ContentControlsChoiceListGetItemsInput;
+    options: never;
+    output: ContentControlsChoiceListGetItemsResult;
+  };
+  'contentControls.choiceList.setItems': {
+    input: ContentControlsChoiceListSetItemsInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.choiceList.setSelected': {
+    input: ContentControlsChoiceListSetSelectedInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.repeatingSection.* ---
+  'contentControls.repeatingSection.listItems': {
+    input: ContentControlsRepeatingSectionListItemsInput;
+    options: never;
+    output: ContentControlsRepeatingSectionListItemsResult;
+  };
+  'contentControls.repeatingSection.insertItemBefore': {
+    input: ContentControlsRepeatingSectionInsertItemBeforeInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.insertItemAfter': {
+    input: ContentControlsRepeatingSectionInsertItemAfterInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.cloneItem': {
+    input: ContentControlsRepeatingSectionCloneItemInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.deleteItem': {
+    input: ContentControlsRepeatingSectionDeleteItemInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.repeatingSection.setAllowInsertDelete': {
+    input: ContentControlsRepeatingSectionSetAllowInsertDeleteInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- contentControls.group.* ---
+  'contentControls.group.wrap': {
+    input: ContentControlsGroupWrapInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+  'contentControls.group.ungroup': {
+    input: ContentControlsGroupUngroupInput;
+    options: MutationOptions;
+    output: ContentControlMutationResult;
+  };
+
+  // --- bookmarks.* ---
+  'bookmarks.list': { input: BookmarkListInput | undefined; options: never; output: BookmarksListResult };
+  'bookmarks.get': { input: BookmarkGetInput; options: never; output: BookmarkInfo };
+  'bookmarks.insert': { input: BookmarkInsertInput; options: MutationOptions; output: BookmarkMutationResult };
+  'bookmarks.rename': { input: BookmarkRenameInput; options: MutationOptions; output: BookmarkMutationResult };
+  'bookmarks.remove': { input: BookmarkRemoveInput; options: MutationOptions; output: BookmarkMutationResult };
+
+  // --- footnotes.* ---
+  'footnotes.list': { input: FootnoteListInput | undefined; options: never; output: FootnotesListResult };
+  'footnotes.get': { input: FootnoteGetInput; options: never; output: FootnoteInfo };
+  'footnotes.insert': { input: FootnoteInsertInput; options: MutationOptions; output: FootnoteMutationResult };
+  'footnotes.update': { input: FootnoteUpdateInput; options: MutationOptions; output: FootnoteMutationResult };
+  'footnotes.remove': { input: FootnoteRemoveInput; options: MutationOptions; output: FootnoteMutationResult };
+  'footnotes.configure': { input: FootnoteConfigureInput; options: MutationOptions; output: FootnoteConfigResult };
+
+  // --- crossRefs.* ---
+  'crossRefs.list': { input: CrossRefListInput | undefined; options: never; output: CrossRefsListResult };
+  'crossRefs.get': { input: CrossRefGetInput; options: never; output: CrossRefInfo };
+  'crossRefs.insert': { input: CrossRefInsertInput; options: MutationOptions; output: CrossRefMutationResult };
+  'crossRefs.rebuild': { input: CrossRefRebuildInput; options: MutationOptions; output: CrossRefMutationResult };
+  'crossRefs.remove': { input: CrossRefRemoveInput; options: MutationOptions; output: CrossRefMutationResult };
+
+  // --- index.* ---
+  'index.list': { input: IndexListInput | undefined; options: never; output: IndexListResult };
+  'index.get': { input: IndexGetInput; options: never; output: IndexInfo };
+  'index.insert': { input: IndexInsertInput; options: MutationOptions; output: IndexMutationResult };
+  'index.configure': { input: IndexConfigureInput; options: MutationOptions; output: IndexMutationResult };
+  'index.rebuild': { input: IndexRebuildInput; options: MutationOptions; output: IndexMutationResult };
+  'index.remove': { input: IndexRemoveInput; options: MutationOptions; output: IndexMutationResult };
+
+  // --- index.entries.* ---
+  'index.entries.list': { input: IndexEntryListInput | undefined; options: never; output: IndexEntryListResult };
+  'index.entries.get': { input: IndexEntryGetInput; options: never; output: IndexEntryInfo };
+  'index.entries.insert': { input: IndexEntryInsertInput; options: MutationOptions; output: IndexEntryMutationResult };
+  'index.entries.update': { input: IndexEntryUpdateInput; options: MutationOptions; output: IndexEntryMutationResult };
+  'index.entries.remove': { input: IndexEntryRemoveInput; options: MutationOptions; output: IndexEntryMutationResult };
+
+  // --- captions.* ---
+  'captions.list': { input: CaptionListInput | undefined; options: never; output: CaptionsListResult };
+  'captions.get': { input: CaptionGetInput; options: never; output: CaptionInfo };
+  'captions.insert': { input: CaptionInsertInput; options: MutationOptions; output: CaptionMutationResult };
+  'captions.update': { input: CaptionUpdateInput; options: MutationOptions; output: CaptionMutationResult };
+  'captions.remove': { input: CaptionRemoveInput; options: MutationOptions; output: CaptionMutationResult };
+  'captions.configure': { input: CaptionConfigureInput; options: MutationOptions; output: CaptionConfigResult };
+
+  // --- fields.* ---
+  'fields.list': { input: FieldListInput | undefined; options: never; output: FieldsListResult };
+  'fields.get': { input: FieldGetInput; options: never; output: FieldInfo };
+  'fields.insert': { input: FieldInsertInput; options: MutationOptions; output: FieldMutationResult };
+  'fields.rebuild': { input: FieldRebuildInput; options: MutationOptions; output: FieldMutationResult };
+  'fields.remove': { input: FieldRemoveInput; options: MutationOptions; output: FieldMutationResult };
+
+  // --- citations.* ---
+  'citations.list': { input: CitationListInput | undefined; options: never; output: CitationsListResult };
+  'citations.get': { input: CitationGetInput; options: never; output: CitationInfo };
+  'citations.insert': { input: CitationInsertInput; options: MutationOptions; output: CitationMutationResult };
+  'citations.update': { input: CitationUpdateInput; options: MutationOptions; output: CitationMutationResult };
+  'citations.remove': { input: CitationRemoveInput; options: MutationOptions; output: CitationMutationResult };
+
+  // --- citations.sources.* ---
+  'citations.sources.list': {
+    input: CitationSourceListInput | undefined;
+    options: never;
+    output: CitationSourcesListResult;
+  };
+  'citations.sources.get': { input: CitationSourceGetInput; options: never; output: CitationSourceInfo };
+  'citations.sources.insert': {
+    input: CitationSourceInsertInput;
+    options: MutationOptions;
+    output: CitationSourceMutationResult;
+  };
+  'citations.sources.update': {
+    input: CitationSourceUpdateInput;
+    options: MutationOptions;
+    output: CitationSourceMutationResult;
+  };
+  'citations.sources.remove': {
+    input: CitationSourceRemoveInput;
+    options: MutationOptions;
+    output: CitationSourceMutationResult;
+  };
+
+  // --- citations.bibliography.* ---
+  'citations.bibliography.get': { input: BibliographyGetInput; options: never; output: BibliographyInfo };
+  'citations.bibliography.insert': {
+    input: BibliographyInsertInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+  'citations.bibliography.rebuild': {
+    input: BibliographyRebuildInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+  'citations.bibliography.configure': {
+    input: BibliographyConfigureInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+  'citations.bibliography.remove': {
+    input: BibliographyRemoveInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+
+  // --- authorities.* ---
+  'authorities.list': { input: AuthoritiesListInput | undefined; options: never; output: AuthoritiesListResult };
+  'authorities.get': { input: AuthoritiesGetInput; options: never; output: AuthoritiesInfo };
+  'authorities.insert': { input: AuthoritiesInsertInput; options: MutationOptions; output: AuthoritiesMutationResult };
+  'authorities.configure': {
+    input: AuthoritiesConfigureInput;
+    options: MutationOptions;
+    output: AuthoritiesMutationResult;
+  };
+  'authorities.rebuild': {
+    input: AuthoritiesRebuildInput;
+    options: MutationOptions;
+    output: AuthoritiesMutationResult;
+  };
+  'authorities.remove': { input: AuthoritiesRemoveInput; options: MutationOptions; output: AuthoritiesMutationResult };
+
+  // --- authorities.entries.* ---
+  'authorities.entries.list': {
+    input: AuthorityEntryListInput | undefined;
+    options: never;
+    output: AuthorityEntryListResult;
+  };
+  'authorities.entries.get': { input: AuthorityEntryGetInput; options: never; output: AuthorityEntryInfo };
+  'authorities.entries.insert': {
+    input: AuthorityEntryInsertInput;
+    options: MutationOptions;
+    output: AuthorityEntryMutationResult;
+  };
+  'authorities.entries.update': {
+    input: AuthorityEntryUpdateInput;
+    options: MutationOptions;
+    output: AuthorityEntryMutationResult;
+  };
+  'authorities.entries.remove': {
+    input: AuthorityEntryRemoveInput;
+    options: MutationOptions;
+    output: AuthorityEntryMutationResult;
+  };
 }
 
 // --- Bidirectional completeness checks ---

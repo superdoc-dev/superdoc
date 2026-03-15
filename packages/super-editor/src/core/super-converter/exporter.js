@@ -22,6 +22,12 @@ import {
 import { translator as wPermStartTranslator } from './v3/handlers/w/perm-start/index.js';
 import { translator as wPermEndTranslator } from './v3/handlers/w/perm-end/index.js';
 import { translator as sdPageReferenceTranslator } from '@converter/v3/handlers/sd/pageReference';
+import { translator as sdCrossReferenceTranslator } from '@converter/v3/handlers/sd/crossReference/crossReference-translator.js';
+import { translator as sdCitationTranslator } from '@converter/v3/handlers/sd/citation/citation-translator.js';
+import { translator as sdBibliographyTranslator } from '@converter/v3/handlers/sd/bibliography/bibliography-translator.js';
+import { translator as sdAuthorityEntryTranslator } from '@converter/v3/handlers/sd/authorityEntry/authorityEntry-translator.js';
+import { translator as sdTableOfAuthoritiesTranslator } from '@converter/v3/handlers/sd/tableOfAuthorities/tableOfAuthorities-translator.js';
+import { translator as sdSequenceFieldTranslator } from '@converter/v3/handlers/sd/sequenceField/sequenceField-translator.js';
 import { translator as sdTableOfContentsTranslator } from '@converter/v3/handlers/sd/tableOfContents';
 import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index';
 import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
@@ -185,6 +191,7 @@ export function exportSchemaToJson(params) {
     contentBlock: pictTranslator,
     vectorShape: translateVectorShape,
     shapeGroup: translateShapeGroup,
+    chart: wDrawingNodeTranslator,
     structuredContent: wSdtNodeTranslator,
     structuredContentBlock: wSdtNodeTranslator,
     documentPartObject: wSdtNodeTranslator,
@@ -192,6 +199,12 @@ export function exportSchemaToJson(params) {
     'page-number': sdAutoPageNumberTranslator,
     'total-page-number': sdTotalPageNumberTranslator,
     pageReference: sdPageReferenceTranslator,
+    crossReference: sdCrossReferenceTranslator,
+    citation: sdCitationTranslator,
+    bibliography: sdBibliographyTranslator,
+    authorityEntry: sdAuthorityEntryTranslator,
+    tableOfAuthorities: sdTableOfAuthoritiesTranslator,
+    sequenceField: sdSequenceFieldTranslator,
     tableOfContents: sdTableOfContentsTranslator,
     index: sdIndexTranslator,
     indexEntry: sdIndexEntryTranslator,

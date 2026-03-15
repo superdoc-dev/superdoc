@@ -1,8 +1,8 @@
 <script setup>
-import { computed, ref, h, onMounted, watch, getCurrentInstance } from 'vue';
-import { NDropdown } from 'naive-ui';
+import { computed, ref, onMounted, watch } from 'vue';
 import { superdocIcons } from '@superdoc/icons.js';
 import { useUiFontFamily } from '@superdoc/composables/useUiFontFamily.js';
+import CommentsDropdown from './CommentsDropdown.vue';
 
 const emit = defineEmits(['select']);
 const props = defineProps({
@@ -18,24 +18,16 @@ const props = defineProps({
 
 const { uiFontFamily } = useUiFontFamily();
 
-const renderIcon = (icon) => {
-  return () => {
-    return h('div', { innerHTML: icon, class: 'internal-dropdown__item-icon' });
-  };
-};
-
 const options = [
   {
     label: 'Internal',
     key: 'internal',
-    icon: renderIcon(superdocIcons.internal),
     iconString: superdocIcons.internal,
     backgroundColor: '#CDE6E6',
   },
   {
     label: 'External',
     key: 'external',
-    icon: renderIcon(superdocIcons.external),
     iconString: superdocIcons.external,
     backgroundColor: '#F5CFDA',
   },
@@ -85,8 +77,7 @@ onMounted(() => {
 
 <template>
   <div class="internal-dropdown" :style="getStyle">
-    <n-dropdown
-      trigger="click"
+    <CommentsDropdown
       :options="options"
       @select="handleSelect($event)"
       :disabled="isDisabled"
@@ -97,7 +88,7 @@ onMounted(() => {
         <div class="option-state">{{ getState }}</div>
         <div class="dropdown-caret" v-html="superdocIcons.caretDown"></div>
       </div>
-    </n-dropdown>
+    </CommentsDropdown>
   </div>
 </template>
 
@@ -148,30 +139,12 @@ onMounted(() => {
 
 .internal-dropdown {
   transition: all 250ms ease;
-  display: inline-block;
+  display: inline-flex;
   cursor: pointer;
   border-radius: 50px;
   padding: 2px 8px;
 }
 .internal-dropdown:hover {
   background-color: #f3f3f5;
-}
-</style>
-
-<style>
-.internal-dropdown__item-icon {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-}
-
-.internal-dropdown__item-icon svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  fill: currentColor;
 }
 </style>

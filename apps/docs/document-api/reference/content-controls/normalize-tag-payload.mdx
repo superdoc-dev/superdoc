@@ -1,0 +1,309 @@
+---
+title: contentControls.normalizeTagPayload
+sidebarTitle: contentControls.normalizeTagPayload
+description: Normalize a content control tag between plain-string and JSON-encoded formats.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Normalize a content control tag between plain-string and JSON-encoded formats.
+
+- Operation ID: `contentControls.normalizeTagPayload`
+- API member path: `editor.doc.contentControls.normalizeTagPayload(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ContentControlMutationResult; reports NO_OP if already normalized.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(nodeType="sdt") | yes |  |
+| `target.kind` | enum | yes | `"block"`, `"inline"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"sdt"` | yes | Constant: `"sdt"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "sdt"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contentControl` | object(nodeType="sdt") | yes |  |
+| `contentControl.kind` | enum | yes | `"block"`, `"inline"` |
+| `contentControl.nodeId` | string | yes |  |
+| `contentControl.nodeType` | `"sdt"` | yes | Constant: `"sdt"` |
+| `success` | `true` | yes | Constant: `true` |
+| `updatedRef` | object(nodeType="sdt") | no |  |
+| `updatedRef.kind` | enum | no | `"block"`, `"inline"` |
+| `updatedRef.nodeId` | string | no |  |
+| `updatedRef.nodeType` | `"sdt"` | no | Constant: `"sdt"` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | ReceiptFailure | yes | ReceiptFailure |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "contentControl": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "sdt"
+  },
+  "success": true,
+  "updatedRef": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "sdt"
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_INPUT`
+- `REVISION_MISMATCH`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block",
+            "inline"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "sdt"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentControl": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "block",
+                "inline"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "sdt"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        },
+        "updatedRef": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "block",
+                "inline"
+              ]
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "sdt"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "success",
+        "contentControl"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "$ref": "#/$defs/ReceiptFailure"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "contentControl": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block",
+            "inline"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "sdt"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    },
+    "updatedRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block",
+            "inline"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "sdt"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "success",
+    "contentControl"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "$ref": "#/$defs/ReceiptFailure"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

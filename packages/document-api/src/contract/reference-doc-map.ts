@@ -116,6 +116,61 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Hyperlink discovery, creation, and metadata management.',
     pagePath: 'hyperlinks/index.mdx',
   },
+  headerFooters: {
+    title: 'Headers & Footers',
+    description: 'Structure, references, and part lifecycle for document headers and footers.',
+    pagePath: 'header-footers/index.mdx',
+  },
+  contentControls: {
+    title: 'Content Controls',
+    description: 'Content control (SDT) discovery, mutation, typed controls, and Word compatibility.',
+    pagePath: 'content-controls/index.mdx',
+  },
+  bookmarks: {
+    title: 'Bookmarks',
+    description: 'Named bookmark inspection, insertion, renaming, and removal.',
+    pagePath: 'bookmarks/index.mdx',
+  },
+  footnotes: {
+    title: 'Footnotes',
+    description: 'Footnote and endnote lifecycle and numbering configuration.',
+    pagePath: 'footnotes/index.mdx',
+  },
+  crossRefs: {
+    title: 'Cross-References',
+    description: 'Cross-reference field inspection, insertion, rebuild, and removal.',
+    pagePath: 'cross-refs/index.mdx',
+  },
+  index: {
+    title: 'Index',
+    description: 'Index (TABLE OF AUTHORITIES / INDEX field) lifecycle and XE entry operations.',
+    pagePath: 'index/index.mdx',
+  },
+  captions: {
+    title: 'Captions',
+    description: 'Caption (SEQ field) inspection, insertion, update, removal, and numbering configuration.',
+    pagePath: 'captions/index.mdx',
+  },
+  fields: {
+    title: 'Fields',
+    description: 'Raw field code inspection, insertion, rebuild, and removal.',
+    pagePath: 'fields/index.mdx',
+  },
+  citations: {
+    title: 'Citations',
+    description: 'Citation, source, and bibliography lifecycle operations.',
+    pagePath: 'citations/index.mdx',
+  },
+  authorities: {
+    title: 'Table of Authorities',
+    description: 'Table of authorities lifecycle and TA entry operations.',
+    pagePath: 'authorities/index.mdx',
+  },
+  ranges: {
+    title: 'Ranges',
+    description: 'Deterministic range construction from explicit document anchors.',
+    pagePath: 'ranges/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

@@ -1,6 +1,6 @@
 import type { NodeAddress, NodeKind, NodeType } from './base.js';
 import type { NodeInfo } from './node.js';
-import type { Range, TextAddress } from './address.js';
+import type { Range, TextAddress, SelectionTarget } from './address.js';
 import type { DiscoveryOutput } from './discovery.js';
 
 export interface TextSelector {
@@ -62,6 +62,13 @@ export interface MatchContext {
   address: NodeAddress;
   snippet: string;
   highlightRange: Range;
+  /**
+   * Canonical mutation-ready selection target for this text match.
+   *
+   * Built from the first and last text ranges. Can be passed directly to
+   * `doc.delete({ target })`, `doc.replace({ target, text })`, etc.
+   */
+  target?: SelectionTarget;
   /**
    * Text ranges matching the query, expressed as block-relative offsets.
    * For cross-paragraph matches, this will include one range per block.

@@ -44,7 +44,6 @@ const DRY_RUN_PARAM: CliOperationParamSpec = {
   kind: 'flag',
   flag: 'dry-run',
   type: 'boolean',
-  agentVisible: false,
 };
 const CHANGE_MODE_PARAM: CliOperationParamSpec = {
   name: 'changeMode',
@@ -58,7 +57,6 @@ const EXPECTED_REVISION_PARAM: CliOperationParamSpec = {
   kind: 'flag',
   flag: 'expected-revision',
   type: 'number',
-  agentVisible: false,
 };
 const USER_NAME_PARAM: CliOperationParamSpec = {
   name: 'userName',
@@ -78,7 +76,12 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'expectedRevision', 'dryRun']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
+
+type ObjectSchemaVariant = {
+  properties: Record<string, JsonSchema>;
+  required: Set<string>;
+};
 
 function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): JsonSchema {
   if (schema.$ref && $defs) {
@@ -90,6 +93,108 @@ function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): Jso
     }
   }
   return schema;
+}
+
+function hasObjectShape(schema: JsonSchema): boolean {
+  return schema.type === 'object' || schema.properties != null || schema.required != null;
+}
+
+function cloneVariant(variant: ObjectSchemaVariant): ObjectSchemaVariant {
+  return {
+    properties: { ...variant.properties },
+    required: new Set(variant.required),
+  };
+}
+
+function directObjectVariant(schema: JsonSchema): ObjectSchemaVariant {
+  return {
+    properties: {
+      ...(((schema.properties as Record<string, JsonSchema> | undefined) ?? {}) as Record<string, JsonSchema>),
+    },
+    required: new Set<string>(((schema.required as string[] | undefined) ?? []) as string[]),
+  };
+}
+
+function schemasEqual(left: JsonSchema, right: JsonSchema): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergePropertySchemas(left: JsonSchema, right: JsonSchema): JsonSchema {
+  if (schemasEqual(left, right)) return left;
+
+  const variants: JsonSchema[] = [];
+  const appendVariant = (schema: JsonSchema) => {
+    if (variants.some((candidate) => schemasEqual(candidate, schema))) return;
+    variants.push(schema);
+  };
+
+  if (Array.isArray(left.oneOf)) {
+    for (const entry of left.oneOf as JsonSchema[]) appendVariant(entry);
+  } else {
+    appendVariant(left);
+  }
+
+  if (Array.isArray(right.oneOf)) {
+    for (const entry of right.oneOf as JsonSchema[]) appendVariant(entry);
+  } else {
+    appendVariant(right);
+  }
+
+  return variants.length === 1 ? variants[0]! : { oneOf: variants };
+}
+
+function mergeObjectVariants(left: ObjectSchemaVariant, right: ObjectSchemaVariant): ObjectSchemaVariant {
+  const merged = cloneVariant(left);
+  for (const [name, schema] of Object.entries(right.properties)) {
+    const existing = merged.properties[name];
+    merged.properties[name] = existing ? mergePropertySchemas(existing, schema) : schema;
+  }
+  for (const key of right.required) {
+    merged.required.add(key);
+  }
+  return merged;
+}
+
+function extractObjectSchemaVariants(rawSchema: JsonSchema, $defs?: Record<string, JsonSchema>): ObjectSchemaVariant[] {
+  const schema = resolveRef(rawSchema, $defs);
+  const directVariants = hasObjectShape(schema) ? [directObjectVariant(schema)] : [];
+  let variants = directVariants.length > 0 ? directVariants.map(cloneVariant) : [];
+
+  if (Array.isArray(schema.allOf)) {
+    variants = variants.length > 0 ? variants : [{ properties: {}, required: new Set<string>() }];
+    for (const member of schema.allOf as JsonSchema[]) {
+      const memberVariants = extractObjectSchemaVariants(member, $defs);
+      if (memberVariants.length === 0) continue;
+
+      const nextVariants: ObjectSchemaVariant[] = [];
+      for (const base of variants) {
+        for (const part of memberVariants) {
+          nextVariants.push(mergeObjectVariants(base, part));
+        }
+      }
+      variants = nextVariants;
+    }
+  }
+
+  const alternativeKeyword = Array.isArray(schema.oneOf) ? 'oneOf' : Array.isArray(schema.anyOf) ? 'anyOf' : null;
+  if (alternativeKeyword) {
+    const branches = (schema[alternativeKeyword] as JsonSchema[]).flatMap((member) =>
+      extractObjectSchemaVariants(member, $defs),
+    );
+    if (branches.length > 0) {
+      const baseVariants = variants.length > 0 ? variants : [{ properties: {}, required: new Set<string>() }];
+      const nextVariants: ObjectSchemaVariant[] = [];
+      for (const base of baseVariants) {
+        for (const branch of branches) {
+          nextVariants.push(mergeObjectVariants(base, branch));
+        }
+      }
+      variants = nextVariants;
+    }
+  }
+
+  if (variants.length > 0) return variants;
+  return hasObjectShape(schema) ? [directObjectVariant(schema)] : [];
 }
 
 function schemaToParamType(schema: JsonSchema, $defs?: Record<string, JsonSchema>): CliOperationParamSpec['type'] {
@@ -169,8 +274,26 @@ function deriveParamsFromInputSchema(
 } {
   const params: CliOperationParamSpec[] = [];
   const positionalParams: string[] = [];
-  const properties = (inputSchema.properties ?? {}) as Record<string, JsonSchema>;
-  const required = new Set<string>((inputSchema.required as string[]) ?? []);
+  const variants = extractObjectSchemaVariants(inputSchema, $defs);
+  const properties: Record<string, JsonSchema> = {};
+  const requiredCounts = new Map<string, number>();
+
+  for (const variant of variants) {
+    for (const [name, schema] of Object.entries(variant.properties)) {
+      const existing = properties[name];
+      properties[name] = existing ? mergePropertySchemas(existing, schema) : schema;
+    }
+    for (const name of variant.required) {
+      requiredCounts.set(name, (requiredCounts.get(name) ?? 0) + 1);
+    }
+  }
+
+  const required = new Set<string>();
+  for (const [name] of Object.entries(properties)) {
+    if (variants.length > 0 && requiredCounts.get(name) === variants.length) {
+      required.add(name);
+    }
+  }
 
   for (const [name, rawPropSchema] of Object.entries(properties)) {
     const propSchema = resolveRef(rawPropSchema, $defs);
@@ -416,9 +539,18 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
+  'doc.blocks.list': [
+    { name: 'offset', kind: 'flag', flag: 'offset', type: 'number' },
+    { name: 'limit', kind: 'flag', flag: 'limit', type: 'number' },
+    { name: 'nodeTypes', kind: 'jsonFlag', flag: 'node-types-json', type: 'json' },
+  ],
   'doc.blocks.delete': [
     { name: 'nodeType', kind: 'flag', flag: 'node-type', type: 'string' },
     { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+  ],
+  'doc.blocks.deleteRange': [
+    { name: 'start', kind: 'jsonFlag', flag: 'start-json', type: 'json' },
+    { name: 'end', kind: 'jsonFlag', flag: 'end-json', type: 'json' },
   ],
   'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],

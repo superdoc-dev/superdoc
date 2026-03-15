@@ -202,12 +202,12 @@ describe('claimBootstrap', () => {
     const ydoc = new YDoc();
     const metaMap = ydoc.getMap('meta');
 
+    // claimBootstrap (with jitter=0) executes synchronously until
+    // `await sleep(settlingMs)`, so the marker is already written
+    // when control returns here. Deleting it simulates another
+    // process removing the key during the settling window.
     const promise = claimBootstrap(ydoc, 20, 0);
-
-    // Another process deletes the bootstrap key during settling
-    setTimeout(() => {
-      metaMap.delete('bootstrap');
-    }, 2);
+    metaMap.delete('bootstrap');
 
     const result = await promise;
     expect(result.granted).toBe(false);

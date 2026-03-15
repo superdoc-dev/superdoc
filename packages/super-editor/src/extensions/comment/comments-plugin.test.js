@@ -1312,3 +1312,62 @@ describe('SD-1940: no recursive dispatch from apply() on selection change', () =
     expect(dispatchCount).toBeLessThanOrEqual(3);
   });
 });
+
+describe('Headless mode plugin behavior', () => {
+  it('creates a state-only plugin in headless mode (no props or view)', () => {
+    const editor = {
+      options: { isHeadless: true, comments: {} },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0].spec.props).toBeUndefined();
+    expect(plugins[0].spec.view).toBeUndefined();
+    // State spec should exist
+    expect(plugins[0].spec.state).toBeDefined();
+    expect(plugins[0].spec.state.init).toBeDefined();
+    expect(plugins[0].spec.state.apply).toBeDefined();
+  });
+
+  it('creates a full plugin in browser mode (with props and view)', () => {
+    const editor = {
+      options: { isHeadless: false, comments: {} },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0].spec.props).toBeDefined();
+    expect(plugins[0].spec.view).toBeDefined();
+  });
+
+  it('provides valid plugin state via CommentsPluginKey in headless mode', () => {
+    const schema = createCommentSchema();
+    const editor = {
+      options: { isHeadless: true, comments: { highlightColors: { external: '#aaa', internal: '#bbb' } } },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Hello')])]);
+    const state = EditorState.create({ schema, doc, plugins });
+    const pluginState = CommentsPluginKey.getState(state);
+
+    expect(pluginState).toBeDefined();
+    expect(pluginState.trackedChanges).toEqual({});
+    expect(pluginState.activeThreadId).toBeNull();
+    expect(pluginState.allCommentPositions).toEqual({});
+    expect(pluginState.externalColor).toBe('#aaa');
+    expect(pluginState.internalColor).toBe('#bbb');
+  });
+});

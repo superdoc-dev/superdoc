@@ -65,7 +65,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
     description: 'Apply strikethrough formatting to a text range.',
     category: 'format',
     mutates: true,
-    examples: ['superdoc format strikethrough --blockId p1 --start 0 --end 5'],
+    examples: ['superdoc format strikethrough --block-id p1 --start 0 --end 5'],
   },
   // --- Track-changes review helpers (route to trackChanges.decide) ---
   {
@@ -116,9 +116,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
     description: 'Add a new comment thread anchored to a text range.',
     category: 'comments',
     mutates: true,
-    examples: [
-      'superdoc comments add --target \'{"kind":"text","blockId":"p1","range":{"start":0,"end":5}}\' --text "Review this"',
-    ],
+    examples: ['superdoc comments add --block-id p1 --start 0 --end 5 --text "Review this"'],
   },
   {
     tokens: ['comments', 'reply'],
@@ -146,7 +144,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
     category: 'comments',
     mutates: true,
     examples: [
-      'superdoc comments move --id c1 --target \'{"kind":"text","blockId":"p2","range":{"start":0,"end":5}}\'',
+      'superdoc comments move --id c1 --target-json \'{"kind":"text","blockId":"p2","range":{"start":0,"end":5}}\'',
     ],
   },
   {

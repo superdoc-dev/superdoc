@@ -30,31 +30,112 @@ Stateful editing flow (recommended for multi-step edits):
 
 ```bash
 superdoc open ./contract.docx
-superdoc find --type text --pattern "termination"
-superdoc replace --target-json '{"blockId":"p1","range":{"start":0,"end":11}}' --text "expiration"
+
+# Use query match to find a mutation-grade target
+superdoc query match --select-json '{"type":"text","pattern":"termination"}' --require exactlyOne
+
+# Mutate using the returned target
+superdoc replace --target-json '{"kind":"text","blockId":"p1","range":{"start":0,"end":11}}' --text "expiration"
+
 superdoc save --in-place
 superdoc close
 ```
 
-Legacy compatibility commands (v0.x behavior):
+## Choosing the Right Command
+
+### Which command should I use?
+
+| I want to... | Use this command |
+|--------------|------------------|
+| Find a mutation target (block ID, text range) | `query match` |
+| Search/browse document content | `find` |
+| Insert inline text within a block | `insert` |
+| Create a new standalone paragraph | `create paragraph` |
+| Create a new heading | `create heading` |
+| Insert a list item before/after another list item | `lists insert` |
+| Apply formatting to a text range | `format apply` or format helpers (`format bold`, etc.) |
+| Apply multiple changes in one operation | `mutations apply` |
+
+### Mutation targeting workflow
+
+Always use `query match` to discover targets before mutating:
 
 ```bash
-superdoc search "indemnification" ./contracts/*.docx
-superdoc replace-legacy "ACME Corp" "Globex Inc" ./merger/*.docx
-superdoc read ./proposal.docx
+# Step 1: Find the target
+superdoc query match --select-json '{"type":"text","pattern":"Introduction"}' --require exactlyOne
+
+# Step 2: Use the returned address in a mutation
+superdoc replace --block-id <returned-blockId> --start <start> --end <end> --text "Overview"
 ```
+
+`find` is for content discovery and inspection. `query match` is for mutation targeting — it returns exact addresses with cardinality guarantees.
+
+### Block-oriented editing workflow
+
+Use `blocks list` for ordered inspection, then `blocks delete-range` for contiguous removal:
+
+```bash
+superdoc open ./contract.docx
+
+# 1. Inspect block order, IDs, and text previews
+superdoc blocks list --limit 30
+
+# 2. Preview the deletion (no mutation, shows what would be removed)
+superdoc blocks delete-range \
+  --start-json '{"kind":"block","nodeType":"paragraph","nodeId":"abc123"}' \
+  --end-json '{"kind":"block","nodeType":"paragraph","nodeId":"def456"}' \
+  --dry-run
+
+# 3. Apply the deletion
+superdoc blocks delete-range \
+  --start-json '{"kind":"block","nodeType":"paragraph","nodeId":"abc123"}' \
+  --end-json '{"kind":"block","nodeType":"paragraph","nodeId":"def456"}'
+
+superdoc save --in-place
+```
+
+This replaces the pattern of calling `blocks delete` once per block. A 17-block removal becomes one command.
+
+### Preview-before-apply workflow
+
+Use `--dry-run` and `--expected-revision` for safe, auditable mutations:
+
+```bash
+superdoc open ./contract.docx
+
+# 1. Check session state
+superdoc status
+
+# 2. Find the mutation target
+superdoc query match --select-json '{"type":"text","pattern":"termination"}' --require exactlyOne
+
+# 3. Preview the change (validates input, shows what would change, no mutation)
+superdoc replace --block-id p1 --start 0 --end 11 --text "expiration" --dry-run
+
+# 4. Apply with revision guard (fails if document changed since preview)
+superdoc replace --block-id p1 --start 0 --end 11 --text "expiration" --expected-revision 1
+
+superdoc save --in-place
+```
+
+### Common mistakes
+
+1. **Do not use `find` output to construct mutation targets.** `find` returns discovery-grade data, not mutation-grade addresses. Use `query match` instead.
+2. **Do not use `insert --block-id` for sibling block insertion.** `insert` inserts inline text *within* a block. To create a new block adjacent to another, use `create paragraph`, `create heading`, or `lists insert`.
+3. **Do not use `create paragraph` to continue a list.** If you want to add a list item adjacent to existing list items, use `lists insert`. `create paragraph` creates a standalone (non-list) paragraph.
 
 ## Command Index
 
 | Category | Commands |
 |----------|----------|
-| query | `find`, `get-node`, `get-node-by-id`, `info` |
-| mutation | `insert`, `replace`, `delete` |
-| format | `format bold` |
-| create | `create paragraph` |
-| lists | `lists list`, `lists get`, `lists insert`, `lists set-type`, `lists indent`, `lists outdent`, `lists restart`, `lists exit` |
-| comments | `comments add`, `comments edit`, `comments reply`, `comments move`, `comments resolve`, `comments remove`, `comments set-internal`, `comments set-active`, `comments go-to`, `comments get`, `comments list` |
+| query | `find`, `query match`, `get-node`, `get-node-by-id`, `get-text`, `info` |
+| mutation | `insert`, `replace`, `delete`, `blocks delete`, `blocks delete-range`, `blocks list`, `mutations apply`, `mutations preview` |
+| format | `format apply`, `format bold`, `format italic`, `format underline`, `format strikethrough` |
+| create | `create paragraph`, `create heading`, `create table-of-contents` |
+| lists | `lists list`, `lists get`, `lists insert`, `lists create`, `lists attach`, `lists detach`, `lists join`, `lists separate`, `lists set-level`, `lists indent`, `lists outdent`, `lists set-value`, `lists set-type`, `lists convert-to-text` |
+| comments | `comments add`, `comments reply`, `comments delete`, `comments get`, `comments list` |
 | trackChanges | `track-changes list`, `track-changes get`, `track-changes accept`, `track-changes reject`, `track-changes accept-all`, `track-changes reject-all` |
+| history | `history get`, `history undo`, `history redo` |
 | lifecycle | `open`, `save`, `close` |
 | session | `session list`, `session save`, `session close`, `session set-default`, `session use` |
 | introspection | `status`, `describe`, `describe command` |
@@ -65,6 +146,7 @@ For full command help and examples, run:
 
 ```bash
 superdoc --help
+superdoc describe command <command-name>
 ```
 
 ## v1 Breaking Changes
@@ -73,7 +155,7 @@ This CLI replaces the previous `@superdoc-dev/cli` package surface with the v1 c
 
 | Legacy command | v1 status | Migration |
 |---------------|-----------|-----------|
-| `superdoc replace <find> <to> <files...>` | Renamed to `replace-legacy` | Use `replace-legacy`, or use `find` + `replace --target-json` for the v1 workflow. |
+| `superdoc replace <find> <to> <files...>` | Renamed to `replace-legacy` | Use `replace-legacy`, or use `query match` + `replace --target-json` for the v1 workflow. |
 
 Legacy compatibility is retained for `search`, `read`, and `replace-legacy`.
 
@@ -116,7 +198,7 @@ superdoc status
 ```bash
 superdoc open ./contract.docx
 superdoc status
-superdoc find --type text --pattern "termination"
+superdoc query match --select-json '{"type":"text","pattern":"termination"}' --require exactlyOne
 superdoc replace --target-json '{...}' --text "Updated clause"
 superdoc save --in-place
 superdoc close
@@ -140,27 +222,44 @@ superdoc session close <sessionId> [--discard]
 
 ```bash
 superdoc info [<doc>]
-superdoc find [<doc>] --type text --pattern "termination"
-superdoc find [<doc>] --type run
+superdoc find [<doc>] --type text --pattern "termination" --limit 5
+superdoc query match [<doc>] --select-json '{"type":"text","pattern":"termination"}' --require exactlyOne
 superdoc get-node [<doc>] --address-json '{"kind":"block","nodeType":"paragraph","nodeId":"p1"}'
 superdoc get-node-by-id [<doc>] --id p1 --node-type paragraph
 ```
 
-- Flat `find` flags are convenience syntax and are normalized into the canonical query object used by `editor.doc.find`.
-- Use `--query-json` / `--query-file` for complex or programmatic queries.
-- For text queries, use `result.context[*].textRanges[*]` as targets for `replace`, `comments add`, and formatting commands.
+- `find` returns discovery-grade results for content search and browsing.
+- `query match` returns mutation-grade addresses and text ranges — use this before any mutation.
+- For text queries, use the returned `blocks[].range` as targets for `replace`, `comments add`, and formatting commands.
 
 ## Mutating commands
 
 ```bash
-superdoc comments add [<doc>] --target-json '{...}' --text "Please revise" [--out ./with-comment.docx]
 superdoc replace [<doc>] --target-json '{...}' --text "Updated text" [--out ./updated.docx]
+superdoc insert [<doc>] --value "New text" [--out ./inserted.docx]
+superdoc blocks delete [<doc>] --node-type paragraph --node-id abc123
+superdoc blocks delete-range --start-json '{"kind":"block",...}' --end-json '{"kind":"block",...}'
+superdoc create paragraph [<doc>] --text "New paragraph" [--at-json '{"kind":"after","target":{"kind":"block","nodeType":"paragraph","nodeId":"p1"}}']
+superdoc lists insert [<doc>] --node-id li1 --position after --text "New item"
 superdoc format bold [<doc>] --target-json '{...}' [--out ./bolded.docx]
+superdoc comments add [<doc>] --block-id p1 --start 0 --end 10 --text "Please revise" [--out ./with-comment.docx]
 ```
 
 - In stateless mode (`<doc>` provided), mutating commands require `--out`.
 - In stateful mode (after `open`), mutating commands update the active working document and `--out` is optional.
+- Use `--dry-run` to preview any mutation without applying it.
 - Use `--expected-revision <n>` with stateful mutating commands for optimistic concurrency checks.
+
+## Block inspection
+
+```bash
+superdoc blocks list
+superdoc blocks list --limit 20 --offset 10
+superdoc blocks list --node-types-json '["paragraph","heading"]'
+```
+
+- Returns ordered block metadata: ordinal, nodeId, nodeType, textPreview, isEmpty.
+- Use the returned nodeIds as targets for `blocks delete`, `blocks delete-range`, or other block-oriented commands.
 
 ## Low-level invocation
 
@@ -208,12 +307,14 @@ superdoc info ./contract.docx --pretty
 - `--session <id>`
 - `--timeout-ms <n>`
 - `--help`
+- `--version`, `-v`
 
 ## Input payload flags
 
 - `--query-json`, `--query-file`
 - `--address-json`, `--address-file`
 - `--target-json`, `--target-file`
+- `--at-json`, `--at-file` (for `create paragraph`)
 
 ## Stdin support
 
@@ -248,8 +349,14 @@ Error:
 {
   "ok": false,
   "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "..."
+    "code": "INVALID_TARGET",
+    "message": "Expected paragraph:abc123 but found listItem:abc123.",
+    "details": {
+      "requestedNodeType": "paragraph",
+      "actualNodeType": "listItem",
+      "nodeId": "abc123",
+      "remediation": "Use lists.insert to add an item to a list sequence."
+    }
   },
   "meta": {
     "version": "1.0.0",

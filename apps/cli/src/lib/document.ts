@@ -24,6 +24,7 @@ import {
 } from './bootstrap';
 import { CliError } from './errors';
 import { pathExists } from './guards';
+import { buildHeadlessCommentBridge } from './headless-comment-bridge';
 import type { ContextMetadata } from './context';
 import type { CliIO, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
 import type { SessionPool } from '../host/session-pool';
@@ -46,7 +47,7 @@ interface ContentOverrideOptions {
 }
 
 /** Options passed through to Editor.open() alongside content overrides. */
-type EditorPassThroughOptions = Record<string, string>;
+type EditorPassThroughOptions = Record<string, unknown>;
 
 interface OpenDocumentOptions {
   documentId?: string;
@@ -144,6 +145,10 @@ export async function openDocument(
   // HTML content override). Always inject via options.document — never set globals.
   const domEnv = createCliDomEnvironment();
 
+  // Wire headless comment/tracked-change bridge when collaboration is active.
+  const hasCollaboration = options.ydoc != null && options.collaborationProvider != null;
+  const commentBridge = hasCollaboration ? buildHeadlessCommentBridge(options.ydoc, options.user) : null;
+
   let editor: Editor;
   try {
     const isTest = process.env.NODE_ENV === 'test';
@@ -159,9 +164,11 @@ export async function openDocument(
       ...(options.isNewFile != null ? { isNewFile: options.isNewFile } : {}),
       // Pass through HTML override directly — happy-dom provides DOM support.
       ...(htmlOverride != null ? { html: htmlOverride } : {}),
+      ...(commentBridge?.editorOptions ?? {}),
       ...passThroughEditorOpts,
     });
   } catch (error) {
+    commentBridge?.dispose();
     domEnv.dispose();
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to open document.', {
@@ -220,6 +227,7 @@ export async function openDocument(
     editor: editorWithDoc,
     meta,
     dispose() {
+      commentBridge?.dispose();
       editor.destroy();
       domEnv.dispose();
     },

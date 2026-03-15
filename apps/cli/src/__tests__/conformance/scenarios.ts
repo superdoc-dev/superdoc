@@ -29,6 +29,99 @@ function genericInvalidArgumentFailure(operationId: CliOperationId) {
   });
 }
 
+function skippedSuccessScenario(operationId: CliOperationId) {
+  return async (harness: ConformanceHarness): Promise<ScenarioInvocation> => ({
+    stateDir: await harness.createStateDir(`${operationId}-skipped-success`),
+    args: ['status'],
+  });
+}
+
+type SuccessScenarioFactory = (harness: ConformanceHarness) => Promise<ScenarioInvocation>;
+
+function deferredRuntimeScenario(
+  operationId: CliOperationId,
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness: ConformanceHarness): Promise<ScenarioInvocation> => ({
+    stateDir: await harness.createStateDir(`${operationId.replace(/\./g, '-')}-deferred-success`),
+    args: [...commandTokens(operationId)],
+  });
+}
+
+const DEFERRED_NEW_NAMESPACE_OPERATION_IDS = [
+  'doc.bookmarks.list',
+  'doc.bookmarks.get',
+  'doc.bookmarks.insert',
+  'doc.bookmarks.rename',
+  'doc.bookmarks.remove',
+
+  'doc.footnotes.list',
+  'doc.footnotes.get',
+  'doc.footnotes.insert',
+  'doc.footnotes.update',
+  'doc.footnotes.remove',
+  'doc.footnotes.configure',
+  'doc.crossRefs.list',
+  'doc.crossRefs.get',
+  'doc.crossRefs.insert',
+  'doc.crossRefs.rebuild',
+  'doc.crossRefs.remove',
+  'doc.index.list',
+  'doc.index.get',
+  'doc.index.insert',
+  'doc.index.configure',
+  'doc.index.rebuild',
+  'doc.index.remove',
+  'doc.index.entries.list',
+  'doc.index.entries.get',
+  'doc.index.entries.insert',
+  'doc.index.entries.update',
+  'doc.index.entries.remove',
+  'doc.captions.list',
+  'doc.captions.get',
+  'doc.captions.insert',
+  'doc.captions.update',
+  'doc.captions.remove',
+  'doc.captions.configure',
+  'doc.fields.list',
+  'doc.fields.get',
+  'doc.fields.insert',
+  'doc.fields.rebuild',
+  'doc.fields.remove',
+  'doc.citations.list',
+  'doc.citations.get',
+  'doc.citations.insert',
+  'doc.citations.update',
+  'doc.citations.remove',
+  'doc.citations.sources.list',
+  'doc.citations.sources.get',
+  'doc.citations.sources.insert',
+  'doc.citations.sources.update',
+  'doc.citations.sources.remove',
+  'doc.citations.bibliography.get',
+  'doc.citations.bibliography.insert',
+  'doc.citations.bibliography.rebuild',
+  'doc.citations.bibliography.configure',
+  'doc.citations.bibliography.remove',
+  'doc.authorities.list',
+  'doc.authorities.get',
+  'doc.authorities.insert',
+  'doc.authorities.configure',
+  'doc.authorities.rebuild',
+  'doc.authorities.remove',
+  'doc.authorities.entries.list',
+  'doc.authorities.entries.get',
+  'doc.authorities.entries.insert',
+  'doc.authorities.entries.update',
+  'doc.authorities.entries.remove',
+] as const satisfies readonly CliOperationId[];
+
+const DEFERRED_NEW_NAMESPACE_SUCCESS_SCENARIOS = Object.fromEntries(
+  DEFERRED_NEW_NAMESPACE_OPERATION_IDS.map((operationId) => [operationId, deferredRuntimeScenario(operationId)]),
+) as Record<
+  (typeof DEFERRED_NEW_NAMESPACE_OPERATION_IDS)[number],
+  (harness: ConformanceHarness) => Promise<ScenarioInvocation>
+>;
+
 function extractDiscoveryItems(data: unknown): Record<string, unknown>[] {
   if (!data || typeof data !== 'object') return [];
 
@@ -315,6 +408,8 @@ function sampleInlineAliasValue(key: InlineAliasKey): unknown {
     case 'fontSize':
     case 'fontSizeCs':
       return 14;
+    case 'fontFamily':
+      return 'Courier New';
     case 'letterSpacing':
       return 0.5;
     case 'position':
@@ -858,6 +953,19 @@ export const SUCCESS_SCENARIOS = {
     stateDir: await harness.createStateDir('doc-describe-command-success'),
     args: ['describe', 'command', 'doc.find'],
   }),
+  'doc.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-get-success');
+    const docPath = await harness.copyFixtureDoc('doc-get');
+    return { stateDir, args: ['get', docPath] };
+  },
+  'doc.markdownToFragment': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-markdown-to-fragment-success');
+    const docPath = await harness.copyFixtureDoc('doc-markdown-to-fragment');
+    return {
+      stateDir,
+      args: ['markdown-to-fragment', docPath, '--markdown', '# Hello\n\nWorld'],
+    };
+  },
   'doc.find': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-find-success');
     const docPath = await harness.copyFixtureDoc('doc-find');
@@ -1443,6 +1551,14 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.blocks.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-list');
+    return {
+      stateDir,
+      args: ['blocks', 'list', docPath, '--limit', '10'],
+    };
+  },
   'doc.blocks.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-blocks-delete-success');
     const docPath = await harness.copyFixtureDoc('doc-blocks-delete');
@@ -1457,6 +1573,25 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ kind: 'block', nodeType: block.nodeType, nodeId: block.nodeId }),
         '--out',
         harness.createOutputPath('doc-blocks-delete-output'),
+      ],
+    };
+  },
+  'doc.blocks.deleteRange': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-delete-range-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-delete-range');
+    const { first, second } = await harness.firstTwoBlockAddresses(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'blocks',
+        'delete-range',
+        docPath,
+        '--start-json',
+        JSON.stringify({ kind: 'block', nodeType: first.nodeType, nodeId: first.nodeId }),
+        '--end-json',
+        JSON.stringify({ kind: 'block', nodeType: second.nodeType, nodeId: second.nodeId }),
+        '--out',
+        harness.createOutputPath('doc-blocks-delete-range-output'),
       ],
     };
   },
@@ -2987,6 +3122,219 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  ...DEFERRED_NEW_NAMESPACE_SUCCESS_SCENARIOS,
+
+  // ---------------------------------------------------------------------------
+  // Header/footer operations
+  // ---------------------------------------------------------------------------
+
+  'doc.headerFooters.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.list'), docPath, '--limit', '10'],
+    };
+  },
+  'doc.headerFooters.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-get-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-get');
+    const { address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.headerFooters.get');
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'header',
+      variant: 'default',
+    };
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.get'), docPath, '--target-json', JSON.stringify(slotTarget)],
+    };
+  },
+  'doc.headerFooters.resolve': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-resolve-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-resolve');
+    const { address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.headerFooters.resolve');
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'header',
+      variant: 'default',
+    };
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.resolve'), docPath, '--target-json', JSON.stringify(slotTarget)],
+    };
+  },
+  'doc.headerFooters.refs.set': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-refs-set-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-refs-set');
+    const { item, address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.headerFooters.refs.set');
+    const footerRefs = item.footerRefs as Record<string, unknown> | undefined;
+    const refId =
+      (typeof footerRefs?.default === 'string' ? footerRefs.default : undefined) ??
+      (typeof footerRefs?.even === 'string' ? footerRefs.even : undefined);
+    if (!refId) {
+      throw new Error('No footer relationship id available for doc.headerFooters.refs.set.');
+    }
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'footer',
+      variant: 'first',
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.refs.set'),
+        docPath,
+        '--target-json',
+        JSON.stringify(slotTarget),
+        '--ref-id',
+        refId,
+        '--out',
+        harness.createOutputPath('doc-headerFooters-refs-set-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.refs.clear': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-refs-clear-success');
+    const sourceDoc = await harness.copyFixtureDoc('doc-headerFooters-refs-clear');
+    const { item, address } = await resolveFirstSection(
+      harness,
+      stateDir,
+      sourceDoc,
+      'doc.headerFooters.refs.clear:prepare',
+    );
+    const footerRefs = item.footerRefs as Record<string, unknown> | undefined;
+    const refId =
+      (typeof footerRefs?.default === 'string' ? footerRefs.default : undefined) ??
+      (typeof footerRefs?.even === 'string' ? footerRefs.even : undefined);
+    if (!refId) {
+      throw new Error('No footer relationship id available for doc.headerFooters.refs.clear.');
+    }
+
+    // First set a ref on the 'first' variant so we can clear it
+    const preparedDoc = harness.createOutputPath('doc-headerFooters-refs-clear-prepared');
+    const setSlotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'footer',
+      variant: 'first',
+    };
+    const prepared = await harness.runCli(
+      [
+        ...commandTokens('doc.headerFooters.refs.set'),
+        sourceDoc,
+        '--target-json',
+        JSON.stringify(setSlotTarget),
+        '--ref-id',
+        refId,
+        '--out',
+        preparedDoc,
+      ],
+      stateDir,
+    );
+    if (prepared.result.code !== 0 || prepared.envelope.ok !== true) {
+      throw new Error('Failed to prepare explicit header/footer ref for clear scenario.');
+    }
+
+    const clearSlotTarget = {
+      kind: 'headerFooterSlot',
+      section: address,
+      headerFooterKind: 'footer',
+      variant: 'first',
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.refs.clear'),
+        preparedDoc,
+        '--target-json',
+        JSON.stringify(clearSlotTarget),
+        '--out',
+        harness.createOutputPath('doc-headerFooters-refs-clear-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.refs.setLinkedToPrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-refs-setLinkedToPrevious-success');
+    const fixture = await createDocWithSecondSection(harness, stateDir, 'doc-headerFooters-refs-setLinkedToPrevious');
+    const secondAddress = requireSectionAddress(fixture.second, 'doc.headerFooters.refs.setLinkedToPrevious');
+    const slotTarget = {
+      kind: 'headerFooterSlot',
+      section: secondAddress,
+      headerFooterKind: 'header',
+      variant: 'default',
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.refs.setLinkedToPrevious'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(slotTarget),
+        '--linked',
+        'false',
+        '--out',
+        harness.createOutputPath('doc-headerFooters-refs-setLinkedToPrevious-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.parts.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-parts-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-parts-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.headerFooters.parts.list'), docPath, '--limit', '10'],
+    };
+  },
+  'doc.headerFooters.parts.create': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-parts-create-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-parts-create');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.parts.create'),
+        docPath,
+        '--kind',
+        'header',
+        '--out',
+        harness.createOutputPath('doc-headerFooters-parts-create-output'),
+      ],
+    };
+  },
+  'doc.headerFooters.parts.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-headerFooters-parts-delete-success');
+    const docPath = await harness.copyFixtureDoc('doc-headerFooters-parts-delete');
+    // Create a new part first, then delete it (to avoid deleting a referenced part)
+    const preparedDoc = harness.createOutputPath('doc-headerFooters-parts-delete-prepared');
+    const createResult = await harness.runCli(
+      [...commandTokens('doc.headerFooters.parts.create'), docPath, '--kind', 'header', '--out', preparedDoc],
+      stateDir,
+    );
+    if (createResult.result.code !== 0 || createResult.envelope.ok !== true) {
+      throw new Error('Failed to create header part for delete scenario.');
+    }
+    const createdData = createResult.envelope.data as Record<string, unknown>;
+    const resultPayload = createdData.result as { refId?: string } | undefined;
+    const refId = resultPayload?.refId;
+    if (!refId) {
+      throw new Error('Created part has no refId for delete scenario.');
+    }
+    const partTarget = { kind: 'headerFooterPart', refId };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.headerFooters.parts.delete'),
+        preparedDoc,
+        '--target-json',
+        JSON.stringify(partTarget),
+        '--out',
+        harness.createOutputPath('doc-headerFooters-parts-delete-output'),
+      ],
+    };
+  },
 
   // ---------------------------------------------------------------------------
   // History operations
@@ -3007,9 +3355,9 @@ export const SUCCESS_SCENARIOS = {
     await harness.openSessionFixture(stateDir, 'doc-history-redo', 'history-redo-session');
     return { stateDir, args: ['history', 'redo', '--session', 'history-redo-session'] };
   },
-} as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
+} as const satisfies Partial<Record<CliOperationId, SuccessScenarioFactory>>;
 
-const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
+const EXPLICIT_RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   'doc.toc.markEntry',
   'doc.toc.unmarkEntry',
   'doc.toc.getEntry',
@@ -3026,12 +3374,25 @@ const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   'doc.images.resetCrop',
   'doc.images.updateCaption',
   'doc.images.removeCaption',
+  // New namespaces are contract-registered; deterministic runtime fixtures will follow.
+  ...DEFERRED_NEW_NAMESPACE_OPERATION_IDS,
 ]);
 
-export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {
+const CANONICAL_OPERATION_IDS = Object.keys(CLI_OPERATION_COMMAND_KEYS) as CliOperationId[];
+const AUTO_SKIPPED_OPERATION_IDS = CANONICAL_OPERATION_IDS.filter(
+  (operationId) => SUCCESS_SCENARIOS[operationId] == null,
+);
+
+const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
+  ...EXPLICIT_RUNTIME_CONFORMANCE_SKIP,
+  ...AUTO_SKIPPED_OPERATION_IDS,
+]);
+
+export const OPERATION_SCENARIOS = CANONICAL_OPERATION_IDS.map((operationId) => {
+  const success = SUCCESS_SCENARIOS[operationId] ?? skippedSuccessScenario(operationId);
   const scenario: OperationScenario = {
     operationId,
-    success: SUCCESS_SCENARIOS[operationId],
+    success,
     failure: genericInvalidArgumentFailure(operationId),
     expectedFailureCodes: ['INVALID_ARGUMENT', 'MISSING_REQUIRED'],
     ...(RUNTIME_CONFORMANCE_SKIP.has(operationId) ? { skipRuntimeConformance: true } : {}),

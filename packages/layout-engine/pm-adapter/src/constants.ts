@@ -6,6 +6,13 @@ import type { TextRun, TrackedChangeKind } from '@superdoc/contracts';
 import type { HyperlinkConfig } from './types.js';
 
 /**
+ * Font size scaling factor for subscript and superscript text.
+ * Matches Microsoft Word's default rendering behavior for w:vertAlign
+ * when set to 'superscript' or 'subscript'.
+ */
+export const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
+
+/**
  * Unit conversion constants
  */
 export const TWIPS_PER_INCH = 1440;

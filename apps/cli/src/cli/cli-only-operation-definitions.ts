@@ -46,10 +46,11 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
       'Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text).',
     requiresDocumentContext: false,
     intentName: 'open_document',
-    sdkMetadata: { mutates: false, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
+    sdkMetadata: { mutates: true, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
       properties: {
+        active: { type: 'boolean' },
         contextId: { type: 'string' },
         sessionType: { type: 'string' },
         document: {
@@ -57,9 +58,11 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
           properties: {
             path: { type: 'string' },
             source: { type: 'string' },
+            byteLength: { type: 'number' },
             revision: { type: 'number' },
           },
         },
+        dirty: { type: 'boolean' },
         collaboration: {
           type: 'object',
           properties: {
@@ -75,8 +78,10 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
             bootstrapSource: { type: 'string' },
           },
         },
+        openedAt: { type: 'string' },
+        updatedAt: { type: 'string' },
       },
-      required: ['contextId', 'sessionType'],
+      required: ['active', 'contextId', 'sessionType'],
     },
   },
   save: {
@@ -123,7 +128,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     description: 'Close the active editing session and clean up resources.',
     requiresDocumentContext: false,
     intentName: 'close_document',
-    sdkMetadata: { mutates: false, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
+    sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
       properties: {
@@ -154,19 +159,35 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     outputSchema: {
       type: 'object',
       properties: {
+        active: { type: 'boolean' },
         contextId: { type: 'string' },
+        activeSessionId: { type: 'string' },
+        requestedSessionId: { type: 'string' },
+        projectRoot: { type: 'string' },
         sessionType: { type: 'string' },
         dirty: { type: 'boolean' },
-        revision: { type: 'number' },
         document: {
           type: 'object',
           properties: {
             path: { type: 'string' },
             source: { type: 'string' },
+            sourceByteLength: { oneOf: [{ type: 'number' }, { type: 'null' }] },
+            byteLength: { type: 'number' },
+            revision: { type: 'number' },
           },
         },
+        collaboration: {
+          type: 'object',
+          properties: {
+            documentId: { type: 'string' },
+            url: { type: 'string' },
+          },
+        },
+        openedAt: { type: 'string' },
+        updatedAt: { type: 'string' },
+        lastSavedAt: { type: 'string' },
       },
-      required: ['contextId'],
+      required: ['active'],
     },
   },
   describe: {
@@ -280,7 +301,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     description: 'Close a specific editing session by ID.',
     requiresDocumentContext: false,
     intentName: 'close_session',
-    sdkMetadata: { mutates: false, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
+    sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
       properties: {
@@ -308,7 +329,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     description: 'Set the default session for subsequent commands.',
     requiresDocumentContext: false,
     intentName: 'set_default_session',
-    sdkMetadata: { mutates: false, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
+    sdkMetadata: { mutates: true, idempotency: 'conditional', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
       properties: {

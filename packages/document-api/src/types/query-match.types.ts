@@ -9,6 +9,7 @@
  */
 
 import type { BlockNodeType, NodeAddress } from './base.js';
+import type { SelectionTarget } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { DiscoveryItem, DiscoveryOutput, DiscoveryResult } from './discovery.js';
 import type { InlineToggleDirective } from './style-policy.types.js';
@@ -154,6 +155,13 @@ export interface TextMatchDomain {
   matchKind: 'text';
   /** Address of the first matched block in document order (D14). */
   address: NodeAddress;
+  /**
+   * Canonical mutation-ready selection target for this text match.
+   *
+   * Can be passed directly to `doc.delete({ target })`, `doc.replace({ target, text })`,
+   * or `doc.format.apply({ target, inline })` for cross-block mutations.
+   */
+  target: SelectionTarget;
   /** Matched text plus surrounding context (D11). */
   snippet: string;
   /** Character offsets within `snippet` identifying the matched text (D17). */

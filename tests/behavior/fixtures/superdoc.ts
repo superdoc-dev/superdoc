@@ -13,6 +13,8 @@ interface HarnessConfig {
   trackChanges?: boolean;
   showCaret?: boolean;
   showSelection?: boolean;
+  allowSelectionInViewMode?: boolean;
+  documentMode?: 'editing' | 'viewing' | 'suggesting';
 }
 
 type DocumentMode = 'editing' | 'suggesting' | 'viewing';
@@ -45,6 +47,8 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   if (config.trackChanges) params.set('trackChanges', '1');
   if (config.showCaret !== undefined) params.set('showCaret', config.showCaret ? '1' : '0');
   if (config.showSelection !== undefined) params.set('showSelection', config.showSelection ? '1' : '0');
+  if (config.allowSelectionInViewMode) params.set('allowSelectionInViewMode', '1');
+  if (config.documentMode) params.set('documentMode', config.documentMode);
   const qs = params.toString();
   return qs ? `${HARNESS_URL}?${qs}` : HARNESS_URL;
 }

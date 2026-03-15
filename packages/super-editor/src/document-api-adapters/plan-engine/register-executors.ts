@@ -16,6 +16,7 @@ import type {
   TextStepData,
   TextStepResolution,
   SpanStepResolution,
+  SelectionStepResolution,
   TextRewriteStep,
   TextInsertStep,
   TextDeleteStep,
@@ -32,6 +33,7 @@ import type {
   CompiledTarget,
   CompiledRangeTarget,
   CompiledSpanTarget,
+  CompiledSelectionTarget,
   ExecuteContext,
 } from './executor-registry.types.js';
 import { registerStepExecutor } from './executor-registry.js';
@@ -96,17 +98,48 @@ import {
 // Target partitioning
 // ---------------------------------------------------------------------------
 
+/**
+ * Converts a CompiledSelectionTarget to a CompiledRangeTarget for executor
+ * dispatch. Range executors only use absFrom/absTo for PM operations.
+ */
+function selectionTargetToRange(t: CompiledSelectionTarget): CompiledRangeTarget {
+  const startPoint = t.normalizedTarget.start;
+  const endPoint = t.normalizedTarget.end;
+
+  // Derive a real blockId from the nearest text point so fallback lookups
+  // (e.g. style capture in resolveMarksForRange) never hit a synthetic id.
+  const blockId =
+    startPoint.kind === 'text' ? startPoint.blockId : endPoint.kind === 'text' ? endPoint.blockId : '__selection__';
+
+  return {
+    kind: 'range',
+    stepId: t.stepId,
+    op: t.op,
+    blockId,
+    from: 0,
+    to: t.absTo - t.absFrom,
+    absFrom: t.absFrom,
+    absTo: t.absTo,
+    text: t.text,
+    marks: [],
+    capturedStyle: t.capturedStyle,
+  };
+}
+
 function partitionTargets(targets: CompiledTarget[]): {
   range: CompiledRangeTarget[];
   span: CompiledSpanTarget[];
+  selection: CompiledSelectionTarget[];
 } {
   const range: CompiledRangeTarget[] = [];
   const span: CompiledSpanTarget[] = [];
+  const selection: CompiledSelectionTarget[] = [];
   for (const t of targets) {
     if (t.kind === 'range') range.push(t);
+    else if (t.kind === 'selection') selection.push(t);
     else span.push(t);
   }
-  return { range, span };
+  return { range, span, selection };
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +177,14 @@ function buildSpanResolution(target: CompiledSpanTarget): SpanStepResolution {
   };
 }
 
+function buildSelectionResolution(target: CompiledSelectionTarget): SelectionStepResolution {
+  return {
+    selectionTarget: target.normalizedTarget,
+    range: { from: target.absFrom, to: target.absTo },
+    text: target.text,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Unified step execution — dispatches range and span targets
 // ---------------------------------------------------------------------------
@@ -176,15 +217,25 @@ function executeTextStep(
   rangeExecutor: RangeExecutorFn,
   spanExecutor?: SpanExecutorFn,
 ): StepOutcome {
-  const { range, span } = partitionTargets(targets);
+  const { range, span, selection } = partitionTargets(targets);
   let overallChanged = false;
   const resolutions: TextStepResolution[] = [];
   const spanResolutions: SpanStepResolution[] = [];
+  const selectionResolutions: SelectionStepResolution[] = [];
 
   // Execute range targets in document order
   for (const target of sortRangeTargets(range)) {
     resolutions.push(buildRangeResolution(target));
     const { changed } = rangeExecutor(ctx.editor, ctx.tr, target, step, ctx.mapping);
+    if (changed) overallChanged = true;
+  }
+
+  // Execute selection targets — convert to range for the executor, but
+  // produce proper SelectionStepResolution instead of bogus TextStepResolution.
+  for (const selTarget of selection) {
+    selectionResolutions.push(buildSelectionResolution(selTarget));
+    const rangeTarget = selectionTargetToRange(selTarget);
+    const { changed } = rangeExecutor(ctx.editor, ctx.tr, rangeTarget, step, ctx.mapping);
     if (changed) overallChanged = true;
   }
 
@@ -203,6 +254,7 @@ function executeTextStep(
     domain: 'text',
     resolutions,
     ...(spanResolutions.length > 0 ? { spanResolutions } : {}),
+    ...(selectionResolutions.length > 0 ? { selectionResolutions } : {}),
   };
 
   return { stepId: step.id, op: step.op, effect, matchCount: targets.length, data };

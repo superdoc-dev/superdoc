@@ -6,7 +6,6 @@ import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
-import { carbonCopy } from '@core/utilities/carbonCopy';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
@@ -74,8 +73,6 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
       if (!runPositions.size) return null;
 
       const selectionPreserver = createSelectionPreserver(tr, newState.selection);
-      const firstRunPosByParagraph = new Map();
-
       const sortedRunPositions = Array.from(runPositions).sort((a, b) => b - a);
 
       sortedRunPositions.forEach((pos) => {
@@ -96,26 +93,6 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           preservedDerivedKeys,
         );
         const runProperties = firstInlineProps ?? null;
-
-        let firstRunPos = firstRunPosByParagraph.get(paragraphPos);
-        if (firstRunPos === undefined) {
-          firstRunPos = findFirstRunPosInParagraph(paragraphNode, paragraphPos, runType);
-          firstRunPosByParagraph.set(paragraphPos, firstRunPos);
-        }
-        const isFirstInParagraph = firstRunPos === mappedPos;
-
-        if (isFirstInParagraph) {
-          // Keep paragraph's default runProperties in sync for the first run.
-          const currentParagraphRunProperties = paragraphNode.attrs?.paragraphProperties?.runProperties ?? null;
-          if (!areRunPropertiesEqual(currentParagraphRunProperties, runProperties)) {
-            const inlineParagraphProperties = carbonCopy(paragraphNode.attrs.paragraphProperties) || {};
-            inlineParagraphProperties.runProperties = runProperties;
-            tr.setNodeMarkup(paragraphPos, paragraphNode.type, {
-              ...paragraphNode.attrs,
-              paragraphProperties: inlineParagraphProperties,
-            });
-          }
-        }
 
         if (segments.length === 1) {
           if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties)) return;
@@ -223,24 +200,6 @@ export function extractTableInfo($pos, depth) {
     // Fall back to physical positions for malformed tables where TableMap cannot be built.
     return fallbackInfo;
   }
-}
-/**
- * Find the absolute document position of the first run node inside a paragraph.
- *
- * @param {import('prosemirror-model').Node} paragraphNode
- * @param {number} paragraphPos Absolute position of the paragraph node.
- * @param {import('prosemirror-model').NodeType} runType
- * @returns {number|null}
- */
-function findFirstRunPosInParagraph(paragraphNode, paragraphPos, runType) {
-  let firstRunPos = null;
-  paragraphNode.descendants((child, childPos) => {
-    if (firstRunPos !== null) return false;
-    if (child.type !== runType) return true;
-    firstRunPos = paragraphPos + 1 + childPos;
-    return false;
-  });
-  return firstRunPos;
 }
 
 /**
@@ -407,17 +366,6 @@ function stableStringifyInlineProps(inlineProps) {
     sorted[key] = inlineProps[key];
   });
   return JSON.stringify(sorted);
-}
-
-/**
- * Compare two runProperties objects with stable key ordering.
- *
- * @param {Record<string, any>|null} left
- * @param {Record<string, any>|null} right
- * @returns {boolean}
- */
-function areRunPropertiesEqual(left, right) {
-  return stableStringifyInlineProps(left) === stableStringifyInlineProps(right);
 }
 
 /**

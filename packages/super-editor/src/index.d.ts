@@ -153,6 +153,13 @@ export interface OpenOptions {
   isCommentsEnabled?: boolean;
   suppressDefaultDocxStyles?: boolean;
   documentMode?: 'editing' | 'viewing' | 'suggesting';
+  /**
+   * Allow text selection in viewing mode.
+   * When true, users can select and copy text while in viewing mode,
+   * but editing (typing, paste, delete) remains blocked.
+   * @default false
+   */
+  allowSelectionInViewMode?: boolean;
   content?: unknown;
   mediaFiles?: Record<string, unknown>;
   fonts?: Record<string, unknown>;
@@ -425,6 +432,7 @@ export declare class Editor {
     content?: string | object;
     extensions?: any[];
     editable?: boolean;
+    allowSelectionInViewMode?: boolean;
     autofocus?: boolean | 'start' | 'end' | 'all' | number;
     [key: string]: any;
   });

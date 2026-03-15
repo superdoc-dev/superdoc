@@ -15,7 +15,6 @@ import {
   watch,
   defineAsyncComponent,
 } from 'vue';
-import { NConfigProvider, NMessageProvider } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 
 import CommentsLayer from './components/CommentsLayer/CommentsLayer.vue';
@@ -102,6 +101,7 @@ const { isHighContrastMode } = useHighContrastMode();
 const { uiFontFamily } = useUiFontFamily();
 
 const isViewingMode = () => proxy?.$superdoc?.config?.documentMode === 'viewing';
+const allowSelectionInViewMode = () => !!proxy?.$superdoc?.config?.allowSelectionInViewMode;
 const isViewingCommentsVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.comments?.visible === true,
 );
@@ -211,7 +211,7 @@ const handleDocumentMouseDown = (e) => {
 
 const handleHighlightClick = () => (toolsMenuPosition.top = null);
 const cancelPendingComment = (e) => {
-  if (e.target.classList.contains('n-dropdown-option-body__label')) return;
+  if (e.target.classList.contains('comments-dropdown__option-label')) return;
   commentsStore.removePendingComment(proxy.$superdoc);
 };
 
@@ -317,13 +317,13 @@ const onEditorSelectionChange = ({ editor }) => {
     // When comment is added selection will be equal to comment text
     // Should skip calculations to keep text selection for comments correct
     skipSelectionUpdate.value = false;
-    if (isViewingMode()) {
+    if (isViewingMode() && !allowSelectionInViewMode()) {
       resetSelection();
     }
     return;
   }
 
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }
@@ -338,7 +338,7 @@ const onEditorSelectionChange = ({ editor }) => {
   // processSelectionChange already reads editor.state.selection as the primary source.
   selectionUpdateRafId = requestAnimationFrame(() => {
     selectionUpdateRafId = null;
-    if (isViewingMode()) {
+    if (isViewingMode() && !allowSelectionInViewMode()) {
       resetSelection();
       return;
     }
@@ -524,6 +524,7 @@ const editorOptions = (doc) => {
     html: doc.html,
     markdown: doc.markdown,
     documentMode: proxy.$superdoc.config.documentMode,
+    allowSelectionInViewMode: proxy.$superdoc.config.allowSelectionInViewMode,
     rulers: doc.rulers,
     rulerContainer: proxy.$superdoc.config.rulerContainer,
     isInternal: proxy.$superdoc.config.isInternal,
@@ -787,7 +788,7 @@ const getSelectionPosition = computed(() => {
 });
 
 const handleSelectionChange = (selection) => {
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }
@@ -1021,150 +1022,146 @@ const getPDFViewer = () => {
 </script>
 
 <template>
-  <n-config-provider abstract preflight-style-disabled>
-    <div
-      class="superdoc"
-      :class="{
-        'superdoc--with-sidebar': showCommentsSidebar,
-        'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
-        'high-contrast': isHighContrastMode,
-      }"
-      :style="superdocStyleVars"
-    >
-      <div class="superdoc__layers layers" ref="layers" role="group">
-        <!-- Floating tools menu (shows up when user has text selection)-->
-        <div v-if="showToolsFloatingMenu" class="superdoc__tools tools" :style="toolsMenuPosition">
-          <div class="tools-item" data-id="is-tool" @mousedown.stop.prevent="handleToolClick('comments')">
-            <div class="superdoc__tools-icon" v-html="superdocIcons.comment"></div>
-          </div>
-          <!-- AI tool button -->
-          <div
-            v-if="proxy.$superdoc.config.modules.ai"
-            class="tools-item"
-            data-id="is-tool"
-            @mousedown.stop.prevent="handleToolClick('ai')"
-          >
-            <div class="superdoc__tools-icon ai-tool"></div>
-          </div>
+  <div
+    class="superdoc"
+    :class="{
+      'superdoc--with-sidebar': showCommentsSidebar,
+      'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
+      'high-contrast': isHighContrastMode,
+    }"
+    :style="superdocStyleVars"
+  >
+    <div class="superdoc__layers layers" ref="layers" role="group">
+      <!-- Floating tools menu (shows up when user has text selection)-->
+      <div v-if="showToolsFloatingMenu" class="superdoc__tools tools" :style="toolsMenuPosition">
+        <div class="tools-item" data-id="is-tool" @mousedown.stop.prevent="handleToolClick('comments')">
+          <div class="superdoc__tools-icon" v-html="superdocIcons.comment"></div>
         </div>
-
-        <div class="superdoc__document document">
-          <div
-            v-if="isCommentsEnabled"
-            class="superdoc__selection-layer selection-layer"
-            @mousedown="handleSelectionStart"
-            @mouseup="handleDragEnd"
-            ref="selectionLayer"
-          >
-            <div
-              :style="getSelectionPosition"
-              class="superdoc__temp-selection temp-selection sd-highlight sd-initial-highlight"
-              v-if="selectionPosition && shouldShowSelection"
-            ></div>
-          </div>
-
-          <!-- Fields layer -->
-          <HrbrFieldsLayer
-            v-if="'hrbr-fields' in modules && layers"
-            :fields="modules['hrbr-fields']"
-            class="superdoc__comments-layer comments-layer"
-            style="z-index: 2"
-            ref="hrbrFieldsLayer"
-          />
-
-          <!-- On-document comments layer -->
-          <CommentsLayer
-            v-if="layers"
-            class="superdoc__comments-layer comments-layer"
-            style="z-index: 3"
-            ref="commentsLayer"
-            :parent="layers"
-            :user="user"
-            @highlight-click="handleHighlightClick"
-          />
-
-          <!-- AI Layer for temporary highlights -->
-          <AiLayer
-            v-if="showAiLayer"
-            class="ai-layer"
-            style="z-index: 4"
-            ref="aiLayer"
-            :editor="proxy.$superdoc.activeEditor"
-          />
-
-          <!-- Whiteboard Layer -->
-          <WhiteboardLayer
-            v-if="layers && whiteboardModuleConfig"
-            style="z-index: 3"
-            :whiteboard="whiteboard"
-            :pages="whiteboardPages"
-            :page-sizes="whiteboardPageSizes"
-            :page-offsets="whiteboardPageOffsets"
-            :enabled="whiteboardEnabled"
-            :opacity="whiteboardOpacity"
-          />
-
-          <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
-            <!-- PDF renderer -->
-            <PdfViewer
-              v-if="doc.type === PDF"
-              :file="doc.data"
-              :file-id="doc.id"
-              :config="pdfConfig"
-              @selection-raw="handlePdfSelectionRaw"
-              @bypass-selection="handlePdfClick"
-              @page-rendered="handleWhiteboardPageReady"
-              @document-ready="({ documentId, viewerContainer }) => handleDocumentReady(documentId, viewerContainer)"
-              ref="pdfViewerRef"
-            />
-
-            <n-message-provider>
-              <SuperEditor
-                v-if="doc.type === DOCX"
-                :file-source="doc.data"
-                :state="doc.state"
-                :document-id="doc.id"
-                :options="{ ...editorOptions(doc), rulers: doc.rulers }"
-                @editor-ready="onEditorReady"
-                @pageMarginsChange="handleSuperEditorPageMarginsChange(doc, $event)"
-              />
-            </n-message-provider>
-
-            <!-- omitting field props -->
-            <HtmlViewer
-              v-if="doc.type === HTML"
-              @ready="(id) => handleDocumentReady(id, null)"
-              @selection-change="handleSelectionChange"
-              :file-source="doc.data"
-              :document-id="doc.id"
-            />
-          </div>
+        <!-- AI tool button -->
+        <div
+          v-if="proxy.$superdoc.config.modules.ai"
+          class="tools-item"
+          data-id="is-tool"
+          @mousedown.stop.prevent="handleToolClick('ai')"
+        >
+          <div class="superdoc__tools-icon ai-tool"></div>
         </div>
       </div>
 
-      <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
-        <div class="floating-comments">
-          <FloatingComments
-            v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
-            v-for="doc in documentsWithConverations"
-            :parent="layers"
-            :current-document="doc"
-          />
+      <div class="superdoc__document document">
+        <div
+          v-if="isCommentsEnabled"
+          class="superdoc__selection-layer selection-layer"
+          @mousedown="handleSelectionStart"
+          @mouseup="handleDragEnd"
+          ref="selectionLayer"
+        >
+          <div
+            :style="getSelectionPosition"
+            class="superdoc__temp-selection temp-selection sd-highlight sd-initial-highlight"
+            v-if="selectionPosition && shouldShowSelection"
+          ></div>
         </div>
-      </div>
 
-      <!-- AI Writer at cursor position -->
-      <div class="ai-writer-container" v-if="showAiWriter" :style="aiWriterPosition">
-        <AIWriter
-          :selected-text="selectedText"
-          :handle-close="handleAiWriterClose"
+        <!-- Fields layer -->
+        <HrbrFieldsLayer
+          v-if="'hrbr-fields' in modules && layers"
+          :fields="modules['hrbr-fields']"
+          class="superdoc__comments-layer comments-layer"
+          style="z-index: 2"
+          ref="hrbrFieldsLayer"
+        />
+
+        <!-- On-document comments layer -->
+        <CommentsLayer
+          v-if="layers"
+          class="superdoc__comments-layer comments-layer"
+          style="z-index: 3"
+          ref="commentsLayer"
+          :parent="layers"
+          :user="user"
+          @highlight-click="handleHighlightClick"
+        />
+
+        <!-- AI Layer for temporary highlights -->
+        <AiLayer
+          v-if="showAiLayer"
+          class="ai-layer"
+          style="z-index: 4"
+          ref="aiLayer"
           :editor="proxy.$superdoc.activeEditor"
-          :api-key="proxy.$superdoc.toolbar?.config?.aiApiKey"
-          :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
+        />
+
+        <!-- Whiteboard Layer -->
+        <WhiteboardLayer
+          v-if="layers && whiteboardModuleConfig"
+          style="z-index: 3"
+          :whiteboard="whiteboard"
+          :pages="whiteboardPages"
+          :page-sizes="whiteboardPageSizes"
+          :page-offsets="whiteboardPageOffsets"
+          :enabled="whiteboardEnabled"
+          :opacity="whiteboardOpacity"
+        />
+
+        <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
+          <!-- PDF renderer -->
+          <PdfViewer
+            v-if="doc.type === PDF"
+            :file="doc.data"
+            :file-id="doc.id"
+            :config="pdfConfig"
+            @selection-raw="handlePdfSelectionRaw"
+            @bypass-selection="handlePdfClick"
+            @page-rendered="handleWhiteboardPageReady"
+            @document-ready="({ documentId, viewerContainer }) => handleDocumentReady(documentId, viewerContainer)"
+            ref="pdfViewerRef"
+          />
+
+          <SuperEditor
+            v-if="doc.type === DOCX"
+            :file-source="doc.data"
+            :state="doc.state"
+            :document-id="doc.id"
+            :options="{ ...editorOptions(doc), rulers: doc.rulers }"
+            @editor-ready="onEditorReady"
+            @pageMarginsChange="handleSuperEditorPageMarginsChange(doc, $event)"
+          />
+
+          <!-- omitting field props -->
+          <HtmlViewer
+            v-if="doc.type === HTML"
+            @ready="(id) => handleDocumentReady(id, null)"
+            @selection-change="handleSelectionChange"
+            :file-source="doc.data"
+            :document-id="doc.id"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
+      <div class="floating-comments">
+        <FloatingComments
+          v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
+          v-for="doc in documentsWithConverations"
+          :parent="layers"
+          :current-document="doc"
         />
       </div>
     </div>
-  </n-config-provider>
+
+    <!-- AI Writer at cursor position -->
+    <div class="ai-writer-container" v-if="showAiWriter" :style="aiWriterPosition">
+      <AIWriter
+        :selected-text="selectedText"
+        :handle-close="handleAiWriterClose"
+        :editor="proxy.$superdoc.activeEditor"
+        :api-key="proxy.$superdoc.toolbar?.config?.aiApiKey"
+        :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
+      />
+    </div>
+  </div>
 </template>
 
 <style scoped>

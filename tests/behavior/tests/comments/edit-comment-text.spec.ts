@@ -21,7 +21,7 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await dialog.locator('.overflow-icon').click();
   await superdoc.waitForStable();
 
-  const editOption = superdoc.page.locator('.n-dropdown-option-body__label', { hasText: 'Edit' });
+  const editOption = superdoc.page.locator('.comments-dropdown__option-label', { hasText: 'Edit' });
   await expect(editOption.first()).toBeVisible({ timeout: 5_000 });
   await editOption.first().click();
   await superdoc.waitForStable();

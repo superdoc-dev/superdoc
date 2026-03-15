@@ -7,7 +7,7 @@
  */
 
 import type { Editor } from '../../Editor.js';
-import type { PartChangedEvent, PartId  } from '../types.js';
+import type { PartChangedEvent, PartId } from '../types.js';
 import { registerInvalidationHandler } from './part-invalidation-registry.js';
 
 // ---------------------------------------------------------------------------
@@ -65,6 +65,26 @@ function handleHeaderFooterInvalidation(editor: Editor, _event: PartChangedEvent
 }
 
 // ---------------------------------------------------------------------------
+// word/footnotes.xml and word/endnotes.xml
+// ---------------------------------------------------------------------------
+
+/**
+ * Dispatch a `forceUpdatePagination` transaction after a notes part mutation.
+ *
+ * Footnote/endnote body changes affect page flow (the note area expands or
+ * shrinks), so the layout engine must re-paginate.
+ */
+function handleNotesInvalidation(editor: Editor, _event: PartChangedEvent): void {
+  try {
+    const tr = editor.state.tr;
+    tr.setMeta('forceUpdatePagination', true);
+    editor.view?.dispatch?.(tr);
+  } catch {
+    // View may not be ready
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -72,6 +92,8 @@ function handleHeaderFooterInvalidation(editor: Editor, _event: PartChangedEvent
 export function registerStaticInvalidationHandlers(): void {
   registerInvalidationHandler('word/numbering.xml', handleNumberingInvalidation);
   registerInvalidationHandler('word/_rels/document.xml.rels', handleRelationshipsInvalidation);
+  registerInvalidationHandler('word/footnotes.xml', handleNotesInvalidation);
+  registerInvalidationHandler('word/endnotes.xml', handleNotesInvalidation);
 }
 
 /**

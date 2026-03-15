@@ -324,7 +324,7 @@ export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpaci
 export const normalizeParagraphBorders = (value: unknown): ParagraphAttrs['borders'] | undefined => {
   if (!value || typeof value !== 'object') return undefined;
   const source = value as Record<string, unknown>;
-  const sides: Array<'top' | 'right' | 'bottom' | 'left'> = ['top', 'right', 'bottom', 'left'];
+  const sides: Array<'top' | 'right' | 'bottom' | 'left' | 'between'> = ['top', 'right', 'bottom', 'left', 'between'];
   const borders: ParagraphAttrs['borders'] = {};
 
   sides.forEach((side) => {
@@ -333,6 +333,17 @@ export const normalizeParagraphBorders = (value: unknown): ParagraphAttrs['borde
       borders[side] = normalized;
     }
   });
+
+  // Preserve between: {style: 'none'} for nil/none between borders.
+  // normalizeBorderSide drops 'none' sides, but for 'between' we need to keep it
+  // so the grouping logic can distinguish "explicitly nil/none" (group without separator)
+  // from "no between element at all" (don't group).
+  if (!borders.between && source.between) {
+    const style = mapBorderStyle((source.between as Record<string, unknown>).val);
+    if (style === 'none') {
+      borders.between = { style: 'none' };
+    }
+  }
 
   return Object.keys(borders).length > 0 ? borders : undefined;
 };

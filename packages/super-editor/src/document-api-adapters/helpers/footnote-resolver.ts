@@ -8,6 +8,7 @@ import type { Editor } from '../../core/Editor.js';
 import type { FootnoteAddress, FootnoteDomain, FootnoteInfo, DiscoveryItem } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { findNoteEntryById } from './note-entry-lookup.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,7 +73,7 @@ function resolveCollectionContent(collection: FootnoteCollection | undefined, no
   if (!collection) return '';
 
   if (Array.isArray(collection)) {
-    const match = collection.find((entry) => String(entry?.id ?? '') === noteId);
+    const match = findNoteEntryById(collection, noteId);
     return extractTextFromContent(match?.content);
   }
 

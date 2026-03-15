@@ -9,5 +9,9 @@
     "lib": ["DOM", "ES2021"]
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../../contracts/tsconfig.json" }, { "path": "../../measuring/dom/tsconfig.json" }]
+  "references": [
+    { "path": "../../contracts/tsconfig.json" },
+    { "path": "../../measuring/dom/tsconfig.json" },
+    { "path": "../../../../shared/common/tsconfig.json" }
+  ]
 }

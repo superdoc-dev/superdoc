@@ -6,7 +6,7 @@ import type {
   CommentsDeleteInput,
   GetCommentInput,
 } from './comments/comments.js';
-import type { FormatAdapter } from './format/format.js';
+import type { SelectionMutationAdapter } from './selection-mutation.js';
 import type { FindAdapter } from './find/find.js';
 import type { GetNodeAdapter } from './get-node/get-node.js';
 import type { GetAdapter } from './get/get.js';
@@ -126,20 +126,16 @@ function makeWriteAdapter(): WriteAdapter {
   };
 }
 
-function makeFormatReceipt() {
+function makeSelectionMutationAdapter(): SelectionMutationAdapter {
   return {
-    success: true as const,
-    resolution: {
-      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-      range: { from: 1, to: 3 },
-      text: 'Hi',
-    },
-  };
-}
-
-function makeFormatAdapter(): FormatAdapter {
-  return {
-    apply: vi.fn(() => makeFormatReceipt()),
+    execute: vi.fn(() => ({
+      success: true as const,
+      resolution: {
+        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
+        range: { from: 1, to: 3 },
+        text: 'Hi',
+      },
+    })),
   };
 }
 
@@ -381,7 +377,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -404,7 +400,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -426,7 +422,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -448,7 +444,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -470,7 +466,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -495,7 +491,7 @@ describe('createDocumentApi', () => {
       info: infoAdpt,
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -518,7 +514,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: commentsAdpt,
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -544,7 +540,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: commentsAdpt,
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -567,7 +563,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: commentsAdpt,
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -596,6 +592,7 @@ describe('createDocumentApi', () => {
 
   it('delegates write operations through the shared write adapter', () => {
     const writeAdpt = makeWriteAdapter();
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -604,42 +601,45 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: writeAdpt,
-      format: makeFormatAdapter(),
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const insertTarget = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const selectionTarget = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.insert({ value: 'Hi' });
-    api.insert({ target, value: 'Yo' });
-    api.replace({ target, text: 'Hello' }, { changeMode: 'tracked' });
-    api.delete({ target });
+    api.insert({ target: insertTarget, value: 'Yo' });
+    api.replace({ target: selectionTarget, text: 'Hello' }, { changeMode: 'tracked' });
+    api.delete({ target: selectionTarget });
 
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       1,
-      { kind: 'insert', text: 'Hi' }, // write request keeps `text` (internal protocol)
+      { kind: 'insert', text: 'Hi' },
       { changeMode: 'direct', dryRun: false },
     );
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       2,
-      { kind: 'insert', target, text: 'Yo' }, // write request keeps `text` (internal protocol)
+      { kind: 'insert', target: insertTarget, text: 'Yo' },
       { changeMode: 'direct', dryRun: false },
     );
-    expect(writeAdpt.write).toHaveBeenNthCalledWith(
-      3,
-      { kind: 'replace', target, text: 'Hello' },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'replace', target: selectionTarget, ref: undefined, text: 'Hello' },
       { changeMode: 'tracked', dryRun: false },
     );
-    expect(writeAdpt.write).toHaveBeenNthCalledWith(
-      4,
-      { kind: 'delete', target, text: '' },
-      { changeMode: 'direct', dryRun: false },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'delete', target: selectionTarget, ref: undefined, behavior: 'selection' },
+      undefined,
     );
   });
 
-  it('delegates format.bold to adapter.apply with inline.bold', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.bold to selectionMutation.execute with inline.bold', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -648,22 +648,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.bold({ target }, { changeMode: 'tracked' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { bold: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { bold: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
 
-  it('delegates format.italic to adapter.apply with inline.italic', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.italic to selectionMutation.execute with inline.italic', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -672,22 +676,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.italic({ target }, { changeMode: 'direct' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { italic: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { italic: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.underline to adapter.apply with inline.underline', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.underline to selectionMutation.execute with inline.underline', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -696,22 +704,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.underline({ target }, { changeMode: 'direct' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { underline: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { underline: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.strikethrough to adapter.apply with inline.strike', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.strikethrough to selectionMutation.execute with inline.strike', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -720,22 +732,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.strikethrough({ target }, { changeMode: 'tracked' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { strike: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { strike: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
 
-  it('delegates format.fontFamily to adapter.apply with inline.fontFamily', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.fontFamily to selectionMutation.execute with inline.fontFamily', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -744,16 +760,20 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.fontFamily({ target, value: 'Arial' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { fontFamily: 'Arial' } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { fontFamily: 'Arial' } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -768,7 +788,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: trackAdpt,
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -793,7 +813,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: trackAdpt,
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -824,7 +844,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -853,7 +873,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -879,7 +899,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -964,7 +984,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: createAdpt,
       lists: makeListsAdapter(),
@@ -998,7 +1018,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: createAdpt,
       lists: makeListsAdapter(),
@@ -1034,7 +1054,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: listsAdpt,
@@ -1086,7 +1106,7 @@ describe('createDocumentApi', () => {
       capabilities: capAdpt,
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -1110,7 +1130,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1245,7 +1265,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1269,7 +1289,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1296,7 +1316,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1319,7 +1339,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1342,7 +1362,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1364,7 +1384,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1424,7 +1444,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1473,7 +1493,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1487,7 +1507,6 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1498,18 +1517,27 @@ describe('createDocumentApi', () => {
       }
     }
 
+    const SELECTION_TARGET = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+    };
+
     // -- Truth table: valid cases --
 
     it('accepts canonical target', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      const result = api.replace({ target, text: 'hello' });
+      const result = api.replace({ target: SELECTION_TARGET, text: 'hello' });
       expect(result.success).toBe(true);
     });
 
     it('allows collapsed range (start === end) through pre-apply', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 3, end: 3 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+      };
       const result = api.replace({ target, text: 'hello' });
       expect(result.success).toBe(true);
     });
@@ -1518,14 +1546,14 @@ describe('createDocumentApi', () => {
 
     it('rejects no target at all', () => {
       const api = makeApi();
-      expectValidationError(() => api.replace({ text: 'hello' } as any), 'Replace requires a target');
+      expectValidationError(() => api.replace({ text: 'hello' } as any), 'requires a target or ref');
     });
 
     it('rejects malformed target', () => {
       const api = makeApi();
       expectValidationError(
         () => api.replace({ target: { kind: 'text', blockId: 'p1' }, text: 'hello' } as any),
-        'target must be a text address object',
+        'SelectionTarget',
       );
     });
 
@@ -1533,8 +1561,7 @@ describe('createDocumentApi', () => {
 
     it('rejects non-string text', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expectValidationError(() => api.replace({ target, text: 42 } as any), 'text must be a string');
+      expectValidationError(() => api.replace({ target: SELECTION_TARGET, text: 42 } as any), 'text must be a string');
     });
 
     // -- Input shape --
@@ -1546,9 +1573,8 @@ describe('createDocumentApi', () => {
 
     it('rejects unknown fields', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
       expectValidationError(
-        () => api.replace({ target, text: 'hi', block_id: 'x' } as any),
+        () => api.replace({ target: SELECTION_TARGET, text: 'hi', block_id: 'x' } as any),
         'Unknown field "block_id"',
       );
     });
@@ -1570,14 +1596,13 @@ describe('createDocumentApi', () => {
         expect.fail('Expected error');
       } catch (err: unknown) {
         expect((err as Error).constructor.name).toBe('DocumentApiValidationError');
-        expect((err as { code: string }).code).toBe('INVALID_TARGET');
       }
     });
 
     // -- Canonical payload parity --
 
     it('sends same adapter request for replace({ target, text }) as before', () => {
-      const writeAdpt = makeWriteAdapter();
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1586,17 +1611,16 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
-        write: writeAdpt,
-        format: makeFormatAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      api.replace({ target, text: 'Hello' });
-      expect(writeAdpt.write).toHaveBeenCalledWith(
-        { kind: 'replace', target, text: 'Hello' },
+      api.replace({ target: SELECTION_TARGET, text: 'Hello' });
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'replace', target: SELECTION_TARGET, ref: undefined, text: 'Hello' },
         { changeMode: 'direct', dryRun: false },
       );
     });
@@ -1605,16 +1629,14 @@ describe('createDocumentApi', () => {
 
     it('rejects replace with both text and content', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expect(() => api.replace({ target, text: 'hi', content: { type: 'paragraph' } } as any)).toThrow(
-        /either "text".*or "content".*not both/,
-      );
+      expect(() =>
+        api.replace({ target: SELECTION_TARGET, text: 'hi', content: { type: 'paragraph' } } as any),
+      ).toThrow(/either "text".*or "content".*not both/);
     });
 
     it('rejects replace with neither text nor content', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expect(() => api.replace({ target } as any)).toThrow(/either "text".*or "content"/);
+      expect(() => api.replace({ target: SELECTION_TARGET } as any)).toThrow(/either "text".*or "content"/);
     });
 
     it('routes structural content replace to replaceStructured', () => {
@@ -1628,29 +1650,29 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      api.replace({ target, content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] } });
+      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      api.replace({ target: sdTarget, content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] } });
       expect(writeAdpt.replaceStructured).toHaveBeenCalledTimes(1);
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
     it('rejects structural replace with empty fragment', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expect(() => api.replace({ target, content: [] } as any)).toThrow(/at least one node/);
+      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      expect(() => api.replace({ target: sdTarget, content: [] } as any)).toThrow(/at least one node/);
     });
 
     it('rejects structural replace with invalid nestingPolicy.tables', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
+      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
       expect(() =>
-        api.replace({ target, content: { type: 'paragraph' }, nestingPolicy: { tables: 'yes' } } as any),
+        api.replace({ target: sdTarget, content: { type: 'paragraph' }, nestingPolicy: { tables: 'yes' } } as any),
       ).toThrow(/nestingPolicy\.tables must be one of/);
     });
   });
@@ -1666,7 +1688,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1680,7 +1702,6 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1691,18 +1712,27 @@ describe('createDocumentApi', () => {
       }
     }
 
+    const SELECTION_TARGET = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+    };
+
     // -- Truth table: valid cases --
 
     it('accepts canonical target', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      const result = api.delete({ target });
+      const result = api.delete({ target: SELECTION_TARGET });
       expect(result.success).toBe(true);
     });
 
     it('allows collapsed range (start === end) through pre-apply', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 3, end: 3 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+      };
       const result = api.delete({ target });
       expect(result.success).toBe(true);
     });
@@ -1711,15 +1741,12 @@ describe('createDocumentApi', () => {
 
     it('rejects no target at all', () => {
       const api = makeApi();
-      expectValidationError(() => api.delete({} as any), 'Delete requires a target');
+      expectValidationError(() => api.delete({} as any), 'Delete input must provide either "target" or "ref"');
     });
 
     it('rejects malformed target', () => {
       const api = makeApi();
-      expectValidationError(
-        () => api.delete({ target: { kind: 'text', blockId: 'p1' } } as any),
-        'target must be a text address object',
-      );
+      expectValidationError(() => api.delete({ target: { kind: 'text', blockId: 'p1' } } as any), 'SelectionTarget');
     });
 
     // -- Input shape --
@@ -1731,8 +1758,7 @@ describe('createDocumentApi', () => {
 
     it('rejects unknown fields', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expectValidationError(() => api.delete({ target, offset: 3 } as any), 'Unknown field "offset"');
+      expectValidationError(() => api.delete({ target: SELECTION_TARGET, offset: 3 } as any), 'Unknown field "offset"');
     });
 
     it('rejects flat blockId as unknown field', () => {
@@ -1743,7 +1769,7 @@ describe('createDocumentApi', () => {
     // -- Canonical payload parity --
 
     it('sends same adapter request for delete({ target }) as before', () => {
-      const writeAdpt = makeWriteAdapter();
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1752,18 +1778,17 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
-        write: writeAdpt,
-        format: makeFormatAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      api.delete({ target });
-      expect(writeAdpt.write).toHaveBeenCalledWith(
-        { kind: 'delete', target, text: '' },
-        { changeMode: 'direct', dryRun: false },
+      api.delete({ target: SELECTION_TARGET });
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'delete', target: SELECTION_TARGET, ref: undefined, behavior: 'selection' },
+        undefined,
       );
     });
   });
@@ -1779,7 +1804,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1793,7 +1818,6 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1804,6 +1828,12 @@ describe('createDocumentApi', () => {
       }
     }
 
+    const SELECTION_TARGET = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+    };
+
     const FORMAT_METHODS = ['bold', 'italic', 'underline', 'strikethrough'] as const;
 
     for (const method of FORMAT_METHODS) {
@@ -1812,14 +1842,17 @@ describe('createDocumentApi', () => {
 
         it('accepts canonical target', () => {
           const api = makeApi();
-          const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-          const result = api.format[method]({ target });
+          const result = api.format[method]({ target: SELECTION_TARGET });
           expect(result.success).toBe(true);
         });
 
         it('allows collapsed range (start === end) through pre-apply', () => {
           const api = makeApi();
-          const target = { kind: 'text', blockId: 'p1', range: { start: 3, end: 3 } } as const;
+          const target = {
+            kind: 'selection' as const,
+            start: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+            end: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+          };
           const result = api.format[method]({ target });
           expect(result.success).toBe(true);
         });
@@ -1828,14 +1861,14 @@ describe('createDocumentApi', () => {
 
         it('rejects no target at all', () => {
           const api = makeApi();
-          expectValidationError(() => api.format[method]({} as any), 'requires a target');
+          expectValidationError(() => api.format[method]({} as any), 'either "target" or "ref"');
         });
 
         it('rejects malformed target', () => {
           const api = makeApi();
           expectValidationError(
             () => api.format[method]({ target: { kind: 'text', blockId: 'p1' } } as any),
-            'target must be a text address object',
+            'SelectionTarget',
           );
         });
 
@@ -1843,15 +1876,17 @@ describe('createDocumentApi', () => {
 
         it('rejects null input', () => {
           const api = makeApi();
-          // null spreads to {}, so the merged object { inline: {...} } passes shape
+          // null spreads to {}, so the merged object passes shape
           // checks but fails the locator requirement
-          expectValidationError(() => api.format[method](null as any), 'requires a target');
+          expectValidationError(() => api.format[method](null as any), 'either "target" or "ref"');
         });
 
         it('rejects unknown fields', () => {
           const api = makeApi();
-          const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-          expectValidationError(() => api.format[method]({ target, offset: 3 } as any), 'Unknown field "offset"');
+          expectValidationError(
+            () => api.format[method]({ target: SELECTION_TARGET, offset: 3 } as any),
+            'Unknown field "offset"',
+          );
         });
 
         it('rejects flat blockId as unknown field', () => {
@@ -1866,8 +1901,8 @@ describe('createDocumentApi', () => {
 
     // -- Canonical payload parity --
 
-    it('passes canonical target through to adapter.apply with inline', () => {
-      const formatAdpt = makeFormatAdapter();
+    it('passes canonical target through to adapter.execute with inline', () => {
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1877,16 +1912,20 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: formatAdpt,
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+      };
       api.format.bold({ target });
-      expect(formatAdpt.apply).toHaveBeenCalledWith(
-        { target, inline: { bold: true } },
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'format', target, ref: undefined, inline: { bold: true } },
         { changeMode: 'direct', dryRun: false },
       );
     });
@@ -1903,7 +1942,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2010,7 +2049,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: commentsAdpt,
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2033,7 +2072,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2141,7 +2180,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: commentsAdpt,
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2172,7 +2211,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: commentsAdpt,
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2201,7 +2240,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2284,7 +2323,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: createAdpt,
         lists: makeListsAdapter(),
@@ -2315,7 +2354,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2407,7 +2446,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: listsAdpt,
@@ -2433,7 +2472,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2470,7 +2509,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2502,7 +2541,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: createAdpt,
         lists: makeListsAdapter(),
@@ -2527,7 +2566,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: createAdpt,
         lists: makeListsAdapter(),
@@ -2554,7 +2593,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),

@@ -308,6 +308,10 @@ export interface NodeHandlerContext {
   themeColors?: ThemeColorPalette;
   // FlowBlock cache for incremental conversion (optional)
   flowBlockCache?: import('./cache.js').FlowBlockCache;
+  // Per-list marker offsets caused by suppressed tracked-change ghost items
+  trackedListMarkerOffsets?: Map<string, number>;
+  // Last seen source ordinal per list key for restart detection
+  trackedListLastOrdinals?: Map<string, number>;
 }
 
 /**

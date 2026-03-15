@@ -11,6 +11,7 @@ import type {
   ListMeasure,
   Measure,
   Page,
+  PageBreakBlock,
   PageMargins,
   ParagraphBlock,
   ParagraphMeasure,
@@ -506,6 +507,7 @@ const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter portrait in px
 const DEFAULT_MARGINS: Margins = { top: 72, right: 72, bottom: 72, left: 72 };
 
 const COLUMN_EPSILON = 0.0001;
+const PAGE_START_EPSILON = 0.0001;
 
 /**
  * Safely converts OOXML boolean-like values to actual booleans.
@@ -518,6 +520,29 @@ const asBoolean = (value: unknown): boolean => {
     return normalized === 'true' || normalized === '1' || normalized === 'on';
   }
   return false;
+};
+
+/**
+ * A DOCX pageBreakBefore paragraph only requires that the paragraph start on a
+ * new page. If pagination has already advanced to the top of a fresh page
+ * because of a preceding section break, applying the break again would create
+ * an extra blank page that Word does not render.
+ */
+const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageState | undefined): boolean => {
+  if (block.attrs?.source !== 'pageBreakBefore') {
+    return false;
+  }
+
+  if (!state) {
+    return true;
+  }
+
+  const isAtTopOfFreshPage =
+    state.page.fragments.length === 0 &&
+    state.columnIndex === 0 &&
+    Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON;
+
+  return isAtTopOfFreshPage;
 };
 
 // List constants sourced from shared/common
@@ -2082,6 +2107,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.kind === 'pageBreak') {
       if (measure.kind !== 'pageBreak') {
         throw new Error(`layoutDocument: expected pageBreak measure for block ${block.id}`);
+      }
+      const currentState = states[states.length - 1];
+      if (shouldSkipRedundantPageBreakBefore(block as PageBreakBlock, currentState)) {
+        continue;
       }
       paginator.startNewPage();
       continue;

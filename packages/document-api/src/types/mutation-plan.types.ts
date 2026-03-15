@@ -6,7 +6,7 @@
  */
 
 import type { NodeAddress } from './base.js';
-import type { TextAddress, TrackedChangeAddress } from './address.js';
+import type { TextAddress, TrackedChangeAddress, SelectionTarget, DeleteBehavior } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
 import type { InlineRunPatch } from '../format/inline-run-patch.js';
@@ -30,7 +30,12 @@ export type RefWhere = {
   within?: NodeAddress;
 };
 
-export type StepWhere = SelectWhere | RefWhere;
+export type TargetWhere = {
+  by: 'target';
+  target: SelectionTarget;
+};
+
+export type StepWhere = SelectWhere | RefWhere | TargetWhere;
 
 export type AssertWhere = {
   by: 'select';
@@ -106,7 +111,10 @@ export type TextDeleteStep = {
   id: string;
   op: 'text.delete';
   where: StepWhere;
-  args: Record<string, never>;
+  args: {
+    /** Controls block-edge expansion. Defaults to `'selection'`. */
+    behavior?: DeleteBehavior;
+  };
 };
 
 export type StyleApplyStep = {
@@ -219,10 +227,18 @@ export type SpanStepResolution = {
   text: string;
 };
 
+/** Resolution for a selection-based target (may span multiple blocks). */
+export type SelectionStepResolution = {
+  selectionTarget: SelectionTarget;
+  range: { from: number; to: number };
+  text: string;
+};
+
 export type TextStepData = {
   domain: 'text';
   resolutions: TextStepResolution[];
   spanResolutions?: SpanStepResolution[];
+  selectionResolutions?: SelectionStepResolution[];
 };
 
 export type AssertStepData = {
@@ -289,6 +305,7 @@ export type StepPreview = {
   op: string;
   resolutions?: TextStepResolution[];
   spanResolutions?: SpanStepResolution[];
+  selectionResolutions?: SelectionStepResolution[];
   style?: unknown;
 };
 

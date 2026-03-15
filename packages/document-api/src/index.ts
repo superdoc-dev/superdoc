@@ -9,6 +9,19 @@ export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
+export type {
+  RangeAnchor,
+  DocumentEdgeAnchor,
+  PointAnchor,
+  RefBoundaryAnchor,
+  ResolveRangeInput,
+  ResolveRangeOutput,
+  RangeBlockPreview,
+  RangePreview,
+  RangeResolverAdapter,
+} from './ranges/index.js';
+export { executeResolveRange } from './ranges/index.js';
 export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
 export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
@@ -17,7 +30,7 @@ export type {
   MarkdownToFragmentAdapter,
 } from './markdown-to-fragment/markdown-to-fragment.js';
 export { executeMarkdownToFragment } from './markdown-to-fragment/markdown-to-fragment.js';
-export type { HistoryState, HistoryActionResult } from './history/history.types.js';
+export type { HistoryState, HistoryActionResult, HistoryNoopReason } from './history/history.types.js';
 
 import type {
   CreateParagraphInput,
@@ -60,7 +73,6 @@ import type { DeleteInput } from './delete/delete.js';
 import { executeFind, type FindAdapter } from './find/find.js';
 import type { SDFindInput, SDFindResult, SDGetInput, SDNodeResult } from './types/sd-envelope.js';
 import type {
-  FormatAdapter,
   FormatApi,
   FormatInlineAliasApi,
   FormatInlineAliasInput,
@@ -98,6 +110,8 @@ import {
 } from './clear-content/clear-content.js';
 import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
+import { executeResolveRange } from './ranges/resolve.js';
+import type { RangeResolverAdapter, ResolveRangeInput, ResolveRangeOutput } from './ranges/ranges.types.js';
 import { executeInsert } from './insert/insert.js';
 import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
@@ -183,8 +197,15 @@ import {
   executeCreateTableOfContents,
 } from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
-import { executeBlocksDelete } from './blocks/blocks.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from './types/blocks.types.js';
+import { executeBlocksList, executeBlocksDelete, executeBlocksDeleteRange } from './blocks/blocks.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
+} from './types/blocks.types.js';
 import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
   CreateTableInput,
@@ -249,6 +270,7 @@ import {
   executeTrackChangesDecide,
 } from './track-changes/track-changes.js';
 import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
+import type { SelectionMutationAdapter } from './selection-mutation.js';
 import {
   executeCapabilities,
   type CapabilitiesAdapter,
@@ -1257,7 +1279,7 @@ export { textReceiptToSDReceipt } from './receipt-bridge.js';
 export { isSDAddress, isValidTarget } from './validation-primitives.js';
 export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
-export type { ReplaceInput, LegacyReplaceInput } from './replace/replace.js';
+export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
 export { isStructuralReplaceInput } from './replace/replace.js';
 export { validateDocumentFragment, validateSDFragment } from './validation/fragment-validator.js';
 export type { DeleteInput } from './delete/delete.js';
@@ -1326,6 +1348,14 @@ export interface QueryApi {
 export interface MutationsApi {
   preview(input: MutationsPreviewInput): MutationsPreviewOutput;
   apply(input: MutationsApplyInput): PlanReceipt;
+}
+
+export interface RangesApi {
+  resolve(input: ResolveRangeInput): ResolveRangeOutput;
+}
+
+export interface RangesAdapter {
+  resolve(input: ResolveRangeInput): ResolveRangeOutput;
 }
 
 export interface QueryAdapter {
@@ -1419,7 +1449,7 @@ export interface DocumentApi {
    */
   trackChanges: TrackChangesApi;
   /**
-   * Block-level structural operations (delete whole blocks).
+   * Block-level structural operations (list, delete, delete-range).
    */
   blocks: BlocksApi;
   /**
@@ -1495,6 +1525,10 @@ export interface DocumentApi {
    */
   query: QueryApi;
   /**
+   * Deterministic range construction from explicit document anchors.
+   */
+  ranges: RangesApi;
+  /**
    * Mutation plan engine — preview and apply atomic mutation plans.
    */
   mutations: MutationsApi;
@@ -1537,7 +1571,7 @@ export interface DocumentApiAdapters {
   capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
   write: WriteAdapter;
-  format: FormatAdapter;
+  selectionMutation: SelectionMutationAdapter;
   styles: StylesAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
@@ -1560,6 +1594,7 @@ export interface DocumentApiAdapters {
   fields?: FieldsAdapter;
   citations?: CitationsAdapter;
   authorities?: AuthoritiesAdapter;
+  ranges: RangesAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -1597,7 +1632,7 @@ function requireAdapter<T>(adapter: T | undefined, namespace: string): T {
   return adapter;
 }
 
-function buildFormatInlineAliasApi(adapter: FormatAdapter): FormatInlineAliasApi {
+function buildFormatInlineAliasApi(adapter: SelectionMutationAdapter): FormatInlineAliasApi {
   return Object.fromEntries(
     INLINE_PROPERTY_REGISTRY.map((entry) => {
       const key = entry.key as InlineRunPatchKey;
@@ -1638,7 +1673,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     return caps;
   };
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
-  const inlineAliasApi = buildFormatInlineAliasApi(adapters.format);
+  const inlineAliasApi = buildFormatInlineAliasApi(adapters.selectionMutation);
 
   const api: DocumentApi = {
     get(input: SDGetInput): SDDocument {
@@ -1692,18 +1727,18 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeInsert(adapters.write, input, options);
     },
     replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
-      return executeReplace(adapters.write, input, options);
+      return executeReplace(adapters.selectionMutation, adapters.write, input, options);
     },
     delete(input: DeleteInput, options?: MutationOptions): TextMutationReceipt {
-      return executeDelete(adapters.write, input, options);
+      return executeDelete(adapters.selectionMutation, input, options);
     },
     format: {
       ...inlineAliasApi,
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeInlineAlias(adapters.format, 'strike', { ...input, value: true }, options);
+        return executeInlineAlias(adapters.selectionMutation, 'strike', { ...input, value: true }, options);
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, input, options);
+        return executeStyleApply(adapters.selectionMutation, input, options);
       },
       paragraph: {
         resetDirectFormatting(
@@ -1787,8 +1822,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     blocks: {
+      list(input?: BlocksListInput): BlocksListResult {
+        return executeBlocksList(adapters.blocks, input);
+      },
       delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult {
         return executeBlocksDelete(adapters.blocks, input, options);
+      },
+      deleteRange(input: BlocksDeleteRangeInput, options?: MutationOptions): BlocksDeleteRangeResult {
+        return executeBlocksDeleteRange(adapters.blocks, input, options);
       },
     },
     create: {
@@ -2737,6 +2778,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     query: {
       match(input: QueryMatchInput): QueryMatchOutput {
         return adapters.query.match(input);
+      },
+    },
+    ranges: {
+      resolve(input: ResolveRangeInput): ResolveRangeOutput {
+        return executeResolveRange(adapters.ranges, input);
       },
     },
     mutations: {

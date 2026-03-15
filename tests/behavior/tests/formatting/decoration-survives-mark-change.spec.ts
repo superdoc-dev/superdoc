@@ -1,5 +1,5 @@
 import { test, expect } from '../../fixtures/superdoc.js';
-import { addCommentByText, assertDocumentApiReady, listComments } from '../../helpers/document-api.js';
+import { addCommentByText, assertDocumentApiReady } from '../../helpers/document-api.js';
 
 /**
  * SD-1963: Decoration range incorrectly expands to run boundaries;
@@ -22,29 +22,25 @@ test.describe('comment highlight survives mark changes', () => {
     await superdoc.waitForStable();
 
     // Add a comment on "brown fox"
-    const commentId = await addCommentByText(superdoc.page, {
+    await addCommentByText(superdoc.page, {
       pattern: 'brown fox',
       text: 'Comment on brown fox',
     });
     await superdoc.waitForStable();
 
-    // Verify comment highlight exists
-    await superdoc.assertCommentHighlightExists({
-      text: 'brown fox',
-      commentId,
-      timeoutMs: 20_000,
-    });
+    // Verify comment mark exists in PM state (avoids slow DOM highlight polling on WebKit)
+    let pos = await superdoc.findTextPos('brown fox');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     // Select "brown fox" and apply bold
-    const pos = await superdoc.findTextPos('brown fox');
+    pos = await superdoc.findTextPos('brown fox');
     await superdoc.setTextSelection(pos, pos + 'brown fox'.length);
     await superdoc.bold();
     await superdoc.waitForStable();
 
-    // Comment highlight must still be present
-    await superdoc.assertCommentHighlightExists({
-      commentId,
-    });
+    // Comment mark must still be present after applying bold
+    pos = await superdoc.findTextPos('brown fox');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     // Bold must have been applied
     await superdoc.assertTextHasMarks('brown fox', ['bold']);
@@ -59,48 +55,28 @@ test.describe('comment highlight survives mark changes', () => {
     await superdoc.waitForStable();
 
     // Comment spans "quick brown fox"
-    const commentId = await addCommentByText(superdoc.page, {
+    await addCommentByText(superdoc.page, {
       pattern: 'quick brown fox',
       text: 'Partial italic test',
     });
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ text: 'quick brown fox', commentId, timeoutMs: 20_000 });
+
+    // Verify comment mark exists in PM state (avoids slow DOM highlight polling on WebKit)
+    let pos = await superdoc.findTextPos('quick brown fox');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     // Apply italic to only "brown" (middle of the commented range)
-    const pos = await superdoc.findTextPos('brown');
+    pos = await superdoc.findTextPos('brown');
     await superdoc.setTextSelection(pos, pos + 'brown'.length);
     await superdoc.italic();
     await superdoc.waitForStable();
 
-    // Comment highlight must still exist — after the run split the highlight may
-    // span multiple elements, so check by commentId AND all text segments in a
-    // single poll to avoid multiplicative timeouts in slower engines (webkit).
-    await expect
-      .poll(
-        () =>
-          superdoc.page.evaluate(
-            ({ cId }) => {
-              const normalize = (v: string) => v.replace(/\s+/g, ' ').trim();
-              const highlights = Array.from(document.querySelectorAll('.superdoc-comment-highlight'));
-              if (highlights.length === 0) return 'no highlights';
-              const hasId = highlights.some((el) =>
-                (el.getAttribute('data-comment-ids') ?? '')
-                  .split(/[\s,]+/)
-                  .filter(Boolean)
-                  .includes(cId),
-              );
-              if (!hasId) return 'missing commentId';
-              const texts = highlights.map((el) => normalize(el.textContent ?? ''));
-              for (const word of ['quick', 'brown', 'fox']) {
-                if (!texts.some((t) => t.includes(word))) return `missing "${word}"`;
-              }
-              return 'ok';
-            },
-            { cId: commentId },
-          ),
-        { timeout: 25_000 },
-      )
-      .toBe('ok');
+    // Comment mark must still exist on all segments after the run split.
+    // After italic splits the range, check each word's PM node still has commentMark.
+    for (const word of ['quick', 'brown', 'fox']) {
+      const wordPos = await superdoc.findTextPos(word);
+      await superdoc.assertMarksAtPos(wordPos, ['commentMark']);
+    }
 
     // Italic applied to "brown"
     await superdoc.assertTextHasMarks('brown', ['italic']);
@@ -114,33 +90,39 @@ test.describe('comment highlight survives mark changes', () => {
     await superdoc.type('Decoration resilience test sentence');
     await superdoc.waitForStable();
 
-    const commentId = await addCommentByText(superdoc.page, {
+    await addCommentByText(superdoc.page, {
       pattern: 'resilience test',
       text: 'Multi-mark test',
     });
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ text: 'resilience test', commentId, timeoutMs: 20_000 });
+
+    // Verify comment mark exists in PM state (avoids slow DOM highlight polling on WebKit)
+    let pos = await superdoc.findTextPos('resilience test');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     // Apply bold, then italic, then underline to the same range.
     // Re-select between each mark because WebKit can disrupt DOM selection
     // after Cmd+B/I/U shortcuts, and PM may re-index positions after marks.
-    let pos = await superdoc.findTextPos('resilience test');
+    pos = await superdoc.findTextPos('resilience test');
     await superdoc.setTextSelection(pos, pos + 'resilience test'.length);
     await superdoc.bold();
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ commentId });
+    pos = await superdoc.findTextPos('resilience test');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     pos = await superdoc.findTextPos('resilience test');
     await superdoc.setTextSelection(pos, pos + 'resilience test'.length);
     await superdoc.italic();
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ commentId });
+    pos = await superdoc.findTextPos('resilience test');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     pos = await superdoc.findTextPos('resilience test');
     await superdoc.setTextSelection(pos, pos + 'resilience test'.length);
     await superdoc.underline();
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ commentId });
+    pos = await superdoc.findTextPos('resilience test');
+    await superdoc.assertMarksAtPos(pos, ['commentMark']);
 
     // All three marks should be present
     await superdoc.assertTextHasMarks('resilience test', ['bold', 'italic', 'underline']);

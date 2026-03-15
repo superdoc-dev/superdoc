@@ -326,8 +326,18 @@ export function handleImageNode(node, params, isAnchor) {
     return null;
   }
 
-  // Check for image effects (grayscale, etc.)
+  // Check for image effects (grayscale, luminance, etc.)
   const hasGrayscale = blip.elements?.some((el) => el.name === 'a:grayscl');
+  const lumEl = blip.elements?.find((el) => el.name === 'a:lum');
+  const rawBright = Number(lumEl?.attributes?.bright);
+  const rawContrast = Number(lumEl?.attributes?.contrast);
+  const lum =
+    Number.isFinite(rawBright) || Number.isFinite(rawContrast)
+      ? {
+          ...(Number.isFinite(rawBright) ? { bright: rawBright } : {}),
+          ...(Number.isFinite(rawContrast) ? { contrast: rawContrast } : {}),
+        }
+      : undefined;
 
   // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
   // This tells Word to scale the image to fill the extent rectangle.
@@ -552,6 +562,7 @@ export function handleImageNode(node, params, isAnchor) {
     ...(order.length ? { drawingChildOrder: order } : {}),
     ...(originalChildren.length ? { originalDrawingChildren: originalChildren } : {}),
     ...(hasGrayscale ? { grayscale: true } : {}),
+    ...(lum ? { lum } : {}),
   };
 
   return {

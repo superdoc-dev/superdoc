@@ -3,7 +3,7 @@ import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
-import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
@@ -67,8 +67,6 @@ import {
 import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
-import { decodeRPrFromMarks } from '../super-converter/styles.js';
-import { halfPointToPoints } from '../super-converter/helpers.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
@@ -171,14 +169,6 @@ export type {
 // Mark name constants
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
-
-/**
- * Font size scaling factor for subscript and superscript text.
- * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
- * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
- * Applied to the base font size to reduce text size for sub/superscripts.
- */
-const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
@@ -1114,6 +1104,10 @@ export class PresentationEditor extends EventEmitter {
   #syncDocumentModeClass() {
     if (!this.#visibleHost) return;
     this.#visibleHost.classList.toggle('presentation-editor--viewing', this.#documentMode === 'viewing');
+    this.#visibleHost.classList.toggle(
+      'presentation-editor--allow-selection',
+      this.#documentMode === 'viewing' && !!this.#options.allowSelectionInViewMode,
+    );
   }
 
   /**
@@ -2776,6 +2770,20 @@ export class PresentationEditor extends EventEmitter {
       handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
 
+    // Listen for footnote/endnote part mutations (e.g., insert via document API).
+    // These modify the OOXML part and derived cache but don't change the PM document,
+    // so the normal 'update' event won't trigger a layout refresh.
+    const handleNotesPartChanged = () => {
+      this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    };
+    this.#editor.on('notes-part-changed', handleNotesPartChanged);
+    this.#editorListeners.push({
+      event: 'notes-part-changed',
+      handler: handleNotesPartChanged as (...args: unknown[]) => void,
+    });
+
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
       // Setup remote cursor rendering after collaboration is ready
@@ -3693,7 +3701,6 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintEnd = perfNow();
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
       const painterPostStart = perfNow();
-      this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
       this.#syncDecorations();
       this.#domIndexObserverManager?.resume();
@@ -4211,7 +4218,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // In viewing mode, don't render caret or selection highlights
-    if (this.#isViewLocked()) {
+    // (unless allowSelectionInViewMode is enabled for read-only selection)
+    if (this.#isViewLocked() && !this.#options.allowSelectionInViewMode) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -4230,11 +4238,13 @@ export class PresentationEditor extends EventEmitter {
     // Keep selection visible when context menu is open.
     const contextMenuOpen = activeEditor?.state ? !!ContextMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
-    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
-    // so it won't be inside [data-editor-ui-surface]. Check both.
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns, tooltips).
+    // Dropdown/tooltip content is portaled under <body>, so it won't be inside
+    // [data-editor-ui-surface]. Check both in-surface and portaled SD UI roots.
     const activeEl = document.activeElement;
-    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.(
+      '[data-editor-ui-surface], .sd-toolbar-dropdown-menu, .toolbar-dropdown-menu',
+    );
 
     if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
       try {
@@ -4992,6 +5002,8 @@ export class PresentationEditor extends EventEmitter {
         bookmarks: this.#layoutState.bookmarks,
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,
+        scrollContainer: this.#scrollContainer ?? this.#visibleHost,
+        zoom: this.zoom,
         scrollPageIntoView: (pageIndex) => this.#scrollPageIntoView(pageIndex),
         waitForPageMount: (pageIndex, timeoutMs) => this.#waitForPageMount(pageIndex, { timeout: timeoutMs }),
         getActiveEditor: () => this.getActiveEditor(),
@@ -5747,6 +5759,9 @@ export class PresentationEditor extends EventEmitter {
    * Determines whether the current viewing mode should block edits.
    * When documentMode is viewing but the active editor has been toggled
    * back to editable (e.g. permission ranges), we treat the view as editable.
+   *
+   * Note: This method controls input blocking. For selection visuals,
+   * check allowSelectionInViewMode separately.
    */
   #isViewLocked(): boolean {
     if (this.#documentMode !== 'viewing') return false;
@@ -5754,108 +5769,5 @@ export class PresentationEditor extends EventEmitter {
       ?.permissionRanges?.hasAllowedRanges;
     if (hasPermissionOverride) return false;
     return this.#documentMode === 'viewing';
-  }
-
-  /**
-   * Applies vertical alignment and font scaling to layout DOM elements for subscript/superscript rendering.
-   *
-   * This method post-processes the painted DOM layout to apply vertical alignment styles
-   * (super, sub, baseline, or custom position) based on run properties and text style marks.
-   * It handles both DOCX-style vertAlign ('superscript', 'subscript', 'baseline') and
-   * custom position offsets (in half-points).
-   *
-   * Processing logic:
-   * 1. Queries all text spans with ProseMirror position markers
-   * 2. For each span, resolves the ProseMirror position to find the containing run node
-   * 3. Extracts vertAlign and position from run properties and/or text style marks
-   * 4. Applies CSS vertical-align and font-size styles based on the extracted properties
-   * 5. Position takes precedence over vertAlign when both are present
-   *
-   * @throws Does not throw - DOM manipulation errors are silently caught to prevent layout corruption
-   * @private
-   */
-  #applyVertAlignToLayout() {
-    const doc = this.#editor?.state?.doc;
-    if (!doc || !this.#painterHost) return;
-
-    try {
-      const spans = this.#painterHost.querySelectorAll('.superdoc-line span[data-pm-start]') as NodeListOf<HTMLElement>;
-      spans.forEach((span) => {
-        try {
-          // Skip header/footer spans - they belong to separate PM documents
-          // and their data-pm-start values don't correspond to the body doc
-          if (span.closest('.superdoc-page-header, .superdoc-page-footer')) return;
-
-          const pmStart = Number(span.dataset.pmStart ?? 'NaN');
-          if (!Number.isFinite(pmStart)) return;
-
-          const pos = Math.max(0, Math.min(pmStart, doc.content.size));
-          const $pos = doc.resolve(pos);
-
-          let runNode: ProseMirrorNode | null = null;
-          for (let depth = $pos.depth; depth >= 0; depth--) {
-            const node = $pos.node(depth);
-            if (node.type.name === 'run') {
-              runNode = node;
-              break;
-            }
-          }
-
-          let vertAlign: string | null = runNode?.attrs?.runProperties?.vertAlign ?? null;
-          let position: number | null = runNode?.attrs?.runProperties?.position ?? null;
-          let fontSizeHalfPts: number | null = runNode?.attrs?.runProperties?.fontSize ?? null;
-
-          if (!vertAlign && position == null && runNode) {
-            runNode.forEach((child: ProseMirrorNode) => {
-              if (!child.isText || !child.marks?.length) return;
-              const rpr = decodeRPrFromMarks(child.marks as Mark[]) as {
-                vertAlign?: string;
-                position?: number;
-                fontSize?: number;
-              };
-              if (rpr.vertAlign && !vertAlign) vertAlign = rpr.vertAlign;
-              if (rpr.position != null && position == null) position = rpr.position;
-              if (rpr.fontSize != null && fontSizeHalfPts == null) fontSizeHalfPts = rpr.fontSize;
-            });
-          }
-
-          if (vertAlign == null && position == null) return;
-
-          const styleEntries: string[] = [];
-          if (position != null && Number.isFinite(position)) {
-            const pts = halfPointToPoints(position);
-            if (Number.isFinite(pts)) {
-              styleEntries.push(`vertical-align: ${pts}pt`);
-            }
-          } else if (vertAlign === 'superscript' || vertAlign === 'subscript') {
-            styleEntries.push(`vertical-align: ${vertAlign === 'superscript' ? 'super' : 'sub'}`);
-            if (fontSizeHalfPts != null && Number.isFinite(fontSizeHalfPts)) {
-              const scaledPts = halfPointToPoints(fontSizeHalfPts * SUBSCRIPT_SUPERSCRIPT_SCALE);
-              if (Number.isFinite(scaledPts)) {
-                styleEntries.push(`font-size: ${scaledPts}pt`);
-              } else {
-                styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-              }
-            } else {
-              styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-            }
-          } else if (vertAlign === 'baseline') {
-            styleEntries.push('vertical-align: baseline');
-          }
-
-          if (!styleEntries.length) return;
-          const existing = span.getAttribute('style');
-          const merged = existing ? `${existing}; ${styleEntries.join('; ')}` : styleEntries.join('; ');
-          span.setAttribute('style', merged);
-        } catch (error) {
-          // Silently catch errors for individual spans to prevent layout corruption
-          // DOM manipulation failures should not break the entire layout process
-          console.error('Failed to apply vertical alignment to span:', error);
-        }
-      });
-    } catch (error) {
-      // Silently catch errors to prevent layout corruption
-      console.error('Failed to apply vertical alignment to layout:', error);
-    }
   }
 }

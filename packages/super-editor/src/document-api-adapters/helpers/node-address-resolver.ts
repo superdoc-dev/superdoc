@@ -110,7 +110,7 @@ export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefin
   }
 }
 
-function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType: BlockNodeType): string | undefined {
+export function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType: BlockNodeType): string | undefined {
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
     // paraId (imported from DOCX) is the primary identity for paragraphs. This

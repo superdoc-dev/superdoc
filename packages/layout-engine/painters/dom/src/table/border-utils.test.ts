@@ -19,6 +19,7 @@ import {
   resolveTableBorderValue,
   resolveTableCellBorders,
   createTableBorderOverlay,
+  hasExplicitCellBorders,
 } from './border-utils.js';
 
 describe('applyBorder', () => {
@@ -240,6 +241,34 @@ describe('resolveTableBorderValue', () => {
   });
 });
 
+describe('hasExplicitCellBorders', () => {
+  it('returns false for undefined', () => {
+    expect(hasExplicitCellBorders(undefined)).toBe(false);
+  });
+
+  it('returns false when all sides are undefined', () => {
+    expect(hasExplicitCellBorders({})).toBe(false);
+  });
+
+  it('returns true when at least one side is defined', () => {
+    expect(hasExplicitCellBorders({ top: { style: 'single', width: 1 } })).toBe(true);
+    expect(hasExplicitCellBorders({ right: { style: 'none', width: 0 } })).toBe(true);
+    expect(hasExplicitCellBorders({ bottom: { style: 'single' } })).toBe(true);
+    expect(hasExplicitCellBorders({ left: { style: 'double', width: 2, color: '#FF0000' } })).toBe(true);
+  });
+
+  it('returns true when all sides are defined', () => {
+    expect(
+      hasExplicitCellBorders({
+        top: { style: 'single', width: 1 },
+        right: { style: 'single', width: 1 },
+        bottom: { style: 'single', width: 1 },
+        left: { style: 'single', width: 1 },
+      }),
+    ).toBe(true);
+  });
+});
+
 describe('resolveTableCellBorders', () => {
   // Tests use single-owner border model: each cell owns TOP and LEFT,
   // only edge cells (last row/col) own BOTTOM and RIGHT
@@ -254,7 +283,14 @@ describe('resolveTableCellBorders', () => {
 
   it('should use top/left borders for top-left corner cell (no bottom/right)', () => {
     // Cell (0,0) in 3x3: owns top and left, but NOT bottom/right (those come from adjacent cells)
-    const result = resolveTableCellBorders(tableBorders, 0, 0, 3, 3);
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 0,
+      rowSpan: 1,
+      gridColumnStart: 0,
+      colSpan: 1,
+      totalRows: 3,
+      totalCols: 3,
+    });
     expect(result.top).toEqual({ style: 'single', width: 2, color: '#FF0000' });
     expect(result.left).toEqual({ style: 'single', width: 2, color: '#FFFF00' });
     expect(result.bottom).toBeUndefined(); // Not last row
@@ -263,7 +299,14 @@ describe('resolveTableCellBorders', () => {
 
   it('should use bottom/right borders for bottom-right corner cell', () => {
     // Cell (2,2) in 3x3: is last row AND last col, so owns all four borders
-    const result = resolveTableCellBorders(tableBorders, 2, 2, 3, 3);
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 2,
+      rowSpan: 1,
+      gridColumnStart: 2,
+      colSpan: 1,
+      totalRows: 3,
+      totalCols: 3,
+    });
     expect(result.bottom).toEqual({ style: 'single', width: 2, color: '#0000FF' });
     expect(result.right).toEqual({ style: 'single', width: 2, color: '#00FF00' });
     expect(result.top).toEqual({ style: 'single', width: 1, color: '#888888' });
@@ -272,7 +315,14 @@ describe('resolveTableCellBorders', () => {
 
   it('should use insideH/insideV for middle cells (no bottom/right)', () => {
     // Cell (1,1) in 3x3: interior cell owns only top and left (insideH/insideV)
-    const result = resolveTableCellBorders(tableBorders, 1, 1, 3, 3);
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 1,
+      rowSpan: 1,
+      gridColumnStart: 1,
+      colSpan: 1,
+      totalRows: 3,
+      totalCols: 3,
+    });
     expect(result.top).toEqual({ style: 'single', width: 1, color: '#888888' });
     expect(result.bottom).toBeUndefined(); // Not last row - bottom comes from cell below
     expect(result.left).toEqual({ style: 'single', width: 1, color: '#CCCCCC' });
@@ -281,7 +331,14 @@ describe('resolveTableCellBorders', () => {
 
   it('should handle single row table (has both top and bottom)', () => {
     // Cell in single row table: is both first AND last row
-    const result = resolveTableCellBorders(tableBorders, 0, 1, 1, 3);
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 0,
+      rowSpan: 1,
+      gridColumnStart: 1,
+      colSpan: 1,
+      totalRows: 1,
+      totalCols: 3,
+    });
     expect(result.top).toEqual({ style: 'single', width: 2, color: '#FF0000' });
     expect(result.bottom).toEqual({ style: 'single', width: 2, color: '#0000FF' });
     // Middle column - no right border
@@ -290,11 +347,58 @@ describe('resolveTableCellBorders', () => {
 
   it('should handle single column table (has both left and right)', () => {
     // Cell in single column table: is both first AND last column
-    const result = resolveTableCellBorders(tableBorders, 1, 0, 3, 1);
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 1,
+      rowSpan: 1,
+      gridColumnStart: 0,
+      colSpan: 1,
+      totalRows: 3,
+      totalCols: 1,
+    });
     expect(result.left).toEqual({ style: 'single', width: 2, color: '#FFFF00' });
     expect(result.right).toEqual({ style: 'single', width: 2, color: '#00FF00' });
     // Middle row - no bottom border
     expect(result.bottom).toBeUndefined();
+  });
+
+  it('should give a spanning header cell the table right border when it reaches the last column', () => {
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 0,
+      rowSpan: 1,
+      gridColumnStart: 0,
+      colSpan: 2,
+      totalRows: 3,
+      totalCols: 2,
+    });
+
+    expect(result.left).toEqual({ style: 'single', width: 2, color: '#FFFF00' });
+    expect(result.right).toEqual({ style: 'single', width: 2, color: '#00FF00' });
+  });
+
+  it('should not give a spanning cell the right border when it does not reach the table edge', () => {
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 0,
+      rowSpan: 1,
+      gridColumnStart: 0,
+      colSpan: 2,
+      totalRows: 3,
+      totalCols: 4,
+    });
+
+    expect(result.right).toBeUndefined();
+  });
+
+  it('should give a rowspan cell the table bottom border when it reaches the last row', () => {
+    const result = resolveTableCellBorders(tableBorders, {
+      rowIndex: 2,
+      rowSpan: 2,
+      gridColumnStart: 1,
+      colSpan: 1,
+      totalRows: 4,
+      totalCols: 3,
+    });
+
+    expect(result.bottom).toEqual({ style: 'single', width: 2, color: '#0000FF' });
   });
 });
 

@@ -155,6 +155,36 @@ describe('translateImageNode', () => {
     expect(blip.elements).toEqual([{ name: 'a:grayscl' }]);
   });
 
+  it('should export luminance adjustment when present', () => {
+    baseParams.node.attrs.lum = { bright: 70000, contrast: -70000 };
+
+    const result = translateImageNode(baseParams);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+
+    expect(blip.elements).toEqual([{ name: 'a:lum', attributes: { bright: 70000, contrast: -70000 } }]);
+  });
+
+  it('should export grayscale and luminance adjustment together when both are present', () => {
+    baseParams.node.attrs.grayscale = true;
+    baseParams.node.attrs.lum = { bright: 70000, contrast: -70000 };
+
+    const result = translateImageNode(baseParams);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+
+    expect(blip.elements).toEqual([
+      { name: 'a:grayscl' },
+      { name: 'a:lum', attributes: { bright: 70000, contrast: -70000 } },
+    ]);
+  });
+
   it('should not export grayscale element when not present', () => {
     const result = translateImageNode(baseParams);
 

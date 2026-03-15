@@ -331,6 +331,8 @@ export const resetRunFormatting = (run: TextRun): void => {
   delete run.highlight;
   delete run.link;
   delete run.letterSpacing;
+  delete run.vertAlign;
+  delete run.baselineShift;
   // Keep fontFamily and fontSize as they may be defaults, not formatting changes
 };
 

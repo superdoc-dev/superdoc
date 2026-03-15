@@ -989,7 +989,7 @@ describe('TrackChanges extension commands', () => {
     expect(rejectSpy).toHaveBeenNthCalledWith(3, 3, 4);
   });
 
-  it('acceptTrackedChangeById chains contiguous same-id insertions before linking complementary deletions', () => {
+  it('acceptTrackedChangeById resolves contiguous same-id insertions without pulling in adjacent different-id deletions', () => {
     const italicMark = schema.marks.italic.create();
     const deletionMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-id' });
     const insertionId = 'shared-id';
@@ -1012,10 +1012,9 @@ describe('TrackChanges extension commands', () => {
     });
 
     expect(result).toBe(true);
-    expect(acceptSpy).toHaveBeenCalledTimes(3);
+    expect(acceptSpy).toHaveBeenCalledTimes(2);
     expect(acceptSpy).toHaveBeenNthCalledWith(1, 4, 5);
     expect(acceptSpy).toHaveBeenNthCalledWith(2, 5, 6);
-    expect(acceptSpy).toHaveBeenNthCalledWith(3, 1, 4);
 
     const rejectSpy = vi.fn().mockReturnValue(true);
     const rejectResult = commands.rejectTrackedChangeById(insertionId)({
@@ -1025,13 +1024,12 @@ describe('TrackChanges extension commands', () => {
     });
 
     expect(rejectResult).toBe(true);
-    expect(rejectSpy).toHaveBeenCalledTimes(3);
+    expect(rejectSpy).toHaveBeenCalledTimes(2);
     expect(rejectSpy).toHaveBeenNthCalledWith(1, 4, 5);
     expect(rejectSpy).toHaveBeenNthCalledWith(2, 5, 6);
-    expect(rejectSpy).toHaveBeenNthCalledWith(3, 1, 4);
   });
 
-  it('acceptTrackedChangeById and rejectTrackedChangeById SHOULD link deletion-insertion pairs', () => {
+  it('acceptTrackedChangeById and rejectTrackedChangeById should NOT link adjacent deletion-insertion pairs with different ids', () => {
     const deletionMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-id' });
     const insertionMark = schema.marks[TrackInsertMarkName].create({ id: 'ins-id' });
     const paragraph = schema.nodes.paragraph.create(null, [
@@ -1050,10 +1048,8 @@ describe('TrackChanges extension commands', () => {
     });
 
     expect(result).toBe(true);
-    // Should resolve both the insertion and the linked deletion
-    expect(acceptSpy).toHaveBeenCalledTimes(2);
-    expect(acceptSpy).toHaveBeenNthCalledWith(1, 4, 7);
-    expect(acceptSpy).toHaveBeenNthCalledWith(2, 1, 4);
+    expect(acceptSpy).toHaveBeenCalledTimes(1);
+    expect(acceptSpy).toHaveBeenCalledWith(4, 7);
 
     const rejectSpy = vi.fn().mockReturnValue(true);
     const rejectResult = commands.rejectTrackedChangeById('ins-id')({
@@ -1062,10 +1058,44 @@ describe('TrackChanges extension commands', () => {
       commands: { rejectTrackedChangesBetween: rejectSpy },
     });
     expect(rejectResult).toBe(true);
-    // Should resolve both the insertion and the linked deletion
+    expect(rejectSpy).toHaveBeenCalledTimes(1);
+    expect(rejectSpy).toHaveBeenCalledWith(4, 7);
+  });
+
+  it('acceptTrackedChangeById and rejectTrackedChangeById should still link adjacent deletion-insertion pairs with the same id', () => {
+    const sharedId = 'replace-id';
+    const deletionMark = schema.marks[TrackDeleteMarkName].create({ id: sharedId });
+    const insertionMark = schema.marks[TrackInsertMarkName].create({ id: sharedId });
+    const paragraph = schema.nodes.paragraph.create(null, [
+      schema.text('old', [deletionMark]),
+      schema.text('new', [insertionMark]),
+    ]);
+    const doc = schema.nodes.doc.create(null, paragraph);
+    const state = createState(doc);
+
+    const acceptSpy = vi.fn().mockReturnValue(true);
+    const tr = state.tr;
+    const result = commands.acceptTrackedChangeById(sharedId)({
+      state,
+      tr,
+      commands: { acceptTrackedChangesBetween: acceptSpy },
+    });
+
+    expect(result).toBe(true);
+    expect(acceptSpy).toHaveBeenCalledTimes(2);
+    expect(acceptSpy).toHaveBeenNthCalledWith(1, 1, 4);
+    expect(acceptSpy).toHaveBeenNthCalledWith(2, 4, 7);
+
+    const rejectSpy = vi.fn().mockReturnValue(true);
+    const rejectResult = commands.rejectTrackedChangeById(sharedId)({
+      state,
+      tr,
+      commands: { rejectTrackedChangesBetween: rejectSpy },
+    });
+    expect(rejectResult).toBe(true);
     expect(rejectSpy).toHaveBeenCalledTimes(2);
-    expect(rejectSpy).toHaveBeenNthCalledWith(1, 4, 7); // insertion "new"
-    expect(rejectSpy).toHaveBeenNthCalledWith(2, 1, 4); // deletion "old"
+    expect(rejectSpy).toHaveBeenNthCalledWith(1, 1, 4);
+    expect(rejectSpy).toHaveBeenNthCalledWith(2, 4, 7);
   });
 
   it('should NOT link changes separated by untracked content', () => {

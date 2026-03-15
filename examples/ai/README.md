@@ -12,12 +12,6 @@ You write the agentic loop and control the conversation directly.
 |----------|---------|--------|------|
 | [AWS Bedrock](./bedrock) | `index.ts` | `index.py` | AWS credentials (`aws configure`) |
 
-## Full demo
-
-| Example | Description | Docs |
-|---------|-------------|------|
-| [contract-review](./contract-review) | AI-powered contract review with agentic and headless patterns | [AI Agents](https://docs.superdoc.dev/getting-started/ai-agents) |
-
 ## Run
 
 ```bash

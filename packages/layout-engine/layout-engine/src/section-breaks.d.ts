@@ -22,11 +22,7 @@ export type SectionState = {
     h: number;
   } | null;
   activeColumns: ColumnLayout;
-  pendingColumns: {
-    count: number;
-    gap: number;
-    withSeparator?: boolean;
-  } | null;
+  pendingColumns: ColumnLayout | null;
   activeOrientation: 'portrait' | 'landscape' | null;
   pendingOrientation: 'portrait' | 'landscape' | null;
   hasAnyPages: boolean;

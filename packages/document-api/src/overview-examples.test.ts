@@ -9,19 +9,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDocumentApi } from './index.js';
 import type { DocumentApiCapabilities } from './capabilities/capabilities.js';
-import type { TextAddress } from './types/index.js';
+import type { SelectionTarget } from './types/index.js';
 
 // ---------------------------------------------------------------------------
 // Shared mock-adapter factories (mirrors index.test.ts patterns)
 // ---------------------------------------------------------------------------
 
-const TEXT_TARGET: TextAddress = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+const SELECTION_TARGET: SelectionTarget = {
+  kind: 'selection',
+  start: { kind: 'text', blockId: 'p1', offset: 0 },
+  end: { kind: 'text', blockId: 'p1', offset: 3 },
+};
 
-function makeTextMutationReceipt(target = TEXT_TARGET) {
+function makeTextMutationReceipt() {
   return {
     success: true as const,
     resolution: {
-      target,
+      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 3 } },
       range: { from: 1, to: 4 },
       text: 'foo',
     },
@@ -39,7 +43,7 @@ function makeFindAdapter() {
           id: 'p1',
           handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'node' as const },
           address: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
-          context: { textRanges: [TEXT_TARGET] },
+          context: { textRanges: [SELECTION_TARGET] },
         },
       ],
       page: { limit: 1, offset: 0, returned: 1 },
@@ -90,9 +94,9 @@ function makeWriteAdapter() {
   };
 }
 
-function makeFormatAdapter() {
+function makeSelectionMutationAdapter() {
   return {
-    apply: vi.fn(() => makeTextMutationReceipt()),
+    execute: vi.fn(() => makeTextMutationReceipt()),
   };
 }
 
@@ -329,7 +333,7 @@ function makeApi() {
     capabilities: makeCapabilitiesAdapter(),
     comments: makeCommentsAdapter(),
     write: makeWriteAdapter(),
-    format: makeFormatAdapter(),
+    selectionMutation: makeSelectionMutationAdapter(),
     paragraphs: makeParagraphsAdapter(),
     trackChanges: makeTrackChangesAdapter(),
     create: makeCreateAdapter(),
@@ -497,7 +501,7 @@ describe('overview.mdx examples', () => {
       }
 
       expect(target).toBeDefined();
-      expect(target?.kind).toBe('text');
+      expect(target?.kind).toBe('selection');
     });
   });
 
@@ -519,7 +523,7 @@ describe('overview.mdx examples', () => {
       const doc = makeApi();
 
       const caps = doc.capabilities();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+      const target = SELECTION_TARGET;
 
       if (caps.operations['format.apply'].available) {
         doc.format.apply({ target, inline: { bold: true } });
@@ -539,7 +543,7 @@ describe('overview.mdx examples', () => {
     // Mirrors the exact code block from overview.mdx § "Dry-run preview"
     it('insert with dryRun true', () => {
       const doc = makeApi();
-      const target = TEXT_TARGET;
+      const target = { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 3 } };
 
       const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed
@@ -591,10 +595,9 @@ describe('src/README.md workflow examples', () => {
     it('create comment, reply, then resolve', () => {
       const doc = makeApi();
 
-      // Simulate having a find result in scope (the example assumes `result` exists)
-      const result = doc.find({ type: 'text', pattern: 'something' });
-      const target = result.items[0]?.context?.textRanges?.[0];
-      const createReceipt = doc.comments.create({ target: target!, text: 'Review this section.' });
+      // Simulate having a comment target
+      const target = { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 3 } };
+      const createReceipt = doc.comments.create({ target, text: 'Review this section.' });
       // Use the comment ID from the receipt to reply
       const comments = doc.comments.list();
       const thread = comments.items[0];
@@ -629,7 +632,7 @@ describe('src/README.md workflow examples', () => {
     // Mirrors the exact code block from src/README.md § "Workflow: Capabilities-Aware Branching"
     it('branch on per-operation capabilities', () => {
       const doc = makeApi();
-      const target = TEXT_TARGET;
+      const target = SELECTION_TARGET;
 
       const caps = doc.capabilities();
       if (caps.operations['format.apply'].available) {

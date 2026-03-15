@@ -80,6 +80,26 @@ function isPresent(value: unknown): boolean {
   return true;
 }
 
+function isTextAddressLike(value: unknown): value is {
+  kind: 'text';
+  blockId: string;
+  range: { start: number; end: number };
+} {
+  if (!isRecord(value) || value.kind !== 'text' || typeof value.blockId !== 'string') return false;
+  if (!isRecord(value.range)) return false;
+  return typeof value.range.start === 'number' && typeof value.range.end === 'number';
+}
+
+function acceptsLegacyTextAddressTarget(
+  operationId: CliOperationId,
+  param: CliOperationParamSpec,
+  value: unknown,
+): boolean {
+  if (param.name !== 'target' || !isTextAddressLike(value)) return false;
+  const docApiId = toDocApiId(operationId);
+  return docApiId === 'replace' || docApiId === 'delete' || docApiId?.startsWith('format.') === true;
+}
+
 export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec, path: string): void {
   if ('const' in schema) {
     if (value !== schema.const) {
@@ -416,6 +436,9 @@ export function validateOperationInputData(operationId: CliOperationId, input: u
     if (!isPresent(value)) continue;
 
     if ('schema' in param && param.schema) {
+      if (acceptsLegacyTextAddressTarget(operationId, param, value)) {
+        continue;
+      }
       validateValueAgainstTypeSpec(value, param.schema, `${commandName}:input.${param.name}`);
       continue;
     }
@@ -478,6 +501,7 @@ export function parseOperationArgs<TOperationId extends CliOperationId>(
     if (!('schema' in param) || !param.schema) continue;
     const value = argsRecord[param.name];
     if (!isPresent(value)) continue;
+    if (acceptsLegacyTextAddressTarget(operationId, param, value)) continue;
     validateValueAgainstTypeSpec(value, param.schema, `${commandName}:${param.name}`);
   }
 

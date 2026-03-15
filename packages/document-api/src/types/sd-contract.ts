@@ -2,6 +2,7 @@
  * SDM/1 contract types — mutation receipts, error model, and diagnostics.
  */
 
+import type { SelectionTarget } from './address.js';
 import type { SDAddress } from './sd-envelope.js';
 
 // ---------------------------------------------------------------------------
@@ -41,7 +42,12 @@ export interface SDMutationReceipt {
   success: boolean;
   failure?: SDError;
   evaluatedRevision?: { before: string; after: string };
-  resolution?: { requestedTarget?: SDAddress; target: SDAddress };
+  resolution?: {
+    requestedTarget?: SDAddress;
+    target: SDAddress;
+    /** Full selection target for cross-block mutations. */
+    selectionTarget?: SelectionTarget;
+  };
 }
 
 // ---------------------------------------------------------------------------

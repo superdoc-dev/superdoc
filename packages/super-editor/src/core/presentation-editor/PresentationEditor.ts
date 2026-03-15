@@ -1104,6 +1104,10 @@ export class PresentationEditor extends EventEmitter {
   #syncDocumentModeClass() {
     if (!this.#visibleHost) return;
     this.#visibleHost.classList.toggle('presentation-editor--viewing', this.#documentMode === 'viewing');
+    this.#visibleHost.classList.toggle(
+      'presentation-editor--allow-selection',
+      this.#documentMode === 'viewing' && !!this.#options.allowSelectionInViewMode,
+    );
   }
 
   /**
@@ -4214,7 +4218,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // In viewing mode, don't render caret or selection highlights
-    if (this.#isViewLocked()) {
+    // (unless allowSelectionInViewMode is enabled for read-only selection)
+    if (this.#isViewLocked() && !this.#options.allowSelectionInViewMode) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -5754,6 +5759,9 @@ export class PresentationEditor extends EventEmitter {
    * Determines whether the current viewing mode should block edits.
    * When documentMode is viewing but the active editor has been toggled
    * back to editable (e.g. permission ranges), we treat the view as editable.
+   *
+   * Note: This method controls input blocking. For selection visuals,
+   * check allowSelectionInViewMode separately.
    */
   #isViewLocked(): boolean {
     if (this.#documentMode !== 'viewing') return false;

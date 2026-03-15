@@ -2,7 +2,6 @@
 import { NodeTranslator } from '@translator';
 import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
 import { exportSchemaToJson } from '@converter/exporter.js';
-import { createTrackStyleMark } from '@converter/v3/handlers/helpers.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:del';
@@ -70,14 +69,14 @@ function decode(params) {
     return null;
   }
 
-  const trackingMarks = ['trackInsert', 'trackFormat', 'trackDelete'];
-  const marks = node.marks;
+  const trackingMarks = ['trackInsert', 'trackDelete'];
+  const marks = Array.isArray(node.marks) ? node.marks : [];
   const trackedMark = marks.find((m) => m.type === 'trackDelete');
-  const trackStyleMark = createTrackStyleMark(marks);
-  node.marks = marks.filter((m) => !trackingMarks.includes(m.type));
-  if (trackStyleMark) {
-    node.marks.push(trackStyleMark);
+  if (!trackedMark) {
+    return null;
   }
+
+  node.marks = marks.filter((m) => !trackingMarks.includes(m.type));
 
   const translatedTextNode = exportSchemaToJson({ ...params, node });
   const textNode = translatedTextNode.elements.find((n) => n.name === 'w:t');
@@ -106,7 +105,7 @@ export const config = {
 };
 
 /**
- * The NodeTranslator instance for the w:b element.
+ * The NodeTranslator instance for the w:del element.
  * @type {import('@translator').NodeTranslator}
  */
 export const translator = NodeTranslator.from(config);

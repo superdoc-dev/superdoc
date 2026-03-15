@@ -1,45 +1,62 @@
-import { executeWrite, type MutationOptions, type WriteAdapter } from '../write/write.js';
-import type { TextAddress, SDMutationReceipt } from '../types/index.js';
+/**
+ * Replace operation — replaces content at a contiguous document selection.
+ *
+ * Two shapes:
+ * - Text replacement (`text` field): routes through SelectionMutationAdapter.
+ * - Structural replacement (`content` field): continues through WriteAdapter.replaceStructured.
+ *
+ * Text path accepts `SelectionTarget` or `ref`. Structural path accepts
+ * `SDAddress`, `SelectionTarget`, or `ref`.
+ */
+
+import type { MutationOptions } from '../types/mutation-plan.types.js';
+import type { SelectionTarget } from '../types/address.js';
+import type { SDMutationReceipt } from '../types/sd-contract.js';
 import type { SDReplaceInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
+import type { SelectionMutationAdapter } from '../selection-mutation.js';
+import type { WriteAdapter } from '../write/write.js';
+import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   isRecord,
+  isSDAddress,
   isTextAddress,
-  isValidTarget,
   assertNoUnknownFields,
   validateNestingPolicyValue,
 } from '../validation-primitives.js';
+import { isSelectionTarget } from '../validation/selection-target-validator.js';
 import { validateDocumentFragment } from '../validation/fragment-validator.js';
 import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 
 // ---------------------------------------------------------------------------
-// Legacy string-based input shape
+// Text replacement input (new shape)
 // ---------------------------------------------------------------------------
 
-/** Legacy string-based input for the replace operation. */
-export interface LegacyReplaceInput {
-  target: TextAddress;
+/** Text replacement input — uses SelectionTarget / ref. */
+export interface TextReplaceInput {
+  target?: SelectionTarget;
+  ref?: string;
   text: string;
 }
 
 // ---------------------------------------------------------------------------
-// Discriminated union: legacy string shape OR structural SDFragment shape
+// Discriminated union: text shape OR structural SDFragment shape
 // ---------------------------------------------------------------------------
 
 /**
  * Input payload for the `doc.replace` operation.
  *
- * Discrimination: presence of `content` (structural) vs `text` (legacy string).
+ * Discrimination: presence of `content` (structural) vs `text` (text replacement).
  */
-export type ReplaceInput = LegacyReplaceInput | SDReplaceInput;
+export type ReplaceInput = TextReplaceInput | SDReplaceInput;
 
 // ---------------------------------------------------------------------------
 // Allowlists
 // ---------------------------------------------------------------------------
 
-const LEGACY_REPLACE_ALLOWED_KEYS = new Set(['text', 'target']);
-const STRUCTURAL_REPLACE_ALLOWED_KEYS = new Set(['content', 'target', 'nestingPolicy']);
+const TEXT_REPLACE_ALLOWED_KEYS = new Set(['text', 'target', 'ref']);
+const STRUCTURAL_REPLACE_ALLOWED_KEYS = new Set(['content', 'target', 'ref', 'nestingPolicy']);
 
 // ---------------------------------------------------------------------------
 // Shape discrimination
@@ -51,17 +68,46 @@ export function isStructuralReplaceInput(input: ReplaceInput): input is SDReplac
 }
 
 // ---------------------------------------------------------------------------
+// Shared target validation for text path
+// ---------------------------------------------------------------------------
+
+function validateTargetLocator(input: Record<string, unknown>, operation: string): void {
+  const hasTarget = input.target !== undefined;
+  const hasRef = input.ref !== undefined;
+
+  if (hasTarget && hasRef) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operation} input must provide either "target" or "ref", not both.`,
+      { fields: ['target', 'ref'] },
+    );
+  }
+
+  if (!hasTarget && !hasRef) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operation} requires a target or ref.`, {
+      fields: ['target', 'ref'],
+    });
+  }
+
+  if (hasTarget && !isSelectionTarget(input.target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a SelectionTarget object.', {
+      field: 'target',
+      value: input.target,
+    });
+  }
+
+  if (hasRef && typeof input.ref !== 'string') {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+      field: 'ref',
+      value: input.ref,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
-/**
- * Validates ReplaceInput as either legacy or structural shape.
- *
- * Validation order:
- * 0. Input shape guard
- * 1. Union conflict detection
- * 2. Shape-specific validation
- */
 function validateReplaceInput(input: unknown): asserts input is ReplaceInput {
   if (!isRecord(input)) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'Replace input must be a non-null object.');
@@ -70,33 +116,29 @@ function validateReplaceInput(input: unknown): asserts input is ReplaceInput {
   const hasText = 'text' in input && input.text !== undefined;
   const hasContent = 'content' in input && input.content !== undefined;
 
-  // Union conflict: both discriminants present
   if (hasText && hasContent) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
-      'Replace input must provide either "text" (legacy) or "content" (structural), not both.',
+      'Replace input must provide either "text" or "content", not both.',
       { fields: ['text', 'content'] },
     );
   }
 
-  // Union conflict: neither discriminant present
   if (!hasText && !hasContent) {
-    throw new DocumentApiValidationError(
-      'INVALID_INPUT',
-      'Replace input must provide either "text" (legacy string) or "content" (SDFragment).',
-      { fields: ['text', 'content'] },
-    );
+    throw new DocumentApiValidationError('INVALID_INPUT', 'Replace input must provide either "text" or "content".', {
+      fields: ['text', 'content'],
+    });
   }
 
   if (hasContent) {
     validateStructuralReplaceInput(input);
   } else {
-    validateLegacyReplaceInput(input);
+    validateTextReplaceInput(input);
   }
 }
 
-/** Validates legacy string-based replace input. */
-function validateLegacyReplaceInput(input: Record<string, unknown>): void {
+/** Validates the text replacement path (SelectionTarget / ref + text). */
+function validateTextReplaceInput(input: Record<string, unknown>): void {
   if ('nestingPolicy' in input && input.nestingPolicy !== undefined) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
@@ -105,25 +147,13 @@ function validateLegacyReplaceInput(input: Record<string, unknown>): void {
     );
   }
 
-  assertNoUnknownFields(input, LEGACY_REPLACE_ALLOWED_KEYS, 'replace');
+  assertNoUnknownFields(input, TEXT_REPLACE_ALLOWED_KEYS, 'replace');
+  validateTargetLocator(input, 'replace');
 
-  const { target, text } = input;
-
-  if (target === undefined) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'Replace requires a target.');
-  }
-
-  if (!isTextAddress(target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
-      field: 'target',
-      value: target,
-    });
-  }
-
-  if (typeof text !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `text must be a string, got ${typeof text}.`, {
+  if (typeof input.text !== 'string') {
+    throw new DocumentApiValidationError('INVALID_TARGET', `text must be a string, got ${typeof input.text}.`, {
       field: 'text',
-      value: text,
+      value: input.text,
     });
   }
 }
@@ -132,22 +162,37 @@ function validateLegacyReplaceInput(input: Record<string, unknown>): void {
 function validateStructuralReplaceInput(input: Record<string, unknown>): void {
   assertNoUnknownFields(input, STRUCTURAL_REPLACE_ALLOWED_KEYS, 'replace');
 
-  const { target, content, nestingPolicy } = input;
+  const { target, ref: refValue, content, nestingPolicy } = input;
+  const hasTarget = target !== undefined;
+  const hasRef = refValue !== undefined;
 
-  if (target === undefined) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'Replace requires a target.');
+  if (hasTarget && hasRef) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'Structural replace must provide either "target" or "ref", not both.',
+      { fields: ['target', 'ref'] },
+    );
   }
 
-  // Structural path accepts both SDAddress and TextAddress
-  if (!isValidTarget(target)) {
+  if (!hasTarget && !hasRef) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'Structural replace requires a target or ref.', {
+      fields: ['target', 'ref'],
+    });
+  }
+
+  if (hasTarget && !isSDAddress(target) && !isTextAddress(target) && !isSelectionTarget(target)) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      'target must be a valid address (SDAddress or TextAddress).',
-      {
-        field: 'target',
-        value: target,
-      },
+      'target must be a valid address (SDAddress, TextAddress, or SelectionTarget).',
+      { field: 'target', value: target },
     );
+  }
+
+  if (hasRef && typeof refValue !== 'string') {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+      field: 'ref',
+      value: refValue,
+    });
   }
 
   validateNestingPolicyValue(nestingPolicy);
@@ -159,7 +204,8 @@ function validateStructuralReplaceInput(input: Record<string, unknown>): void {
 // ---------------------------------------------------------------------------
 
 export function executeReplace(
-  adapter: WriteAdapter,
+  selectionAdapter: SelectionMutationAdapter,
+  writeAdapter: WriteAdapter,
   input: ReplaceInput,
   options?: MutationOptions,
 ): SDMutationReceipt {
@@ -167,10 +213,19 @@ export function executeReplace(
 
   // Structural content path — returns SDMutationReceipt directly
   if (isStructuralReplaceInput(input)) {
-    return adapter.replaceStructured(input as unknown as ReplaceInput, options);
+    return writeAdapter.replaceStructured(input as unknown as ReplaceInput, options);
   }
 
-  // Legacy string path — wrap TextMutationReceipt → SDMutationReceipt
-  const textReceipt = executeWrite(adapter, { kind: 'replace', target: input.target, text: input.text }, options);
+  // Text replacement path — route through SelectionMutationAdapter
+  const textInput = input as TextReplaceInput;
+  const textReceipt = selectionAdapter.execute(
+    {
+      kind: 'replace',
+      target: textInput.target,
+      ref: textInput.ref,
+      text: textInput.text,
+    },
+    normalizeMutationOptions(options),
+  );
   return textReceiptToSDReceipt(textReceipt);
 }

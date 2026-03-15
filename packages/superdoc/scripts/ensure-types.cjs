@@ -206,9 +206,9 @@ for (const filePath of dtsFiles) {
 // Write _internal-shims.d.ts
 //
 // Two sections:
-//   1. Hand-written shims for well-known external packages (prosemirror, vue,
-//      yjs, eventemitter3, @hocuspocus/provider) — these need generics, class
-//      declarations, and namespace exports that can't be auto-generated.
+//   1. Hand-written shims for external packages (prosemirror-*, vue, yjs,
+//      eventemitter3, @hocuspocus/provider). See KNOWN LIMITATION note in the
+//      generated file about ambient shims overriding real package types.
 //   2. Auto-generated shims for @superdoc/* workspace packages.
 // ---------------------------------------------------------------------------
 
@@ -216,14 +216,18 @@ const shimLines = [
   '// Auto-generated ambient declarations for internal/bundled packages.',
   '// These packages are bundled into superdoc or are internal workspace packages.',
   '// Consumers do not need to install them. This file prevents TypeScript errors',
-  '// when skipLibCheck is false. If a consumer installs the real package,',
-  '// TypeScript will use those types instead of these shims.',
+  '// when skipLibCheck is false.',
+  '//',
+  '// KNOWN LIMITATION: ambient `declare module` with `export type X = any`',
+  '// overrides real package types when both are present. Consumers who install',
+  '// prosemirror-*, vue, yjs, or @hocuspocus/provider alongside superdoc will',
+  '// see those types resolve to `any`. The proper fix is adding prosemirror-*',
+  '// as peerDependencies so consumers always have real types available.',
+  '//',
   '// NOTE: This is a script file (no exports), so `declare module` creates',
   '// global ambient declarations and top-level declarations are global.',
   '',
   '// --- Well-known external packages (hand-written for correctness) ---',
-  '// Note: Buffer is NOT shimmed here — consumers using Node.js APIs should',
-  '// install @types/node. Shimming Buffer conflicts with @types/node declarations.',
   '',
   "declare module 'prosemirror-model' {",
   '  export type DOMOutputSpec = any;',

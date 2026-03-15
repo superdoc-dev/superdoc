@@ -275,7 +275,7 @@ const isEmptyTextRun = (run: Run): boolean => {
  * Shared by ghost-list marker adjustment helpers to avoid duplicated extraction logic.
  */
 const getBlockMarker = (block: FlowBlock): Record<string, unknown> | undefined => {
-  if (!block.attrs || typeof block.attrs !== 'object') return undefined;
+  if (!('attrs' in block) || !block.attrs || typeof block.attrs !== 'object') return undefined;
   const wordLayout = (block.attrs as Record<string, unknown>).wordLayout;
   if (!wordLayout || typeof wordLayout !== 'object') return undefined;
   const marker = (wordLayout as Record<string, unknown>).marker;

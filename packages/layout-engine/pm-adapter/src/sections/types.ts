@@ -5,7 +5,7 @@
  * Includes section ranges, signatures, and OOXML structures.
  */
 
-import { ColumnLayout } from '@superdoc/contracts';
+import type { ColumnLayout } from '@superdoc/contracts';
 
 /**
  * Section types in Word documents.

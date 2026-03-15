@@ -6,7 +6,7 @@
 
 import type { PMNode } from '../types.js';
 import type { ParagraphProperties, SectionVerticalAlign } from './types.js';
-import { ColumnLayout } from '@superdoc/contracts';
+import type { ColumnLayout } from '@superdoc/contracts';
 
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;

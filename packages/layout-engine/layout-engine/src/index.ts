@@ -765,7 +765,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let pendingPageSize: { w: number; h: number } | null = null;
 
   // Track active and pending columns
-  let activeColumns = options.columns ?? { count: 1, gap: 0 };
+  let activeColumns = options.columns ?? { ...SINGLE_COLUMN_DEFAULT };
   let pendingColumns: ColumnLayout | null = null;
 
   // Track active and pending orientation

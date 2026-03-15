@@ -118,10 +118,14 @@ for (const filePath of dtsFiles) {
   fileContent = fileContent.replace(BAD_ABSOLUTE_PATH_RE, (match, quote, rest) => {
     changed = true;
     totalReplacements++;
-    const relativePath = path.posix.join(
+    let relativePath = path.posix.join(
       relDir.split(path.sep).join('/'),
       rest,
     );
+    // Ensure relative paths start with ./ (bare names are treated as package specifiers)
+    if (!relativePath.startsWith('.') && !relativePath.startsWith('/')) {
+      relativePath = './' + relativePath;
+    }
     return `${quote}${relativePath}${quote}`;
   });
 
@@ -153,39 +157,17 @@ if (fixedFiles > 0) {
 // Also shim prosemirror peer deps that are bundled (not in consumer node_modules).
 // ---------------------------------------------------------------------------
 
-// Collect module specifiers and their named imports from all .d.ts files.
-// Two categories:
-//   1. @superdoc/* workspace packages (private, never in consumer node_modules)
-//   2. Bundled/internal bare specifiers (prosemirror-*, etc.) that consumers may not install
-// We generate ambient `declare module` shims for both. TypeScript uses real types if
-// the package is installed, otherwise falls back to the shim.
+// Collect @superdoc/* workspace module specifiers and their named imports from
+// all .d.ts files. These are private packages consumers can't install — we
+// generate ambient `declare module` shims for them. External packages
+// (prosemirror, vue, yjs, etc.) are handled by the hand-written shims below.
 const workspaceImports = new Map(); // module → Set<name>
-const bundledImports = new Map();   // module → Set<name>
-
-// Packages that are bundled into superdoc or only used internally.
-// Consumers don't need to install these — shim them for skipLibCheck:false.
-const BUNDLED_PACKAGES = new Set([
-  'prosemirror-model',
-  'prosemirror-state',
-  'prosemirror-transform',
-  'prosemirror-view',
-  'eventemitter3',
-]);
-
-// Peer deps that may not have types available for all consumers.
-const PEER_PACKAGES = new Set([
-  'yjs',
-  '@hocuspocus/provider',
-  'vue',
-]);
-
-const SHIM_PACKAGES = new Set([...BUNDLED_PACKAGES, ...PEER_PACKAGES]);
 
 for (const filePath of dtsFiles) {
   const fileContent = fs.readFileSync(filePath, 'utf8');
 
-  // Match: import { Foo, Bar } from '...'
-  const namedImports = fileContent.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g);
+  // Match: import { Foo, Bar } from '...' and import type { Foo } from '...'
+  const namedImports = fileContent.matchAll(/import\s+(?:type\s+)?\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g);
   for (const m of namedImports) {
     const mod = m[2];
 
@@ -196,10 +178,6 @@ for (const filePath of dtsFiles) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
       const names = m[1].split(',').map(n => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
       for (const name of names) workspaceImports.get(mod).add(name);
-    } else if (SHIM_PACKAGES.has(mod)) {
-      if (!bundledImports.has(mod)) bundledImports.set(mod, new Set());
-      const names = m[1].split(',').map(n => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
-      for (const name of names) bundledImports.get(mod).add(name);
     }
   }
 
@@ -212,9 +190,6 @@ for (const filePath of dtsFiles) {
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
       workspaceImports.get(mod).add(m[2]);
-    } else if (SHIM_PACKAGES.has(mod)) {
-      if (!bundledImports.has(mod)) bundledImports.set(mod, new Set());
-      bundledImports.get(mod).add(m[2]);
     }
   }
 
@@ -374,7 +349,6 @@ for (const entry of requiredEntryPoints) {
   }
 }
 
-const bundledCount = bundledImports.size;
-console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace + ${bundledCount + 7} external modules`);
+console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace + 8 external modules`);
 
 console.log('[ensure-types] ✓ Verified type entry points');

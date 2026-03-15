@@ -3318,7 +3318,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
           }, SYNC_TIMEOUT_MS);
         }
       });
-      doReplaceFileSync();
     } else {
       this.#insertNewFileData();
     }

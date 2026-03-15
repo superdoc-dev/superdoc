@@ -2,15 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { config, translator } from './del-translator.js';
 import { NodeTranslator } from '@translator';
 import { exportSchemaToJson } from '@converter/exporter.js';
-import { createTrackStyleMark } from '@converter/v3/handlers/helpers.js';
 
 // Mock external modules
 vi.mock('@converter/exporter.js', () => ({
   exportSchemaToJson: vi.fn(),
-}));
-
-vi.mock('@converter/v3/handlers/helpers.js', () => ({
-  createTrackStyleMark: vi.fn(),
 }));
 
 describe('w:del translator', () => {
@@ -114,7 +109,6 @@ describe('w:del translator', () => {
       const mockTranslatedNode = { elements: [mockTextNode] };
 
       exportSchemaToJson.mockReturnValue(mockTranslatedNode);
-      createTrackStyleMark.mockReturnValue(null);
 
       const node = {
         type: 'text',
@@ -149,7 +143,6 @@ describe('w:del translator', () => {
       };
 
       exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t' }] });
-      createTrackStyleMark.mockReturnValue(null);
 
       const node = { type: 'text', marks: [mockTrackedMark] };
       const result = config.decode({ node });
@@ -162,21 +155,43 @@ describe('w:del translator', () => {
       expect(config.decode({ node: {} })).toBeNull();
     });
 
-    it('preserves trackStyleMark if created', () => {
+    it('returns null when the node is missing a trackDelete mark', () => {
       const node = {
         type: 'text',
-        marks: [{ type: 'trackDelete', attrs: {} }],
+        marks: [{ type: 'italic', attrs: { value: true } }],
       };
 
-      const mockTrackStyleMark = { type: 'trackStyle', attrs: {} };
-      createTrackStyleMark.mockReturnValue(mockTrackStyleMark);
+      expect(config.decode({ node })).toBeNull();
+      expect(exportSchemaToJson).not.toHaveBeenCalled();
+    });
+
+    it('keeps trackFormat marks for downstream text export', () => {
+      const trackFormatMark = {
+        type: 'trackFormat',
+        attrs: {
+          id: 'format-1',
+          author: 'Missy Fox',
+          date: '2026-01-07T20:24:39Z',
+          before: [],
+          after: [{ type: 'italic', attrs: { value: true } }],
+        },
+      };
+      const node = {
+        type: 'text',
+        marks: [{ type: 'trackDelete', attrs: {} }, { type: 'italic', attrs: { value: true } }, trackFormatMark],
+      };
+
       exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t' }] });
 
-      const result = config.decode({ node });
+      config.decode({ node });
 
-      expect(createTrackStyleMark).toHaveBeenCalled();
-      expect(result).toBeTruthy();
-      expect(result.elements[0].elements[0].name).toBe('w:delText');
+      expect(exportSchemaToJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          node: expect.objectContaining({
+            marks: [{ type: 'italic', attrs: { value: true } }, trackFormatMark],
+          }),
+        }),
+      );
     });
   });
 });

@@ -86,7 +86,7 @@ function findDtsFiles(dir) {
 // Captures the bare package name from the pnpm structure:
 //   .../node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>/dist/index.js
 //                                                    ^^^^^ capture this
-const PNPM_PATH_RE = /(['"])([^'"]*\/node_modules\/\.pnpm\/[^/]+\/node_modules\/([^/]+)\/dist\/index\.js)\1/g;
+const PNPM_PATH_RE = /(['"])([^'"]*\/node_modules\/\.pnpm\/[^/]+\/node_modules\/(@[^/]+\/[^/]+|[^/]+)\/dist\/index\.js)\1/g;
 
 // Match broken absolute-looking paths like 'packages/superdoc/src/types.js'
 // that vite-plugin-dts sometimes emits from path alias resolution.
@@ -221,16 +221,9 @@ const shimLines = [
   '// NOTE: This is a script file (no exports), so `declare module` creates',
   '// global ambient declarations and top-level declarations are global.',
   '',
-  '// Buffer is used in some internal APIs but superdoc bundles the polyfill.',
-  '// Declare as interface (type position) + var (value position) for full compat.',
-  'interface Buffer extends Uint8Array {}',
-  'declare var Buffer: {',
-  '  from(data: any, encoding?: string): Buffer;',
-  '  alloc(size: number): Buffer;',
-  '  isBuffer(obj: any): boolean;',
-  '};',
-  '',
   '// --- Well-known external packages (hand-written for correctness) ---',
+  '// Note: Buffer is NOT shimmed here — consumers using Node.js APIs should',
+  '// install @types/node. Shimming Buffer conflicts with @types/node declarations.',
   '',
   "declare module 'prosemirror-model' {",
   '  export type DOMOutputSpec = any;',

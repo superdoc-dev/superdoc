@@ -27,9 +27,13 @@ const encode = (params, encodedAttrs = {}) => {
   const { nodeListHandler, extraParams = {}, converter } = params;
   const { node } = extraParams;
 
-  if (encodedAttrs.id && converter?.trackedChangeIdMap?.has(encodedAttrs.id)) {
-    encodedAttrs.id = converter.trackedChangeIdMap.get(encodedAttrs.id);
+  // Preserve the original OOXML w:id for round-trip export fidelity.
+  // The internal id is remapped to a shared UUID for replacement pairing.
+  const originalWordId = encodedAttrs.id;
+  if (originalWordId && converter?.trackedChangeIdMap?.has(originalWordId)) {
+    encodedAttrs.id = converter.trackedChangeIdMap.get(originalWordId);
   }
+  encodedAttrs.sourceId = originalWordId || '';
 
   const subs = nodeListHandler.handler({
     ...params,
@@ -86,7 +90,7 @@ function decode(params) {
   return {
     name: 'w:del',
     attributes: {
-      'w:id': trackedMark.attrs.id,
+      'w:id': trackedMark.attrs.sourceId || trackedMark.attrs.id,
       'w:author': trackedMark.attrs.author,
       'w:authorEmail': trackedMark.attrs.authorEmail,
       'w:date': trackedMark.attrs.date,

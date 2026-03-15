@@ -3,11 +3,12 @@ import { test, expect } from '../../fixtures/superdoc.js';
 import {
   assertDocumentApiReady,
   deleteText,
+  findFirstSelectionTarget,
   findFirstTextRange,
   insertText,
   listTrackChanges,
 } from '../../helpers/document-api.js';
-import type { TextAddress, TextMutationReceipt, TrackChangeType } from '../../helpers/document-api.js';
+import type { SelectionTarget, TextAddress, TextMutationReceipt, TrackChangeType } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
 
@@ -33,6 +34,14 @@ function requireTextTarget(target: TextAddress | null, pattern: string): TextAdd
   throw new Error(`Could not find a text target for pattern "${pattern}".`);
 }
 
+function requireSelectionTarget(target: SelectionTarget | null, pattern: string): SelectionTarget {
+  if (target != null) {
+    return target;
+  }
+
+  throw new Error(`Could not find a selection target for pattern "${pattern}".`);
+}
+
 function assertMutationSucceeded(
   operationName: string,
   receipt: TextMutationReceipt,
@@ -48,7 +57,7 @@ async function createAdjacentTrackedDeleteAndInsert(superdoc: SuperDocHarness) {
   await superdoc.type('AB');
   await superdoc.waitForStable();
 
-  const deleteTarget = requireTextTarget(await findFirstTextRange(superdoc.page, 'A'), 'A');
+  const deleteTarget = requireSelectionTarget(await findFirstSelectionTarget(superdoc.page, 'A'), 'A');
   const deleteReceipt = await deleteText(superdoc.page, { target: deleteTarget }, { changeMode: 'tracked' });
   assertMutationSucceeded('deleteText', deleteReceipt);
 

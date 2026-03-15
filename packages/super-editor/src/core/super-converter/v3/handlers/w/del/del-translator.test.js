@@ -33,40 +33,37 @@ describe('w:del translator', () => {
   });
 
   describe('encode', () => {
-    it('wraps subnodes with trackDelete mark and sets importedAuthor', () => {
-      const mockNode = { elements: [{ text: 'deleted text' }] };
+    const mockNode = { elements: [{ text: 'deleted text' }] };
 
+    function encodeWith({ converter, id = '123' } = {}) {
       const mockSubNodes = [{ content: [{ type: 'text', text: 'deleted text' }] }];
-
-      const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue(mockSubNodes),
-      };
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
 
       const encodedAttrs = {
         author: 'Test',
         authorEmail: 'test@example.com',
-        id: '123',
+        id,
         date: '2025-10-09T12:00:00Z',
       };
 
-      const result = config.encode(
+      return config.encode(
         {
           nodeListHandler: mockNodeListHandler,
           extraParams: { node: mockNode },
+          converter,
           path: [],
         },
         { ...encodedAttrs },
       );
+    }
 
-      // Ensure handler is called properly
-      expect(mockNodeListHandler.handler).toHaveBeenCalledWith(
-        expect.objectContaining({
-          insideTrackChange: true,
-          nodes: mockNode.elements,
-        }),
-      );
+    function getMarkAttrs(result) {
+      return result[0].content[0].marks[0].attrs;
+    }
 
-      // Ensure results are annotated correctly
+    it('wraps subnodes with trackDelete mark and sets importedAuthor', () => {
+      const result = encodeWith();
+
       expect(result).toHaveLength(1);
       expect(result[0].marks).toEqual([]);
       expect(result[0].content[0].marks).toEqual([
@@ -79,6 +76,24 @@ describe('w:del translator', () => {
         },
       ]);
     });
+
+    it('preserves the original Word ID as sourceId when no map exists', () => {
+      const result = encodeWith();
+
+      expect(getMarkAttrs(result)).toEqual(expect.objectContaining({ id: '123', sourceId: '123' }));
+    });
+
+    it('remaps id via trackedChangeIdMap and preserves sourceId', () => {
+      const converter = {
+        trackedChangeIdMap: new Map([['123', 'shared-uuid-abc']]),
+      };
+
+      const result = encodeWith({ converter });
+      const attrs = getMarkAttrs(result);
+
+      expect(attrs.id).toBe('shared-uuid-abc');
+      expect(attrs.sourceId).toBe('123');
+    });
   });
 
   describe('decode', () => {
@@ -87,6 +102,7 @@ describe('w:del translator', () => {
         type: 'trackDelete',
         attrs: {
           id: '123',
+          sourceId: '',
           author: 'Test',
           authorEmail: 'test@example.com',
           date: '2025-10-09T12:00:00Z',
@@ -118,6 +134,27 @@ describe('w:del translator', () => {
         'w:date': '2025-10-09T12:00:00Z',
       });
       expect(result.elements[0].elements[0].name).toBe('w:delText');
+    });
+
+    it('writes sourceId to w:id for round-trip fidelity', () => {
+      const mockTrackedMark = {
+        type: 'trackDelete',
+        attrs: {
+          id: 'shared-uuid-abc',
+          sourceId: '456',
+          author: 'Test',
+          authorEmail: 'test@example.com',
+          date: '2025-10-09T12:00:00Z',
+        },
+      };
+
+      exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:t' }] });
+      createTrackStyleMark.mockReturnValue(null);
+
+      const node = { type: 'text', marks: [mockTrackedMark] };
+      const result = config.decode({ node });
+
+      expect(result.attributes['w:id']).toBe('456');
     });
 
     it('returns null if node is missing or invalid', () => {

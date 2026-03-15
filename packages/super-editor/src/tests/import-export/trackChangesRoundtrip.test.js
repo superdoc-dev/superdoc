@@ -177,14 +177,14 @@ describe('msword tracked changes import/export round trip', () => {
     ({ docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(filename));
   });
 
-  it('preserves separate add and delete revisions through export', async () => {
+  it('combines Word replacements internally while preserving separate OOXML ids on export', async () => {
     const { editor } = await initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
 
     try {
       const initialMarks = collectTrackMarkIds(editor.state.doc);
       expect(initialMarks.insert.length).toBeGreaterThan(0);
       expect(initialMarks.delete.length).toBeGreaterThan(0);
-      expect(getIntersection(initialMarks.insert, initialMarks.delete)).toHaveLength(0);
+      expect(getIntersection(initialMarks.insert, initialMarks.delete).length).toBeGreaterThan(0);
 
       const exportedBuffer = await editor.exportDocx({ isFinalDoc: false });
       const exportedBody = await loadExportedDocumentBody(exportedBuffer);

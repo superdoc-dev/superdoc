@@ -2,6 +2,7 @@ export type ListRendering = {
   markerText?: string;
   numberingType?: string;
   path?: number[];
+  customFormat?: string;
 };
 
 const toFiniteNumber = (value: unknown): number | undefined => {
@@ -27,7 +28,10 @@ export const getListRendering = (value: unknown): ListRendering | undefined => {
   const attrs = value as Record<string, unknown>;
   const markerText = typeof attrs.markerText === 'string' ? attrs.markerText : undefined;
   const numberingType = typeof attrs.numberingType === 'string' ? attrs.numberingType : undefined;
-  const path = Array.isArray(attrs.path) ? attrs.path.map(toFiniteNumber).filter((entry): entry is number => entry != null) : undefined;
+  const customFormat = typeof attrs.customFormat === 'string' ? attrs.customFormat : undefined;
+  const path = Array.isArray(attrs.path)
+    ? attrs.path.map(toFiniteNumber).filter((entry): entry is number => entry != null)
+    : undefined;
 
   if (!markerText && !numberingType && (!path || path.length === 0)) {
     return undefined;
@@ -37,5 +41,6 @@ export const getListRendering = (value: unknown): ListRendering | undefined => {
     markerText,
     numberingType,
     ...(path && path.length > 0 ? { path } : {}),
+    ...(customFormat ? { customFormat } : {}),
   };
 };

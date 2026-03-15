@@ -270,6 +270,35 @@ const isEmptyTextRun = (run: Run): boolean => {
   return run.text.length === 0;
 };
 
+/**
+ * Extracts the marker record from a paragraph FlowBlock's wordLayout attrs.
+ * Shared by ghost-list marker adjustment helpers to avoid duplicated extraction logic.
+ */
+const getBlockMarker = (block: FlowBlock): Record<string, unknown> | undefined => {
+  if (!block.attrs || typeof block.attrs !== 'object') return undefined;
+  const wordLayout = (block.attrs as Record<string, unknown>).wordLayout;
+  if (!wordLayout || typeof wordLayout !== 'object') return undefined;
+  const marker = (wordLayout as Record<string, unknown>).marker;
+  if (!marker || typeof marker !== 'object') return undefined;
+  return marker as Record<string, unknown>;
+};
+
+/**
+ * Returns the original (pre-adjustment) marker text from a marker record.
+ * Prefers the saved pmAdapterOriginalMarkerText over the current markerText.
+ */
+const getOriginalMarkerText = (marker: Record<string, unknown>): string | undefined => {
+  if (typeof marker.pmAdapterOriginalMarkerText === 'string') return marker.pmAdapterOriginalMarkerText;
+  return typeof marker.markerText === 'string' ? marker.markerText : undefined;
+};
+
+/**
+ * Ghost list artifact suppression only applies in modes that display tracked changes
+ * visually (review/markup). In final/original, applyTrackedChangesModeToRuns already
+ * handles visibility correctly — surviving empty list items are real content.
+ */
+const isGhostSuppressionMode = (mode: string): boolean => mode !== 'off' && mode !== 'final' && mode !== 'original';
+
 const getListKey = (numId: unknown, ilvl: unknown): string | undefined => {
   if ((typeof numId !== 'number' && typeof numId !== 'string') || typeof ilvl !== 'number') {
     return undefined;
@@ -293,7 +322,7 @@ const getParagraphListKeyFromAttrs = (attrs: unknown): string | undefined => {
   return getListKey(numberingProperties.numId, numberingProperties.ilvl);
 };
 
-const TRAILING_MARKER_TOKEN_RE = /^(.*?)([A-Za-z0-9]+)([^A-Za-z0-9]*)$/;
+const TRAILING_MARKER_TOKEN_RE = /^(.*?)([\p{L}\p{N}]+)([^\p{L}\p{N}]*)$/u;
 
 const getNodeListOrdinal = (node: PMNode): number | undefined => {
   const listRendering = getListRendering(node.attrs?.listRendering);
@@ -303,7 +332,7 @@ const getNodeListOrdinal = (node: PMNode): number | undefined => {
   return getListOrdinalFromPath(listRendering.path);
 };
 
-const formatListOrdinalToken = (numberingType: string, ordinal: number): string | undefined => {
+const formatListOrdinalToken = (numberingType: string, ordinal: number, customFormat?: string): string | undefined => {
   if (!Number.isFinite(ordinal) || ordinal < 1 || numberingType === 'bullet') {
     return undefined;
   }
@@ -311,6 +340,7 @@ const formatListOrdinalToken = (numberingType: string, ordinal: number): string 
     listLevel: [Math.trunc(ordinal)],
     lvlText: '%1',
     listNumberingType: numberingType,
+    customFormat,
   });
   return formatted ?? undefined;
 };
@@ -400,58 +430,30 @@ const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[],
     // Stale offset would underflow this marker; treat as a restart boundary.
     offsets.delete(nodeListKey);
     paragraphBlocks.forEach((block) => {
-      if (block.kind !== 'paragraph' || getParagraphListKeyFromAttrs(block.attrs) !== nodeListKey) {
-        return;
-      }
-      const marker = (block.attrs as { wordLayout?: { marker?: Record<string, unknown> } } | undefined)?.wordLayout
-        ?.marker as Record<string, unknown> | undefined;
-      if (!marker) {
-        return;
-      }
-      const markerText = typeof marker.markerText === 'string' ? marker.markerText : undefined;
-      const sourceMarkerText =
-        typeof marker.pmAdapterOriginalMarkerText === 'string' ? marker.pmAdapterOriginalMarkerText : markerText;
+      if (block.kind !== 'paragraph' || getParagraphListKeyFromAttrs(block.attrs) !== nodeListKey) return;
+      const marker = getBlockMarker(block);
+      if (!marker) return;
+      const sourceMarkerText = getOriginalMarkerText(marker);
       if (sourceMarkerText) {
         marker.markerText = sourceMarkerText;
       }
     });
     return;
   }
-  const replacementToken = formatListOrdinalToken(numberingType, adjustedOrdinal);
+
+  const replacementToken = formatListOrdinalToken(numberingType, adjustedOrdinal, listRendering.customFormat);
   if (!replacementToken) {
     return;
   }
 
   paragraphBlocks.forEach((block) => {
-    if (block.kind !== 'paragraph') {
-      return;
-    }
-    const key = getParagraphListKeyFromAttrs(block.attrs);
-    if (!key || key !== nodeListKey) {
-      return;
-    }
-
-    const wordLayout =
-      block.attrs && typeof block.attrs.wordLayout === 'object' && block.attrs.wordLayout !== null
-        ? (block.attrs.wordLayout as Record<string, unknown>)
-        : undefined;
-    const marker =
-      wordLayout && typeof wordLayout.marker === 'object' && wordLayout.marker !== null
-        ? (wordLayout.marker as Record<string, unknown>)
-        : undefined;
-    if (!marker) {
-      return;
-    }
-    const markerText = typeof marker?.markerText === 'string' ? marker.markerText : undefined;
-    const sourceMarkerText =
-      typeof marker?.pmAdapterOriginalMarkerText === 'string' ? marker.pmAdapterOriginalMarkerText : markerText;
-    if (!sourceMarkerText) {
-      return;
-    }
+    if (block.kind !== 'paragraph' || getParagraphListKeyFromAttrs(block.attrs) !== nodeListKey) return;
+    const marker = getBlockMarker(block);
+    if (!marker) return;
+    const sourceMarkerText = getOriginalMarkerText(marker);
+    if (!sourceMarkerText) return;
     const adjustedText = replaceTrailingMarkerToken(sourceMarkerText, replacementToken);
-    if (!adjustedText || adjustedText === sourceMarkerText) {
-      return;
-    }
+    if (!adjustedText || adjustedText === sourceMarkerText) return;
     // Preserve the source marker so repeated conversions/cache reuse remain idempotent.
     marker.pmAdapterOriginalMarkerText = sourceMarkerText;
     marker.markerText = adjustedText;
@@ -592,9 +594,14 @@ export function paragraphToFlowBlocks({
       themeColors,
       enableComments,
     );
+
+    // Ghost list artifact suppression only applies in markup/review modes.
+    // In final/original, applyTrackedChangesModeToRuns already handles visibility:
+    // insertions survive in final and deletions survive in original — these are real content,
+    // not phantom list items that need hiding.
     const isGhostTrackedListArtifact =
       trackedChangesConfig.enabled &&
-      trackedChangesConfig.mode !== 'off' &&
+      isGhostSuppressionMode(trackedChangesConfig.mode) &&
       Boolean(paragraphAttrs.numberingProperties) &&
       Boolean(paragraphMarkTrackedChange) &&
       filteredRuns.length > 0 &&

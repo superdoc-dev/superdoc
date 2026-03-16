@@ -48,6 +48,10 @@ vi.mock('./toolbar/LinkInput.vue', () => ({
   default: { name: 'LinkInput', render: () => null },
 }));
 
+vi.mock('./TableResizeOverlay.vue', () => ({
+  default: { name: 'TableResizeOverlay', render: () => null },
+}));
+
 vi.mock('@superdoc/common', () => ({
   getFileObject: getFileObjectMock,
 }));
@@ -1243,6 +1247,57 @@ describe('SuperEditor.vue', () => {
 
       wrapper.unmount();
       vi.useRealTimers();
+    });
+
+    describe('table overlay click guard', () => {
+      it('should suppress overlay updates when clicking in viewing mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-click-guard',
+            options: {},
+          },
+        });
+
+        await flushPromises();
+
+        await flushPromises();
+
+        const updateSpy = vi.spyOn(wrapper.vm, 'updateTableResizeOverlay');
+        // Force viewing mode
+        Object.defineProperty(wrapper.vm, 'activeEditor', {
+          value: {
+            value: {
+              options: { documentMode: 'viewing' },
+              isEditable: false,
+              view: { focus: vi.fn() },
+            },
+          },
+        });
+        wrapper.vm.getDocumentMode = () => 'viewing';
+        wrapper.vm.isViewingMode = () => true;
+
+        wrapper.vm.tableResizeState.visible = true;
+        wrapper.vm.tableResizeState.tableElement = { foo: 'bar' };
+        wrapper.vm.editorElem.value = {
+          querySelector: () => ({
+            contains: () => false,
+          }),
+        };
+
+        const event = new MouseEvent('click');
+        Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+        Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+
+        wrapper.vm.handleSuperEditorClick(event);
+
+        expect(updateSpy).not.toHaveBeenCalled();
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
     });
   });
 });

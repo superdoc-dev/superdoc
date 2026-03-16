@@ -158,6 +158,22 @@ export type SessionManagerCallbacks = {
   onAnnounce?: (message: string) => void;
   /** Called to update awareness session */
   onUpdateAwarenessSession?: (session: HeaderFooterSession) => void;
+  /** Called when the active header/footer editor emits an update */
+  onSurfaceUpdate?: (data: {
+    sourceEditor: Editor;
+    surface: 'header' | 'footer';
+    headerId?: string | null;
+    sectionType?: string | null;
+  }) => void;
+  /** Called when the active header/footer editor emits a transaction */
+  onSurfaceTransaction?: (data: {
+    sourceEditor: Editor;
+    surface: 'header' | 'footer';
+    headerId?: string | null;
+    sectionType?: string | null;
+    transaction: unknown;
+    duration?: number;
+  }) => void;
 };
 
 // =============================================================================
@@ -198,6 +214,7 @@ export class HeaderFooterSessionManager {
   // Session state
   #session: HeaderFooterSession = { mode: 'body' };
   #activeEditor: Editor | null = null;
+  #activeEditorEventCleanup: (() => void) | null = null;
 
   // Hover UI elements (passed in, not owned)
   #hoverOverlay: HTMLElement | null = null;
@@ -415,6 +432,7 @@ export class HeaderFooterSessionManager {
       resetSession: () => {
         this.#managerCleanups = [];
         this.#session = { mode: 'body' };
+        this.#teardownActiveEditorEventBridge();
         this.#activeEditor = null;
         this.#deps?.notifyInputBridgeTargetChanged();
       },
@@ -640,6 +658,7 @@ export class HeaderFooterSessionManager {
       this.#activeEditor.setEditable(false);
       this.#activeEditor.setOptions({ documentMode: 'viewing' });
     }
+    this.#teardownActiveEditorEventBridge();
 
     this.#overlayManager?.hideEditingOverlay();
     this.#overlayManager?.showSelectionOverlay();
@@ -687,6 +706,7 @@ export class HeaderFooterSessionManager {
           this.#activeEditor.setEditable(false);
           this.#activeEditor.setOptions({ documentMode: 'viewing' });
         }
+        this.#teardownActiveEditorEventBridge();
         this.#overlayManager.hideEditingOverlay();
         this.#activeEditor = null;
         this.#session = { mode: 'body' };
@@ -833,6 +853,7 @@ export class HeaderFooterSessionManager {
       this.#overlayManager.hideSelectionOverlay();
 
       this.#activeEditor = editor;
+      this.#setupActiveEditorEventBridge(editor);
       this.#session = {
         mode: region.kind,
         kind: region.kind,
@@ -861,6 +882,7 @@ export class HeaderFooterSessionManager {
         this.#overlayManager?.hideEditingOverlay();
         this.#overlayManager?.showSelectionOverlay();
         this.clearHover();
+        this.#teardownActiveEditorEventBridge();
         this.#activeEditor = null;
         this.#session = { mode: 'body' };
       } catch (cleanupError) {
@@ -926,6 +948,50 @@ export class HeaderFooterSessionManager {
         ? 'Exited header/footer edit mode.'
         : `Editing ${this.#session.kind === 'header' ? 'Header' : 'Footer'} (${this.#session.sectionType ?? 'default'})`;
     this.#callbacks.onAnnounce?.(message);
+  }
+
+  #setupActiveEditorEventBridge(editor: Editor): void {
+    this.#teardownActiveEditorEventBridge();
+
+    const emitSurfaceUpdate = () => {
+      if (this.#session.mode !== 'header' && this.#session.mode !== 'footer') return;
+      this.#callbacks.onSurfaceUpdate?.({
+        sourceEditor: editor,
+        surface: this.#session.mode,
+        headerId: this.#session.headerId ?? null,
+        sectionType: this.#session.sectionType ?? null,
+      });
+    };
+
+    const emitSurfaceTransaction = ({ transaction, duration }: { transaction: unknown; duration?: number }) => {
+      if (this.#session.mode !== 'header' && this.#session.mode !== 'footer') return;
+      this.#callbacks.onSurfaceTransaction?.({
+        sourceEditor: editor,
+        surface: this.#session.mode,
+        headerId: this.#session.headerId ?? null,
+        sectionType: this.#session.sectionType ?? null,
+        transaction,
+        duration,
+      });
+    };
+
+    editor.on('update', emitSurfaceUpdate);
+    editor.on('transaction', emitSurfaceTransaction);
+
+    this.#activeEditorEventCleanup = () => {
+      editor.off?.('update', emitSurfaceUpdate);
+      editor.off?.('transaction', emitSurfaceTransaction);
+    };
+  }
+
+  #teardownActiveEditorEventBridge(): void {
+    try {
+      this.#activeEditorEventCleanup?.();
+    } catch (error) {
+      console.warn('[HeaderFooterSessionManager] Failed to clean up active editor bridge:', error);
+    } finally {
+      this.#activeEditorEventCleanup = null;
+    }
   }
 
   #updateModeBanner(): void {
@@ -1537,6 +1603,8 @@ export class HeaderFooterSessionManager {
    * Clean up all resources.
    */
   destroy(): void {
+    this.#teardownActiveEditorEventBridge();
+
     // Run cleanup functions
     this.#managerCleanups.forEach((fn) => {
       try {

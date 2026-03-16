@@ -1,5 +1,6 @@
 import { ReplaceStep } from 'prosemirror-transform';
 import { Slice } from 'prosemirror-model';
+import { Selection, TextSelection } from 'prosemirror-state';
 import { markInsertion } from './markInsertion.js';
 import { markDeletion } from './markDeletion.js';
 import { TrackDeleteMarkName } from '../constants.js';
@@ -295,7 +296,7 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   }
 
   if (!newTr.selection.eq(tempTr.selection)) {
-    newTr.setSelection(tempTr.selection);
+    syncSelectionFromTransaction({ targetTr: newTr, sourceSelection: tempTr.selection });
   }
 
   if (step.from !== step.to) {
@@ -334,4 +335,47 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   // Add meta to the new transaction.
   newTr.setMeta(TrackChangesBasePluginKey, meta);
   newTr.setMeta(CommentsPluginKey, { type: 'force' });
+};
+
+/**
+ * Copies a selection from one transaction into another transaction that has a different
+ * document instance, while guaranteeing the resulting selection is valid for the target doc.
+ *
+ * ProseMirror selections are bound to a specific document object. Reusing a `Selection`
+ * created from another transaction can throw:
+ * `Selection passed to setSelection must point at the current document`.
+ *
+ * This helper performs a safe transfer strategy:
+ * 1. Clamp source selection positions to the target document bounds.
+ * 2. Recreate `TextSelection` directly on the target doc when possible.
+ * 3. If recreation fails (for example, target endpoints are no longer valid text positions),
+ *    fall back to `Selection.near(...)` so caret placement still succeeds.
+ * 4. For non-text selections, use the same `Selection.near(...)` fallback.
+ *
+ * The intent is to preserve cursor location as closely as possible without ever throwing
+ * during tracked replay.
+ *
+ * @param {{ targetTr: import('prosemirror-state').Transaction, sourceSelection: import('prosemirror-state').Selection }} options
+ * @param {import('prosemirror-state').Transaction} options.targetTr
+ *   Transaction that should receive the selection. The resulting selection is always created
+ *   against `targetTr.doc`.
+ * @param {import('prosemirror-state').Selection} options.sourceSelection
+ *   Selection taken from another transaction/document context.
+ * @returns {void}
+ */
+const syncSelectionFromTransaction = ({ targetTr, sourceSelection }) => {
+  const boundedFrom = Math.max(0, Math.min(sourceSelection.from, targetTr.doc.content.size));
+  const boundedTo = Math.max(0, Math.min(sourceSelection.to, targetTr.doc.content.size));
+
+  if (sourceSelection instanceof TextSelection) {
+    try {
+      targetTr.setSelection(TextSelection.create(targetTr.doc, boundedFrom, boundedTo));
+      return;
+    } catch {
+      targetTr.setSelection(Selection.near(targetTr.doc.resolve(boundedFrom), -1));
+      return;
+    }
+  }
+
+  targetTr.setSelection(Selection.near(targetTr.doc.resolve(boundedFrom), -1));
 };

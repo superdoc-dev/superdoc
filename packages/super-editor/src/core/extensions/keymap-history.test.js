@@ -124,6 +124,28 @@ describe('keymap history grouping', () => {
     expect(selectionAfterUndo.empty).toBe(true);
   });
 
+  it('clears preservedSelection/lastSelection on undo so toolbar state does not resurrect old ranges', () => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p>Hello world</p>' }));
+
+    // Seed editor-level selection snapshots (simulating toolbar/command preservation)
+    const from = 1;
+    const to = 6;
+    const sel = TextSelection.create(editor.state.doc, from, to);
+    editor.options.preservedSelection = sel;
+    editor.options.lastSelection = sel;
+
+    // Simple edit to create an undo step
+    editor.view.dispatch(editor.state.tr.insertText('!', to));
+
+    // Undo should trigger history cleanup, which clears editor-level selection snapshots
+    // and collapses any active text selection.
+    editor.commands.undo();
+
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.options.preservedSelection).toBeNull();
+    expect(editor.options.lastSelection).toBeNull();
+  });
+
   it('closeHistory before deletion creates its own undo step', () => {
     ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
 

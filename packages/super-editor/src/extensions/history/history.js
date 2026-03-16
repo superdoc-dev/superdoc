@@ -3,37 +3,46 @@ import { TextSelection } from 'prosemirror-state';
 import { history, redo as originalRedo, undo as originalUndo } from 'prosemirror-history';
 import { undo as yUndo, redo as yRedo, yUndoPlugin } from 'y-prosemirror';
 import { Extension } from '@core/Extension.js';
-import { CustomSelectionPluginKey } from '../custom-selection/custom-selection.js';
+import { CustomSelectionPluginKey, DEFAULT_SELECTION_STATE } from '../custom-selection/custom-selection.js';
+
+function applySelectionCleanup(editor, tr) {
+  let cleaned = tr.setMeta(CustomSelectionPluginKey, DEFAULT_SELECTION_STATE);
+
+  const sel = cleaned.selection;
+  if (sel && sel instanceof TextSelection && !sel.empty) {
+    try {
+      const collapsed = TextSelection.create(cleaned.doc, sel.head);
+      cleaned = cleaned.setSelection(collapsed);
+    } catch {
+      // Ignore collapse failures and fall back to original selection
+    }
+  }
+
+  editor.setOptions({
+    preservedSelection: null,
+    lastSelection: null,
+  });
+
+  return cleaned;
+}
 
 function createHistoryDispatch(editor, dispatch) {
   if (!dispatch) return dispatch;
-
   return (historyTr) => {
-    let cleared = historyTr.setMeta(CustomSelectionPluginKey, {
-      focused: false,
-      preservedSelection: null,
-      showVisualSelection: false,
-      skipFocusReset: false,
-    });
-
-    const sel = cleared.selection;
-    if (sel && sel instanceof TextSelection && !sel.empty) {
-      const headPos = typeof sel.head === 'number' ? sel.head : sel.to;
-      try {
-        const collapsed = TextSelection.create(cleared.doc, headPos);
-        cleared = cleared.setSelection(collapsed);
-      } catch {
-        // Ignore collapse failures and fall back to original selection
-      }
-    }
-
-    editor.setOptions({
-      preservedSelection: null,
-      lastSelection: null,
-    });
-
-    dispatch(cleared);
+    const cleaned = applySelectionCleanup(editor, historyTr);
+    dispatch(cleaned);
   };
+}
+
+function runSelectionCleanupAfterCollabHistory(editor) {
+  const view = editor?.view;
+  const state = editor?.state;
+  if (!view || !state) return;
+
+  let tr = applySelectionCleanup(editor, state.tr);
+  // Avoid creating a new undo step for this synthetic cleanup transaction.
+  tr = tr.setMeta('addToHistory', false);
+  view.dispatch(tr);
 }
 
 /**
@@ -85,7 +94,9 @@ export const History = Extension.create({
       undo: () => ({ state, dispatch, tr }) => {
         if (this.editor.options.collaborationProvider && this.editor.options.ydoc) {
           tr.setMeta('preventDispatch', true);
-          return yUndo(state);
+          const result = yUndo(state);
+          runSelectionCleanupAfterCollabHistory(this.editor);
+          return result;
         }
         tr.setMeta('inputType', 'historyUndo');
         const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);
@@ -102,7 +113,9 @@ export const History = Extension.create({
       redo: () => ({ state, dispatch, tr }) => {
         if (this.editor.options.collaborationProvider && this.editor.options.ydoc) {
           tr.setMeta('preventDispatch', true);
-          return yRedo(state);
+          const result = yRedo(state);
+          runSelectionCleanupAfterCollabHistory(this.editor);
+          return result;
         }
         tr.setMeta('inputType', 'historyRedo');
         const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);

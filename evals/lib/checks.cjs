@@ -89,8 +89,15 @@ module.exports.noMixedBatch = (output) => {
 module.exports.correctFormatArgs = (output) => {
   if (!findMutations(output)) return true;
   const formatSteps = getSteps(output).filter((s) => s.op === 'format.apply');
-  const bad = formatSteps.find((s) => s.args?.bold !== undefined && !s.args?.inline);
-  if (bad) return { pass: false, score: 0, reason: 'format.apply args should be {inline: {bold: true}}, not {bold: true}' };
+  if (formatSteps.length === 0) return true; // no format.apply steps, skip
+  for (const step of formatSteps) {
+    if (!step.args?.inline) {
+      // Formatting properties must be nested inside args.inline, not at args top level
+      const topLevelKeys = Object.keys(step.args || {}).filter((k) => k !== 'inline');
+      const hint = topLevelKeys.length > 0 ? ` (found top-level: ${topLevelKeys.join(', ')})` : '';
+      return { pass: false, score: 0, reason: `format.apply args must have "inline" wrapper: {inline: {bold: true}}, not {bold: true}${hint}` };
+    }
+  }
   return { pass: true, score: 1, reason: 'Correct format.apply structure' };
 };
 
@@ -123,19 +130,22 @@ module.exports.nodeSearchOrBlocksList = (output, context) => {
   const qm = findTool(output, 'query_match');
   if (qm) {
     const args = getArgs(qm);
-    if (args.select?.type === 'node') {
-      return { pass: true, score: 1, reason: `query_match with node selector (nodeType=${args.select?.nodeType})` };
+    if (args.select?.type !== 'node') {
+      return { pass: false, score: 0, reason: `query_match select.type is "${args.select?.type}", expected "node"` };
     }
-    return { pass: false, score: 0, reason: `query_match select.type is "${args.select?.type}", expected "node"` };
+    if (args.select?.nodeType !== expectedType) {
+      return { pass: false, score: 0, reason: `query_match nodeType is "${args.select?.nodeType}", expected "${expectedType}"` };
+    }
+    return { pass: true, score: 1, reason: `query_match with node selector (nodeType=${expectedType})` };
   }
 
   const bl = findTool(output, 'blocks_list');
   if (bl) {
     const args = getArgs(bl);
-    if (Array.isArray(args.nodeTypes) && args.nodeTypes.includes(expectedType)) {
-      return { pass: true, score: 1, reason: `blocks_list with nodeTypes filter including "${expectedType}"` };
+    if (!Array.isArray(args.nodeTypes) || !args.nodeTypes.includes(expectedType)) {
+      return { pass: false, score: 0, reason: `blocks_list called but nodeTypes ${JSON.stringify(args.nodeTypes)} does not include "${expectedType}"` };
     }
-    return { pass: true, score: 0.7, reason: 'blocks_list called but without nodeTypes filter for "' + expectedType + '"' };
+    return { pass: true, score: 1, reason: `blocks_list with nodeTypes filter including "${expectedType}"` };
   }
 
   return { pass: false, score: 0, reason: 'Neither query_match nor blocks_list called' };

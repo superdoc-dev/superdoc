@@ -68,9 +68,10 @@ export function cleanArgs(args) {
 
 // --- Cache ---
 
-/** Generate a cache key from model + fixture + task. */
-export function cacheKey(model, fixture, task) {
-  const hash = createHash('sha256').update(`${model}|${fixture}|${task}`).digest('hex').slice(0, 16);
+/** Generate a cache key from model + fixture + task + prompt hash. */
+export function cacheKey(model, fixture, task, prompt) {
+  const promptSig = prompt ? createHash('sha256').update(prompt).digest('hex').slice(0, 8) : '';
+  const hash = createHash('sha256').update(`${model}|${fixture}|${task}|${promptSig}`).digest('hex').slice(0, 16);
   return hash;
 }
 

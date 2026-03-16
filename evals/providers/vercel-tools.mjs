@@ -90,7 +90,7 @@ export default class VercelToolsProvider {
 
   async callApi(prompt, context) {
     const task = context?.vars?.task || '';
-    const key = cacheKey(this.modelId, prompt, task);
+    const key = cacheKey(this.modelId, prompt, task, prompt);
     const cached = readCache(key);
     if (cached) return cached;
 

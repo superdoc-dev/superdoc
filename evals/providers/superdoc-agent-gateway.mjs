@@ -140,7 +140,7 @@ export default class SuperDocAgentGatewayProvider {
     const task = vars.task || prompt;
 
     // Check cache first (skip CLI + LLM if we already have this result)
-    const key = cacheKey(modelId, fixture, task);
+    const key = cacheKey(modelId, fixture, task, prompt);
     const cached = readCache(key);
     if (cached) return cached;
 

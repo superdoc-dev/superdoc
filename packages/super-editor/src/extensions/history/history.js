@@ -1,7 +1,49 @@
 // @ts-nocheck
+import { TextSelection } from 'prosemirror-state';
 import { history, redo as originalRedo, undo as originalUndo } from 'prosemirror-history';
 import { undo as yUndo, redo as yRedo, yUndoPlugin } from 'y-prosemirror';
 import { Extension } from '@core/Extension.js';
+import { CustomSelectionPluginKey, DEFAULT_SELECTION_STATE } from '../custom-selection/custom-selection.js';
+
+function applySelectionCleanup(editor, tr) {
+  let cleaned = tr.setMeta(CustomSelectionPluginKey, DEFAULT_SELECTION_STATE);
+
+  const sel = cleaned.selection;
+  if (sel && sel instanceof TextSelection && !sel.empty) {
+    try {
+      const collapsed = TextSelection.create(cleaned.doc, sel.head);
+      cleaned = cleaned.setSelection(collapsed);
+    } catch {
+      // Ignore collapse failures and fall back to original selection
+    }
+  }
+
+  editor.setOptions({
+    preservedSelection: null,
+    lastSelection: null,
+  });
+
+  return cleaned;
+}
+
+function createHistoryDispatch(editor, dispatch) {
+  if (!dispatch) return dispatch;
+  return (historyTr) => {
+    const cleaned = applySelectionCleanup(editor, historyTr);
+    dispatch(cleaned);
+  };
+}
+
+function runSelectionCleanupAfterCollabHistory(editor) {
+  const view = editor?.view;
+  const state = editor?.state;
+  if (!view || !state) return;
+
+  let tr = applySelectionCleanup(editor, state.tr);
+  // Avoid creating a new undo step for this synthetic cleanup transaction.
+  tr = tr.setMeta('addToHistory', false);
+  view.dispatch(tr);
+}
 
 /**
  * Configuration options for History
@@ -52,10 +94,13 @@ export const History = Extension.create({
       undo: () => ({ state, dispatch, tr }) => {
         if (this.editor.options.collaborationProvider && this.editor.options.ydoc) {
           tr.setMeta('preventDispatch', true);
-          return yUndo(state);
+          const result = yUndo(state);
+          runSelectionCleanupAfterCollabHistory(this.editor);
+          return result;
         }
         tr.setMeta('inputType', 'historyUndo');
-        return originalUndo(state, dispatch);
+        const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);
+        return originalUndo(state, wrappedDispatch);
       },
 
       /**
@@ -68,10 +113,13 @@ export const History = Extension.create({
       redo: () => ({ state, dispatch, tr }) => {
         if (this.editor.options.collaborationProvider && this.editor.options.ydoc) {
           tr.setMeta('preventDispatch', true);
-          return yRedo(state);
+          const result = yRedo(state);
+          runSelectionCleanupAfterCollabHistory(this.editor);
+          return result;
         }
         tr.setMeta('inputType', 'historyRedo');
-        return originalRedo(state, dispatch);
+        const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);
+        return originalRedo(state, wrappedDispatch);
       },
     };
   },

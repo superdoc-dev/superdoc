@@ -82,6 +82,20 @@
   caret-color: transparent;
 }
 
+/* Allow selection visibility in viewing mode when allowSelectionInViewMode is enabled */
+.presentation-editor--allow-selection .ProseMirror-hideselection *::selection {
+  background: Highlight;
+  background: -moz-Highlight;
+}
+
+.presentation-editor--allow-selection .ProseMirror-hideselection *::-moz-selection {
+  background: Highlight;
+}
+
+.presentation-editor--allow-selection .ProseMirror-hideselection * {
+  caret-color: auto;
+}
+
 /* See https://github.com/ProseMirror/prosemirror/issues/1421#issuecomment-1759320191 */
 .sd-editor-scoped .ProseMirror [draggable][contenteditable='false'] {
   user-select: text;

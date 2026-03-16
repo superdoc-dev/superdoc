@@ -47,6 +47,12 @@ export interface StructuralReplaceOptions {
   changeMode?: 'direct' | 'tracked';
   /** When true, runs all validation (target resolution, materialization, nesting policy) but skips the transaction dispatch. */
   dryRun?: boolean;
+  /**
+   * Pre-resolved replacement range. When present, skips single-block target
+   * resolution and uses this range directly. Used by the wrapper for
+   * multi-block locators (SelectionTarget spanning blocks, multi-segment refs).
+   */
+  resolvedRange?: { from: number; to: number };
 }
 
 /** Result of a structural write operation. */
@@ -111,11 +117,14 @@ export function executeStructuralInsert(editor: Editor, options: StructuralInser
  * (from pos to pos + nodeSize) is replaced, not just its text content.
  */
 export function executeStructuralReplace(editor: Editor, options: StructuralReplaceOptions): StructuralWriteResult {
-  const { content, nestingPolicy, target, changeMode, dryRun } = options;
+  const { content, nestingPolicy, target, changeMode, dryRun, resolvedRange } = options;
   const schema = editor.state.schema;
 
-  // 1. Resolve target range (full block node range)
-  const resolved = resolveReplaceTarget(editor, target);
+  // 1. Resolve target range — use pre-resolved range for multi-block locators,
+  //    otherwise resolve from the single-block TextAddress target.
+  const resolved = resolvedRange
+    ? { from: resolvedRange.from, to: resolvedRange.to, effectiveTarget: target }
+    : resolveReplaceTarget(editor, target);
 
   // 2. Validate section references in the fragment
   validateSectionReferences(editor, content);

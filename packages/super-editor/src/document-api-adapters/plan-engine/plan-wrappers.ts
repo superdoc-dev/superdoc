@@ -24,6 +24,13 @@ import type {
   SDReplaceInput,
   ReplaceInput,
   SDAddress,
+  StepWhere,
+  SelectionMutationRequest,
+  SelectionTarget,
+  SelectionPoint,
+  SelectionEdgeNodeType,
+  StepOutcome,
+  SelectionStepResolution,
 } from '@superdoc/document-api';
 import {
   isStructuralInsertInput,
@@ -33,9 +40,10 @@ import {
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
-import type { CompiledTarget } from './executor-registry.types.js';
+import { compilePlan } from './compiler.js';
+import type { CompiledTarget, CompiledSpanTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
-import { getRevision } from './revision-tracker.js';
+import { checkRevision, getRevision } from './revision-tracker.js';
 import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import {
@@ -63,6 +71,14 @@ import {
   resolveInsertTarget as resolveStructuralInsertTarget,
   resolvePlacement,
 } from '../structural-write-engine/index.js';
+import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js';
+import { getBlockIndex } from '../helpers/index-cache.js';
+import {
+  findBlockByNodeIdOnly,
+  isTextBlockCandidate,
+  type BlockCandidate,
+  type BlockIndex,
+} from '../helpers/node-address-resolver.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -166,75 +182,42 @@ function narrowToTextAddress(target: SDAddress | TextAddress): TextAddress {
 // ---------------------------------------------------------------------------
 
 function normalizeWriteLocator(request: WriteRequest): WriteRequest {
-  if (request.kind === 'insert') {
-    const hasBlockId = request.blockId !== undefined;
-    const hasOffset = request.offset !== undefined;
+  const hasBlockId = request.blockId !== undefined;
+  const hasOffset = request.offset !== undefined;
 
-    if (hasOffset && request.target) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
-        fields: ['target', 'offset'],
-      });
-    }
-    if (hasOffset && !hasBlockId) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
-        fields: ['offset', 'blockId'],
-      });
-    }
-    if (!hasBlockId) return request;
-    if (request.target) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
-        fields: ['target', 'blockId'],
-      });
-    }
-
-    const effectiveOffset = request.offset ?? 0;
-    const target: TextAddress = {
-      kind: 'text',
-      blockId: request.blockId!,
-      range: { start: effectiveOffset, end: effectiveOffset },
-    };
-    return { kind: 'insert', target, text: request.text };
+  if (hasOffset && request.target) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
+      fields: ['target', 'offset'],
+    });
+  }
+  if (hasOffset && !hasBlockId) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
+      fields: ['offset', 'blockId'],
+    });
+  }
+  if (!hasBlockId) return request;
+  if (request.target) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
+      fields: ['target', 'blockId'],
+    });
   }
 
-  if (request.kind === 'replace' || request.kind === 'delete') {
-    const hasBlockId = request.blockId !== undefined;
-    const hasStart = request.start !== undefined;
-    const hasEnd = request.end !== undefined;
-
-    if (request.target && (hasBlockId || hasStart || hasEnd)) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        `Cannot combine target with blockId/start/end on ${request.kind} request.`,
-        { fields: ['target', 'blockId', 'start', 'end'] },
-      );
-    }
-    if (!hasBlockId && (hasStart || hasEnd)) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', `start/end require blockId on ${request.kind} request.`, {
-        fields: ['blockId', 'start', 'end'],
-      });
-    }
-    if (!hasBlockId) return request;
-    if (!hasStart || !hasEnd) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        `blockId requires both start and end on ${request.kind} request.`,
-        { fields: ['blockId', 'start', 'end'] },
-      );
-    }
-
-    const target: TextAddress = {
-      kind: 'text',
-      blockId: request.blockId!,
-      range: { start: request.start!, end: request.end! },
-    };
-    if (request.kind === 'replace') return { kind: 'replace', target, text: request.text };
-    return { kind: 'delete', target, text: '' };
-  }
-
-  return request;
+  const effectiveOffset = request.offset ?? 0;
+  const target: TextAddress = {
+    kind: 'text',
+    blockId: request.blockId!,
+    range: { start: effectiveOffset, end: effectiveOffset },
+  };
+  return { kind: 'insert', target, text: request.text };
 }
 
-type FormatOperationInput = { target?: TextAddress; blockId?: string; start?: number; end?: number };
+type FormatOperationInput = {
+  target?: TextAddress | SelectionTarget;
+  ref?: string;
+  blockId?: string;
+  start?: number;
+  end?: number;
+};
 
 function normalizeFormatLocator(input: FormatOperationInput): FormatOperationInput {
   const hasBlockId = input.blockId !== undefined;
@@ -348,29 +331,20 @@ export function executeDomainCommand(
 // ---------------------------------------------------------------------------
 
 function validateWriteRequest(request: WriteRequest, resolved: ResolvedWrite): ReceiptFailure | null {
-  if (request.kind === 'insert') {
-    if (!request.text) return { code: 'INVALID_TARGET', message: 'Insert operations require non-empty text.' };
-    if (resolved.range.from !== resolved.range.to) {
-      return { code: 'INVALID_TARGET', message: 'Insert operations require a collapsed target range.' };
-    }
-    return null;
-  }
-  if (request.kind === 'replace') {
-    if (request.text == null || request.text.length === 0) {
-      return { code: 'INVALID_TARGET', message: 'Replace operations require non-empty text. Use delete for removals.' };
-    }
-    if (resolved.resolution.text === request.text) {
-      return { code: 'NO_OP', message: 'Replace operation produced no change.' };
-    }
-    return null;
-  }
-  // delete
-  if (resolved.range.from === resolved.range.to) {
-    return { code: 'NO_OP', message: 'Delete operation produced no change for a collapsed range.' };
+  if (!request.text) return { code: 'INVALID_TARGET', message: 'Insert operations require non-empty text.' };
+  if (resolved.range.from !== resolved.range.to) {
+    return { code: 'INVALID_TARGET', message: 'Insert operations require a collapsed target range.' };
   }
   return null;
 }
 
+/**
+ * Write wrapper for insert operations only.
+ *
+ * Delete and replace now route through `selectionMutationWrapper` via
+ * `SelectionMutationAdapter`. This wrapper handles the legacy insert path
+ * that still uses `TextAddress`-based `InsertWriteRequest`.
+ */
 export function writeWrapper(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
   const normalizedRequest = normalizeWriteLocator(request);
 
@@ -396,7 +370,7 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
   // Structural-end: the doc ends with non-text blocks. Create a paragraph
   // containing the text at the structural document end via a domain command,
   // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
-  if (resolved.structuralEnd && normalizedRequest.kind === 'insert') {
+  if (resolved.structuralEnd) {
     const insertPos = resolved.range.from;
     const text = normalizedRequest.text ?? '';
     const receipt = executeDomainCommand(
@@ -412,40 +386,15 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
   }
 
   // Build single-step compiled plan with pre-resolved target.
-  // The step's `where` clause is a structural stub — it is never evaluated
-  // because targets are already resolved.
   const stepId = uuidv4();
-  let op: string;
-  let stepDef: { id: string; op: string; where: typeof STUB_WHERE; args: unknown };
+  const step = {
+    id: stepId,
+    op: 'text.insert',
+    where: STUB_WHERE,
+    args: { position: 'before', content: { text: normalizedRequest.text ?? '' } },
+  } as unknown as MutationStep;
 
-  if (normalizedRequest.kind === 'insert') {
-    op = 'text.insert';
-    stepDef = {
-      id: stepId,
-      op,
-      where: STUB_WHERE,
-      args: { position: 'before', content: { text: normalizedRequest.text ?? '' } },
-    };
-  } else if (normalizedRequest.kind === 'replace') {
-    op = 'text.rewrite';
-    stepDef = {
-      id: stepId,
-      op,
-      where: STUB_WHERE,
-      args: { replacement: { text: normalizedRequest.text ?? '' }, style: { inline: { mode: 'preserve' } } },
-    };
-  } else {
-    op = 'text.delete';
-    stepDef = {
-      id: stepId,
-      op,
-      where: STUB_WHERE,
-      args: {},
-    };
-  }
-
-  const step = stepDef as unknown as MutationStep;
-  const target = toCompiledTarget(stepId, op, resolved);
+  const target = toCompiledTarget(stepId, 'text.insert', resolved);
   const compiled: CompiledPlan = {
     mutationSteps: [{ step, targets: [target] }],
     assertSteps: [],
@@ -534,13 +483,15 @@ function ensureTrackedInlinePropertySupport(keys: readonly InlineRunPatchKey[]):
   );
 }
 
+/** @deprecated Legacy wrapper. New code routes through selectionMutationWrapper. */
 export function styleApplyWrapper(
   editor: Editor,
   input: StyleApplyInput,
   options?: MutationOptions,
 ): TextMutationReceipt {
-  const normalizedInput = normalizeFormatLocator(input);
-  const resolved = resolveFormatTarget(editor, normalizedInput.target!, 'format.apply');
+  const normalizedInput = normalizeFormatLocator(input as unknown as FormatOperationInput);
+  const textTarget = normalizedInput.target as TextAddress | undefined;
+  const resolved = resolveFormatTarget(editor, textTarget!, 'format.apply');
 
   if (resolved.range.from === resolved.range.to) {
     return {
@@ -576,9 +527,9 @@ export function styleApplyWrapper(
     kind: 'range',
     stepId,
     op: 'format.apply',
-    blockId: normalizedInput.target!.blockId,
-    from: normalizedInput.target!.range.start,
-    to: normalizedInput.target!.range.end,
+    blockId: textTarget!.blockId,
+    from: textTarget!.range.start,
+    to: textTarget!.range.end,
     absFrom: resolved.range.from,
     absTo: resolved.range.to,
     text: resolved.resolution.text,
@@ -597,6 +548,264 @@ export function styleApplyWrapper(
   });
 
   return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
+}
+
+// ---------------------------------------------------------------------------
+// Selection mutation wrapper — routes delete/replace/format through the
+// compiler's where.by: 'target' or where.by: 'ref' path.
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the `where` clause for a selection mutation request.
+ * Returns either `{ by: 'target', target }` or `{ by: 'ref', ref }`.
+ */
+function buildSelectionWhere(request: SelectionMutationRequest): StepWhere {
+  if (request.target) {
+    return { by: 'target', target: request.target };
+  }
+  if (request.ref) {
+    return { by: 'ref', ref: request.ref };
+  }
+  throw new DocumentApiAdapterError('INVALID_TARGET', 'Selection mutation requires either target or ref.');
+}
+
+/**
+ * Maps a SelectionMutationRequest to a plan step op and args.
+ */
+function buildSelectionStepDef(stepId: string, request: SelectionMutationRequest, where: StepWhere): MutationStep {
+  switch (request.kind) {
+    case 'delete':
+      return {
+        id: stepId,
+        op: 'text.delete',
+        where,
+        args: { behavior: request.behavior },
+      } as unknown as MutationStep;
+
+    case 'replace':
+      return {
+        id: stepId,
+        op: 'text.rewrite',
+        where,
+        args: {
+          replacement: { text: request.text },
+          style: { inline: { mode: 'preserve' } },
+        },
+      } as unknown as MutationStep;
+
+    case 'format':
+      return {
+        id: stepId,
+        op: 'format.apply',
+        where,
+        args: { inline: request.inline },
+      } as unknown as MutationStep;
+  }
+}
+
+/**
+ * Bridge between SelectionMutationAdapter.execute() and the plan engine.
+ *
+ * Builds a one-step MutationPlan with a proper where clause and routes
+ * it through compile → validate → execute. This is the single execution
+ * path for all selection-based mutations (delete, replace-text, format.apply).
+ */
+export function selectionMutationWrapper(
+  editor: Editor,
+  request: SelectionMutationRequest,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const mode = options?.changeMode ?? 'direct';
+  if (mode === 'tracked') ensureTrackedCapability(editor, { operation: request.kind });
+
+  // Capability checks for format operations.
+  if (request.kind === 'format') {
+    const inlineKeys = Object.keys(request.inline) as InlineRunPatchKey[];
+    ensureInlinePropertyCapabilities(editor, inlineKeys);
+    if (mode === 'tracked') ensureTrackedInlinePropertySupport(inlineKeys);
+  }
+
+  const stepId = uuidv4();
+  const where = buildSelectionWhere(request);
+  const step = buildSelectionStepDef(stepId, request, where);
+
+  // Compile the one-step plan through the real compiler.
+  // Compilation is side-effect-free — it resolves targets against the current
+  // document state without mutating anything.
+  const compiled = compilePlan(editor, [step]);
+
+  // Enforce expectedRevision even on dry-run — callers need to know if the
+  // document has drifted since their last query, regardless of execution.
+  checkRevision(editor, options?.expectedRevision);
+
+  // Dry-run: compile and resolve, but do NOT execute.
+  if (options?.dryRun) {
+    const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+    return { success: true, resolution };
+  }
+
+  // Execute through the shared execution engine.
+  const receipt = executeCompiledPlan(editor, compiled, {
+    changeMode: mode,
+    expectedRevision: options?.expectedRevision,
+  });
+
+  // Map PlanReceipt → TextMutationReceipt.
+  const stepOutcome = receipt.steps.find((s) => s.stepId === stepId);
+  const resolution = buildSelectionResolutionFromOutcome(stepOutcome, compiled, stepId);
+
+  const success = stepOutcome?.effect === 'changed';
+  if (!success) {
+    return {
+      success: false,
+      resolution,
+      failure: { code: 'NO_OP', message: `${request.kind} produced no change.` },
+    };
+  }
+
+  return { success: true, resolution };
+}
+
+/**
+ * Extracts a backward-compatible blockId from a SelectionPoint.
+ *
+ * For `text` points the blockId is the point's own blockId.
+ * For `nodeEdge` points we use the addressed node's nodeId — this is the
+ * block-level node that the edge refers to, which is the closest valid
+ * block identifier we can provide for the legacy TextAddress shape.
+ */
+function blockIdFromPoint(point: SelectionPoint): string {
+  return point.kind === 'text' ? point.blockId : point.node.nodeId;
+}
+
+/**
+ * Converts a SelectionTarget and its absolute range into a TextMutationResolution.
+ *
+ * The backward-compatible `target` (TextAddress) is derived from the start
+ * point — nodeEdge points use the node's nodeId so callers always get a
+ * meaningful blockId. The full `selectionTarget` is included whenever the
+ * two endpoints refer to different blocks or different point kinds.
+ */
+function selectionTargetToResolution(
+  selectionTarget: SelectionTarget,
+  range: { from: number; to: number },
+  text: string,
+): TextMutationResolution {
+  const startPoint = selectionTarget.start;
+  const endPoint = selectionTarget.end;
+
+  const blockId = blockIdFromPoint(startPoint);
+  const startOffset = startPoint.kind === 'text' ? startPoint.offset : 0;
+  const endOffset = endPoint.kind === 'text' && endPoint.blockId === blockId ? endPoint.offset : startOffset;
+
+  const isCrossBlock =
+    startPoint.kind !== 'text' ||
+    endPoint.kind !== 'text' ||
+    blockIdFromPoint(startPoint) !== blockIdFromPoint(endPoint);
+
+  return {
+    target: { kind: 'text', blockId, range: { start: startOffset, end: endOffset } },
+    range,
+    text,
+    ...(isCrossBlock ? { selectionTarget } : undefined),
+  };
+}
+
+/** Fallback resolution when no target data is available. */
+const EMPTY_RESOLUTION: TextMutationResolution = {
+  target: { kind: 'text', blockId: '', range: { start: 0, end: 0 } },
+  range: { from: 0, to: 0 },
+  text: '',
+};
+
+/**
+ * Builds a TextMutationResolution directly from the compiled plan's
+ * CompiledSelectionTarget. This produces correct resolution data
+ * regardless of how the executor internally represents targets.
+ */
+function buildSelectionResolutionFromCompiled(compiled: CompiledPlan, stepId: string): TextMutationResolution {
+  const compiledStep = compiled.mutationSteps.find((s) => s.step.id === stepId);
+  const target = compiledStep?.targets[0];
+
+  if (target?.kind === 'selection') {
+    return selectionTargetToResolution(
+      target.normalizedTarget,
+      { from: target.absFrom, to: target.absTo },
+      target.text,
+    );
+  }
+
+  if (target?.kind === 'range') {
+    return {
+      target: { kind: 'text', blockId: target.blockId, range: { start: target.from, end: target.to } },
+      range: { from: target.absFrom, to: target.absTo },
+      text: target.text,
+    };
+  }
+
+  if (target?.kind === 'span') {
+    return spanTargetToResolution(target);
+  }
+
+  return EMPTY_RESOLUTION;
+}
+
+/** Converts a CompiledSpanTarget to a TextMutationResolution using its segments. */
+function spanTargetToResolution(target: CompiledSpanTarget): TextMutationResolution {
+  const first = target.segments[0];
+  const last = target.segments[target.segments.length - 1];
+  if (!first || !last) {
+    return EMPTY_RESOLUTION;
+  }
+
+  const isCrossBlock = first.blockId !== last.blockId;
+  const selectionTarget: SelectionTarget | undefined = isCrossBlock
+    ? {
+        kind: 'selection',
+        start: { kind: 'text', blockId: first.blockId, offset: first.from },
+        end: { kind: 'text', blockId: last.blockId, offset: last.to },
+      }
+    : undefined;
+
+  return {
+    target: { kind: 'text', blockId: first.blockId, range: { start: first.from, end: first.to } },
+    range: { from: first.absFrom, to: last.absTo },
+    text: target.text,
+    ...(selectionTarget ? { selectionTarget } : undefined),
+  };
+}
+
+/**
+ * Builds resolution from a step outcome, falling back to compiled target
+ * data when the outcome doesn't carry resolutions.
+ */
+function buildSelectionResolutionFromOutcome(
+  stepOutcome: StepOutcome | undefined,
+  compiled: CompiledPlan,
+  stepId: string,
+): TextMutationResolution {
+  // Try plan outcome first — executors may produce detailed resolutions.
+  if (stepOutcome?.data) {
+    const data = stepOutcome.data;
+
+    // Prefer selection-aware resolutions when available — these carry
+    // absolute ranges and full SelectionTarget metadata.
+    if (
+      'selectionResolutions' in data &&
+      Array.isArray(data.selectionResolutions) &&
+      data.selectionResolutions.length > 0
+    ) {
+      const selRes = data.selectionResolutions[0] as SelectionStepResolution;
+      return selectionTargetToResolution(selRes.selectionTarget, selRes.range, selRes.text);
+    }
+
+    // Skip data.resolutions — TextStepResolution.range carries block-relative
+    // offsets, but TextMutationResolution.range requires absolute document
+    // positions. The compiled target fallback always has correct absolute ranges.
+  }
+
+  // Fall back to the compiled target data, which is always correct.
+  return buildSelectionResolutionFromCompiled(compiled, stepId);
 }
 
 // ---------------------------------------------------------------------------
@@ -989,6 +1198,303 @@ export function replaceStructuredWrapper(
 }
 
 /**
+ * Resolved structural replace locator — contains the primary TextAddress
+ * (for the engine's target parameter) and metadata about the actual
+ * replacement scope for accurate receipt resolution.
+ */
+interface ResolvedStructuralLocator {
+  /** Primary block TextAddress — always points to the first targeted block. */
+  textTarget: TextAddress;
+  /**
+   * Pre-resolved PM range spanning the full replacement area.
+   * Present for SelectionTarget and multi-segment text ref locators.
+   * When absent, the engine resolves the range from `textTarget`.
+   */
+  resolvedRange?: { from: number; to: number };
+  /**
+   * Effective SelectionTarget describing the actual block-boundary-expanded
+   * scope of the replacement. Present whenever the replacement spans more
+   * than one block — whether the input was a SelectionTarget or a multi-block
+   * ref. Used to populate `selectionTarget` on the receipt.
+   */
+  effectiveSelectionTarget?: SelectionTarget;
+  /**
+   * True when the input used a ref-based locator (no caller-supplied target).
+   * Resolution should omit `requestedTarget` since the TextAddress is synthetic.
+   */
+  isRefBased?: boolean;
+}
+
+/**
+ * Resolves the target/ref locator from an SDReplaceInput into a
+ * ResolvedStructuralLocator for the structural replace engine.
+ *
+ * Single-block locators (SDAddress, TextAddress, raw nodeId ref) produce
+ * only a `textTarget`. Multi-block locators (cross-block SelectionTarget,
+ * multi-segment text refs) also produce a `resolvedRange` spanning the
+ * full contiguous block range so the engine replaces all covered blocks.
+ */
+function resolveStructuralLocator(editor: Editor, input: SDReplaceInput): ResolvedStructuralLocator {
+  const { target, ref } = input;
+
+  if (target !== undefined) {
+    // SelectionTarget — resolve to absolute positions.
+    if (target.kind === 'selection') {
+      const sel = target;
+      const resolved = resolveSelectionTarget(editor, sel);
+
+      // Expand to full block boundaries for structural replace.
+      const index = getBlockIndex(editor);
+      const expanded = expandToBlockBoundaries(index, resolved.absFrom, resolved.absTo, {
+        startHint: resolveSelectionBoundaryHint(index, sel.start),
+        endHint: resolveSelectionBoundaryHint(index, sel.end),
+      });
+
+      const textTarget: TextAddress = {
+        kind: 'text',
+        blockId: expanded.firstBlock.nodeId,
+        range: { start: 0, end: 0 },
+      };
+
+      return {
+        textTarget,
+        resolvedRange: { from: expanded.blockFrom, to: expanded.blockTo },
+        effectiveSelectionTarget: buildEffectiveSelectionTarget(expanded),
+      };
+    }
+    // SDAddress | TextAddress — existing bridge (single block).
+    return { textTarget: narrowToTextAddress(target) };
+  }
+
+  if (ref !== undefined) {
+    // V3 text ref — decode payload and resolve blocks.
+    if (ref.startsWith('text:')) {
+      const result = resolveTextRefLocator(editor, ref);
+      return { ...result, isRefBased: true };
+    }
+    // Raw nodeId ref — target the full block (single block).
+    return {
+      textTarget: { kind: 'text', blockId: ref, range: { start: 0, end: 0 } },
+      isRefBased: true,
+    };
+  }
+
+  throw new DocumentApiAdapterError('INVALID_TARGET', 'Structural replace requires either target or ref.');
+}
+
+/**
+ * Decodes a V3 text ref and resolves all segments to a spanning block range.
+ * Single-segment refs resolve as single-block; multi-segment refs produce
+ * a resolvedRange spanning from the first to last segment's block.
+ */
+function resolveTextRefLocator(editor: Editor, ref: string): ResolvedStructuralLocator {
+  let payload: { segments?: Array<{ blockId: string }> };
+  try {
+    payload = JSON.parse(atob(ref.slice(5)));
+  } catch {
+    throw new DocumentApiAdapterError('INVALID_TARGET', `Cannot decode text ref for structural replace: ${ref}`);
+  }
+
+  const segments = payload?.segments;
+  if (!Array.isArray(segments) || segments.length === 0) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      'Text ref does not contain valid segments for structural replace.',
+    );
+  }
+
+  const firstBlockId = segments[0].blockId;
+  if (typeof firstBlockId !== 'string' || firstBlockId.length === 0) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      'Text ref does not contain a valid blockId for structural replace.',
+    );
+  }
+
+  const textTarget: TextAddress = { kind: 'text', blockId: firstBlockId, range: { start: 0, end: 0 } };
+
+  // Single-segment ref → single-block replacement.
+  if (segments.length === 1) {
+    return { textTarget };
+  }
+
+  // Multi-segment ref → resolve all blocks and span the range.
+  const index = getBlockIndex(editor);
+  let rangeFrom = Infinity;
+  let rangeTo = -Infinity;
+  let firstCandidate: BlockCandidate | undefined;
+  let lastCandidate: BlockCandidate | undefined;
+
+  for (const seg of segments) {
+    if (typeof seg.blockId !== 'string') continue;
+    try {
+      const block = findBlockByNodeIdOnly(index, seg.blockId);
+      if (block.pos < rangeFrom) {
+        rangeFrom = block.pos;
+        firstCandidate = block;
+      }
+      if (block.end > rangeTo) {
+        rangeTo = block.end;
+        lastCandidate = block;
+      }
+    } catch {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Cannot resolve text ref segment block "${seg.blockId}".`);
+    }
+  }
+
+  // Build effective SelectionTarget for multi-block receipt metadata.
+  const effectiveSelectionTarget: SelectionTarget | undefined =
+    firstCandidate && lastCandidate && firstCandidate.nodeId !== lastCandidate.nodeId
+      ? {
+          kind: 'selection',
+          start: buildSelectionPoint(firstCandidate, 'start'),
+          end: buildSelectionPoint(lastCandidate, 'end'),
+        }
+      : undefined;
+
+  return { textTarget, resolvedRange: { from: rangeFrom, to: rangeTo }, effectiveSelectionTarget };
+}
+
+/** Result of expanding a PM range to full block boundaries. */
+interface ExpandedBlockRange {
+  blockFrom: number;
+  blockTo: number;
+  /** The first block candidate in the expanded range. */
+  firstBlock: BlockCandidate;
+  /** The last block candidate in the expanded range. */
+  lastBlock: BlockCandidate;
+}
+
+interface BoundaryHints {
+  startHint?: BlockCandidate;
+  endHint?: BlockCandidate;
+}
+
+/** Container node types that should not be used as block boundaries — they
+ *  enclose child blocks and would cause the expansion to swallow entire tables. */
+const CONTAINER_NODE_TYPES: ReadonlySet<string> = new Set(['table', 'tableRow', 'tableCell']);
+
+function resolveSelectionBoundaryHint(index: BlockIndex, point: SelectionPoint): BlockCandidate | undefined {
+  if (point.kind !== 'nodeEdge') return undefined;
+
+  const key = `${point.node.nodeType}:${point.node.nodeId}`;
+  if (index.ambiguous.has(key)) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share key "${key}".`, {
+      nodeType: point.node.nodeType,
+      nodeId: point.node.nodeId,
+    });
+  }
+
+  const candidate = index.byId.get(key);
+  if (!candidate) {
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Node "${point.node.nodeType}" with id "${point.node.nodeId}" not found.`,
+      { nodeType: point.node.nodeType, nodeId: point.node.nodeId },
+    );
+  }
+
+  return candidate;
+}
+
+/**
+ * Expands a PM position range to encompass full block boundaries.
+ * Finds the first content-level block whose range intersects `absFrom` and
+ * the last content-level block whose range intersects `absTo`, then returns
+ * their outer boundaries plus the block IDs needed for receipt metadata.
+ *
+ * Container nodes (table, tableRow, tableCell) are excluded so that a
+ * selection inside a table cell expands only to the cell's leaf blocks,
+ * not to the entire table.
+ */
+function expandToBlockBoundaries(
+  index: BlockIndex,
+  absFrom: number,
+  absTo: number,
+  hints?: BoundaryHints,
+): ExpandedBlockRange {
+  let blockFrom = hints?.startHint?.pos ?? absFrom;
+  let blockTo = hints?.endHint?.end ?? absTo;
+  let firstBlock: BlockCandidate | undefined = hints?.startHint;
+  let lastBlock: BlockCandidate | undefined = hints?.endHint;
+  const lockStart = firstBlock !== undefined;
+  const lockEnd = lastBlock !== undefined;
+
+  for (const candidate of index.candidates) {
+    if (CONTAINER_NODE_TYPES.has(candidate.nodeType)) continue;
+    // Skip non-overlapping blocks.
+    if (candidate.end <= absFrom || candidate.pos >= absTo) continue;
+    if (!lockStart && candidate.pos <= blockFrom) {
+      blockFrom = candidate.pos;
+      firstBlock = candidate;
+    }
+    if (!lockEnd && candidate.end >= blockTo) {
+      blockTo = candidate.end;
+      lastBlock = candidate;
+    }
+  }
+
+  if (!firstBlock || !lastBlock) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Cannot resolve block boundaries for the target range.');
+  }
+
+  return { blockFrom, blockTo, firstBlock, lastBlock };
+}
+
+/** Node types valid as nodeEdge selection anchors — kept in sync with SELECTION_EDGE_NODE_TYPES in document-api. */
+const VALID_EDGE_NODE_TYPES: ReadonlySet<string> = new Set<SelectionEdgeNodeType>([
+  'paragraph',
+  'heading',
+  'table',
+  'tableOfContents',
+  'sdt',
+  'image',
+]);
+
+/**
+ * Builds a SelectionPoint for a block candidate.
+ * Text blocks (paragraph, heading) produce `kind: 'text'` points.
+ * Non-text blocks (table, tableOfContents, sdt) produce `kind: 'nodeEdge'` points.
+ */
+function buildSelectionPoint(candidate: BlockCandidate, edge: 'start' | 'end'): SelectionPoint {
+  if (isTextBlockCandidate(candidate)) {
+    return {
+      kind: 'text',
+      blockId: candidate.nodeId,
+      offset: edge === 'start' ? 0 : candidate.node.textContent.length,
+    };
+  }
+  if (!VALID_EDGE_NODE_TYPES.has(candidate.nodeType)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `Block type "${candidate.nodeType}" is not valid as a selection edge anchor.`,
+    );
+  }
+  return {
+    kind: 'nodeEdge',
+    node: {
+      kind: 'block',
+      nodeType: candidate.nodeType as SelectionEdgeNodeType,
+      nodeId: candidate.nodeId,
+    },
+    edge: edge === 'start' ? 'before' : 'after',
+  };
+}
+
+/**
+ * Builds an effective SelectionTarget describing the full block-boundary scope
+ * of a structural replacement. Returns undefined for single-block ranges.
+ */
+function buildEffectiveSelectionTarget(expanded: ExpandedBlockRange): SelectionTarget | undefined {
+  if (expanded.firstBlock.nodeId === expanded.lastBlock.nodeId) return undefined;
+  return {
+    kind: 'selection',
+    start: buildSelectionPoint(expanded.firstBlock, 'start'),
+    end: buildSelectionPoint(expanded.lastBlock, 'end'),
+  };
+}
+
+/**
  * Handles structural replace (SDFragment content).
  * Wraps the structural replace engine to produce a TextMutationReceipt.
  */
@@ -997,34 +1503,55 @@ function executeStructuralReplaceWrapper(
   input: SDReplaceInput,
   options?: MutationOptions,
 ): TextMutationReceipt {
-  const { content, target, nestingPolicy } = input;
+  const { content, nestingPolicy } = input;
   const mode = options?.changeMode ?? 'direct';
 
-  // Narrow SDAddress | TextAddress → TextAddress for the current adapter layer.
-  const textTarget = narrowToTextAddress(target);
+  const locator = resolveStructuralLocator(editor, input);
+  const { textTarget, resolvedRange: locatorRange, effectiveSelectionTarget, isRefBased } = locator;
 
-  // Block-level resolution for metadata — uses the same block lookup as the engine.
-  // This supports non-text blocks (tables, images) that resolveTextTarget would miss.
-  let resolvedBlock;
-  try {
-    resolvedBlock = resolveStructuralReplaceTarget(editor, textTarget);
-  } catch (err) {
-    if (err instanceof DocumentApiAdapterError) throw err;
-    throw new DocumentApiAdapterError(
-      'TARGET_NOT_FOUND',
-      `Cannot resolve replace target for block "${textTarget.blockId}".`,
-    );
+  // Resolve the effective replacement range.
+  // For multi-block locators, use the pre-resolved range. Otherwise,
+  // fall back to single-block resolution through the structural engine.
+  let effectiveRange: { from: number; to: number };
+  if (locatorRange) {
+    effectiveRange = locatorRange;
+  } else {
+    let resolvedBlock;
+    try {
+      resolvedBlock = resolveStructuralReplaceTarget(editor, textTarget);
+    } catch (err) {
+      if (err instanceof DocumentApiAdapterError) throw err;
+      throw new DocumentApiAdapterError(
+        'TARGET_NOT_FOUND',
+        `Cannot resolve replace target for block "${textTarget.blockId}".`,
+      );
+    }
+    effectiveRange = { from: resolvedBlock.from, to: resolvedBlock.to };
   }
 
-  const resolvedRange = { from: resolvedBlock.from, to: resolvedBlock.to };
-  // Snapshot the text currently covered by the target block (contract: non-empty for non-collapsed ranges).
-  const coveredText = editor.state.doc.textBetween(resolvedBlock.from, resolvedBlock.to, '\n', '\ufffc');
-  const resolution = buildTextMutationResolution({
-    requestedTarget: textTarget,
-    target: textTarget,
-    range: resolvedRange,
-    text: coveredText,
-  });
+  // Snapshot the text currently covered by the target range.
+  const coveredText = editor.state.doc.textBetween(effectiveRange.from, effectiveRange.to, '\n', '\ufffc');
+
+  // Build resolution from the effective (expanded) selection target when present.
+  // This covers both SelectionTarget inputs and multi-block ref inputs — both
+  // produce an effectiveSelectionTarget describing the actual block-boundary scope.
+  // For single-block inputs, fall back to the direct TextAddress resolution.
+  let resolution: TextMutationResolution;
+  if (effectiveSelectionTarget) {
+    resolution = selectionTargetToResolution(effectiveSelectionTarget, effectiveRange, coveredText);
+  } else {
+    resolution = buildTextMutationResolution({
+      // Omit requestedTarget for ref-based calls — the textTarget is synthetic.
+      requestedTarget: isRefBased ? undefined : textTarget,
+      target: textTarget,
+      range: effectiveRange,
+      text: coveredText,
+    });
+  }
+
+  // Enforce expectedRevision even on dry-run — callers need to know if the
+  // document has drifted since their last query.
+  checkRevision(editor, options?.expectedRevision);
 
   try {
     // Dry-run: run full structural engine validation (target, materialization, nesting),
@@ -1036,6 +1563,7 @@ function executeStructuralReplaceWrapper(
         nestingPolicy,
         changeMode: mode,
         dryRun: true,
+        resolvedRange: locatorRange,
       });
       return { success: true, resolution };
     }
@@ -1048,6 +1576,7 @@ function executeStructuralReplaceWrapper(
           content,
           nestingPolicy,
           changeMode: mode,
+          resolvedRange: locatorRange,
         });
         return result.success;
       },

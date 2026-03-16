@@ -35,12 +35,14 @@ superdoc open contract.docx
 superdoc find --pattern "ACME Corp"
 
 # Replace it
-superdoc replace --target-json '{"blockId":"...","range":{"start":0,"end":9}}' --text "NewCo Inc."
+superdoc replace --target-json '{"kind":"selection","start":{"kind":"text","blockId":"...","offset":0},"end":{"kind":"text","blockId":"...","offset":9}}' --text "NewCo Inc."
 
 # Save and close
 superdoc save
 superdoc close
 ```
+
+For `replace`, `delete`, and `format.*`, prefer canonical `SelectionTarget` JSON or a mutation-ready `ref`. The CLI still accepts legacy single-block text ranges such as `{"kind":"text","blockId":"...","range":{"start":0,"end":9}}` and upgrades them automatically for compatibility, but new scripts should use the canonical selection form.
 
 ## Tracked mode for mutations
 
@@ -49,19 +51,19 @@ Use `--tracked` on mutating commands to apply edits as tracked changes instead o
 ```bash
 # Replace text as a tracked change
 superdoc replace \
-  --target-json '{"kind":"text","blockId":"...","range":{"start":0,"end":9}}' \
+  --target-json '{"kind":"selection","start":{"kind":"text","blockId":"...","offset":0},"end":{"kind":"text","blockId":"...","offset":9}}' \
   --text "NewCo Inc." \
   --tracked
 
 # Insert text as a tracked change
-superdoc insert --text "Added clause" --tracked
+superdoc insert --value "Added clause" --tracked
 ```
 
 `--tracked` is shorthand for `--change-mode tracked`:
 
 ```bash
 superdoc replace \
-  --target-json '{"kind":"text","blockId":"...","range":{"start":0,"end":9}}' \
+  --target-json '{"kind":"selection","start":{"kind":"text","blockId":"...","offset":0},"end":{"kind":"text","blockId":"...","offset":9}}' \
   --text "NewCo Inc." \
   --change-mode tracked
 ```
@@ -97,12 +99,13 @@ The CLI exposes all [Document API operations](/document-api/overview) as command
 | `superdoc get-node` | `getNode` | Get a node by address |
 | `superdoc get-node-by-id` | `getNodeById` | Get a node by ID |
 | `superdoc insert` | `insert` | Insert text at a position |
-| `superdoc replace` | `replace` | Replace content at a position |
-| `superdoc delete` | `delete` | Delete content at a position |
-| `superdoc format bold` | `format.bold` | Toggle bold on a range |
-| `superdoc format italic` | `format.italic` | Toggle italic on a range |
-| `superdoc format underline` | `format.underline` | Toggle underline on a range |
-| `superdoc format strikethrough` | `format.strikethrough` | Toggle strikethrough on a range |
+| `superdoc replace` | `replace` | Replace content at a selection |
+| `superdoc delete` | `delete` | Delete content at a selection |
+| `superdoc format bold` | `format.bold` | Toggle bold on a selection |
+| `superdoc format italic` | `format.italic` | Toggle italic on a selection |
+| `superdoc format underline` | `format.underline` | Toggle underline on a selection |
+| `superdoc format strikethrough` | `format.strikethrough` | Toggle strikethrough on a selection |
+| `superdoc ranges resolve` | `ranges.resolve` | Resolve a selection from explicit anchors |
 | `superdoc create paragraph` | `create.paragraph` | Insert a new paragraph |
 | `superdoc comments create` | `comments.create` | Create a comment thread |
 | `superdoc comments list` | `comments.list` | List all comments |

@@ -5,7 +5,7 @@ export const TableOfContents = Node.create({
 
   group: 'block',
 
-  content: 'paragraph+',
+  content: 'paragraph*',
 
   inline: false,
 

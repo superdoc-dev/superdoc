@@ -203,6 +203,8 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     converters,
     themeColors,
     flowBlockCache,
+    trackedListMarkerOffsets: new Map<string, number>(),
+    trackedListLastOrdinals: new Map<string, number>(),
   };
 
   // Process nodes using handler dispatch pattern

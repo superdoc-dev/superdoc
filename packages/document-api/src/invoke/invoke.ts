@@ -182,6 +182,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- query.* ---
     'query.match': (input) => api.query.match(input),
 
+    // --- ranges.* ---
+    'ranges.resolve': (input) => api.ranges.resolve(input),
+
     // --- mutations.* ---
     'mutations.preview': (input) => api.mutations.preview(input),
     'mutations.apply': (input) => api.mutations.apply(input),

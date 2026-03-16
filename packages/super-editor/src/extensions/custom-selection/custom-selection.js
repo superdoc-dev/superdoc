@@ -5,7 +5,7 @@ import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { shouldAllowNativeContextMenu } from '../../utils/contextmenu-helpers.js';
 
-const DEFAULT_SELECTION_STATE = Object.freeze({
+export const DEFAULT_SELECTION_STATE = Object.freeze({
   focused: false,
   preservedSelection: null,
   showVisualSelection: false,
@@ -378,6 +378,14 @@ export const CustomSelection = Extension.create({
                   skipFocusReset: false,
                 }),
               );
+
+              // Also clear editor-level preserved selection snapshots so that
+              // subsequent commands (linked styles, mark commands, etc.) don't
+              // resurrect an old selection after history undo/redo.
+              this.editor.setOptions({
+                preservedSelection: null,
+                lastSelection: null,
+              });
             }
           },
         },

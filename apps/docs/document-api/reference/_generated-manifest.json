@@ -307,6 +307,8 @@
     "apps/docs/document-api/reference/mutations/preview.mdx",
     "apps/docs/document-api/reference/query/index.mdx",
     "apps/docs/document-api/reference/query/match.mdx",
+    "apps/docs/document-api/reference/ranges/index.mdx",
+    "apps/docs/document-api/reference/ranges/resolve.mdx",
     "apps/docs/document-api/reference/replace.mdx",
     "apps/docs/document-api/reference/sections/clear-header-footer-ref.mdx",
     "apps/docs/document-api/reference/sections/clear-page-borders.mdx",
@@ -937,8 +939,15 @@
       ],
       "pagePath": "apps/docs/document-api/reference/authorities/index.mdx",
       "title": "Table of Authorities"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "ranges",
+      "operationIds": ["ranges.resolve"],
+      "pagePath": "apps/docs/document-api/reference/ranges/index.mdx",
+      "title": "Ranges"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "eef969b01d52d99044ea5eb9c17085c5e31768001ced01042c4ebd90e6f00a24"
+  "sourceHash": "08748422ca56636a690f6224f369929364172c120c1113343f06de4f1f4e1e14"
 }

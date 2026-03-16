@@ -18,6 +18,15 @@ const getParagraphAtPos = (doc, pos) => {
   return null;
 };
 
+const hasParagraphStyleOverride = (paragraphNode) => {
+  const paragraphProperties = paragraphNode?.attrs?.paragraphProperties;
+  return Boolean(
+    paragraphProperties &&
+      typeof paragraphProperties === 'object' &&
+      Object.prototype.hasOwnProperty.call(paragraphProperties, 'styleId'),
+  );
+};
+
 /**
  * Converts an array of mark definitions into ProseMirror Mark instances.
  * @param {import('prosemirror-model').Schema} schema - The ProseMirror schema
@@ -70,6 +79,11 @@ const normalizeSelectionIntoRun = (tr, runType) => {
 const copyRunPropertiesFromPreviousParagraph = (state, pos, textNode, runType, editor) => {
   let runProperties;
   let updatedTextNode = textNode;
+  const currentParagraphNode = getParagraphAtPos(state.doc, pos);
+  if (hasParagraphStyleOverride(currentParagraphNode)) {
+    return { runProperties, textNode: updatedTextNode };
+  }
+
   const paragraphNode = getParagraphAtPos(state.doc, pos - 2);
   if (paragraphNode && paragraphNode.content.size > 0) {
     const lastChild = paragraphNode.child(paragraphNode.childCount - 1);
@@ -199,9 +213,9 @@ export const wrapTextInRunsPlugin = (editor) => {
       const metaFromTxn = [...transactions]
         .reverse()
         .map((txn) => txn.getMeta('sdStyleMarks'))
-        .find(Boolean);
-      if (metaFromTxn?.length) {
-        lastStyleMarksMeta = metaFromTxn;
+        .find((meta) => meta !== undefined);
+      if (metaFromTxn !== undefined) {
+        lastStyleMarksMeta = Array.isArray(metaFromTxn) ? metaFromTxn : [];
       }
 
       const tr = buildWrapTransaction(newState, pendingRanges, runType, editor, lastStyleMarksMeta);

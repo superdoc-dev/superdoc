@@ -84,7 +84,7 @@ if (preview.valid) {
 
 ## Quick search and single edit
 
-For lightweight text edits, use `query.match` and apply against the matched block range:
+For lightweight text edits, use `query.match` and apply against the canonical selection target returned by the match:
 
 ```ts
 const match = editor.doc.query.match({
@@ -92,15 +92,39 @@ const match = editor.doc.query.match({
   require: 'first',
 });
 
-const firstBlock = match.items?.[0]?.blocks?.[0];
-if (firstBlock) {
+const target = match.items?.[0]?.target;
+if (target) {
   editor.doc.replace({
-    target: {
-      kind: 'text',
-      blockId: firstBlock.blockId,
-      range: { start: firstBlock.range.start, end: firstBlock.range.end },
-    },
+    target,
     text: 'bar',
+  });
+}
+```
+
+For direct single-operation calls, prefer `item.target`. For plans or multi-step edits, prefer `item.handle.ref` so every step reuses the same resolved match.
+
+## Build a selection explicitly with ranges.resolve
+
+Use `ranges.resolve` when you already know the anchor points and want a transparent `SelectionTarget` plus a reusable mutation-ready ref:
+
+```ts
+const resolved = editor.doc.ranges.resolve({
+  start: {
+    kind: 'point',
+    point: { kind: 'text', blockId: 'p1', offset: 0 },
+  },
+  end: {
+    kind: 'point',
+    point: { kind: 'text', blockId: 'p2', offset: 12 },
+  },
+});
+
+editor.doc.delete({ target: resolved.target });
+
+if (resolved.handle.ref) {
+  editor.doc.format.apply({
+    ref: resolved.handle.ref,
+    inline: { bold: 'on' },
   });
 }
 ```
@@ -111,7 +135,7 @@ Insert text as a tracked change so reviewers can accept or reject it:
 
 ```ts
 const receipt = editor.doc.insert(
-  { text: 'new content' },
+  { value: 'new content' },
   { changeMode: 'tracked' },
 );
 ```
@@ -124,7 +148,11 @@ Use `capabilities()` to branch on what the editor supports:
 
 ```ts
 const caps = editor.doc.capabilities();
-const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+const target = {
+  kind: 'selection',
+  start: { kind: 'text', blockId: 'p1', offset: 0 },
+  end: { kind: 'text', blockId: 'p1', offset: 3 },
+};
 
 if (caps.operations['format.apply'].available) {
   editor.doc.format.apply({

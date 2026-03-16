@@ -87,7 +87,6 @@
   "devDependencies": {
     "@clack/prompts": "^1.0.1",
     "@commitlint/cli": "catalog:",
-    "concurrently": "catalog:",
     "@commitlint/config-conventional": "catalog:",
     "@eslint/js": "catalog:",
     "@semantic-release/changelog": "catalog:",
@@ -97,6 +96,7 @@
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "concurrently": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "eslint-import-resolver-typescript": "catalog:",
@@ -136,5 +136,8 @@
       "@vue/shared": "3.5.25",
       "vite": "npm:rolldown-vite@7.3.1"
     }
+  },
+  "dependencies": {
+    "superdoc": "link:../../../packages/superdoc"
   }
 }

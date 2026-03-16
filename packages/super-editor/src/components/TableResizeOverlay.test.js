@@ -741,6 +741,71 @@ describe('TableResizeOverlay', () => {
   });
 
   // ==========================================================================
+  // Viewing Mode Guard Tests
+  // ==========================================================================
+
+  describe('Viewing mode restrictions', () => {
+    it('should ignore column handle drags when documentMode is viewing', async () => {
+      const tableElement = createMockTableElement();
+
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor({ options: { documentMode: 'viewing' } }),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const event = new MouseEvent('mousedown', { clientX: 100, clientY: 50 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+
+      wrapper.vm.onHandleMouseDown(event, 0);
+
+      expect(wrapper.vm.dragState).toBeNull();
+      expect(wrapper.emitted('resize-start')).toBeUndefined();
+
+      wrapper.unmount();
+    });
+
+    it('should ignore row handle drags when documentMode is viewing', async () => {
+      const tableElement = createMockTableElement({
+        columns: [
+          { i: 0, x: 0, w: 100, min: 50, r: 1 },
+          { i: 1, x: 100, w: 150, min: 50, r: 1 },
+        ],
+        rows: [
+          { i: 0, y: 0, h: 50, min: 30, r: 1 },
+          { i: 1, y: 50, h: 50, min: 30, r: 1 },
+        ],
+      });
+
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor({ options: { documentMode: 'viewing' } }),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const event = new MouseEvent('mousedown', { clientX: 100, clientY: 50 });
+      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+
+      wrapper.vm.onRowHandleMouseDown(event, 0);
+
+      expect(wrapper.vm.rowDragState).toBeNull();
+      expect(wrapper.emitted('resize-start')).toBeUndefined();
+
+      wrapper.unmount();
+    });
+  });
+
+  // ==========================================================================
   // Overlay Rect Tests
   // ==========================================================================
 

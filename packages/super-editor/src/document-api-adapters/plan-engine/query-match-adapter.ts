@@ -20,6 +20,7 @@ import type {
   MatchRun,
   CardinalityRequirement,
   TextAddress,
+  SelectionTarget,
   HighlightRange,
   InlineAnchor,
   PageInfo,
@@ -51,7 +52,7 @@ import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-rea
 // V3 ref encoding (D6)
 // ---------------------------------------------------------------------------
 
-interface TextRefV3 {
+export interface TextRefV3 {
   v: 3;
   rev: string;
   matchId: string;
@@ -61,8 +62,45 @@ interface TextRefV3 {
   runIndex?: number;
 }
 
-function encodeV3Ref(payload: TextRefV3): string {
+export function encodeV3Ref(payload: TextRefV3): string {
   return `text:${btoa(JSON.stringify(payload))}`;
+}
+
+// ---------------------------------------------------------------------------
+// SelectionTarget builder — mutation-ready target from match blocks
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a canonical `SelectionTarget` from completed match blocks.
+ *
+ * Uses the first block's start and the last block's end to form a
+ * contiguous selection spanning all matched blocks.
+ */
+function buildSelectionTargetFromBlocks(blocks: MatchBlock[]): SelectionTarget {
+  const first = blocks[0]!;
+  const last = blocks[blocks.length - 1]!;
+
+  return {
+    kind: 'selection',
+    start: { kind: 'text', blockId: first.blockId, offset: first.range.start },
+    end: { kind: 'text', blockId: last.blockId, offset: last.range.end },
+  };
+}
+
+/**
+ * Builds a canonical `SelectionTarget` from raw text ranges.
+ *
+ * Used by the legacy find adapter which doesn't build match blocks.
+ */
+export function buildSelectionTargetFromTextRanges(textRanges: TextAddress[]): SelectionTarget {
+  const first = textRanges[0]!;
+  const last = textRanges[textRanges.length - 1]!;
+
+  return {
+    kind: 'selection',
+    start: { kind: 'text', blockId: first.blockId, offset: first.range.start },
+    end: { kind: 'text', blockId: last.blockId, offset: last.range.end },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -478,6 +516,7 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
         handle: buildResolvedHandle(ref, 'ephemeral', 'text'),
         matchKind: 'text',
         address: raw.address,
+        target: buildSelectionTargetFromBlocks(blocks),
         snippet: snippetResult?.snippet ?? '',
         highlightRange: snippetResult?.highlightRange ?? { start: 0, end: 0 },
         blocks: blocks as [MatchBlock, ...MatchBlock[]],

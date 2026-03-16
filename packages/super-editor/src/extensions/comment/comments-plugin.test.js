@@ -901,6 +901,37 @@ describe('internal helper functions', () => {
     );
   });
 
+  it('handleTrackedChangeTransaction emits event for deletion-only tracked changes when step nodes are empty', () => {
+    const schema = createCommentSchema();
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'change-delete-only',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      date: 'today',
+    });
+    const deletedNode = schema.text('Removed', [deleteMark]);
+    const paragraph = schema.node('paragraph', null, [deletedNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+
+    const meta = {
+      insertedMark: null,
+      deletionMark: deleteMark,
+      formatMark: null,
+      deletionNodes: [deletedNode],
+      step: { slice: { content: { content: [] } } },
+    };
+
+    const trackedChanges = handleTrackedChangeTransaction(meta, {}, state, editor);
+
+    expect(trackedChanges['change-delete-only']).toMatchObject({ deletion: 'change-delete-only' });
+    expect(editor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({ event: comments_module_events.ADD, changeId: 'change-delete-only' }),
+    );
+  });
+
   it('handleTrackedChangeTransaction returns original state when no marks provided', () => {
     const schema = createCommentSchema();
     const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Text')])]);

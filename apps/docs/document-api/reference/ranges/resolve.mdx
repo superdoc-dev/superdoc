@@ -1,0 +1,362 @@
+---
+title: ranges.resolve
+sidebarTitle: ranges.resolve
+description: Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic.
+
+- Operation ID: `ranges.resolve`
+- API member path: `editor.doc.ranges.resolve(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ResolveRangeOutput with evaluatedRevision, handle.ref, target (SelectionTarget), and preview metadata.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `end` | object(kind="document") \\| object(kind="point") \\| object(kind="ref") | yes | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
+| `expectedRevision` | string | no |  |
+| `start` | object(kind="document") \\| object(kind="point") \\| object(kind="ref") | yes | One of: object(kind="document"), object(kind="point"), object(kind="ref") |
+
+### Example request
+
+```json
+{
+  "end": {
+    "edge": "start",
+    "kind": "document"
+  },
+  "expectedRevision": "rev-001",
+  "start": {
+    "edge": "start",
+    "kind": "document"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `handle` | object(refStability="ephemeral") | yes |  |
+| `handle.coversFullTarget` | boolean | yes |  |
+| `handle.ref` | string \\| null | yes | One of: string, null |
+| `handle.refStability` | `"ephemeral"` | yes | Constant: `"ephemeral"` |
+| `preview` | object | yes |  |
+| `preview.blocks` | object[] | yes |  |
+| `preview.text` | string | yes |  |
+| `preview.truncated` | boolean | yes |  |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "handle": {
+    "coversFullTarget": true,
+    "ref": "handle:abc123",
+    "refStability": "ephemeral"
+  },
+  "preview": {
+    "blocks": [
+      {
+        "nodeId": "node-def456",
+        "nodeType": "paragraph",
+        "textPreview": "example"
+      }
+    ],
+    "text": "Hello, world.",
+    "truncated": true
+  },
+  "target": {
+    "end": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
+    },
+    "kind": "selection",
+    "start": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
+    }
+  }
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `INVALID_TARGET`
+- `TARGET_NOT_FOUND`
+- `INVALID_CONTEXT`
+- `REVISION_MISMATCH`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "end": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "edge": {
+              "enum": [
+                "start",
+                "end"
+              ]
+            },
+            "kind": {
+              "const": "document"
+            }
+          },
+          "required": [
+            "kind",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "point"
+            },
+            "point": {
+              "$ref": "#/$defs/SelectionPoint"
+            }
+          },
+          "required": [
+            "kind",
+            "point"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "boundary": {
+              "enum": [
+                "start",
+                "end"
+              ]
+            },
+            "kind": {
+              "const": "ref"
+            },
+            "ref": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ref",
+            "boundary"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "expectedRevision": {
+      "type": "string"
+    },
+    "start": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "edge": {
+              "enum": [
+                "start",
+                "end"
+              ]
+            },
+            "kind": {
+              "const": "document"
+            }
+          },
+          "required": [
+            "kind",
+            "edge"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "point"
+            },
+            "point": {
+              "$ref": "#/$defs/SelectionPoint"
+            }
+          },
+          "required": [
+            "kind",
+            "point"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "boundary": {
+              "enum": [
+                "start",
+                "end"
+              ]
+            },
+            "kind": {
+              "const": "ref"
+            },
+            "ref": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ref",
+            "boundary"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "start",
+    "end"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "handle": {
+      "additionalProperties": false,
+      "properties": {
+        "coversFullTarget": {
+          "type": "boolean"
+        },
+        "ref": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refStability": {
+          "const": "ephemeral"
+        }
+      },
+      "required": [
+        "ref",
+        "refStability",
+        "coversFullTarget"
+      ],
+      "type": "object"
+    },
+    "preview": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "nodeId": {
+                "type": "string"
+              },
+              "nodeType": {
+                "enum": [
+                  "paragraph",
+                  "heading",
+                  "listItem",
+                  "table",
+                  "tableRow",
+                  "tableCell",
+                  "tableOfContents",
+                  "image",
+                  "sdt"
+                ]
+              },
+              "textPreview": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeId",
+              "nodeType",
+              "textPreview"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text",
+        "truncated",
+        "blocks"
+      ],
+      "type": "object"
+    },
+    "target": {
+      "$ref": "#/$defs/SelectionTarget"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "handle",
+    "target",
+    "preview"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

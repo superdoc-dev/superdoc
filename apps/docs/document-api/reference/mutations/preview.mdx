@@ -490,6 +490,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                       "ref"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "target",
+                        "type": "string"
+                      },
+                      "target": {
+                        "$ref": "#/$defs/SelectionTarget"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "target"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -711,7 +728,11 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
             "properties": {
               "args": {
                 "additionalProperties": false,
-                "properties": {},
+                "properties": {
+                  "behavior": {
+                    "$ref": "#/$defs/DeleteBehavior"
+                  }
+                },
                 "type": "object"
               },
               "id": {
@@ -838,6 +859,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                     "required": [
                       "by",
                       "ref"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "target",
+                        "type": "string"
+                      },
+                      "target": {
+                        "$ref": "#/$defs/SelectionTarget"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "target"
                     ],
                     "type": "object"
                   }
@@ -1797,6 +1835,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                     "required": [
                       "by",
                       "ref"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "target",
+                        "type": "string"
+                      },
+                      "target": {
+                        "$ref": "#/$defs/SelectionTarget"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "target"
                     ],
                     "type": "object"
                   }

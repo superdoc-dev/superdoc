@@ -408,6 +408,8 @@ function sampleInlineAliasValue(key: InlineAliasKey): unknown {
     case 'fontSize':
     case 'fontSizeCs':
       return 14;
+    case 'fontFamily':
+      return 'Courier New';
     case 'letterSpacing':
       return 0.5;
     case 'position':

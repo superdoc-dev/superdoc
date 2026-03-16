@@ -168,6 +168,153 @@ describe('tableOfContentsHandler', () => {
     expect(result.attrs.sdtPr).toHaveProperty('elements');
   });
 
+  it('hoists nested sd:tableOfContents blocks out of wrapper paragraphs', () => {
+    const sdtPr = {
+      name: 'w:sdtPr',
+      elements: [
+        { name: 'w:id', attributes: { 'w:val': '456' } },
+        {
+          name: 'w:docPartObj',
+          elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Table of Contents' } }],
+        },
+      ],
+    };
+    const contentNode = {
+      name: 'w:sdtContent',
+      elements: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Table of Contents' }] }] },
+          ],
+        },
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'sd:tableOfContents', attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' }, elements: [] },
+          ],
+        },
+      ],
+    };
+    const handler = vi.fn(({ nodes }) => {
+      const node = nodes[0];
+      if (node.name === 'sd:tableOfContents') {
+        return [{ type: 'tableOfContents', attrs: { instruction: node.attributes.instruction }, content: [] }];
+      }
+      return [{ type: 'paragraph', content: [{ type: 'text', text: 'Table of Contents' }] }];
+    });
+    const params = {
+      nodes: [contentNode],
+      nodeListHandler: { handler },
+      extraParams: { sdtPr },
+      path: [],
+    };
+
+    const result = tableOfContentsHandler(params);
+
+    expect(result.content).toEqual([
+      { type: 'paragraph', content: [{ type: 'text', text: 'Table of Contents' }] },
+      { type: 'tableOfContents', attrs: { instruction: 'TOC \\o "1-1" \\h \\z \\u' }, content: [] },
+    ]);
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [{ name: 'sd:tableOfContents', attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' }, elements: [] }],
+      }),
+    );
+  });
+
+  it('does not emit an empty paragraph when the wrapper only contains pPr and sd:tableOfContents', () => {
+    const sdtPr = {
+      name: 'w:sdtPr',
+      elements: [
+        { name: 'w:id', attributes: { 'w:val': '456' } },
+        {
+          name: 'w:docPartObj',
+          elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Table of Contents' } }],
+        },
+      ],
+    };
+    const contentNode = {
+      name: 'w:sdtContent',
+      elements: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:pPr', elements: [] },
+            { name: 'sd:tableOfContents', attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' }, elements: [] },
+          ],
+        },
+      ],
+    };
+    const handler = vi.fn(({ nodes }) => {
+      const node = nodes[0];
+      if (node.name === 'sd:tableOfContents') {
+        return [{ type: 'tableOfContents', attrs: { instruction: node.attributes.instruction }, content: [] }];
+      }
+      return [{ type: 'paragraph', content: [] }];
+    });
+    const params = {
+      nodes: [contentNode],
+      nodeListHandler: { handler },
+      extraParams: { sdtPr },
+      path: [],
+    };
+
+    const result = tableOfContentsHandler(params);
+
+    expect(result.content).toEqual([
+      { type: 'tableOfContents', attrs: { instruction: 'TOC \\o "1-1" \\h \\z \\u' }, content: [] },
+    ]);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves paragraph content when a wrapper paragraph contains text and sd:tableOfContents', () => {
+    const sdtPr = {
+      name: 'w:sdtPr',
+      elements: [
+        { name: 'w:id', attributes: { 'w:val': '456' } },
+        {
+          name: 'w:docPartObj',
+          elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Table of Contents' } }],
+        },
+      ],
+    };
+    const contentNode = {
+      name: 'w:sdtContent',
+      elements: [
+        {
+          name: 'w:p',
+          elements: [
+            { name: 'w:pPr', elements: [] },
+            { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Intro text' }] }] },
+            { name: 'sd:tableOfContents', attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' }, elements: [] },
+          ],
+        },
+      ],
+    };
+    const handler = vi.fn(({ nodes }) => {
+      const node = nodes[0];
+      if (node.name === 'sd:tableOfContents') {
+        return [{ type: 'tableOfContents', attrs: { instruction: node.attributes.instruction }, content: [] }];
+      }
+      return [{ type: 'paragraph', content: [{ type: 'text', text: 'Intro text' }] }];
+    });
+    const params = {
+      nodes: [contentNode],
+      nodeListHandler: { handler },
+      extraParams: { sdtPr },
+      path: [],
+    };
+
+    const result = tableOfContentsHandler(params);
+
+    expect(result.content).toEqual([
+      { type: 'paragraph', content: [{ type: 'text', text: 'Intro text' }] },
+      { type: 'tableOfContents', attrs: { instruction: 'TOC \\o "1-1" \\h \\z \\u' }, content: [] },
+    ]);
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
   it('should handle empty sdtPr.elements array', () => {
     const sdtPr = {
       name: 'w:sdtPr',

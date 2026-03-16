@@ -280,6 +280,167 @@ describe('splitBlock', () => {
       expect(attrs.paragraphProperties?.styleId).toBeUndefined();
     });
 
+    it('does not inherit linked paragraph styles onto the newly created paragraph', () => {
+      mockEditor.converter = {
+        translatedLinkedStyles: {
+          styles: {
+            Heading2: { styleId: 'Heading2', type: 'paragraph', link: 'Heading2Char' },
+          },
+        },
+      };
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const parentNode = {
+        contentMatchAt: vi.fn(() => ({
+          edgeCount: 1,
+          edge: vi.fn(() => ({ type: paragraphType })),
+        })),
+      };
+
+      const sourceAttrs = {
+        paragraphProperties: { styleId: 'Heading2', keep: true },
+      };
+      const $from = createMockResolvedPos({
+        depth: 1,
+        parent: {
+          isBlock: true,
+          content: { size: 10 },
+          type: { name: 'paragraph' },
+          inlineContent: true,
+          attrs: sourceAttrs,
+        },
+        parentOffset: 5,
+        node: vi.fn((depth) => {
+          if (depth === -1) return parentNode;
+          return { type: { name: 'paragraph' }, attrs: sourceAttrs };
+        }),
+      });
+      const $to = createMockResolvedPos({
+        pos: 5,
+        parent: { isBlock: true, content: { size: 10 }, type: { name: 'paragraph' }, inlineContent: true },
+        parentOffset: 10,
+      });
+
+      mockTr.selection = { $from, $to };
+      mockState.selection = mockTr.selection;
+      mockTr.doc = {
+        resolve: vi.fn(() => $from),
+      };
+
+      const command = splitBlock();
+      command({ tr: mockTr, state: mockState, dispatch: () => {}, editor: mockEditor });
+
+      const splitTypes = mockTr.split.mock.calls[0][2];
+      expect(splitTypes?.[0]?.attrs?.paragraphProperties?.styleId).toBeNull();
+      expect(splitTypes?.[0]?.attrs?.paragraphProperties?.keep).toBe(true);
+      expect(sourceAttrs.paragraphProperties.styleId).toBe('Heading2');
+    });
+
+    it('preserves linked paragraph styles when the split creates a non-empty following paragraph', () => {
+      mockEditor.converter = {
+        translatedLinkedStyles: {
+          styles: {
+            Heading2: { styleId: 'Heading2', type: 'paragraph', link: 'Heading2Char' },
+          },
+        },
+      };
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const parentNode = {
+        contentMatchAt: vi.fn(() => ({
+          edgeCount: 1,
+          edge: vi.fn(() => ({ type: paragraphType })),
+        })),
+      };
+
+      const sourceAttrs = {
+        paragraphProperties: { styleId: 'Heading2', keep: true },
+      };
+      const $from = createMockResolvedPos({
+        depth: 1,
+        parent: {
+          isBlock: true,
+          content: { size: 10 },
+          type: { name: 'paragraph' },
+          inlineContent: true,
+          attrs: sourceAttrs,
+        },
+        parentOffset: 5,
+        node: vi.fn((depth) => {
+          if (depth === -1) return parentNode;
+          return { type: { name: 'paragraph' }, attrs: sourceAttrs };
+        }),
+      });
+      const $to = createMockResolvedPos({
+        pos: 5,
+        parent: { isBlock: true, content: { size: 10 }, type: { name: 'paragraph' }, inlineContent: true },
+        parentOffset: 5,
+      });
+
+      mockTr.selection = { $from, $to };
+      mockState.selection = mockTr.selection;
+      mockTr.doc = {
+        resolve: vi.fn(() => $from),
+      };
+
+      const command = splitBlock();
+      command({ tr: mockTr, state: mockState, dispatch: () => {}, editor: mockEditor });
+
+      const splitTypes = mockTr.split.mock.calls[0][2];
+      expect(splitTypes).toBeUndefined();
+    });
+
+    it('preserves ordinary paragraph styles on the newly created paragraph', () => {
+      mockEditor.converter = {
+        translatedLinkedStyles: {
+          styles: {
+            BodyText: { styleId: 'BodyText', type: 'paragraph' },
+          },
+        },
+      };
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const parentNode = {
+        contentMatchAt: vi.fn(() => ({
+          edgeCount: 1,
+          edge: vi.fn(() => ({ type: paragraphType })),
+        })),
+      };
+
+      const sourceAttrs = {
+        paragraphProperties: { styleId: 'BodyText', keep: true },
+      };
+      const $from = createMockResolvedPos({
+        depth: 1,
+        parent: {
+          isBlock: true,
+          content: { size: 10 },
+          type: { name: 'paragraph' },
+          inlineContent: true,
+          attrs: sourceAttrs,
+        },
+        parentOffset: 5,
+        node: vi.fn((depth) => {
+          if (depth === -1) return parentNode;
+          return { type: { name: 'paragraph' }, attrs: sourceAttrs };
+        }),
+      });
+      const $to = createMockResolvedPos({
+        pos: 5,
+        parent: { isBlock: true, content: { size: 10 }, type: { name: 'paragraph' }, inlineContent: true },
+        parentOffset: 10,
+      });
+
+      mockTr.selection = { $from, $to };
+      mockState.selection = mockTr.selection;
+      mockTr.doc = {
+        resolve: vi.fn(() => $from),
+      };
+
+      const command = splitBlock();
+      command({ tr: mockTr, state: mockState, dispatch: () => {}, editor: mockEditor });
+
+      const splitTypes = mockTr.split.mock.calls[0][2];
+      expect(splitTypes?.[0]?.attrs?.paragraphProperties?.styleId).toBe('BodyText');
+    });
+
     it('does not mutate source attrs when removing nested override attributes', () => {
       const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
       const parentNode = {

@@ -272,22 +272,22 @@ describe('findLegacyAdapter — within scope', () => {
     expect(result.diagnostics![0].message).toContain('was not found');
   });
 
-  it('returns empty with diagnostic for inline within scope', () => {
+  it('returns empty with diagnostic for non-existent within scope', () => {
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, offset: 0 });
     const editor = makeEditor(doc);
     const query: Query = {
       select: { type: 'node', nodeType: 'paragraph' },
       within: {
-        kind: 'inline',
-        nodeType: 'run',
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+        kind: 'block',
+        nodeType: 'paragraph',
+        nodeId: 'nonexistent',
       },
     };
 
     const result = findLegacyAdapter(editor, query);
 
     expect(result.items).toEqual([]);
-    expect(result.diagnostics![0].message).toContain('Inline');
+    expect(result.diagnostics![0].message).toContain('not found');
   });
 });
 

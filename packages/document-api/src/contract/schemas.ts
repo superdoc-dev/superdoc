@@ -807,8 +807,8 @@ const sdTextSelectorSchema = objectSchema(
 const sdNodeSelectorSchema = objectSchema(
   {
     type: { const: 'node' },
-    kind: { enum: ['content', 'inline'] },
-    nodeKind: { type: 'string' },
+    kind: { enum: ['block', 'inline'] },
+    nodeType: { type: 'string' },
   },
   ['type'],
 );
@@ -817,20 +817,7 @@ const sdSelectorSchema: JsonSchema = {
   oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
 };
 
-const sdAddressSchema = objectSchema(
-  {
-    kind: { enum: ['content', 'inline', 'annotation', 'section'] },
-    stability: { enum: ['stable', 'ephemeral'] },
-    nodeId: { type: 'string' },
-    anchor: objectSchema({
-      start: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
-      end: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
-    }),
-    evaluatedRevision: { type: 'string' },
-    path: arraySchema({ oneOf: [{ type: 'string' }, { type: 'integer' }] }),
-  },
-  ['kind', 'stability'],
-);
+// sdAddressSchema removed — replaced by blockNodeAddressSchema, nodeAddressSchema, textAddressSchema
 
 const sdReadOptionsSchema = objectSchema({
   includeResolved: { type: 'boolean' },
@@ -841,7 +828,7 @@ const sdReadOptionsSchema = objectSchema({
 const sdFindInputSchema = objectSchema(
   {
     select: sdSelectorSchema,
-    within: sdAddressSchema,
+    within: blockNodeAddressSchema,
     limit: { type: 'integer' },
     offset: { type: 'integer' },
     options: sdReadOptionsSchema,
@@ -852,7 +839,7 @@ const sdFindInputSchema = objectSchema(
 const sdNodeResultSchema = objectSchema(
   {
     node: { type: 'object' },
-    address: sdAddressSchema,
+    address: nodeAddressSchema,
     context: { type: 'object' },
   },
   ['node', 'address'],
@@ -874,11 +861,11 @@ const sdFindResultSchema = objectSchema(
 
 const sdMutationResolutionSchema = objectSchema(
   {
-    requestedTarget: sdAddressSchema,
-    target: sdAddressSchema,
+    target: { oneOf: [textAddressSchema, blockNodeAddressSchema] },
+    range: textMutationRangeSchema,
     selectionTarget: selectionTargetSchema,
   },
-  ['target'],
+  ['target', 'range'],
 );
 
 const sdMutationSuccessSchema = objectSchema(
@@ -2589,7 +2576,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           oneOf: [
             objectSchema(
               {
-                target: { oneOf: [sdAddressSchema, textAddressSchema, selectionTargetSchema] },
+                target: { oneOf: [blockNodeAddressSchema, selectionTargetSchema] },
                 content: { type: 'object' },
                 nestingPolicy: { type: 'object' },
               },
@@ -3923,7 +3910,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
         mode: { enum: ['strict', 'candidates'] },
         includeNodes: { type: 'boolean' },
@@ -3941,7 +3928,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       const textMatchItemSchema = discoveryItemSchema(
         {
           matchKind: { const: 'text' },
-          address: nodeAddressSchema,
+          address: blockNodeAddressSchema,
           target: selectionTargetSchema,
           snippet: { type: 'string' },
           highlightRange: rangeSchema,
@@ -3976,7 +3963,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne', 'all'] },
       },
       ['by', 'select', 'require'],
@@ -3986,7 +3973,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'ref', type: 'string' },
         ref: { type: 'string' },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'ref'],
     );
@@ -4006,7 +3993,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne'] },
       },
       ['by', 'select', 'require'],
@@ -4017,7 +4004,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'select'],
     );
@@ -5564,7 +5551,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // --- hyperlinks.* ---
   'hyperlinks.list': {
     input: objectSchema({
-      within: nodeAddressSchema,
+      within: blockNodeAddressSchema,
       hrefPattern: { type: 'string' },
       anchor: { type: 'string' },
       textPattern: { type: 'string' },

@@ -503,14 +503,14 @@ function resolveTextSelector(
   editor: Editor,
   index: BlockIndex,
   selector: TextSelector | NodeSelector,
-  within: import('@superdoc/document-api').NodeAddress | undefined,
+  within: import('@superdoc/document-api').BlockNodeAddress | undefined,
   stepId: string,
   options?: { allBlockTypes?: boolean },
 ): { addresses: ResolvedAddress[] } {
   if (selector.type === 'text') {
     const query = {
       select: selector,
-      within: within as import('@superdoc/document-api').NodeAddress | undefined,
+      within: within as import('@superdoc/document-api').BlockNodeAddress | undefined,
       includeNodes: false,
     };
     const result = executeTextSelector(editor, index, query, []);
@@ -546,7 +546,7 @@ function resolveTextSelector(
   // Node selector — resolve to block positions
   const query = {
     select: selector,
-    within: within as import('@superdoc/document-api').NodeAddress | undefined,
+    within: within as import('@superdoc/document-api').BlockNodeAddress | undefined,
     includeNodes: false,
   };
   const result = executeBlockSelector(index, query, []);

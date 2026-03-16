@@ -45,6 +45,8 @@ import type {
   Query,
   QueryMatchInput,
   QueryMatchOutput,
+  TextSelector,
+  NodeSelector,
   FindOutput,
   Receipt,
   Selector,
@@ -1275,8 +1277,9 @@ export type {
 } from './comments/comments.js';
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 export { DocumentApiValidationError, toSDError } from './errors.js';
-export { textReceiptToSDReceipt } from './receipt-bridge.js';
-export { isSDAddress, isValidTarget } from './validation-primitives.js';
+export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
+export type { StructuralReceiptParams } from './receipt-bridge.js';
+export { isBlockNodeAddress } from './validation-primitives.js';
 export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
 export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
@@ -1342,7 +1345,10 @@ export interface CapabilitiesApi {
 }
 
 export interface QueryApi {
+  /** Canonical nested input. */
   match(input: QueryMatchInput): QueryMatchOutput;
+  /** TS shorthand: pass a TextSelector or NodeSelector directly (normalized to `{ select: ... }` internally). */
+  match(selector: TextSelector | NodeSelector): QueryMatchOutput;
 }
 
 export interface MutationsApi {
@@ -2776,8 +2782,17 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     query: {
-      match(input: QueryMatchInput): QueryMatchOutput {
-        return adapters.query.match(input);
+      match(input: QueryMatchInput | TextSelector | NodeSelector): QueryMatchOutput {
+        if (!input || typeof input !== 'object') {
+          throw new DocumentApiValidationError(
+            'INVALID_INPUT',
+            'query.match requires a QueryMatchInput or selector object.',
+            { value: input },
+          );
+        }
+        // Normalize flat selector shorthand to canonical nested form.
+        const normalized: QueryMatchInput = 'select' in input ? input : { select: input };
+        return adapters.query.match(normalized);
       },
     },
     ranges: {

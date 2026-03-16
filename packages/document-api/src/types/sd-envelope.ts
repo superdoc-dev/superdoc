@@ -1,14 +1,14 @@
 /**
- * SDM/1 envelope types — addressing, read options, query/find, and results.
+ * SDM/1 envelope types — read options, query/find, and results.
  *
  * These types wrap the core node model for API operations:
- *   SDAddress     — universal node locator
  *   SDNodeResult  — single-node read/find result
  *   SDFindResult  — paginated find result set
  *   SDReadOptions — projection options for reads
  */
 
-import type { NodeAddress } from './base.js';
+import type { BlockNodeAddress, NodeAddress } from './base.js';
+import type { TextSelector, NodeSelector } from './query.js';
 import type { SDContentNode, SDInlineNode } from './sd-nodes.js';
 
 // ---------------------------------------------------------------------------
@@ -19,22 +19,6 @@ export interface SDPoint {
   blockId: string;
   /** UTF-16 code units. */
   offset: number;
-}
-
-/**
- * Legacy SDM/1 address type.
- *
- * @deprecated Prefer `NodeAddress` from `./base.js`. `find` results now return
- * `NodeAddress` directly. This type is retained for backward-compatible inputs
- * (`within`, `getNode`).
- */
-export interface SDAddress {
-  kind: 'content' | 'inline' | 'annotation' | 'section';
-  stability: 'stable' | 'ephemeral';
-  nodeId?: string;
-  anchor?: { start: SDPoint; end: SDPoint };
-  evaluatedRevision?: string;
-  path?: Array<string | number>;
 }
 
 export interface SDNodeContext {
@@ -65,33 +49,13 @@ export interface SDGetInput {
   options?: SDReadOptions;
 }
 
-export interface SDGetNodeInput {
-  target: SDAddress;
-  options?: SDReadOptions;
-}
-
 // ---------------------------------------------------------------------------
-// Selectors
+// Find input
 // ---------------------------------------------------------------------------
-
-export interface SDTextSelector {
-  type: 'text';
-  pattern: string;
-  mode?: 'contains' | 'regex';
-  caseSensitive?: boolean;
-}
-
-export interface SDNodeSelector {
-  type: 'node';
-  kind?: 'content' | 'inline';
-  nodeKind?: string;
-}
-
-export type SDSelector = SDTextSelector | SDNodeSelector;
 
 export interface SDFindInput {
-  select: SDSelector;
-  within?: SDAddress | NodeAddress;
+  select: TextSelector | NodeSelector;
+  within?: BlockNodeAddress;
   limit?: number;
   offset?: number;
   options?: SDReadOptions;

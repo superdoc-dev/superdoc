@@ -1,4 +1,4 @@
-import type { InlineNodeAddress, NodeAddress } from '../types/base.js';
+import type { BlockNodeAddress, InlineNodeAddress, NodeAddress } from '../types/base.js';
 import type { TextAddress } from '../types/address.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 import type { ReceiptFailure } from '../types/receipt.js';
@@ -121,7 +121,7 @@ export type HyperlinksListResult = DiscoveryOutput<HyperlinkDomain>;
 // ---------------------------------------------------------------------------
 
 export interface HyperlinksListQuery {
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
   hrefPattern?: string;
   anchor?: string;
   textPattern?: string;

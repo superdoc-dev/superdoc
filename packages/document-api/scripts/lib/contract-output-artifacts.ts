@@ -113,7 +113,7 @@ const DEFAULT_REMEDIATION_BY_CODE: Record<string, string> = {
   // SDM/1 structural codes
   INVALID_PAYLOAD: 'Check fragment structure: every node needs a valid kind and required payload fields.',
   CAPABILITY_UNSUPPORTED: 'This node kind or operation is not supported by the current engine. Check capabilities.',
-  ADDRESS_STALE: 'The SDAddress was obtained before a mutation and is no longer valid. Re-resolve the address.',
+  ADDRESS_STALE: 'The address was obtained before a mutation and is no longer valid. Re-resolve the address.',
   DUPLICATE_ID: 'A node ID in the fragment conflicts with an existing document node. Use unique IDs or omit them.',
   INVALID_CONTEXT:
     'The target context does not allow this content (e.g., inserting block content inside an inline context).',

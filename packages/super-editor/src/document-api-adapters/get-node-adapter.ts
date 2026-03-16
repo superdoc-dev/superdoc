@@ -16,18 +16,12 @@ function findBlocksByTypeAndId(blockIndex: BlockIndex, nodeType: BlockNodeType, 
   return blockIndex.candidates.filter((candidate) => candidate.nodeType === nodeType && candidate.nodeId === nodeId);
 }
 
-/**
- * Returns the input block address as-is (it's already a NodeAddress).
- * Previously converted to SDAddress; now passes through directly.
- */
+/** Returns the input block address as-is (already a NodeAddress). */
 function buildBlockAddress(address: NodeAddress & { kind: 'block' }): NodeAddress {
   return address;
 }
 
-/**
- * Returns the input inline address as-is (it's already a NodeAddress).
- * Previously converted to SDAddress; now passes through directly.
- */
+/** Returns the input inline address as-is (already a NodeAddress). */
 function buildInlineAddress(address: NodeAddress & { kind: 'inline' }): NodeAddress {
   return address;
 }

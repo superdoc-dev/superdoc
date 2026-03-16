@@ -367,7 +367,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.get` | `get` | Read the full document as an SDDocument structure. |
-| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.getText` | `get-text` | Extract the plain-text content of the document. |
@@ -376,11 +376,14 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.replace` | `replace` | Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
+| `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
+| `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
+| `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -592,7 +595,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.paragraph` | `create paragraph` | Create a standalone paragraph at the target position. To add a list item, use lists.insert instead. |
 | `doc.create.heading` | `create heading` | Create a new heading at the target position. |
 | `doc.create.sectionBreak` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
@@ -628,7 +631,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
-| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
+| `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
@@ -799,7 +802,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.get` | `get` | Read the full document as an SDDocument structure. |
-| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
 | `doc.get_node` | `get-node` | Retrieve a single node by target position. |
 | `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
@@ -808,11 +811,14 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.replace` | `replace` | Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
+| `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
+| `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
+| `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -1024,7 +1030,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.paragraph` | `create paragraph` | Create a standalone paragraph at the target position. To add a list item, use lists.insert instead. |
 | `doc.create.heading` | `create heading` | Create a new heading at the target position. |
 | `doc.create.section_break` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
@@ -1060,7 +1066,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
-| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
+| `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |

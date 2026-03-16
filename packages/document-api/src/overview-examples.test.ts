@@ -77,10 +77,9 @@ function makeSDMutationReceipt() {
     success: true as const,
     resolution: {
       target: {
-        kind: 'content' as const,
-        stability: 'stable' as const,
-        nodeId: 'p1',
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 3 } },
+        kind: 'text' as const,
+        blockId: 'p1',
+        range: { start: 0, end: 3 },
       },
     },
   };
@@ -547,7 +546,7 @@ describe('overview.mdx examples', () => {
 
       const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed
-      // preview.resolution shows the resolved target (SDAddress)
+      // preview.resolution shows the resolved target (TextAddress)
 
       expect(preview).toHaveProperty('success');
       expect(preview).toHaveProperty('resolution');
@@ -601,6 +600,24 @@ describe('common-workflows.mdx: Find text and insert at position', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('query.match accepts flat TextSelector shorthand', () => {
+    const doc = makeApi();
+
+    // Shorthand: pass TextSelector directly instead of { select: ... }
+    const match = doc.query.match({ type: 'text', pattern: 'Materials and methods' });
+
+    expect(match.items).toBeDefined();
+  });
+
+  it('query.match accepts flat NodeSelector shorthand', () => {
+    const doc = makeApi();
+
+    // Shorthand: pass NodeSelector directly instead of { select: ... }
+    const match = doc.query.match({ type: 'node', nodeType: 'paragraph' });
+
+    expect(match.items).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -629,7 +646,7 @@ describe('src/README.md workflow examples', () => {
       const doc = makeApi();
 
       const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
-      // receipt.resolution.target contains the resolved insertion point (SDAddress)
+      // receipt.resolution.target contains the resolved insertion point (TextAddress)
 
       expect(receipt.resolution).toBeDefined();
       expect(receipt.resolution!.target).toBeDefined();

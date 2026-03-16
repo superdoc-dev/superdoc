@@ -37,12 +37,12 @@ lives in adapter layers that map engine behavior into discovery envelopes and ot
 ## Selector Semantics
 
 - For dual-context types (`sdt`, `image`), selectors without an explicit `kind` may return both block and inline matches.
-- For `find`, set `kind: 'content'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
+- For `find`, set `kind: 'block'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
 
 ## Find Result Contract
 
 - `find` always returns `SDFindResult` with `items: SDNodeResult[]`.
-- Each item has `{ node, address }`, where `address` is an `SDAddress`.
+- Each item has `{ node, address }`, where `address` is a `NodeAddress`.
 - For precise text spans/runs (for direct mutation targeting), use `query.match`, which returns `blocks[].range` and run-level metadata.
 - `insert` supports canonical `TextAddress` targeting or default insertion point when target is omitted.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.

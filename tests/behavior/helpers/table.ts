@@ -21,15 +21,15 @@ export async function countTableCells(page: Page): Promise<number> {
       return Array.isArray(result?.matches) ? result.matches : [];
     };
 
-    const tableResult = docApi.find({ select: { type: 'node', nodeKind: 'table' }, limit: 1 });
+    const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
     const tableAddress = getAddresses(tableResult)[0];
     if (!tableAddress) return 0;
 
-    const cellResult = docApi.find({ select: { type: 'node', nodeKind: 'tableCell' }, within: tableAddress });
+    const cellResult = docApi.find({ select: { type: 'node', nodeType: 'tableCell' }, within: tableAddress });
     let cellCount = getAddresses(cellResult).length;
 
     try {
-      const headerResult = docApi.find({ select: { type: 'node', nodeKind: 'tableHeader' }, within: tableAddress });
+      const headerResult = docApi.find({ select: { type: 'node', nodeType: 'tableHeader' }, within: tableAddress });
       cellCount += getAddresses(headerResult).length;
     } catch {
       /* tableHeader may not be queryable */
@@ -38,7 +38,7 @@ export async function countTableCells(page: Page): Promise<number> {
     if (cellCount > 0) return cellCount;
 
     // Fallback: count paragraphs when cell-level querying isn't available.
-    const paragraphResult = docApi.find({ select: { type: 'node', nodeKind: 'paragraph' }, within: tableAddress });
+    const paragraphResult = docApi.find({ select: { type: 'node', nodeType: 'paragraph' }, within: tableAddress });
     return getAddresses(paragraphResult).length;
   });
 }

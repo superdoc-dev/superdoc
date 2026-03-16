@@ -401,7 +401,7 @@ describe('sdFindAdapter — inline SDT node.kind', () => {
     });
 
     const result = sdFindAdapter(editor, {
-      select: { type: 'node', nodeKind: 'sdt' },
+      select: { type: 'node', nodeType: 'sdt' },
     });
 
     const inlineItem = result.items.find((item) => item.address.kind === 'inline');

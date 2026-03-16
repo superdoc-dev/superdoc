@@ -1,27 +1,30 @@
 /**
- * Bridge utilities for converting between TextMutationReceipt and SDMutationReceipt.
+ * Bridge utilities for converting internal receipt types to SDMutationReceipt.
  *
- * The legacy text write pipeline returns TextMutationReceipt internally.
- * The public insert/replace API returns SDMutationReceipt for all branches.
- * This module handles the conversion at the API boundary.
+ * Two paths produce SDMutationReceipts:
+ *   1. Text pipeline: TextMutationReceipt → SDMutationReceipt (via {@link textReceiptToSDReceipt})
+ *   2. Structural pipeline: direct construction (via {@link buildStructuralReceipt})
  */
 
-import type { TextMutationReceipt, SDMutationReceipt, SDError } from './types/index.js';
-import type { SDAddress } from './types/sd-envelope.js';
-import type { TextAddress } from './types/address.js';
+import type {
+  TextMutationReceipt,
+  TextMutationResolution,
+  TextMutationRange,
+  SDMutationReceipt,
+  SDError,
+  SelectionTarget,
+  MutationResolutionTarget,
+} from './types/index.js';
 
 /**
- * Converts a TextAddress into an SDAddress for receipt resolution.
+ * Builds the public receipt resolution from a TextMutationResolution.
+ * Passes through `target` (TextAddress) and optional `selectionTarget` directly.
  */
-function textAddressToSDAddress(textAddr: TextAddress): SDAddress {
+function buildResolution(resolution: TextMutationResolution): SDMutationReceipt['resolution'] {
   return {
-    kind: 'content',
-    stability: 'stable',
-    nodeId: textAddr.blockId,
-    anchor: {
-      start: { blockId: textAddr.blockId, offset: textAddr.range.start },
-      end: { blockId: textAddr.blockId, offset: textAddr.range.end },
-    },
+    target: resolution.target,
+    range: resolution.range,
+    ...(resolution.selectionTarget ? { selectionTarget: resolution.selectionTarget } : {}),
   };
 }
 
@@ -29,28 +32,14 @@ function textAddressToSDAddress(textAddr: TextAddress): SDAddress {
  * Wraps a TextMutationReceipt into an SDMutationReceipt at the public API boundary.
  *
  * - Success/failure semantics are preserved.
- * - TextAddress resolution is converted to SDAddress resolution.
- * - Failure codes from the text pipeline are mapped through the receipt.
+ * - Resolution is passed through directly (both use TextAddress).
+ * - Failure codes from the text pipeline are mapped to SDErrorCode.
  */
-/**
- * Builds the SDMutationReceipt resolution object from a TextMutationResolution.
- * Carries through selectionTarget for cross-block mutations.
- */
-function buildSDResolution(
-  resolution: import('./types/index.js').TextMutationResolution,
-): SDMutationReceipt['resolution'] {
-  return {
-    ...(resolution.requestedTarget ? { requestedTarget: textAddressToSDAddress(resolution.requestedTarget) } : {}),
-    target: textAddressToSDAddress(resolution.target),
-    ...(resolution.selectionTarget ? { selectionTarget: resolution.selectionTarget } : undefined),
-  };
-}
-
 export function textReceiptToSDReceipt(receipt: TextMutationReceipt): SDMutationReceipt {
   if (receipt.success) {
     return {
       success: true,
-      resolution: receipt.resolution ? buildSDResolution(receipt.resolution) : undefined,
+      resolution: receipt.resolution ? buildResolution(receipt.resolution) : undefined,
     };
   }
 
@@ -80,6 +69,53 @@ export function textReceiptToSDReceipt(receipt: TextMutationReceipt): SDMutation
   return {
     success: false,
     failure,
-    resolution: receipt.resolution ? buildSDResolution(receipt.resolution) : undefined,
+    resolution: receipt.resolution ? buildResolution(receipt.resolution) : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Structural receipt builder
+// ---------------------------------------------------------------------------
+
+/** Parameters for building a structural mutation receipt. */
+export interface StructuralReceiptParams {
+  target: MutationResolutionTarget;
+  range: TextMutationRange;
+  selectionTarget?: SelectionTarget;
+}
+
+/**
+ * Builds an SDMutationReceipt for structural (block-level) mutations.
+ *
+ * Unlike {@link textReceiptToSDReceipt} which converts from the internal
+ * text pipeline, this constructs a receipt directly — preserving the
+ * original `BlockNodeAddress` target instead of normalizing it to a
+ * synthetic `TextAddress`.
+ */
+export function buildStructuralReceipt(success: true, params: StructuralReceiptParams): SDMutationReceipt;
+export function buildStructuralReceipt(
+  success: false,
+  params: StructuralReceiptParams,
+  failure: { code: string; message: string },
+): SDMutationReceipt;
+export function buildStructuralReceipt(
+  success: boolean,
+  params: StructuralReceiptParams,
+  failure?: { code: string; message: string },
+): SDMutationReceipt {
+  const resolution: SDMutationReceipt['resolution'] = {
+    target: params.target,
+    range: params.range,
+    ...(params.selectionTarget ? { selectionTarget: params.selectionTarget } : {}),
+  };
+
+  if (success) {
+    return { success: true, resolution };
+  }
+
+  return {
+    success: false,
+    failure: { code: (failure?.code ?? 'INTERNAL_ERROR') as SDError['code'], message: failure?.message ?? '' },
+    resolution,
   };
 }

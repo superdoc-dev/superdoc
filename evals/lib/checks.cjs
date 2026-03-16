@@ -115,6 +115,32 @@ module.exports.nodeSearchArgs = (output, context) => {
   return { pass: true, score: 1, reason: 'Correct node search' };
 };
 
+/** Accept query_match (node selector) or blocks_list (nodeTypes filter) for listing nodes. */
+module.exports.nodeSearchOrBlocksList = (output, context) => {
+  if (!Array.isArray(output)) return true;
+  const expectedType = context?.vars?.expectedNodeType || 'heading';
+
+  const qm = findTool(output, 'query_match');
+  if (qm) {
+    const args = getArgs(qm);
+    if (args.select?.type === 'node') {
+      return { pass: true, score: 1, reason: `query_match with node selector (nodeType=${args.select?.nodeType})` };
+    }
+    return { pass: false, score: 0, reason: `query_match select.type is "${args.select?.type}", expected "node"` };
+  }
+
+  const bl = findTool(output, 'blocks_list');
+  if (bl) {
+    const args = getArgs(bl);
+    if (Array.isArray(args.nodeTypes) && args.nodeTypes.includes(expectedType)) {
+      return { pass: true, score: 1, reason: `blocks_list with nodeTypes filter including "${expectedType}"` };
+    }
+    return { pass: true, score: 0.7, reason: 'blocks_list called but without nodeTypes filter for "' + expectedType + '"' };
+  }
+
+  return { pass: false, score: 0, reason: 'Neither query_match nor blocks_list called' };
+};
+
 // --- Correctness ---
 
 module.exports.noTextInsertForStructure = (output) => {

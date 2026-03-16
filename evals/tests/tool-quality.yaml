@@ -30,17 +30,18 @@
       value: file://lib/checks.cjs:textSearchArgs
       metric: argument_accuracy
 
-- description: 'Node search uses query_match with node selector'
+- description: 'Node search uses query_match or blocks_list'
   metadata: { category: reading }
   vars:
     task: 'List all headings in the document.'
+    expectedNodeType: heading
   assert:
     - type: tool-call-f1
-      value: [query_match]
-      threshold: 0.5         # may also call blocks_list
+      value: [query_match, blocks_list]
+      threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:nodeSearchArgs
+      value: file://lib/checks.cjs:nodeSearchOrBlocksList
       metric: argument_accuracy
 
 - description: 'Get full text calls get_document_text'

@@ -829,9 +829,6 @@ export class HeaderFooterSessionManager {
         return;
       }
 
-      // Hide layout selection overlay
-      this.#overlayManager.hideSelectionOverlay();
-
       this.#activeEditor = editor;
       this.#session = {
         mode: region.kind,

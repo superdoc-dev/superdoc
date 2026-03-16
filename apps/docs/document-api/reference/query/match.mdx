@@ -34,7 +34,10 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 | `offset` | integer | no |  |
 | `require` | enum | no | `"any"`, `"first"`, `"exactlyOne"`, `"all"` |
 | `select` | object(type="text") \\| object(type="node") | yes | One of: object(type="text"), object(type="node") |
-| `within` | NodeAddress | no | NodeAddress |
+| `within` | BlockNodeAddress | no | BlockNodeAddress |
+| `within.kind` | `"block"` | no | Constant: `"block"` |
+| `within.nodeId` | string | no |  |
+| `within.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 
 ### Example request
 
@@ -280,7 +283,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
       ]
     },
     "within": {
-      "$ref": "#/$defs/NodeAddress"
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
   "required": [
@@ -306,7 +309,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
             "additionalProperties": false,
             "properties": {
               "address": {
-                "$ref": "#/$defs/NodeAddress"
+                "$ref": "#/$defs/BlockNodeAddress"
               },
               "blocks": {
                 "items": {

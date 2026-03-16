@@ -1,4 +1,4 @@
-import type { NodeAddress, NodeKind, NodeType } from './base.js';
+import type { BlockNodeAddress, NodeAddress, NodeKind, NodeType } from './base.js';
 import type { NodeInfo } from './node.js';
 import type { Range, TextAddress, SelectionTarget } from './address.js';
 import type { DiscoveryOutput } from './discovery.js';
@@ -38,7 +38,7 @@ export type Selector = { nodeType: NodeType } | NodeSelector | TextSelector;
 export interface Query {
   /** Selector that determines which nodes to match. */
   select: NodeSelector | TextSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
   limit?: number;
   offset?: number;
   /**

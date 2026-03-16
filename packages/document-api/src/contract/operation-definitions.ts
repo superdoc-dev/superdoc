@@ -407,13 +407,14 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert inline content at a text position within an existing block, or at the end of the document when target is omitted. ' +
-      'This is NOT for creating sibling blocks — use create.paragraph, create.heading, or lists.insert for that. ' +
-      'Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). ' +
-      'Supports text (default), markdown, and html content types via the `type` field in legacy mode. ' +
-      'Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).',
+      'Insert content into the document. Two input shapes: ' +
+      'legacy string-based (value + type) inserts inline content at a text position within an existing block; ' +
+      'structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. ' +
+      'When target is omitted, content appends at the end of the document. ' +
+      'Legacy mode supports text (default), markdown, and html content types via the `type` field. ' +
+      'Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.',
+      'Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -456,7 +457,7 @@ export const OPERATION_DEFINITIONS = {
     description:
       'Replace content at a contiguous document selection. ' +
       'Text path accepts a SelectionTarget or ref plus replacement text. ' +
-      'Structural path accepts an SDAddress, SelectionTarget, or ref plus SDFragment content.',
+      'Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.',
     expectedResult:
       'Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,

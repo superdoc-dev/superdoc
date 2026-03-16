@@ -1,7 +1,7 @@
 ---
 title: replace
 sidebarTitle: replace
-description: Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts an SDAddress, SelectionTarget, or ref plus SDFragment content.
+description: Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Replace content at a contiguous document selection. Text path accep
 
 ## Summary
 
-Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts an SDAddress, SelectionTarget, or ref plus SDFragment content.
+Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.
 
 - Operation ID: `replace`
 - API member path: `editor.doc.replace(...)`
@@ -26,13 +26,40 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 
 ## Input fields
 
-### Variant 1
+### Variant 1.1 (target.kind="selection")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+| `text` | string | yes |  |
 
-### Variant 2
+### Variant 1.2
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ref` | string | yes |  |
+| `text` | string | yes |  |
+
+### Variant 2.1
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object \\| object[] | yes | One of: object, object[] |
+| `nestingPolicy` | object | no |  |
+| `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
+| `target` | BlockNodeAddress \\| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
+
+### Variant 2.2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object \\| object[] | yes | One of: object, object[] |
+| `nestingPolicy` | object | no |  |
+| `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
+| `ref` | string | yes |  |
 
 ### Example request
 
@@ -42,7 +69,7 @@ _No fields._
     "end": {
       "blockId": "block-abc123",
       "kind": "text",
-      "offset": 0
+      "offset": 12
     },
     "kind": "selection",
     "start": {
@@ -57,7 +84,7 @@ _No fields._
 
 ## Output fields
 
-### Variant 1 (resolution.selectionTarget.kind="selection")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -65,39 +92,17 @@ _No fields._
 | `evaluatedRevision.after` | string | no |  |
 | `evaluatedRevision.before` | string | no |  |
 | `resolution` | object | no |  |
-| `resolution.requestedTarget` | object | no |  |
-| `resolution.requestedTarget.anchor` | object | no |  |
-| `resolution.requestedTarget.anchor.end` | object | no |  |
-| `resolution.requestedTarget.anchor.end.blockId` | string | no |  |
-| `resolution.requestedTarget.anchor.end.offset` | integer | no |  |
-| `resolution.requestedTarget.anchor.start` | object | no |  |
-| `resolution.requestedTarget.anchor.start.blockId` | string | no |  |
-| `resolution.requestedTarget.anchor.start.offset` | integer | no |  |
-| `resolution.requestedTarget.evaluatedRevision` | string | no |  |
-| `resolution.requestedTarget.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
-| `resolution.requestedTarget.nodeId` | string | no |  |
-| `resolution.requestedTarget.path` | string \\| integer[] | no |  |
-| `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.range` | TextMutationRange | no | TextMutationRange |
+| `resolution.range.from` | integer | no |  |
+| `resolution.range.to` | integer | no |  |
 | `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
-| `resolution.target` | object | no |  |
-| `resolution.target.anchor` | object | no |  |
-| `resolution.target.anchor.end` | object | no |  |
-| `resolution.target.anchor.end.blockId` | string | no |  |
-| `resolution.target.anchor.end.offset` | integer | no |  |
-| `resolution.target.anchor.start` | object | no |  |
-| `resolution.target.anchor.start.blockId` | string | no |  |
-| `resolution.target.anchor.start.offset` | integer | no |  |
-| `resolution.target.evaluatedRevision` | string | no |  |
-| `resolution.target.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
-| `resolution.target.nodeId` | string | no |  |
-| `resolution.target.path` | string \\| integer[] | no |  |
-| `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `true` | yes | Constant: `true` |
 
-### Variant 2 (resolution.selectionTarget.kind="selection")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -109,36 +114,14 @@ _No fields._
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `resolution` | object | no |  |
-| `resolution.requestedTarget` | object | no |  |
-| `resolution.requestedTarget.anchor` | object | no |  |
-| `resolution.requestedTarget.anchor.end` | object | no |  |
-| `resolution.requestedTarget.anchor.end.blockId` | string | no |  |
-| `resolution.requestedTarget.anchor.end.offset` | integer | no |  |
-| `resolution.requestedTarget.anchor.start` | object | no |  |
-| `resolution.requestedTarget.anchor.start.blockId` | string | no |  |
-| `resolution.requestedTarget.anchor.start.offset` | integer | no |  |
-| `resolution.requestedTarget.evaluatedRevision` | string | no |  |
-| `resolution.requestedTarget.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
-| `resolution.requestedTarget.nodeId` | string | no |  |
-| `resolution.requestedTarget.path` | string \\| integer[] | no |  |
-| `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.range` | TextMutationRange | no | TextMutationRange |
+| `resolution.range.from` | integer | no |  |
+| `resolution.range.to` | integer | no |  |
 | `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
 | `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
 | `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
 | `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
-| `resolution.target` | object | no |  |
-| `resolution.target.anchor` | object | no |  |
-| `resolution.target.anchor.end` | object | no |  |
-| `resolution.target.anchor.end.blockId` | string | no |  |
-| `resolution.target.anchor.end.offset` | integer | no |  |
-| `resolution.target.anchor.start` | object | no |  |
-| `resolution.target.anchor.start.blockId` | string | no |  |
-| `resolution.target.anchor.start.offset` | integer | no |  |
-| `resolution.target.evaluatedRevision` | string | no |  |
-| `resolution.target.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
-| `resolution.target.nodeId` | string | no |  |
-| `resolution.target.path` | string \\| integer[] | no |  |
-| `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response
@@ -146,52 +129,21 @@ _No fields._
 ```json
 {
   "evaluatedRevision": {
-    "after": "example",
-    "before": "example"
+    "after": "rev-002",
+    "before": "rev-001"
   },
   "resolution": {
-    "requestedTarget": {
-      "anchor": {
-        "end": {
-          "blockId": "block-abc123",
-          "offset": 0
-        },
-        "start": {
-          "blockId": "block-abc123",
-          "offset": 0
-        }
-      },
-      "kind": "content",
-      "nodeId": "node-def456",
-      "stability": "stable"
-    },
-    "selectionTarget": {
-      "end": {
-        "blockId": "block-abc123",
-        "kind": "text",
-        "offset": 0
-      },
-      "kind": "selection",
-      "start": {
-        "blockId": "block-abc123",
-        "kind": "text",
-        "offset": 0
-      }
+    "range": {
+      "from": 0,
+      "to": 12
     },
     "target": {
-      "anchor": {
-        "end": {
-          "blockId": "block-abc123",
-          "offset": 0
-        },
-        "start": {
-          "blockId": "block-abc123",
-          "offset": 0
-        }
-      },
-      "kind": "content",
-      "nodeId": "node-def456",
-      "stability": "stable"
+      "blockId": "block-abc123",
+      "kind": "text",
+      "range": {
+        "end": 12,
+        "start": 0
+      }
     }
   },
   "success": true
@@ -273,96 +225,34 @@ _No fields._
           "additionalProperties": false,
           "properties": {
             "content": {
-              "type": "object"
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              ]
             },
             "nestingPolicy": {
+              "additionalProperties": false,
+              "properties": {
+                "tables": {
+                  "enum": [
+                    "forbid",
+                    "allow"
+                  ]
+                }
+              },
               "type": "object"
             },
             "target": {
               "oneOf": [
                 {
-                  "additionalProperties": false,
-                  "properties": {
-                    "anchor": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "end": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "blockId": {
-                              "type": "string"
-                            },
-                            "offset": {
-                              "type": "integer"
-                            }
-                          },
-                          "required": [
-                            "blockId",
-                            "offset"
-                          ],
-                          "type": "object"
-                        },
-                        "start": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "blockId": {
-                              "type": "string"
-                            },
-                            "offset": {
-                              "type": "integer"
-                            }
-                          },
-                          "required": [
-                            "blockId",
-                            "offset"
-                          ],
-                          "type": "object"
-                        }
-                      },
-                      "type": "object"
-                    },
-                    "evaluatedRevision": {
-                      "type": "string"
-                    },
-                    "kind": {
-                      "enum": [
-                        "content",
-                        "inline",
-                        "annotation",
-                        "section"
-                      ]
-                    },
-                    "nodeId": {
-                      "type": "string"
-                    },
-                    "path": {
-                      "items": {
-                        "oneOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "integer"
-                          }
-                        ]
-                      },
-                      "type": "array"
-                    },
-                    "stability": {
-                      "enum": [
-                        "stable",
-                        "ephemeral"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "stability"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "$ref": "#/$defs/TextAddress"
+                  "$ref": "#/$defs/BlockNodeAddress"
                 },
                 {
                   "$ref": "#/$defs/SelectionTarget"
@@ -380,9 +270,28 @@ _No fields._
           "additionalProperties": false,
           "properties": {
             "content": {
-              "type": "object"
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              ]
             },
             "nestingPolicy": {
+              "additionalProperties": false,
+              "properties": {
+                "tables": {
+                  "enum": [
+                    "forbid",
+                    "allow"
+                  ]
+                }
+              },
               "type": "object"
             },
             "ref": {
@@ -428,174 +337,26 @@ _No fields._
         "resolution": {
           "additionalProperties": false,
           "properties": {
-            "requestedTarget": {
-              "additionalProperties": false,
-              "properties": {
-                "anchor": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    },
-                    "start": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "type": "object"
-                },
-                "evaluatedRevision": {
-                  "type": "string"
-                },
-                "kind": {
-                  "enum": [
-                    "content",
-                    "inline",
-                    "annotation",
-                    "section"
-                  ]
-                },
-                "nodeId": {
-                  "type": "string"
-                },
-                "path": {
-                  "items": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "integer"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
-                "stability": {
-                  "enum": [
-                    "stable",
-                    "ephemeral"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "stability"
-              ],
-              "type": "object"
+            "range": {
+              "$ref": "#/$defs/TextMutationRange"
             },
             "selectionTarget": {
               "$ref": "#/$defs/SelectionTarget"
             },
             "target": {
-              "additionalProperties": false,
-              "properties": {
-                "anchor": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    },
-                    "start": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "type": "object"
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/TextAddress"
                 },
-                "evaluatedRevision": {
-                  "type": "string"
-                },
-                "kind": {
-                  "enum": [
-                    "content",
-                    "inline",
-                    "annotation",
-                    "section"
-                  ]
-                },
-                "nodeId": {
-                  "type": "string"
-                },
-                "path": {
-                  "items": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "integer"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
-                "stability": {
-                  "enum": [
-                    "stable",
-                    "ephemeral"
-                  ]
+                {
+                  "$ref": "#/$defs/BlockNodeAddress"
                 }
-              },
-              "required": [
-                "kind",
-                "stability"
-              ],
-              "type": "object"
+              ]
             }
           },
           "required": [
-            "target"
+            "target",
+            "range"
           ],
           "type": "object"
         },
@@ -660,174 +421,26 @@ _No fields._
         "resolution": {
           "additionalProperties": false,
           "properties": {
-            "requestedTarget": {
-              "additionalProperties": false,
-              "properties": {
-                "anchor": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    },
-                    "start": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "type": "object"
-                },
-                "evaluatedRevision": {
-                  "type": "string"
-                },
-                "kind": {
-                  "enum": [
-                    "content",
-                    "inline",
-                    "annotation",
-                    "section"
-                  ]
-                },
-                "nodeId": {
-                  "type": "string"
-                },
-                "path": {
-                  "items": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "integer"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
-                "stability": {
-                  "enum": [
-                    "stable",
-                    "ephemeral"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "stability"
-              ],
-              "type": "object"
+            "range": {
+              "$ref": "#/$defs/TextMutationRange"
             },
             "selectionTarget": {
               "$ref": "#/$defs/SelectionTarget"
             },
             "target": {
-              "additionalProperties": false,
-              "properties": {
-                "anchor": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    },
-                    "start": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "blockId": {
-                          "type": "string"
-                        },
-                        "offset": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "blockId",
-                        "offset"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "type": "object"
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/TextAddress"
                 },
-                "evaluatedRevision": {
-                  "type": "string"
-                },
-                "kind": {
-                  "enum": [
-                    "content",
-                    "inline",
-                    "annotation",
-                    "section"
-                  ]
-                },
-                "nodeId": {
-                  "type": "string"
-                },
-                "path": {
-                  "items": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "integer"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
-                "stability": {
-                  "enum": [
-                    "stable",
-                    "ephemeral"
-                  ]
+                {
+                  "$ref": "#/$defs/BlockNodeAddress"
                 }
-              },
-              "required": [
-                "kind",
-                "stability"
-              ],
-              "type": "object"
+              ]
             }
           },
           "required": [
-            "target"
+            "target",
+            "range"
           ],
           "type": "object"
         },
@@ -870,174 +483,26 @@ _No fields._
     "resolution": {
       "additionalProperties": false,
       "properties": {
-        "requestedTarget": {
-          "additionalProperties": false,
-          "properties": {
-            "anchor": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                },
-                "start": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                }
-              },
-              "type": "object"
-            },
-            "evaluatedRevision": {
-              "type": "string"
-            },
-            "kind": {
-              "enum": [
-                "content",
-                "inline",
-                "annotation",
-                "section"
-              ]
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "path": {
-              "items": {
-                "oneOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ]
-              },
-              "type": "array"
-            },
-            "stability": {
-              "enum": [
-                "stable",
-                "ephemeral"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "stability"
-          ],
-          "type": "object"
+        "range": {
+          "$ref": "#/$defs/TextMutationRange"
         },
         "selectionTarget": {
           "$ref": "#/$defs/SelectionTarget"
         },
         "target": {
-          "additionalProperties": false,
-          "properties": {
-            "anchor": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                },
-                "start": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                }
-              },
-              "type": "object"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TextAddress"
             },
-            "evaluatedRevision": {
-              "type": "string"
-            },
-            "kind": {
-              "enum": [
-                "content",
-                "inline",
-                "annotation",
-                "section"
-              ]
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "path": {
-              "items": {
-                "oneOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ]
-              },
-              "type": "array"
-            },
-            "stability": {
-              "enum": [
-                "stable",
-                "ephemeral"
-              ]
+            {
+              "$ref": "#/$defs/BlockNodeAddress"
             }
-          },
-          "required": [
-            "kind",
-            "stability"
-          ],
-          "type": "object"
+          ]
         }
       },
       "required": [
-        "target"
+        "target",
+        "range"
       ],
       "type": "object"
     },
@@ -1107,174 +572,26 @@ _No fields._
     "resolution": {
       "additionalProperties": false,
       "properties": {
-        "requestedTarget": {
-          "additionalProperties": false,
-          "properties": {
-            "anchor": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                },
-                "start": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                }
-              },
-              "type": "object"
-            },
-            "evaluatedRevision": {
-              "type": "string"
-            },
-            "kind": {
-              "enum": [
-                "content",
-                "inline",
-                "annotation",
-                "section"
-              ]
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "path": {
-              "items": {
-                "oneOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ]
-              },
-              "type": "array"
-            },
-            "stability": {
-              "enum": [
-                "stable",
-                "ephemeral"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "stability"
-          ],
-          "type": "object"
+        "range": {
+          "$ref": "#/$defs/TextMutationRange"
         },
         "selectionTarget": {
           "$ref": "#/$defs/SelectionTarget"
         },
         "target": {
-          "additionalProperties": false,
-          "properties": {
-            "anchor": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                },
-                "start": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                }
-              },
-              "type": "object"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TextAddress"
             },
-            "evaluatedRevision": {
-              "type": "string"
-            },
-            "kind": {
-              "enum": [
-                "content",
-                "inline",
-                "annotation",
-                "section"
-              ]
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "path": {
-              "items": {
-                "oneOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ]
-              },
-              "type": "array"
-            },
-            "stability": {
-              "enum": [
-                "stable",
-                "ephemeral"
-              ]
+            {
+              "$ref": "#/$defs/BlockNodeAddress"
             }
-          },
-          "required": [
-            "kind",
-            "stability"
-          ],
-          "type": "object"
+          ]
         }
       },
       "required": [
-        "target"
+        "target",
+        "range"
       ],
       "type": "object"
     },

@@ -7,7 +7,7 @@ import { DocumentApiValidationError } from '../errors.js';
 import {
   isRecord,
   isTextAddress,
-  isValidTarget,
+  isBlockNodeAddress,
   assertNoUnknownFields,
   validateNestingPolicyValue,
 } from '../validation-primitives.js';
@@ -165,11 +165,10 @@ function validateStructuralInsertInput(input: Record<string, unknown>): void {
 
   const { target, content, placement, nestingPolicy } = input;
 
-  // Structural path accepts both SDAddress and TextAddress
-  if (target !== undefined && !isValidTarget(target)) {
+  if (target !== undefined && !isBlockNodeAddress(target)) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      'target must be a valid address (SDAddress or TextAddress).',
+      'target must be a BlockNodeAddress ({ kind: "block", nodeType, nodeId }).',
       {
         field: 'target',
         value: target,

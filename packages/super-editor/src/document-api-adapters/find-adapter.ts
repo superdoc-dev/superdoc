@@ -5,9 +5,7 @@ import type {
   SDFindInput,
   SDFindResult,
   SDNodeResult,
-  SDAddress,
   NodeAddress,
-  NodeType,
   UnknownNodeDiagnostic,
 } from '@superdoc/document-api';
 import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
@@ -15,7 +13,7 @@ import { DocumentApiAdapterError } from './errors.js';
 import { dedupeDiagnostics } from './helpers/adapter-utils.js';
 import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
-import { findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
+import { findBlockByIdStrict, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { resolveIncludedNodes } from './helpers/node-info-resolver.js';
 import { collectUnknownNodeDiagnostics, isInlineQuery, shouldQueryBothKinds } from './find/common.js';
 import { executeBlockSelector } from './find/block-strategy.js';
@@ -149,32 +147,28 @@ function translateToInternalQuery(input: SDFindInput): Query {
   // Validate within address early (actual nodeType resolution happens in sdFindAdapter)
   if (within) validateWithinAddress(within);
 
-  if (select.type === 'text') {
-    return {
-      select: {
-        type: 'text',
-        pattern: select.pattern,
-        ...(select.mode != null && { mode: select.mode }),
-        ...(select.caseSensitive != null && { caseSensitive: select.caseSensitive }),
-      },
-      limit,
-      offset,
-      // within is resolved in sdFindAdapter after block index is built
-      includeNodes: true,
-    };
+  // Reject legacy selector vocabulary that would otherwise be silently ignored.
+  if (select.type === 'node') {
+    const raw = select as unknown as Record<string, unknown>;
+    if ('nodeKind' in raw && raw.nodeKind != null) {
+      throw new DocumentApiAdapterError(
+        'INVALID_INPUT',
+        `"nodeKind" is no longer supported on node selectors. Use "nodeType" instead: ` +
+          `{ type: 'node', nodeType: '${String(raw.nodeKind)}' }.`,
+        { field: 'select.nodeKind', value: raw.nodeKind },
+      );
+    }
+    if (raw.kind === 'content') {
+      throw new DocumentApiAdapterError(
+        'INVALID_INPUT',
+        `kind: 'content' is no longer supported on node selectors. Use kind: 'block' instead.`,
+        { field: 'select.kind', value: raw.kind },
+      );
+    }
   }
 
-  // SDNodeSelector → internal NodeSelector
-  // Cast nodeKind (string) to NodeType — the internal engine handles unknown types gracefully.
-  const nodeSelect = {
-    type: 'node' as const,
-    ...(select.nodeKind != null && { nodeType: select.nodeKind as NodeType }),
-    ...(select.kind === 'content' && { kind: 'block' as const }),
-    ...(select.kind === 'inline' && { kind: 'inline' as const }),
-  };
-
   return {
-    select: nodeSelect,
+    select,
     limit,
     offset,
     // within is resolved in sdFindAdapter after block index is built
@@ -183,65 +177,54 @@ function translateToInternalQuery(input: SDFindInput): Query {
 }
 
 /**
- * Validates an SDAddress for use as a within scope.
+ * Validates a BlockNodeAddress for use as a within scope.
  *
- * Only content-kind addresses with a `nodeId` are supported for scoping.
- * The actual nodeType resolution is deferred to {@link resolveWithinNodeType}
- * which requires the block index.
+ * Only block-kind addresses with a `nodeId` are supported for scoping.
+ * Returns the validated `nodeId` and optional `nodeType` for downstream
+ * verification against the live document in {@link resolveWithinAddress}.
  */
-function validateWithinAddress(sdAddress: SDFindInput['within'] & object): { nodeId: string } {
-  if (sdAddress.kind === 'content' && sdAddress.nodeId) {
-    return { nodeId: sdAddress.nodeId };
+function validateWithinAddress(address: SDFindInput['within'] & object): {
+  nodeId: string;
+  nodeType?: import('@superdoc/document-api').BlockNodeType;
+} {
+  if (address.kind === 'block' && 'nodeId' in address && typeof address.nodeId === 'string') {
+    return { nodeId: address.nodeId, nodeType: address.nodeType };
   }
 
-  throw new DocumentApiAdapterError(
-    'INVALID_TARGET',
-    `"within" scope requires a content-kind SDAddress with a nodeId. Got kind="${sdAddress.kind}".`,
-    { field: 'within', value: sdAddress },
-  );
+  throw new DocumentApiAdapterError('INVALID_TARGET', '"within" scope requires a BlockNodeAddress with a nodeId.', {
+    field: 'within',
+    value: address,
+  });
 }
 
 /**
- * Resolves the actual nodeType for a within-scope nodeId using
- * {@link findBlockByNodeIdOnly}, which handles alias IDs (e.g. sdBlockId)
- * and throws a precise error for ambiguous or missing targets.
+ * Resolves a within-scope address against the live document index.
+ *
+ * When `expectedNodeType` is provided, uses the composite `nodeType:nodeId`
+ * key via {@link findBlockByIdStrict} — this disambiguates duplicate nodeIds
+ * that differ by type. Without a nodeType, falls back to
+ * {@link findBlockByNodeIdOnly} which handles alias IDs (e.g. sdBlockId).
  */
-function resolveWithinNodeType(index: ReturnType<typeof getBlockIndex>, nodeId: string): NodeAddress {
-  // findBlockByNodeIdOnly checks primary candidates, then alias entries,
-  // and throws AMBIGUOUS_TARGET / TARGET_NOT_FOUND as appropriate.
+function resolveWithinAddress(
+  index: ReturnType<typeof getBlockIndex>,
+  nodeId: string,
+  expectedNodeType?: import('@superdoc/document-api').BlockNodeType,
+): import('@superdoc/document-api').BlockNodeAddress {
+  if (expectedNodeType) {
+    const match = findBlockByIdStrict(index, { kind: 'block', nodeType: expectedNodeType, nodeId });
+    return { kind: 'block', nodeType: match.nodeType, nodeId: match.nodeId };
+  }
+
   const match = findBlockByNodeIdOnly(index, nodeId);
-  return {
-    kind: 'block',
-    nodeType: match.nodeType,
-    nodeId: match.nodeId,
-  } as NodeAddress;
-}
-
-/**
- * Builds an SDAddress from an internal NodeAddress match result.
- */
-function toSDAddress(address: NodeAddress): SDAddress {
-  if (address.kind === 'block') {
-    return {
-      kind: 'content',
-      stability: 'stable',
-      nodeId: address.nodeId,
-    };
-  }
-  return {
-    kind: 'inline',
-    stability: 'ephemeral',
-    anchor: {
-      start: { blockId: address.anchor.start.blockId, offset: address.anchor.start.offset },
-      end: { blockId: address.anchor.end.blockId, offset: address.anchor.end.offset },
-    },
-  };
+  return { kind: 'block', nodeType: match.nodeType, nodeId: match.nodeId };
 }
 
 /**
  * Projects a matched address into an SDNodeResult by looking up the PM node
  * in the block index (for blocks) or inline index (for inlines) and projecting
  * it to an SDM/1 node.
+ *
+ * Returns NodeAddress directly.
  */
 function projectMatchToSDNodeResult(
   editor: Editor,
@@ -257,12 +240,12 @@ function projectMatchToSDNodeResult(
       if (!found) return null;
       return {
         node: projectContentNode(found.node),
-        address: toSDAddress(address),
+        address,
       };
     }
     return {
       node: projectContentNode(candidate.node),
-      address: toSDAddress(address),
+      address,
     };
   }
 
@@ -276,13 +259,13 @@ function projectMatchToSDNodeResult(
     if (inlineCandidate.node) {
       return {
         node: projectInlineNode(inlineCandidate.node),
-        address: toSDAddress(address),
+        address,
       };
     }
     // Mark-based inlines (hyperlink, comment) have mark/attrs but no node.
     const markProjected = projectMarkBasedInline(editor, inlineCandidate);
     if (markProjected) {
-      return { node: markProjected, address: toSDAddress(address) };
+      return { node: markProjected, address };
     }
   }
 
@@ -290,7 +273,7 @@ function projectMatchToSDNodeResult(
   const resolvedText = resolveTextByBlockId(editor, address.anchor);
   return {
     node: { kind: 'run', run: { text: resolvedText } },
-    address: toSDAddress(address),
+    address,
   };
 }
 
@@ -312,11 +295,11 @@ export function sdFindAdapter(editor: Editor, input: SDFindInput): SDFindResult 
   const query = translateToInternalQuery(input);
   const index = getBlockIndex(editor);
 
-  // Resolve within scope after index is built (SDAddress doesn't carry nodeType,
-  // so we need the index to look up the actual PM node type for the nodeId).
+  // Resolve within scope after index is built — validates the caller-supplied
+  // nodeType matches the actual node found in the document.
   if (input.within) {
-    const { nodeId } = validateWithinAddress(input.within);
-    query.within = resolveWithinNodeType(index, nodeId);
+    const { nodeId, nodeType } = validateWithinAddress(input.within);
+    query.within = resolveWithinAddress(index, nodeId, nodeType);
   }
 
   const diagnostics: UnknownNodeDiagnostic[] = [];

@@ -23,7 +23,7 @@ import type {
   SDInsertInput,
   SDReplaceInput,
   ReplaceInput,
-  SDAddress,
+  BlockNodeAddress,
   StepWhere,
   SelectionMutationRequest,
   SelectionTarget,
@@ -36,6 +36,7 @@ import {
   isStructuralInsertInput,
   isStructuralReplaceInput,
   textReceiptToSDReceipt,
+  buildStructuralReceipt,
   INLINE_PROPERTY_BY_KEY,
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
@@ -157,24 +158,22 @@ function ensureTableSeparators(jsonNodes: Record<string, unknown>[]): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// SDAddress → TextAddress bridge (transitional — SDAddress resolution in Phase 6)
-// ---------------------------------------------------------------------------
+/**
+ * Extracts the block ID from a structural target, regardless of its kind.
+ */
+function targetBlockId(target: TextAddress | BlockNodeAddress): string {
+  return target.kind === 'block' ? target.nodeId : target.blockId;
+}
 
 /**
- * Narrows an `SDAddress | TextAddress` union to `TextAddress` for the current
- * adapter layer, which only handles TextAddress-based resolution.
+ * Coerces a structural target to a TextAddress for internal resolution APIs
+ * that require it (e.g. text mutation resolution).
  *
- * SDAddress inputs are bridged using `nodeId → blockId` and `anchor → range`.
+ * The zero range is a lookup sentinel — it does not affect behavior.
  */
-function narrowToTextAddress(target: SDAddress | TextAddress): TextAddress {
+function toTextAddress(target: TextAddress | BlockNodeAddress): TextAddress {
   if (target.kind === 'text') return target;
-  const sd = target as SDAddress;
-  return {
-    kind: 'text',
-    blockId: sd.nodeId ?? '',
-    range: sd.anchor ? { start: sd.anchor.start.offset, end: sd.anchor.end.offset } : { start: 0, end: 0 },
-  };
+  return { kind: 'text', blockId: target.nodeId, range: { start: 0, end: 0 } };
 }
 
 // ---------------------------------------------------------------------------
@@ -829,6 +828,11 @@ export function insertStructuredWrapper(
   input: InsertInput,
   options?: MutationOptions,
 ): SDMutationReceipt {
+  // Structural (SDFragment) inserts with a BlockNodeAddress target produce
+  // a block-level receipt directly, avoiding the synthetic TextAddress bridge.
+  if (isStructuralInsertInput(input) && input.target) {
+    return executeStructuralInsertDirect(editor, input, options);
+  }
   return textReceiptToSDReceipt(insertStructuredInner(editor, input, options));
 }
 
@@ -1082,19 +1086,16 @@ function executeStructuralInsertWrapper(
   const { content, target, placement, nestingPolicy } = input;
   const mode = options?.changeMode ?? 'direct';
 
-  // Narrow SDAddress | TextAddress → TextAddress for the current adapter layer.
-  const textTarget = target ? narrowToTextAddress(target) : undefined;
-
   // Block-level resolution for metadata — uses the structural engine's resolver
   // so ALL block types (tables, images, etc.) are addressable, not just text blocks.
   let resolved;
   try {
-    resolved = resolveStructuralInsertTarget(editor, textTarget);
+    resolved = resolveStructuralInsertTarget(editor, target);
   } catch (err) {
     if (err instanceof DocumentApiAdapterError) throw err;
     throw new DocumentApiAdapterError(
       'TARGET_NOT_FOUND',
-      `Cannot resolve insert target${textTarget ? ` for block "${textTarget.blockId}"` : ''}.`,
+      `Cannot resolve insert target${target ? ` for block "${target.nodeId}"` : ''}.`,
     );
   }
 
@@ -1116,7 +1117,6 @@ function executeStructuralInsertWrapper(
 
   const resolvedRange = { from: insertPos, to: insertPos };
   const resolution = buildTextMutationResolution({
-    requestedTarget: textTarget,
     target: effectiveTarget,
     range: resolvedRange,
     text: '',
@@ -1127,7 +1127,7 @@ function executeStructuralInsertWrapper(
     // but skip dispatch.
     if (options?.dryRun) {
       executeStructuralInsertEngine(editor, {
-        target: textTarget,
+        target,
         content,
         placement,
         nestingPolicy,
@@ -1141,7 +1141,7 @@ function executeStructuralInsertWrapper(
       editor,
       () => {
         const result = executeStructuralInsertEngine(editor, {
-          target: textTarget,
+          target,
           content,
           placement,
           nestingPolicy,
@@ -1173,6 +1173,87 @@ function executeStructuralInsertWrapper(
   }
 }
 
+/**
+ * Builds an SDMutationReceipt directly for structural inserts that target a
+ * BlockNodeAddress, preserving the original block address in the resolution
+ * instead of normalizing it to a synthetic TextAddress.
+ */
+function executeStructuralInsertDirect(
+  editor: Editor,
+  input: SDInsertInput,
+  options?: MutationOptions,
+): SDMutationReceipt {
+  const { content, target, placement, nestingPolicy } = input;
+  const mode = options?.changeMode ?? 'direct';
+
+  // Resolve insert position directly from the BlockNodeAddress — no TextAddress conversion.
+  let resolved;
+  try {
+    resolved = resolveStructuralInsertTarget(editor, target);
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Cannot resolve insert target for block "${target!.nodeId}".`,
+    );
+  }
+
+  let insertPos: number;
+  if (resolved.targetNode && resolved.targetNodePos !== undefined) {
+    insertPos = resolvePlacement(editor.state.doc, resolved.targetNodePos, resolved.targetNode, placement);
+  } else {
+    insertPos = resolved.insertPos;
+  }
+
+  const range = { from: insertPos, to: insertPos };
+  const receiptParams = { target: target!, range };
+
+  try {
+    if (options?.dryRun) {
+      executeStructuralInsertEngine(editor, {
+        target,
+        content,
+        placement,
+        nestingPolicy,
+        changeMode: mode,
+        dryRun: true,
+      });
+      return buildStructuralReceipt(true, receiptParams);
+    }
+
+    const receipt = executeDomainCommand(
+      editor,
+      () => {
+        const result = executeStructuralInsertEngine(editor, {
+          target,
+          content,
+          placement,
+          nestingPolicy,
+          changeMode: mode,
+        });
+        return result.success;
+      },
+      { expectedRevision: options?.expectedRevision, changeMode: mode },
+    );
+
+    if (receipt.steps[0]?.effect !== 'changed') {
+      return buildStructuralReceipt(false, receiptParams, {
+        code: 'INVALID_TARGET',
+        message: 'Structural insert failed.',
+      });
+    }
+
+    return buildStructuralReceipt(true, receiptParams);
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return buildStructuralReceipt(false, receiptParams, {
+      code: 'INVALID_TARGET',
+      message: `Structural insert failed: ${message}`,
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Structural SDFragment replace wrapper
 // ---------------------------------------------------------------------------
@@ -1194,17 +1275,32 @@ export function replaceStructuredWrapper(
       'replaceStructured requires structural content input with a "content" field.',
     );
   }
-  return textReceiptToSDReceipt(executeStructuralReplaceWrapper(editor, input, options));
+
+  // When the target is a BlockNodeAddress, re-wrap the receipt to preserve
+  // the block-level address instead of the synthetic TextAddress.
+  const blockTarget =
+    input.target && 'kind' in input.target && input.target.kind === 'block'
+      ? (input.target as BlockNodeAddress)
+      : undefined;
+
+  const textReceipt = executeStructuralReplaceWrapper(editor, input, options);
+  if (!blockTarget) return textReceiptToSDReceipt(textReceipt);
+
+  const sdReceipt = textReceiptToSDReceipt(textReceipt);
+  if (sdReceipt.resolution) {
+    sdReceipt.resolution.target = blockTarget;
+  }
+  return sdReceipt;
 }
 
 /**
- * Resolved structural replace locator — contains the primary TextAddress
+ * Resolved structural replace locator — contains the primary target address
  * (for the engine's target parameter) and metadata about the actual
  * replacement scope for accurate receipt resolution.
  */
 interface ResolvedStructuralLocator {
-  /** Primary block TextAddress — always points to the first targeted block. */
-  textTarget: TextAddress;
+  /** Primary target — BlockNodeAddress for typed inputs, TextAddress for refs/selections. */
+  textTarget: TextAddress | BlockNodeAddress;
   /**
    * Pre-resolved PM range spanning the full replacement area.
    * Present for SelectionTarget and multi-segment text ref locators.
@@ -1229,7 +1325,7 @@ interface ResolvedStructuralLocator {
  * Resolves the target/ref locator from an SDReplaceInput into a
  * ResolvedStructuralLocator for the structural replace engine.
  *
- * Single-block locators (SDAddress, TextAddress, raw nodeId ref) produce
+ * Single-block locators (BlockNodeAddress, raw nodeId ref) produce
  * only a `textTarget`. Multi-block locators (cross-block SelectionTarget,
  * multi-segment text refs) also produce a `resolvedRange` spanning the
  * full contiguous block range so the engine replaces all covered blocks.
@@ -1262,8 +1358,8 @@ function resolveStructuralLocator(editor: Editor, input: SDReplaceInput): Resolv
         effectiveSelectionTarget: buildEffectiveSelectionTarget(expanded),
       };
     }
-    // SDAddress | TextAddress — existing bridge (single block).
-    return { textTarget: narrowToTextAddress(target) };
+    // BlockNodeAddress — pass through directly for typed block lookup.
+    return { textTarget: target };
   }
 
   if (ref !== undefined) {
@@ -1523,7 +1619,7 @@ function executeStructuralReplaceWrapper(
       if (err instanceof DocumentApiAdapterError) throw err;
       throw new DocumentApiAdapterError(
         'TARGET_NOT_FOUND',
-        `Cannot resolve replace target for block "${textTarget.blockId}".`,
+        `Cannot resolve replace target for block "${targetBlockId(textTarget)}".`,
       );
     }
     effectiveRange = { from: resolvedBlock.from, to: resolvedBlock.to };
@@ -1536,14 +1632,13 @@ function executeStructuralReplaceWrapper(
   // This covers both SelectionTarget inputs and multi-block ref inputs — both
   // produce an effectiveSelectionTarget describing the actual block-boundary scope.
   // For single-block inputs, fall back to the direct TextAddress resolution.
+  const textAddr = toTextAddress(textTarget);
   let resolution: TextMutationResolution;
   if (effectiveSelectionTarget) {
     resolution = selectionTargetToResolution(effectiveSelectionTarget, effectiveRange, coveredText);
   } else {
     resolution = buildTextMutationResolution({
-      // Omit requestedTarget for ref-based calls — the textTarget is synthetic.
-      requestedTarget: isRefBased ? undefined : textTarget,
-      target: textTarget,
+      target: textAddr,
       range: effectiveRange,
       text: coveredText,
     });

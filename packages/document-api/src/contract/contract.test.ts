@@ -75,22 +75,80 @@ describe('document-api contract catalog', () => {
     }
   });
 
-  it('uses simplified target-based insert input schema without locator constraints', () => {
+  it('declares insert input as a legacy-text or structural-content union', () => {
     const schemas = buildInternalContractSchemas();
     const insertInputSchema = schemas.operations.insert.input as {
-      type?: string;
-      properties?: Record<string, unknown>;
-      required?: string[];
-      allOf?: unknown;
-      additionalProperties?: boolean;
+      oneOf?: Array<{
+        type?: string;
+        properties?: Record<string, unknown>;
+        required?: string[];
+        additionalProperties?: boolean;
+      }>;
     };
 
-    // Simplified schema: target (optional) + value (required) + type (optional enum), no allOf constraints
-    expect(insertInputSchema.type).toBe('object');
-    expect(Object.keys(insertInputSchema.properties!).sort()).toEqual(['target', 'type', 'value']);
-    expect(insertInputSchema.required).toEqual(['value']);
-    expect(insertInputSchema.allOf).toBeUndefined();
-    expect(insertInputSchema.additionalProperties).toBe(false);
+    expect(Array.isArray(insertInputSchema.oneOf)).toBe(true);
+    expect(insertInputSchema.oneOf).toHaveLength(2);
+
+    const [legacyVariant, structuralVariant] = insertInputSchema.oneOf!;
+
+    expect(legacyVariant.type).toBe('object');
+    expect(Object.keys(legacyVariant.properties!).sort()).toEqual(['target', 'type', 'value']);
+    expect(legacyVariant.required).toEqual(['value']);
+    expect(legacyVariant.additionalProperties).toBe(false);
+    expect((legacyVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/TextAddress');
+
+    expect(structuralVariant.type).toBe('object');
+    expect(Object.keys(structuralVariant.properties!).sort()).toEqual([
+      'content',
+      'nestingPolicy',
+      'placement',
+      'target',
+    ]);
+    expect(structuralVariant.required).toEqual(['content']);
+    expect(structuralVariant.additionalProperties).toBe(false);
+    expect((structuralVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/BlockNodeAddress');
+    expect((structuralVariant.properties!.placement as { enum?: string[] }).enum).toEqual([
+      'before',
+      'after',
+      'insideStart',
+      'insideEnd',
+    ]);
+    expect(
+      (
+        structuralVariant.properties!.nestingPolicy as {
+          properties?: { tables?: { enum?: string[] } };
+        }
+      ).properties?.tables?.enum,
+    ).toEqual(['forbid', 'allow']);
+  });
+
+  it('accepts both object and array SDFragment in structural insert content schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertInput = schemas.operations.insert.input as { oneOf?: Array<{ properties?: Record<string, unknown> }> };
+    const structuralVariant = insertInput.oneOf![1];
+    const contentSchema = structuralVariant.properties!.content as { oneOf?: Array<{ type?: string }> };
+
+    expect(Array.isArray(contentSchema.oneOf)).toBe(true);
+    expect(contentSchema.oneOf).toHaveLength(2);
+    expect(contentSchema.oneOf![0].type).toBe('object');
+    expect(contentSchema.oneOf![1].type).toBe('array');
+  });
+
+  it('accepts both object and array SDFragment in structural replace content schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const replaceInput = schemas.operations.replace.input as {
+      oneOf?: Array<{ oneOf?: Array<{ properties?: Record<string, unknown> }> }>;
+    };
+    // The structural branch is the second oneOf element
+    const structuralBranch = replaceInput.oneOf![1] as { oneOf?: Array<{ properties?: Record<string, unknown> }> };
+
+    for (const variant of structuralBranch.oneOf!) {
+      const contentSchema = variant.properties!.content as { oneOf?: Array<{ type?: string }> };
+      expect(Array.isArray(contentSchema.oneOf)).toBe(true);
+      expect(contentSchema.oneOf).toHaveLength(2);
+      expect(contentSchema.oneOf![0].type).toBe('object');
+      expect(contentSchema.oneOf![1].type).toBe('array');
+    }
   });
 
   it('declares UNSUPPORTED_ENVIRONMENT for insert metadata and generated failure schema', () => {

@@ -34,12 +34,7 @@ function resolveInsertedBlockId(receipt: unknown): string | null {
   const value = receipt as {
     target?: { blockId?: unknown };
     resolution?: {
-      target?: {
-        nodeId?: unknown;
-        anchor?: {
-          start?: { blockId?: unknown };
-        };
-      };
+      target?: { blockId?: unknown };
     };
   };
 
@@ -47,15 +42,8 @@ function resolveInsertedBlockId(receipt: unknown): string | null {
     return value.target.blockId;
   }
 
-  if (typeof value.resolution?.target?.nodeId === 'string' && value.resolution.target.nodeId.length > 0) {
-    return value.resolution.target.nodeId;
-  }
-
-  if (
-    typeof value.resolution?.target?.anchor?.start?.blockId === 'string' &&
-    value.resolution.target.anchor.start.blockId.length > 0
-  ) {
-    return value.resolution.target.anchor.start.blockId;
+  if (typeof value.resolution?.target?.blockId === 'string' && value.resolution.target.blockId.length > 0) {
+    return value.resolution.target.blockId;
   }
 
   return null;

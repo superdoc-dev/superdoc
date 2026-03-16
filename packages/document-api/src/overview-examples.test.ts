@@ -41,9 +41,35 @@ function makeFindAdapter() {
       items: [
         {
           id: 'p1',
-          handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'node' as const },
+          handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'text' as const },
+          matchKind: 'text' as const,
           address: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
-          context: { textRanges: [SELECTION_TARGET] },
+          target: SELECTION_TARGET,
+          snippet: 'foo',
+          highlightRange: { start: 0, end: 3 },
+          blocks: [
+            {
+              blockId: 'p1',
+              nodeType: 'paragraph',
+              range: { start: 0, end: 3 },
+              text: 'foo',
+              ref: 'ref:block-1',
+              runs: [
+                {
+                  range: { start: 0, end: 3 },
+                  text: 'foo',
+                  styles: {
+                    bold: false,
+                    italic: false,
+                    underline: false,
+                    strike: false,
+                  },
+                  ref: 'ref:run-1',
+                },
+              ],
+            },
+          ],
+          context: { target: SELECTION_TARGET, textRanges: [SELECTION_TARGET] },
         },
       ],
       page: { limit: 1, offset: 0, returned: 1 },
@@ -77,10 +103,9 @@ function makeSDMutationReceipt() {
     success: true as const,
     resolution: {
       target: {
-        kind: 'content' as const,
-        stability: 'stable' as const,
-        nodeId: 'p1',
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 3 } },
+        kind: 'text' as const,
+        blockId: 'p1',
+        range: { start: 0, end: 3 },
       },
     },
   };
@@ -356,6 +381,7 @@ function makeApi() {
               nodeType: 'paragraph' as const,
               nodeId: 'p1',
             },
+            target: SELECTION_TARGET,
             snippet: 'foo',
             highlightRange: { start: 0, end: 3 },
             blocks: [
@@ -547,12 +573,77 @@ describe('overview.mdx examples', () => {
 
       const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed
-      // preview.resolution shows the resolved target (SDAddress)
+      // preview.resolution shows the resolved target (TextAddress)
 
       expect(preview).toHaveProperty('success');
       expect(preview).toHaveProperty('resolution');
       expect(preview.resolution).toHaveProperty('target');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// common-workflows.mdx — "Find text and insert at position"
+// ---------------------------------------------------------------------------
+
+describe('common-workflows.mdx: Find text and insert at position', () => {
+  it('query.match → create.paragraph with at: after', () => {
+    const doc = makeApi();
+
+    // Step 1: Find the heading by text content
+    const match = doc.query.match({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+    });
+
+    const address = match.items?.[0]?.address;
+    if (!address) return;
+
+    // Step 2: Insert a paragraph after the heading
+    const result = doc.create.paragraph({
+      at: { kind: 'after', target: address },
+      text: 'New section content goes here.',
+    });
+
+    expect(address.kind).toBe('block');
+    expect(result.success).toBe(true);
+  });
+
+  it('query.match → create.paragraph with tracked changes', () => {
+    const doc = makeApi();
+
+    const match = doc.query.match({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+    });
+
+    const address = match.items?.[0]?.address;
+    if (!address) return;
+
+    const result = doc.create.paragraph(
+      { at: { kind: 'after', target: address }, text: 'Suggested addition.' },
+      { changeMode: 'tracked' },
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it('query.match accepts flat TextSelector shorthand', () => {
+    const doc = makeApi();
+
+    // Shorthand: pass TextSelector directly instead of { select: ... }
+    const match = doc.query.match({ type: 'text', pattern: 'Materials and methods' });
+
+    expect(match.items).toBeDefined();
+  });
+
+  it('query.match accepts flat NodeSelector shorthand', () => {
+    const doc = makeApi();
+
+    // Shorthand: pass NodeSelector directly instead of { select: ... }
+    const match = doc.query.match({ type: 'node', nodeType: 'paragraph' });
+
+    expect(match.items).toBeDefined();
   });
 });
 
@@ -566,8 +657,12 @@ describe('src/README.md workflow examples', () => {
     it('find then replace', () => {
       const doc = makeApi();
 
-      const result = doc.find({ type: 'text', pattern: 'foo' });
-      const target = result.items[0]?.context?.textRanges?.[0];
+      const match = doc.query.match({
+        select: { type: 'text', pattern: 'foo' },
+        require: 'first',
+      });
+
+      const target = match.items?.[0]?.target;
       if (target) {
         doc.replace({ target, text: 'bar' });
       }
@@ -582,7 +677,8 @@ describe('src/README.md workflow examples', () => {
       const doc = makeApi();
 
       const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
-      // receipt.resolution.target contains the resolved insertion point (SDAddress)
+      // receipt.resolution.target contains the resolved insertion point (TextAddress)
+      // receipt.success tells you whether the tracked insert applied
 
       expect(receipt.resolution).toBeDefined();
       expect(receipt.resolution!.target).toBeDefined();

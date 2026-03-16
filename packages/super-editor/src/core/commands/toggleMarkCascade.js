@@ -27,7 +27,7 @@ export const toggleMarkCascade =
       extendEmptyMarkRange = false,
     } = options;
 
-    const selectionMarks = getMarksFromSelection(state) || [];
+    const selectionMarks = getMarksFromSelection(state, editor) || [];
     const inlineMarks = selectionMarks.filter((m) => m.type?.name === markName);
     const hasNegation = inlineMarks.some((m) => isNegation(m.attrs || {}));
     const hasInline = inlineMarks.some((m) => !isNegation(m.attrs || {}));

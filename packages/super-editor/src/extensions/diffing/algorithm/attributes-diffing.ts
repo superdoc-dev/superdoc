@@ -1,5 +1,6 @@
 const IGNORED_ATTRIBUTE_KEYS = new Set(['sdBlockId']);
 const TRACK_CHANGE_MARK_NAMES = new Set(['trackInsert', 'trackDelete', 'trackFormat']);
+const TRACK_CHANGE_IGNORED_ATTRIBUTE_KEYS = new Set(['id', 'sourceId']);
 
 /**
  * Represents a single attribute change capturing the previous and next values.
@@ -85,7 +86,9 @@ export function getMarksDiff(
     const ignoredMarkKeys = new Set<string>();
     if (TRACK_CHANGE_MARK_NAMES.has(markName)) {
       // Track change ids are generated per import and are not semantic content changes.
-      ignoredMarkKeys.add('id');
+      for (const key of TRACK_CHANGE_IGNORED_ATTRIBUTE_KEYS) {
+        ignoredMarkKeys.add(key);
+      }
     }
 
     const normalized: Record<string, unknown> = {};

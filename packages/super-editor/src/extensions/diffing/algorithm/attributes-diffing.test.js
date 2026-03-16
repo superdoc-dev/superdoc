@@ -196,6 +196,13 @@ describe('getMarksDiff', () => {
     expect(getMarksDiff(marksA, marksB)).toBeNull();
   });
 
+  it('ignores track change mark sourceId-only differences', () => {
+    const marksA = [{ type: 'trackInsert', attrs: { id: 'shared-id', sourceId: '1', author: 'Alice' } }];
+    const marksB = [{ type: 'trackInsert', attrs: { id: 'shared-id', sourceId: '2', author: 'Alice' } }];
+
+    expect(getMarksDiff(marksA, marksB)).toBeNull();
+  });
+
   it('does not ignore id changes for non-track-change marks', () => {
     const marksA = [{ type: 'custom', attrs: { id: 'before' } }];
     const marksB = [{ type: 'custom', attrs: { id: 'after' } }];

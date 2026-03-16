@@ -509,16 +509,16 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@4.3.6)
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-    devDependencies:
       '@superdoc-dev/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk/langs/node
       '@superdoc/document-api':
         specifier: workspace:*
         version: link:../../packages/document-api
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
       '@superdoc/super-editor':
         specifier: workspace:*
         version: link:../../packages/super-editor

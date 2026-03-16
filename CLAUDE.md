@@ -112,6 +112,24 @@ Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., 
 - `pnpm dev` - Start dev server (from examples/)
 - `pnpm run generate:all` - Generate all derived artifacts (schemas, SDK clients, tool catalogs, reference docs)
 
+## AI Eval Suite
+
+The `evals/` directory contains a Promptfoo-based evaluation suite for validating AI tool call quality.
+
+| Command | What it does | Cost |
+|---------|-------------|------|
+| `pnpm --filter @superdoc-testing/evals run eval` | Run deterministic evals (reading + argument tests) | ~$0.30 |
+| `pnpm --filter @superdoc-testing/evals run eval:reading` | Run reading tool tests only | ~$0.15 |
+| `pnpm --filter @superdoc-testing/evals run eval:gdpval` | Run GDPval benchmark (Model+SuperDoc vs Model-Only) | ~$1-2 |
+| `pnpm --filter @superdoc-testing/evals run eval:view` | Open Promptfoo web UI with results | Free |
+| `pnpm --filter @superdoc-testing/evals run baseline:save <label>` | Save versioned results snapshot | Free |
+
+Tool definitions are extracted from `packages/sdk/tools/` via `evals/tools/extract.mjs`. Run `pnpm run generate:all` first if SDK artifacts are missing.
+
+Test files are YAML in `evals/tests/`. Each test has a `vars.task` prompt and JavaScript assertions that check tool call structure (Level 1: tool selection + argument accuracy, not execution).
+
+The system prompt at `evals/prompts/agent.txt` is a copy of the proven prompt from `examples/eval-demo/lib/agent.ts`. Update both when changing the prompt.
+
 ## Generated Artifacts
 
 These directories are produced by `pnpm run generate:all`:

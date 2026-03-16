@@ -241,6 +241,41 @@ describe('replaceStructuredWrapper', () => {
     expect((result.resolution!.target as { nodeId: string }).nodeId).toBe(blockId);
   });
 
+  it('resolves a block-targeted replace after the paragraph subtype changes', () => {
+    // Seed a plain paragraph and capture its address as nodeType: 'paragraph'.
+    const seed = executeStructuralInsert(editor, {
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'will restyle' }] },
+    });
+    const blockId = seed.insertedBlockIds[0]!;
+    const staleAddress = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: blockId };
+
+    // Restyle the paragraph to a heading by setting styleId — this changes
+    // mapBlockNodeType() from 'paragraph' to 'heading', making the saved
+    // nodeType stale.
+    const { doc, tr } = editor.state;
+    doc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && node.attrs.sdBlockId === blockId) {
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          paragraphProperties: { ...node.attrs.paragraphProperties, styleId: 'Heading1' },
+        });
+        return false;
+      }
+    });
+    editor.dispatch(tr);
+
+    // The stale address (nodeType: 'paragraph') should still resolve because
+    // the structural target resolver falls back to nodeId-only lookup.
+    const result = replaceStructuredWrapper(editor, {
+      target: staleAddress,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'after restyle' }] },
+    });
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('after restyle');
+    expect(editor.state.doc.textContent).not.toContain('will restyle');
+  });
+
   it('replaces a table block via the wrapper', () => {
     const seed = executeStructuralInsert(editor, {
       content: {

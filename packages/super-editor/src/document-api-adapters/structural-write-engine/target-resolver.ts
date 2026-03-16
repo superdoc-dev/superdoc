@@ -17,7 +17,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { resolveDefaultInsertTarget } from '../helpers/adapter-utils.js';
 import { getBlockIndex } from '../helpers/index-cache.js';
-import { findBlockByIdStrict, findBlockByNodeIdOnly } from '../helpers/node-address-resolver.js';
+import { findBlockById, findBlockByNodeIdOnly } from '../helpers/node-address-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
 /** Target selector for structural operations — either a typed block address or a text address. */
@@ -50,16 +50,23 @@ export interface ResolvedReplaceTarget {
 /**
  * Resolves a block candidate from a structural target.
  *
- * When the target is a BlockNodeAddress, uses the composite `nodeType:nodeId`
- * key via {@link findBlockByIdStrict} — this disambiguates duplicate nodeIds
- * that differ by type. TextAddress targets fall back to
- * {@link findBlockByNodeIdOnly} for alias-aware resolution.
+ * For BlockNodeAddress targets, tries the composite `nodeType:nodeId` key first
+ * to disambiguate duplicate IDs, then falls back to nodeId-only lookup. The
+ * fallback is necessary because paragraph-backed blocks can change subtype
+ * (paragraph/heading/listItem) via mutable attrs — a saved address from
+ * find() or getNodeById() should still resolve after a restyle.
+ *
+ * TextAddress targets always use nodeId-only (alias-aware) resolution.
  */
 function findBlockByTarget(index: ReturnType<typeof getBlockIndex>, target: StructuralTarget, operationName: string) {
   const nodeId = target.kind === 'block' ? target.nodeId : target.blockId;
   try {
     if (target.kind === 'block') {
-      return findBlockByIdStrict(index, target);
+      // Typed lookup first — handles duplicate IDs across different block types.
+      const typed = findBlockById(index, target);
+      if (typed) return typed;
+      // Fallback to nodeId-only — handles stale subtypes after restyle.
+      return findBlockByNodeIdOnly(index, nodeId);
     }
     return findBlockByNodeIdOnly(index, nodeId);
   } catch {

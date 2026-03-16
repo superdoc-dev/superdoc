@@ -131,6 +131,9 @@ export function getNodeByIdAdapter(editor: Editor, input: GetNodeByIdInput): SDN
   const { candidate, resolvedType } = resolveBlockById(editor, nodeId, nodeType);
   return {
     node: projectContentNode(candidate.node),
-    address: { kind: 'block', nodeType: resolvedType, nodeId } as NodeAddress,
+    // Use candidate.nodeId (the canonical ID) rather than the caller's input,
+    // which may be an alias (e.g. sdBlockId). This ensures the emitted address
+    // is resolvable by getNode(), which looks up by primary nodeId.
+    address: { kind: 'block', nodeType: resolvedType, nodeId: candidate.nodeId } as NodeAddress,
   };
 }

@@ -30,6 +30,8 @@ describe('getMarksFromSelection', () => {
   });
 
   describe('inherited runProperties from paragraph', () => {
+    const mockEditor = {};
+
     // Custom schema with a paragraph that supports paragraphProperties attrs
     const customSchema = new Schema({
       nodes: {
@@ -67,7 +69,7 @@ describe('getMarksFromSelection', () => {
       const state = EditorState.create({ schema: customSchema, doc: testDoc });
       const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
 
-      const result = getMarksFromSelection(cursorState);
+      const result = getMarksFromSelection(cursorState, mockEditor);
 
       expect(result.some((mark) => mark.type.name === 'bold')).toBe(true);
     });
@@ -81,7 +83,7 @@ describe('getMarksFromSelection', () => {
       const state = EditorState.create({ schema: customSchema, doc: testDoc });
       const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
 
-      const result = getMarksFromSelection(cursorState);
+      const result = getMarksFromSelection(cursorState, mockEditor);
 
       expect(result.some((mark) => mark.type.name === 'bold')).toBe(true);
       expect(result.some((mark) => mark.type.name === 'italic')).toBe(true);
@@ -96,7 +98,7 @@ describe('getMarksFromSelection', () => {
       tr.setStoredMarks([customSchema.marks.italic.create()]);
       const state = baseState.apply(tr);
 
-      const result = getMarksFromSelection(state);
+      const result = getMarksFromSelection(state, mockEditor);
 
       expect(result.some((mark) => mark.type.name === 'italic')).toBe(true);
       // storedMarks take precedence; inherited bold should not appear
@@ -112,7 +114,7 @@ describe('getMarksFromSelection', () => {
       const state = EditorState.create({ schema: customSchema, doc: testDoc });
       const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 3)));
 
-      const result = getMarksFromSelection(cursorState);
+      const result = getMarksFromSelection(cursorState, mockEditor);
 
       // The paragraph has text content, so the inherited runProperties fallback
       // does not activate — only empty paragraphs use it.
@@ -124,7 +126,7 @@ describe('getMarksFromSelection', () => {
       const state = EditorState.create({ schema: customSchema, doc: testDoc });
       const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
 
-      const result = getMarksFromSelection(cursorState);
+      const result = getMarksFromSelection(cursorState, mockEditor);
 
       expect(result).toEqual([]);
     });
@@ -134,7 +136,7 @@ describe('getMarksFromSelection', () => {
       const state = EditorState.create({ schema: customSchema, doc: testDoc });
       const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
 
-      const result = getMarksFromSelection(cursorState);
+      const result = getMarksFromSelection(cursorState, mockEditor);
 
       expect(result).toEqual([]);
     });
@@ -148,7 +150,7 @@ describe('getMarksFromSelection', () => {
       const state = EditorState.create({ schema: customSchema, doc: testDoc });
       const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
 
-      const result = getMarksFromSelection(cursorState);
+      const result = getMarksFromSelection(cursorState, mockEditor);
 
       // bold exists in the schema, strike does not
       expect(result.some((mark) => mark.type.name === 'bold')).toBe(true);

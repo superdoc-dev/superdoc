@@ -721,8 +721,20 @@ const setSelectedImage = (element, blockId, pmStart) => {
 /**
  * Combined handler to update both table and image resize overlays
  */
+const getDocumentMode = () => {
+  if (activeEditor.value?.options?.documentMode) return activeEditor.value.options.documentMode;
+  if (props.options?.documentMode) return props.options.documentMode;
+  return 'editing';
+};
+
+const isViewingMode = () => getDocumentMode() === 'viewing';
+
 const handleOverlayUpdates = (event) => {
-  updateTableResizeOverlay(event);
+  if (isViewingMode()) {
+    hideTableResizeOverlay();
+  } else {
+    updateTableResizeOverlay(event);
+  }
   updateImageResizeOverlay(event);
 };
 

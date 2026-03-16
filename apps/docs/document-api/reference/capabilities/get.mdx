@@ -1682,6 +1682,11 @@ _No fields._
 | `operations.query.match.dryRun` | boolean | yes |  |
 | `operations.query.match.reasons` | enum[] | no |  |
 | `operations.query.match.tracked` | boolean | yes |  |
+| `operations.ranges.resolve` | object | yes |  |
+| `operations.ranges.resolve.available` | boolean | yes |  |
+| `operations.ranges.resolve.dryRun` | boolean | yes |  |
+| `operations.ranges.resolve.reasons` | enum[] | no |  |
+| `operations.ranges.resolve.tracked` | boolean | yes |  |
 | `operations.replace` | object | yes |  |
 | `operations.replace.available` | boolean | yes |  |
 | `operations.replace.dryRun` | boolean | yes |  |
@@ -4622,6 +4627,14 @@ _No fields._
       "tracked": true
     },
     "query.match": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "ranges.resolve": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -16788,6 +16801,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "ranges.resolve": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "replace": {
           "additionalProperties": false,
           "properties": {
@@ -19622,6 +19670,7 @@ _No fields._
         "trackChanges.get",
         "trackChanges.decide",
         "query.match",
+        "ranges.resolve",
         "mutations.preview",
         "mutations.apply",
         "capabilities.get",

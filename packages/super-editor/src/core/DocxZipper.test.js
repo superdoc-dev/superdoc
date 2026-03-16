@@ -658,6 +658,79 @@ describe('DocxZipper - .tmp image file detection', () => {
   });
 });
 
+describe('DocxZipper - exportFromOriginalFile font preservation', () => {
+  it('includes caller-supplied fonts in the output zip', async () => {
+    const zipper = new DocxZipper();
+    const originalZip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    originalZip.file('[Content_Types].xml', contentTypes);
+    originalZip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+    const originalDocxFile = await originalZip.generateAsync({ type: 'nodebuffer' });
+
+    const fontData = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0xde, 0xad, 0xbe, 0xef]);
+
+    const result = await zipper.updateZip({
+      docx: [],
+      updatedDocs: {
+        'word/document.xml': '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+      },
+      originalDocxFile,
+      media: {},
+      fonts: { 'word/fonts/font1.odttf': fontData },
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const fontBytes = await readBack.file('word/fonts/font1.odttf').async('uint8array');
+    expect(fontBytes).toEqual(fontData);
+
+    // Verify [Content_Types].xml includes the odttf content type
+    const outputContentTypes = await readBack.file('[Content_Types].xml').async('string');
+    expect(outputContentTypes).toContain('Extension="odttf"');
+    expect(outputContentTypes).toContain('application/vnd.openxmlformats-officedocument.obfuscatedFont');
+  });
+
+  it('does not fail when fonts is undefined', async () => {
+    const zipper = new DocxZipper();
+    const originalZip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    originalZip.file('[Content_Types].xml', contentTypes);
+    originalZip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+    const originalDocxFile = await originalZip.generateAsync({ type: 'nodebuffer' });
+
+    const result = await zipper.updateZip({
+      docx: [],
+      updatedDocs: {
+        'word/document.xml': '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+      },
+      originalDocxFile,
+      media: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    expect(readBack.file('word/document.xml')).toBeTruthy();
+  });
+});
+
 describe('DocxZipper - comment file deletion', () => {
   const contentTypesWithComments = `<?xml version="1.0" encoding="UTF-8"?>
     <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">

@@ -143,7 +143,7 @@ export function captureRunsInRange(editor: Editor, blockPos: number, from: numbe
 /**
  * Check whether all runs share the exact same mark set.
  */
-function checkUniformity(runs: CapturedRun[]): boolean {
+export function checkUniformity(runs: CapturedRun[]): boolean {
   if (runs.length <= 1) return true;
 
   const reference = runs[0].marks;

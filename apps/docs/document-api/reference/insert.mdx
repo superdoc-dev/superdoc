@@ -56,7 +56,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Output fields
 
-### Variant 1 (success=true)
+### Variant 1 (resolution.selectionTarget.kind="selection")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -77,6 +77,10 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.requestedTarget.nodeId` | string | no |  |
 | `resolution.requestedTarget.path` | string \\| integer[] | no |  |
 | `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | object | no |  |
 | `resolution.target.anchor` | object | no |  |
 | `resolution.target.anchor.end` | object | no |  |
@@ -92,7 +96,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.target.stability` | enum | no | `"stable"`, `"ephemeral"` |
 | `success` | `true` | yes | Constant: `true` |
 
-### Variant 2 (success=false)
+### Variant 2 (resolution.selectionTarget.kind="selection")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -117,6 +121,10 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.requestedTarget.nodeId` | string | no |  |
 | `resolution.requestedTarget.path` | string \\| integer[] | no |  |
 | `resolution.requestedTarget.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | object | no |  |
 | `resolution.target.anchor` | object | no |  |
 | `resolution.target.anchor.end` | object | no |  |
@@ -155,6 +163,19 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "kind": "content",
       "nodeId": "node-def456",
       "stability": "stable"
+    },
+    "selectionTarget": {
+      "end": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      },
+      "kind": "selection",
+      "start": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      }
     },
     "target": {
       "anchor": {
@@ -341,6 +362,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
                 "stability"
               ],
               "type": "object"
+            },
+            "selectionTarget": {
+              "$ref": "#/$defs/SelectionTarget"
             },
             "target": {
               "additionalProperties": false,
@@ -573,6 +597,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
               ],
               "type": "object"
             },
+            "selectionTarget": {
+              "$ref": "#/$defs/SelectionTarget"
+            },
             "target": {
               "additionalProperties": false,
               "properties": {
@@ -779,6 +806,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
             "stability"
           ],
           "type": "object"
+        },
+        "selectionTarget": {
+          "$ref": "#/$defs/SelectionTarget"
         },
         "target": {
           "additionalProperties": false,
@@ -1015,6 +1045,9 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
             "stability"
           ],
           "type": "object"
+        },
+        "selectionTarget": {
+          "$ref": "#/$defs/SelectionTarget"
         },
         "target": {
           "additionalProperties": false,

@@ -135,7 +135,20 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
       },
       "id": "id-001",
       "matchKind": "text",
-      "snippet": "...the quick brown fox..."
+      "snippet": "...the quick brown fox...",
+      "target": {
+        "end": {
+          "blockId": "block-abc123",
+          "kind": "text",
+          "offset": 0
+        },
+        "kind": "selection",
+        "start": {
+          "blockId": "block-abc123",
+          "kind": "text",
+          "offset": 0
+        }
+      }
     }
   ],
   "meta": {
@@ -316,6 +329,9 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
               },
               "snippet": {
                 "type": "string"
+              },
+              "target": {
+                "$ref": "#/$defs/SelectionTarget"
               }
             },
             "required": [
@@ -323,6 +339,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
               "handle",
               "matchKind",
               "address",
+              "target",
               "snippet",
               "highlightRange",
               "blocks"

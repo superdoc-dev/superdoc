@@ -9,6 +9,7 @@ packages:
   - packages/**/*
   - shared/*
   - examples/*
+  - examples/*/*
 
 catalog:
   '@commitlint/cli': ^19.8.1

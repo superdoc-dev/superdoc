@@ -1,5 +1,6 @@
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import type { Editor } from '../../core/Editor.js';
+import { getListOrdinalFromPath, getListRendering } from '@superdoc/common/list-rendering';
 import type {
   BlockNodeAddress,
   ListItemAddress,
@@ -28,12 +29,6 @@ export type ListItemProjection = {
   kind?: ListKind;
   text?: string;
 };
-
-function toPath(value: unknown): number[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const parsed = value.map((entry) => toFiniteNumber(entry)).filter((entry): entry is number => entry != null);
-  return parsed.length > 0 ? parsed : undefined;
-}
 
 function getNumberingProperties(node: BlockCandidate['node']): { numId?: number; level?: number } {
   const attrs = (node.attrs ?? {}) as {
@@ -85,16 +80,14 @@ function getListText(candidate: BlockCandidate): string | undefined {
 
 export function projectListItemCandidate(editor: Editor, candidate: BlockCandidate): ListItemProjection {
   const attrs = (candidate.node.attrs ?? {}) as {
-    listRendering?: {
-      markerText?: unknown;
-      path?: unknown;
-    } | null;
+    listRendering?: unknown;
   };
 
   const { numId, level } = getNumberingProperties(candidate.node);
-  const path = toPath(attrs.listRendering?.path);
-  const ordinal = path?.length ? path[path.length - 1] : undefined;
-  const marker = typeof attrs.listRendering?.markerText === 'string' ? attrs.listRendering.markerText : undefined;
+  const listRendering = getListRendering(attrs.listRendering);
+  const path = listRendering?.path;
+  const ordinal = getListOrdinalFromPath(path);
+  const marker = listRendering?.markerText;
 
   return {
     candidate,

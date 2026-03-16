@@ -27,6 +27,8 @@ const showSelection = params.get('showSelection') === '1';
 const toolbar = params.get('toolbar');
 const comments = params.get('comments');
 const trackChanges = params.get('trackChanges') === '1';
+const allowSelectionInViewMode = params.get('allowSelectionInViewMode') === '1';
+const documentMode = params.get('documentMode') as 'editing' | 'viewing' | 'suggesting' | null;
 const contentOverride = params.get('contentOverride') ?? undefined;
 const overrideType = (params.get('overrideType') as OverrideType | null) ?? undefined;
 
@@ -104,6 +106,16 @@ function init(file?: File, content?: ContentOverrideInput) {
   // Track changes
   if (trackChanges) {
     config.trackChanges = { visible: true };
+  }
+
+  // Selection in viewing mode
+  if (allowSelectionInViewMode) {
+    config.allowSelectionInViewMode = true;
+  }
+
+  // Document mode
+  if (documentMode) {
+    config.documentMode = documentMode;
   }
 
   instance = new SuperDoc(config);

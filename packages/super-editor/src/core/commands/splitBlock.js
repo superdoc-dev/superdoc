@@ -2,6 +2,7 @@ import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '../helpers/defaultBlockAt.js';
 import { Attribute } from '../Attribute.js';
+import { clearInheritedLinkedStyleId } from './linkedStyleSplitHelpers.js';
 
 const isHeadingStyleId = (styleId) => typeof styleId === 'string' && /^heading\s*[1-6]$/i.test(styleId.trim());
 
@@ -65,6 +66,7 @@ export const splitBlock =
 
     if (dispatch) {
       const atEnd = $to.parentOffset === $to.parent.content.size;
+      newAttrs = clearInheritedLinkedStyleId(newAttrs, editor, { emptyParagraph: atEnd });
       if (selection instanceof TextSelection) tr.deleteSelection();
       const deflt = $from.depth === 0 ? null : defaultBlockAt($from.node(-1).contentMatchAt($from.indexAfter(-1)));
 

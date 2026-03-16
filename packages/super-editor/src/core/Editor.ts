@@ -802,7 +802,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // Blank document (source is undefined or null)
         // For docx mode without pre-parsed content, load the blank.docx template
         const shouldLoadBlankDocx =
-          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown;
 
         if (shouldLoadBlankDocx) {
           // Decode base64 blank.docx without fetch
@@ -821,8 +821,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
           }
           const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
           resolvedOptions.content = docx;
-          resolvedOptions.mediaFiles = mediaFiles;
-          resolvedOptions.fonts = fonts;
+          resolvedOptions.mediaFiles = {
+            ...mediaFiles,
+            ...(options?.mediaFiles ?? {}),
+          };
+          resolvedOptions.fonts = {
+            ...fonts,
+            ...(options?.fonts ?? {}),
+          };
           resolvedOptions.fileSource = fileSource;
           resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;
@@ -2783,6 +2789,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           media,
           true,
           updatedDocs,
+          this.options.fonts,
         );
 
         // Reconcile package-level singleton metadata (content-type overrides
@@ -3270,8 +3277,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const provider = this.options.collaborationProvider;
 
       const doReplaceFileSync = () => {
-        const mediaFiles = this.options.mediaFiles ?? {};
-
         // 1. Insert new PM doc into Y fragment (must happen first)
         this.#insertNewFileData();
 
@@ -3279,6 +3284,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         seedPartsFromEditor(this, ydoc, { replaceExisting: true });
 
         // 3. Replace media map (prune stale + upsert new)
+        const mediaFiles = this.options.mediaFiles ?? {};
         const mediaMap = ydoc.getMap('media');
         for (const key of mediaMap.keys()) {
           if (!(key in mediaFiles)) mediaMap.delete(key);

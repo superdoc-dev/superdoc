@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { TextSelection } from 'prosemirror-state';
 import { closeHistory, undoDepth } from 'prosemirror-history';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { handleEnter, handleBackspace, handleDelete } from './keymap.js';
@@ -98,6 +99,51 @@ describe('keymap history grouping', () => {
 
     editor.commands.undo();
     expect(editor.state.doc.textContent).toBe('hello');
+  });
+
+  it('collapses selection after undo so layout does not treat it as active range', () => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p>Hello world</p>' }));
+
+    // Select "Hello"
+    const from = 1;
+    const to = 6;
+    const sel = TextSelection.create(editor.state.doc, from, to);
+    editor.view.dispatch(editor.state.tr.setSelection(sel));
+
+    expect(editor.state.selection.from).toBe(from);
+    expect(editor.state.selection.to).toBe(to);
+    expect(editor.state.selection.empty).toBe(false);
+
+    // Simple edit to create an undo step
+    editor.view.dispatch(editor.state.tr.insertText('!', to));
+
+    // Undo should both revert the content change and collapse selection
+    editor.commands.undo();
+
+    const selectionAfterUndo = editor.state.selection;
+    expect(selectionAfterUndo.empty).toBe(true);
+  });
+
+  it('clears preservedSelection/lastSelection on undo so toolbar state does not resurrect old ranges', () => {
+    ({ editor } = initTestEditor({ mode: 'text', content: '<p>Hello world</p>' }));
+
+    // Seed editor-level selection snapshots (simulating toolbar/command preservation)
+    const from = 1;
+    const to = 6;
+    const sel = TextSelection.create(editor.state.doc, from, to);
+    editor.options.preservedSelection = sel;
+    editor.options.lastSelection = sel;
+
+    // Simple edit to create an undo step
+    editor.view.dispatch(editor.state.tr.insertText('!', to));
+
+    // Undo should trigger history cleanup, which clears editor-level selection snapshots
+    // and collapses any active text selection.
+    editor.commands.undo();
+
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.options.preservedSelection).toBeNull();
+    expect(editor.options.lastSelection).toBeNull();
   });
 
   it('closeHistory before deletion creates its own undo step', () => {

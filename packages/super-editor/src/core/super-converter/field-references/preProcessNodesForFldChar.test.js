@@ -119,6 +119,190 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('processes TOC fields when begin, instrText, separate, and end share a single run', () => {
+    const nodes = [
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } },
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'TOC \\o "1-1" \\h \\z \\u' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'sd:tableOfContents',
+        type: 'element',
+        attributes: {
+          instruction: 'TOC \\o "1-1" \\h \\z \\u',
+        },
+        elements: [],
+      },
+    ]);
+  });
+
+  it('preserves unknown fields when begin, instrText, separate, and end share a single run', () => {
+    const nodes = [
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } },
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
+          { name: 'w:t', elements: [{ type: 'text', text: 'value' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual(nodes);
+  });
+
+  it('does not duplicate later fields when an unknown field and a TOC share one run', () => {
+    const nodes = [
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } },
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
+          { name: 'w:t', elements: [{ type: 'text', text: 'value' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } },
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'TOC \\o "1-1" \\h \\z \\u' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } },
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
+          { name: 'w:t', elements: [{ type: 'text', text: 'value' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } },
+        ],
+      },
+      {
+        name: 'sd:tableOfContents',
+        type: 'element',
+        attributes: {
+          instruction: 'TOC \\o "1-1" \\h \\z \\u',
+        },
+        elements: [],
+      },
+    ]);
+  });
+
+  it('preserves w:drawing and w:pict nodes while collecting field content', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:drawing', elements: [{ name: 'wp:inline', elements: [] }] },
+      { name: 'w:pict', elements: [{ name: 'v:shape', elements: [] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'w:hyperlink',
+        type: 'element',
+        attributes: { 'r:id': 'rIdabc12345' },
+        elements: [
+          { name: 'w:drawing', elements: [{ name: 'wp:inline', elements: [] }] },
+          { name: 'w:pict', elements: [{ name: 'v:shape', elements: [] }] },
+        ],
+      },
+    ]);
+  });
+
+  it('processes fields that begin and end inside child nodes', () => {
+    const nodes = [
+      {
+        name: 'w:p',
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+          {
+            name: 'w:r',
+            elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+          },
+          { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+          { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:hyperlink',
+            type: 'element',
+            attributes: { 'r:id': 'rIdabc12345' },
+            elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('processes fields that end inside child nodes after starting at the parent level', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      {
+        name: 'w:p',
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+          { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'w:hyperlink',
+        type: 'element',
+        attributes: { 'r:id': 'rIdabc12345' },
+        elements: [
+          {
+            name: 'w:p',
+            elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
+          },
+        ],
+      },
+    ]);
+  });
+
   it('should handle unpaired begin', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

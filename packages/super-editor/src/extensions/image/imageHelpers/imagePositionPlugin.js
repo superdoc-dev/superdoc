@@ -100,7 +100,8 @@ export const ImagePositionPlugin = ({ editor }) => {
 
     props: {
       decorations(state) {
-        return this.getState(state);
+        // Duplicate prosemirror-view installs can make DecorationSet nominally incompatible here.
+        return /** @type {any} */ (this.getState(state));
       },
     },
   });

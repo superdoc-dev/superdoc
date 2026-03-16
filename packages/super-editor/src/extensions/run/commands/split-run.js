@@ -98,6 +98,19 @@ export function splitBlockPatch(state, dispatch, editor) {
           textId: null,
         });
         paragraphAttrs = clearInheritedLinkedStyleId(paragraphAttrs, editor, { emptyParagraph: atEnd });
+
+        // When splitting at the end (creating an empty new paragraph), store the
+        // current run's runProperties on the new paragraph so the toolbar and
+        // wrapTextInRunsPlugin know which inline formatting to inherit.
+        if (atEnd && $from.parent.type.name === 'run' && $from.parent.attrs.runProperties) {
+          paragraphAttrs = {
+            ...paragraphAttrs,
+            paragraphProperties: {
+              ...(paragraphAttrs.paragraphProperties || {}),
+              runProperties: { ...$from.parent.attrs.runProperties },
+            },
+          };
+        }
         types.unshift({ type: deflt || node.type, attrs: paragraphAttrs });
         splitDepth = d;
       } else if (node.type.name === 'tableCell') {

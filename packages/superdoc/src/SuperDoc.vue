@@ -90,8 +90,10 @@ const {
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
   syncTrackedChangePositionsWithDocument,
+  syncTrackedChangeComments,
   addComment,
   getComment,
+  belongsToDocument,
   COMMENT_EVENTS,
 } = commentsStore;
 const { proxy } = getCurrentInstance();
@@ -148,6 +150,7 @@ const superdocStyleVars = computed(() => {
 // Refs
 const layers = ref(null);
 const pdfViewerRef = ref(null);
+const pendingReplayTrackedChangeSync = ref(false);
 
 // Comments layer
 const commentsLayer = ref(null);
@@ -177,6 +180,30 @@ const {
 const hrbrFieldsLayer = ref(null);
 
 const pdfConfig = proxy.$superdoc.config.modules?.pdf || {};
+
+const flushPendingReplayTrackedChangeSync = () => {
+  if (!pendingReplayTrackedChangeSync.value) return;
+  pendingReplayTrackedChangeSync.value = false;
+  syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+};
+
+const scheduleReplayTrackedChangeSync = () => {
+  pendingReplayTrackedChangeSync.value = true;
+
+  const activeDocId = proxy.$superdoc?.activeEditor?.options?.documentId;
+  const hasPresentationBridge = Boolean(activeDocId && PresentationEditor.getInstance(activeDocId) && layers.value);
+
+  // Always schedule a fallback flush. In layout mode, replay can remove the last
+  // comment/tracked-change anchor, which means no commentPositions event is emitted.
+  // Without this fallback, pending replay sync can stay stuck forever.
+  nextTick(() => {
+    flushPendingReplayTrackedChangeSync();
+  });
+
+  // In layout mode we still flush on comment-position updates when they arrive.
+  // For non-layout/viewing-hidden cases, the nextTick fallback above is the primary path.
+  if (!hasPresentationBridge || !shouldRenderCommentsInViewing.value) return;
+};
 
 const handleDocumentReady = (documentId, container) => {
   const doc = getDocument(documentId);
@@ -273,6 +300,7 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // Map PM positions to visual layout coordinates
     const mappedPositions = presentationEditor.getCommentBounds(positions, layers.value);
     handleEditorLocationsUpdate(mappedPositions);
+    flushPendingReplayTrackedChangeSync();
 
     // Ensure floating comments can render once the layout engine starts emitting positions.
     // For DOCX, handleDocumentReady doesn't fire (it's wired to PDFViewer), so this is
@@ -621,6 +649,7 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   if (!presentation) {
     // Non-layout-engine mode: pass through raw positions
     handleEditorLocationsUpdate(allCommentPositions, activeThreadId);
+    flushPendingReplayTrackedChangeSync();
     return;
   }
 
@@ -629,16 +658,128 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   // after every layout, so this is mainly for the initial load before layout completes.
   const mappedPositions = presentation.getCommentBounds(allCommentPositions, layers.value);
   handleEditorLocationsUpdate(mappedPositions, activeThreadId);
+  flushPendingReplayTrackedChangeSync();
+};
+
+// Replay updates should only patch mutable comment state.
+// Identity and construction-time metadata are intentionally excluded.
+const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
+  'commentText',
+  'isInternal',
+  'parentCommentId',
+  'trackedChangeParentId',
+  'threadingParentCommentId',
+  'trackedChange',
+  'trackedChangeType',
+  'trackedChangeText',
+  'deletedText',
+  'resolvedTime',
+  'resolvedByEmail',
+  'resolvedByName',
+  'importedAuthor',
+  'docxCommentJSON',
+]);
+
+const applyReplayIsDoneResolutionFallback = (target, payload = {}) => {
+  if (!target || payload.isDone === undefined) return;
+  if (payload.resolvedTime != null || payload.resolvedByEmail != null || payload.resolvedByName != null) return;
+
+  // Imported replay payloads often use `isDone` while resolved fields remain null.
+  // When resolved fields are not explicitly populated, derive sidebar/export state from `isDone`.
+  if (payload.isDone) {
+    target.resolvedTime = target.resolvedTime || Date.now();
+    target.resolvedByEmail = target.resolvedByEmail || payload.creatorEmail || null;
+    target.resolvedByName = target.resolvedByName || payload.creatorName || null;
+    return;
+  }
+
+  target.resolvedTime = null;
+  target.resolvedByEmail = null;
+  target.resolvedByName = null;
+};
+
+const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
+  if (!commentModel || !payload) return;
+
+  if (Array.isArray(payload.elements)) {
+    commentModel.docxCommentJSON = payload.elements;
+  }
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (key === 'text') return;
+    if (key === 'elements') return;
+    if (!REPLAY_MUTABLE_COMMENT_FIELDS.has(key)) return;
+    commentModel[key] = value;
+  });
+
+  if (resolvedText !== undefined) {
+    commentModel.commentText = resolvedText;
+  }
+
+  applyReplayIsDoneResolutionFallback(commentModel, payload);
+};
+
+const normalizeReplayCommentModelPayload = (payload = {}) => {
+  const normalizedPayload = { ...payload };
+  if (!normalizedPayload.commentText && normalizedPayload.text) {
+    normalizedPayload.commentText = normalizedPayload.text;
+  }
+  if (!normalizedPayload.docxCommentJSON && Array.isArray(normalizedPayload.elements)) {
+    normalizedPayload.docxCommentJSON = normalizedPayload.elements;
+  }
+  applyReplayIsDoneResolutionFallback(normalizedPayload, normalizedPayload);
+  return normalizedPayload;
 };
 
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
+  // Only sync active state when the event explicitly requests it.
+  // Replay add/update events often omit activeCommentId; inferring it here can
+  // cause repeated focus toggles while replay emits batched updates.
+  let shouldSyncActiveComment = Object.prototype.hasOwnProperty.call(params, 'activeCommentId');
+  const resolveCommentEventIds = (payload) => {
+    const ids = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    return [...new Set(ids)];
+  };
+  const resolveDocumentScopedCommentMatch = (payload) => {
+    const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    const activeDocumentId =
+      proxy.$superdoc?.activeEditor?.options?.documentId != null
+        ? String(proxy.$superdoc.activeEditor.options.documentId)
+        : null;
+
+    for (const candidateId of candidateIds) {
+      const existingComment = commentsList.value.find((comment) => {
+        const commentId = comment?.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment?.importedId != null ? String(comment.importedId) : null;
+        const isIdMatch = commentId === candidateId || importedId === candidateId;
+        if (!isIdMatch) return false;
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      });
+
+      if (existingComment) {
+        const matchedCommentId = existingComment?.commentId ?? existingComment?.importedId ?? candidateId;
+        return {
+          id: matchedCommentId != null ? String(matchedCommentId) : null,
+          existingComment,
+        };
+      }
+    }
+    return {
+      id: candidateIds[0] || null,
+      existingComment: null,
+    };
+  };
+
+  if (type === 'replayCompleted') {
+    scheduleReplayTrackedChangeSync();
+  }
 
   if (COMMENT_EVENTS?.ADD && type === COMMENT_EVENTS.ADD && commentPayload) {
-    if (!commentPayload.commentText && commentPayload.text) {
-      commentPayload.commentText = commentPayload.text;
-    }
+    commentPayload = normalizeReplayCommentModelPayload(commentPayload);
 
     const currentUser = proxy.$superdoc?.user;
     if (currentUser) {
@@ -657,14 +798,107 @@ const onEditorCommentsUpdate = (params = {}) => {
       commentPayload.fileId = primaryDocumentId;
     }
 
-    const id = commentPayload.commentId || commentPayload.importedId;
-    if (id && !getComment(id)) {
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
+    if (id && !existingComment) {
       const commentModel = useComment(commentPayload);
       addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
     }
+  }
 
-    if (!activeCommentId && id) {
-      activeCommentId = id;
+  if (COMMENT_EVENTS?.UPDATE && type === COMMENT_EVENTS.UPDATE && commentPayload) {
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
+    if (id) {
+      const resolvedText = commentPayload.commentText || commentPayload.text;
+
+      if (existingComment) {
+        applyReplayUpdateToComment(existingComment, commentPayload, resolvedText);
+      } else {
+        const normalizedPayload = normalizeReplayCommentModelPayload(commentPayload);
+        const commentModel = useComment(normalizedPayload);
+        addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
+      }
+    }
+  }
+
+  if (COMMENT_EVENTS?.DELETED && type === COMMENT_EVENTS.DELETED && commentPayload) {
+    const targetIds = resolveCommentEventIds(commentPayload);
+    if (targetIds.length) {
+      const activeDocumentId =
+        proxy.$superdoc?.activeEditor?.options?.documentId != null
+          ? String(proxy.$superdoc.activeEditor.options.documentId)
+          : null;
+      const isInActiveDocument = (comment) => {
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      };
+
+      // Remove the entire thread subtree (parent + all descendants), not only direct replies.
+      const removedCommentIds = new Set();
+      commentsList.value.forEach((comment) => {
+        if (!isInActiveDocument(comment)) return;
+        const commentId = comment.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment.importedId != null ? String(comment.importedId) : null;
+        const matchesTarget =
+          (commentId && targetIds.includes(commentId)) || (importedId && targetIds.includes(importedId));
+        if (!matchesTarget) return;
+        if (commentId) removedCommentIds.add(commentId);
+        if (importedId) removedCommentIds.add(importedId);
+      });
+
+      if (removedCommentIds.size) {
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          commentsList.value.forEach((comment) => {
+            if (!isInActiveDocument(comment)) return;
+            const commentId = comment.commentId != null ? String(comment.commentId) : null;
+            const importedId = comment.importedId != null ? String(comment.importedId) : null;
+            const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+            const trackedChangeParentId =
+              comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
+
+            const isRemovedComment =
+              (commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId));
+            const isDescendantOfRemovedComment =
+              (parentCommentId && removedCommentIds.has(parentCommentId)) ||
+              (trackedChangeParentId && removedCommentIds.has(trackedChangeParentId));
+            if (!isRemovedComment && !isDescendantOfRemovedComment) return;
+
+            const sizeBefore = removedCommentIds.size;
+            if (commentId) removedCommentIds.add(commentId);
+            if (importedId) removedCommentIds.add(importedId);
+            if (removedCommentIds.size > sizeBefore) {
+              expanded = true;
+            }
+          });
+        }
+
+        const previousComments = [...commentsList.value];
+        commentsList.value = commentsList.value.filter((comment) => {
+          if (!isInActiveDocument(comment)) return true;
+          const commentId = comment.commentId != null ? String(comment.commentId) : null;
+          const importedId = comment.importedId != null ? String(comment.importedId) : null;
+          return !(
+            (commentId && removedCommentIds.has(commentId)) ||
+            (importedId && removedCommentIds.has(importedId))
+          );
+        });
+
+        const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;
+        const activeCommentModel =
+          activeCommentKey != null
+            ? previousComments.find((comment) => {
+                const commentId = comment.commentId != null ? String(comment.commentId) : null;
+                const importedId = comment.importedId != null ? String(comment.importedId) : null;
+                return commentId === activeCommentKey || importedId === activeCommentKey;
+              })
+            : null;
+        const activeCommentInActiveDocument = activeCommentModel ? isInActiveDocument(activeCommentModel) : false;
+        if (activeCommentKey && removedCommentIds.has(activeCommentKey) && activeCommentInActiveDocument) {
+          activeCommentId = null;
+          shouldSyncActiveComment = true;
+        }
+      }
     }
   }
 
@@ -674,14 +908,18 @@ const onEditorCommentsUpdate = (params = {}) => {
 
   nextTick(() => {
     if (pendingComment.value) return;
-    commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    if (shouldSyncActiveComment) {
+      commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    }
     // Briefly suppress click-outside so the same click that selected the comment
     // highlight in the editor doesn't immediately deactivate it via the sidebar.
     // Reset after the event loop settles so subsequent outside clicks work normally.
-    isCommentHighlighted.value = true;
-    setTimeout(() => {
-      isCommentHighlighted.value = false;
-    }, 0);
+    if (shouldSyncActiveComment) {
+      isCommentHighlighted.value = true;
+      setTimeout(() => {
+        isCommentHighlighted.value = false;
+      }, 0);
+    }
   });
 
   // Bubble up the event to the user, if handled

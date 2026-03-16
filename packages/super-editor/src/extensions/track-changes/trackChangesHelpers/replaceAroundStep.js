@@ -83,6 +83,17 @@ export const replaceAroundStep = ({
   originalStep,
   originalStepIndex,
 }) => {
+  // Diff replay uses forceTrackChanges for consistency, but structural metadata updates
+  // (e.g. table style setNodeMarkup) are encoded as ReplaceAroundStep and cannot be
+  // represented as tracked text deletions/insertions. Apply them directly so replay
+  // does not drop non-text formatting changes.
+  if (tr.getMeta('forceTrackChanges')) {
+    if (!newTr.maybeStep(step).failed) {
+      map.appendMap(step.getMap());
+    }
+    return;
+  }
+
   const inputType = tr.getMeta('inputType');
   const isBackspace = inputType === 'deleteContentBackward';
 

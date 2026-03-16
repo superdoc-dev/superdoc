@@ -802,7 +802,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // Blank document (source is undefined or null)
         // For docx mode without pre-parsed content, load the blank.docx template
         const shouldLoadBlankDocx =
-          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown;
 
         if (shouldLoadBlankDocx) {
           // Decode base64 blank.docx without fetch

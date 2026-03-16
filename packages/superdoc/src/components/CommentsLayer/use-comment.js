@@ -32,7 +32,7 @@ export default function useComment(params) {
   const creatorImage = params.creatorImage;
   const createdTime = params.createdTime || Date.now();
   const importedAuthor = ref(params.importedAuthor || null);
-  const docxCommentJSON = params.docxCommentJSON || null;
+  const docxCommentJSON = ref(params.docxCommentJSON || null);
   const origin = params.origin;
   const threadingMethod = params.threadingMethod;
   const threadingStyleOverride = params.threadingStyleOverride;
@@ -244,7 +244,7 @@ export default function useComment(params) {
       creatorImage,
       createdTime,
       importedAuthor: importedAuthor.value,
-      docxCommentJSON,
+      docxCommentJSON: docxCommentJSON.value,
       isInternal: isInternal.value,
       commentText: commentText.value,
       selection: selection ? selection.getValues() : null,

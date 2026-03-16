@@ -31,4 +31,26 @@ describe('Json override export', () => {
       editor.destroy();
     }
   });
+
+  it('preserves caller-supplied media files and fonts when initialized from JSON', async () => {
+    const mediaFiles = {
+      'word/media/image1.png': 'data:image/png;base64,ZmFrZQ==',
+    };
+    const fonts = {
+      'word/fonts/custom-font.odttf': 'data:font/otf;base64,ZmFrZQ==',
+    };
+
+    const editor = await Editor.open(undefined, {
+      json: SAMPLE_JSON,
+      mediaFiles,
+      fonts,
+    });
+
+    try {
+      expect(editor.options.mediaFiles).toMatchObject(mediaFiles);
+      expect(editor.options.fonts).toMatchObject(fonts);
+    } finally {
+      editor.destroy();
+    }
+  });
 });

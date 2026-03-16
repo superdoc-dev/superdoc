@@ -821,8 +821,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
           }
           const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
           resolvedOptions.content = docx;
-          resolvedOptions.mediaFiles = mediaFiles;
-          resolvedOptions.fonts = fonts;
+          resolvedOptions.mediaFiles = {
+            ...mediaFiles,
+            ...(options?.mediaFiles ?? {}),
+          };
+          resolvedOptions.fonts = {
+            ...fonts,
+            ...(options?.fonts ?? {}),
+          };
           resolvedOptions.fileSource = fileSource;
           resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;

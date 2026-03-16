@@ -103,11 +103,10 @@ const encode = (params, encodedAttrs) => {
 
     const startColumn = currentColumnIndex;
 
-    // Cell was consumed by a vertical merge (rowspan) above; skip encoding but preserve column advance
-    if (node._vMergeConsumed && Number.isFinite(node._vMergeConsumedGridSpan)) {
-      currentColumnIndex = startColumn + node._vMergeConsumedGridSpan;
-      return;
-    }
+    // Cell was consumed by a vertical merge (rowspan) above.
+    // At this point skipOccupiedColumns() has already advanced past the spanned columns
+    // using pendingRowSpans, so we just skip encoding without touching currentColumnIndex.
+    if (node._vMergeConsumed) return;
 
     const columnWidth = gridColumnWidths?.[startColumn] || null;
 

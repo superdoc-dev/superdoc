@@ -287,11 +287,10 @@ const findTableCellAtColumn = (row, targetColumn) => {
   return null;
 };
 
-/** Mark a w:tc as consumed by a vertical merge so the row encoder skips it but advances column index. */
+/** Mark a w:tc as consumed by a vertical merge so the row encoder skips it. */
 const markTableCellAsVMergeConsumed = (node) => {
   if (node?.name === 'w:tc') {
     node._vMergeConsumed = true;
-    node._vMergeConsumedGridSpan = getTableCellGridSpan(node);
   }
 };
 

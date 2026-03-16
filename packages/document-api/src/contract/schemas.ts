@@ -1395,14 +1395,33 @@ const capabilitiesOutputSchema = objectSchema(
 
 const strictEmptyObjectSchema = objectSchema({});
 
-const insertInputSchema = objectSchema(
-  {
-    target: textAddressSchema,
-    value: { type: 'string' },
-    type: { type: 'string', enum: ['text', 'markdown', 'html'] },
-  },
-  ['value'],
-);
+const placementSchema: JsonSchema = { enum: ['before', 'after', 'insideStart', 'insideEnd'] };
+
+const nestingPolicySchema = objectSchema({
+  tables: { enum: ['forbid', 'allow'] },
+});
+
+const insertInputSchema: JsonSchema = {
+  oneOf: [
+    objectSchema(
+      {
+        target: textAddressSchema,
+        value: { type: 'string' },
+        type: { type: 'string', enum: ['text', 'markdown', 'html'] },
+      },
+      ['value'],
+    ),
+    objectSchema(
+      {
+        target: blockNodeAddressSchema,
+        content: { type: 'object' },
+        placement: placementSchema,
+        nestingPolicy: nestingPolicySchema,
+      },
+      ['content'],
+    ),
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Table operation shared schemas
@@ -2578,7 +2597,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               {
                 target: { oneOf: [blockNodeAddressSchema, selectionTargetSchema] },
                 content: { type: 'object' },
-                nestingPolicy: { type: 'object' },
+                nestingPolicy: nestingPolicySchema,
               },
               ['target', 'content'],
             ),
@@ -2586,7 +2605,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               {
                 ref: { type: 'string' },
                 content: { type: 'object' },
-                nestingPolicy: { type: 'object' },
+                nestingPolicy: nestingPolicySchema,
               },
               ['ref', 'content'],
             ),

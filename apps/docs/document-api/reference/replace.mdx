@@ -26,13 +26,40 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 
 ## Input fields
 
-### Variant 1
+### Variant 1.1 (target.kind="selection")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+| `text` | string | yes |  |
 
-### Variant 2
+### Variant 1.2
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ref` | string | yes |  |
+| `text` | string | yes |  |
+
+### Variant 2.1
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object | yes |  |
+| `nestingPolicy` | object | no |  |
+| `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
+| `target` | BlockNodeAddress \\| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
+
+### Variant 2.2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object | yes |  |
+| `nestingPolicy` | object | no |  |
+| `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
+| `ref` | string | yes |  |
 
 ### Example request
 
@@ -42,7 +69,7 @@ _No fields._
     "end": {
       "blockId": "block-abc123",
       "kind": "text",
-      "offset": 0
+      "offset": 12
     },
     "kind": "selection",
     "start": {
@@ -57,7 +84,7 @@ _No fields._
 
 ## Output fields
 
-### Variant 1 (resolution.selectionTarget.kind="selection")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -75,7 +102,7 @@ _No fields._
 | `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `true` | yes | Constant: `true` |
 
-### Variant 2 (resolution.selectionTarget.kind="selection")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -102,32 +129,19 @@ _No fields._
 ```json
 {
   "evaluatedRevision": {
-    "after": "example",
-    "before": "example"
+    "after": "rev-002",
+    "before": "rev-001"
   },
   "resolution": {
     "range": {
       "from": 0,
-      "to": 10
-    },
-    "selectionTarget": {
-      "end": {
-        "blockId": "block-abc123",
-        "kind": "text",
-        "offset": 0
-      },
-      "kind": "selection",
-      "start": {
-        "blockId": "block-abc123",
-        "kind": "text",
-        "offset": 0
-      }
+      "to": 12
     },
     "target": {
       "blockId": "block-abc123",
       "kind": "text",
       "range": {
-        "end": 10,
+        "end": 12,
         "start": 0
       }
     }
@@ -214,6 +228,15 @@ _No fields._
               "type": "object"
             },
             "nestingPolicy": {
+              "additionalProperties": false,
+              "properties": {
+                "tables": {
+                  "enum": [
+                    "forbid",
+                    "allow"
+                  ]
+                }
+              },
               "type": "object"
             },
             "target": {
@@ -240,6 +263,15 @@ _No fields._
               "type": "object"
             },
             "nestingPolicy": {
+              "additionalProperties": false,
+              "properties": {
+                "tables": {
+                  "enum": [
+                    "forbid",
+                    "allow"
+                  ]
+                }
+              },
               "type": "object"
             },
             "ref": {

@@ -22,9 +22,11 @@ Insert content into the document. Two input shapes: legacy string-based (value +
 
 ## Expected result
 
-Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.
+Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.
 
 ## Input fields
+
+### Variant 1 (target.kind="text")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -37,26 +39,44 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
 | `value` | string | yes |  |
 
+### Variant 2 (target.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object | yes |  |
+| `nestingPolicy` | object | no |  |
+| `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
+| `placement` | enum | no | `"before"`, `"after"`, `"insideStart"`, `"insideEnd"` |
+| `target` | BlockNodeAddress | no | BlockNodeAddress |
+| `target.kind` | `"block"` | no | Constant: `"block"` |
+| `target.nodeId` | string | no |  |
+| `target.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
 ### Example request
 
 ```json
 {
-  "target": {
-    "blockId": "block-abc123",
-    "kind": "text",
-    "range": {
-      "end": 10,
-      "start": 0
-    }
+  "content": {
+    "content": [
+      {
+        "text": "example",
+        "type": "text"
+      }
+    ],
+    "type": "paragraph"
   },
-  "type": "text",
-  "value": "example"
+  "placement": "after",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
 }
 ```
 
 ## Output fields
 
-### Variant 1 (resolution.selectionTarget.kind="selection")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -74,7 +94,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `true` | yes | Constant: `true` |
 
-### Variant 2 (resolution.selectionTarget.kind="selection")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -101,34 +121,18 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 ```json
 {
   "evaluatedRevision": {
-    "after": "example",
-    "before": "example"
+    "after": "rev-002",
+    "before": "rev-001"
   },
   "resolution": {
     "range": {
-      "from": 0,
-      "to": 10
-    },
-    "selectionTarget": {
-      "end": {
-        "blockId": "block-abc123",
-        "kind": "text",
-        "offset": 0
-      },
-      "kind": "selection",
-      "start": {
-        "blockId": "block-abc123",
-        "kind": "text",
-        "offset": 0
-      }
+      "from": 42,
+      "to": 42
     },
     "target": {
-      "blockId": "block-abc123",
-      "kind": "text",
-      "range": {
-        "end": 10,
-        "start": 0
-      }
+      "kind": "block",
+      "nodeId": "node-def456",
+      "nodeType": "paragraph"
     }
   },
   "success": true
@@ -169,27 +173,66 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "target": {
-      "$ref": "#/$defs/TextAddress"
-    },
-    "type": {
-      "enum": [
-        "text",
-        "markdown",
-        "html"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/TextAddress"
+        },
+        "type": {
+          "enum": [
+            "text",
+            "markdown",
+            "html"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
       ],
-      "type": "string"
+      "type": "object"
     },
-    "value": {
-      "type": "string"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "object"
+        },
+        "nestingPolicy": {
+          "additionalProperties": false,
+          "properties": {
+            "tables": {
+              "enum": [
+                "forbid",
+                "allow"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "placement": {
+          "enum": [
+            "before",
+            "after",
+            "insideStart",
+            "insideEnd"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/BlockNodeAddress"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "value"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

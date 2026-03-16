@@ -41,9 +41,35 @@ function makeFindAdapter() {
       items: [
         {
           id: 'p1',
-          handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'node' as const },
+          handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'text' as const },
+          matchKind: 'text' as const,
           address: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
-          context: { textRanges: [SELECTION_TARGET] },
+          target: SELECTION_TARGET,
+          snippet: 'foo',
+          highlightRange: { start: 0, end: 3 },
+          blocks: [
+            {
+              blockId: 'p1',
+              nodeType: 'paragraph',
+              range: { start: 0, end: 3 },
+              text: 'foo',
+              ref: 'ref:block-1',
+              runs: [
+                {
+                  range: { start: 0, end: 3 },
+                  text: 'foo',
+                  styles: {
+                    bold: false,
+                    italic: false,
+                    underline: false,
+                    strike: false,
+                  },
+                  ref: 'ref:run-1',
+                },
+              ],
+            },
+          ],
+          context: { target: SELECTION_TARGET, textRanges: [SELECTION_TARGET] },
         },
       ],
       page: { limit: 1, offset: 0, returned: 1 },
@@ -355,6 +381,7 @@ function makeApi() {
               nodeType: 'paragraph' as const,
               nodeId: 'p1',
             },
+            target: SELECTION_TARGET,
             snippet: 'foo',
             highlightRange: { start: 0, end: 3 },
             blocks: [
@@ -630,8 +657,12 @@ describe('src/README.md workflow examples', () => {
     it('find then replace', () => {
       const doc = makeApi();
 
-      const result = doc.find({ type: 'text', pattern: 'foo' });
-      const target = result.items[0]?.context?.textRanges?.[0];
+      const match = doc.query.match({
+        select: { type: 'text', pattern: 'foo' },
+        require: 'first',
+      });
+
+      const target = match.items?.[0]?.target;
       if (target) {
         doc.replace({ target, text: 'bar' });
       }
@@ -647,6 +678,7 @@ describe('src/README.md workflow examples', () => {
 
       const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
       // receipt.resolution.target contains the resolved insertion point (TextAddress)
+      // receipt.success tells you whether the tracked insert applied
 
       expect(receipt.resolution).toBeDefined();
       expect(receipt.resolution!.target).toBeDefined();

@@ -909,6 +909,7 @@ export class SuperToolbar extends EventEmitter {
 
     this.toolbarItems.forEach((item) => {
       item.resetDisabled();
+      let activatedFromLinkedStyle = false;
 
       if (item.name.value === 'undo') {
         item.setDisabled(this.undoDepth === 0);
@@ -973,6 +974,7 @@ export class SuperToolbar extends EventEmitter {
             [item.name.value]: linkedStylesItem,
           };
           item.activate(value);
+          activatedFromLinkedStyle = true;
         }
       }
       if (item.name.value === 'textAlign' && paragraphProps?.justification) {
@@ -985,7 +987,7 @@ export class SuperToolbar extends EventEmitter {
         paragraphIsEmpty &&
         !activeMark &&
         !markNegated &&
-        !item.active.value &&
+        !activatedFromLinkedStyle &&
         paragraphFontFamily
       ) {
         item.activate({ fontFamily: paragraphFontFamily });

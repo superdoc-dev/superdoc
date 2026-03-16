@@ -132,10 +132,13 @@ describe('wrapTextInRunsPlugin', () => {
     expect(paragraph.textContent).toBe('あ');
   });
 
-  it('copies run properties from previous paragraph and applies marks to wrapped text', () => {
+  it('copies run properties from current paragraph paragraphProperties and applies marks to wrapped text', () => {
     const schema = makeSchema();
     const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
-    const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [prevRun]),
+      schema.node('paragraph', { paragraphProperties: { runProperties: { bold: true } } }),
+    ]);
     const view = createView(schema, doc);
 
     const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
@@ -149,10 +152,13 @@ describe('wrapTextInRunsPlugin', () => {
     expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
   });
 
-  it('merges previous paragraph marks with existing text marks', () => {
+  it('merges current paragraph inherited run properties with existing text marks', () => {
     const schema = makeSchema();
     const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
-    const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [prevRun]),
+      schema.node('paragraph', { paragraphProperties: { runProperties: { bold: true } } }),
+    ]);
     const view = createView(schema, doc);
 
     const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
@@ -168,7 +174,7 @@ describe('wrapTextInRunsPlugin', () => {
     expect(markNames).toContain('italic');
   });
 
-  it('does not copy previous paragraph run properties when the current paragraph has an explicit style override', () => {
+  it('does not copy inherited run properties when the current paragraph has an explicit style override', () => {
     const schema = makeSchema();
     const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
     const doc = schema.node('doc', null, [
@@ -449,12 +455,15 @@ describe('wrapTextInRunsPlugin', () => {
       expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
     });
 
-    it('merges sdStyleMarks with inherited marks from previous paragraph', () => {
+    it('merges sdStyleMarks with inherited run properties from current paragraph', () => {
       const schema = makeSchema();
       const prevRun = schema.node('run', { runProperties: { italic: true } }, [
         schema.text('Prev', [schema.marks.italic.create()]),
       ]);
-      const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+      const doc = schema.node('doc', null, [
+        schema.node('paragraph', null, [prevRun]),
+        schema.node('paragraph', { paragraphProperties: { runProperties: { italic: true } } }),
+      ]);
       const view = createView(schema, doc);
 
       const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;

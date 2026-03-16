@@ -198,7 +198,6 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
 
   if (hasExplicitStyleReset) {
     tr.setStoredMarks([]);
-    tr.setMeta('sdStyleMarks', []);
     return;
   }
 
@@ -246,7 +245,6 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
 
     if (marksToApply.length > 0) {
       tr.ensureMarks(marksToApply);
-      tr.setMeta('sdStyleMarks', markDefsToApply);
     }
   } catch {
     // ignore failures; typing still works without style marks

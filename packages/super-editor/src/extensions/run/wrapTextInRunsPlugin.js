@@ -2,6 +2,7 @@ import { Plugin, TextSelection } from 'prosemirror-state';
 import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
 import { carbonCopy } from '@core/utilities/carbonCopy';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
+import { getInheritedRunProperties } from '@core/helpers/getMarksFromSelection.js';
 
 const getParagraphAtPos = (doc, pos) => {
   try {
@@ -68,7 +69,8 @@ const normalizeSelectionIntoRun = (tr, runType) => {
 };
 
 /**
- * Copies run properties from the previous paragraph's last run and applies its marks to a text node.
+ * Copies run properties from the current paragraph's `paragraphProperties.runProperties`
+ * (set during paragraph split) and applies its marks to a text node.
  * @param {import('prosemirror-state').EditorState} state
  * @param {number} pos
  * @param {import('prosemirror-model').Node} textNode
@@ -76,28 +78,19 @@ const normalizeSelectionIntoRun = (tr, runType) => {
  * @param {Object} editor
  * @returns {{ runProperties: Record<string, unknown> | undefined, textNode: import('prosemirror-model').Node }}
  */
-const copyRunPropertiesFromPreviousParagraph = (state, pos, textNode, runType, editor) => {
+const copyRunPropertiesFromParagraph = (state, pos, textNode, runType, editor) => {
   let runProperties;
   let updatedTextNode = textNode;
-  const currentParagraphNode = getParagraphAtPos(state.doc, pos);
-  if (hasParagraphStyleOverride(currentParagraphNode)) {
-    return { runProperties, textNode: updatedTextNode };
-  }
+  const $pos = state.doc.resolve(pos);
+  const inheritedRunProperties = getInheritedRunProperties($pos, editor, false);
 
-  const paragraphNode = getParagraphAtPos(state.doc, pos - 2);
-  if (paragraphNode && paragraphNode.content.size > 0) {
-    const lastChild = paragraphNode.child(paragraphNode.childCount - 1);
-    if (lastChild.type === runType && lastChild.attrs.runProperties) {
-      runProperties = carbonCopy(lastChild.attrs.runProperties);
-    }
-    // Copy marks and apply them to the text node being wrapped.
-    if (runProperties) {
-      const markDefs = encodeMarksFromRPr(runProperties, editor?.converter?.convertedXml ?? {});
-      const markInstances = markDefs.map((def) => state.schema.marks[def.type]?.create(def.attrs)).filter(Boolean);
-      if (markInstances.length) {
-        const mergedMarks = markInstances.reduce((set, mark) => mark.addToSet(set), updatedTextNode.marks);
-        updatedTextNode = updatedTextNode.mark(mergedMarks);
-      }
+  if (inheritedRunProperties) {
+    runProperties = carbonCopy(inheritedRunProperties);
+    const markDefs = encodeMarksFromRPr(runProperties, editor?.converter?.convertedXml ?? {});
+    const markInstances = markDefs.map((def) => state.schema.marks[def.type]?.create(def.attrs)).filter(Boolean);
+    if (markInstances.length) {
+      const mergedMarks = markInstances.reduce((set, mark) => mark.addToSet(set), updatedTextNode.marks);
+      updatedTextNode = updatedTextNode.mark(mergedMarks);
     }
   }
   return { runProperties, textNode: updatedTextNode };
@@ -120,12 +113,12 @@ const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta =
       let runProperties;
       let textNode = node;
 
-      // For the first node in a paragraph, inherit run properties from previous paragraph
-      // and merge marks (this preserves existing marks like italic while adding inherited ones like bold).
+      // For the first node in a paragraph, inherit run properties from the paragraph's
+      // paragraphProperties.runProperties (set during split) and merge marks.
       // Only apply when the text is a direct child of the paragraph — not when it is
       // first inside an inline wrapper like structuredContent (SDT).
       if (index === 0 && parent.type.name === 'paragraph') {
-        ({ runProperties, textNode } = copyRunPropertiesFromPreviousParagraph(state, pos, textNode, runType, editor));
+        ({ runProperties, textNode } = copyRunPropertiesFromParagraph(state, pos, textNode, runType, editor));
       }
 
       // Apply explicit toolbar style marks (e.g., highlight color selected by user)
@@ -206,16 +199,6 @@ export const wrapTextInRunsPlugin = (editor) => {
 
       if (view?.composing) {
         return null;
-      }
-
-      // Extract style marks from the most recent transaction that has them.
-      // These marks persist across transactions until new ones are provided (sticky toolbar behavior).
-      const metaFromTxn = [...transactions]
-        .reverse()
-        .map((txn) => txn.getMeta('sdStyleMarks'))
-        .find((meta) => meta !== undefined);
-      if (metaFromTxn !== undefined) {
-        lastStyleMarksMeta = Array.isArray(metaFromTxn) ? metaFromTxn : [];
       }
 
       const tr = buildWrapTransaction(newState, pendingRanges, runType, editor, lastStyleMarksMeta);

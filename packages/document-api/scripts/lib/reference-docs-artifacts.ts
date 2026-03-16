@@ -221,6 +221,12 @@ function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
     return `enum`;
   }
 
+  // allOf — flatten and derive type from merged schema
+  if (Array.isArray(schema.allOf)) {
+    const flat = flattenAllOf(schema, $defs);
+    return schemaTypeLabel(flat, $defs);
+  }
+
   // oneOf / anyOf
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = schema[keyword];
@@ -272,6 +278,11 @@ function schemaDescription(schema: JsonSchema, $defs: Defs): string {
     return (schema.enum as unknown[]).map((v) => `\`${JSON.stringify(v)}\``).join(', ');
   }
 
+  if (Array.isArray(schema.allOf)) {
+    const flat = flattenAllOf(schema, $defs);
+    return schemaDescription(flat, $defs);
+  }
+
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = schema[keyword];
     if (Array.isArray(variants)) {
@@ -309,6 +320,56 @@ function collectConstDiscriminators(
 }
 
 /**
+ * If `schema` contains an `allOf` array, merge all members' properties and
+ * required fields into a single flat object schema. Recursively resolves
+ * `$ref` pointers inside each member. Returns the original schema unchanged
+ * when no `allOf` is present.
+ */
+function flattenAllOf(schema: JsonSchema, $defs: Defs): JsonSchema {
+  const allOf = schema.allOf;
+  if (!Array.isArray(allOf) || allOf.length === 0) return schema;
+
+  const mergedProperties: Record<string, JsonSchema> = {};
+  const mergedRequired = new Set<string>();
+
+  for (const member of allOf as JsonSchema[]) {
+    const { resolved } = resolveRef(member, $defs);
+    // Recursively flatten nested allOf
+    const flat = flattenAllOf(resolved, $defs);
+
+    if (flat.properties && typeof flat.properties === 'object') {
+      Object.assign(mergedProperties, flat.properties);
+    }
+    if (Array.isArray(flat.required)) {
+      for (const r of flat.required as string[]) mergedRequired.add(r);
+    }
+
+    // For oneOf/anyOf TargetLocator-style schemas, extract properties from
+    // each variant so they appear in the merged field table.
+    for (const keyword of ['oneOf', 'anyOf'] as const) {
+      const variants = flat[keyword];
+      if (!Array.isArray(variants)) continue;
+      for (const variant of variants as JsonSchema[]) {
+        const { resolved: varResolved } = resolveRef(variant, $defs);
+        if (varResolved.properties && typeof varResolved.properties === 'object') {
+          // Only merge the properties — requirement is optional since
+          // these are union alternatives, not all simultaneously required.
+          Object.assign(mergedProperties, varResolved.properties);
+        }
+      }
+    }
+  }
+
+  // Preserve any top-level non-allOf keys (e.g. type, description)
+  const result: JsonSchema = { ...schema, type: 'object', properties: mergedProperties };
+  delete result.allOf;
+  if (mergedRequired.size > 0) {
+    result.required = [...mergedRequired];
+  }
+  return result;
+}
+
+/**
  * Build field table rows from an object schema's properties.
  * Recursively flattens nested objects into dot-path rows.
  */
@@ -316,10 +377,11 @@ function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequ
   if (depth > 8) return [];
 
   const { resolved } = resolveRef(schema, $defs);
-  const properties = resolved.properties as Record<string, JsonSchema> | undefined;
-  if (!properties || resolved.type !== 'object') return [];
+  const flat = flattenAllOf(resolved, $defs);
+  const properties = flat.properties as Record<string, JsonSchema> | undefined;
+  if (!properties || flat.type !== 'object') return [];
 
-  const requiredSet = new Set<string>(Array.isArray(resolved.required) ? (resolved.required as string[]) : []);
+  const requiredSet = new Set<string>(Array.isArray(flat.required) ? (flat.required as string[]) : []);
   const rows: FieldRow[] = [];
 
   for (const field of Object.keys(properties).sort()) {
@@ -343,9 +405,11 @@ function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequ
 /** Build field sections, splitting top-level oneOf/anyOf schemas into explicit variants. */
 function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
   const { resolved } = resolveRef(schema, $defs);
+  // Flatten allOf first — the merged schema may itself contain oneOf/anyOf.
+  const flat = flattenAllOf(resolved, $defs);
 
   for (const keyword of ['oneOf', 'anyOf'] as const) {
-    const variants = resolved[keyword];
+    const variants = flat[keyword];
     if (!Array.isArray(variants) || variants.length === 0) continue;
 
     return variants.map((variant, index) => {
@@ -364,7 +428,7 @@ function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
     });
   }
 
-  return [{ rows: buildFieldRows(resolved, $defs) }];
+  return [{ rows: buildFieldRows(flat, $defs) }];
 }
 
 /** Escape pipe characters inside markdown table cells. */
@@ -533,6 +597,21 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
       }
     }
     return result;
+  }
+
+  // allOf — generate per-member and merge. This preserves oneOf/anyOf
+  // variant selection (first-variant-only) instead of flattening all
+  // variant properties into a single object.
+  if (Array.isArray(schema.allOf)) {
+    const merged: Record<string, unknown> = {};
+    for (const member of schema.allOf as JsonSchema[]) {
+      const { resolved } = resolveRef(member, $defs);
+      const memberExample = generateExample(resolved, $defs, fieldName, depth + 1);
+      if (typeof memberExample === 'object' && memberExample !== null && !Array.isArray(memberExample)) {
+        Object.assign(merged, memberExample as Record<string, unknown>);
+      }
+    }
+    return merged;
   }
 
   // oneOf / anyOf — first variant (non-object union fallback)

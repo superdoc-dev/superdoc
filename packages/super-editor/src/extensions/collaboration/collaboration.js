@@ -199,7 +199,7 @@ export const Collaboration = Extension.create({
       };
 
       const provider = editor.options.collaborationProvider;
-      if (!provider) {
+      if (!provider || isCollaborationProviderSynced(provider)) {
         doBootstrap();
       } else {
         cleanupState.partSyncPendingCleanup = onCollaborationProviderSynced(provider, doBootstrap);
@@ -301,7 +301,8 @@ const initSyncListener = (ydoc, editor, extension) => {
   const provider = editor.options.collaborationProvider;
   if (!provider) return;
 
-  const emit = () => {
+  const emit = (synced) => {
+    if (synced === false) return;
     extension.options.isReady = true;
     editor.emit('collaborationReady', { editor, ydoc });
   };

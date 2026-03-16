@@ -15,6 +15,7 @@
     "./helpers/*": "./helpers/*.ts",
     "./list-numbering": "./list-numbering/index.ts",
     "./list-numbering/*": "./list-numbering/*.ts",
+    "./list-rendering": "./list-rendering.ts",
     "./layout-constants": "./layout-constants.ts",
     "./list-marker-utils": "./list-marker-utils.ts",
     "./*.ts": "./*.ts",

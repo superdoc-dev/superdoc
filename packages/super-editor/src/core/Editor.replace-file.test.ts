@@ -1,5 +1,22 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Doc as YDoc } from 'yjs';
+
+const { seedPartsFromEditorSpy } = vi.hoisted(() => ({
+  seedPartsFromEditorSpy: vi.fn(),
+}));
+
+vi.mock('@extensions/collaboration/part-sync/seed-parts.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@extensions/collaboration/part-sync/seed-parts.js')>();
+
+  return {
+    ...actual,
+    seedPartsFromEditor: vi.fn((...args: Parameters<typeof actual.seedPartsFromEditor>) => {
+      seedPartsFromEditorSpy(...args);
+      return actual.seedPartsFromEditor(...args);
+    }),
+  };
+});
+
 import { Editor } from './Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsFileBuffer, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
@@ -55,6 +72,7 @@ describe('Editor.replaceFile', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.clearAllMocks();
   });
 
   it('applies replacement when provider emits sync(true) without synced event', async () => {
@@ -174,6 +192,48 @@ describe('Editor.replaceFile', () => {
       await replacePromise;
 
       expect(editor.state.doc.textContent).toBe(expectedText);
+    } finally {
+      if (editor.lifecycleState === 'ready') {
+        editor.close();
+      }
+      if (expectedEditor.lifecycleState === 'ready') {
+        expectedEditor.close();
+      }
+      editor.destroy();
+      expectedEditor.destroy();
+    }
+  });
+
+  it('runs collaborative replace side effects once when the provider is already synced', async () => {
+    const provider = createProviderStub();
+    provider.synced = true;
+    provider.isSynced = true;
+
+    const ydoc = new YDoc();
+    const editor = createTestEditor({
+      ydoc,
+      collaborationProvider: provider,
+    });
+    const expectedEditor = createTestEditor();
+
+    try {
+      await editor.open(undefined, {
+        mode: 'docx',
+        content: blankDocData.docx as any,
+        mediaFiles: blankDocData.mediaFiles as any,
+        fonts: blankDocData.fonts as any,
+      });
+      await expectedEditor.open(replacementBuffer, { mode: 'docx' });
+
+      const seedCallsBeforeReplace = seedPartsFromEditorSpy.mock.calls.length;
+
+      await editor.replaceFile(replacementBuffer);
+
+      const seedCallsDuringReplace = seedPartsFromEditorSpy.mock.calls.length - seedCallsBeforeReplace;
+
+      expect(editor.state.doc.textContent).toBe(expectedEditor.state.doc.textContent);
+      expect(seedCallsDuringReplace).toBe(1);
+      expect(seedPartsFromEditorSpy).toHaveBeenLastCalledWith(editor, ydoc, { replaceExisting: true });
     } finally {
       if (editor.lifecycleState === 'ready') {
         editor.close();

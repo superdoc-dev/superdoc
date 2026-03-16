@@ -68,6 +68,7 @@ export class SuperDoc extends EventEmitter {
     superdocId: null,
     selector: '#superdoc',
     documentMode: 'editing',
+    allowSelectionInViewMode: false,
     role: 'editor',
     document: {},
     documents: [],

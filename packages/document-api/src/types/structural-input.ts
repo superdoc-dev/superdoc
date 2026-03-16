@@ -8,7 +8,7 @@
  */
 
 import type { SDAddress } from './sd-envelope.js';
-import type { TextAddress } from './address.js';
+import type { SelectionTarget, TextAddress } from './address.js';
 import type { SDFragment } from './fragment.js';
 import type { Placement, NestingPolicy } from './placement.js';
 
@@ -34,8 +34,10 @@ export interface SDInsertInput {
 
 /** SDM/1 structural shape for the replace operation. */
 export interface SDReplaceInput {
-  /** Required target range to replace. */
-  target: SDAddress | TextAddress;
+  /** Target range to replace. Required unless `ref` is provided. */
+  target?: SDAddress | TextAddress | SelectionTarget;
+  /** Opaque ref string (alternative to `target`). */
+  ref?: string;
   /** Structural content to replace with. */
   content: SDFragment;
   /** Nesting policy. Defaults to { tables: 'forbid' }. */

@@ -145,6 +145,7 @@ import type {
   SectionsSetVerticalAlignInput,
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
+import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -775,6 +776,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };
+
+  // --- ranges.* ---
+  'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
 
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };

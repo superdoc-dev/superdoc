@@ -1,10 +1,22 @@
-import { normalizeMutationOptions, type MutationOptions } from '../write/write.js';
-import type { TextAddress, TextMutationReceipt } from '../types/index.js';
+/**
+ * Format operations — inline style application on contiguous document selections.
+ *
+ * All format operations now accept `SelectionTarget` or `ref` instead of `TextAddress`.
+ * They route through the `SelectionMutationAdapter` (backed by the plan engine).
+ */
+
+import type { MutationOptions } from '../types/mutation-plan.types.js';
+import { normalizeMutationOptions } from '../write/write.js';
+import type { SelectionTarget } from '../types/address.js';
+import type { TextMutationReceipt } from '../types/receipt.js';
+import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import { DocumentApiValidationError } from '../errors.js';
-import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
+import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
+import { isSelectionTarget } from '../validation/selection-target-validator.js';
 import type { InlineRunPatch, InlineRunPatchKey } from './inline-run-patch.js';
 import { INLINE_PROPERTY_BY_KEY, validateInlineRunPatch } from './inline-run-patch.js';
 
+// ---------------------------------------------------------------------------
 // Input types
 // ---------------------------------------------------------------------------
 
@@ -19,7 +31,8 @@ export type FormatUnderlineInput = FormatInlineAliasInput<'underline'>;
 
 /** Input payload for `format.strikethrough`. */
 export interface FormatStrikethroughInput {
-  target: TextAddress;
+  target?: SelectionTarget;
+  ref?: string;
 }
 
 /**
@@ -37,22 +50,19 @@ type ImplicitTrueKey =
  *
  * `value` is optional only for boolean-like keys (including `underline`), where
  * omission defaults to `true` for ergonomic "turn on" calls.
- * For all other keys the caller must supply a value.
  */
 export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends ImplicitTrueKey
-  ? { target: TextAddress; value?: InlineRunPatch[K] }
-  : { target: TextAddress; value: InlineRunPatch[K] };
+  ? { target?: SelectionTarget; ref?: string; value?: InlineRunPatch[K] }
+  : { target?: SelectionTarget; ref?: string; value: InlineRunPatch[K] };
 
 /**
  * Input payload for `format.apply`.
  *
- * `inline` uses explicit patch semantics:
- * - omitted key: unchanged
- * - concrete value: set
- * - `null`: clear
+ * Accepts either `target` (SelectionTarget) or `ref` (string) — exactly one required.
  */
 export interface StyleApplyInput {
-  target: TextAddress;
+  target?: SelectionTarget;
+  ref?: string;
   inline: InlineRunPatch;
 }
 
@@ -60,10 +70,11 @@ export interface StyleApplyInput {
 export type StyleApplyOptions = MutationOptions;
 
 // ---------------------------------------------------------------------------
-// Adapter interface
+// Legacy FormatAdapter — kept temporarily for inline aliases that still
+// route through the old path. Will be fully retired once all aliases migrate.
 // ---------------------------------------------------------------------------
 
-/** Engine-specific adapter for format operations. */
+/** @deprecated Use SelectionMutationAdapter instead. Kept for inline-alias compatibility. */
 export interface FormatAdapter {
   apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
 }
@@ -84,10 +95,47 @@ export interface FormatApi extends FormatInlineAliasApi {
 }
 
 // ---------------------------------------------------------------------------
+// Shared target validation
+// ---------------------------------------------------------------------------
+
+function validateTargetLocator(input: Record<string, unknown>, operation: string): void {
+  const hasTarget = input.target !== undefined;
+  const hasRef = input.ref !== undefined;
+
+  if (hasTarget && hasRef) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operation} input must provide either "target" or "ref", not both.`,
+      { fields: ['target', 'ref'] },
+    );
+  }
+
+  if (!hasTarget && !hasRef) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operation} input must provide either "target" or "ref".`, {
+      fields: ['target', 'ref'],
+    });
+  }
+
+  if (hasTarget && !isSelectionTarget(input.target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a SelectionTarget object.', {
+      field: 'target',
+      value: input.target,
+    });
+  }
+
+  if (hasRef && typeof input.ref !== 'string') {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+      field: 'ref',
+      value: input.ref,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // format.apply — validation and execution
 // ---------------------------------------------------------------------------
 
-const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'inline']);
+const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'inline']);
 
 function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInput {
   if (!isRecord(input)) {
@@ -95,17 +143,7 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
   }
 
   assertNoUnknownFields(input, STYLE_APPLY_INPUT_ALLOWED_KEYS, 'format.apply');
-
-  if (input.target === undefined) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'format.apply requires a target.');
-  }
-
-  if (!isTextAddress(input.target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
-      field: 'target',
-      value: input.target,
-    });
-  }
+  validateTargetLocator(input, 'format.apply');
 
   if (input.inline === undefined || input.inline === null) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply requires an inline object.');
@@ -115,24 +153,30 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
 }
 
 /**
- * Executes `format.apply` using the provided adapter.
- *
- * Validates the target and inline patch payload, then delegates to adapter `apply`.
+ * Executes `format.apply` via the selection mutation adapter (plan engine).
  */
 export function executeStyleApply(
-  adapter: FormatAdapter,
+  adapter: SelectionMutationAdapter,
   input: StyleApplyInput,
   options?: MutationOptions,
 ): TextMutationReceipt {
   validateStyleApplyInput(input);
-  return adapter.apply(input, normalizeMutationOptions(options));
+  return adapter.execute(
+    {
+      kind: 'format',
+      target: input.target,
+      ref: input.ref,
+      inline: input.inline,
+    },
+    normalizeMutationOptions(options),
+  );
 }
 
 // ---------------------------------------------------------------------------
 // format.<inlineKey> aliases — normalize to format.apply payloads
 // ---------------------------------------------------------------------------
 
-const INLINE_ALIAS_INPUT_ALLOWED_KEYS = new Set(['target', 'value']);
+const INLINE_ALIAS_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'value']);
 
 function acceptsImplicitTrue(key: InlineRunPatchKey): boolean {
   return INLINE_PROPERTY_BY_KEY[key].type === 'boolean' || key === 'underline';
@@ -154,12 +198,9 @@ function validateInlineAliasInput<K extends InlineRunPatchKey>(
   input: unknown,
 ): asserts input is FormatInlineAliasInput<K> {
   const operation = `format.${key}`;
-  // Preserve historical input semantics for direct aliases:
-  // - null / primitive input behaves like "{}" and fails with missing target.
-  // - unknown top-level fields are reported before target validation.
   const candidate = isRecord(input) ? input : {};
   assertNoUnknownFields(candidate, INLINE_ALIAS_INPUT_ALLOWED_KEYS, operation);
-  validateTarget(candidate, operation);
+  validateTargetLocator(candidate, operation);
 }
 
 /**
@@ -167,35 +208,22 @@ function validateInlineAliasInput<K extends InlineRunPatchKey>(
  * into a single-key `format.apply` payload.
  */
 export function executeInlineAlias<K extends InlineRunPatchKey>(
-  adapter: FormatAdapter,
+  adapter: SelectionMutationAdapter,
   key: K,
   input: FormatInlineAliasInput<K>,
   options?: MutationOptions,
 ): TextMutationReceipt {
   validateInlineAliasInput(key, input);
-  // `input.value` is typed as required or optional depending on K; at runtime
-  // `normalizeInlineAliasValue` handles both branches uniformly.
   const value = normalizeInlineAliasValue(key, (input as { value?: InlineRunPatch[K] }).value);
   const inline = { [key]: value } as InlineRunPatch;
   validateInlineRunPatch(inline);
-  return adapter.apply({ target: input.target, inline }, normalizeMutationOptions(options));
-}
-
-// ---------------------------------------------------------------------------
-// Shared validation: target field
-// ---------------------------------------------------------------------------
-
-function validateTarget(input: unknown, operation: string): asserts input is { target: TextAddress } {
-  if (!isRecord(input)) {
-    throw new DocumentApiValidationError('INVALID_INPUT', `${operation} input must be a non-null object.`);
-  }
-  if (input.target === undefined) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operation} requires a target.`);
-  }
-  if (!isTextAddress(input.target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
-      field: 'target',
-      value: input.target,
-    });
-  }
+  return adapter.execute(
+    {
+      kind: 'format',
+      target: input.target,
+      ref: input.ref,
+      inline,
+    },
+    normalizeMutationOptions(options),
+  );
 }

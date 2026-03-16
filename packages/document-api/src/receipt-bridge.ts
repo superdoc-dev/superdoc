@@ -32,18 +32,25 @@ function textAddressToSDAddress(textAddr: TextAddress): SDAddress {
  * - TextAddress resolution is converted to SDAddress resolution.
  * - Failure codes from the text pipeline are mapped through the receipt.
  */
+/**
+ * Builds the SDMutationReceipt resolution object from a TextMutationResolution.
+ * Carries through selectionTarget for cross-block mutations.
+ */
+function buildSDResolution(
+  resolution: import('./types/index.js').TextMutationResolution,
+): SDMutationReceipt['resolution'] {
+  return {
+    ...(resolution.requestedTarget ? { requestedTarget: textAddressToSDAddress(resolution.requestedTarget) } : {}),
+    target: textAddressToSDAddress(resolution.target),
+    ...(resolution.selectionTarget ? { selectionTarget: resolution.selectionTarget } : undefined),
+  };
+}
+
 export function textReceiptToSDReceipt(receipt: TextMutationReceipt): SDMutationReceipt {
   if (receipt.success) {
     return {
       success: true,
-      resolution: receipt.resolution
-        ? {
-            ...(receipt.resolution.requestedTarget
-              ? { requestedTarget: textAddressToSDAddress(receipt.resolution.requestedTarget) }
-              : {}),
-            target: textAddressToSDAddress(receipt.resolution.target),
-          }
-        : undefined,
+      resolution: receipt.resolution ? buildSDResolution(receipt.resolution) : undefined,
     };
   }
 
@@ -73,13 +80,6 @@ export function textReceiptToSDReceipt(receipt: TextMutationReceipt): SDMutation
   return {
     success: false,
     failure,
-    resolution: receipt.resolution
-      ? {
-          ...(receipt.resolution.requestedTarget
-            ? { requestedTarget: textAddressToSDAddress(receipt.resolution.requestedTarget) }
-            : {}),
-          target: textAddressToSDAddress(receipt.resolution.target),
-        }
-      : undefined,
+    resolution: receipt.resolution ? buildSDResolution(receipt.resolution) : undefined,
   };
 }

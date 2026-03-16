@@ -23,6 +23,7 @@ import { executeDualKindSelector } from './find/dual-kind-strategy.js';
 import { executeInlineSelector } from './find/inline-strategy.js';
 import { executeTextSelector } from './find/text-strategy.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
+import { buildSelectionTargetFromTextRanges, encodeV3Ref } from './plan-engine/query-match-adapter.js';
 import {
   projectContentNode,
   projectInlineNode,
@@ -66,9 +67,32 @@ export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
   // Merge parallel arrays into per-item FindItemDomain entries.
   const items = result.matches.map((address, idx) => {
     const nodeId = 'nodeId' in address ? (address as { nodeId: string }).nodeId : undefined;
-    const isTextContext = result.context?.[idx]?.textRanges?.length;
-    const ref = nodeId ?? `find:${idx}`;
-    const targetKind = isTextContext ? ('text' as const) : ('node' as const);
+    const contextEntry = result.context?.[idx];
+    const textRanges = contextEntry?.textRanges;
+    const isTextContext = textRanges?.length;
+
+    // Text matches get real V3 refs so they can be chained into mutations.
+    // Node matches use the stable nodeId or a coarse indexed ref.
+    let ref: string;
+    let targetKind: 'text' | 'node';
+    if (isTextContext && textRanges) {
+      const segments = textRanges.map((tr) => ({
+        blockId: tr.blockId,
+        start: tr.range.start,
+        end: tr.range.end,
+      }));
+      ref = encodeV3Ref({
+        v: 3,
+        rev: evaluatedRevision,
+        matchId: `f:${idx}`,
+        scope: 'match',
+        segments,
+      });
+      targetKind = 'text';
+    } else {
+      ref = nodeId ?? `find:${idx}`;
+      targetKind = 'node';
+    }
     const handle = buildResolvedHandle(ref, 'ephemeral', targetKind);
 
     const domain: {
@@ -77,7 +101,13 @@ export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
       context?: typeof result.context extends (infer U)[] | undefined ? U : never;
     } = { address };
     if (includedNodes?.[idx]) domain.node = includedNodes[idx];
-    if (result.context?.[idx]) domain.context = result.context[idx];
+    if (contextEntry) {
+      // Inject mutation-ready SelectionTarget into text match contexts.
+      if (textRanges?.length) {
+        contextEntry.target = buildSelectionTargetFromTextRanges(textRanges);
+      }
+      domain.context = contextEntry;
+    }
 
     return buildDiscoveryItem(ref, handle, domain);
   });

@@ -122,6 +122,35 @@ describe('document-api contract catalog', () => {
     ).toEqual(['forbid', 'allow']);
   });
 
+  it('accepts both object and array SDFragment in structural insert content schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertInput = schemas.operations.insert.input as { oneOf?: Array<{ properties?: Record<string, unknown> }> };
+    const structuralVariant = insertInput.oneOf![1];
+    const contentSchema = structuralVariant.properties!.content as { oneOf?: Array<{ type?: string }> };
+
+    expect(Array.isArray(contentSchema.oneOf)).toBe(true);
+    expect(contentSchema.oneOf).toHaveLength(2);
+    expect(contentSchema.oneOf![0].type).toBe('object');
+    expect(contentSchema.oneOf![1].type).toBe('array');
+  });
+
+  it('accepts both object and array SDFragment in structural replace content schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const replaceInput = schemas.operations.replace.input as {
+      oneOf?: Array<{ oneOf?: Array<{ properties?: Record<string, unknown> }> }>;
+    };
+    // The structural branch is the second oneOf element
+    const structuralBranch = replaceInput.oneOf![1] as { oneOf?: Array<{ properties?: Record<string, unknown> }> };
+
+    for (const variant of structuralBranch.oneOf!) {
+      const contentSchema = variant.properties!.content as { oneOf?: Array<{ type?: string }> };
+      expect(Array.isArray(contentSchema.oneOf)).toBe(true);
+      expect(contentSchema.oneOf).toHaveLength(2);
+      expect(contentSchema.oneOf![0].type).toBe('object');
+      expect(contentSchema.oneOf![1].type).toBe('array');
+    }
+  });
+
   it('declares UNSUPPORTED_ENVIRONMENT for insert metadata and generated failure schema', () => {
     const schemas = buildInternalContractSchemas();
     const insertFailureSchema = schemas.operations.insert.failure as {

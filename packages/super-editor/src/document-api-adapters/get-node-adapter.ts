@@ -1,6 +1,7 @@
 import type { Editor } from '../core/Editor.js';
 import type { BlockNodeType, GetNodeByIdInput, NodeAddress, SDNodeResult } from '@superdoc/document-api';
 import type { BlockCandidate, BlockIndex } from './helpers/node-address-resolver.js';
+import { findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
 import { projectContentNode, projectInlineNode, projectMarkBasedInline } from './helpers/sd-projection.js';
@@ -35,12 +36,6 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResu
 
   if (address.kind === 'block') {
     const matches = findBlocksByTypeAndId(blockIndex, address.nodeType, address.nodeId);
-    if (matches.length === 0) {
-      throw new DocumentApiAdapterError(
-        'TARGET_NOT_FOUND',
-        `Node "${address.nodeType}" not found for id "${address.nodeId}".`,
-      );
-    }
     if (matches.length > 1) {
       throw new DocumentApiAdapterError(
         'TARGET_NOT_FOUND',
@@ -48,10 +43,29 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResu
       );
     }
 
-    const candidate = matches[0]!;
+    let candidate = matches[0];
+
+    // Fallback: nodeId-only lookup handles stale subtypes after paragraph ↔
+    // heading / listItem restyling (the PM node and its nodeId stay the same
+    // but the indexed nodeType changes).
+    if (!candidate) {
+      try {
+        candidate = findBlockByNodeIdOnly(blockIndex, address.nodeId);
+      } catch {
+        // AMBIGUOUS_TARGET / TARGET_NOT_FOUND — throw the original error below
+      }
+    }
+
+    if (!candidate) {
+      throw new DocumentApiAdapterError(
+        'TARGET_NOT_FOUND',
+        `Node "${address.nodeType}" not found for id "${address.nodeId}".`,
+      );
+    }
+
     return {
       node: projectContentNode(candidate.node),
-      address: buildBlockAddress(address),
+      address: { kind: 'block', nodeType: candidate.nodeType, nodeId: candidate.nodeId } as NodeAddress,
     };
   }
 

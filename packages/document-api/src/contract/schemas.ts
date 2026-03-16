@@ -1395,6 +1395,10 @@ const capabilitiesOutputSchema = objectSchema(
 
 const strictEmptyObjectSchema = objectSchema({});
 
+const sdFragmentSchema: JsonSchema = {
+  oneOf: [{ type: 'object' }, { type: 'array', items: { type: 'object' } }],
+};
+
 const placementSchema: JsonSchema = { enum: ['before', 'after', 'insideStart', 'insideEnd'] };
 
 const nestingPolicySchema = objectSchema({
@@ -1414,7 +1418,7 @@ const insertInputSchema: JsonSchema = {
     objectSchema(
       {
         target: blockNodeAddressSchema,
-        content: { type: 'object' },
+        content: sdFragmentSchema,
         placement: placementSchema,
         nestingPolicy: nestingPolicySchema,
       },
@@ -2596,7 +2600,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             objectSchema(
               {
                 target: { oneOf: [blockNodeAddressSchema, selectionTargetSchema] },
-                content: { type: 'object' },
+                content: sdFragmentSchema,
                 nestingPolicy: nestingPolicySchema,
               },
               ['target', 'content'],
@@ -2604,7 +2608,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             objectSchema(
               {
                 ref: { type: 'string' },
-                content: { type: 'object' },
+                content: sdFragmentSchema,
                 nestingPolicy: nestingPolicySchema,
               },
               ['ref', 'content'],

@@ -149,7 +149,7 @@ function translateToInternalQuery(input: SDFindInput): Query {
 
   // Reject legacy selector vocabulary that would otherwise be silently ignored.
   if (select.type === 'node') {
-    const raw = select as Record<string, unknown>;
+    const raw = select as unknown as Record<string, unknown>;
     if ('nodeKind' in raw && raw.nodeKind != null) {
       throw new DocumentApiAdapterError(
         'INVALID_INPUT',

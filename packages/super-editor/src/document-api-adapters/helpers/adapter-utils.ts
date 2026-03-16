@@ -380,7 +380,20 @@ export function resolveWithinScope(
 ): WithinResult {
   if (!query.within) return { ok: true, range: undefined };
 
-  const within = findBlockById(index, query.within);
+  // Try exact nodeType:nodeId match first.
+  let within = findBlockById(index, query.within);
+
+  // Fallback: nodeId-only lookup handles stale subtypes after paragraph ↔
+  // heading / listItem restyling (the PM node and its nodeId stay the same
+  // but the indexed nodeType changes).
+  if (!within && query.within.kind === 'block') {
+    try {
+      within = findBlockByNodeIdOnly(index, query.within.nodeId);
+    } catch {
+      // TARGET_NOT_FOUND / AMBIGUOUS_TARGET — fall through to diagnostic
+    }
+  }
+
   if (!within) {
     addDiagnostic(
       diagnostics,

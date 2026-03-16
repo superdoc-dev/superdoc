@@ -1,5 +1,6 @@
 import { getMarkRange } from '../helpers/getMarkRange.js';
 import { getMarkType } from '../helpers/getMarkType.js';
+import { syncParagraphRunProperties } from '../helpers/syncParagraphRunProperties.js';
 
 /**
  * Remove all marks in the current selection.
@@ -36,6 +37,7 @@ export const unsetMark = (typeOrName, options = {}) => ({ tr, state, dispatch, e
   }
 
   tr.removeStoredMark(type);
+  syncParagraphRunProperties(tr);
 
   return true;
 };

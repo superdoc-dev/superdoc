@@ -1,6 +1,7 @@
 import { Attribute } from '../Attribute.js';
 import { getMarkType } from '../helpers/getMarkType.js';
 import { isTextSelection } from '../helpers/isTextSelection.js';
+import { syncParagraphRunProperties } from '../helpers/syncParagraphRunProperties.js';
 
 function canSetMark(editor, state, tr, newMarkType) {
   let { selection } = tr;
@@ -70,6 +71,7 @@ export const setMark = (typeOrName, attributes = {}) => ({ tr, state, dispatch, 
             ...attributes,
           }),
         );
+        syncParagraphRunProperties(tr);
       } else {
         ranges.forEach((range) => {
           const from = range.$from.pos;

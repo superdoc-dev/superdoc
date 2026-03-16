@@ -48,8 +48,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Generate SDK artifacts
+        run: pnpm run generate:all
+
       - name: Build superdoc (dependency)
         run: pnpm run build:superdoc
+
+      - name: Build SDK (dependency)
+        run: pnpm --prefix packages/sdk/langs/node run build
 
       - name: Build MCP server
         run: pnpm --prefix apps/mcp run build

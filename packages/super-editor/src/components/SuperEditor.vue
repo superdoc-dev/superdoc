@@ -1048,7 +1048,11 @@ const handleSuperEditorClick = (event) => {
   }
 
   // Update table resize overlay on click
-  updateTableResizeOverlay(event);
+  if (isViewingMode()) {
+    hideTableResizeOverlay();
+  } else {
+    updateTableResizeOverlay(event);
+  }
 };
 
 onMounted(() => {

@@ -1869,7 +1869,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'ranges/resolve.mdx',
     referenceGroup: 'ranges',
-    essential: true,
   },
 
   'mutations.preview': {

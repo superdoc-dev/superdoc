@@ -2789,6 +2789,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           media,
           true,
           updatedDocs,
+          this.options.fonts,
         );
 
         // Reconcile package-level singleton metadata (content-type overrides

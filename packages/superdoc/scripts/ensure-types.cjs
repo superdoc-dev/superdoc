@@ -106,12 +106,11 @@ for (const filePath of dtsFiles) {
   let changed = false;
 
   // Fix pnpm node_modules paths → bare specifiers
-  const pnpmResult = fileContent.replace(PNPM_PATH_RE, (match, quote, _fullPath, packageName) => {
+  fileContent = fileContent.replace(PNPM_PATH_RE, (match, quote, _fullPath, packageName) => {
     changed = true;
     totalReplacements++;
     return `${quote}${packageName}${quote}`;
   });
-  fileContent = pnpmResult;
 
   // Fix broken absolute-looking paths → relative paths
   const relDir = path.relative(path.dirname(filePath), path.join(distRoot, 'superdoc/src'));
@@ -219,10 +218,13 @@ const shimLines = [
   '// when skipLibCheck is false.',
   '//',
   '// KNOWN LIMITATION: ambient `declare module` with `export type X = any`',
-  '// overrides real package types when both are present. Consumers who install',
-  '// prosemirror-*, vue, yjs, or @hocuspocus/provider alongside superdoc will',
-  '// see those types resolve to `any`. The proper fix is adding prosemirror-*',
-  '// as peerDependencies so consumers always have real types available.',
+  '// overrides real package types when both are present. This affects:',
+  '//   - vue, eventemitter3: direct deps of superdoc — ALWAYS in consumer',
+  '//     node_modules, so real types are always replaced by `any`.',
+  '//   - yjs, @hocuspocus/provider: peer deps — affected when installed.',
+  '//   - prosemirror-*: bundled (not in consumer node_modules) — no conflict.',
+  '// The proper fix is adding prosemirror-* as peerDependencies and removing',
+  '// shims for packages consumers already have installed.',
   '//',
   '// NOTE: This is a script file (no exports), so `declare module` creates',
   '// global ambient declarations and top-level declarations are global.',
@@ -318,12 +320,7 @@ if (workspaceImports.size > 0) {
     wsCount++;
     const sortedNames = [...names].sort();
     const exportLines = sortedNames
-      .filter(n => n !== 'default')
       .map(n => `  export type ${n} = any;`);
-    if (sortedNames.includes('default')) {
-      exportLines.push('  const _default: any;');
-      exportLines.push('  export default _default;');
-    }
     if (exportLines.length > 0) {
       shimLines.push(`declare module '${mod}' {\n${exportLines.join('\n')}\n}`);
     } else {

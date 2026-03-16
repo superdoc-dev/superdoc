@@ -18,14 +18,14 @@ cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
 
 echo "==> Packing superdoc..."
-TARBALL=$(cd "$PKG_DIR" && npm pack --pack-destination "$WORK_DIR" 2>/dev/null)
+TARBALL=$(cd "$PKG_DIR" && npm pack --pack-destination "$WORK_DIR" --quiet)
 
 echo "==> Setting up consumer project..."
 cp "$SCRIPT_DIR/test.ts" "$WORK_DIR/test.ts"
 cp "$SCRIPT_DIR/tsconfig.json" "$WORK_DIR/tsconfig.json"
 
 # Install typescript and @types/node first
-npm install --prefix "$WORK_DIR" typescript @types/node --save-dev --silent 2>/dev/null
+npm install --prefix "$WORK_DIR" typescript @types/node --save-dev --silent
 
 # Extract superdoc AFTER npm install (so npm doesn't wipe it)
 mkdir -p "$WORK_DIR/node_modules/superdoc"

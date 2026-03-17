@@ -12,6 +12,7 @@
  * receives the correct input shape.
  */
 
+import { CliError } from './errors.js';
 import { CLI_DOC_OPERATIONS, type CliExposedOperationId } from '../cli/operation-set.js';
 
 /**
@@ -88,19 +89,20 @@ const FORMAT_TARGET_OPERATIONS = CLI_DOC_OPERATIONS.filter((operationId): operat
 // ---------------------------------------------------------------------------
 
 /**
- * Operations that accept a text-range target (textAddressSchema):
+ * Operations that accept a SelectionTarget or a mutation-ready `ref`.
+ * The CLI still supports legacy single-block text range flags/JSON inputs and
+ * upgrades them to the equivalent SelectionTarget before dispatch.
+ */
+const SELECTION_TARGET_OPERATIONS = new Set<CliExposedOperationId>(['replace', 'delete', ...FORMAT_TARGET_OPERATIONS]);
+
+/**
+ * Operations that still accept a text-range target (textAddressSchema):
  *   target: { kind: 'text', blockId, range: { start, end } }
  *
  * When the CLI input has flat `blockId` + `start` + `end` but no `target`,
  * these are folded into a canonical target object.
  */
-const TEXT_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
-  'replace',
-  'delete',
-  ...FORMAT_TARGET_OPERATIONS,
-  'comments.create',
-  'comments.patch',
-]);
+const TEXT_ADDRESS_TARGET_OPERATIONS = new Set<CliExposedOperationId>(['comments.create', 'comments.patch']);
 
 /**
  * Insert is a text-range operation but uses `offset` instead of `start`/`end`
@@ -129,6 +131,50 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isTextAddressLike(value: unknown): value is {
+  kind: 'text';
+  blockId: string;
+  range: { start: number; end: number };
+} {
+  if (!isRecord(value) || value.kind !== 'text' || typeof value.blockId !== 'string') return false;
+  if (!isRecord(value.range)) return false;
+  return typeof value.range.start === 'number' && typeof value.range.end === 'number';
+}
+
+function textAddressToSelectionTarget(target: {
+  blockId: string;
+  range: { start: number; end: number };
+}): Record<string, unknown> {
+  return {
+    kind: 'selection',
+    start: {
+      kind: 'text',
+      blockId: target.blockId,
+      offset: target.range.start,
+    },
+    end: {
+      kind: 'text',
+      blockId: target.blockId,
+      offset: target.range.end,
+    },
+  };
+}
+
+function isCollapsedTextAddress(target: { range: { start: number; end: number } }): boolean {
+  return target.range.start === target.range.end;
+}
+
+function assertLegacySelectionTargetSupported(
+  operationId: CliExposedOperationId,
+  target: {
+    range: { start: number; end: number };
+  },
+): void {
+  if (operationId.startsWith('format.') && isCollapsedTextAddress(target)) {
+    throw new CliError('INVALID_ARGUMENT', `${operationId} requires a non-collapsed target range.`);
+  }
+}
+
 /**
  * Normalizes flat CLI flags into canonical `target` objects.
  *
@@ -139,11 +185,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeFlatTargetFlags(operationId: CliExposedOperationId, apiInput: unknown): unknown {
   if (!isRecord(apiInput)) return apiInput;
 
-  // Skip if target is already provided
-  if (apiInput.target !== undefined) return apiInput;
+  if (apiInput.target !== undefined) {
+    if (SELECTION_TARGET_OPERATIONS.has(operationId) && isTextAddressLike(apiInput.target)) {
+      assertLegacySelectionTargetSupported(operationId, apiInput.target);
+      return {
+        ...apiInput,
+        target: textAddressToSelectionTarget(apiInput.target),
+      };
+    }
+    return apiInput;
+  }
 
-  // --- Text-range operations (replace, delete, format.apply, comments.create, comments.patch) ---
-  if (TEXT_TARGET_OPERATIONS.has(operationId)) {
+  // --- Selection-based text mutations (replace, delete, format.*) ---
+  if (SELECTION_TARGET_OPERATIONS.has(operationId)) {
+    const blockId = apiInput.blockId;
+    if (typeof blockId === 'string') {
+      const start = typeof apiInput.start === 'number' ? apiInput.start : 0;
+      const end = typeof apiInput.end === 'number' ? apiInput.end : 0;
+      assertLegacySelectionTargetSupported(operationId, { range: { start, end } });
+      const { blockId: _, start: _s, end: _e, ...rest } = apiInput;
+      return {
+        ...rest,
+        target: textAddressToSelectionTarget({ blockId, range: { start, end } }),
+      };
+    }
+    return apiInput;
+  }
+
+  // --- Text-address operations (comments.create, comments.patch) ---
+  if (TEXT_ADDRESS_TARGET_OPERATIONS.has(operationId)) {
     const blockId = apiInput.blockId;
     if (typeof blockId === 'string') {
       const start = typeof apiInput.start === 'number' ? apiInput.start : 0;

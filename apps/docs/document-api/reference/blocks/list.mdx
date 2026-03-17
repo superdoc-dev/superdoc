@@ -1,0 +1,183 @@
+---
+title: blocks.list
+sidebarTitle: blocks.list
+description: List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.
+
+- Operation ID: `blocks.list`
+- API member path: `editor.doc.blocks.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | number | no |  |
+| `nodeTypes` | enum[] | no |  |
+| `offset` | number | no |  |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `blocks` | object[] | yes |  |
+| `revision` | string | yes |  |
+| `total` | number | yes |  |
+
+### Example response
+
+```json
+{
+  "blocks": [
+    {
+      "isEmpty": true,
+      "nodeId": "node-def456",
+      "nodeType": "paragraph",
+      "ordinal": 1,
+      "textPreview": "example"
+    }
+  ],
+  "revision": "example",
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "minimum": 1,
+      "type": "number"
+    },
+    "nodeTypes": {
+      "items": {
+        "enum": [
+          "paragraph",
+          "heading",
+          "listItem",
+          "table",
+          "tableRow",
+          "tableCell",
+          "tableOfContents",
+          "image",
+          "sdt"
+        ]
+      },
+      "type": "array"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "blocks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "isEmpty": {
+            "type": "boolean"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeType": {
+            "enum": [
+              "paragraph",
+              "heading",
+              "listItem",
+              "table",
+              "tableRow",
+              "tableCell",
+              "tableOfContents",
+              "image",
+              "sdt"
+            ]
+          },
+          "ordinal": {
+            "type": "number"
+          },
+          "textPreview": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ordinal",
+          "nodeId",
+          "nodeType",
+          "textPreview",
+          "isEmpty"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "total": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "total",
+    "blocks",
+    "revision"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

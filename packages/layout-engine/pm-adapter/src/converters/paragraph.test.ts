@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   paragraphToFlowBlocks as baseParagraphToFlowBlocks,
+  handleParagraphNode,
   mergeAdjacentRuns,
   dataAttrsCompatible,
   commentsCompatible,
@@ -22,6 +23,7 @@ import type {
   HyperlinkConfig,
   ThemeColorPalette,
   NestedConverters,
+  NodeHandlerContext,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import type {
@@ -795,6 +797,109 @@ describe('paragraph converters', () => {
       vi.mocked(annotateBlockWithTrackedChange).mockImplementation(() => undefined);
       vi.mocked(applyMarksToRun).mockImplementation(() => undefined);
     });
+
+    const mockParagraphMarkTrackedChanges = () => {
+      vi.mocked(collectTrackedChangeFromMarks).mockImplementation((marks) => {
+        const markType = marks[0]?.type;
+        const id = typeof marks[0]?.attrs?.id === 'string' ? marks[0].attrs.id : undefined;
+        if (markType === 'trackInsert') {
+          return {
+            kind: 'insert',
+            ...(id ? { id } : {}),
+          };
+        }
+        if (markType === 'trackDelete') {
+          return {
+            kind: 'delete',
+            ...(id ? { id } : {}),
+          };
+        }
+        return undefined;
+      });
+    };
+
+    const createTrackedListParagraph = ({
+      ordinal,
+      markerText,
+      numberingType,
+      paragraphMarkChange,
+      customFormat,
+    }: {
+      ordinal: number;
+      markerText: string;
+      numberingType: string;
+      paragraphMarkChange?: 'insert' | 'delete';
+      customFormat?: string;
+    }): PMNode => ({
+      type: 'paragraph',
+      content: [],
+      attrs: {
+        listRendering: {
+          numberingType,
+          path: [ordinal],
+          markerText,
+          ...(customFormat ? { customFormat } : {}),
+        },
+        ...(paragraphMarkChange
+          ? {
+              paragraphProperties: {
+                runProperties: {
+                  [paragraphMarkChange === 'insert' ? 'trackInsert' : 'trackDelete']: {
+                    id: `${paragraphMarkChange}-${ordinal}`,
+                    author: 'Test Author',
+                    date: '2026-03-01T12:00:00Z',
+                  },
+                },
+              },
+            }
+          : {}),
+        mockParagraphAttrs: {
+          numberingProperties: { ilvl: 0, numId: 42 },
+          wordLayout: {
+            marker: {
+              markerText,
+            },
+          },
+        },
+      },
+    });
+
+    const mockParagraphAttrsFromNode = () => {
+      vi.mocked(computeParagraphAttrs).mockImplementation((node) => ({
+        paragraphAttrs:
+          ((node.attrs ?? {}) as { mockParagraphAttrs?: Record<string, unknown> }).mockParagraphAttrs ?? {},
+        resolvedParagraphProperties: {},
+      }));
+    };
+
+    const createParagraphHandlerContext = (trackedChangesConfig: TrackedChangesConfig): NodeHandlerContext => ({
+      blocks: [],
+      recordBlockKind: vi.fn(),
+      nextBlockId,
+      positions,
+      defaultFont: 'Arial',
+      defaultSize: 16,
+      converterContext,
+      trackedChangesConfig,
+      hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+      enableComments: true,
+      bookmarks: new Map(),
+      sectionState: {
+        ranges: [],
+        currentSectionIndex: 0,
+        currentParagraphIndex: 0,
+      },
+      converters: {
+        paragraphToFlowBlocks: baseParagraphToFlowBlocks,
+      } as unknown as NestedConverters,
+      trackedListMarkerOffsets: new Map(),
+      trackedListLastOrdinals: new Map(),
+    });
+
+    const getMarkerText = (block: FlowBlock | undefined): string | undefined => {
+      const attrs = (block as { attrs?: { wordLayout?: { marker?: { markerText?: string } } } } | undefined)?.attrs;
+      return attrs?.wordLayout?.marker?.markerText;
+    };
 
     describe('Basic functionality', () => {
       it('should create empty paragraph for node with no content', () => {
@@ -1959,6 +2064,78 @@ describe('paragraph converters', () => {
         expect(shapeTextboxNodeToDrawingBlock).toHaveBeenCalledWith(shapeNode, nextBlockId, positions);
       });
 
+      it('should handle chart node', () => {
+        const chartNode: PMNode = {
+          type: 'chart',
+          attrs: {
+            width: 576,
+            height: 588,
+            chartData: {
+              chartType: 'barChart',
+              barDirection: 'col',
+              series: [{ name: 'Series 1', categories: ['A', 'B'], values: [10, 20] }],
+            },
+          },
+        };
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [chartNode],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        const chartBlock = blocks.find((block) => block.kind === 'drawing' && block.drawingKind === 'chart');
+        expect(chartBlock).toBeDefined();
+      });
+
+      it('should handle chart node nested inside run', () => {
+        const chartNode: PMNode = {
+          type: 'chart',
+          attrs: {
+            width: 576,
+            height: 588,
+            chartData: {
+              chartType: 'barChart',
+              barDirection: 'col',
+              series: [{ name: 'Series 1', categories: ['A', 'B'], values: [10, 20] }],
+            },
+          },
+        };
+
+        const blocks = paragraphToFlowBlocks(
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'run',
+                attrs: { runProperties: null },
+                content: [chartNode],
+              },
+            ],
+          },
+          nextBlockId,
+          positions,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        const chartBlock = blocks.find((block) => block.kind === 'drawing' && block.drawingKind === 'chart');
+        expect(chartBlock).toBeDefined();
+      });
+
       it('should handle table node', () => {
         const tableNode: PMNode = { type: 'table' };
         const para: PMNode = {
@@ -2141,6 +2318,158 @@ describe('paragraph converters', () => {
         expect(blocks).toHaveLength(0);
       });
 
+      it('should skip tracked empty list paragraph artifacts from paragraph mark revisions', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                trackInsert: {
+                  id: 'ins-1',
+                  author: 'Test Author',
+                  date: '2026-03-01T12:00:00Z',
+                },
+              },
+            },
+          },
+        };
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+          },
+          resolvedParagraphProperties: {},
+        });
+        vi.mocked(collectTrackedChangeFromMarks).mockReturnValue({
+          kind: 'insert',
+          id: 'ins-1',
+        });
+        vi.mocked(applyTrackedChangesModeToRuns).mockImplementation((runs) => runs);
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+        expect(blocks).toHaveLength(0);
+      });
+
+      it('should preserve tracked empty list paragraph artifacts when tracked changes mode is off', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                trackInsert: {
+                  id: 'ins-1',
+                  author: 'Test Author',
+                  date: '2026-03-01T12:00:00Z',
+                },
+              },
+            },
+          },
+        };
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'off',
+          enabled: true,
+        };
+
+        const filteredRuns: Run[] = [
+          {
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ];
+
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+          },
+          resolvedParagraphProperties: {},
+        });
+        vi.mocked(collectTrackedChangeFromMarks).mockReturnValue({
+          kind: 'insert',
+          id: 'ins-1',
+        });
+        vi.mocked(applyTrackedChangesModeToRuns).mockReturnValue(filteredRuns);
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          attrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+            trackedChangesMode: 'off',
+            trackedChangesEnabled: true,
+          },
+        });
+      });
+
+      it.each([
+        {
+          mode: 'final' as const,
+          paragraphMarkChange: 'insert' as const,
+        },
+        {
+          mode: 'original' as const,
+          paragraphMarkChange: 'delete' as const,
+        },
+      ])(
+        'should keep empty tracked list paragraphs in $mode mode when the paragraph mark change survives',
+        ({ mode, paragraphMarkChange }) => {
+          mockParagraphMarkTrackedChanges();
+          mockParagraphAttrsFromNode();
+
+          const para = createTrackedListParagraph({
+            ordinal: 2,
+            markerText: '2.',
+            numberingType: 'decimal',
+            paragraphMarkChange,
+          });
+
+          const trackedChanges: TrackedChangesConfig = {
+            mode,
+            enabled: true,
+          };
+
+          // Simulate real final/original behavior: surviving runs have insert/delete
+          // metadata stripped (tracked-changes.ts:503-512), keeping only format changes.
+          vi.mocked(applyTrackedChangesModeToRuns).mockImplementation((runs) =>
+            runs.map((run) => {
+              if (!('trackedChange' in run)) return run;
+              const copy = { ...run };
+              delete (copy as Record<string, unknown>).trackedChange;
+              return copy;
+            }),
+          );
+
+          const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+          expect(blocks).toHaveLength(1);
+          expect(blocks[0]).toMatchObject({
+            kind: 'paragraph',
+            attrs: {
+              numberingProperties: { ilvl: 0, numId: 42 },
+              trackedChangesMode: mode,
+              trackedChangesEnabled: true,
+            },
+          });
+
+          const paragraphBlock = blocks[0] as ParagraphBlock;
+          expect(paragraphBlock.runs).toHaveLength(1);
+          expect(paragraphBlock.runs[0]).toMatchObject({ text: '' });
+          // insert/delete metadata is stripped by applyTrackedChangesModeToRuns in final/original mode
+          expect(paragraphBlock.runs[0]).not.toHaveProperty('trackedChange');
+        },
+      );
+
       it('should not apply tracked changes mode when config not provided', () => {
         const para: PMNode = {
           type: 'paragraph',
@@ -2169,6 +2498,72 @@ describe('paragraph converters', () => {
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
 
         expect(blocks.some((b) => b.kind === 'pageBreak')).toBe(true);
+      });
+
+      it('should preserve custom list marker formatting when renumbering after a suppressed ghost item', () => {
+        mockParagraphMarkTrackedChanges();
+        mockParagraphAttrsFromNode();
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 2,
+            markerText: '002.',
+            numberingType: 'custom',
+            paragraphMarkChange: 'insert',
+            customFormat: '001, 002, 003, ...',
+          }),
+          context,
+        );
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 3,
+            markerText: '003.',
+            numberingType: 'custom',
+            customFormat: '001, 002, 003, ...',
+          }),
+          context,
+        );
+
+        expect(context.blocks).toHaveLength(1);
+        expect(getMarkerText(context.blocks[0])).toBe('002.');
+      });
+
+      it('should renumber non-ASCII list markers after a suppressed ghost item', () => {
+        mockParagraphMarkTrackedChanges();
+        mockParagraphAttrsFromNode();
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 2,
+            markerText: '二.',
+            numberingType: 'japaneseCounting',
+            paragraphMarkChange: 'insert',
+          }),
+          context,
+        );
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 3,
+            markerText: '三.',
+            numberingType: 'japaneseCounting',
+          }),
+          context,
+        );
+
+        expect(context.blocks).toHaveLength(1);
+        expect(getMarkerText(context.blocks[0])).toBe('二.');
       });
     });
 

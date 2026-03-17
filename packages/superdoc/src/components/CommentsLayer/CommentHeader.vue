@@ -1,12 +1,12 @@
 <script setup>
 import { formatDate } from './helpers';
 import { superdocIcons } from '@superdoc/icons.js';
-import { NDropdown } from 'naive-ui';
 import { computed, getCurrentInstance } from 'vue';
 import { isAllowed, PERMISSIONS } from '@superdoc/core/collaboration/permissions.js';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import Avatar from '@superdoc/components/general/Avatar.vue';
 import { useUiFontFamily } from '@superdoc/composables/useUiFontFamily.js';
+import CommentsDropdown from './CommentsDropdown.vue';
 
 const emit = defineEmits(['resolve', 'reject', 'overflow-select']);
 const commentsStore = useCommentsStore();
@@ -178,17 +178,16 @@ const getCurrentUser = computed(() => {
         @click.stop.prevent="handleReject"
       ></div>
 
-      <n-dropdown
+      <CommentsDropdown
         v-if="allowOverflow"
-        trigger="click"
         :options="getOverflowOptions"
         @select="handleSelect"
         :content-style="{ fontFamily: uiFontFamily }"
       >
-        <div class="overflow-menu__icon" @click.stop.prevent>
+        <div class="overflow-menu__icon">
           <div class="overflow-icon" v-html="superdocIcons.overflow"></div>
         </div>
-      </n-dropdown>
+      </CommentsDropdown>
     </div>
   </div>
 </template>

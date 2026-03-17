@@ -118,16 +118,57 @@ describe('createHistoryAdapter', () => {
   });
 
   it('returns noop=false when undo/redo commands succeed', () => {
+    undoDepthMock.mockReturnValue(1);
+    redoDepthMock.mockReturnValue(1);
     const adapter = createHistoryAdapter(makeEditor());
 
     const undoResult = adapter.undo();
     const redoResult = adapter.redo();
 
     expect(undoResult.noop).toBe(false);
+    expect(undoResult.reason).toBeUndefined();
     expect(redoResult.noop).toBe(false);
+    expect(redoResult.reason).toBeUndefined();
     expect(undoResult.revision.before).toBeDefined();
     expect(undoResult.revision.after).toBeDefined();
     expect(redoResult.revision.before).toBeDefined();
     expect(redoResult.revision.after).toBeDefined();
+  });
+
+  it('returns EMPTY_UNDO_STACK reason when undo stack is empty', () => {
+    undoDepthMock.mockReturnValue(0);
+    const adapter = createHistoryAdapter(makeEditor());
+
+    const result = adapter.undo();
+
+    expect(result.noop).toBe(true);
+    expect(result.reason).toBe('EMPTY_UNDO_STACK');
+  });
+
+  it('returns EMPTY_REDO_STACK reason when redo stack is empty', () => {
+    redoDepthMock.mockReturnValue(0);
+    const adapter = createHistoryAdapter(makeEditor());
+
+    const result = adapter.redo();
+
+    expect(result.noop).toBe(true);
+    expect(result.reason).toBe('EMPTY_REDO_STACK');
+  });
+
+  it('returns NO_EFFECT when command returns false with non-empty stack', () => {
+    undoDepthMock.mockReturnValue(1);
+    const adapter = createHistoryAdapter(
+      makeEditor({
+        commands: {
+          undo: vi.fn(() => false),
+          redo: vi.fn(() => true),
+        } as unknown as Editor['commands'],
+      }),
+    );
+
+    const result = adapter.undo();
+
+    expect(result.noop).toBe(true);
+    expect(result.reason).toBe('NO_EFFECT');
   });
 });

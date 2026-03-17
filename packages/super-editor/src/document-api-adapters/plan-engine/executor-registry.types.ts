@@ -7,7 +7,7 @@
 
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
-import type { StepOutcome, StepOutcomeData, MutationStep } from '@superdoc/document-api';
+import type { StepOutcome, StepOutcomeData, MutationStep, SelectionTarget } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { CapturedStyle } from './style-resolver.js';
 
@@ -56,7 +56,30 @@ export interface CompiledSpanTarget {
   capturedStyleBySegment?: CapturedStyle[];
 }
 
-export type CompiledTarget = CompiledRangeTarget | CompiledSpanTarget;
+/**
+ * Selection-based compiled target — produced by `where.by: 'target'`.
+ *
+ * Uses absolute PM positions directly, without block-relative text offsets.
+ * This is the canonical internal shape for explicit SelectionTarget inputs,
+ * including nodeEdge boundaries that have no block-relative representation.
+ */
+export interface CompiledSelectionTarget {
+  kind: 'selection';
+  stepId: string;
+  op: string;
+  absFrom: number;
+  absTo: number;
+  /** The normalized SelectionTarget (direction-corrected). */
+  normalizedTarget: SelectionTarget;
+  /** Canonical text snapshot using doc.textBetween projection. */
+  text: string;
+  /** Optional per-segment detail when the selection spans multiple blocks. */
+  segments?: CompiledSegment[];
+  /** Captured inline style data for style-preserving operations. */
+  capturedStyle?: CapturedStyle;
+}
+
+export type CompiledTarget = CompiledRangeTarget | CompiledSpanTarget | CompiledSelectionTarget;
 
 // ---------------------------------------------------------------------------
 // Executor context and interface

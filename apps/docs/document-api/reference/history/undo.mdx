@@ -22,7 +22,7 @@ Undo the most recent history-safe mutation in the active editor.
 
 ## Expected result
 
-Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the undo stack is empty.
+Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.
 
 ## Input fields
 

@@ -54,7 +54,7 @@ import {
 import { DocumentApiAdapterError } from '../errors.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { resolveBlockInsertionPos } from './create-insertion.js';
+import { resolveCreateAnchor } from './create-insertion.js';
 import { readImageDimensionsFromDataUri } from '../../core/super-converter/image-dimensions.js';
 import { generateUniqueDocPrId } from '../../extensions/image/imageHelpers/startImageUpload.js';
 
@@ -172,9 +172,10 @@ function resolveImageInsertPosition(editor: Editor, location: ImageCreateLocatio
       return editor.state.doc.content.size;
     case 'before':
     case 'after':
-      return resolveBlockInsertionPos(editor, location.target.nodeId, location.kind);
+      return resolveCreateAnchor(editor, location.target, location.kind).pos;
     case 'inParagraph': {
-      const pos = resolveBlockInsertionPos(editor, location.target.nodeId, 'before');
+      // Pre-flight nodeType validation via resolveCreateAnchor, then compute inline offset
+      const { pos } = resolveCreateAnchor(editor, location.target, 'before');
       // pos points to the start of the paragraph node; +1 enters the inline content.
       // Add any caller-supplied character offset within the paragraph text.
       return pos + 1 + (location.offset ?? 0);
@@ -1207,26 +1208,38 @@ export function imagesSetHyperlinkWrapper(
 // SD-2100: Caption lifecycle
 // ===========================================================================
 
-/** Find the caption paragraph immediately following the image's parent paragraph. */
-function findCaptionParagraph(editor: Editor, imagePos: number) {
+function findContainingParagraph(editor: Editor, imagePos: number) {
   const $pos = editor.state.doc.resolve(imagePos);
-  const parentDepth = $pos.depth - 1;
-  if (parentDepth < 0) return null;
+  for (let depth = $pos.depth; depth >= 1; depth -= 1) {
+    const node = $pos.node(depth);
+    if (node.type.name !== 'paragraph') continue;
+    return {
+      depth,
+      pos: $pos.before(depth),
+      node,
+    };
+  }
 
-  const parentPos = $pos.before(parentDepth + 1);
-  const parentNode = $pos.node(parentDepth + 1);
-  const afterParentPos = parentPos + parentNode.nodeSize;
-
-  if (afterParentPos >= editor.state.doc.content.size) return null;
-
-  const nextNode = editor.state.doc.nodeAt(afterParentPos);
-  if (!nextNode || nextNode.type.name !== 'paragraph') return null;
-  if (nextNode.attrs?.paragraphProperties?.styleId !== 'Caption') return null;
-
-  return { pos: afterParentPos, node: nextNode };
+  throw new DocumentApiAdapterError('INVALID_TARGET', 'Caption operations require the image to be inside a paragraph.');
 }
 
-/** Verify the image is the sole inline content of its parent paragraph. */
+/** Find the caption paragraph immediately following the image's containing paragraph. */
+function findCaptionParagraph(editor: Editor, imagePos: number) {
+  const paragraph = findContainingParagraph(editor, imagePos);
+  const afterParagraphPos = paragraph.pos + paragraph.node.nodeSize;
+
+  if (afterParagraphPos >= editor.state.doc.content.size) return null;
+
+  const nextNode = editor.state.doc.nodeAt(afterParagraphPos);
+  if (!nextNode || nextNode.type.name !== 'paragraph') return null;
+
+  const styleId = nextNode.attrs?.paragraphProperties?.styleId ?? nextNode.attrs?.styleId;
+  if (styleId !== 'Caption') return null;
+
+  return { pos: afterParagraphPos, node: nextNode };
+}
+
+/** Verify the image is the sole inline content of its immediate parent container. */
 function requireSoleImageInParagraph(editor: Editor, imagePos: number): void {
   const $pos = editor.state.doc.resolve(imagePos);
   const parentDepth = $pos.depth - 1;
@@ -1267,18 +1280,16 @@ export function imagesInsertCaptionWrapper(
   if (options?.dryRun) return buildSuccessResult(image);
 
   const receipt = executeDomainCommand(editor, () => {
-    const $pos = editor.state.doc.resolve(image.pos);
-    const parentDepth = $pos.depth - 1;
-    const parentPos = $pos.before(parentDepth + 1);
-    const parentNode = $pos.node(parentDepth + 1);
-    const afterParentPos = parentPos + parentNode.nodeSize;
+    const currentImage = findImageById(editor, input.imageId);
+    const paragraph = findContainingParagraph(editor, currentImage.pos);
+    const afterParagraphPos = paragraph.pos + paragraph.node.nodeSize;
 
     const tr = editor.state.tr;
     const captionPara = editor.state.schema.nodes.paragraph.create(
       { paragraphProperties: { styleId: 'Caption' } },
       editor.state.schema.text(input.text),
     );
-    tr.insert(afterParentPos, captionPara);
+    tr.insert(afterParagraphPos, captionPara);
     if (!tr.docChanged) return false;
     editor.dispatch(tr);
     return true;

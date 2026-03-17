@@ -10,6 +10,12 @@ import { listComments } from './document-api.js';
 export const activeCommentDialog = (page: Page): Locator =>
   page.locator('.comment-placeholder .comments-dialog.is-active, .comment-placeholder .comments-dialog').last();
 
+const locatorTop = async (locator: Locator): Promise<number> => {
+  const target = locator.first();
+  await expect(target).toBeVisible({ timeout: 10_000 });
+  return target.evaluate((el) => el.getBoundingClientRect().top);
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -24,6 +30,23 @@ export async function addCommentViaUI(
   superdoc: SuperDocFixture,
   { textToSelect, commentText }: { textToSelect: string; commentText: string },
 ): Promise<void> {
+  const dialog = await openPendingCommentViaUI(superdoc, { textToSelect });
+
+  await dialog.locator('.comment-entry .superdoc-field').first().click();
+  await superdoc.page.keyboard.type(commentText);
+  await superdoc.waitForStable();
+
+  await dialog.locator('.reply-btn-primary', { hasText: 'Comment' }).first().click();
+  await superdoc.waitForStable();
+}
+
+/**
+ * Select text and open the pending comment dialog via the toolbar bubble UI.
+ */
+export async function openPendingCommentViaUI(
+  superdoc: SuperDocFixture,
+  { textToSelect }: { textToSelect: string },
+): Promise<Locator> {
   const pos = await superdoc.findTextPos(textToSelect);
   await superdoc.setTextSelection(pos, pos + textToSelect.length);
   await superdoc.waitForStable();
@@ -32,18 +55,9 @@ export async function addCommentViaUI(
   await expect(bubble).toBeVisible({ timeout: 5_000 });
   await bubble.locator('[data-id="is-tool"]').click();
 
-  // Give the layout engine time to emit pending-comment positions
-  await superdoc.page.waitForTimeout(1000);
-
   const dialog = superdoc.page.locator('.comments-dialog.is-active').last();
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
-
-  await dialog.locator('.comment-entry .superdoc-field').first().click();
-  await superdoc.page.keyboard.type(commentText);
-  await superdoc.waitForStable();
-
-  await dialog.locator('.reply-btn-primary', { hasText: 'Comment' }).first().click();
-  await superdoc.waitForStable();
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  return dialog;
 }
 
 /**
@@ -150,4 +164,19 @@ export async function addCommentViaUIWithId(
   await addCommentViaUI(superdoc, opts);
   await superdoc.assertCommentHighlightExists({ text: opts.textToSelect, timeoutMs: opts.timeoutMs });
   return getCommentId(superdoc.page, opts.textToSelect, { timeoutMs: opts.timeoutMs });
+}
+
+/**
+ * Assert that two visible locators are vertically aligned within a tolerance.
+ */
+export async function expectDialogTopNearLocator(
+  dialog: Locator,
+  anchor: Locator,
+  { tolerancePx = 16 }: { tolerancePx?: number } = {},
+): Promise<void> {
+  const [dialogTop, anchorTop] = await Promise.all([locatorTop(dialog), locatorTop(anchor)]);
+  expect(
+    Math.abs(dialogTop - anchorTop),
+    `Expected dialog top ${dialogTop} to be within ${tolerancePx}px of anchor top ${anchorTop}`,
+  ).toBeLessThanOrEqual(tolerancePx);
 }

@@ -1,6 +1,7 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
+import { SELECTION_EDGE_NODE_TYPES } from '../types/address.js';
 import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
 import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import {
@@ -62,6 +63,23 @@ function arraySchema(items: JsonSchema): JsonSchema {
 /** Returns a `{ $ref: '#/$defs/<name>' }` pointer for use in operation schemas. */
 function ref(name: string): JsonSchema {
   return { $ref: `#/$defs/${name}` };
+}
+
+/**
+ * Builds a `oneOf` schema that merges each TargetLocator branch with additional
+ * payload properties. This avoids the `allOf` + `additionalProperties: false`
+ * conflict where each branch would reject keys defined in the other schema.
+ */
+function targetLocatorWithPayload(
+  payloadProperties: Record<string, JsonSchema>,
+  payloadRequired: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema({ target: ref('SelectionTarget'), ...payloadProperties }, ['target', ...payloadRequired]),
+      objectSchema({ ref: { type: 'string' }, ...payloadProperties }, ['ref', ...payloadRequired]),
+    ],
+  };
 }
 
 /** Shared output/success/failure shape for ImagesMutationResult operations. */
@@ -159,6 +177,49 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['kind', 'segments'],
   ),
+
+  // -- Selection-based targeting --
+  SelectionEdgeNodeAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: [...SELECTION_EDGE_NODE_TYPES] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  SelectionPoint: {
+    oneOf: [
+      objectSchema({ kind: { const: 'text' }, blockId: { type: 'string' }, offset: { type: 'integer', minimum: 0 } }, [
+        'kind',
+        'blockId',
+        'offset',
+      ]),
+      objectSchema(
+        {
+          kind: { const: 'nodeEdge' },
+          node: ref('SelectionEdgeNodeAddress'),
+          edge: { enum: ['before', 'after'] },
+        },
+        ['kind', 'node', 'edge'],
+      ),
+    ],
+  } satisfies JsonSchema,
+  SelectionTarget: objectSchema(
+    {
+      kind: { const: 'selection' },
+      start: ref('SelectionPoint'),
+      end: ref('SelectionPoint'),
+    },
+    ['kind', 'start', 'end'],
+  ),
+  TargetLocator: {
+    oneOf: [
+      objectSchema({ target: ref('SelectionTarget') }, ['target']),
+      objectSchema({ ref: { type: 'string' } }, ['ref']),
+    ],
+  } satisfies JsonSchema,
+  DeleteBehavior: { enum: ['selection', 'exact'] } satisfies JsonSchema,
+
   BlockNodeAddress: objectSchema(
     {
       kind: { const: 'block' },
@@ -265,6 +326,14 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['success'],
   ),
+  ReceiptFailure: objectSchema(
+    {
+      code: { type: 'string' },
+      message: { type: 'string' },
+      details: {},
+    },
+    ['code', 'message'],
+  ),
   TextMutationRange: objectSchema(
     {
       from: { type: 'integer' },
@@ -278,6 +347,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       target: ref('TextAddress'),
       range: ref('TextMutationRange'),
       text: { type: 'string' },
+      selectionTarget: ref('SelectionTarget'),
     },
     ['target', 'range', 'text'],
   ),
@@ -391,6 +461,9 @@ const nodeAddressSchema = ref('NodeAddress');
 const commentAddressSchema = ref('CommentAddress');
 const trackedChangeAddressSchema = ref('TrackedChangeAddress');
 const entityAddressSchema = ref('EntityAddress');
+const selectionTargetSchema = ref('SelectionTarget');
+const targetLocatorSchema = ref('TargetLocator');
+const deleteBehaviorSchema = ref('DeleteBehavior');
 const resolvedHandleSchema = ref('ResolvedHandle');
 const pageInfoSchema = ref('PageInfo');
 const receiptSuccessSchema = ref('ReceiptSuccess');
@@ -642,7 +715,7 @@ function listsMutateItemResultSchemaFor(operationId: OperationId): JsonSchema {
   };
 }
 
-function listsExitResultSchemaFor(operationId: OperationId): JsonSchema {
+function _listsExitResultSchemaFor(operationId: OperationId): JsonSchema {
   return {
     oneOf: [listsExitSuccessSchema, listsFailureSchemaFor(operationId)],
   };
@@ -675,6 +748,7 @@ const matchContextSchema = objectSchema(
     snippet: { type: 'string' },
     highlightRange: rangeSchema,
     textRanges: arraySchema(textAddressSchema),
+    target: selectionTargetSchema,
   },
   ['address', 'snippet', 'highlightRange'],
 );
@@ -718,35 +792,108 @@ const selectSchema: JsonSchema = {
   anyOf: [textSelectorSchema, nodeSelectorSchema, selectorShorthandSchema],
 };
 
-const findInputSchema = objectSchema(
+// -- SDFindInput / SDFindResult schemas (SDM/1) --
+
+const sdTextSelectorSchema = objectSchema(
   {
-    select: selectSchema,
-    within: nodeAddressSchema,
+    type: { const: 'text' },
+    pattern: { type: 'string' },
+    mode: { enum: ['contains', 'regex'] },
+    caseSensitive: { type: 'boolean' },
+  },
+  ['type', 'pattern'],
+);
+
+const sdNodeSelectorSchema = objectSchema(
+  {
+    type: { const: 'node' },
+    kind: { enum: ['block', 'inline'] },
+    nodeType: { type: 'string' },
+  },
+  ['type'],
+);
+
+const sdSelectorSchema: JsonSchema = {
+  oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
+};
+
+// sdAddressSchema removed — replaced by blockNodeAddressSchema, nodeAddressSchema, textAddressSchema
+
+const sdReadOptionsSchema = objectSchema({
+  includeResolved: { type: 'boolean' },
+  includeProvenance: { type: 'boolean' },
+  includeContext: { type: 'boolean' },
+});
+
+const sdFindInputSchema = objectSchema(
+  {
+    select: sdSelectorSchema,
+    within: blockNodeAddressSchema,
     limit: { type: 'integer' },
     offset: { type: 'integer' },
-    require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
-    includeNodes: { type: 'boolean' },
-    includeUnknown: { type: 'boolean' },
+    options: sdReadOptionsSchema,
   },
   ['select'],
 );
 
-const findItemDomainSchema = discoveryItemSchema(
+const sdNodeResultSchema = objectSchema(
   {
+    node: { type: 'object' },
     address: nodeAddressSchema,
-    node: nodeInfoSchema,
-    context: matchContextSchema,
+    context: { type: 'object' },
   },
-  ['address'],
+  ['node', 'address'],
 );
 
-const findOutputSchema: JsonSchema = {
-  ...discoveryResultSchema(findItemDomainSchema),
-  properties: {
-    ...(discoveryResultSchema(findItemDomainSchema) as { properties: Record<string, JsonSchema> }).properties,
-    diagnostics: arraySchema(unknownNodeDiagnosticSchema),
+const sdFindResultSchema = objectSchema(
+  {
+    total: { type: 'integer', minimum: 0 },
+    limit: { type: 'integer', minimum: 0 },
+    offset: { type: 'integer', minimum: 0 },
+    items: arraySchema(sdNodeResultSchema),
   },
-};
+  ['total', 'limit', 'offset', 'items'],
+);
+
+// ---------------------------------------------------------------------------
+// SDMutationReceipt schemas (for insert/replace in SDM/1 format)
+// ---------------------------------------------------------------------------
+
+const sdMutationResolutionSchema = objectSchema(
+  {
+    target: { oneOf: [textAddressSchema, blockNodeAddressSchema] },
+    range: textMutationRangeSchema,
+    selectionTarget: selectionTargetSchema,
+  },
+  ['target', 'range'],
+);
+
+const sdMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    resolution: sdMutationResolutionSchema,
+    evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+  },
+  ['success'],
+);
+
+function sdMutationFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+      resolution: sdMutationResolutionSchema,
+      evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+    },
+    ['success', 'failure'],
+  );
+}
+
+function sdMutationResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [sdMutationSuccessSchema, sdMutationFailureSchemaFor(operationId)],
+  };
+}
 
 const documentInfoCountsSchema = objectSchema(
   {
@@ -1248,14 +1395,37 @@ const capabilitiesOutputSchema = objectSchema(
 
 const strictEmptyObjectSchema = objectSchema({});
 
-const insertInputSchema = objectSchema(
-  {
-    target: textAddressSchema,
-    value: { type: 'string' },
-    type: { type: 'string', enum: ['text', 'markdown', 'html'] },
-  },
-  ['value'],
-);
+const sdFragmentSchema: JsonSchema = {
+  oneOf: [{ type: 'object' }, { type: 'array', items: { type: 'object' } }],
+};
+
+const placementSchema: JsonSchema = { enum: ['before', 'after', 'insideStart', 'insideEnd'] };
+
+const nestingPolicySchema = objectSchema({
+  tables: { enum: ['forbid', 'allow'] },
+});
+
+const insertInputSchema: JsonSchema = {
+  oneOf: [
+    objectSchema(
+      {
+        target: textAddressSchema,
+        value: { type: 'string' },
+        type: { type: 'string', enum: ['text', 'markdown', 'html'] },
+      },
+      ['value'],
+    ),
+    objectSchema(
+      {
+        target: blockNodeAddressSchema,
+        content: sdFragmentSchema,
+        placement: placementSchema,
+        nestingPolicy: nestingPolicySchema,
+      },
+      ['content'],
+    ),
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Table operation shared schemas
@@ -1416,15 +1586,11 @@ function supportsImplicitTrueValue(operationId: FormatInlineAliasOperationId): b
 const formatInlineAliasOperationSchemas: Record<FormatInlineAliasOperationId, OperationSchemaSet> = Object.fromEntries(
   INLINE_PROPERTY_REGISTRY.map((entry) => {
     const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
-    const requiredFields = supportsImplicitTrueValue(operationId) ? ['target'] : ['target', 'value'];
+    const requiredFields = supportsImplicitTrueValue(operationId) ? [] : ['value'];
     const schema: OperationSchemaSet = {
-      input: objectSchema(
-        {
-          target: textAddressSchema,
-          value: entry.schema,
-        },
-        requiredFields,
-      ),
+      input: {
+        ...targetLocatorWithPayload({ value: entry.schema }, requiredFields),
+      },
       output: textMutationResultSchemaFor(operationId),
       success: textMutationSuccessSchema,
       failure: textMutationFailureSchemaFor(operationId),
@@ -1643,14 +1809,783 @@ const hyperlinkInfoSchema: JsonSchema = objectSchema(
   ['address', 'properties'],
 );
 
+// ---------------------------------------------------------------------------
+// Content Controls shared schemas
+// ---------------------------------------------------------------------------
+
+const contentControlTargetSchema = objectSchema(
+  {
+    kind: { enum: ['block', 'inline'] },
+    nodeType: { const: 'sdt' },
+    nodeId: { type: 'string' },
+  },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const contentControlMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    contentControl: contentControlTargetSchema,
+    updatedRef: contentControlTargetSchema,
+  },
+  ['success', 'contentControl'],
+);
+
+const contentControlMutationFailureSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: { $ref: '#/$defs/ReceiptFailure' },
+  },
+  ['success', 'failure'],
+);
+
+function ccMutationResultSchema(): JsonSchema {
+  return { oneOf: [contentControlMutationSuccessSchema, contentControlMutationFailureSchema] };
+}
+
+const ccListResultSchema = objectSchema(
+  { items: { type: 'array', items: { type: 'object' } }, total: { type: 'integer' } },
+  ['items', 'total'],
+);
+
+const ccInfoSchema: JsonSchema = { type: 'object', description: 'ContentControlInfo' };
+
+function ccTargetInput(): JsonSchema {
+  return objectSchema({ target: contentControlTargetSchema }, ['target']);
+}
+
+/** Generates all contentControls.* schemas in one helper to keep the main map DRY. */
+type ContentControlOperationId = Extract<OperationId, 'create.contentControl' | `contentControls.${string}`>;
+
+function buildContentControlSchemas(): Record<ContentControlOperationId, OperationSchemaSet> {
+  const targetOnlyMutation: OperationSchemaSet = {
+    input: ccTargetInput(),
+    output: ccMutationResultSchema(),
+    success: contentControlMutationSuccessSchema,
+    failure: contentControlMutationFailureSchema,
+  };
+
+  const targetOnlyRead: OperationSchemaSet = {
+    input: ccTargetInput(),
+    output: ccInfoSchema,
+  };
+
+  const ccContentMutation: OperationSchemaSet = {
+    input: objectSchema(
+      { target: contentControlTargetSchema, content: { type: 'string' }, format: { enum: ['text', 'html'] } },
+      ['target', 'content'],
+    ),
+    output: ccMutationResultSchema(),
+    success: contentControlMutationSuccessSchema,
+    failure: contentControlMutationFailureSchema,
+  };
+
+  return {
+    'create.contentControl': {
+      input: objectSchema(
+        {
+          kind: { enum: ['block', 'inline'] },
+          controlType: { type: 'string' },
+          target: contentControlTargetSchema,
+          tag: { type: 'string' },
+          alias: { type: 'string' },
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+          content: { type: 'string' },
+        },
+        ['kind'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.list': {
+      input: objectSchema({
+        controlType: { type: 'string' },
+        tag: { type: 'string' },
+        offset: { type: 'integer' },
+        limit: { type: 'integer' },
+      }),
+      output: ccListResultSchema,
+    },
+    'contentControls.get': targetOnlyRead,
+    'contentControls.listInRange': {
+      input: objectSchema(
+        {
+          startBlockId: { type: 'string' },
+          endBlockId: { type: 'string' },
+          offset: { type: 'integer' },
+          limit: { type: 'integer' },
+        },
+        ['startBlockId', 'endBlockId'],
+      ),
+      output: ccListResultSchema,
+    },
+    'contentControls.selectByTag': {
+      input: objectSchema({ tag: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } }, [
+        'tag',
+      ]),
+      output: ccListResultSchema,
+    },
+    'contentControls.selectByTitle': {
+      input: objectSchema({ title: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } }, [
+        'title',
+      ]),
+      output: ccListResultSchema,
+    },
+    'contentControls.listChildren': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, offset: { type: 'integer' }, limit: { type: 'integer' } },
+        ['target'],
+      ),
+      output: ccListResultSchema,
+    },
+    'contentControls.getParent': { input: ccTargetInput(), output: { oneOf: [ccInfoSchema, { type: 'null' }] } },
+    'contentControls.wrap': {
+      input: objectSchema(
+        {
+          kind: { enum: ['block', 'inline'] },
+          target: contentControlTargetSchema,
+          tag: { type: 'string' },
+          alias: { type: 'string' },
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+        },
+        ['kind', 'target'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.unwrap': targetOnlyMutation,
+    'contentControls.delete': targetOnlyMutation,
+    'contentControls.copy': {
+      input: objectSchema({ target: contentControlTargetSchema, destination: contentControlTargetSchema }, [
+        'target',
+        'destination',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.move': {
+      input: objectSchema({ target: contentControlTargetSchema, destination: contentControlTargetSchema }, [
+        'target',
+        'destination',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.patch': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          alias: {},
+          tag: {},
+          appearance: { enum: ['boundingBox', 'tags', 'hidden'] },
+          color: { type: 'string' },
+          placeholder: { type: 'string' },
+          showingPlaceholder: { type: 'boolean' },
+          temporary: { type: 'boolean' },
+          tabIndex: { type: 'integer' },
+        },
+        ['target'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.setLockMode': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          lockMode: { enum: ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'] },
+        },
+        ['target', 'lockMode'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.setType': {
+      input: objectSchema({ target: contentControlTargetSchema, controlType: { type: 'string' } }, [
+        'target',
+        'controlType',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.getContent': {
+      input: ccTargetInput(),
+      output: objectSchema({ content: { type: 'string' }, format: { enum: ['text', 'html'] } }, ['content', 'format']),
+    },
+    'contentControls.replaceContent': ccContentMutation,
+    'contentControls.clearContent': targetOnlyMutation,
+    'contentControls.appendContent': ccContentMutation,
+    'contentControls.prependContent': ccContentMutation,
+    'contentControls.insertBefore': ccContentMutation,
+    'contentControls.insertAfter': ccContentMutation,
+
+    // Binding
+    'contentControls.getBinding': {
+      input: ccTargetInput(),
+      output: {
+        oneOf: [
+          objectSchema(
+            { storeItemId: { type: 'string' }, xpath: { type: 'string' }, prefixMappings: { type: 'string' } },
+            ['storeItemId', 'xpath'],
+          ),
+          { type: 'null' },
+        ],
+      },
+    },
+    'contentControls.setBinding': {
+      input: objectSchema(
+        {
+          target: contentControlTargetSchema,
+          storeItemId: { type: 'string' },
+          xpath: { type: 'string' },
+          prefixMappings: { type: 'string' },
+        },
+        ['target', 'storeItemId', 'xpath'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.clearBinding': targetOnlyMutation,
+    'contentControls.getRawProperties': {
+      input: ccTargetInput(),
+      output: objectSchema({ properties: { type: 'object' } }, ['properties']),
+    },
+    'contentControls.patchRawProperties': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, patches: { type: 'array', items: { type: 'object' } } },
+        ['target', 'patches'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.validateWordCompatibility': {
+      input: ccTargetInput(),
+      output: objectSchema(
+        { compatible: { type: 'boolean' }, diagnostics: { type: 'array', items: { type: 'object' } } },
+        ['compatible', 'diagnostics'],
+      ),
+    },
+    'contentControls.normalizeWordCompatibility': targetOnlyMutation,
+    'contentControls.normalizeTagPayload': targetOnlyMutation,
+
+    // Text
+    'contentControls.text.setMultiline': {
+      input: objectSchema({ target: contentControlTargetSchema, multiline: { type: 'boolean' } }, [
+        'target',
+        'multiline',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.text.setValue': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.text.clearValue': targetOnlyMutation,
+
+    // Date
+    'contentControls.date.setValue': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.clearValue': targetOnlyMutation,
+    'contentControls.date.setDisplayFormat': {
+      input: objectSchema({ target: contentControlTargetSchema, format: { type: 'string' } }, ['target', 'format']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setDisplayLocale': {
+      input: objectSchema({ target: contentControlTargetSchema, locale: { type: 'string' } }, ['target', 'locale']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setStorageFormat': {
+      input: objectSchema({ target: contentControlTargetSchema, format: { type: 'string' } }, ['target', 'format']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.date.setCalendar': {
+      input: objectSchema({ target: contentControlTargetSchema, calendar: { type: 'string' } }, ['target', 'calendar']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Checkbox
+    'contentControls.checkbox.getState': {
+      input: ccTargetInput(),
+      output: objectSchema({ checked: { type: 'boolean' } }, ['checked']),
+    },
+    'contentControls.checkbox.setState': {
+      input: objectSchema({ target: contentControlTargetSchema, checked: { type: 'boolean' } }, ['target', 'checked']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.checkbox.toggle': targetOnlyMutation,
+    'contentControls.checkbox.setSymbolPair': {
+      input: objectSchema(
+        { target: contentControlTargetSchema, checkedSymbol: { type: 'object' }, uncheckedSymbol: { type: 'object' } },
+        ['target', 'checkedSymbol', 'uncheckedSymbol'],
+      ),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Choice list
+    'contentControls.choiceList.getItems': {
+      input: ccTargetInput(),
+      output: objectSchema({ items: { type: 'array', items: { type: 'object' } }, selectedValue: { type: 'string' } }, [
+        'items',
+      ]),
+    },
+    'contentControls.choiceList.setItems': {
+      input: objectSchema({ target: contentControlTargetSchema, items: { type: 'array', items: { type: 'object' } } }, [
+        'target',
+        'items',
+      ]),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.choiceList.setSelected': {
+      input: objectSchema({ target: contentControlTargetSchema, value: { type: 'string' } }, ['target', 'value']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Repeating section
+    'contentControls.repeatingSection.listItems': { input: ccTargetInput(), output: ccListResultSchema },
+    'contentControls.repeatingSection.insertItemBefore': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.insertItemAfter': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.cloneItem': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.deleteItem': {
+      input: objectSchema({ target: contentControlTargetSchema, index: { type: 'integer' } }, ['target', 'index']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+    'contentControls.repeatingSection.setAllowInsertDelete': {
+      input: objectSchema({ target: contentControlTargetSchema, allow: { type: 'boolean' } }, ['target', 'allow']),
+      output: ccMutationResultSchema(),
+      success: contentControlMutationSuccessSchema,
+      failure: contentControlMutationFailureSchema,
+    },
+
+    // Group
+    'contentControls.group.wrap': targetOnlyMutation,
+    'contentControls.group.ungroup': targetOnlyMutation,
+  };
+}
+// Reference namespace schema helpers
+// ---------------------------------------------------------------------------
+
+// --- Shared patterns ---
+const refListQuerySchema = objectSchema({
+  limit: { type: 'integer', minimum: 1 },
+  offset: { type: 'integer', minimum: 0 },
+});
+
+const discoveryOutputSchema: JsonSchema = { type: 'object' };
+
+const receiptFailureSchema: JsonSchema = objectSchema(
+  {
+    code: { type: 'string' },
+    message: { type: 'string' },
+    details: {},
+  },
+  ['code', 'message'],
+);
+
+/** Failure branch shared by all reference-namespace mutation results. */
+const refFailureSchema: JsonSchema = objectSchema({ success: { const: false }, failure: receiptFailureSchema }, [
+  'success',
+  'failure',
+]);
+
+/** Creates output, success, and failure schemas for a reference-namespace mutation. */
+function refMutationSchemas(
+  successProperties: Record<string, JsonSchema>,
+  requiredSuccess: string[],
+): { output: JsonSchema; success: JsonSchema; failure: JsonSchema } {
+  const success = objectSchema({ success: { const: true }, ...successProperties }, ['success', ...requiredSuccess]);
+  return {
+    output: { oneOf: [success, refFailureSchema] },
+    success,
+    failure: refFailureSchema,
+  };
+}
+
+/** Creates output, success, and failure schemas for a config-style mutation (no address in success). */
+function refConfigSchemas(): { output: JsonSchema; success: JsonSchema; failure: JsonSchema } {
+  const success = objectSchema({ success: { const: true } }, ['success']);
+  return {
+    output: { oneOf: [success, refFailureSchema] },
+    success,
+    failure: refFailureSchema,
+  };
+}
+
+// --- Bookmark schemas ---
+const bookmarkAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'bookmark' }, name: { type: 'string' } },
+  ['kind', 'entityType', 'name'],
+);
+
+const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
+
+// --- Footnote schemas ---
+const footnoteAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'footnote' }, noteId: { type: 'string' } },
+  ['kind', 'entityType', 'noteId'],
+);
+
+const footnoteConfigScopeSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'document' } }, ['kind']),
+    objectSchema({ kind: { const: 'section' }, sectionId: { type: 'string' } }, ['kind', 'sectionId']),
+  ],
+};
+
+const footnoteNumberingSchema: JsonSchema = objectSchema({
+  format: { enum: ['decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter', 'symbol'] },
+  start: { type: 'integer' },
+  restartPolicy: { enum: ['continuous', 'eachSection', 'eachPage'] },
+  position: { enum: ['pageBottom', 'beneathText', 'sectionEnd', 'documentEnd'] },
+});
+
+const footnoteMutation = refMutationSchemas({ footnote: footnoteAddressSchema }, ['footnote']);
+const footnoteConfig = refConfigSchemas();
+
+// --- CrossRef schemas ---
+const crossRefAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'crossRef' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const crossRefTargetSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'bookmark' }, name: { type: 'string' } }, ['kind', 'name']),
+    objectSchema({ kind: { const: 'heading' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema({ kind: { const: 'note' }, noteId: { type: 'string' } }, ['kind', 'noteId']),
+    objectSchema({ kind: { const: 'caption' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema({ kind: { const: 'numberedItem' }, nodeId: { type: 'string' } }, ['kind', 'nodeId']),
+    objectSchema(
+      { kind: { const: 'styledParagraph' }, styleName: { type: 'string' }, direction: { enum: ['before', 'after'] } },
+      ['kind', 'styleName'],
+    ),
+  ],
+};
+
+const crossRefDisplaySchema: JsonSchema = {
+  enum: [
+    'content',
+    'pageNumber',
+    'noteNumber',
+    'labelAndNumber',
+    'aboveBelow',
+    'numberOnly',
+    'numberFullContext',
+    'styledContent',
+    'styledPageNumber',
+  ],
+};
+
+const crossRefMutation = refMutationSchemas({ crossRef: crossRefAddressSchema }, ['crossRef']);
+
+// --- Index schemas ---
+const indexAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'index' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const indexEntryAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'indexEntry' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const indexConfigSchema: JsonSchema = objectSchema({
+  headingSeparator: { type: 'string' },
+  entryPageSeparator: { type: 'string' },
+  pageRangeSeparator: { type: 'string' },
+  sequenceId: { type: 'string' },
+  columns: { type: 'integer' },
+  entryTypeFilter: { type: 'string' },
+  pageRangeBookmark: { type: 'string' },
+  letterRange: objectSchema({ from: { type: 'string' }, to: { type: 'string' } }, ['from', 'to']),
+  runIn: { type: 'boolean' },
+  accentedSorting: { type: 'boolean' },
+});
+
+const indexEntryDataSchema: JsonSchema = objectSchema(
+  {
+    text: { type: 'string' },
+    subEntry: { type: 'string' },
+    bold: { type: 'boolean' },
+    italic: { type: 'boolean' },
+    crossReference: { type: 'string' },
+    pageRangeBookmark: { type: 'string' },
+    entryType: { type: 'string' },
+    yomi: { type: 'string' },
+  },
+  ['text'],
+);
+
+const indexEntryPatchSchema: JsonSchema = objectSchema({
+  text: { type: 'string' },
+  subEntry: { type: 'string' },
+  bold: { type: 'boolean' },
+  italic: { type: 'boolean' },
+  crossReference: { type: 'string' },
+  pageRangeBookmark: { type: 'string' },
+  entryType: { type: 'string' },
+  yomi: { type: 'string' },
+});
+
+const indexMutation = refMutationSchemas({ index: indexAddressSchema }, ['index']);
+const indexEntryMutation = refMutationSchemas({ entry: indexEntryAddressSchema }, ['entry']);
+
+// --- Caption schemas ---
+const captionAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'paragraph' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const captionMutation = refMutationSchemas({ caption: captionAddressSchema }, ['caption']);
+const captionConfig = refConfigSchemas();
+
+// --- Field schemas ---
+const fieldAddressSchema: JsonSchema = objectSchema(
+  {
+    kind: { const: 'field' },
+    blockId: { type: 'string' },
+    occurrenceIndex: { type: 'integer' },
+    nestingDepth: { type: 'integer' },
+  },
+  ['kind', 'blockId', 'occurrenceIndex'],
+);
+
+const fieldMutation = refMutationSchemas({ field: fieldAddressSchema }, ['field']);
+
+// --- Citation schemas ---
+const citationAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'citation' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const citationSourceAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'entity' }, entityType: { const: 'citationSource' }, sourceId: { type: 'string' } },
+  ['kind', 'entityType', 'sourceId'],
+);
+
+const bibliographyAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'bibliography' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const citationMutation = refMutationSchemas({ citation: citationAddressSchema }, ['citation']);
+const citationSourceMutation = refMutationSchemas({ source: citationSourceAddressSchema }, ['source']);
+const bibliographyMutation = refMutationSchemas({ bibliography: bibliographyAddressSchema }, ['bibliography']);
+
+const citationPersonSchema: JsonSchema = objectSchema(
+  {
+    first: { type: 'string' },
+    middle: { type: 'string' },
+    last: { type: 'string' },
+  },
+  ['last'],
+);
+
+const citationSourceFieldsSchema: JsonSchema = objectSchema({
+  title: { type: 'string' },
+  authors: arraySchema(citationPersonSchema),
+  year: { type: 'string' },
+  publisher: { type: 'string' },
+  city: { type: 'string' },
+  journalName: { type: 'string' },
+  volume: { type: 'string' },
+  issue: { type: 'string' },
+  pages: { type: 'string' },
+  url: { type: 'string' },
+  doi: { type: 'string' },
+  edition: { type: 'string' },
+  editor: arraySchema(citationPersonSchema),
+  translator: arraySchema(citationPersonSchema),
+  medium: { type: 'string' },
+  shortTitle: { type: 'string' },
+  standardNumber: { type: 'string' },
+});
+
+const tocCreateLocationSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+    objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+    objectSchema({ kind: { const: 'before' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+    objectSchema({ kind: { const: 'after' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+  ],
+};
+
+// --- Authorities schemas ---
+const authoritiesAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'block' }, nodeType: { const: 'tableOfAuthorities' }, nodeId: { type: 'string' } },
+  ['kind', 'nodeType', 'nodeId'],
+);
+
+const authorityEntryAddressSchema: JsonSchema = objectSchema(
+  { kind: { const: 'inline' }, nodeType: { const: 'authorityEntry' }, anchor: ref('InlineAnchor') },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const authoritiesConfigSchema: JsonSchema = objectSchema({
+  category: { type: 'integer' },
+  entryPageSeparator: { type: 'string' },
+  usePassim: { type: 'boolean' },
+  includeHeadings: { type: 'boolean' },
+  tabLeader: { type: 'string' },
+  pageRangeSeparator: { type: 'string' },
+});
+
+const authorityEntryDataSchema: JsonSchema = objectSchema(
+  {
+    longCitation: { type: 'string' },
+    shortCitation: { type: 'string' },
+    category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+    bold: { type: 'boolean' },
+    italic: { type: 'boolean' },
+  },
+  ['longCitation', 'category'],
+);
+
+const authorityEntryPatchSchema: JsonSchema = objectSchema({
+  longCitation: { type: 'string' },
+  shortCitation: { type: 'string' },
+  category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+  bold: { type: 'boolean' },
+  italic: { type: 'boolean' },
+});
+
+const authoritiesMutation = refMutationSchemas({ authorities: authoritiesAddressSchema }, ['authorities']);
+const authorityEntryMutation = refMutationSchemas({ entry: authorityEntryAddressSchema }, ['entry']);
+
+// --- Diff schemas ---
+
+const diffCoverageSchema: JsonSchema = objectSchema(
+  {
+    body: { type: 'boolean', const: true },
+    comments: { type: 'boolean' },
+    styles: { type: 'boolean' },
+    numbering: { type: 'boolean' },
+    headerFooters: { type: 'boolean', const: false },
+  },
+  ['body', 'comments', 'styles', 'numbering', 'headerFooters'],
+);
+
+const diffSummarySchema: JsonSchema = objectSchema(
+  {
+    hasChanges: { type: 'boolean' },
+    changedComponents: { type: 'array', items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering'] } },
+    body: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    comments: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    styles: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    numbering: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+  },
+  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering'],
+);
+
+const diffSnapshotSchema: JsonSchema = objectSchema(
+  {
+    version: { type: 'string', const: 'sd-diff-snapshot/v1' },
+    engine: { type: 'string', enum: ['super-editor'] },
+    fingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    payload: { type: 'object', description: 'Opaque engine-owned snapshot data.' },
+  },
+  ['version', 'engine', 'fingerprint', 'coverage', 'payload'],
+);
+
+const diffPayloadSchema: JsonSchema = objectSchema(
+  {
+    version: { type: 'string', const: 'sd-diff-payload/v1' },
+    engine: { type: 'string', enum: ['super-editor'] },
+    baseFingerprint: { type: 'string' },
+    targetFingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    summary: diffSummarySchema,
+    payload: { type: 'object', description: 'Opaque engine-owned diff data.' },
+  },
+  ['version', 'engine', 'baseFingerprint', 'targetFingerprint', 'coverage', 'summary', 'payload'],
+);
+
+const diffApplyResultSchema: JsonSchema = objectSchema(
+  {
+    appliedOperations: { type: 'integer' },
+    baseFingerprint: { type: 'string' },
+    targetFingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    summary: diffSummarySchema,
+    diagnostics: { type: 'array', items: { type: 'string' } },
+  },
+  ['appliedOperations', 'baseFingerprint', 'targetFingerprint', 'coverage', 'summary', 'diagnostics'],
+);
+
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
+  get: {
+    input: objectSchema({
+      options: objectSchema({
+        includeResolved: { type: 'boolean' },
+        includeProvenance: { type: 'boolean' },
+        includeContext: { type: 'boolean' },
+      }),
+    }),
+    output: objectSchema(
+      {
+        modelVersion: { const: 'sdm/1' },
+        body: { type: 'array' },
+      },
+      ['modelVersion', 'body'],
+    ),
+  },
   find: {
-    input: findInputSchema,
-    output: findOutputSchema,
+    input: sdFindInputSchema,
+    output: sdFindResultSchema,
   },
   getNode: {
     input: nodeAddressSchema,
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getNodeById: {
     input: objectSchema(
@@ -1660,7 +2595,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['nodeId'],
     ),
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getText: {
     input: strictEmptyObjectSchema,
@@ -1676,6 +2611,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     }),
     output: { type: 'string' },
   },
+  markdownToFragment: {
+    input: objectSchema({ markdown: { type: 'string' } }, ['markdown']),
+    output: objectSchema(
+      {
+        fragment: {},
+        lossy: { type: 'boolean' },
+        diagnostics: arraySchema(
+          objectSchema(
+            {
+              code: { type: 'string' },
+              severity: { type: 'string', enum: ['error', 'warning', 'info'] },
+              message: { type: 'string' },
+              path: arraySchema({ type: 'string' }),
+            },
+            ['code', 'severity', 'message'],
+          ),
+        ),
+      },
+      ['fragment', 'lossy', 'diagnostics'],
+    ),
+  },
   info: {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
@@ -1688,46 +2644,88 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   insert: {
     input: insertInputSchema,
-    output: textMutationResultSchemaFor('insert'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('insert'),
+    output: sdMutationResultSchemaFor('insert'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('insert'),
   },
   replace: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        text: { type: 'string' },
-      },
-      ['target', 'text'],
-    ),
-    output: textMutationResultSchemaFor('replace'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('replace'),
+    input: {
+      oneOf: [
+        // Text replacement: TargetLocator + text
+        {
+          ...targetLocatorWithPayload({ text: { type: 'string' } }, ['text']),
+        },
+        // Structural replacement: exactly one of (target | ref) + content
+        {
+          oneOf: [
+            objectSchema(
+              {
+                target: { oneOf: [blockNodeAddressSchema, selectionTargetSchema] },
+                content: sdFragmentSchema,
+                nestingPolicy: nestingPolicySchema,
+              },
+              ['target', 'content'],
+            ),
+            objectSchema(
+              {
+                ref: { type: 'string' },
+                content: sdFragmentSchema,
+                nestingPolicy: nestingPolicySchema,
+              },
+              ['ref', 'content'],
+            ),
+          ],
+        },
+      ],
+    },
+    output: sdMutationResultSchemaFor('replace'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('replace'),
   },
   delete: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: {
+      ...targetLocatorWithPayload({ behavior: deleteBehaviorSchema }),
+    },
     output: textMutationResultSchemaFor('delete'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('delete'),
   },
   'format.apply': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        inline: buildInlineRunPatchSchema(),
-      },
-      ['target', 'inline'],
-    ),
+    input: {
+      ...targetLocatorWithPayload({ inline: buildInlineRunPatchSchema() }, ['inline']),
+    },
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.apply'),
   },
   ...formatInlineAliasOperationSchemas,
+  'blocks.list': {
+    input: objectSchema({
+      offset: { type: 'number', minimum: 0 },
+      limit: { type: 'number', minimum: 1 },
+      nodeTypes: { type: 'array', items: { enum: [...blockNodeTypeValues] } },
+    }),
+    output: objectSchema(
+      {
+        total: { type: 'number' },
+        blocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string' },
+              nodeType: { enum: [...blockNodeTypeValues] },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+              isEmpty: { type: 'boolean' },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'textPreview', 'isEmpty'],
+          ),
+        },
+        revision: { type: 'string' },
+      },
+      ['total', 'blocks', 'revision'],
+    ),
+  },
   'blocks.delete': {
     input: objectSchema(
       {
@@ -1739,6 +2737,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
@@ -1746,10 +2750,63 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         success: { const: true },
         deleted: deletableBlockNodeAddressSchema,
+        deletedBlock: objectSchema({
+          ordinal: { type: 'number' },
+          nodeId: { type: 'string' },
+          nodeType: { type: 'string' },
+          textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+        }),
       },
       ['success', 'deleted'],
     ),
     failure: preApplyFailureResultSchemaFor('blocks.delete'),
+  },
+  'blocks.deleteRange': {
+    input: objectSchema(
+      {
+        start: blockNodeAddressSchema,
+        end: blockNodeAddressSchema,
+      },
+      ['start', 'end'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: {
+          type: 'array',
+          items: objectSchema(
+            {
+              ordinal: { type: 'number' },
+              nodeId: { type: 'string' },
+              nodeType: { type: 'string' },
+              textPreview: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            },
+            ['ordinal', 'nodeId', 'nodeType', 'textPreview'],
+          ),
+        },
+        revision: objectSchema(
+          {
+            before: { type: 'string' },
+            after: { type: 'string' },
+          },
+          ['before', 'after'],
+        ),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        deletedCount: { type: 'number' },
+        deletedBlocks: { type: 'array' },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        dryRun: { type: 'boolean' },
+      },
+      ['success', 'deletedCount', 'deletedBlocks', 'revision', 'dryRun'],
+    ),
+    failure: preApplyFailureResultSchemaFor('blocks.deleteRange'),
   },
 
   // --- styles.paragraph.* ---
@@ -2937,7 +3994,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
         mode: { enum: ['strict', 'candidates'] },
         includeNodes: { type: 'boolean' },
@@ -2955,12 +4012,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       const textMatchItemSchema = discoveryItemSchema(
         {
           matchKind: { const: 'text' },
-          address: nodeAddressSchema,
+          address: blockNodeAddressSchema,
+          target: selectionTargetSchema,
           snippet: { type: 'string' },
           highlightRange: rangeSchema,
           blocks: { type: 'array', items: matchBlockSchema, minItems: 1 },
         },
-        ['matchKind', 'address', 'snippet', 'highlightRange', 'blocks'],
+        ['matchKind', 'address', 'target', 'snippet', 'highlightRange', 'blocks'],
       );
 
       // Node match item: id + handle + address + empty blocks
@@ -2989,7 +4047,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne', 'all'] },
       },
       ['by', 'select', 'require'],
@@ -2999,19 +4057,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'ref', type: 'string' },
         ref: { type: 'string' },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'ref'],
     );
 
-    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema] };
+    const targetWhereSchema = objectSchema(
+      {
+        by: { const: 'target', type: 'string' },
+        target: selectionTargetSchema,
+      },
+      ['by', 'target'],
+    );
+
+    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema, targetWhereSchema] };
 
     // Insert-only where (no 'all' require, no ref)
     const insertWhereSchema = objectSchema(
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne'] },
       },
       ['by', 'select', 'require'],
@@ -3022,7 +4088,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'select'],
     );
@@ -3118,7 +4184,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         id: { type: 'string' },
         op: { const: 'text.delete', type: 'string' },
         where: stepWhereSchema,
-        args: objectSchema({}),
+        args: objectSchema({ behavior: deleteBehaviorSchema }),
       },
       ['id', 'op', 'where', 'args'],
     );
@@ -3173,7 +4239,87 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['atomic', 'changeMode', 'steps'],
     );
 
+    // ---------------------------------------------------------------
+    // ranges.resolve schema
+    // ---------------------------------------------------------------
+
+    const documentEdgeAnchorSchema = objectSchema(
+      {
+        kind: { const: 'document' },
+        edge: { enum: ['start', 'end'] },
+      },
+      ['kind', 'edge'],
+    );
+
+    const pointAnchorSchema = objectSchema(
+      {
+        kind: { const: 'point' },
+        point: ref('SelectionPoint'),
+      },
+      ['kind', 'point'],
+    );
+
+    const refBoundaryAnchorSchema = objectSchema(
+      {
+        kind: { const: 'ref' },
+        ref: { type: 'string', minLength: 1 },
+        boundary: { enum: ['start', 'end'] },
+      },
+      ['kind', 'ref', 'boundary'],
+    );
+
+    const rangeAnchorSchema: JsonSchema = {
+      oneOf: [documentEdgeAnchorSchema, pointAnchorSchema, refBoundaryAnchorSchema],
+    };
+
+    const rangeBlockPreviewSchema = objectSchema(
+      {
+        nodeId: { type: 'string' },
+        nodeType: { enum: [...blockNodeTypeValues] },
+        textPreview: { type: 'string' },
+      },
+      ['nodeId', 'nodeType', 'textPreview'],
+    );
+
+    const rangePreviewSchema = objectSchema(
+      {
+        text: { type: 'string' },
+        truncated: { type: 'boolean' },
+        blocks: arraySchema(rangeBlockPreviewSchema),
+      },
+      ['text', 'truncated', 'blocks'],
+    );
+
+    const resolveRangeOutputSchema = objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        handle: objectSchema(
+          {
+            ref: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            refStability: { const: 'ephemeral' },
+            coversFullTarget: { type: 'boolean' },
+          },
+          ['ref', 'refStability', 'coversFullTarget'],
+        ),
+        target: selectionTargetSchema,
+        preview: rangePreviewSchema,
+      },
+      ['evaluatedRevision', 'handle', 'target', 'preview'],
+    );
+
     return {
+      'ranges.resolve': {
+        input: objectSchema(
+          {
+            start: rangeAnchorSchema,
+            end: rangeAnchorSchema,
+            expectedRevision: { type: 'string' },
+          },
+          ['start', 'end'],
+        ),
+        output: resolveRangeOutputSchema,
+      },
+
       'mutations.preview': {
         input: mutationsInputSchema,
         output: objectSchema(
@@ -4489,7 +5635,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // --- hyperlinks.* ---
   'hyperlinks.list': {
     input: objectSchema({
-      within: nodeAddressSchema,
+      within: blockNodeAddressSchema,
       hrefPattern: { type: 'string' },
       anchor: { type: 'string' },
       textPattern: { type: 'string' },
@@ -4529,6 +5675,657 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: hyperlinkMutationSuccessSchema,
     failure: hyperlinkMutationFailureSchema,
   },
+
+  // =========================================================================
+  // headerFooters.*
+  // =========================================================================
+
+  'headerFooters.list': {
+    input: objectSchema({
+      kind: { enum: ['header', 'footer'] },
+      section: sectionAddressSchema,
+      limit: { type: 'integer', minimum: 1 },
+      offset: { type: 'integer', minimum: 0 },
+    }),
+    output: discoveryResultSchema(
+      discoveryItemSchema(
+        {
+          section: sectionAddressSchema,
+          sectionIndex: { type: 'integer', minimum: 0 },
+          kind: { enum: ['header', 'footer'] },
+          variant: { enum: ['default', 'first', 'even'] },
+          refId: { type: ['string', 'null'] },
+          isExplicit: { type: 'boolean' },
+        },
+        ['section', 'sectionIndex', 'kind', 'variant', 'isExplicit'],
+      ),
+    ),
+  },
+  'headerFooters.get': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: objectSchema(
+      {
+        section: sectionAddressSchema,
+        sectionIndex: { type: 'integer', minimum: 0 },
+        kind: { enum: ['header', 'footer'] },
+        variant: { enum: ['default', 'first', 'even'] },
+        refId: { type: ['string', 'null'] },
+        isExplicit: { type: 'boolean' },
+      },
+      ['section', 'sectionIndex', 'kind', 'variant', 'isExplicit'],
+    ),
+  },
+  'headerFooters.resolve': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ status: { const: 'explicit' }, refId: { type: 'string' }, section: sectionAddressSchema }, [
+          'status',
+          'refId',
+          'section',
+        ]),
+        objectSchema(
+          {
+            status: { const: 'inherited' },
+            refId: { type: 'string' },
+            resolvedFromSection: sectionAddressSchema,
+            resolvedVariant: { enum: ['default', 'first', 'even'] },
+          },
+          ['status', 'refId', 'resolvedFromSection', 'resolvedVariant'],
+        ),
+        objectSchema({ status: { const: 'none' } }, ['status']),
+      ],
+    },
+  },
+  'headerFooters.refs.set': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+        refId: { type: 'string', minLength: 1 },
+      },
+      ['target', 'refId'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.set'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.set'),
+  },
+  'headerFooters.refs.clear': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+      },
+      ['target'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.clear'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.clear'),
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterSlot' },
+            section: sectionAddressSchema,
+            headerFooterKind: { enum: ['header', 'footer'] },
+            variant: { enum: ['default', 'first', 'even'] },
+          },
+          ['kind', 'section', 'headerFooterKind', 'variant'],
+        ),
+        linked: { type: 'boolean' },
+      },
+      ['target', 'linked'],
+    ),
+    output: sectionMutationResultSchemaFor('headerFooters.refs.setLinkedToPrevious'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('headerFooters.refs.setLinkedToPrevious'),
+  },
+  'headerFooters.parts.list': {
+    input: objectSchema({
+      kind: { enum: ['header', 'footer'] },
+      limit: { type: 'integer', minimum: 1 },
+      offset: { type: 'integer', minimum: 0 },
+    }),
+    output: discoveryResultSchema(
+      discoveryItemSchema(
+        {
+          refId: { type: 'string' },
+          kind: { enum: ['header', 'footer'] },
+          partPath: { type: 'string' },
+          referencedBySections: arraySchema(sectionAddressSchema),
+        },
+        ['refId', 'kind', 'partPath', 'referencedBySections'],
+      ),
+    ),
+  },
+  'headerFooters.parts.create': {
+    input: objectSchema(
+      {
+        kind: { enum: ['header', 'footer'] },
+        sourceRefId: { type: 'string', minLength: 1 },
+      },
+      ['kind'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+          'success',
+          'refId',
+          'partPath',
+        ]),
+        objectSchema(
+          {
+            success: { const: false },
+            failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+          },
+          ['success', 'failure'],
+        ),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+      'success',
+      'refId',
+      'partPath',
+    ]),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: receiptFailureSchemaFor('headerFooters.parts.create'),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'headerFooters.parts.delete': {
+    input: objectSchema(
+      {
+        target: objectSchema(
+          {
+            kind: { const: 'headerFooterPart' },
+            refId: { type: 'string', minLength: 1 },
+          },
+          ['kind', 'refId'],
+        ),
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+          'success',
+          'refId',
+          'partPath',
+        ]),
+        objectSchema(
+          {
+            success: { const: false },
+            failure: receiptFailureSchemaFor('headerFooters.parts.delete'),
+          },
+          ['success', 'failure'],
+        ),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, refId: { type: 'string' }, partPath: { type: 'string' } }, [
+      'success',
+      'refId',
+      'partPath',
+    ]),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: receiptFailureSchemaFor('headerFooters.parts.delete'),
+      },
+      ['success', 'failure'],
+    ),
+  },
+
+  // =========================================================================
+  // Content Controls (SD-2070) — schemas
+  // =========================================================================
+  ...buildContentControlSchemas(),
+  // -------------------------------------------------------------------------
+  // Bookmarks
+  // -------------------------------------------------------------------------
+  'bookmarks.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'bookmarks.get': {
+    input: objectSchema({ target: bookmarkAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'bookmarks.insert': {
+    input: objectSchema(
+      {
+        name: { type: 'string' },
+        at: textTargetSchema,
+        tableColumn: objectSchema({ colFirst: { type: 'integer' }, colLast: { type: 'integer' } }, [
+          'colFirst',
+          'colLast',
+        ]),
+      },
+      ['name', 'at'],
+    ),
+    ...bookmarkMutation,
+  },
+  'bookmarks.rename': {
+    input: objectSchema({ target: bookmarkAddressSchema, newName: { type: 'string' } }, ['target', 'newName']),
+    ...bookmarkMutation,
+  },
+  'bookmarks.remove': {
+    input: objectSchema({ target: bookmarkAddressSchema }, ['target']),
+    ...bookmarkMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Footnotes
+  // -------------------------------------------------------------------------
+  'footnotes.list': {
+    input: objectSchema({
+      type: { enum: ['footnote', 'endnote'] },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'footnotes.get': {
+    input: objectSchema({ target: footnoteAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'footnotes.insert': {
+    input: objectSchema(
+      { at: textTargetSchema, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } },
+      ['at', 'type', 'content'],
+    ),
+    ...footnoteMutation,
+  },
+  'footnotes.update': {
+    input: objectSchema({ target: footnoteAddressSchema, patch: objectSchema({ content: { type: 'string' } }) }, [
+      'target',
+      'patch',
+    ]),
+    ...footnoteMutation,
+  },
+  'footnotes.remove': {
+    input: objectSchema({ target: footnoteAddressSchema }, ['target']),
+    ...footnoteMutation,
+  },
+  'footnotes.configure': {
+    input: objectSchema(
+      {
+        type: { enum: ['footnote', 'endnote'] },
+        scope: footnoteConfigScopeSchema,
+        numbering: footnoteNumberingSchema,
+      },
+      ['type', 'scope'],
+    ),
+    ...footnoteConfig,
+  },
+
+  // -------------------------------------------------------------------------
+  // Cross-References
+  // -------------------------------------------------------------------------
+  'crossRefs.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'crossRefs.get': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'crossRefs.insert': {
+    input: objectSchema({ at: textTargetSchema, target: crossRefTargetSchema, display: crossRefDisplaySchema }, [
+      'at',
+      'target',
+      'display',
+    ]),
+    ...crossRefMutation,
+  },
+  'crossRefs.rebuild': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    ...crossRefMutation,
+  },
+  'crossRefs.remove': {
+    input: objectSchema({ target: crossRefAddressSchema }, ['target']),
+    ...crossRefMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Index
+  // -------------------------------------------------------------------------
+  'index.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'index.get': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'index.insert': {
+    input: objectSchema({ at: tocCreateLocationSchema, config: indexConfigSchema }, ['at']),
+    ...indexMutation,
+  },
+  'index.configure': {
+    input: objectSchema({ target: indexAddressSchema, patch: indexConfigSchema }, ['target', 'patch']),
+    ...indexMutation,
+  },
+  'index.rebuild': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    ...indexMutation,
+  },
+  'index.remove': {
+    input: objectSchema({ target: indexAddressSchema }, ['target']),
+    ...indexMutation,
+  },
+
+  // --- Index entries ---
+  'index.entries.list': {
+    input: objectSchema({ entryType: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'index.entries.get': {
+    input: objectSchema({ target: indexEntryAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'index.entries.insert': {
+    input: objectSchema({ at: textTargetSchema, entry: indexEntryDataSchema }, ['at', 'entry']),
+    ...indexEntryMutation,
+  },
+  'index.entries.update': {
+    input: objectSchema({ target: indexEntryAddressSchema, patch: indexEntryPatchSchema }, ['target', 'patch']),
+    ...indexEntryMutation,
+  },
+  'index.entries.remove': {
+    input: objectSchema({ target: indexEntryAddressSchema }, ['target']),
+    ...indexEntryMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Captions
+  // -------------------------------------------------------------------------
+  'captions.list': {
+    input: objectSchema({ label: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'captions.get': {
+    input: objectSchema({ target: captionAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'captions.insert': {
+    input: objectSchema(
+      {
+        adjacentTo: blockNodeAddressSchema,
+        position: { enum: ['above', 'below'] },
+        label: { type: 'string' },
+        text: { type: 'string' },
+      },
+      ['adjacentTo', 'position', 'label'],
+    ),
+    ...captionMutation,
+  },
+  'captions.update': {
+    input: objectSchema({ target: captionAddressSchema, patch: objectSchema({ text: { type: 'string' } }) }, [
+      'target',
+      'patch',
+    ]),
+    ...captionMutation,
+  },
+  'captions.remove': {
+    input: objectSchema({ target: captionAddressSchema }, ['target']),
+    ...captionMutation,
+  },
+  'captions.configure': {
+    input: objectSchema(
+      {
+        label: { type: 'string' },
+        format: { enum: ['decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter'] },
+        includeChapter: { type: 'boolean' },
+        chapterStyle: { type: 'string' },
+      },
+      ['label'],
+    ),
+    ...captionConfig,
+  },
+
+  // -------------------------------------------------------------------------
+  // Fields
+  // -------------------------------------------------------------------------
+  'fields.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'fields.get': {
+    input: objectSchema({ target: fieldAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'fields.insert': {
+    input: objectSchema({ mode: { const: 'raw' }, at: textTargetSchema, instruction: { type: 'string' } }, [
+      'mode',
+      'at',
+      'instruction',
+    ]),
+    ...fieldMutation,
+  },
+  'fields.rebuild': {
+    input: objectSchema({ target: fieldAddressSchema }, ['target']),
+    ...fieldMutation,
+  },
+  'fields.remove': {
+    input: objectSchema({ mode: { const: 'raw' }, target: fieldAddressSchema }, ['mode', 'target']),
+    ...fieldMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations
+  // -------------------------------------------------------------------------
+  'citations.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'citations.get': {
+    input: objectSchema({ target: citationAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.insert': {
+    input: objectSchema({ at: textTargetSchema, sourceIds: { type: 'array', items: { type: 'string' } } }, [
+      'at',
+      'sourceIds',
+    ]),
+    ...citationMutation,
+  },
+  'citations.update': {
+    input: objectSchema(
+      {
+        target: citationAddressSchema,
+        patch: objectSchema({ sourceIds: { type: 'array', items: { type: 'string' } } }),
+      },
+      ['target', 'patch'],
+    ),
+    ...citationMutation,
+  },
+  'citations.remove': {
+    input: objectSchema({ target: citationAddressSchema }, ['target']),
+    ...citationMutation,
+  },
+
+  // --- Citations: sources ---
+  'citations.sources.list': {
+    input: objectSchema({ type: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }),
+    output: discoveryOutputSchema,
+  },
+  'citations.sources.get': {
+    input: objectSchema({ target: citationSourceAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.sources.insert': {
+    input: objectSchema(
+      {
+        type: {
+          enum: [
+            'book',
+            'journalArticle',
+            'conferenceProceedings',
+            'report',
+            'website',
+            'patent',
+            'case',
+            'statute',
+            'thesis',
+            'film',
+            'interview',
+            'misc',
+          ],
+        },
+        fields: citationSourceFieldsSchema,
+      },
+      ['type', 'fields'],
+    ),
+    ...citationSourceMutation,
+  },
+  'citations.sources.update': {
+    input: objectSchema({ target: citationSourceAddressSchema, patch: citationSourceFieldsSchema }, [
+      'target',
+      'patch',
+    ]),
+    ...citationSourceMutation,
+  },
+  'citations.sources.remove': {
+    input: objectSchema({ target: citationSourceAddressSchema }, ['target']),
+    ...citationSourceMutation,
+  },
+
+  // --- Citations: bibliography ---
+  'citations.bibliography.get': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'citations.bibliography.insert': {
+    input: objectSchema({ at: tocCreateLocationSchema, style: { type: 'string' } }, ['at']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.rebuild': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.configure': {
+    input: objectSchema({ style: { type: 'string' } }, ['style']),
+    ...bibliographyMutation,
+  },
+  'citations.bibliography.remove': {
+    input: objectSchema({ target: bibliographyAddressSchema }, ['target']),
+    ...bibliographyMutation,
+  },
+
+  // -------------------------------------------------------------------------
+  // Authorities
+  // -------------------------------------------------------------------------
+  'authorities.list': {
+    input: refListQuerySchema,
+    output: discoveryOutputSchema,
+  },
+  'authorities.get': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'authorities.insert': {
+    input: objectSchema({ at: tocCreateLocationSchema, config: authoritiesConfigSchema }, ['at']),
+    ...authoritiesMutation,
+  },
+  'authorities.configure': {
+    input: objectSchema({ target: authoritiesAddressSchema, patch: authoritiesConfigSchema }, ['target', 'patch']),
+    ...authoritiesMutation,
+  },
+  'authorities.rebuild': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    ...authoritiesMutation,
+  },
+  'authorities.remove': {
+    input: objectSchema({ target: authoritiesAddressSchema }, ['target']),
+    ...authoritiesMutation,
+  },
+
+  // --- Authorities: entries ---
+  'authorities.entries.list': {
+    input: objectSchema({
+      category: { oneOf: [{ type: 'string' }, { type: 'integer' }] },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'authorities.entries.get': {
+    input: objectSchema({ target: authorityEntryAddressSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'authorities.entries.insert': {
+    input: objectSchema({ at: textTargetSchema, entry: authorityEntryDataSchema }, ['at', 'entry']),
+    ...authorityEntryMutation,
+  },
+  'authorities.entries.update': {
+    input: objectSchema({ target: authorityEntryAddressSchema, patch: authorityEntryPatchSchema }, ['target', 'patch']),
+    ...authorityEntryMutation,
+  },
+  'authorities.entries.remove': {
+    input: objectSchema({ target: authorityEntryAddressSchema }, ['target']),
+    ...authorityEntryMutation,
+  },
+
+  // --- diff.* ---
+  'diff.capture': {
+    input: objectSchema({}),
+    output: diffSnapshotSchema,
+  },
+  'diff.compare': {
+    input: objectSchema({ targetSnapshot: diffSnapshotSchema }, ['targetSnapshot']),
+    output: diffPayloadSchema,
+  },
+  'diff.apply': {
+    input: objectSchema({ diff: diffPayloadSchema }, ['diff']),
+    output: diffApplyResultSchema,
+    success: diffApplyResultSchema,
+    failure: { type: 'object' },
+  },
 };
 
 /**
@@ -4541,7 +6338,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
  * @throws {Error} If any operation is missing a schema or an unknown operation is found.
  */
 export function buildInternalContractSchemas(): InternalContractSchemas {
-  const operations = { ...operationSchemas };
+  // Cast is safe — the runtime loops below verify completeness against OPERATION_IDS.
+  const operations = { ...operationSchemas } as unknown as Record<OperationId, OperationSchemaSet>;
 
   for (const operationId of OPERATION_IDS) {
     if (!operations[operationId]) {

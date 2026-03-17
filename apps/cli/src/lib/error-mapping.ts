@@ -81,8 +81,9 @@ function mapListsError(operationId: CliExposedOperationId, error: unknown, code:
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
+  // Preserve structured INVALID_TARGET details (requestedNodeType, actualNodeType, remediation)
   if (code === 'INVALID_TARGET') {
-    return new CliError('INVALID_ARGUMENT', message, { operationId, details });
+    return new CliError('INVALID_TARGET', message, { operationId, details });
   }
 
   if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || code === 'CAPABILITY_UNAVAILABLE') {
@@ -177,8 +178,14 @@ function mapCreateError(operationId: CliExposedOperationId, error: unknown, code
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
-  if (code === 'AMBIGUOUS_TARGET' || code === 'INVALID_TARGET') {
+  if (code === 'AMBIGUOUS_TARGET') {
     return new CliError('INVALID_ARGUMENT', message, { operationId, details });
+  }
+
+  // Preserve structured INVALID_TARGET details (requestedNodeType, actualNodeType, remediation)
+  // so CLI consumers can programmatically triage mismatch errors.
+  if (code === 'INVALID_TARGET') {
+    return new CliError('INVALID_TARGET', message, { operationId, details });
   }
 
   if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
@@ -317,6 +324,27 @@ function tryMapPlanEngineError(
 // Per-family error mappers (dispatch by family)
 // ---------------------------------------------------------------------------
 
+function mapDiffError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
+  const message = extractErrorMessage(error);
+  const details = extractErrorDetails(error);
+
+  if (code === 'INVALID_INPUT') {
+    return new CliError('INVALID_INPUT', message, { operationId, details });
+  }
+  if (code === 'CAPABILITY_UNSUPPORTED') {
+    return new CliError('CAPABILITY_UNSUPPORTED', message, { operationId, details });
+  }
+  if (code === 'PRECONDITION_FAILED') {
+    return new CliError('PRECONDITION_FAILED', message, { operationId, details });
+  }
+  if (code === 'CAPABILITY_UNAVAILABLE') {
+    return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+  }
+
+  if (error instanceof CliError) return error;
+  return new CliError('COMMAND_FAILED', message, { operationId, details });
+}
+
 const FAMILY_MAPPERS: Record<
   OperationFamily,
   (operationId: CliExposedOperationId, error: unknown, code: string | undefined) => CliError
@@ -331,6 +359,7 @@ const FAMILY_MAPPERS: Record<
   create: mapCreateError,
   blocks: mapBlocksError,
   query: mapQueryError,
+  diff: mapDiffError,
   general: (operationId, error, code) => {
     // Plan-engine errors pass through with original code and structured details
     const planEngineError = tryMapPlanEngineError(operationId, error, code);
@@ -426,7 +455,7 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
   // Lists family
   if (family === 'lists') {
     if (failureCode === 'INVALID_TARGET') {
-      return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+      return new CliError('INVALID_TARGET', failureMessage, { operationId, failure });
     }
     if (failureCode === 'CAPABILITY_UNAVAILABLE') {
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
@@ -459,7 +488,7 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
     }
     if (failureCode === 'INVALID_TARGET') {
-      return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+      return new CliError('INVALID_TARGET', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }

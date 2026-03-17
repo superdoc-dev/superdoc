@@ -1,0 +1,347 @@
+---
+title: index.entries.update
+sidebarTitle: index.entries.update
+description: Update the properties of an existing XE index entry.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Update the properties of an existing XE index entry.
+
+- Operation ID: `index.entries.update`
+- API member path: `editor.doc.index.entries.update(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an IndexEntryMutationResult indicating success or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.bold` | boolean | no |  |
+| `patch.crossReference` | string | no |  |
+| `patch.entryType` | string | no |  |
+| `patch.italic` | boolean | no |  |
+| `patch.pageRangeBookmark` | string | no |  |
+| `patch.subEntry` | string | no |  |
+| `patch.text` | string | no |  |
+| `patch.yomi` | string | no |  |
+| `target` | object(kind="inline") | yes |  |
+| `target.anchor` | InlineAnchor | yes | InlineAnchor |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
+| `target.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `target.nodeType` | `"indexEntry"` | yes | Constant: `"indexEntry"` |
+
+### Example request
+
+```json
+{
+  "patch": {
+    "subEntry": "example",
+    "text": "Hello, world."
+  },
+  "target": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "inline",
+    "nodeType": "indexEntry"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | object(kind="inline") | yes |  |
+| `entry.anchor` | InlineAnchor | yes | InlineAnchor |
+| `entry.anchor.end` | Position | yes | Position |
+| `entry.anchor.end.blockId` | string | yes |  |
+| `entry.anchor.end.offset` | integer | yes |  |
+| `entry.anchor.start` | Position | yes | Position |
+| `entry.anchor.start.blockId` | string | yes |  |
+| `entry.anchor.start.offset` | integer | yes |  |
+| `entry.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `entry.nodeType` | `"indexEntry"` | yes | Constant: `"indexEntry"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "entry": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "inline",
+    "nodeType": "indexEntry"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "patch": {
+      "additionalProperties": false,
+      "properties": {
+        "bold": {
+          "type": "boolean"
+        },
+        "crossReference": {
+          "type": "string"
+        },
+        "entryType": {
+          "type": "string"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "pageRangeBookmark": {
+          "type": "string"
+        },
+        "subEntry": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "yomi": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InlineAnchor"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "indexEntry"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "patch"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "$ref": "#/$defs/InlineAnchor"
+            },
+            "kind": {
+              "const": "inline"
+            },
+            "nodeType": {
+              "const": "indexEntry"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "anchor"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "entry"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "entry": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InlineAnchor"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "indexEntry"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "entry"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

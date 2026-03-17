@@ -117,6 +117,10 @@ describe('sdt module exports', () => {
         'handleDocumentSectionNode',
         // Document Part Object
         'handleDocumentPartObjectNode',
+        // Bibliography
+        'handleBibliographyNode',
+        // Table of Authorities
+        'handleTableOfAuthoritiesNode',
       ];
 
       const actualExports = Object.keys(sdtModule);

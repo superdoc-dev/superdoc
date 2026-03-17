@@ -4,6 +4,9 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 type BookmarkConfig = {
   name: string;
   id?: string | null;
+  colFirst?: number | string | null;
+  colLast?: number | string | null;
+  displacedByCustomXml?: string | null;
 };
 
 type SearchMatch = {
@@ -53,6 +56,7 @@ type StructuredContentUpdateOptions = {
   html?: string;
   json?: ProseMirrorJSON;
   attrs?: Record<string, unknown>;
+  keepTextNodeStyles?: boolean;
 };
 
 type StructuredContentTableAppendOptions = {
@@ -67,6 +71,8 @@ export interface SpecializedCommandAugmentations {
   insertBookmark: (config: BookmarkConfig) => boolean;
   goToBookmark: (name: string) => boolean;
   insertBookmarkEnd: (id: string) => boolean;
+  renameBookmark: (name: string, newName: string) => boolean;
+  removeBookmark: (name: string) => boolean;
 
   // Search
   goToFirstMatch: () => boolean;

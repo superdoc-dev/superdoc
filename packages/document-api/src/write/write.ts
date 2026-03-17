@@ -1,6 +1,7 @@
-import type { TextAddress, TextMutationReceipt } from '../types/index.js';
-import type { BlockRelativeLocator, BlockRelativeRange } from './locator.js';
+import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
+import type { BlockRelativeLocator } from './locator.js';
 import type { InsertInput } from '../insert/insert.js';
+import type { ReplaceInput } from '../replace/replace.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
@@ -22,8 +23,10 @@ export interface MutationOptions extends RevisionGuardOptions {
   dryRun?: boolean;
 }
 
-export type WriteKind = 'insert' | 'replace' | 'delete';
-
+/**
+ * Text insertion request — the only write-kind that still routes through
+ * the WriteAdapter. Delete and replace now use SelectionMutationAdapter.
+ */
 export type InsertWriteRequest = {
   kind: 'insert';
   /**
@@ -34,24 +37,20 @@ export type InsertWriteRequest = {
   text: string;
 } & Partial<BlockRelativeLocator>;
 
-export type ReplaceWriteRequest = {
-  kind: 'replace';
-  target?: TextAddress;
-  text: string;
-} & Partial<BlockRelativeRange>;
+/** @deprecated Use `InsertWriteRequest` directly. Delete and replace now use SelectionMutationAdapter. */
+export type WriteRequest = InsertWriteRequest;
 
-export type DeleteWriteRequest = {
-  kind: 'delete';
-  target?: TextAddress;
-  text?: '';
-} & Partial<BlockRelativeRange>;
-
-export type WriteRequest = InsertWriteRequest | ReplaceWriteRequest | DeleteWriteRequest;
-
+/**
+ * Adapter interface for write operations. After the selection-first delete
+ * cutover, only `insert` routes through `write()`. Delete and replace use
+ * `SelectionMutationAdapter` instead.
+ */
 export interface WriteAdapter {
-  write(request: WriteRequest, options?: MutationOptions): TextMutationReceipt;
-  /** Structured insert for markdown/html content types. */
-  insertStructured(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
+  write(request: InsertWriteRequest, options?: MutationOptions): TextMutationReceipt;
+  /** Structured insert for SDFragment or markdown/html content. Returns SDMutationReceipt. */
+  insertStructured(input: InsertInput, options?: MutationOptions): SDMutationReceipt;
+  /** Structured replace for SDFragment content. Returns SDMutationReceipt. */
+  replaceStructured(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt;
 }
 
 export function normalizeMutationOptions(options?: MutationOptions): MutationOptions {
@@ -64,7 +63,7 @@ export function normalizeMutationOptions(options?: MutationOptions): MutationOpt
 
 export function executeWrite(
   adapter: WriteAdapter,
-  request: WriteRequest,
+  request: InsertWriteRequest,
   options?: MutationOptions,
 ): TextMutationReceipt {
   return adapter.write(request, normalizeMutationOptions(options));

@@ -1,4 +1,8 @@
 import type { SectionHeaderFooterKind, SectionHeaderFooterVariant } from '@superdoc/document-api';
+import type { Editor } from '../../core/Editor.js';
+import type { PartId, PartOperation } from '../../core/parts/types.js';
+import { mutateParts } from '../../core/parts/mutation/mutate-part.js';
+import { registerHeaderFooterInvalidation } from '../../core/parts/invalidation/invalidation-handlers.js';
 import type { XmlElement } from './sections-xml.js';
 
 const DOCUMENT_RELS_PATH = 'word/_rels/document.xml.rels';
@@ -67,6 +71,10 @@ export interface HeaderFooterRelationshipLookupInput {
   refId: string;
 }
 
+function getConverterForHeaderFooter(editor: Editor): ConverterWithHeaderFooterParts {
+  return (editor as unknown as { converter: ConverterWithHeaderFooterParts }).converter;
+}
+
 function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -99,36 +107,6 @@ function ensureConvertedXml(converter: ConverterWithHeaderFooterParts): Record<s
     converter.convertedXml = {};
   }
   return converter.convertedXml;
-}
-
-function ensureRelationshipsRoot(converter: ConverterWithHeaderFooterParts): XmlElement {
-  const convertedXml = ensureConvertedXml(converter);
-
-  let relsPart = convertedXml[DOCUMENT_RELS_PATH] as XmlElement | undefined;
-  if (!relsPart || typeof relsPart !== 'object') {
-    relsPart = {
-      name: 'document.xml.rels',
-      elements: [],
-    };
-    convertedXml[DOCUMENT_RELS_PATH] = relsPart;
-  }
-
-  if (!Array.isArray(relsPart.elements)) relsPart.elements = [];
-  let relationshipsRoot = relsPart.elements.find((entry) => entry.name === 'Relationships');
-  if (!relationshipsRoot) {
-    relationshipsRoot = {
-      type: 'element',
-      name: 'Relationships',
-      attributes: { xmlns: RELS_XMLNS },
-      elements: [],
-    };
-    relsPart.elements.push(relationshipsRoot);
-  }
-
-  if (!Array.isArray(relationshipsRoot.elements)) relationshipsRoot.elements = [];
-  if (!relationshipsRoot.attributes) relationshipsRoot.attributes = { xmlns: RELS_XMLNS };
-  if (!relationshipsRoot.attributes.xmlns) relationshipsRoot.attributes.xmlns = RELS_XMLNS;
-  return relationshipsRoot;
 }
 
 function readRelationshipsRoot(converter: ConverterWithHeaderFooterParts): XmlElement | null {
@@ -320,45 +298,80 @@ function readSourceSnapshot(
 }
 
 export function createHeaderFooterPart(
-  converter: ConverterWithHeaderFooterParts,
+  editor: Editor,
   input: CreateHeaderFooterPartInput,
 ): CreateHeaderFooterPartResult {
-  const convertedXml = ensureConvertedXml(converter);
-  const relationshipsRoot = ensureRelationshipsRoot(converter);
-  const relationships = getRelationshipElements(relationshipsRoot);
+  const converter = getConverterForHeaderFooter(editor);
+  ensureConvertedXml(converter);
+
+  // Read-only computation: determine next IDs and clone source data
+  const convertedXml = converter.convertedXml!;
+  const relationshipsRoot = readRelationshipsRoot(converter);
+  const relationships = relationshipsRoot ? getRelationshipElements(relationshipsRoot) : [];
 
   const newRefId = nextRelationshipId(relationships);
   const relationshipType = toRelationshipType(input.kind);
   const newFilename = nextHeaderFooterFilename(input.kind, relationships, convertedXml);
   const newPartPath = `word/${newFilename}`;
   const sourceSnapshot = readSourceSnapshot(converter, input.kind, input.sourceRefId, relationships);
-
   const partXml = sourceSnapshot.xmlPart ?? createEmptyXmlPart(input.kind);
-  convertedXml[newPartPath] = partXml;
 
-  if (sourceSnapshot.relsPart && sourceSnapshot.xmlPartPath) {
-    convertedXml[toRelsPathForPart(newPartPath)] = sourceSnapshot.relsPart;
+  // Atomic multi-part mutation: XML part + optional rels + document.xml.rels
+  const operations: PartOperation[] = [
+    {
+      editor,
+      partId: newPartPath as PartId,
+      operation: 'create',
+      source: 'createHeaderFooterPart',
+      initial: partXml,
+    },
+  ];
+
+  if (sourceSnapshot.relsPart) {
+    operations.push({
+      editor,
+      partId: toRelsPathForPart(newPartPath) as PartId,
+      operation: 'create',
+      source: 'createHeaderFooterPart',
+      initial: sourceSnapshot.relsPart,
+    });
   }
 
-  relationshipsRoot.elements!.push({
-    type: 'element',
-    name: 'Relationship',
-    attributes: {
-      Id: newRefId,
-      Type: relationshipType,
-      Target: newFilename,
+  operations.push({
+    editor,
+    partId: DOCUMENT_RELS_PATH as PartId,
+    operation: 'mutate',
+    source: 'createHeaderFooterPart',
+    mutate({ part }) {
+      const root = part as { elements?: XmlElement[] };
+      if (!root.elements) root.elements = [];
+      let relsRoot = root.elements.find((el) => el.name === 'Relationships');
+      if (!relsRoot) {
+        relsRoot = { type: 'element', name: 'Relationships', attributes: { xmlns: RELS_XMLNS }, elements: [] };
+        root.elements.push(relsRoot);
+      }
+      if (!relsRoot.elements) relsRoot.elements = [];
+      relsRoot.elements.push({
+        type: 'element',
+        name: 'Relationship',
+        attributes: { Id: newRefId, Type: relationshipType, Target: newFilename },
+      } as XmlElement);
+      return true;
     },
   });
 
-  const collection = getCollection(converter, input.kind);
-  collection[newRefId] = sourceSnapshot.jsonPart ?? createEmptyJsonPart();
+  mutateParts({ editor, source: 'createHeaderFooterPart', operations });
 
-  const variantIds = getVariantIds(converter, input.kind);
-  if (!Array.isArray(variantIds.ids)) variantIds.ids = [];
-  if (!variantIds.ids.includes(newRefId)) variantIds.ids.push(newRefId);
+  // Register invalidation handler for the newly created part
+  registerHeaderFooterInvalidation(newPartPath);
 
-  converter.headerFooterModified = true;
-  converter.documentModified = true;
+  // The rels afterCommit hook automatically initializes the new refId in
+  // converter.headers/footers (with an empty JSON part), updates variantIds,
+  // and sets headerFooterModified. Override with cloned source content if available.
+  if (sourceSnapshot.jsonPart) {
+    const collection = getCollection(converter, input.kind);
+    collection[newRefId] = sourceSnapshot.jsonPart;
+  }
 
   return {
     refId: newRefId,

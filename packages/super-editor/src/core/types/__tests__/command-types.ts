@@ -7,7 +7,18 @@ type SearchReturn = ReturnType<ExtensionCommandMap['search']>;
 type AssertSearchReturn = ExpectTrue<Equal<SearchReturn, { id: string; from: number; to: number; text: string }[]>>;
 
 type InsertBookmarkArgs = Parameters<ExtensionCommandMap['insertBookmark']>[0];
-type AssertBookmarkArgs = ExpectTrue<Equal<InsertBookmarkArgs, { name: string; id?: string | null }>>;
+type AssertBookmarkArgs = ExpectTrue<
+  Equal<
+    InsertBookmarkArgs,
+    {
+      name: string;
+      id?: string | null;
+      colFirst?: number | string | null;
+      colLast?: number | string | null;
+      displacedByCustomXml?: string | null;
+    }
+  >
+>;
 
 type SetHeadingArgs = Parameters<ExtensionCommandMap['setHeading']>[0];
 type AssertHeadingArgs = ExpectTrue<Equal<SetHeadingArgs, { level: number }>>;

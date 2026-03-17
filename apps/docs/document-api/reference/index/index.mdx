@@ -1,0 +1,28 @@
+---
+title: Index operations
+sidebarTitle: Index
+description: Index operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Index (TABLE OF AUTHORITIES / INDEX field) lifecycle and XE entry operations.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/list"><code>index.list</code></a></span> | `index.list` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/get"><code>index.get</code></a></span> | `index.get` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/insert"><code>index.insert</code></a></span> | `index.insert` | Yes | `non-idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/configure"><code>index.configure</code></a></span> | `index.configure` | Yes | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/rebuild"><code>index.rebuild</code></a></span> | `index.rebuild` | Yes | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/remove"><code>index.remove</code></a></span> | `index.remove` | Yes | `non-idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/entries-list"><code>index.entries.list</code></a></span> | `index.entries.list` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/entries-get"><code>index.entries.get</code></a></span> | `index.entries.get` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/entries-insert"><code>index.entries.insert</code></a></span> | `index.entries.insert` | Yes | `non-idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/entries-update"><code>index.entries.update</code></a></span> | `index.entries.update` | Yes | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/index/entries-remove"><code>index.entries.remove</code></a></span> | `index.entries.remove` | Yes | `non-idempotent` | No | No |
+

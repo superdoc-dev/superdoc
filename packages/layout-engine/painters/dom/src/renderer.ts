@@ -1,4 +1,5 @@
 import type {
+  ChartDrawing,
   CustomGeometryData,
   DrawingBlock,
   DrawingFragment,
@@ -51,6 +52,7 @@ import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
+import { createChartElement as renderChartToElement } from './chart-renderer.js';
 import {
   getRunBooleanProp,
   getRunNumberProp,
@@ -83,7 +85,11 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import { computeTabWidth } from './utils/marker-helpers.js';
+import {
+  computeTabWidth,
+  resolvePainterListMarkerGeometry,
+  resolvePainterListTextStartPx,
+} from './utils/marker-helpers.js';
 import {
   applySdtContainerStyling,
   getSdtContainerKey,
@@ -91,6 +97,17 @@ import {
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
+import {
+  computeBetweenBorderFlags,
+  getFragmentParagraphBorders,
+  getFragmentHeight,
+  createParagraphDecorationLayers,
+  applyParagraphBorderStyles,
+  applyParagraphShadingStyles,
+  getParagraphBorderBox,
+  stampBetweenBorderDataset,
+  type BetweenBorderInfo,
+} from './features/paragraph-borders/index.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -330,20 +347,9 @@ type PainterOptions = {
   ruler?: RulerOptions;
 };
 
-type BlockLookupEntry = {
-  block: FlowBlock;
-  measure: Measure;
-  version: string;
-};
-
-/**
- * Map of block IDs to their corresponding block data and measurements.
- * Used by the renderer to efficiently look up block information during fragment rendering.
- * Each entry contains the block definition, its layout measurements, and a version string for cache invalidation.
- *
- * @typedef {Map<string, BlockLookupEntry>} BlockLookup
- */
-export type BlockLookup = Map<string, BlockLookupEntry>;
+// BlockLookup lives in the shared types module (single source of truth)
+import type { BlockLookupEntry, BlockLookup } from './features/paragraph-borders/types.js';
+export type { BlockLookup, BlockLookupEntry };
 
 type FragmentDomState = {
   key: string;
@@ -772,6 +778,81 @@ const normalizeAnchor = (value: string | null | undefined): string | null => {
  */
 const isValidSafeFragment = (fragment: string): boolean => {
   return SAFE_ANCHOR_PATTERN.test(fragment);
+};
+
+type ImageFilterSource = Pick<ImageBlock, 'grayscale' | 'gain' | 'blacklevel' | 'lum'>;
+
+const clampLumUnit = (value: number): number => {
+  return Math.max(-100000, Math.min(100000, value));
+};
+
+const parseVmlFixedFraction = (value: string | number | undefined): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'string' || value.length === 0) {
+    return null;
+  }
+
+  if (value.endsWith('f')) {
+    const raw = Number.parseInt(value.slice(0, -1), 10);
+    return Number.isFinite(raw) ? raw / 65536 : null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const buildImageFilters = (source: ImageFilterSource): string[] => {
+  const filters: string[] = [];
+
+  if (source.grayscale) {
+    filters.push('grayscale(100%)');
+  }
+
+  if (source.gain != null || source.blacklevel != null) {
+    const gain = parseVmlFixedFraction(source.gain);
+    const blacklevel = parseVmlFixedFraction(source.blacklevel);
+
+    if (gain != null) {
+      const contrast = Math.max(0, gain);
+      if (contrast > 0) {
+        filters.push(`contrast(${contrast})`);
+      }
+    }
+
+    if (blacklevel != null) {
+      // CSS has no black-point control, so approximate VML blacklevel with a linear
+      // brightness shift using the same 0..32767 range Word's watermark UI uses.
+      const brightness = Math.max(0, 1 + blacklevel * (65536 / 32767));
+      if (brightness > 0) {
+        filters.push(`brightness(${brightness})`);
+      }
+    }
+  }
+
+  if (source.lum) {
+    // a:lum uses ST_FixedPercentage values expressed in thousandths of a percent.
+    // Convert those percentage deltas into CSS filter multipliers.
+    const contrastValue = typeof source.lum.contrast === 'number' ? clampLumUnit(source.lum.contrast) : null;
+    const brightValue = typeof source.lum.bright === 'number' ? clampLumUnit(source.lum.bright) : null;
+
+    if (contrastValue != null) {
+      const contrast = Math.max(0, 1 + contrastValue / 100000);
+      if (contrast >= 0) {
+        filters.push(`contrast(${contrast})`);
+      }
+    }
+
+    if (brightValue != null) {
+      const brightness = Math.max(0, 1 + brightValue / 100000);
+      if (brightness >= 0) {
+        filters.push(`brightness(${brightness})`);
+      }
+    }
+  }
+
+  return filters;
 };
 
 /**
@@ -1718,9 +1799,16 @@ export class DomPainter {
     const zoom = this.zoomFactor;
     let scrollY: number;
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
+    // Check if the external scroll container is actually scrollable (content overflows its
+    // visible area). An element can have overflow:auto but still not scroll if it's in an
+    // unconstrained flex layout where the parent has only min-height (no height). In that
+    // case the element grows to fit content and scrollTop stays 0 — fall through to the
+    // viewport-based calculation instead.
+    const scrollCont = this.scrollContainer;
+    const isScrollContainerActive = scrollCont != null && scrollCont.scrollHeight > scrollCont.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
-    } else if (this.scrollContainer) {
+    } else if (isScrollContainerActive) {
       // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
       // Use scrollContainer.scrollTop with a cached mount offset instead of
       // getBoundingClientRect(). Rects are affected by spacer DOM mutations
@@ -1730,10 +1818,10 @@ export class DomPainter {
       // Computed once and cached; invalidated on mount/container/zoom change.
       if (this.scrollContainerMountOffset == null) {
         const mountRect = this.mount.getBoundingClientRect();
-        const containerRect = this.scrollContainer.getBoundingClientRect();
-        this.scrollContainerMountOffset = mountRect.top - containerRect.top + this.scrollContainer.scrollTop;
+        const containerRect = scrollCont.getBoundingClientRect();
+        this.scrollContainerMountOffset = mountRect.top - containerRect.top + scrollCont.scrollTop;
       }
-      scrollY = Math.max(0, (this.scrollContainer.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
+      scrollY = Math.max(0, (scrollCont.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
       // rect.top is in screen space (affected by CSS transform: scale).
@@ -1826,8 +1914,13 @@ export class DomPainter {
     }
     this.mount.appendChild(this.bottomSpacerEl);
 
-    // Ensure mounted pages are ordered (with gap spacers) before bottom spacer.
+    // Ensure mounted pages are ordered (with gap spacers).
+    // Use cursor-based reconciliation to skip DOM moves for elements already in
+    // the correct position. Moving an element via appendChild/insertBefore triggers
+    // a browser blur event on any focused descendant, which breaks header/footer
+    // in-place editing where a PM editor lives inside a page element (SD-1993).
     let prevIndex: number | null = null;
+    let cursor: ChildNode | null = this.virtualPagesEl.firstChild;
     for (const idx of mounted) {
       if (prevIndex != null && idx > prevIndex + 1) {
         const gap = this.doc!.createElement('div');
@@ -1838,10 +1931,18 @@ export class DomPainter {
           this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
-        this.virtualPagesEl.appendChild(gap);
+        // Insert gap before cursor. cursor is NOT advanced because it still
+        // points at the next page element that needs to be reconciled.
+        this.virtualPagesEl.insertBefore(gap, cursor);
       }
       const state = this.pageIndexToState.get(idx)!;
-      this.virtualPagesEl.appendChild(state.element);
+      if (state.element === cursor) {
+        // Already in the correct position. Skip the DOM mutation.
+        cursor = state.element.nextSibling;
+      } else {
+        // Out of order. Move to the correct position.
+        this.virtualPagesEl.insertBefore(state.element, cursor);
+      }
       prevIndex = idx;
     }
 
@@ -1957,10 +2058,11 @@ export class DomPainter {
     };
 
     const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
 
     page.fragments.forEach((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary));
+      el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index)));
     });
     this.renderDecorationsForPage(el, page, pageIndex);
     return el;
@@ -2141,22 +2243,27 @@ export class DomPainter {
       pageIndex,
     };
 
+    // Compute between-border flags for header/footer paragraph fragments
+    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, this.blockLookup);
+
     // Separate behindDoc fragments from normal fragments.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
     // compatibility fallback for older layouts that predate explicit metadata.
-    const behindDocFragments: typeof data.fragments = [];
-    const normalFragments: typeof data.fragments = [];
+    // Track original index for between-border flag lookup.
+    const behindDocFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
+    const normalFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
 
-    for (const fragment of data.fragments) {
+    for (let fi = 0; fi < data.fragments.length; fi += 1) {
+      const fragment = data.fragments[fi];
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
         isBehindDoc =
           fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0);
       }
       if (isBehindDoc) {
-        behindDocFragments.push(fragment);
+        behindDocFragments.push({ fragment, originalIndex: fi });
       } else {
-        normalFragments.push(fragment);
+        normalFragments.push({ fragment, originalIndex: fi });
       }
     }
 
@@ -2171,8 +2278,8 @@ export class DomPainter {
     // We can't use z-index: -1 because that goes behind the page's white background.
     // By inserting at the beginning and using z-index: 0, they render below body content
     // which also has z-index values but comes later in DOM order.
-    behindDocFragments.forEach((fragment) => {
-      const fragEl = this.renderFragment(fragment, context);
+    behindDocFragments.forEach(({ fragment, originalIndex }) => {
+      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
       const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
       // Page-relative anchors already carry absolute page Y coordinates. Adding decoration
       // container offsets would shift them twice and can push header art into body content.
@@ -2188,8 +2295,8 @@ export class DomPainter {
     });
 
     // Render normal fragments in the header/footer container
-    normalFragments.forEach((fragment) => {
-      const fragEl = this.renderFragment(fragment, context);
+    normalFragments.forEach(({ fragment, originalIndex }) => {
+      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
       const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
       if (isPageRelativeVertical) {
         // Convert absolute page Y back to decoration-container local coordinates.
@@ -2300,6 +2407,7 @@ export class DomPainter {
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
     const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -2313,10 +2421,16 @@ export class DomPainter {
       const key = fragmentKey(fragment);
       const current = existing.get(key);
       const sdtBoundary = sdtBoundaries.get(index);
+      const betweenInfo = betweenBorderFlags.get(index);
 
       if (current) {
         existing.delete(key);
         const sdtBoundaryMismatch = shouldRebuildForSdtBoundary(current.element, sdtBoundary);
+        // Detect mismatch in any between-border property
+        const betweenBorderMismatch =
+          (current.element.dataset.betweenBorder === 'true') !== (betweenInfo?.showBetweenBorder ?? false) ||
+          (current.element.dataset.suppressTopBorder === 'true') !== (betweenInfo?.suppressTopBorder ?? false) ||
+          (current.element.dataset.gapBelow ?? '') !== (betweenInfo?.gapBelow ? String(betweenInfo.gapBelow) : '');
         // Verify the position mapping is reliable: if mapping the old pmStart doesn't produce
         // the expected new pmStart, the mapping is degenerate (e.g. full-document paste) and
         // we must rebuild to get correct span position attributes.
@@ -2330,10 +2444,11 @@ export class DomPainter {
           this.changedBlocks.has(fragment.blockId) ||
           current.signature !== fragmentSignature(fragment, this.blockLookup) ||
           sdtBoundaryMismatch ||
+          betweenBorderMismatch ||
           mappingUnreliable;
 
         if (needsRebuild) {
-          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary);
+          const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
           current.signature = fragmentSignature(fragment, this.blockLookup);
@@ -2354,7 +2469,7 @@ export class DomPainter {
         return;
       }
 
-      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary);
+      const fresh = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo);
       pageEl.insertBefore(fresh, pageEl.children[index] ?? null);
       nextFragments.push({
         key,
@@ -2449,9 +2564,10 @@ export class DomPainter {
     };
 
     const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
     const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
       const sdtBoundary = sdtBoundaries.get(index);
-      const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary);
+      const fragmentEl = this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index));
       el.appendChild(fragmentEl);
       return {
         key: fragmentKey(fragment),
@@ -2497,12 +2613,13 @@ export class DomPainter {
     fragment: Fragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
+    betweenInfo?: BetweenBorderInfo,
   ): HTMLElement {
     if (fragment.kind === 'para') {
-      return this.renderParagraphFragment(fragment, context, sdtBoundary);
+      return this.renderParagraphFragment(fragment, context, sdtBoundary, betweenInfo);
     }
     if (fragment.kind === 'list-item') {
-      return this.renderListItemFragment(fragment, context, sdtBoundary);
+      return this.renderListItemFragment(fragment, context, sdtBoundary, betweenInfo);
     }
     if (fragment.kind === 'image') {
       return this.renderImageFragment(fragment, context);
@@ -2529,6 +2646,7 @@ export class DomPainter {
     fragment: ParaFragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
+    betweenInfo?: BetweenBorderInfo,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -2584,13 +2702,19 @@ export class DomPainter {
       // Otherwise, fall back to slicing from the original measure.
       const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
       applyParagraphBlockStyles(fragmentEl, block.attrs);
-      const { shadingLayer, borderLayer } = createParagraphDecorationLayers(this.doc, fragment.width, block.attrs);
+      const { shadingLayer, borderLayer } = createParagraphDecorationLayers(
+        this.doc,
+        fragment.width,
+        block.attrs,
+        betweenInfo,
+      );
       if (shadingLayer) {
         fragmentEl.appendChild(shadingLayer);
       }
       if (borderLayer) {
         fragmentEl.appendChild(borderLayer);
       }
+      stampBetweenBorderDataset(fragmentEl, betweenInfo);
       if (block.attrs?.styleId) {
         fragmentEl.dataset.styleId = block.attrs.styleId;
         fragmentEl.setAttribute('styleid', block.attrs.styleId);
@@ -2632,13 +2756,38 @@ export class DomPainter {
       const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
       const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
-      // Pre-calculate actual marker+tab inline width for list first lines.
-      // The measurer uses textStartPx to calculate line.maxWidth, but the painter renders
-      // marker+tab as inline elements that may consume MORE space than textStartPx indicates.
-      // This causes justify overflow when line.maxWidth > (fragment.width - actualMarkerTabWidth).
-      let listFirstLineMarkerTabEndPx: number | null = null;
+      const listFirstLineTextStartPx =
+        !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
+          ? resolvePainterListTextStartPx({
+              wordLayout,
+              indentLeftPx: paraIndentLeft,
+              hangingIndentPx: paraIndent?.hanging ?? 0,
+              firstLineIndentPx: paraIndent?.firstLine ?? 0,
+              markerTextWidthPx: fragment.markerTextWidth,
+            })
+          : undefined;
+
+      const shouldUseSharedInlinePrefixGeometry =
+        !fragment.continuesFromPrev &&
+        fragment.markerWidth &&
+        wordLayout?.marker?.justification === 'left' &&
+        wordLayout.firstLineIndentMode !== true &&
+        typeof fragment.markerTextWidth === 'number' &&
+        Number.isFinite(fragment.markerTextWidth) &&
+        fragment.markerTextWidth >= 0;
+      const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
+        ? resolvePainterListMarkerGeometry({
+            wordLayout,
+            indentLeftPx: paraIndentLeft,
+            hangingIndentPx: paraIndent?.hanging ?? 0,
+            firstLineIndentPx: paraIndent?.firstLine ?? 0,
+            markerTextWidthPx: fragment.markerTextWidth,
+          })
+        : undefined;
+
+      // Pre-calculate marker geometry used later when painting the inline prefix.
       let listTabWidth = 0;
-      let markerStartPos: number;
+      let markerStartPos = 0;
       if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
         const markerTextWidth = fragment.markerTextWidth!;
         const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
@@ -2655,9 +2804,10 @@ export class DomPainter {
           currentPos = markerStartPos + markerTextWidth;
         }
 
-        // Calculate tab width using same logic as marker rendering section
         const suffix = wordLayout.marker.suffix ?? 'tab';
-        if (suffix === 'tab') {
+        if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
+          listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
+        } else if (suffix === 'tab') {
           listTabWidth = computeTabWidth(
             currentPos,
             markerJustification,
@@ -2669,10 +2819,15 @@ export class DomPainter {
         } else if (suffix === 'space') {
           listTabWidth = 4;
         }
-        listFirstLineMarkerTabEndPx = currentPos + listTabWidth;
       }
 
       lines.forEach((line, index) => {
+        const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
+        const hasListFirstLineMarker =
+          index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+        const shouldUseResolvedListTextStart =
+          hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
+
         // Calculate available width from fragment dimensions (the actual rendered width).
         // This is the ground truth for justify calculations since it matches what's visible.
         // Only subtract positive indents - negative indents already expand fragment.width in layout
@@ -2684,13 +2839,11 @@ export class DomPainter {
         let availableWidthOverride =
           line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
 
-        // For list first lines, use the actual marker+tab inline width instead of line.maxWidth
-        // which is based on textStartPx and may not match the actual rendered inline width.
-        // Must also subtract paraIndentRight to match measurer's calculation:
-        // initialAvailableWidth = maxWidth - textStartPx - indentRight
-        // Only subtract positive paraIndentRight - negative indents already expand fragment.width
-        if (index === 0 && listFirstLineMarkerTabEndPx != null) {
-          availableWidthOverride = fragment.width - listFirstLineMarkerTabEndPx - Math.max(0, paraIndentRight);
+        // Only explicit-positioned list first lines need a painter-side width override.
+        // Inline list first lines already have the correct measured width in `line.maxWidth`,
+        // and second-guessing that width causes justified spacing regressions.
+        if (shouldUseResolvedListTextStart) {
+          availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
         }
 
         // Determine if this is the true last line of the paragraph that should skip justification.
@@ -2711,23 +2864,12 @@ export class DomPainter {
           availableWidthOverride,
           fragment.fromLine + index,
           shouldSkipJustifyForLastLine,
+          shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
         );
 
         // List first lines handle indentation via marker positioning and tab stops,
         // not CSS padding/text-indent. This matches Word's rendering model.
-        const isListFirstLine =
-          index === 0 &&
-          !fragment.continuesFromPrev &&
-          fragment.markerWidth &&
-          fragment.markerTextWidth &&
-          wordLayout?.marker;
-
-        /**
-         * Determines if this line contains segments with explicit X positioning (typically from tabs).
-         * When segments have explicit X positions, they are rendered with absolute positioning,
-         * which means CSS textIndent has no effect on their placement.
-         */
-        const hasExplicitSegmentPositioning = line.segments?.some((seg) => seg.x !== undefined);
+        const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
 
         /**
          * Identifies first lines that require special indent handling.
@@ -2813,8 +2955,11 @@ export class DomPainter {
         }
 
         if (isListFirstLine) {
-          const marker = wordLayout.marker!;
-          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`; // HERE CONTROLS WHERE TAB STARTS - I think this will vary with justification
+          const marker = wordLayout?.marker;
+          if (!marker) {
+            return;
+          }
+          lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
           // Skip marker rendering when hidden by vanish property (preserves list indentation)
           if (!marker.run.vanish) {
@@ -2837,10 +2982,10 @@ export class DomPainter {
             markerContainer.style.position = 'relative';
             if (markerJustification === 'right') {
               markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              markerContainer.style.left = `${markerStartPos}px`;
             } else if (markerJustification === 'center') {
               markerContainer.style.position = 'absolute';
-              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`; // HERE CONTROLS MARKER POSITION - I think this will vary with justification
+              markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
               lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
             }
 
@@ -2986,6 +3131,7 @@ export class DomPainter {
     fragment: ListItemFragment,
     context: FragmentRenderContext,
     sdtBoundary?: SdtBoundaryOptions,
+    betweenInfo?: BetweenBorderInfo,
   ): HTMLElement {
     try {
       const lookup = this.blockLookup.get(fragment.blockId);
@@ -3077,13 +3223,19 @@ export class DomPainter {
       // Track B: preserve indent for wordLayout-based lists to show hierarchy
       const contentAttrs = wordLayout ? item.paragraph.attrs : stripListIndent(item.paragraph.attrs);
       applyParagraphBlockStyles(contentEl, contentAttrs);
-      const { shadingLayer, borderLayer } = createParagraphDecorationLayers(this.doc, fragment.width, contentAttrs);
+      const { shadingLayer, borderLayer } = createParagraphDecorationLayers(
+        this.doc,
+        fragment.width,
+        contentAttrs,
+        betweenInfo,
+      );
       if (shadingLayer) {
         contentEl.appendChild(shadingLayer);
       }
       if (borderLayer) {
         contentEl.appendChild(borderLayer);
       }
+      stampBetweenBorderDataset(fragmentEl, betweenInfo);
       // INTENTIONAL DIVERGENCE: Force list content to left alignment
       // Microsoft Word DOES justify list paragraphs when alignment is 'justify',
       // but we intentionally keep lists left-aligned to match user expectations
@@ -3209,36 +3361,7 @@ export class DomPainter {
         img.style.transformOrigin = 'center';
       }
 
-      // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
-      // conversion formulas calculated based on Libreoffice vml reader
-      // https://github.com/LibreOffice/core/blob/951a74d047cfddff78014225f55ecb2bbdcd9c4c/oox/source/vml/vmlshapecontext.cxx#L465C13-L493C1
-      const filters: string[] = [];
-
-      // Apply OOXML grayscale effect
-      if (block.grayscale) {
-        filters.push('grayscale(100%)');
-      }
-
-      if (block.gain != null || block.blacklevel != null) {
-        // Convert VML gain to CSS contrast
-        // VML gain is a hex string like "19661f" - higher = more contrast
-        if (block.gain && typeof block.gain === 'string' && block.gain.endsWith('f')) {
-          const contrast = Math.max(0, parseInt(block.gain) / 65536) * (2 / 3); // 2/3 factor based on visual comparison.
-          if (contrast > 0) {
-            filters.push(`contrast(${contrast})`);
-          }
-        }
-
-        // Convert VML blacklevel (brightness) to CSS brightness
-        // VML blacklevel is a hex string like "22938f" - lower = less brightness
-        if (block.blacklevel && typeof block.blacklevel === 'string' && block.blacklevel.endsWith('f')) {
-          const brightness = Math.max(0, 1 + parseInt(block.blacklevel) / 327 / 100) * 1.3; // 1.3 factor added based on visual comparison.
-          if (brightness > 0) {
-            filters.push(`brightness(${brightness})`);
-          }
-        }
-      }
-
+      const filters = buildImageFilters(block);
       if (filters.length > 0) {
         img.style.filter = filters.join(' ');
       }
@@ -3321,6 +3444,9 @@ export class DomPainter {
     }
     if (block.drawingKind === 'shapeGroup') {
       return this.createShapeGroupElement(block, context);
+    }
+    if (block.drawingKind === 'chart') {
+      return this.createChartElement(block);
     }
     return this.createDrawingPlaceholder();
   }
@@ -4068,6 +4194,18 @@ export class DomPainter {
     return placeholder;
   }
 
+  // ============================================================================
+  // Chart Rendering
+  // ============================================================================
+
+  /**
+   * Create an SVG chart element from a ChartDrawing block.
+   * Delegates to the chart-renderer module for clean separation.
+   */
+  private createChartElement(block: ChartDrawing): HTMLElement {
+    return renderChartToElement(this.doc!, block.chartData, block.geometry);
+  }
+
   private renderTableFragment(
     fragment: TableFragment,
     context: FragmentRenderContext,
@@ -4092,6 +4230,7 @@ export class DomPainter {
       ctx: FragmentRenderContext,
       lineIndex: number,
       isLastLine: boolean,
+      resolvedListTextStartPx?: number,
     ): HTMLElement => {
       // Check if paragraph ends with a line break
       const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
@@ -4100,7 +4239,7 @@ export class DomPainter {
       // Skip justify only on the last line, unless the paragraph ends with a line break
       const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify);
+      return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
     };
 
     /**
@@ -4131,6 +4270,9 @@ export class DomPainter {
       if (block.drawingKind === 'vectorShape') {
         // For vectorShapes in table cells, render without geometry transforms
         return this.createVectorShapeElement(block, block.geometry, false, 1, 1, context);
+      }
+      if (block.drawingKind === 'chart') {
+        return this.createChartElement(block);
       }
       return this.createDrawingPlaceholder();
     };
@@ -4462,7 +4604,7 @@ export class DomPainter {
     const hasAnyComment = !!commentAnnotations?.length;
     const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
 
-    if (commentHighlight.color && !textRun.highlight && hasAnyComment) {
+    if (commentHighlight.color && hasAnyComment) {
       (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
       // Add thin visual indicator for nested comments when outer comment is selected
       // Use box-shadow instead of border to avoid affecting text layout
@@ -4681,32 +4823,7 @@ export class DomPainter {
       img.style.transformOrigin = 'center';
     }
 
-    // Apply image effects (grayscale, VML adjustments for watermarks)
-    const filters: string[] = [];
-
-    // Apply OOXML grayscale effect
-    if (run.grayscale) {
-      filters.push('grayscale(100%)');
-    }
-
-    if (run.gain != null || run.blacklevel != null) {
-      // Convert VML gain to CSS contrast
-      if (run.gain && typeof run.gain === 'string' && run.gain.endsWith('f')) {
-        const contrast = Math.max(0, parseInt(run.gain) / 65536) * (2 / 3);
-        if (contrast > 0) {
-          filters.push(`contrast(${contrast})`);
-        }
-      }
-
-      // Convert VML blacklevel to CSS brightness
-      if (run.blacklevel && typeof run.blacklevel === 'string' && run.blacklevel.endsWith('f')) {
-        const brightness = Math.max(0, 1 + parseInt(run.blacklevel) / 327 / 100) * 1.3;
-        if (brightness > 0) {
-          filters.push(`brightness(${brightness})`);
-        }
-      }
-    }
-
+    const filters = buildImageFilters(run);
     if (filters.length > 0) {
       img.style.filter = filters.join(' ');
     }
@@ -5092,6 +5209,7 @@ export class DomPainter {
    * @param availableWidthOverride - Optional override for available width used in justification calculations
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
+   * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @returns The rendered line element
    */
   private renderLine(
@@ -5101,6 +5219,7 @@ export class DomPainter {
     availableWidthOverride?: number,
     lineIndex?: number,
     skipJustify?: boolean,
+    resolvedListTextStartPx?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -5396,13 +5515,15 @@ export class DomPainter {
       const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
       const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
       const isListParagraph = Boolean(wordLayout?.marker);
-      const rawTextStartPx =
+      const fallbackListTextStartPx =
         typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
           ? wordLayout.marker.textStartX
           : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
             ? wordLayout.textStartPx
             : undefined;
-      const listIndentOffset = isFirstLineOfPara ? (rawTextStartPx ?? indentLeft) : indentLeft;
+      const listIndentOffset = isFirstLineOfPara
+        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+        : indentLeft;
       const indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
       const segmentsByRun = new Map<number, LineSegment[]>();
@@ -6149,41 +6270,6 @@ const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup
   return null;
 };
 
-const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number => {
-  if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
-    return fragment.height;
-  }
-
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return 0;
-
-  if (fragment.kind === 'para' && lookup.measure.kind === 'paragraph') {
-    const measure = lookup.measure;
-    const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
-    if (lines.length === 0) return 0;
-    let totalHeight = 0;
-    for (const line of lines) {
-      totalHeight += line.lineHeight ?? 0;
-    }
-    return totalHeight;
-  }
-
-  if (fragment.kind === 'list-item' && lookup.measure.kind === 'list') {
-    const listMeasure = lookup.measure as ListMeasure;
-    const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
-    if (!item) return 0;
-    const lines = item.paragraph.lines.slice(fragment.fromLine, fragment.toLine);
-    if (lines.length === 0) return 0;
-    let totalHeight = 0;
-    for (const line of lines) {
-      totalHeight += line.lineHeight ?? 0;
-    }
-    return totalHeight;
-  }
-
-  return 0;
-};
-
 const computeSdtBoundaries = (
   fragments: readonly Fragment[],
   blockLookup: BlockLookup,
@@ -6246,6 +6332,8 @@ const computeSdtBoundaries = (
 
   return boundaries;
 };
+
+// getFragmentParagraphBorders, computeBetweenBorderFlags — moved to features/paragraph-borders/
 
 const fragmentKey = (fragment: Fragment): string => {
   if (fragment.kind === 'para') {
@@ -6513,6 +6601,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.strike ? 1 : 0,
           textRun.highlight ?? '',
           textRun.letterSpacing != null ? textRun.letterSpacing : '',
+          textRun.vertAlign ?? '',
+          textRun.baselineShift != null ? textRun.baselineShift : '',
           // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           textRun.token ?? '',
           // Tracked changes - force re-render when added or removed tracked change
@@ -6613,6 +6703,16 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         group.geometry.height,
         group.groupTransform ? JSON.stringify(group.groupTransform) : '',
         childSignature,
+      ].join('|');
+    }
+    if (block.drawingKind === 'chart') {
+      return [
+        'drawing:chart',
+        block.chartData?.chartType ?? '',
+        block.chartData?.series?.length ?? 0,
+        block.geometry.width,
+        block.geometry.height,
+        block.chartRelId ?? '',
       ].join('|');
     }
     // Exhaustiveness check: if a new drawingKind is added, TypeScript will error here
@@ -6744,6 +6844,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunUnderlineStyle(run));
               hash = hashString(hash, getRunUnderlineColor(run));
               hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
+              hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
+              hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
             }
           }
         }
@@ -6841,6 +6943,17 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
   }
   if (decorations.length > 0) {
     element.style.textDecorationLine = decorations.join(' ');
+  }
+
+  // Vertical alignment: custom baseline offset takes precedence over vertAlign
+  if (run.baselineShift != null && Number.isFinite(run.baselineShift)) {
+    element.style.verticalAlign = `${run.baselineShift}pt`;
+  } else if (run.vertAlign === 'superscript') {
+    element.style.verticalAlign = 'super';
+  } else if (run.vertAlign === 'subscript') {
+    element.style.verticalAlign = 'sub';
+  } else if (run.vertAlign === 'baseline') {
+    element.style.verticalAlign = 'baseline';
   }
 };
 
@@ -6974,119 +7087,8 @@ const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs)
   }
 };
 
-const getParagraphBorderBox = (
-  fragmentWidth: number,
-  indent?: ParagraphAttrs['indent'],
-): { leftInset: number; width: number } => {
-  const indentLeft = Number.isFinite(indent?.left) ? indent!.left! : 0;
-  const indentRight = Number.isFinite(indent?.right) ? indent!.right! : 0;
-  const firstLine = Number.isFinite(indent?.firstLine) ? indent!.firstLine! : 0;
-  const hanging = Number.isFinite(indent?.hanging) ? indent!.hanging! : 0;
-  const firstLineOffset = firstLine - hanging;
-  const minLeftInset = Math.min(indentLeft, indentLeft + firstLineOffset);
-  const leftInset = Math.max(0, minLeftInset);
-  const rightInset = Math.max(0, indentRight);
-  return {
-    leftInset,
-    width: Math.max(0, fragmentWidth - leftInset - rightInset),
-  };
-};
-
-/**
- * Builds overlay elements for paragraph shading and borders with indent-aware sizing.
- * Returns layers in the order they should be appended (shading below borders).
- */
-const createParagraphDecorationLayers = (
-  doc: Document,
-  fragmentWidth: number,
-  attrs?: ParagraphAttrs,
-): { shadingLayer?: HTMLElement; borderLayer?: HTMLElement } => {
-  if (!attrs?.borders && !attrs?.shading) return {};
-  const borderBox = getParagraphBorderBox(fragmentWidth, attrs.indent);
-  const baseStyles = {
-    position: 'absolute',
-    top: '0px',
-    bottom: '0px',
-    left: `${borderBox.leftInset}px`,
-    width: `${borderBox.width}px`,
-    pointerEvents: 'none',
-    boxSizing: 'border-box',
-  } as const;
-
-  let shadingLayer: HTMLElement | undefined;
-  if (attrs.shading) {
-    shadingLayer = doc.createElement('div');
-    shadingLayer.classList.add('superdoc-paragraph-shading');
-    Object.assign(shadingLayer.style, baseStyles);
-    applyParagraphShadingStyles(shadingLayer, attrs.shading);
-  }
-
-  let borderLayer: HTMLElement | undefined;
-  if (attrs.borders) {
-    borderLayer = doc.createElement('div');
-    borderLayer.classList.add('superdoc-paragraph-border');
-    Object.assign(borderLayer.style, baseStyles);
-    borderLayer.style.zIndex = '1';
-    applyParagraphBorderStyles(borderLayer, attrs.borders);
-  }
-
-  return { shadingLayer, borderLayer };
-};
-
-type BorderSide = keyof NonNullable<ParagraphAttrs['borders']>;
-const BORDER_SIDES: BorderSide[] = ['top', 'right', 'bottom', 'left'];
-
-/**
- * Applies paragraph border styles to an HTML element.
- * Sets CSS border properties (width, style, color) for each side specified in the borders object.
- *
- * @param {HTMLElement} element - The HTML element to apply border styles to
- * @param {ParagraphAttrs['borders']} borders - Optional borders object containing border definitions for top, right, bottom, and left sides
- *
- * @remarks
- * - Sets box-sizing to 'border-box' to ensure borders are included in element dimensions
- * - Each side's border is processed independently - only specified sides receive border styles
- * - Border width defaults to 1px if not specified, and negative widths are clamped to 0px
- * - Border style defaults to 'solid' if not specified or if style is not 'none'
- * - Border color defaults to '#000' (black) if not specified
- * - Border style 'none' is handled specially to ensure no visible border
- *
- * @example
- * ```typescript
- * applyParagraphBorderStyles(paraElement, {
- *   top: { width: 2, style: 'solid', color: '#FF0000' },
- *   bottom: { width: 1, style: 'dashed', color: '#0000FF' }
- * });
- * ```
- */
-export const applyParagraphBorderStyles = (element: HTMLElement, borders?: ParagraphAttrs['borders']): void => {
-  if (!borders) return;
-  element.style.boxSizing = 'border-box';
-  BORDER_SIDES.forEach((side) => {
-    const border = borders[side];
-    if (!border) return;
-    setBorderSideStyle(element, side, border);
-  });
-};
-
-const setBorderSideStyle = (element: HTMLElement, side: BorderSide, border: ParagraphBorder): void => {
-  const cssSide = side;
-  const resolvedStyle =
-    border.style && border.style !== 'none' ? border.style : border.style === 'none' ? 'none' : 'solid';
-  if (resolvedStyle === 'none') {
-    element.style.setProperty(`border-${cssSide}-style`, 'none');
-    element.style.setProperty(`border-${cssSide}-width`, '0px');
-    if (border.color) {
-      element.style.setProperty(`border-${cssSide}-color`, border.color);
-    }
-    return;
-  }
-
-  const width = border.width != null ? Math.max(0, border.width) : undefined;
-  element.style.setProperty(`border-${cssSide}-style`, resolvedStyle);
-  element.style.setProperty(`border-${cssSide}-width`, `${width ?? 1}px`);
-  element.style.setProperty(`border-${cssSide}-color`, border.color ?? '#000');
-};
+// getParagraphBorderBox, createParagraphDecorationLayers, applyParagraphBorderStyles,
+// setBorderSideStyle, applyParagraphShadingStyles — moved to features/paragraph-borders/
 
 const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => {
   if (!attrs?.indent || attrs.indent.left == null) {
@@ -7101,30 +7103,7 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
   };
 };
 
-/**
- * Applies paragraph shading (background color) styles to an HTML element.
- * Sets the CSS background-color property based on the shading fill value.
- *
- * @param {HTMLElement} element - The HTML element to apply shading styles to
- * @param {ParagraphAttrs['shading']} shading - Optional shading object containing fill color definition
- *
- * @remarks
- * - Only applies background color if shading.fill is defined
- * - Currently only supports the `fill` property for solid color backgrounds
- * - Theme-based shading properties (themeColor, themeTint, themeShade) are not yet supported
- * - The fill value should be a valid CSS color string (hex, rgb, named color, etc.)
- *
- * @example
- * ```typescript
- * applyParagraphShadingStyles(paraElement, {
- *   fill: '#FFFF00'
- * });
- * ```
- */
-export const applyParagraphShadingStyles = (element: HTMLElement, shading?: ParagraphAttrs['shading']): void => {
-  if (!shading?.fill) return;
-  element.style.backgroundColor = shading.fill;
-};
+// applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
 
 /**
  * Extracts and slices text runs that belong to a specific line within a paragraph block.

@@ -38,6 +38,27 @@ const setParagraphCursor = (view, paragraphIndex) => {
   view.dispatch(view.state.tr.setSelection(selection));
 };
 
+const selectParagraphText = (view, paragraphIndex) => {
+  const info = findParagraphInfo(view.state.doc, paragraphIndex);
+  expect(info, `expected paragraph index ${paragraphIndex} to exist`).toBeTruthy();
+
+  let from = null;
+  let to = null;
+  view.state.doc.nodesBetween(info.pos, info.pos + info.node.nodeSize, (node, pos) => {
+    if (!node.isText || !node.text?.length) return true;
+    if (from == null) from = pos;
+    to = pos + node.text.length;
+    return true;
+  });
+
+  expect(from).not.toBeNull();
+  expect(to).not.toBeNull();
+
+  const selection = TextSelection.create(view.state.doc, from, to);
+  view.dispatch(view.state.tr.setSelection(selection));
+  return { from, to };
+};
+
 const toggleLinkedStyleCommand = (editor, style, nodeType = 'paragraph') =>
   editor.chain().toggleLinkedStyle(style, nodeType).run();
 
@@ -64,6 +85,52 @@ describe('LinkedStyles Extension', () => {
         expect(result).toBe(true);
         const firstParagraph = findParagraphInfo(editor.state.doc, 0);
         expect(getParagraphProps(firstParagraph.node).styleId).toBe('Heading1');
+      });
+
+      it('clears carried formatting marks when applying a new linked style on an empty cursor selection', () => {
+        const alternateStyle = editor.helpers.linkedStyles.getStyleById('Heading2');
+        const { bold } = editor.schema.marks;
+
+        setParagraphCursor(editor.view, 0);
+        editor.view.dispatch(editor.state.tr.setStoredMarks([bold.create()]));
+
+        const result = editor.commands.setLinkedStyle(alternateStyle);
+
+        expect(result).toBe(true);
+        const firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(firstParagraph.node).styleId).toBe('Heading2');
+        expect((editor.state.storedMarks || []).map((mark) => mark.type.name)).not.toContain('bold');
+      });
+
+      it('removes bold marks from selected text when applying a linked style', () => {
+        const { from, to } = selectParagraphText(editor.view, 0);
+        editor.view.dispatch(editor.state.tr.addMark(from, to, editor.schema.marks.bold.create()));
+
+        let firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        let boldTextNodes = [];
+        editor.state.doc.nodesBetween(firstParagraph.pos, firstParagraph.pos + firstParagraph.node.nodeSize, (node) => {
+          if (node.isText && node.marks.some((mark) => mark.type.name === 'bold')) {
+            boldTextNodes.push(node);
+          }
+          return true;
+        });
+        expect(boldTextNodes.length).toBeGreaterThan(0);
+
+        selectParagraphText(editor.view, 0);
+        const result = editor.commands.setLinkedStyle(headingStyle);
+
+        expect(result).toBe(true);
+        firstParagraph = findParagraphInfo(editor.state.doc, 0);
+        expect(getParagraphProps(firstParagraph.node).styleId).toBe('Heading1');
+
+        boldTextNodes = [];
+        editor.state.doc.nodesBetween(firstParagraph.pos, firstParagraph.pos + firstParagraph.node.nodeSize, (node) => {
+          if (node.isText && node.marks.some((mark) => mark.type.name === 'bold')) {
+            boldTextNodes.push(node);
+          }
+          return true;
+        });
+        expect(boldTextNodes).toHaveLength(0);
       });
     });
 

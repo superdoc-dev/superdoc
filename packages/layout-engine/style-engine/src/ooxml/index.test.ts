@@ -251,6 +251,11 @@ describe('ooxml - resolveRunProperties', () => {
     expect(result.italic).toBe(true);
     expect(result.color).toEqual({ val: 'CCCCCC' });
   });
+  it('does not treat paragraph mark run properties as inherited text styling', () => {
+    const params = buildParams({ translatedLinkedStyles: null });
+    const result = resolveRunProperties(params, { italic: true }, { runProperties: { bold: true } });
+    expect(result).toEqual({ italic: true });
+  });
 });
 
 describe('ooxml - resolveParagraphProperties', () => {

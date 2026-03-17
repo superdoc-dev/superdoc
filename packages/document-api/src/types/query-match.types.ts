@@ -8,7 +8,8 @@
  * See plans/query-match-blocks-runs-plan.md for design decisions D1–D20.
  */
 
-import type { BlockNodeType, NodeAddress } from './base.js';
+import type { BlockNodeAddress, BlockNodeType, NodeAddress } from './base.js';
+import type { SelectionTarget } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { DiscoveryItem, DiscoveryOutput, DiscoveryResult } from './discovery.js';
 import type { InlineToggleDirective } from './style-policy.types.js';
@@ -152,8 +153,15 @@ export interface MatchBlock {
 export interface TextMatchDomain {
   /** Discriminator — always `'text'` for text-selector matches. */
   matchKind: 'text';
-  /** Address of the first matched block in document order (D14). */
-  address: NodeAddress;
+  /** Address of the containing block in document order (D14). Text matches always yield the block. */
+  address: BlockNodeAddress;
+  /**
+   * Canonical mutation-ready selection target for this text match.
+   *
+   * Can be passed directly to `doc.delete({ target })`, `doc.replace({ target, text })`,
+   * or `doc.format.apply({ target, inline })` for cross-block mutations.
+   */
+  target: SelectionTarget;
   /** Matched text plus surrounding context (D11). */
   snippet: string;
   /** Character offsets within `snippet` identifying the matched text (D17). */
@@ -212,7 +220,7 @@ export interface QueryMatchMeta {
 
 export interface QueryMatchInput {
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
   require?: CardinalityRequirement;
   /** Match evaluation mode. `'candidates'` (default) returns best-effort matches; `'strict'` enforces exact semantics (future). */
   mode?: 'strict' | 'candidates';

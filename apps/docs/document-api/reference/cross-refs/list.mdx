@@ -1,0 +1,89 @@
+---
+title: crossRefs.list
+sidebarTitle: crossRefs.list
+description: List all cross-reference fields in the document.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List all cross-reference fields in the document.
+
+- Operation ID: `crossRefs.list`
+- API member path: `editor.doc.crossRefs.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CrossRefsListResult containing discovered cross-references with address and domain data.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

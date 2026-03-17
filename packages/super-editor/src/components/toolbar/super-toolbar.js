@@ -20,6 +20,7 @@ import { isList } from '@core/commands/list-helpers';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { twipsToLines } from '@converter/helpers';
 import { parseSizeUnit } from '@core/utilities';
+import { encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { NodeSelection } from 'prosemirror-state';
 
 /**
@@ -899,9 +900,16 @@ export class SuperToolbar extends EventEmitter {
           state.doc.resolve(paragraphParent.pos),
         )
       : null;
+    const selectionIsCollapsed = selection.empty;
+    const paragraphIsEmpty = paragraphParent?.node?.content?.size === 0;
+    const paragraphFontFamily = getParagraphFontFamilyFromProperties(
+      paragraphProps,
+      this.activeEditor?.converter?.convertedXml ?? {},
+    );
 
     this.toolbarItems.forEach((item) => {
       item.resetDisabled();
+      let activatedFromLinkedStyle = false;
 
       if (item.name.value === 'undo') {
         item.setDisabled(this.undoDepth === 0);
@@ -966,10 +974,23 @@ export class SuperToolbar extends EventEmitter {
             [item.name.value]: linkedStylesItem,
           };
           item.activate(value);
+          activatedFromLinkedStyle = true;
         }
       }
       if (item.name.value === 'textAlign' && paragraphProps?.justification) {
         item.activate({ textAlign: paragraphProps.justification });
+      }
+
+      if (
+        item.name.value === 'fontFamily' &&
+        selectionIsCollapsed &&
+        paragraphIsEmpty &&
+        !activeMark &&
+        !markNegated &&
+        !activatedFromLinkedStyle &&
+        paragraphFontFamily
+      ) {
+        item.activate({ fontFamily: paragraphFontFamily });
       }
 
       if (item.name.value === 'lineHeight') {
@@ -1357,4 +1378,11 @@ export class SuperToolbar extends EventEmitter {
       this._restoreFocusTimeoutId = null;
     }
   }
+}
+
+function getParagraphFontFamilyFromProperties(paragraphProps, convertedXml = {}) {
+  const fontFamilyProps = paragraphProps?.runProperties?.fontFamily;
+  if (!fontFamilyProps) return null;
+  const [markDef] = encodeMarksFromRPr({ fontFamily: fontFamilyProps }, convertedXml);
+  return markDef?.attrs?.fontFamily ?? null;
 }

@@ -249,7 +249,7 @@ export function createPositionTrackerPlugin(): Plugin<PositionTrackerState> {
 
     props: {
       decorations() {
-        return DecorationSet.empty;
+        return null;
       },
     },
   });

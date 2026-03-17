@@ -252,48 +252,23 @@ function validateCreateParagraphLocation(value: unknown, path: string): NonNulla
   }
 
   if (kind === 'before' || kind === 'after') {
-    const hasTarget = obj.target != null;
-    const hasNodeId = obj.nodeId != null;
-    if (hasTarget === hasNodeId) {
-      throw new CliError('VALIDATION_ERROR', `${path} must include exactly one of target or nodeId.`);
+    if (obj.nodeId != null) {
+      throw new CliError(
+        'VALIDATION_ERROR',
+        `${path}: bare "nodeId" shorthand is not supported. Use "target" with an explicit { kind: "block", nodeType, nodeId }.`,
+      );
     }
 
-    if (hasTarget) {
-      expectOnlyKeys(obj, ['kind', 'target'], path);
-      const target = validateNodeAddress(obj.target, `${path}.target`);
-      if (target.kind !== 'block') {
-        throw new CliError('VALIDATION_ERROR', `${path}.target.kind must be "block".`);
-      }
-
-      if (kind === 'before') {
-        return {
-          kind: 'before',
-          target,
-        };
-      }
-
-      return {
-        kind: 'after',
-        target,
-      };
+    expectOnlyKeys(obj, ['kind', 'target'], path);
+    if (obj.target == null) {
+      throw new CliError('VALIDATION_ERROR', `${path} must include a "target" BlockNodeAddress.`);
+    }
+    const target = validateNodeAddress(obj.target, `${path}.target`);
+    if (target.kind !== 'block') {
+      throw new CliError('VALIDATION_ERROR', `${path}.target.kind must be "block".`);
     }
 
-    expectOnlyKeys(obj, ['kind', 'nodeId'], path);
-    const nodeId = expectString(obj.nodeId, `${path}.nodeId`);
-    // nodeId shorthand: wrap in a BlockNodeAddress with nodeType 'paragraph'
-    // as a default. The adapter falls back to nodeId-only lookup when the
-    // full nodeType:nodeId key doesn't match, so this works for any block type.
-    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId };
-    if (kind === 'before') {
-      return {
-        kind: 'before',
-        target,
-      };
-    }
-    return {
-      kind: 'after',
-      target,
-    };
+    return { kind, target };
   }
 
   throw new CliError('VALIDATION_ERROR', `${path}.kind must be one of: documentStart, documentEnd, before, after.`);
@@ -347,7 +322,7 @@ function validateQuerySelect(value: unknown, path: string): Query['select'] {
 
   if (type === 'node') {
     expectOnlyKeys(obj, ['type', 'nodeType', 'kind'], path);
-    const nodeType = obj.nodeType != null ? validateNodeType(obj.nodeType, `${path}.nodeType`) : undefined;
+    const nodeType = obj.nodeType != null ? String(obj.nodeType) : undefined;
 
     if (obj.kind != null && !NODE_KINDS.has(obj.kind as NodeKind)) {
       throw new CliError('VALIDATION_ERROR', `${path}.kind must be "block" or "inline".`);
@@ -355,7 +330,7 @@ function validateQuerySelect(value: unknown, path: string): Query['select'] {
 
     return {
       type: 'node',
-      nodeType,
+      nodeType: nodeType as NodeType | undefined,
       kind: obj.kind as NodeKind | undefined,
     };
   }
@@ -374,14 +349,18 @@ function validateQuerySelect(value: unknown, path: string): Query['select'] {
 
 export function validateQuery(value: unknown, path = 'query'): Query {
   const obj = expectRecord(value, path);
-  expectOnlyKeys(obj, ['select', 'within', 'limit', 'offset', 'includeNodes', 'includeUnknown'], path);
+  expectOnlyKeys(obj, ['select', 'within', 'limit', 'offset', 'options'], path);
 
   const query: Query = {
     select: validateQuerySelect(obj.select, `${path}.select`),
   };
 
   if (obj.within != null) {
-    query.within = validateNodeAddress(obj.within, `${path}.within`);
+    const within = validateNodeAddress(obj.within, `${path}.within`);
+    if (within.kind !== 'block') {
+      throw new CliError('VALIDATION_ERROR', `${path}.within must be a BlockNodeAddress (kind: "block").`);
+    }
+    query.within = within;
   }
 
   if (obj.limit != null) {
@@ -390,20 +369,6 @@ export function validateQuery(value: unknown, path = 'query'): Query {
 
   if (obj.offset != null) {
     query.offset = expectNonNegativeInteger(obj.offset, `${path}.offset`);
-  }
-
-  if (obj.includeNodes != null) {
-    if (typeof obj.includeNodes !== 'boolean') {
-      throw new CliError('VALIDATION_ERROR', `${path}.includeNodes must be a boolean.`);
-    }
-    query.includeNodes = obj.includeNodes;
-  }
-
-  if (obj.includeUnknown != null) {
-    if (typeof obj.includeUnknown !== 'boolean') {
-      throw new CliError('VALIDATION_ERROR', `${path}.includeUnknown must be a boolean.`);
-    }
-    query.includeUnknown = obj.includeUnknown;
   }
 
   return query;

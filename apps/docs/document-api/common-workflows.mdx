@@ -84,17 +84,84 @@ if (preview.valid) {
 
 ## Quick search and single edit
 
-For lightweight tasks, `find` is still a good option:
+For lightweight text edits, use `query.match` and apply against the canonical selection target returned by the match:
 
 ```ts
-const result = editor.doc.find({
+const match = editor.doc.query.match({
   select: { type: 'text', pattern: 'foo' },
   require: 'first',
 });
 
-const target = result.items?.[0]?.context?.textRanges?.[0];
+const target = match.items?.[0]?.target;
 if (target) {
-  editor.doc.replace({ target, text: 'bar' });
+  editor.doc.replace({
+    target,
+    text: 'bar',
+  });
+}
+```
+
+## Find text and insert at position
+
+Search for a heading (or any text) and insert a new paragraph relative to it:
+
+```ts
+// 1. Find the heading by text content
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'Materials and methods' },
+  require: 'first',
+});
+
+const address = match.items?.[0]?.address;
+if (!address) return;
+
+// 2. Insert a paragraph after the heading
+editor.doc.create.paragraph({
+  at: { kind: 'after', target: address },
+  text: 'New section content goes here.',
+});
+```
+
+The `address` from `query.match` is a `BlockNodeAddress` that works directly with `create.paragraph`, `create.heading`, and `create.table`. Use `kind: 'before'` to insert before the matched node instead.
+
+To insert as a tracked change, pass `changeMode: 'tracked'`:
+
+```ts
+editor.doc.create.paragraph(
+  { at: { kind: 'after', target: address }, text: 'Suggested addition.' },
+  { changeMode: 'tracked' },
+);
+```
+
+<Info>
+Use `query.match` (not `find`) for this workflow. `query.match` returns `BlockNodeAddress` objects that are directly compatible with mutation targets.
+</Info>
+
+For direct single-operation calls, prefer `item.target`. For plans or multi-step edits, prefer `item.handle.ref` so every step reuses the same resolved match.
+
+## Build a selection explicitly with ranges.resolve
+
+Use `ranges.resolve` when you already know the anchor points and want a transparent `SelectionTarget` plus a reusable mutation-ready ref:
+
+```ts
+const resolved = editor.doc.ranges.resolve({
+  start: {
+    kind: 'point',
+    point: { kind: 'text', blockId: 'p1', offset: 0 },
+  },
+  end: {
+    kind: 'point',
+    point: { kind: 'text', blockId: 'p2', offset: 12 },
+  },
+});
+
+editor.doc.delete({ target: resolved.target });
+
+if (resolved.handle.ref) {
+  editor.doc.format.apply({
+    ref: resolved.handle.ref,
+    inline: { bold: 'on' },
+  });
 }
 ```
 
@@ -104,7 +171,7 @@ Insert text as a tracked change so reviewers can accept or reject it:
 
 ```ts
 const receipt = editor.doc.insert(
-  { text: 'new content' },
+  { value: 'new content' },
   { changeMode: 'tracked' },
 );
 ```
@@ -117,7 +184,11 @@ Use `capabilities()` to branch on what the editor supports:
 
 ```ts
 const caps = editor.doc.capabilities();
-const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+const target = {
+  kind: 'selection',
+  start: { kind: 'text', blockId: 'p1', offset: 0 },
+  end: { kind: 'text', blockId: 'p1', offset: 3 },
+};
 
 if (caps.operations['format.apply'].available) {
   editor.doc.format.apply({
@@ -133,7 +204,7 @@ if (caps.global.trackChanges.enabled) {
 
 ## Cross-session block addressing
 
-When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. The Document API's `find` operation returns addresses whose `nodeId` prefers DOCX-native `paraId`, which is usually stable when reopening the same unchanged DOCX.
+When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. For cross-session block targeting, use `query.match` addresses (`NodeAddress` with `kind: 'block'`), which carry DOCX-native `paraId`-derived IDs when available.
 
 This pattern is common in headless pipelines: extract block references in one session, then apply edits in another.
 
@@ -145,15 +216,14 @@ const docx = await readFile('./contract.docx');
 
 // Session 1: extract block addresses
 const editor1 = await Editor.open(docx);
-const result = editor1.doc.find({
+const result = editor1.doc.query.match({
   select: { type: 'node', nodeType: 'paragraph' },
-  includeNodes: true,
+  require: 'any',
 });
 
 // Save addresses — for DOCX-imported blocks, nodeId uses paraId when available
 const addresses = result.items.map((item) => ({
   address: item.address,
-  text: item.node?.text,
 }));
 await writeFile('./blocks.json', JSON.stringify(addresses));
 editor1.destroy();

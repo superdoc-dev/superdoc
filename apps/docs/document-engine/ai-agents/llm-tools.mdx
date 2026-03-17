@@ -119,10 +119,8 @@ Install the SDK, create a client, and wire up an agentic loop.
     ```typescript
     import { chooseTools } from '@superdoc-dev/sdk';
 
-    const { tools, selected, meta } = await chooseTools({
+    const { tools, meta } = await chooseTools({
       provider: 'openai',   // 'openai' | 'anthropic' | 'vercel' | 'generic'
-      mode: 'essential',     // 'essential' (default) | 'all'
-      groups: ['comments'],  // optional — load additional groups alongside essential tools
     });
     ```
   </Tab>
@@ -132,49 +130,31 @@ Install the SDK, create a client, and wire up an agentic loop.
 
     result = choose_tools(
         provider="openai",
-        mode="essential",
-        groups=["comments"],
     )
     tools = result["tools"]
     ```
   </Tab>
 </Tabs>
 
-### Essential mode (default)
+The current SDK returns the full grouped intent tool set for the selected provider. Group filtering and meta-discovery are not part of the shipped public API here.
 
-Returns 5 essential tools plus `discover_tools` — a meta-tool that lets the LLM load more groups on demand. This keeps the initial context small while giving the model access to the full toolkit when needed.
+## Current tool set
 
-The 5 essential tools:
+The generated catalog currently contains 9 grouped intent tools:
 
-| Tool | What it does |
-| --- | --- |
-| `get_document_text` | Returns the full plain-text content of the document |
-| `query_match` | Searches by node type, text pattern, or both — returns matches with addresses |
-| `apply_mutations` | Batch edit: rewrite, insert, delete text and apply formatting in one call |
-| `get_node_by_id` | Get details about a specific node by its address |
-| `undo` | Undo the last operation |
+| Tool | Actions | What it does |
+| --- | --- | --- |
+| `superdoc_get_content` | `text`, `markdown`, `html`, `info` | Read document content in different formats |
+| `superdoc_search` | `match` | Find text or nodes and return handles or addresses for later edits |
+| `superdoc_edit` | `insert`, `replace`, `delete`, `undo`, `redo` | Perform text edits and history actions |
+| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing` | Apply inline or paragraph formatting |
+| `superdoc_create` | `paragraph`, `heading` | Create structural block elements |
+| `superdoc_list` | `insert`, `create`, `detach`, `indent`, `outdent`, `set_level`, `set_type` | Create and manipulate lists |
+| `superdoc_comment` | `create`, `update`, `delete`, `get`, `list` | Manage comment threads |
+| `superdoc_track_changes` | `list`, `decide` | Review and resolve tracked changes |
+| `superdoc_mutations` | `preview`, `apply` | Execute multi-step atomic edits as a batch |
 
-If you pass `groups`, those groups are loaded **in addition** to the essential set:
-
-```typescript
-// Essential tools + all comment tools
-const { tools } = await chooseTools({
-  provider: 'openai',
-  groups: ['comments'],
-});
-```
-
-### All mode
-
-Returns every tool from the requested groups (or all groups if `groups` is omitted). The `core` group is always included.
-
-```typescript
-const { tools } = await chooseTools({
-  provider: 'openai',
-  mode: 'all',
-  groups: ['core', 'format', 'comments'],
-});
-```
+Multi-action tools use an `action` argument to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.
 
 ## Dispatching tool calls
 
@@ -205,47 +185,6 @@ const { tools } = await chooseTools({
 </Tabs>
 
 The dispatcher validates required parameters, enforces mutual exclusivity constraints, and throws descriptive errors if arguments are invalid — so the LLM gets actionable feedback.
-
-## Tool groups
-
-Tools are organized into 11 groups. In essential mode, the LLM can load any group dynamically via `discover_tools`.
-
-| Group | Description |
-| --- | --- |
-| `core` | Read nodes, get text, find/replace, insert, delete, batch mutations |
-| `format` | Bold, italic, underline, strikethrough, alignment, spacing, borders, shading |
-| `create` | Create headings, paragraphs, tables, sections, table of contents |
-| `tables` | Row/column operations, cell merging, table formatting, borders |
-| `sections` | Page layout, margins, columns, headers/footers, page numbering |
-| `lists` | Bullet and numbered lists, indentation, list type conversion |
-| `comments` | Create, edit, delete, resolve, and list comment threads |
-| `trackChanges` | List, inspect, accept, and reject tracked changes |
-| `toc` | Table of contents — create, configure, refresh |
-| `history` | Undo and redo |
-| `session` | Open, save, close, and manage document sessions |
-
-## The discover_tools pattern
-
-When the LLM needs tools beyond the essential set, it calls `discover_tools` with the groups it wants. Your agentic loop handles this like any other tool call — `dispatchSuperDocTool` returns the new tool definitions, and you merge them into the next request.
-
-```typescript
-for (const call of message.tool_calls) {
-  const result = await dispatchSuperDocTool(
-    client, call.function.name, JSON.parse(call.function.arguments),
-  );
-
-  // discover_tools returns new tool definitions — merge them
-  if (call.function.name === 'discover_tools') {
-    tools.push(...result.tools);
-  }
-
-  messages.push({
-    role: 'tool',
-    tool_call_id: call.id,
-    content: JSON.stringify(result),
-  });
-}
-```
 
 ## Providers
 
@@ -280,21 +219,25 @@ Each provider gets tool definitions in its native format.
 
 ## Best practices
 
-### Start with essential mode
+### Start with the full grouped set
 
-Load only the 5 essential tools plus `discover_tools`. This keeps the context window small and gives the model room to reason. Let it call `discover_tools` when it needs more — don't front-load every group.
+The current catalog is intentionally small. In most integrations you should load the full grouped set once and let the model choose among the 9 tools.
 
 ### Minimize tool calls
 
-A typical edit should take 3–5 tool calls: query, mutate, done. Instruct the LLM to plan all edits before calling tools, and to batch multiple changes into a single `apply_mutations` call when possible.
+A typical edit should take 3-5 tool calls: read, search, mutate, done. Instruct the LLM to plan all edits before calling tools, and to batch multiple changes only when atomic execution is genuinely helpful.
 
-### Use `apply_mutations` for text edits
+### Read first, then search before editing
 
-`apply_mutations` can rewrite, insert, delete, and format text in one call. It supports multiple steps, so the LLM can edit several paragraphs at once. Use it for any operation on existing text.
+Use `superdoc_get_content` to understand the document, then `superdoc_search` to obtain stable handles or addresses. Pass those targets into `superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, or `superdoc_comment`.
+
+### Prefer focused tools; use `superdoc_mutations` as an escape hatch
+
+Use the focused intent tools for straightforward edits. Reach for `superdoc_mutations` when you need preview/apply semantics, atomic multi-step edits, or a batched workflow that would otherwise require several target refreshes.
 
 ### Feed errors back to the model
 
-`dispatchSuperDocTool` throws descriptive errors with codes like `MATCH_NOT_FOUND` or `INVALID_ARGUMENT`. Pass these back as tool results — most models self-correct on the next turn.
+`dispatchSuperDocTool` surfaces structured errors from the underlying SDK and Document API. Pass these back as tool results — most models self-correct on the next turn.
 
 ### Add tool call examples for repeatable actions
 
@@ -302,57 +245,43 @@ If your workflow involves the same kind of edit across many documents (e.g., alw
 
 ### Include a system prompt
 
-Tell the model what it can do and how to approach edits. Here's an example:
+Tell the model what it can do and how to approach edits. You can load the bundled prompt with `getSystemPrompt()`, or start with something like this:
 
 ````markdown
-You edit `.docx` files using SuperDoc tools. Be efficient — minimize tool calls.
+You edit `.docx` files using SuperDoc intent tools. Be efficient and minimize tool calls.
 
 ## Workflow
 
-1. **Query** — Call `query_match` to find text you want to edit.
-   Use `require: "any"` to match broadly.
-2. **Plan** — Decide what changes to make. Think through all
-   edits before making tool calls.
-3. **Mutate** — Call `apply_mutations` to rewrite, insert, delete,
-   or format text.
+1. **Read** — Use `superdoc_get_content` to understand the document.
+2. **Search** — Use `superdoc_search` to find stable handles or block addresses.
+3. **Edit** — Use the focused tool that matches the job:
+   - `superdoc_edit` for insert, replace, delete, undo, redo
+   - `superdoc_format` for inline or paragraph formatting
+   - `superdoc_create` for paragraphs and headings
+   - `superdoc_comment` for comment threads
+   - `superdoc_track_changes` for review decisions
+4. **Batch only when useful** — Use `superdoc_mutations` for preview/apply or atomic multi-step edits.
 
-Keep it to 3–5 tool calls total.
-
-## Tools
-
-You start with 5 essential tools plus `discover_tools`.
-Call `discover_tools` to load additional categories when needed:
-
-| Category | What it covers |
-|----------|----------------|
-| core | Read nodes, get text, query, mutations |
-| format | Text formatting, alignment, spacing, borders |
-| create | Headings, paragraphs, tables, sections |
-| tables | Table manipulation, cell operations |
-| comments | Comment threads |
-| trackChanges | Accept/reject tracked changes |
+Keep it to 3-5 tool calls total when possible.
 
 ## Rules
 
-- Use `apply_mutations` for text edits on existing content.
-  You can batch multiple rewrites in one call.
-- Use standalone tools (`create_heading`, `create_table`, etc.)
-  for structural changes — these are NOT step ops.
+- Search before mutating so targets come from fresh results.
+- Use focused intent tools for normal edits.
+- Use `superdoc_mutations` when you need an atomic batch or preview/apply flow.
 - Set `changeMode: "tracked"` when edits need human review.
-- Don't rewrite and format in the same `apply_mutations` batch.
-  Rewrite first, query again for fresh refs, then format.
+- Feed tool errors back to the model so it can recover.
 ````
 
 ## Utility functions
 
 | Function | Description |
 | --- | --- |
-| `chooseTools(input)` | Select tools for a provider, filtered by mode and groups |
+| `chooseTools(input)` | Load grouped tool definitions for a provider |
 | `dispatchSuperDocTool(client, name, args)` | Execute a tool call against a connected client |
 | `listTools(provider)` | List all tool definitions for a provider |
-| `resolveToolOperation(toolName)` | Map a tool name to its operation ID |
 | `getToolCatalog()` | Load the full tool catalog with metadata |
-| `getAvailableGroups()` | List all available tool groups |
+| `getSystemPrompt()` | Read the bundled system prompt for intent tools |
 
 ## Related
 

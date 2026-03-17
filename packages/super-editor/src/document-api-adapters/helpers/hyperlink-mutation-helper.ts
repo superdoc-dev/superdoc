@@ -8,7 +8,7 @@
 
 import type { Editor } from '../../core/Editor.js';
 import type { MarkType, Mark } from 'prosemirror-model';
-import { insertNewRelationship } from '../../core/super-converter/docx-helpers/document-rels.js';
+import { findOrCreateRelationship } from '../../core/parts/adapters/relationships-mutation.js';
 import { sanitizeHref } from '@superdoc/url-validation';
 import { applyDirectMutationMeta } from './transaction-meta.js';
 
@@ -62,11 +62,10 @@ function dispatchIfChanged(editor: Editor, tr: import('prosemirror-state').Trans
  */
 function createRelationshipId(editor: Editor, href: string): string | null {
   if (editor.options.mode !== 'docx') return null;
-  try {
-    return insertNewRelationship(href, 'hyperlink', editor);
-  } catch {
-    return null;
-  }
+  return findOrCreateRelationship(editor, 'hyperlink-mutation-helper:createRelationshipId', {
+    target: href,
+    type: 'hyperlink',
+  });
 }
 
 /**

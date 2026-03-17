@@ -1,6 +1,6 @@
 ---
 title: SDKs
-sidebarTitle: SDKs
+sidebarTitle: Overview
 description: Node.js and Python SDKs for programmatic document editing
 keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
 ---
@@ -172,6 +172,12 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 
 Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 The Python SDK also exposes synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
+
+## Need file-to-file diffing?
+
+For workflows where you already have `Doc1` and need to compare an uploaded `Doc2`, see [SDK Diffing](/document-engine/sdk-diffing).
+
+That guide covers the recommended `diff.capture -> diff.compare -> diff.apply` flow and how to save the result as a third `.docx` with tracked changes.
 
 ## User identity
 
@@ -366,19 +372,24 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
+| `doc.get` | `get` | Read the full document as an SDDocument structure. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.getText` | `get-text` | Extract the plain-text content of the document. |
 | `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
+| `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
-| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
-| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
+| `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
+| `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
+| `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -388,6 +399,137 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.hyperlinks.insert` | `hyperlinks insert` | Insert new linked text at a target position. |
 | `doc.hyperlinks.patch` | `hyperlinks patch` | Update hyperlink metadata (destination, tooltip, target, rel) without changing display text. |
 | `doc.hyperlinks.remove` | `hyperlinks remove` | Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely. |
+| `doc.headerFooters.list` | `header-footers list` | List header/footer slot entries across sections. |
+| `doc.headerFooters.get` | `header-footers get` | Get a single header/footer slot entry by address. |
+| `doc.headerFooters.resolve` | `header-footers resolve` | Resolve the effective header/footer reference for a slot, walking the section inheritance chain. |
+| `doc.headerFooters.refs.set` | `header-footers refs set` | Set an explicit header/footer reference on a section slot. |
+| `doc.headerFooters.refs.clear` | `header-footers refs clear` | Clear an explicit header/footer reference from a section slot. |
+| `doc.headerFooters.refs.setLinkedToPrevious` | `header-footers refs set-linked-to-previous` | Link or unlink a header/footer slot to/from the previous section. |
+| `doc.headerFooters.parts.list` | `header-footers parts list` | List unique header/footer part records from document relationships. |
+| `doc.headerFooters.parts.create` | `header-footers parts create` | Create a new independent header/footer part, optionally cloned from an existing part. |
+| `doc.headerFooters.parts.delete` | `header-footers parts delete` | Delete a header/footer part and its associated relationship when no section slots reference it. |
+| `doc.create.contentControl` | `create content-control` | Create a new content control (SDT) in the document. |
+| `doc.contentControls.list` | `content-controls list` | List all content controls in the document with optional type/tag filtering. |
+| `doc.contentControls.get` | `content-controls get` | Retrieve a single content control by target. |
+| `doc.contentControls.listInRange` | `content-controls list-in-range` | List content controls within a block range. |
+| `doc.contentControls.selectByTag` | `content-controls select-by-tag` | Select content controls matching a specific tag value. |
+| `doc.contentControls.selectByTitle` | `content-controls select-by-title` | Select content controls matching a specific title (alias) value. |
+| `doc.contentControls.listChildren` | `content-controls list-children` | List direct child content controls nested inside the target. |
+| `doc.contentControls.getParent` | `content-controls get-parent` | Get the parent content control of the target, if any. |
+| `doc.contentControls.wrap` | `content-controls wrap` | Wrap existing content with a new content control. |
+| `doc.contentControls.unwrap` | `content-controls unwrap` | Remove the content control wrapper, preserving its content in place. |
+| `doc.contentControls.delete` | `content-controls delete` | Delete a content control and its content from the document. |
+| `doc.contentControls.copy` | `content-controls copy` | Copy a content control to a destination position. Copied SDTs receive new IDs. |
+| `doc.contentControls.move` | `content-controls move` | Move a content control to a new position. Preserves original IDs. |
+| `doc.contentControls.patch` | `content-controls patch` | Patch metadata properties on a content control (tag, alias, appearance, color, etc.). |
+| `doc.contentControls.setLockMode` | `content-controls set-lock-mode` | Set the lock mode on a content control. |
+| `doc.contentControls.setType` | `content-controls set-type` | Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite. |
+| `doc.contentControls.getContent` | `content-controls get-content` | Get the text content of a content control. |
+| `doc.contentControls.replaceContent` | `content-controls replace-content` | Replace the entire content of a content control. |
+| `doc.contentControls.clearContent` | `content-controls clear-content` | Clear all content inside a content control, leaving it empty. |
+| `doc.contentControls.appendContent` | `content-controls append-content` | Append content to the end of a content control. |
+| `doc.contentControls.prependContent` | `content-controls prepend-content` | Prepend content to the beginning of a content control. |
+| `doc.contentControls.insertBefore` | `content-controls insert-before` | Insert content immediately before a content control. |
+| `doc.contentControls.insertAfter` | `content-controls insert-after` | Insert content immediately after a content control. |
+| `doc.contentControls.getBinding` | `content-controls get-binding` | Get the data binding metadata (w:dataBinding) of a content control. |
+| `doc.contentControls.setBinding` | `content-controls set-binding` | Set data binding metadata on a content control. |
+| `doc.contentControls.clearBinding` | `content-controls clear-binding` | Remove data binding metadata from a content control. |
+| `doc.contentControls.getRawProperties` | `content-controls get-raw-properties` | Get the raw sdtPr properties of a content control as a passthrough hash. |
+| `doc.contentControls.patchRawProperties` | `content-controls patch-raw-properties` | Apply raw XML-level patches to the sdtPr subtree of a content control. |
+| `doc.contentControls.validateWordCompatibility` | `content-controls validate-word-compatibility` | Validate a content control for Word compatibility issues. |
+| `doc.contentControls.normalizeWordCompatibility` | `content-controls normalize-word-compatibility` | Normalize a content control to resolve Word compatibility issues. |
+| `doc.contentControls.normalizeTagPayload` | `content-controls normalize-tag-payload` | Normalize a content control tag between plain-string and JSON-encoded formats. |
+| `doc.contentControls.text.setMultiline` | `content-controls text set-multiline` | Set or clear the multiline attribute on a plain-text content control. |
+| `doc.contentControls.text.setValue` | `content-controls text set-value` | Set the text value of a plain-text content control. |
+| `doc.contentControls.text.clearValue` | `content-controls text clear-value` | Clear the text value of a plain-text content control. |
+| `doc.contentControls.date.setValue` | `content-controls date set-value` | Set the date value of a date content control. |
+| `doc.contentControls.date.clearValue` | `content-controls date clear-value` | Clear the date value of a date content control. |
+| `doc.contentControls.date.setDisplayFormat` | `content-controls date set-display-format` | Set the display format string for a date content control. |
+| `doc.contentControls.date.setDisplayLocale` | `content-controls date set-display-locale` | Set the display locale for a date content control. |
+| `doc.contentControls.date.setStorageFormat` | `content-controls date set-storage-format` | Set the XML storage format for a date content control. |
+| `doc.contentControls.date.setCalendar` | `content-controls date set-calendar` | Set the calendar type for a date content control. |
+| `doc.contentControls.checkbox.getState` | `content-controls checkbox get-state` | Get the checked state of a checkbox content control. |
+| `doc.contentControls.checkbox.setState` | `content-controls checkbox set-state` | Set the checked state of a checkbox content control. |
+| `doc.contentControls.checkbox.toggle` | `content-controls checkbox toggle` | Toggle the checked state of a checkbox content control. |
+| `doc.contentControls.checkbox.setSymbolPair` | `content-controls checkbox set-symbol-pair` | Set the checked and unchecked symbol glyphs for a checkbox content control. |
+| `doc.contentControls.choiceList.getItems` | `content-controls choice-list get-items` | Get the list items and selected value of a comboBox or dropDownList content control. |
+| `doc.contentControls.choiceList.setItems` | `content-controls choice-list set-items` | Replace the list items of a comboBox or dropDownList content control. |
+| `doc.contentControls.choiceList.setSelected` | `content-controls choice-list set-selected` | Set the selected value of a comboBox or dropDownList content control. |
+| `doc.contentControls.repeatingSection.listItems` | `content-controls repeating-section list-items` | List the repeating section items inside a repeating section content control. |
+| `doc.contentControls.repeatingSection.insertItemBefore` | `content-controls repeating-section insert-item-before` | Insert a new item before a specific index in a repeating section. |
+| `doc.contentControls.repeatingSection.insertItemAfter` | `content-controls repeating-section insert-item-after` | Insert a new item after a specific index in a repeating section. |
+| `doc.contentControls.repeatingSection.cloneItem` | `content-controls repeating-section clone-item` | Clone a repeating section item at the given index. Cloned SDTs receive new IDs. |
+| `doc.contentControls.repeatingSection.deleteItem` | `content-controls repeating-section delete-item` | Delete a repeating section item at the given index. |
+| `doc.contentControls.repeatingSection.setAllowInsertDelete` | `content-controls repeating-section set-allow-insert-delete` | Set the allowInsertDelete flag on a repeating section. |
+| `doc.contentControls.group.wrap` | `content-controls group wrap` | Wrap a content control inside a new group content control. Always nests; not idempotent. |
+| `doc.contentControls.group.ungroup` | `content-controls group ungroup` | Remove the group designation from a group content control. |
+| `doc.bookmarks.list` | `bookmarks list` | List all bookmarks in the document. |
+| `doc.bookmarks.get` | `bookmarks get` | Get detailed information about a specific bookmark. |
+| `doc.bookmarks.insert` | `bookmarks insert` | Insert a new named bookmark at a target location. |
+| `doc.bookmarks.rename` | `bookmarks rename` | Rename an existing bookmark. |
+| `doc.bookmarks.remove` | `bookmarks remove` | Remove a bookmark from the document. |
+| `doc.footnotes.list` | `footnotes list` | List all footnotes and endnotes in the document. |
+| `doc.footnotes.get` | `footnotes get` | Get detailed information about a specific footnote or endnote. |
+| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location. |
+| `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. |
+| `doc.footnotes.remove` | `footnotes remove` | Remove a footnote or endnote from the document. |
+| `doc.footnotes.configure` | `footnotes configure` | Configure numbering and placement for footnotes or endnotes. |
+| `doc.crossRefs.list` | `cross-refs list` | List all cross-reference fields in the document. |
+| `doc.crossRefs.get` | `cross-refs get` | Get detailed information about a specific cross-reference field. |
+| `doc.crossRefs.insert` | `cross-refs insert` | Insert a new cross-reference field at a target location. |
+| `doc.crossRefs.rebuild` | `cross-refs rebuild` | Rebuild (recalculate) a cross-reference field. |
+| `doc.crossRefs.remove` | `cross-refs remove` | Remove a cross-reference field from the document. |
+| `doc.index.list` | `index list` | List all index blocks in the document. |
+| `doc.index.get` | `index get` | Get detailed information about a specific index block. |
+| `doc.index.insert` | `index insert` | Insert a new index block at a target location. |
+| `doc.index.configure` | `index configure` | Update the configuration of an existing index block. |
+| `doc.index.rebuild` | `index rebuild` | Rebuild (regenerate) an index block from its entries. |
+| `doc.index.remove` | `index remove` | Remove an index block from the document. |
+| `doc.index.entries.list` | `index entries list` | List all XE (index entry) fields in the document. |
+| `doc.index.entries.get` | `index entries get` | Get detailed information about a specific XE index entry. |
+| `doc.index.entries.insert` | `index entries insert` | Insert a new XE index entry field at a target location. |
+| `doc.index.entries.update` | `index entries update` | Update the properties of an existing XE index entry. |
+| `doc.index.entries.remove` | `index entries remove` | Remove an XE index entry field from the document. |
+| `doc.captions.list` | `captions list` | List all caption paragraphs in the document. |
+| `doc.captions.get` | `captions get` | Get detailed information about a specific caption paragraph. |
+| `doc.captions.insert` | `captions insert` | Insert a new caption paragraph adjacent to a target block. |
+| `doc.captions.update` | `captions update` | Update the text of an existing caption paragraph. |
+| `doc.captions.remove` | `captions remove` | Remove a caption paragraph from the document. |
+| `doc.captions.configure` | `captions configure` | Configure numbering format for a caption label. |
+| `doc.fields.list` | `fields list` | List all fields in the document. |
+| `doc.fields.get` | `fields get` | Get detailed information about a specific field. |
+| `doc.fields.insert` | `fields insert` | Insert a raw field code at a target location. |
+| `doc.fields.rebuild` | `fields rebuild` | Rebuild (recalculate) a field. |
+| `doc.fields.remove` | `fields remove` | Remove a field from the document. |
+| `doc.citations.list` | `citations list` | List all citation marks in the document. |
+| `doc.citations.get` | `citations get` | Get detailed information about a specific citation mark. |
+| `doc.citations.insert` | `citations insert` | Insert a new citation mark at a target location. |
+| `doc.citations.update` | `citations update` | Update an existing citation mark's source references. |
+| `doc.citations.remove` | `citations remove` | Remove a citation mark from the document. |
+| `doc.citations.sources.list` | `citations sources list` | List all citation sources in the document store. |
+| `doc.citations.sources.get` | `citations sources get` | Get detailed information about a specific citation source. |
+| `doc.citations.sources.insert` | `citations sources insert` | Register a new citation source in the document store. |
+| `doc.citations.sources.update` | `citations sources update` | Update the fields of an existing citation source. |
+| `doc.citations.sources.remove` | `citations sources remove` | Remove a citation source from the document store. |
+| `doc.citations.bibliography.get` | `citations bibliography get` | Get information about the bibliography block. |
+| `doc.citations.bibliography.insert` | `citations bibliography insert` | Insert a bibliography block at a target location. |
+| `doc.citations.bibliography.rebuild` | `citations bibliography rebuild` | Rebuild the bibliography from current sources. |
+| `doc.citations.bibliography.configure` | `citations bibliography configure` | Configure the bibliography style. |
+| `doc.citations.bibliography.remove` | `citations bibliography remove` | Remove the bibliography block from the document. |
+| `doc.authorities.list` | `authorities list` | List all table-of-authorities blocks in the document. |
+| `doc.authorities.get` | `authorities get` | Get detailed information about a specific table-of-authorities block. |
+| `doc.authorities.insert` | `authorities insert` | Insert a new table-of-authorities block at a target location. |
+| `doc.authorities.configure` | `authorities configure` | Update the configuration of an existing table-of-authorities block. |
+| `doc.authorities.rebuild` | `authorities rebuild` | Rebuild a table-of-authorities block from its entries. |
+| `doc.authorities.remove` | `authorities remove` | Remove a table-of-authorities block from the document. |
+| `doc.authorities.entries.list` | `authorities entries list` | List all TA (authority entry) fields in the document. |
+| `doc.authorities.entries.get` | `authorities entries get` | Get detailed information about a specific TA authority entry. |
+| `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
+| `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
+| `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 
@@ -462,7 +604,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.paragraph` | `create paragraph` | Create a standalone paragraph at the target position. To add a list item, use lists.insert instead. |
 | `doc.create.heading` | `create heading` | Create a new heading at the target position. |
 | `doc.create.sectionBreak` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
@@ -498,7 +640,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
-| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
+| `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
@@ -668,19 +810,24 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
+| `doc.get` | `get` | Read the full document as an SDDocument structure. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
 | `doc.get_node` | `get-node` | Retrieve a single node by target position. |
 | `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
 | `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
+| `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
-| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
-| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
+| `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
+| `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
+| `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -690,6 +837,137 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.hyperlinks.insert` | `hyperlinks insert` | Insert new linked text at a target position. |
 | `doc.hyperlinks.patch` | `hyperlinks patch` | Update hyperlink metadata (destination, tooltip, target, rel) without changing display text. |
 | `doc.hyperlinks.remove` | `hyperlinks remove` | Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely. |
+| `doc.header_footers.list` | `header-footers list` | List header/footer slot entries across sections. |
+| `doc.header_footers.get` | `header-footers get` | Get a single header/footer slot entry by address. |
+| `doc.header_footers.resolve` | `header-footers resolve` | Resolve the effective header/footer reference for a slot, walking the section inheritance chain. |
+| `doc.header_footers.refs.set` | `header-footers refs set` | Set an explicit header/footer reference on a section slot. |
+| `doc.header_footers.refs.clear` | `header-footers refs clear` | Clear an explicit header/footer reference from a section slot. |
+| `doc.header_footers.refs.set_linked_to_previous` | `header-footers refs set-linked-to-previous` | Link or unlink a header/footer slot to/from the previous section. |
+| `doc.header_footers.parts.list` | `header-footers parts list` | List unique header/footer part records from document relationships. |
+| `doc.header_footers.parts.create` | `header-footers parts create` | Create a new independent header/footer part, optionally cloned from an existing part. |
+| `doc.header_footers.parts.delete` | `header-footers parts delete` | Delete a header/footer part and its associated relationship when no section slots reference it. |
+| `doc.create.content_control` | `create content-control` | Create a new content control (SDT) in the document. |
+| `doc.content_controls.list` | `content-controls list` | List all content controls in the document with optional type/tag filtering. |
+| `doc.content_controls.get` | `content-controls get` | Retrieve a single content control by target. |
+| `doc.content_controls.list_in_range` | `content-controls list-in-range` | List content controls within a block range. |
+| `doc.content_controls.select_by_tag` | `content-controls select-by-tag` | Select content controls matching a specific tag value. |
+| `doc.content_controls.select_by_title` | `content-controls select-by-title` | Select content controls matching a specific title (alias) value. |
+| `doc.content_controls.list_children` | `content-controls list-children` | List direct child content controls nested inside the target. |
+| `doc.content_controls.get_parent` | `content-controls get-parent` | Get the parent content control of the target, if any. |
+| `doc.content_controls.wrap` | `content-controls wrap` | Wrap existing content with a new content control. |
+| `doc.content_controls.unwrap` | `content-controls unwrap` | Remove the content control wrapper, preserving its content in place. |
+| `doc.content_controls.delete` | `content-controls delete` | Delete a content control and its content from the document. |
+| `doc.content_controls.copy` | `content-controls copy` | Copy a content control to a destination position. Copied SDTs receive new IDs. |
+| `doc.content_controls.move` | `content-controls move` | Move a content control to a new position. Preserves original IDs. |
+| `doc.content_controls.patch` | `content-controls patch` | Patch metadata properties on a content control (tag, alias, appearance, color, etc.). |
+| `doc.content_controls.set_lock_mode` | `content-controls set-lock-mode` | Set the lock mode on a content control. |
+| `doc.content_controls.set_type` | `content-controls set-type` | Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite. |
+| `doc.content_controls.get_content` | `content-controls get-content` | Get the text content of a content control. |
+| `doc.content_controls.replace_content` | `content-controls replace-content` | Replace the entire content of a content control. |
+| `doc.content_controls.clear_content` | `content-controls clear-content` | Clear all content inside a content control, leaving it empty. |
+| `doc.content_controls.append_content` | `content-controls append-content` | Append content to the end of a content control. |
+| `doc.content_controls.prepend_content` | `content-controls prepend-content` | Prepend content to the beginning of a content control. |
+| `doc.content_controls.insert_before` | `content-controls insert-before` | Insert content immediately before a content control. |
+| `doc.content_controls.insert_after` | `content-controls insert-after` | Insert content immediately after a content control. |
+| `doc.content_controls.get_binding` | `content-controls get-binding` | Get the data binding metadata (w:dataBinding) of a content control. |
+| `doc.content_controls.set_binding` | `content-controls set-binding` | Set data binding metadata on a content control. |
+| `doc.content_controls.clear_binding` | `content-controls clear-binding` | Remove data binding metadata from a content control. |
+| `doc.content_controls.get_raw_properties` | `content-controls get-raw-properties` | Get the raw sdtPr properties of a content control as a passthrough hash. |
+| `doc.content_controls.patch_raw_properties` | `content-controls patch-raw-properties` | Apply raw XML-level patches to the sdtPr subtree of a content control. |
+| `doc.content_controls.validate_word_compatibility` | `content-controls validate-word-compatibility` | Validate a content control for Word compatibility issues. |
+| `doc.content_controls.normalize_word_compatibility` | `content-controls normalize-word-compatibility` | Normalize a content control to resolve Word compatibility issues. |
+| `doc.content_controls.normalize_tag_payload` | `content-controls normalize-tag-payload` | Normalize a content control tag between plain-string and JSON-encoded formats. |
+| `doc.content_controls.text.set_multiline` | `content-controls text set-multiline` | Set or clear the multiline attribute on a plain-text content control. |
+| `doc.content_controls.text.set_value` | `content-controls text set-value` | Set the text value of a plain-text content control. |
+| `doc.content_controls.text.clear_value` | `content-controls text clear-value` | Clear the text value of a plain-text content control. |
+| `doc.content_controls.date.set_value` | `content-controls date set-value` | Set the date value of a date content control. |
+| `doc.content_controls.date.clear_value` | `content-controls date clear-value` | Clear the date value of a date content control. |
+| `doc.content_controls.date.set_display_format` | `content-controls date set-display-format` | Set the display format string for a date content control. |
+| `doc.content_controls.date.set_display_locale` | `content-controls date set-display-locale` | Set the display locale for a date content control. |
+| `doc.content_controls.date.set_storage_format` | `content-controls date set-storage-format` | Set the XML storage format for a date content control. |
+| `doc.content_controls.date.set_calendar` | `content-controls date set-calendar` | Set the calendar type for a date content control. |
+| `doc.content_controls.checkbox.get_state` | `content-controls checkbox get-state` | Get the checked state of a checkbox content control. |
+| `doc.content_controls.checkbox.set_state` | `content-controls checkbox set-state` | Set the checked state of a checkbox content control. |
+| `doc.content_controls.checkbox.toggle` | `content-controls checkbox toggle` | Toggle the checked state of a checkbox content control. |
+| `doc.content_controls.checkbox.set_symbol_pair` | `content-controls checkbox set-symbol-pair` | Set the checked and unchecked symbol glyphs for a checkbox content control. |
+| `doc.content_controls.choice_list.get_items` | `content-controls choice-list get-items` | Get the list items and selected value of a comboBox or dropDownList content control. |
+| `doc.content_controls.choice_list.set_items` | `content-controls choice-list set-items` | Replace the list items of a comboBox or dropDownList content control. |
+| `doc.content_controls.choice_list.set_selected` | `content-controls choice-list set-selected` | Set the selected value of a comboBox or dropDownList content control. |
+| `doc.content_controls.repeating_section.list_items` | `content-controls repeating-section list-items` | List the repeating section items inside a repeating section content control. |
+| `doc.content_controls.repeating_section.insert_item_before` | `content-controls repeating-section insert-item-before` | Insert a new item before a specific index in a repeating section. |
+| `doc.content_controls.repeating_section.insert_item_after` | `content-controls repeating-section insert-item-after` | Insert a new item after a specific index in a repeating section. |
+| `doc.content_controls.repeating_section.clone_item` | `content-controls repeating-section clone-item` | Clone a repeating section item at the given index. Cloned SDTs receive new IDs. |
+| `doc.content_controls.repeating_section.delete_item` | `content-controls repeating-section delete-item` | Delete a repeating section item at the given index. |
+| `doc.content_controls.repeating_section.set_allow_insert_delete` | `content-controls repeating-section set-allow-insert-delete` | Set the allowInsertDelete flag on a repeating section. |
+| `doc.content_controls.group.wrap` | `content-controls group wrap` | Wrap a content control inside a new group content control. Always nests; not idempotent. |
+| `doc.content_controls.group.ungroup` | `content-controls group ungroup` | Remove the group designation from a group content control. |
+| `doc.bookmarks.list` | `bookmarks list` | List all bookmarks in the document. |
+| `doc.bookmarks.get` | `bookmarks get` | Get detailed information about a specific bookmark. |
+| `doc.bookmarks.insert` | `bookmarks insert` | Insert a new named bookmark at a target location. |
+| `doc.bookmarks.rename` | `bookmarks rename` | Rename an existing bookmark. |
+| `doc.bookmarks.remove` | `bookmarks remove` | Remove a bookmark from the document. |
+| `doc.footnotes.list` | `footnotes list` | List all footnotes and endnotes in the document. |
+| `doc.footnotes.get` | `footnotes get` | Get detailed information about a specific footnote or endnote. |
+| `doc.footnotes.insert` | `footnotes insert` | Insert a new footnote or endnote at a target location. |
+| `doc.footnotes.update` | `footnotes update` | Update the content of an existing footnote or endnote. |
+| `doc.footnotes.remove` | `footnotes remove` | Remove a footnote or endnote from the document. |
+| `doc.footnotes.configure` | `footnotes configure` | Configure numbering and placement for footnotes or endnotes. |
+| `doc.cross_refs.list` | `cross-refs list` | List all cross-reference fields in the document. |
+| `doc.cross_refs.get` | `cross-refs get` | Get detailed information about a specific cross-reference field. |
+| `doc.cross_refs.insert` | `cross-refs insert` | Insert a new cross-reference field at a target location. |
+| `doc.cross_refs.rebuild` | `cross-refs rebuild` | Rebuild (recalculate) a cross-reference field. |
+| `doc.cross_refs.remove` | `cross-refs remove` | Remove a cross-reference field from the document. |
+| `doc.index.list` | `index list` | List all index blocks in the document. |
+| `doc.index.get` | `index get` | Get detailed information about a specific index block. |
+| `doc.index.insert` | `index insert` | Insert a new index block at a target location. |
+| `doc.index.configure` | `index configure` | Update the configuration of an existing index block. |
+| `doc.index.rebuild` | `index rebuild` | Rebuild (regenerate) an index block from its entries. |
+| `doc.index.remove` | `index remove` | Remove an index block from the document. |
+| `doc.index.entries.list` | `index entries list` | List all XE (index entry) fields in the document. |
+| `doc.index.entries.get` | `index entries get` | Get detailed information about a specific XE index entry. |
+| `doc.index.entries.insert` | `index entries insert` | Insert a new XE index entry field at a target location. |
+| `doc.index.entries.update` | `index entries update` | Update the properties of an existing XE index entry. |
+| `doc.index.entries.remove` | `index entries remove` | Remove an XE index entry field from the document. |
+| `doc.captions.list` | `captions list` | List all caption paragraphs in the document. |
+| `doc.captions.get` | `captions get` | Get detailed information about a specific caption paragraph. |
+| `doc.captions.insert` | `captions insert` | Insert a new caption paragraph adjacent to a target block. |
+| `doc.captions.update` | `captions update` | Update the text of an existing caption paragraph. |
+| `doc.captions.remove` | `captions remove` | Remove a caption paragraph from the document. |
+| `doc.captions.configure` | `captions configure` | Configure numbering format for a caption label. |
+| `doc.fields.list` | `fields list` | List all fields in the document. |
+| `doc.fields.get` | `fields get` | Get detailed information about a specific field. |
+| `doc.fields.insert` | `fields insert` | Insert a raw field code at a target location. |
+| `doc.fields.rebuild` | `fields rebuild` | Rebuild (recalculate) a field. |
+| `doc.fields.remove` | `fields remove` | Remove a field from the document. |
+| `doc.citations.list` | `citations list` | List all citation marks in the document. |
+| `doc.citations.get` | `citations get` | Get detailed information about a specific citation mark. |
+| `doc.citations.insert` | `citations insert` | Insert a new citation mark at a target location. |
+| `doc.citations.update` | `citations update` | Update an existing citation mark's source references. |
+| `doc.citations.remove` | `citations remove` | Remove a citation mark from the document. |
+| `doc.citations.sources.list` | `citations sources list` | List all citation sources in the document store. |
+| `doc.citations.sources.get` | `citations sources get` | Get detailed information about a specific citation source. |
+| `doc.citations.sources.insert` | `citations sources insert` | Register a new citation source in the document store. |
+| `doc.citations.sources.update` | `citations sources update` | Update the fields of an existing citation source. |
+| `doc.citations.sources.remove` | `citations sources remove` | Remove a citation source from the document store. |
+| `doc.citations.bibliography.get` | `citations bibliography get` | Get information about the bibliography block. |
+| `doc.citations.bibliography.insert` | `citations bibliography insert` | Insert a bibliography block at a target location. |
+| `doc.citations.bibliography.rebuild` | `citations bibliography rebuild` | Rebuild the bibliography from current sources. |
+| `doc.citations.bibliography.configure` | `citations bibliography configure` | Configure the bibliography style. |
+| `doc.citations.bibliography.remove` | `citations bibliography remove` | Remove the bibliography block from the document. |
+| `doc.authorities.list` | `authorities list` | List all table-of-authorities blocks in the document. |
+| `doc.authorities.get` | `authorities get` | Get detailed information about a specific table-of-authorities block. |
+| `doc.authorities.insert` | `authorities insert` | Insert a new table-of-authorities block at a target location. |
+| `doc.authorities.configure` | `authorities configure` | Update the configuration of an existing table-of-authorities block. |
+| `doc.authorities.rebuild` | `authorities rebuild` | Rebuild a table-of-authorities block from its entries. |
+| `doc.authorities.remove` | `authorities remove` | Remove a table-of-authorities block from the document. |
+| `doc.authorities.entries.list` | `authorities entries list` | List all TA (authority entry) fields in the document. |
+| `doc.authorities.entries.get` | `authorities entries get` | Get detailed information about a specific TA authority entry. |
+| `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
+| `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
+| `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 
@@ -764,7 +1042,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.paragraph` | `create paragraph` | Create a standalone paragraph at the target position. To add a list item, use lists.insert instead. |
 | `doc.create.heading` | `create heading` | Create a new heading at the target position. |
 | `doc.create.section_break` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
@@ -800,7 +1078,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
-| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
+| `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |

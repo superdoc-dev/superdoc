@@ -1,0 +1,20 @@
+---
+title: Diff operations
+sidebarTitle: Diff
+description: Diff operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Snapshot-based document comparison and replay.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/diff/capture"><code>diff.capture</code></a></span> | `diff.capture` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/diff/compare"><code>diff.compare</code></a></span> | `diff.compare` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/diff/apply"><code>diff.apply</code></a></span> | `diff.apply` | Yes | `conditional` | Yes | No |
+

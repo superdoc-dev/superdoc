@@ -108,7 +108,6 @@
   },
   "peerDependencies": {
     "@floating-ui/dom": "^1.7.0",
-    "naive-ui": "^2.38.2",
     "tippy.js": "^6.3.7",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"

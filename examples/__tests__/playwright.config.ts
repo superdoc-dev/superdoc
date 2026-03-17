@@ -54,7 +54,7 @@ export default defineConfig({
   webServer: {
     command,
     url: `http://localhost:${port}`,
-    timeout: 30_000,
+    timeout: 60_000,
     reuseExistingServer: !process.env.CI,
   },
   use: {

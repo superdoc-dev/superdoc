@@ -265,8 +265,6 @@ const extractCommentRangesFromDocument = (docx, converter) => {
   let positionIndex = 0;
   let lastElementWasCommentMarker = false;
   const recentlyClosedComments = new Set();
-  let lastTrackedChange = null;
-
   const walkElements = (elements, currentTrackedChangeId = null) => {
     if (!elements || !Array.isArray(elements)) return;
 
@@ -311,61 +309,25 @@ const extractCommentRangesFromDocument = (docx, converter) => {
         }
         lastElementWasCommentMarker = true;
       } else if (isTrackedChange) {
-        const trackedChangeId = element.attributes?.['w:id'];
-        const author = element.attributes?.['w:author'];
-        const date = element.attributes?.['w:date'];
-        const elementType = element.name;
-        let mappedId = trackedChangeId;
-        let isReplacement = false;
-
-        if (trackedChangeId !== undefined && converter) {
-          if (!converter.trackedChangeIdMap) {
-            converter.trackedChangeIdMap = new Map();
-          }
-
-          // Word uses different IDs for deletion and insertion in replacements, link them by same author/date
-          if (
-            lastTrackedChange &&
-            lastTrackedChange.type !== elementType &&
-            lastTrackedChange.author === author &&
-            lastTrackedChange.date === date
-          ) {
-            mappedId = lastTrackedChange.mappedId;
-            converter.trackedChangeIdMap.set(String(trackedChangeId), mappedId);
-            isReplacement = true;
-          } else {
-            if (!converter.trackedChangeIdMap.has(String(trackedChangeId))) {
-              converter.trackedChangeIdMap.set(String(trackedChangeId), uuidv4());
-            }
-            mappedId = converter.trackedChangeIdMap.get(String(trackedChangeId));
-          }
-        }
-
-        if (currentTrackedChangeId === null) {
-          if (isReplacement) {
-            lastTrackedChange = null;
-          } else {
-            lastTrackedChange = {
-              type: elementType,
-              author,
-              date,
-              mappedId,
-              wordId: String(trackedChangeId),
-            };
-          }
-        }
+        // ID mapping and replacement pairing are handled by trackedChangeIdMapper.
+        // Here we only associate recently-closed comments with the tracked change.
+        const wordId = element.attributes?.['w:id'];
+        const mappedId =
+          wordId != null
+            ? (converter?.trackedChangeIdMap?.get(String(wordId)) ?? String(wordId))
+            : currentTrackedChangeId;
 
         if (mappedId && recentlyClosedComments.size > 0) {
           recentlyClosedComments.forEach((commentId) => {
             if (!commentsInTrackedChanges.has(commentId)) {
-              commentsInTrackedChanges.set(commentId, String(mappedId));
+              commentsInTrackedChanges.set(commentId, mappedId);
             }
           });
         }
         recentlyClosedComments.clear();
 
         if (element.elements && Array.isArray(element.elements)) {
-          walkElements(element.elements, mappedId !== undefined ? String(mappedId) : currentTrackedChangeId);
+          walkElements(element.elements, mappedId);
         }
       } else {
         if (lastElementWasCommentMarker) {
@@ -375,7 +337,6 @@ const extractCommentRangesFromDocument = (docx, converter) => {
 
         if (element.name === 'w:p') {
           recentlyClosedComments.clear();
-          lastTrackedChange = null;
         }
 
         if (element.elements && Array.isArray(element.elements)) {

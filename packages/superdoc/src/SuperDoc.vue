@@ -15,7 +15,6 @@ import {
   watch,
   defineAsyncComponent,
 } from 'vue';
-import { NConfigProvider, NMessageProvider } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 
 import CommentsLayer from './components/CommentsLayer/CommentsLayer.vue';
@@ -90,8 +89,11 @@ const {
   showAddComment,
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
+  syncTrackedChangePositionsWithDocument,
+  syncTrackedChangeComments,
   addComment,
   getComment,
+  belongsToDocument,
   COMMENT_EVENTS,
 } = commentsStore;
 const { proxy } = getCurrentInstance();
@@ -101,6 +103,7 @@ const { isHighContrastMode } = useHighContrastMode();
 const { uiFontFamily } = useUiFontFamily();
 
 const isViewingMode = () => proxy?.$superdoc?.config?.documentMode === 'viewing';
+const allowSelectionInViewMode = () => !!proxy?.$superdoc?.config?.allowSelectionInViewMode;
 const isViewingCommentsVisible = computed(
   () => isViewingMode() && proxy?.$superdoc?.config?.comments?.visible === true,
 );
@@ -147,6 +150,7 @@ const superdocStyleVars = computed(() => {
 // Refs
 const layers = ref(null);
 const pdfViewerRef = ref(null);
+const pendingReplayTrackedChangeSync = ref(false);
 
 // Comments layer
 const commentsLayer = ref(null);
@@ -177,6 +181,30 @@ const hrbrFieldsLayer = ref(null);
 
 const pdfConfig = proxy.$superdoc.config.modules?.pdf || {};
 
+const flushPendingReplayTrackedChangeSync = () => {
+  if (!pendingReplayTrackedChangeSync.value) return;
+  pendingReplayTrackedChangeSync.value = false;
+  syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+};
+
+const scheduleReplayTrackedChangeSync = () => {
+  pendingReplayTrackedChangeSync.value = true;
+
+  const activeDocId = proxy.$superdoc?.activeEditor?.options?.documentId;
+  const hasPresentationBridge = Boolean(activeDocId && PresentationEditor.getInstance(activeDocId) && layers.value);
+
+  // Always schedule a fallback flush. In layout mode, replay can remove the last
+  // comment/tracked-change anchor, which means no commentPositions event is emitted.
+  // Without this fallback, pending replay sync can stay stuck forever.
+  nextTick(() => {
+    flushPendingReplayTrackedChangeSync();
+  });
+
+  // In layout mode we still flush on comment-position updates when they arrive.
+  // For non-layout/viewing-hidden cases, the nextTick fallback above is the primary path.
+  if (!hasPresentationBridge || !shouldRenderCommentsInViewing.value) return;
+};
+
 const handleDocumentReady = (documentId, container) => {
   const doc = getDocument(documentId);
   doc.isReady = true;
@@ -190,9 +218,20 @@ const handleDocumentReady = (documentId, container) => {
   proxy.$superdoc.broadcastPdfDocumentReady();
 };
 
+const getPendingCommentTargetClientY = () => {
+  if (!selectionPosition.value || !layers.value) return null;
+
+  const isPdf = selectionPosition.value.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = Number(selectionPosition.value.top);
+  if (!Number.isFinite(top)) return null;
+
+  return layers.value.getBoundingClientRect().top + top * zoom;
+};
+
 const handleToolClick = (tool) => {
   const toolOptions = {
-    comments: () => showAddComment(proxy.$superdoc),
+    comments: () => showAddComment(proxy.$superdoc, getPendingCommentTargetClientY()),
     ai: () => handleAiToolClick(),
   };
 
@@ -210,7 +249,7 @@ const handleDocumentMouseDown = (e) => {
 
 const handleHighlightClick = () => (toolsMenuPosition.top = null);
 const cancelPendingComment = (e) => {
-  if (e.target.classList.contains('n-dropdown-option-body__label')) return;
+  if (e.target.classList.contains('comments-dropdown__option-label')) return;
   commentsStore.removePendingComment(proxy.$superdoc);
 };
 
@@ -272,6 +311,7 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // Map PM positions to visual layout coordinates
     const mappedPositions = presentationEditor.getCommentBounds(positions, layers.value);
     handleEditorLocationsUpdate(mappedPositions);
+    flushPendingReplayTrackedChangeSync();
 
     // Ensure floating comments can render once the layout engine starts emitting positions.
     // For DOCX, handleDocumentReady doesn't fire (it's wired to PDFViewer), so this is
@@ -284,6 +324,14 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   presentationEditor.on('paginationUpdate', ({ layout }) => {
     const totalPages = layout.pages.length;
     proxy.$superdoc.emit('pagination-update', { totalPages, superdoc: proxy.$superdoc });
+  });
+
+  presentationEditor.on('headerFooterUpdate', (payload = {}) => {
+    proxy.$superdoc.emit('editor-update', buildEditorUpdatePayload(payload));
+  });
+
+  presentationEditor.on('headerFooterTransaction', (payload = {}) => {
+    emitEditorTransaction(buildEditorTransactionPayload(payload));
   });
 };
 
@@ -299,8 +347,43 @@ const onEditorDocumentLocked = ({ editor, isLocked, lockedBy }) => {
   proxy.$superdoc.lockSuperdoc(isLocked, lockedBy);
 };
 
-const onEditorUpdate = ({ editor }) => {
-  proxy.$superdoc.emit('editor-update', { editor });
+const buildEditorPayloadBase = ({
+  editor,
+  sourceEditor,
+  surface = 'body',
+  headerId = null,
+  sectionType = null,
+} = {}) => {
+  const effectiveEditor = editor ?? sourceEditor;
+  return {
+    editor: effectiveEditor,
+    sourceEditor: sourceEditor ?? effectiveEditor,
+    surface,
+    headerId,
+    sectionType,
+  };
+};
+
+const buildEditorUpdatePayload = (payload = {}) => {
+  return buildEditorPayloadBase(payload);
+};
+
+const onEditorUpdate = (payload = {}) => {
+  proxy.$superdoc.emit('editor-update', buildEditorUpdatePayload(payload));
+};
+
+const buildEditorTransactionPayload = ({ transaction, duration, ...payload } = {}) => {
+  return {
+    ...buildEditorPayloadBase(payload),
+    transaction,
+    duration,
+  };
+};
+
+const emitEditorTransaction = (payload = {}) => {
+  if (typeof proxy.$superdoc.config.onTransaction === 'function') {
+    proxy.$superdoc.config.onTransaction(payload);
+  }
 };
 
 let selectionUpdateRafId = null;
@@ -316,13 +399,13 @@ const onEditorSelectionChange = ({ editor }) => {
     // When comment is added selection will be equal to comment text
     // Should skip calculations to keep text selection for comments correct
     skipSelectionUpdate.value = false;
-    if (isViewingMode()) {
+    if (isViewingMode() && !allowSelectionInViewMode()) {
       resetSelection();
     }
     return;
   }
 
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }
@@ -337,7 +420,7 @@ const onEditorSelectionChange = ({ editor }) => {
   // processSelectionChange already reads editor.state.selection as the primary source.
   selectionUpdateRafId = requestAnimationFrame(() => {
     selectionUpdateRafId = null;
-    if (isViewingMode()) {
+    if (isViewingMode() && !allowSelectionInViewMode()) {
       resetSelection();
       return;
     }
@@ -506,8 +589,11 @@ const editorOptions = (doc) => {
   const useLayoutEngine = proxy.$superdoc.config.useLayoutEngine !== false;
 
   const ydocFragment = doc.ydoc?.getXmlFragment?.('supereditor');
+  const ydocParts = doc.ydoc?.getMap?.('parts');
   const ydocMeta = doc.ydoc?.getMap?.('meta');
-  const ydocHasContent = (ydocFragment && ydocFragment.length > 0) || (ydocMeta && Boolean(ydocMeta.get('docx')));
+  const legacyContent = ydocMeta?.has('docx');
+  const ydocHasContent =
+    (ydocFragment && ydocFragment.length > 0) || (ydocParts && ydocParts.size > 0) || legacyContent;
   const isNewFile = doc.isNewFile && !ydocHasContent;
 
   const options = {
@@ -520,6 +606,7 @@ const editorOptions = (doc) => {
     html: doc.html,
     markdown: doc.markdown,
     documentMode: proxy.$superdoc.config.documentMode,
+    allowSelectionInViewMode: proxy.$superdoc.config.allowSelectionInViewMode,
     rulers: doc.rulers,
     rulerContainer: proxy.$superdoc.config.rulerContainer,
     isInternal: proxy.$superdoc.config.isInternal,
@@ -616,6 +703,7 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   if (!presentation) {
     // Non-layout-engine mode: pass through raw positions
     handleEditorLocationsUpdate(allCommentPositions, activeThreadId);
+    flushPendingReplayTrackedChangeSync();
     return;
   }
 
@@ -624,16 +712,128 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   // after every layout, so this is mainly for the initial load before layout completes.
   const mappedPositions = presentation.getCommentBounds(allCommentPositions, layers.value);
   handleEditorLocationsUpdate(mappedPositions, activeThreadId);
+  flushPendingReplayTrackedChangeSync();
+};
+
+// Replay updates should only patch mutable comment state.
+// Identity and construction-time metadata are intentionally excluded.
+const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
+  'commentText',
+  'isInternal',
+  'parentCommentId',
+  'trackedChangeParentId',
+  'threadingParentCommentId',
+  'trackedChange',
+  'trackedChangeType',
+  'trackedChangeText',
+  'deletedText',
+  'resolvedTime',
+  'resolvedByEmail',
+  'resolvedByName',
+  'importedAuthor',
+  'docxCommentJSON',
+]);
+
+const applyReplayIsDoneResolutionFallback = (target, payload = {}) => {
+  if (!target || payload.isDone === undefined) return;
+  if (payload.resolvedTime != null || payload.resolvedByEmail != null || payload.resolvedByName != null) return;
+
+  // Imported replay payloads often use `isDone` while resolved fields remain null.
+  // When resolved fields are not explicitly populated, derive sidebar/export state from `isDone`.
+  if (payload.isDone) {
+    target.resolvedTime = target.resolvedTime || Date.now();
+    target.resolvedByEmail = target.resolvedByEmail || payload.creatorEmail || null;
+    target.resolvedByName = target.resolvedByName || payload.creatorName || null;
+    return;
+  }
+
+  target.resolvedTime = null;
+  target.resolvedByEmail = null;
+  target.resolvedByName = null;
+};
+
+const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
+  if (!commentModel || !payload) return;
+
+  if (Array.isArray(payload.elements)) {
+    commentModel.docxCommentJSON = payload.elements;
+  }
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (key === 'text') return;
+    if (key === 'elements') return;
+    if (!REPLAY_MUTABLE_COMMENT_FIELDS.has(key)) return;
+    commentModel[key] = value;
+  });
+
+  if (resolvedText !== undefined) {
+    commentModel.commentText = resolvedText;
+  }
+
+  applyReplayIsDoneResolutionFallback(commentModel, payload);
+};
+
+const normalizeReplayCommentModelPayload = (payload = {}) => {
+  const normalizedPayload = { ...payload };
+  if (!normalizedPayload.commentText && normalizedPayload.text) {
+    normalizedPayload.commentText = normalizedPayload.text;
+  }
+  if (!normalizedPayload.docxCommentJSON && Array.isArray(normalizedPayload.elements)) {
+    normalizedPayload.docxCommentJSON = normalizedPayload.elements;
+  }
+  applyReplayIsDoneResolutionFallback(normalizedPayload, normalizedPayload);
+  return normalizedPayload;
 };
 
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
+  // Only sync active state when the event explicitly requests it.
+  // Replay add/update events often omit activeCommentId; inferring it here can
+  // cause repeated focus toggles while replay emits batched updates.
+  let shouldSyncActiveComment = Object.prototype.hasOwnProperty.call(params, 'activeCommentId');
+  const resolveCommentEventIds = (payload) => {
+    const ids = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    return [...new Set(ids)];
+  };
+  const resolveDocumentScopedCommentMatch = (payload) => {
+    const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    const activeDocumentId =
+      proxy.$superdoc?.activeEditor?.options?.documentId != null
+        ? String(proxy.$superdoc.activeEditor.options.documentId)
+        : null;
+
+    for (const candidateId of candidateIds) {
+      const existingComment = commentsList.value.find((comment) => {
+        const commentId = comment?.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment?.importedId != null ? String(comment.importedId) : null;
+        const isIdMatch = commentId === candidateId || importedId === candidateId;
+        if (!isIdMatch) return false;
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      });
+
+      if (existingComment) {
+        const matchedCommentId = existingComment?.commentId ?? existingComment?.importedId ?? candidateId;
+        return {
+          id: matchedCommentId != null ? String(matchedCommentId) : null,
+          existingComment,
+        };
+      }
+    }
+    return {
+      id: candidateIds[0] || null,
+      existingComment: null,
+    };
+  };
+
+  if (type === 'replayCompleted') {
+    scheduleReplayTrackedChangeSync();
+  }
 
   if (COMMENT_EVENTS?.ADD && type === COMMENT_EVENTS.ADD && commentPayload) {
-    if (!commentPayload.commentText && commentPayload.text) {
-      commentPayload.commentText = commentPayload.text;
-    }
+    commentPayload = normalizeReplayCommentModelPayload(commentPayload);
 
     const currentUser = proxy.$superdoc?.user;
     if (currentUser) {
@@ -652,14 +852,107 @@ const onEditorCommentsUpdate = (params = {}) => {
       commentPayload.fileId = primaryDocumentId;
     }
 
-    const id = commentPayload.commentId || commentPayload.importedId;
-    if (id && !getComment(id)) {
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
+    if (id && !existingComment) {
       const commentModel = useComment(commentPayload);
       addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
     }
+  }
 
-    if (!activeCommentId && id) {
-      activeCommentId = id;
+  if (COMMENT_EVENTS?.UPDATE && type === COMMENT_EVENTS.UPDATE && commentPayload) {
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
+    if (id) {
+      const resolvedText = commentPayload.commentText || commentPayload.text;
+
+      if (existingComment) {
+        applyReplayUpdateToComment(existingComment, commentPayload, resolvedText);
+      } else {
+        const normalizedPayload = normalizeReplayCommentModelPayload(commentPayload);
+        const commentModel = useComment(normalizedPayload);
+        addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
+      }
+    }
+  }
+
+  if (COMMENT_EVENTS?.DELETED && type === COMMENT_EVENTS.DELETED && commentPayload) {
+    const targetIds = resolveCommentEventIds(commentPayload);
+    if (targetIds.length) {
+      const activeDocumentId =
+        proxy.$superdoc?.activeEditor?.options?.documentId != null
+          ? String(proxy.$superdoc.activeEditor.options.documentId)
+          : null;
+      const isInActiveDocument = (comment) => {
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      };
+
+      // Remove the entire thread subtree (parent + all descendants), not only direct replies.
+      const removedCommentIds = new Set();
+      commentsList.value.forEach((comment) => {
+        if (!isInActiveDocument(comment)) return;
+        const commentId = comment.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment.importedId != null ? String(comment.importedId) : null;
+        const matchesTarget =
+          (commentId && targetIds.includes(commentId)) || (importedId && targetIds.includes(importedId));
+        if (!matchesTarget) return;
+        if (commentId) removedCommentIds.add(commentId);
+        if (importedId) removedCommentIds.add(importedId);
+      });
+
+      if (removedCommentIds.size) {
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          commentsList.value.forEach((comment) => {
+            if (!isInActiveDocument(comment)) return;
+            const commentId = comment.commentId != null ? String(comment.commentId) : null;
+            const importedId = comment.importedId != null ? String(comment.importedId) : null;
+            const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+            const trackedChangeParentId =
+              comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
+
+            const isRemovedComment =
+              (commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId));
+            const isDescendantOfRemovedComment =
+              (parentCommentId && removedCommentIds.has(parentCommentId)) ||
+              (trackedChangeParentId && removedCommentIds.has(trackedChangeParentId));
+            if (!isRemovedComment && !isDescendantOfRemovedComment) return;
+
+            const sizeBefore = removedCommentIds.size;
+            if (commentId) removedCommentIds.add(commentId);
+            if (importedId) removedCommentIds.add(importedId);
+            if (removedCommentIds.size > sizeBefore) {
+              expanded = true;
+            }
+          });
+        }
+
+        const previousComments = [...commentsList.value];
+        commentsList.value = commentsList.value.filter((comment) => {
+          if (!isInActiveDocument(comment)) return true;
+          const commentId = comment.commentId != null ? String(comment.commentId) : null;
+          const importedId = comment.importedId != null ? String(comment.importedId) : null;
+          return !(
+            (commentId && removedCommentIds.has(commentId)) ||
+            (importedId && removedCommentIds.has(importedId))
+          );
+        });
+
+        const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;
+        const activeCommentModel =
+          activeCommentKey != null
+            ? previousComments.find((comment) => {
+                const commentId = comment.commentId != null ? String(comment.commentId) : null;
+                const importedId = comment.importedId != null ? String(comment.importedId) : null;
+                return commentId === activeCommentKey || importedId === activeCommentKey;
+              })
+            : null;
+        const activeCommentInActiveDocument = activeCommentModel ? isInActiveDocument(activeCommentModel) : false;
+        if (activeCommentKey && removedCommentIds.has(activeCommentKey) && activeCommentInActiveDocument) {
+          activeCommentId = null;
+          shouldSyncActiveComment = true;
+        }
+      }
     }
   }
 
@@ -669,14 +962,18 @@ const onEditorCommentsUpdate = (params = {}) => {
 
   nextTick(() => {
     if (pendingComment.value) return;
-    commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    if (shouldSyncActiveComment) {
+      commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    }
     // Briefly suppress click-outside so the same click that selected the comment
     // highlight in the editor doesn't immediately deactivate it via the sidebar.
     // Reset after the event loop settles so subsequent outside clicks work normally.
-    isCommentHighlighted.value = true;
-    setTimeout(() => {
-      isCommentHighlighted.value = false;
-    }, 0);
+    if (shouldSyncActiveComment) {
+      isCommentHighlighted.value = true;
+      setTimeout(() => {
+        isCommentHighlighted.value = false;
+      }, 0);
+    }
   });
 
   // Bubble up the event to the user, if handled
@@ -685,10 +982,18 @@ const onEditorCommentsUpdate = (params = {}) => {
   }
 };
 
-const onEditorTransaction = ({ editor, transaction, duration }) => {
-  if (typeof proxy.$superdoc.config.onTransaction === 'function') {
-    proxy.$superdoc.config.onTransaction({ editor, transaction, duration });
+const onEditorTransaction = (payload = {}) => {
+  const { editor, transaction } = payload;
+  const inputType = transaction?.getMeta?.('inputType');
+
+  // Call sync on editor transaction but only if it's undo or redo
+  // This could be extended to other listeners in the future
+  if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+    const documentId = editor?.options?.documentId;
+    syncTrackedChangePositionsWithDocument({ documentId, editor });
   }
+
+  emitEditorTransaction(buildEditorTransactionPayload(payload));
 };
 
 const isCommentsEnabled = computed(() => Boolean(commentsModuleConfig.value));
@@ -774,7 +1079,7 @@ const getSelectionPosition = computed(() => {
 });
 
 const handleSelectionChange = (selection) => {
-  if (isViewingMode()) {
+  if (isViewingMode() && !allowSelectionInViewMode()) {
     resetSelection();
     return;
   }
@@ -961,12 +1266,32 @@ const handlePdfSelectionRaw = ({ selectionBounds, documentId, page }) => {
 watch(
   () => activeZoom.value,
   (zoom) => {
+    const zoomFactor = (zoom ?? 100) / 100;
+
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
-      PresentationEditor.setGlobalZoom((zoom ?? 100) / 100);
+      PresentationEditor.setGlobalZoom(zoomFactor);
+    } else {
+      // Web layout without layout engine — apply CSS transform directly
+      // to non-PDF sub-document containers so zoom works for PM fallback rendering.
+      // PDF documents are excluded because pdfViewer.updateScale() handles their zoom
+      // separately below; applying both would result in double-zoom.
+      const subDocs = layers.value?.querySelectorAll('.superdoc__sub-document');
+      subDocs?.forEach((el) => {
+        if (el.querySelector('.sd-pdf-viewer')) return;
+        if (zoomFactor === 1) {
+          el.style.transformOrigin = '';
+          el.style.transform = '';
+          el.style.width = '';
+        } else {
+          el.style.transformOrigin = 'top left';
+          el.style.transform = `scale(${zoomFactor})`;
+          el.style.width = `${100 / zoomFactor}%`;
+        }
+      });
     }
 
     const pdfViewer = getPDFViewer();
-    pdfViewer?.updateScale((zoom ?? 100) / 100);
+    pdfViewer?.updateScale(zoomFactor);
 
     nextTick(() => {
       updateWhiteboardPageSizes();
@@ -1008,150 +1333,146 @@ const getPDFViewer = () => {
 </script>
 
 <template>
-  <n-config-provider abstract preflight-style-disabled>
-    <div
-      class="superdoc"
-      :class="{
-        'superdoc--with-sidebar': showCommentsSidebar,
-        'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
-        'high-contrast': isHighContrastMode,
-      }"
-      :style="superdocStyleVars"
-    >
-      <div class="superdoc__layers layers" ref="layers" role="group">
-        <!-- Floating tools menu (shows up when user has text selection)-->
-        <div v-if="showToolsFloatingMenu" class="superdoc__tools tools" :style="toolsMenuPosition">
-          <div class="tools-item" data-id="is-tool" @mousedown.stop.prevent="handleToolClick('comments')">
-            <div class="superdoc__tools-icon" v-html="superdocIcons.comment"></div>
-          </div>
-          <!-- AI tool button -->
-          <div
-            v-if="proxy.$superdoc.config.modules.ai"
-            class="tools-item"
-            data-id="is-tool"
-            @mousedown.stop.prevent="handleToolClick('ai')"
-          >
-            <div class="superdoc__tools-icon ai-tool"></div>
-          </div>
+  <div
+    class="superdoc"
+    :class="{
+      'superdoc--with-sidebar': showCommentsSidebar,
+      'superdoc--web-layout': proxy.$superdoc.config.viewOptions?.layout === 'web',
+      'high-contrast': isHighContrastMode,
+    }"
+    :style="superdocStyleVars"
+  >
+    <div class="superdoc__layers layers" ref="layers" role="group">
+      <!-- Floating tools menu (shows up when user has text selection)-->
+      <div v-if="showToolsFloatingMenu" class="superdoc__tools tools" :style="toolsMenuPosition">
+        <div class="tools-item" data-id="is-tool" @mousedown.stop.prevent="handleToolClick('comments')">
+          <div class="superdoc__tools-icon" v-html="superdocIcons.comment"></div>
         </div>
-
-        <div class="superdoc__document document">
-          <div
-            v-if="isCommentsEnabled"
-            class="superdoc__selection-layer selection-layer"
-            @mousedown="handleSelectionStart"
-            @mouseup="handleDragEnd"
-            ref="selectionLayer"
-          >
-            <div
-              :style="getSelectionPosition"
-              class="superdoc__temp-selection temp-selection sd-highlight sd-initial-highlight"
-              v-if="selectionPosition && shouldShowSelection"
-            ></div>
-          </div>
-
-          <!-- Fields layer -->
-          <HrbrFieldsLayer
-            v-if="'hrbr-fields' in modules && layers"
-            :fields="modules['hrbr-fields']"
-            class="superdoc__comments-layer comments-layer"
-            style="z-index: 2"
-            ref="hrbrFieldsLayer"
-          />
-
-          <!-- On-document comments layer -->
-          <CommentsLayer
-            v-if="layers"
-            class="superdoc__comments-layer comments-layer"
-            style="z-index: 3"
-            ref="commentsLayer"
-            :parent="layers"
-            :user="user"
-            @highlight-click="handleHighlightClick"
-          />
-
-          <!-- AI Layer for temporary highlights -->
-          <AiLayer
-            v-if="showAiLayer"
-            class="ai-layer"
-            style="z-index: 4"
-            ref="aiLayer"
-            :editor="proxy.$superdoc.activeEditor"
-          />
-
-          <!-- Whiteboard Layer -->
-          <WhiteboardLayer
-            v-if="layers && whiteboardModuleConfig"
-            style="z-index: 3"
-            :whiteboard="whiteboard"
-            :pages="whiteboardPages"
-            :page-sizes="whiteboardPageSizes"
-            :page-offsets="whiteboardPageOffsets"
-            :enabled="whiteboardEnabled"
-            :opacity="whiteboardOpacity"
-          />
-
-          <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
-            <!-- PDF renderer -->
-            <PdfViewer
-              v-if="doc.type === PDF"
-              :file="doc.data"
-              :file-id="doc.id"
-              :config="pdfConfig"
-              @selection-raw="handlePdfSelectionRaw"
-              @bypass-selection="handlePdfClick"
-              @page-rendered="handleWhiteboardPageReady"
-              @document-ready="({ documentId, viewerContainer }) => handleDocumentReady(documentId, viewerContainer)"
-              ref="pdfViewerRef"
-            />
-
-            <n-message-provider>
-              <SuperEditor
-                v-if="doc.type === DOCX"
-                :file-source="doc.data"
-                :state="doc.state"
-                :document-id="doc.id"
-                :options="{ ...editorOptions(doc), rulers: doc.rulers }"
-                @editor-ready="onEditorReady"
-                @pageMarginsChange="handleSuperEditorPageMarginsChange(doc, $event)"
-              />
-            </n-message-provider>
-
-            <!-- omitting field props -->
-            <HtmlViewer
-              v-if="doc.type === HTML"
-              @ready="(id) => handleDocumentReady(id, null)"
-              @selection-change="handleSelectionChange"
-              :file-source="doc.data"
-              :document-id="doc.id"
-            />
-          </div>
+        <!-- AI tool button -->
+        <div
+          v-if="proxy.$superdoc.config.modules.ai"
+          class="tools-item"
+          data-id="is-tool"
+          @mousedown.stop.prevent="handleToolClick('ai')"
+        >
+          <div class="superdoc__tools-icon ai-tool"></div>
         </div>
       </div>
 
-      <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
-        <div class="floating-comments">
-          <FloatingComments
-            v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
-            v-for="doc in documentsWithConverations"
-            :parent="layers"
-            :current-document="doc"
-          />
+      <div class="superdoc__document document">
+        <div
+          v-if="isCommentsEnabled"
+          class="superdoc__selection-layer selection-layer"
+          @mousedown="handleSelectionStart"
+          @mouseup="handleDragEnd"
+          ref="selectionLayer"
+        >
+          <div
+            :style="getSelectionPosition"
+            class="superdoc__temp-selection temp-selection sd-highlight sd-initial-highlight"
+            v-if="selectionPosition && shouldShowSelection"
+          ></div>
         </div>
-      </div>
 
-      <!-- AI Writer at cursor position -->
-      <div class="ai-writer-container" v-if="showAiWriter" :style="aiWriterPosition">
-        <AIWriter
-          :selected-text="selectedText"
-          :handle-close="handleAiWriterClose"
+        <!-- Fields layer -->
+        <HrbrFieldsLayer
+          v-if="'hrbr-fields' in modules && layers"
+          :fields="modules['hrbr-fields']"
+          class="superdoc__comments-layer comments-layer"
+          style="z-index: 2"
+          ref="hrbrFieldsLayer"
+        />
+
+        <!-- On-document comments layer -->
+        <CommentsLayer
+          v-if="layers"
+          class="superdoc__comments-layer comments-layer"
+          style="z-index: 3"
+          ref="commentsLayer"
+          :parent="layers"
+          :user="user"
+          @highlight-click="handleHighlightClick"
+        />
+
+        <!-- AI Layer for temporary highlights -->
+        <AiLayer
+          v-if="showAiLayer"
+          class="ai-layer"
+          style="z-index: 4"
+          ref="aiLayer"
           :editor="proxy.$superdoc.activeEditor"
-          :api-key="proxy.$superdoc.toolbar?.config?.aiApiKey"
-          :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
+        />
+
+        <!-- Whiteboard Layer -->
+        <WhiteboardLayer
+          v-if="layers && whiteboardModuleConfig"
+          style="z-index: 3"
+          :whiteboard="whiteboard"
+          :pages="whiteboardPages"
+          :page-sizes="whiteboardPageSizes"
+          :page-offsets="whiteboardPageOffsets"
+          :enabled="whiteboardEnabled"
+          :opacity="whiteboardOpacity"
+        />
+
+        <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
+          <!-- PDF renderer -->
+          <PdfViewer
+            v-if="doc.type === PDF"
+            :file="doc.data"
+            :file-id="doc.id"
+            :config="pdfConfig"
+            @selection-raw="handlePdfSelectionRaw"
+            @bypass-selection="handlePdfClick"
+            @page-rendered="handleWhiteboardPageReady"
+            @document-ready="({ documentId, viewerContainer }) => handleDocumentReady(documentId, viewerContainer)"
+            ref="pdfViewerRef"
+          />
+
+          <SuperEditor
+            v-if="doc.type === DOCX"
+            :file-source="doc.data"
+            :state="doc.state"
+            :document-id="doc.id"
+            :options="{ ...editorOptions(doc), rulers: doc.rulers }"
+            @editor-ready="onEditorReady"
+            @pageMarginsChange="handleSuperEditorPageMarginsChange(doc, $event)"
+          />
+
+          <!-- omitting field props -->
+          <HtmlViewer
+            v-if="doc.type === HTML"
+            @ready="(id) => handleDocumentReady(id, null)"
+            @selection-change="handleSelectionChange"
+            :file-source="doc.data"
+            :document-id="doc.id"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
+      <div class="floating-comments">
+        <FloatingComments
+          v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
+          v-for="doc in documentsWithConverations"
+          :parent="layers"
+          :current-document="doc"
         />
       </div>
     </div>
-  </n-config-provider>
+
+    <!-- AI Writer at cursor position -->
+    <div class="ai-writer-container" v-if="showAiWriter" :style="aiWriterPosition">
+      <AIWriter
+        :selected-text="selectedText"
+        :handle-close="handleAiWriterClose"
+        :editor="proxy.$superdoc.activeEditor"
+        :api-key="proxy.$superdoc.toolbar?.config?.aiApiKey"
+        :endpoint="proxy.$superdoc.config?.modules?.ai?.endpoint"
+      />
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -1161,11 +1482,15 @@ const getPDFViewer = () => {
 
 .right-sidebar {
   min-width: 320px;
+  height: 100%;
 }
 
 .floating-comments {
   min-width: 300px;
   width: 300px;
+  height: 100%;
+  overflow-y: hidden;
+  overflow-x: hidden;
 }
 
 .superdoc__layers {

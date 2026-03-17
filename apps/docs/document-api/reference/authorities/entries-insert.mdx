@@ -1,0 +1,322 @@
+---
+title: authorities.entries.insert
+sidebarTitle: authorities.entries.insert
+description: Insert a new TA authority entry field at a target location.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert a new TA authority entry field at a target location.
+
+- Operation ID: `authorities.entries.insert`
+- API member path: `editor.doc.authorities.entries.insert(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an AuthorityEntryMutationResult indicating success with the entry address or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | yes | TextTarget |
+| `at.kind` | `"text"` | yes | Constant: `"text"` |
+| `at.segments` | TextSegment[] | yes |  |
+| `entry` | object | yes |  |
+| `entry.bold` | boolean | no |  |
+| `entry.category` | string \\| integer | yes | One of: string, integer |
+| `entry.italic` | boolean | no |  |
+| `entry.longCitation` | string | yes |  |
+| `entry.shortCitation` | string | no |  |
+
+### Example request
+
+```json
+{
+  "at": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
+  "entry": {
+    "bold": true,
+    "category": "example",
+    "longCitation": "example",
+    "shortCitation": "example"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | object(kind="inline") | yes |  |
+| `entry.anchor` | InlineAnchor | yes | InlineAnchor |
+| `entry.anchor.end` | Position | yes | Position |
+| `entry.anchor.end.blockId` | string | yes |  |
+| `entry.anchor.end.offset` | integer | yes |  |
+| `entry.anchor.start` | Position | yes | Position |
+| `entry.anchor.start.blockId` | string | yes |  |
+| `entry.anchor.start.offset` | integer | yes |  |
+| `entry.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `entry.nodeType` | `"authorityEntry"` | yes | Constant: `"authorityEntry"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "entry": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "inline",
+    "nodeType": "authorityEntry"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "at": {
+      "$ref": "#/$defs/TextTarget"
+    },
+    "entry": {
+      "additionalProperties": false,
+      "properties": {
+        "bold": {
+          "type": "boolean"
+        },
+        "category": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "longCitation": {
+          "type": "string"
+        },
+        "shortCitation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "longCitation",
+        "category"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "at",
+    "entry"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "$ref": "#/$defs/InlineAnchor"
+            },
+            "kind": {
+              "const": "inline"
+            },
+            "nodeType": {
+              "const": "authorityEntry"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "anchor"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "entry"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "entry": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InlineAnchor"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "authorityEntry"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "entry"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

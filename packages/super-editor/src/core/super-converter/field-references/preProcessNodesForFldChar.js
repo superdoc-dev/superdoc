@@ -35,6 +35,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let currentFieldStack = [];
   let unpairedEnd = null;
   let collecting = false;
+  const rawNodeSourceTokens = new WeakMap();
 
   /**
    * Finalizes the current field. If collecting nodes, it processes them.
@@ -66,18 +67,50 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     }
   };
 
-  for (const node of nodes) {
-    const rawNode = carbonCopy(node);
+  /**
+   * Captures the original raw node at most once for the currently active field.
+   * @param {OpenXmlNode} rawNode
+   * @param {Set<OpenXmlNode>} capturedRawNodes
+   * @param {object} rawSourceToken
+   */
+  const captureRawNodeForCurrentField = (rawNode, capturedRawNodes, rawSourceToken) => {
+    if (rawCollectedNodesStack.length === 0) return;
+    if (capturedRawNodes.has(rawNode)) return;
+    const currentRawStack = rawCollectedNodesStack[rawCollectedNodesStack.length - 1];
+    const lastRawNode = currentRawStack[currentRawStack.length - 1];
+    const canMergeIntoLastNode =
+      lastRawNode?.name === 'w:r' &&
+      rawNode?.name === 'w:r' &&
+      rawNodeSourceTokens.get(lastRawNode) === rawSourceToken &&
+      Array.isArray(lastRawNode.elements) &&
+      Array.isArray(rawNode.elements);
+    if (canMergeIntoLastNode) {
+      lastRawNode.elements.push(...carbonCopy(rawNode.elements));
+    } else {
+      currentRawStack.push(rawNode);
+      rawNodeSourceTokens.set(rawNode, rawSourceToken);
+    }
+    capturedRawNodes.add(rawNode);
+  };
+
+  /**
+   * Processes a single logical node against the fldChar state machine.
+   * @param {OpenXmlNode} node
+   * @param {OpenXmlNode} rawNode
+   * @param {Set<OpenXmlNode>} capturedRawNodes
+   * @param {object} rawSourceToken
+   */
+  const processNode = (node, rawNode, capturedRawNodes, rawSourceToken) => {
     collecting = collectedNodesStack.length > 0;
 
     if (shouldSkipFieldProcessing(node)) {
       if (collecting) {
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
-        rawCollectedNodesStack[collectedNodesStack.length - 1].push(rawNode);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
       } else {
         processedNodes.push(node);
       }
-      continue;
+      return;
     }
 
     const fldCharEl = node.elements?.find((el) => el.name === 'w:fldChar');
@@ -97,16 +130,19 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           } else {
             processedNodes.push(...processed);
           }
-          continue;
+          return;
         }
       }
     }
 
     if (fldType === 'begin') {
       collectedNodesStack.push([]);
-      rawCollectedNodesStack.push([rawNode]);
+      const rawStack = [rawNode];
+      rawCollectedNodesStack.push(rawStack);
+      rawNodeSourceTokens.set(rawNode, rawSourceToken);
+      capturedRawNodes.add(rawNode);
       currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false });
-      continue;
+      return;
     }
 
     // If collecting and still in instruction run, aggregate instruction tokens/text.
@@ -115,7 +151,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       if (!currentField.afterSeparate) {
         const instructionTokens = extractInstructionTokensFromNode(node);
         if (instructionTokens.length > 0) {
-          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+          captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
           currentField.instructionTokens.push(...instructionTokens);
           const instrTextValue = instrTextEl?.elements?.[0]?.text;
           if (instrTextValue != null) {
@@ -125,27 +161,27 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
             currentField.instrText += '\t';
           }
           // We can ignore instruction nodes
-          continue;
+          return;
         }
       }
     }
 
     if (fldType === 'end') {
       if (collecting) {
-        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
       }
       finalizeField();
-      continue;
+      return;
     } else if (fldType === 'separate') {
       if (collecting) {
-        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         const currentField = currentFieldStack[currentFieldStack.length - 1];
         if (currentField) {
           currentField.afterSeparate = true;
         }
       }
       // We can ignore the 'fldChar' nodes
-      continue;
+      return;
     }
 
     if (Array.isArray(node.elements)) {
@@ -161,27 +197,41 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
 
           // The current node should be added to the collected nodes
           collectedNodesStack.push([node]);
-          rawCollectedNodesStack.push([rawNode]);
+          const rawStack = [rawNode];
+          rawCollectedNodesStack.push(rawStack);
+          rawNodeSourceTokens.set(rawNode, rawSourceToken);
+          capturedRawNodes.add(rawNode);
         });
       } else if (childResult.unpairedEnd) {
         // A field from this level or higher ended in the children.
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
-        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         finalizeField();
       } else if (collecting) {
         // This node is part of a field being collected at this level.
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
-        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+        captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
       } else {
         // This node is not part of any field.
         processedNodes.push(node);
       }
     } else if (collecting) {
       collectedNodesStack[collectedNodesStack.length - 1].push(node);
-      rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+      captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
     } else {
       processedNodes.push(node);
     }
+  };
+
+  for (const node of nodes) {
+    const rawNode = carbonCopy(node);
+    const logicalNodes = expandNodeForFieldProcessing(node);
+    const rawLogicalNodes = expandNodeForFieldProcessing(rawNode);
+    const capturedRawNodes = new Set();
+    const rawSourceToken = {};
+    logicalNodes.forEach((logicalNode, index) => {
+      processNode(logicalNode, rawLogicalNodes[index] ?? rawNode, capturedRawNodes, rawSourceToken);
+    });
   }
 
   let unpairedBegin = null;
@@ -261,4 +311,75 @@ const extractInstructionTokensFromNode = (node) => {
     }
   });
   return tokens;
+};
+
+const FIELD_CONTROL_ELEMENT_NAMES = new Set(['w:fldChar']);
+const INSTRUCTION_ELEMENT_NAMES = new Set(['w:instrText', 'w:tab']);
+
+const cloneNodeWithElements = (node, elements) => ({
+  ...node,
+  elements: carbonCopy(elements),
+});
+
+/**
+ * Expands mixed-content runs into logical subnodes so the fldChar state machine
+ * can process multiple field markers stored inside a single w:r in document order.
+ *
+ * @param {OpenXmlNode} node
+ * @returns {OpenXmlNode[]}
+ */
+const expandNodeForFieldProcessing = (node) => {
+  const elements = Array.isArray(node?.elements) ? node.elements : null;
+  if (node?.name !== 'w:r' || !elements || elements.length === 0) {
+    return [node];
+  }
+
+  const runProperties = elements.filter((el) => el?.name === 'w:rPr');
+  const contentElements = elements.filter((el) => el?.name !== 'w:rPr');
+  const logicalNodes = [];
+  let currentKind = null;
+  let currentElements = [];
+
+  const flushCurrentGroup = () => {
+    if (currentElements.length === 0) return;
+    logicalNodes.push(cloneNodeWithElements(node, [...runProperties, ...currentElements]));
+    currentElements = [];
+    currentKind = null;
+  };
+
+  contentElements.forEach((element) => {
+    if (!element?.name) {
+      if (currentKind !== 'content') {
+        flushCurrentGroup();
+        currentKind = 'content';
+      }
+      currentElements.push(element);
+      return;
+    }
+
+    if (FIELD_CONTROL_ELEMENT_NAMES.has(element.name)) {
+      flushCurrentGroup();
+      logicalNodes.push(cloneNodeWithElements(node, [...runProperties, element]));
+      return;
+    }
+
+    if (INSTRUCTION_ELEMENT_NAMES.has(element.name)) {
+      if (currentKind !== 'instruction') {
+        flushCurrentGroup();
+        currentKind = 'instruction';
+      }
+      currentElements.push(element);
+      return;
+    }
+
+    if (currentKind !== 'content') {
+      flushCurrentGroup();
+      currentKind = 'content';
+    }
+    currentElements.push(element);
+  });
+
+  flushCurrentGroup();
+
+  return logicalNodes.length > 1 ? logicalNodes : [node];
 };

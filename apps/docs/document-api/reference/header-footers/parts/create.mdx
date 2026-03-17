@@ -1,0 +1,231 @@
+---
+title: headerFooters.parts.create
+sidebarTitle: headerFooters.parts.create
+description: Create a new independent header/footer part, optionally cloned from an existing part.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Create a new independent header/footer part, optionally cloned from an existing part.
+
+- Operation ID: `headerFooters.parts.create`
+- API member path: `editor.doc.headerFooters.parts.create(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HeaderFooterPartsMutationResult with the new refId/partPath on success, INVALID_TARGET failure when sourceRefId is invalid or mismatched.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum | yes | `"header"`, `"footer"` |
+| `sourceRefId` | string | no |  |
+
+### Example request
+
+```json
+{
+  "kind": "header",
+  "sourceRefId": "example"
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `partPath` | string | yes |  |
+| `refId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "partPath": "example",
+  "refId": "example",
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "header",
+        "footer"
+      ]
+    },
+    "sourceRefId": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "partPath": {
+          "type": "string"
+        },
+        "refId": {
+          "type": "string"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "refId",
+        "partPath"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "partPath": {
+      "type": "string"
+    },
+    "refId": {
+      "type": "string"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "refId",
+    "partPath"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

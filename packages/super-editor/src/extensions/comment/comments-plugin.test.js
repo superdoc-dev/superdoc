@@ -680,6 +680,24 @@ describe('CommentsPlugin state', () => {
       }),
     );
   });
+
+  it('preserves the preferred tracked-change thread when cursor lands on overlapping comment text', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'comment-1', internal: true });
+    const trackedMark = schema.marks[TrackInsertMarkName].create({ id: 'tracked-1' });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [commentMark, trackedMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { view } = createPluginStateEnvironment({ schema, doc });
+
+    const tr = view.state.tr
+      .setSelection(TextSelection.create(doc, 2))
+      .setMeta(CommentsPluginKey, { type: 'setCursorById', preferredActiveThreadId: 'tracked-1' });
+
+    view.dispatch(tr);
+
+    const pluginState = CommentsPluginKey.getState(view.state);
+    expect(pluginState.activeThreadId).toBe('tracked-1');
+  });
 });
 
 describe('normalizeCommentEventPayload', () => {
@@ -898,6 +916,37 @@ describe('internal helper functions', () => {
     expect(editor.emit).toHaveBeenCalledWith(
       'commentsUpdate',
       expect.objectContaining({ event: comments_module_events.UPDATE, changeId: 'change-tracked' }),
+    );
+  });
+
+  it('handleTrackedChangeTransaction emits event for deletion-only tracked changes when step nodes are empty', () => {
+    const schema = createCommentSchema();
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'change-delete-only',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      date: 'today',
+    });
+    const deletedNode = schema.text('Removed', [deleteMark]);
+    const paragraph = schema.node('paragraph', null, [deletedNode]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const state = EditorState.create({ schema, doc });
+    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+
+    const meta = {
+      insertedMark: null,
+      deletionMark: deleteMark,
+      formatMark: null,
+      deletionNodes: [deletedNode],
+      step: { slice: { content: { content: [] } } },
+    };
+
+    const trackedChanges = handleTrackedChangeTransaction(meta, {}, state, editor);
+
+    expect(trackedChanges['change-delete-only']).toMatchObject({ deletion: 'change-delete-only' });
+    expect(editor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({ event: comments_module_events.ADD, changeId: 'change-delete-only' }),
     );
   });
 
@@ -1310,5 +1359,64 @@ describe('SD-1940: no recursive dispatch from apply() on selection change', () =
 
     // Should complete without loop — max 2-3 dispatches (selection + addComment + maybe decoration)
     expect(dispatchCount).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('Headless mode plugin behavior', () => {
+  it('creates a state-only plugin in headless mode (no props or view)', () => {
+    const editor = {
+      options: { isHeadless: true, comments: {} },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0].spec.props).toBeUndefined();
+    expect(plugins[0].spec.view).toBeUndefined();
+    // State spec should exist
+    expect(plugins[0].spec.state).toBeDefined();
+    expect(plugins[0].spec.state.init).toBeDefined();
+    expect(plugins[0].spec.state.apply).toBeDefined();
+  });
+
+  it('creates a full plugin in browser mode (with props and view)', () => {
+    const editor = {
+      options: { isHeadless: false, comments: {} },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    expect(plugins).toHaveLength(1);
+    expect(plugins[0].spec.props).toBeDefined();
+    expect(plugins[0].spec.view).toBeDefined();
+  });
+
+  it('provides valid plugin state via CommentsPluginKey in headless mode', () => {
+    const schema = createCommentSchema();
+    const editor = {
+      options: { isHeadless: true, comments: { highlightColors: { external: '#aaa', internal: '#bbb' } } },
+      emit: vi.fn(),
+    };
+
+    const extension = Extension.create(CommentsPlugin.config);
+    extension.editor = editor;
+    const plugins = CommentsPlugin.config.addPmPlugins.call(extension);
+
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Hello')])]);
+    const state = EditorState.create({ schema, doc, plugins });
+    const pluginState = CommentsPluginKey.getState(state);
+
+    expect(pluginState).toBeDefined();
+    expect(pluginState.trackedChanges).toEqual({});
+    expect(pluginState.activeThreadId).toBeNull();
+    expect(pluginState.allCommentPositions).toEqual({});
+    expect(pluginState.externalColor).toBe('#aaa');
+    expect(pluginState.internalColor).toBe('#bbb');
   });
 });

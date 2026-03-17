@@ -7,7 +7,7 @@ import type { HeadingNodeInfo, ListItemNodeInfo, ParagraphNodeInfo } from './par
 import type { LineBreakNodeInfo, RunNodeInfo, TabNodeInfo } from './inline.types.js';
 import type { TableCellNodeInfo, TableNodeInfo, TableRowNodeInfo } from './tables.types.js';
 import type { ImageNodeInfo } from './media.types.js';
-import type { BookmarkNodeInfo, HyperlinkNodeInfo, SdtNodeInfo } from './structured.types.js';
+import type { BookmarkNodeInfo, ContentControlInfo, HyperlinkNodeInfo } from './structured.types.js';
 import type { CommentNodeInfo } from './comments.types.js';
 import type { FootnoteRefNodeInfo } from './references.types.js';
 import type { TableOfContentsNodeInfo } from '../toc/toc.types.js';
@@ -21,7 +21,7 @@ export type NodeInfo =
   | TableCellNodeInfo
   | TableOfContentsNodeInfo
   | ImageNodeInfo
-  | SdtNodeInfo
+  | ContentControlInfo
   | RunNodeInfo
   | BookmarkNodeInfo
   | CommentNodeInfo

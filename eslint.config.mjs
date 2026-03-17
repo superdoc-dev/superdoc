@@ -180,6 +180,37 @@ export default [
       // JavaScript rule with underscore pattern already applied
     },
   },
+  // Parts boundary enforcement: prevent direct writes to convertedXml outside part-store.ts
+  {
+    files: [
+      'packages/super-editor/src/**/*.ts',
+      'packages/super-editor/src/**/*.js',
+    ],
+    ignores: [
+      'packages/super-editor/src/core/parts/store/part-store.ts',
+      // Test helpers set up mock convertedXml for part tests
+      'packages/super-editor/src/core/parts/testing/**',
+      // Import/export phases are exempt (initial document load and final export)
+      'packages/super-editor/src/core/super-converter/**',
+      // Validator normalizes rels key paths during document load
+      'packages/super-editor/src/core/super-validator/**',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "AssignmentExpression > MemberExpression[property.name='convertedXml']",
+          message:
+            'Direct assignment to convertedXml is prohibited. Use setPart/removePart from core/parts/store/part-store.ts, or mutatePart/mutateParts for mutations.',
+        },
+        {
+          selector: "AssignmentExpression > MemberExpression[object.property.name='convertedXml'][computed=true]",
+          message:
+            'Direct assignment to convertedXml[...] is prohibited. Use setPart/removePart from core/parts/store/part-store.ts, or mutatePart/mutateParts for mutations.',
+        },
+      ],
+    },
+  },
   {
     files: ['packages/super-editor/src/extensions/**/*.js'],
     rules: {

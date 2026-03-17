@@ -22,7 +22,27 @@ import sourceResolve from '../../vite.sourceResolve';
 // TODO: Remove once rolldown supports trailing-slash imports or node-stdlib-browser drops them.
 const require = createRequire(import.meta.url);
 const stdlibRequire = createRequire(require.resolve('node-stdlib-browser/package.json'));
+const repoRequire = createRequire(path.resolve(__dirname, '../../package.json'));
 const punycodeEntry = stdlibRequire.resolve('punycode/punycode.js');
+
+const resolvePackageEsmEntry = (pkg) => {
+  const resolved = repoRequire.resolve(pkg);
+  if (resolved.endsWith(`${path.sep}index.cjs`)) {
+    return resolved.slice(0, -'index.cjs'.length) + 'index.js';
+  }
+  return resolved;
+};
+
+// y-prosemirror cursor/selection plugins return DecorationSet instances that must share
+// identity with the EditorView's prosemirror-view copy. If multiple ProseMirror module
+// instances are bundled, `instanceof DecorationSet` checks fail and collaborative startup
+// can crash during the first Yjs rerender.
+const proseMirrorSingletonAliases = [
+  { find: 'prosemirror-model', replacement: resolvePackageEsmEntry('prosemirror-model') },
+  { find: 'prosemirror-state', replacement: resolvePackageEsmEntry('prosemirror-state') },
+  { find: 'prosemirror-transform', replacement: resolvePackageEsmEntry('prosemirror-transform') },
+  { find: 'prosemirror-view', replacement: resolvePackageEsmEntry('prosemirror-view') },
+];
 
 const visualizerConfig = {
   filename: './dist/bundle-analysis.html',
@@ -40,6 +60,8 @@ const superdocSrcAliases = ['components', 'composables', 'core', 'helpers', 'sto
 
 export const getAliases = (_isDev) => {
   const aliases = [
+    ...proseMirrorSingletonAliases,
+
     // Workspace packages (source paths for dev)
     { find: '@stores', replacement: fileURLToPath(new URL('./src/stores', import.meta.url)) },
 
@@ -209,8 +231,10 @@ export default defineConfig(({ mode, command }) => {
     },
     resolve: {
       alias: getAliases(isDev),
+      dedupe: ['prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view', 'y-prosemirror'],
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
       conditions: ['source'],
+      preserveSymlinks: false,
     },
     css: {
       postcss: './postcss.config.mjs',

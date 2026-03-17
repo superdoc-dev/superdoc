@@ -2,7 +2,15 @@
 import * as xmljs from 'xml-js';
 import { v4 as uuidv4 } from 'uuid';
 import { DocxExporter, exportSchemaToJson } from './exporter';
-import { createDocumentJson, addDefaultStylesIfMissing } from './v2/importer/docxImporter.js';
+import {
+  createDocumentJson,
+  addDefaultStylesIfMissing,
+  defaultNodeListHandler,
+  filterOutRootInlineNodes,
+} from './v2/importer/docxImporter.js';
+import { normalizeDuplicateBlockIdentitiesInContent } from './v2/importer/normalizeDuplicateBlockIdentitiesInContent.js';
+import { preProcessPageFieldsOnly } from './field-references/preProcessPageFieldsOnly.js';
+import { carbonCopy } from '../utilities/carbonCopy.js';
 import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
@@ -12,9 +20,16 @@ import {
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
+import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
+import {
+  createEmptyBibliographyPart,
+  loadBibliographyPartFromPackage,
+  syncBibliographyPartToPackage,
+  getBibliographyPartExportPaths,
+} from './citation-sources.js';
 import {
   collectReferencedNumIds,
   filterOrphanedNumberingDefinitions,
@@ -192,6 +207,7 @@ class SuperConverter {
     this.comments = [];
     this.footnotes = [];
     this.footnoteProperties = null;
+    this.bibliographyPart = createEmptyBibliographyPart();
     this.viewSetting = null;
     this.inlineDocumentFonts = [];
     this.commentThreadingProfile = null;
@@ -1079,12 +1095,14 @@ class SuperConverter {
       this.numbering = result.numbering;
       this.comments = result.comments;
       this.footnotes = result.footnotes;
+      this.endnotes = result.endnotes ?? [];
       this.linkedStyles = result.linkedStyles;
       this.translatedLinkedStyles = result.translatedLinkedStyles;
       this.translatedNumbering = result.translatedNumbering;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
       this.importDiagnostics = result.importDiagnostics ?? [];
+      this.bibliographyPart = loadBibliographyPartFromPackage(this.convertedXml);
 
       return result.pmDoc;
     } else {
@@ -1107,6 +1125,7 @@ class SuperConverter {
     editor,
     exportJsonOnly = false,
     fieldsHighlightColor,
+    preserveSdtWrappers = false,
   ) {
     // Reset export warnings for this export cycle
     this.exportWarnings = [];
@@ -1127,6 +1146,7 @@ class SuperConverter {
       isFinalDoc,
       editor,
       fieldsHighlightColor,
+      preserveSdtWrappers,
     });
 
     // Keep convertedXml's document part in sync with the current export tree
@@ -1202,6 +1222,9 @@ class SuperConverter {
       this.#pruneCommentRelationships(removedTargets);
     }
 
+    // Persist citation sources to package customXml bibliography part.
+    this.bibliographyPart = syncBibliographyPartToPackage(this.convertedXml, this.bibliographyPart);
+
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
 
@@ -1231,6 +1254,7 @@ class SuperConverter {
     editor,
     isHeaderFooter = false,
     fieldsHighlightColor = null,
+    preserveSdtWrappers = false,
   }) {
     const bodyNode = this.savedTagsToRestore.find((el) => el.name === 'w:body');
 
@@ -1250,9 +1274,14 @@ class SuperConverter {
       editor,
       isHeaderFooter,
       fieldsHighlightColor,
+      preserveSdtWrappers,
     });
 
     return { result, params };
+  }
+
+  getBibliographyPartExportPaths() {
+    return getBibliographyPartExportPaths(this.bibliographyPart);
   }
 
   #exportNumberingFile() {
@@ -1486,6 +1515,64 @@ class SuperConverter {
     this.addedMedia = {
       ...processedData,
     };
+  }
+
+  /**
+   * Re-import a single header/footer part from OOXML JSON to PM JSON.
+   *
+   * Used by the part-sync afterCommit hook to rebuild the PM JSON cache
+   * after a remote collaborator updates a header/footer part.
+   *
+   * @param {string} partId - OOXML zip path (e.g. 'word/header1.xml')
+   * @returns {object|null} PM JSON document, or null on failure
+   */
+  reimportHeaderFooterPart(partId) {
+    const xmlJson = this.convertedXml?.[partId];
+    if (!xmlJson?.elements?.[0]?.elements) return null;
+
+    const rootElements = carbonCopy(xmlJson.elements[0].elements);
+    const { processedNodes } = preProcessPageFieldsOnly(rootElements);
+
+    const nodeListHandler = defaultNodeListHandler();
+    let schema = nodeListHandler.handler({
+      nodes: processedNodes,
+      nodeListHandler,
+      docx: this.convertedXml,
+      converter: this,
+      numbering: this.numbering,
+      translatedNumbering: this.translatedNumbering,
+      translatedLinkedStyles: this.translatedLinkedStyles,
+      editor: {},
+      filename: partId.split('/').pop(),
+      path: [],
+    });
+
+    schema = filterOutRootInlineNodes(schema);
+    schema = normalizeDuplicateBlockIdentitiesInContent(schema);
+
+    return { type: 'doc', content: [...schema] };
+  }
+
+  /**
+   * Re-import a notes part (footnotes.xml or endnotes.xml) from OOXML JSON
+   * to the derived NoteEntry[] cache.
+   *
+   * Used by the notes-part-descriptor afterCommit hook to rebuild
+   * `converter.footnotes` / `converter.endnotes` after a mutation.
+   *
+   * @param {string} partId - OOXML zip path ('word/footnotes.xml' or 'word/endnotes.xml')
+   * @returns {Array<{id: string, type?: string|null, content: any[], originalXml?: any}>}
+   */
+  reimportNotePart(partId) {
+    if (!this.convertedXml?.[partId]) return [];
+
+    const importFn = partId === 'word/endnotes.xml' ? importEndnoteData : importFootnoteData;
+    return importFn({
+      docx: this.convertedXml,
+      editor: {},
+      converter: this,
+      numbering: this.numbering,
+    });
   }
 
   /**

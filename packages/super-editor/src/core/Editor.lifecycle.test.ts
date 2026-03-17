@@ -468,6 +468,18 @@ describe('Editor Lifecycle API', () => {
         await editor.open(undefined, getBlankDocOptions());
         expect(editor.lifecycleState).toBe('ready');
       });
+
+      it('should ignore late collaborationReady callbacks after close', () => {
+        editor.options.isCommentsEnabled = true;
+        editor.options.shouldLoadComments = true;
+
+        editor.close();
+        expect(editor.lifecycleState).toBe('closed');
+
+        expect(() => {
+          editor.emit('collaborationReady', { editor, ydoc: {} });
+        }).not.toThrow();
+      });
     });
   });
 
@@ -957,7 +969,7 @@ describe('Editor Lifecycle API', () => {
       expect(typeof docAfterReopen.find).toBe('function');
 
       // find should execute without throwing
-      const result = docAfterReopen.find({ nodeType: 'paragraph' });
+      const result = docAfterReopen.find({ select: { type: 'node', nodeType: 'paragraph' } });
       expect(result).toBeDefined();
     });
   });

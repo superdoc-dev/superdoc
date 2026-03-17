@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
+import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
   FlowBlock,
   Measure,
@@ -888,13 +889,11 @@ describe('DomPainter', () => {
     painter.paint(listParaLayout, mount);
 
     const firstLine = mount.querySelector('.superdoc-line') as HTMLElement;
-    // Word-spacing is calculated based on available width AFTER accounting for marker position + inline width.
-    // Fragment has indent: { left: 48, hanging: 24 }, so markerStartPos = 48 - 24 = 24
-    // fragment.markerTextWidth is 12
-    // Text starts at: markerStartPos (24) + markerTextWidth (12) + space (4px) = 40px
-    // availableWidth = 400 - 40 = 360
-    // slack = 360 - 180 = 180, wordSpacing = 180 / 5 = 36px
-    expect(firstLine.style.wordSpacing).toBe('36px');
+    // Inline list first lines without explicit segment positioning keep the measured width contract.
+    // The painter caps line.maxWidth by fragment width minus positive paragraph indents.
+    // availableWidth = 400 - leftIndent(48) = 352
+    // slack = 352 - 180 = 172, wordSpacing = 172 / 5 = 34.4px
+    expect(firstLine.style.wordSpacing).toBe('34.4px');
 
     const suffix = firstLine.querySelector('.superdoc-marker-suffix-space') as HTMLElement;
     expect(suffix).toBeTruthy();
@@ -2336,6 +2335,213 @@ describe('DomPainter', () => {
     expect(textSpan?.style.left).toBe('48px');
   });
 
+  it('positions first-line list text from the resolved tab stop instead of stale wordLayout.textStartPx', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'list-tab-stop-block',
+      runs: [{ text: 'Closing.', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: {
+        indent: { left: 48, hanging: 24 },
+        numberingProperties: { numId: 1, ilvl: 0 },
+        wordLayout: {
+          firstLineIndentMode: true,
+          indentLeftPx: 48,
+          textStartPx: 48,
+          tabsPx: [144],
+          marker: {
+            markerText: '2.1',
+            glyphWidthPx: 20,
+            markerBoxWidthPx: 20,
+            markerX: 0,
+            justification: 'left',
+            suffix: 'tab',
+            run: { fontFamily: 'Arial', fontSize: 16 },
+          },
+        },
+      },
+    };
+
+    const measure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 8,
+          width: 64,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          segments: [{ runIndex: 0, fromChar: 0, toChar: 8, width: 64, x: 0 }],
+        },
+      ],
+      totalHeight: 20,
+      marker: {
+        markerWidth: 20,
+        markerTextWidth: 20,
+        indentLeft: 48,
+      },
+    };
+
+    const listLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'list-tab-stop-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 0,
+              y: 0,
+              width: 240,
+              markerWidth: 20,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter.paint(listLayout, mount);
+
+    const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+    expect(lineEl).toBeTruthy();
+
+    const textSpan = Array.from(lineEl.querySelectorAll('span')).find((el) => el.textContent === 'Closing.') as
+      | HTMLElement
+      | undefined;
+    expect(textSpan).toBeTruthy();
+    expect(textSpan?.style.left).toBe('144px');
+  });
+
+  it('preserves measured justification width for inline list first lines without explicit segments', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-justify-list-block',
+      runs: [
+        {
+          text: 'Subject to the terms of this Agreement, Company will use',
+          fontFamily: 'Times New Roman',
+          fontSize: 13.333333333333332,
+        },
+      ],
+      attrs: {
+        alignment: 'justify',
+        numberingProperties: { numId: 1, ilvl: 3 },
+        wordLayout: {
+          indentLeftPx: 0,
+          hangingPx: 18,
+          firstLinePx: 0,
+          tabsPx: [],
+          textStartPx: 0,
+          marker: {
+            markerText: '1.1',
+            glyphWidthPx: 16.6669921875,
+            markerBoxWidthPx: 24.6669921875,
+            justification: 'left',
+            suffix: 'tab',
+            run: {
+              fontFamily: 'Times New Roman',
+              fontSize: 13.333333333333332,
+            },
+          },
+        },
+      },
+    };
+
+    const measure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 57,
+          width: 309.5732421875,
+          ascent: 11.69921875,
+          descent: 2.876953125,
+          lineHeight: 15.33333333333333,
+          maxWidth: 325.7330078125,
+          segments: [{ runIndex: 0, fromChar: 0, toChar: 57, width: 312.90625 }],
+          spaceCount: 9,
+        },
+        {
+          fromRun: 0,
+          fromChar: 57,
+          toRun: 0,
+          toChar: 61,
+          width: 24,
+          ascent: 11.69921875,
+          descent: 2.876953125,
+          lineHeight: 15.33333333333333,
+          maxWidth: 350.4,
+          segments: [{ runIndex: 0, fromChar: 57, toChar: 61, width: 24 }],
+          spaceCount: 0,
+        },
+      ],
+      totalHeight: 30.66666666666666,
+      marker: {
+        markerWidth: 24.6669921875,
+        markerTextWidth: 16.6669921875,
+        indentLeft: 0,
+        gutterWidth: 8,
+      },
+    };
+
+    const listLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-justify-list-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 350.4,
+              markerWidth: 24.6669921875,
+              markerTextWidth: 16.6669921875,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+    painter.paint(listLayout, mount);
+
+    const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+    expect(lineEl).toBeTruthy();
+    const markerEl = mount.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+    const tabEl = mount.querySelector('.superdoc-tab') as HTMLElement;
+
+    const expectedMarkerGeometry = resolveListMarkerGeometry(
+      block.attrs?.wordLayout as Parameters<typeof resolveListMarkerGeometry>[0],
+      0,
+      0,
+      0,
+      () => 16.6669921875,
+    );
+
+    const appliedWordSpacing = Number.parseFloat(lineEl.style.wordSpacing);
+    const expectedWordSpacing = (325.7330078125 - 309.5732421875) / 9;
+
+    expect(markerEl).toBeTruthy();
+    expect(tabEl).toBeTruthy();
+    expect(expectedMarkerGeometry).toBeTruthy();
+    expect(lineEl.style.paddingLeft).toBe(`${expectedMarkerGeometry!.markerStartPx}px`);
+    expect(Number.parseFloat(tabEl.style.width)).toBeCloseTo(expectedMarkerGeometry!.suffixWidthPx, 4);
+    expect(appliedWordSpacing).toBeGreaterThan(0);
+    expect(appliedWordSpacing).toBeCloseTo(expectedWordSpacing, 5);
+  });
+
   it('reuses fragment DOM nodes when layout geometry changes', () => {
     const painter = createDomPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
@@ -2881,6 +3087,99 @@ describe('DomPainter', () => {
     expect(span.dataset.commentIds).toBe('comment-1');
     // Comments on tracked change text should have normal background-color highlight
     expect(span.style.backgroundColor).not.toBe('');
+  });
+
+  it('applies comment highlight even when text has Word highlight formatting (SD-2188)', () => {
+    const highlightedCommentBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'highlight-comment-block',
+      runs: [
+        {
+          text: 'Highlighted and commented',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          highlight: '#ffff00',
+          comments: [{ commentId: 'comment-hl', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(
+      highlightedCommentBlock.id,
+      highlightedCommentBlock.runs[0].text.length,
+    );
+
+    const painter = createDomPainter({ blocks: [highlightedCommentBlock], measures: [paragraphMeasure] });
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    expect(span.dataset.commentIds).toBe('comment-hl');
+    // Comment highlight should override Word highlight (#ffff00 → yellow)
+    const bg = span.style.backgroundColor;
+    expect(bg).not.toBe('');
+    expect(bg).not.toBe('#ffff00');
+    expect(bg).not.toBe('rgb(255, 255, 0)');
+    expect(bg).not.toBe('yellow');
+  });
+
+  it('applies active comment highlight over Word highlight when comment is selected (SD-2188)', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'active-hl-block',
+      runs: [
+        {
+          text: 'Active highlighted',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          highlight: '#ffff00',
+          comments: [{ commentId: 'comment-active-hl', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
+
+    const painter = createDomPainter({ blocks: [block], measures: [paragraphMeasure] });
+    painter.setActiveComment('comment-active-hl');
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    const bg = span.style.backgroundColor;
+    expect(bg).not.toBe('');
+    expect(bg).not.toBe('#ffff00');
+    expect(bg).not.toBe('rgb(255, 255, 0)');
+  });
+
+  it('applies faded comment highlight over Word highlight when another comment is active (SD-2188)', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'faded-hl-block',
+      runs: [
+        {
+          text: 'Faded highlighted',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          highlight: '#ffff00',
+          comments: [{ commentId: 'comment-faded-hl', internal: false, trackedChange: false }],
+        },
+      ],
+    };
+
+    const { paragraphMeasure, paragraphLayout } = buildSingleParagraphData(block.id, block.runs[0].text.length);
+
+    const painter = createDomPainter({ blocks: [block], measures: [paragraphMeasure] });
+    // Activate a different comment so this one gets faded
+    painter.setActiveComment('some-other-comment');
+    painter.paint(paragraphLayout, mount);
+
+    const span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
+    expect(span).toBeTruthy();
+    const bg = span.style.backgroundColor;
+    expect(bg).not.toBe('');
+    expect(bg).not.toBe('#ffff00');
+    expect(bg).not.toBe('rgb(255, 255, 0)');
   });
 
   it('applies comment highlight styles for non-tracked-change comments', () => {
@@ -4618,6 +4917,236 @@ describe('DomPainter', () => {
       expect(img?.src).toContain('data:image/png;base64');
       expect(img?.width).toBe(100);
       expect(img?.height).toBe(100);
+    });
+
+    it('renders DrawingML luminance using percentage units', () => {
+      const dataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const imageBlocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'img-block-dml',
+          runs: [
+            {
+              kind: 'image',
+              src: dataUrl,
+              width: 100,
+              height: 100,
+              lum: {
+                bright: 70000,
+                contrast: -70000,
+              },
+            },
+          ],
+        },
+      ];
+
+      const imageMeasures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 0,
+              width: 100,
+              ascent: 100,
+              descent: 0,
+              lineHeight: 100,
+            },
+          ],
+          totalHeight: 100,
+        },
+      ];
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block-dml',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      painter.paint(imageLayout, mount);
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+
+      const parseFilter = (value: string) => {
+        const match = value.match(/contrast\(([^)]+)\)\s+brightness\(([^)]+)\)/);
+        expect(match).toBeTruthy();
+        return {
+          contrast: Number(match?.[1]),
+          brightness: Number(match?.[2]),
+        };
+      };
+
+      const filter = parseFilter((img as HTMLElement).style.filter);
+      expect(filter.contrast).toBeCloseTo(0.3, 4);
+      expect(filter.brightness).toBeCloseTo(1.7, 4);
+    });
+
+    it('preserves zero-valued DrawingML luminance filters', () => {
+      const dataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const imageBlocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'img-block-dml-zero',
+          runs: [
+            {
+              kind: 'image',
+              src: dataUrl,
+              width: 100,
+              height: 100,
+              lum: {
+                bright: -100000,
+                contrast: -100000,
+              },
+            },
+          ],
+        },
+      ];
+
+      const imageMeasures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 0,
+              width: 100,
+              ascent: 100,
+              descent: 0,
+              lineHeight: 100,
+            },
+          ],
+          totalHeight: 100,
+        },
+      ];
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block-dml-zero',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      painter.paint(imageLayout, mount);
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.filter).toContain('contrast(0)');
+      expect((img as HTMLElement).style.filter).toContain('brightness(0)');
+    });
+
+    it('renders VML gain and blacklevel using fixed-fraction units', () => {
+      const dataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const imageBlocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'img-block-vml',
+          runs: [
+            {
+              kind: 'image',
+              src: dataUrl,
+              width: 100,
+              height: 100,
+              gain: '19661f',
+              blacklevel: '22938f',
+            },
+          ],
+        },
+      ];
+
+      const imageMeasures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [
+            {
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 0,
+              toChar: 0,
+              width: 100,
+              ascent: 100,
+              descent: 0,
+              lineHeight: 100,
+            },
+          ],
+          totalHeight: 100,
+        },
+      ];
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block-vml',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 100,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: imageBlocks, measures: imageMeasures });
+      painter.paint(imageLayout, mount);
+
+      const img = mount.querySelector('img');
+      expect(img).toBeTruthy();
+
+      const parseFilter = (value: string) => {
+        const match = value.match(/contrast\(([^)]+)\)\s+brightness\(([^)]+)\)/);
+        expect(match).toBeTruthy();
+        return {
+          contrast: Number(match?.[1]),
+          brightness: Number(match?.[2]),
+        };
+      };
+
+      const filter = parseFilter((img as HTMLElement).style.filter);
+      expect(filter.contrast).toBeCloseTo(19661 / 65536, 4);
+      expect(filter.brightness).toBeCloseTo(1 + 22938 / 32767, 4);
     });
 
     it('renders img element with external https URL', () => {

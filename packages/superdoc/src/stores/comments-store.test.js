@@ -76,6 +76,23 @@ vi.mock('@superdoc/super-editor', () => ({
   trackChangesHelpers: {
     getTrackChanges: vi.fn(() => []),
   },
+  createOrUpdateTrackedChangeComment: vi.fn(({ event, marks, documentId }) => {
+    const changeId = marks?.insertedMark?.attrs?.id ?? marks?.deletionMark?.attrs?.id ?? marks?.formatMark?.attrs?.id;
+    if (changeId == null) return;
+    return {
+      event,
+      changeId,
+      trackedChangeText: `tracked-${changeId}`,
+      trackedChangeType: 'insert',
+      deletedText: null,
+      authorEmail: 'alice@example.com',
+      author: 'Alice',
+      date: 123,
+      importedAuthor: null,
+      documentId,
+      coords: {},
+    };
+  }),
   TrackChangesBasePluginKey: 'TrackChangesBasePluginKey',
   CommentsPluginKey: 'CommentsPluginKey',
   getRichTextExtensions: vi.fn(() => []),
@@ -86,9 +103,16 @@ import { __mockSuperdoc } from './superdoc-store.js';
 import { comments_module_events } from '@superdoc/common';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { syncCommentsToClients } from '../core/collaboration/helpers.js';
+import { trackChangesHelpers } from '@superdoc/super-editor';
+import { groupChanges } from '../helpers/group-changes.js';
+import { trackChangesHelpers, createOrUpdateTrackedChangeComment } from '@superdoc/super-editor';
 
 const useCommentMock = useComment;
 const syncCommentsToClientsMock = syncCommentsToClients;
+const getTrackChangesMock = trackChangesHelpers.getTrackChanges;
+const groupChangesMock = groupChanges;
+const trackChangesHelpersMock = trackChangesHelpers;
+const createOrUpdateTrackedChangeCommentMock = createOrUpdateTrackedChangeComment;
 
 describe('comments-store', () => {
   let store;
@@ -99,6 +123,8 @@ describe('comments-store', () => {
     setActivePinia(createPinia());
     store = useCommentsStore();
     __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx' }];
+    groupChangesMock.mockReturnValue([]);
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -339,7 +365,6 @@ describe('comments-store', () => {
     };
 
     store.commentsList = [existingComment];
-
     store.handleTrackedChangeUpdate({
       superdoc,
       params: {
@@ -376,6 +401,451 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' },
       }),
     );
+  });
+
+  it('creates tracked-change comments with super-editor source', () => {
+    const superdoc = {
+      emit: vi.fn(),
+      config: { isInternal: false },
+    };
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'change-add-1',
+        trackedChangeText: 'Inserted text',
+        trackedChangeType: 'trackInsert',
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: Date.now(),
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: { top: 10, left: 10, right: 20, bottom: 20 },
+      },
+    });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(store.commentsList[0].selection.source).toBe('super-editor');
+  });
+
+  it('clears stale tracked-change positions when editor sends empty positions', async () => {
+    const trackedComment = {
+      commentId: 'change-1',
+      fileId: 'doc-1',
+      trackedChange: true,
+      resolvedTime: null,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-1': { start: 1, end: 10, bounds: { top: 0, left: 0 } },
+    };
+
+    store.handleEditorLocationsUpdate({});
+    await nextTick();
+
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.getFloatingComments).toEqual([]);
+  });
+
+  it('updates tracked-change positions with the latest editor payload', async () => {
+    const trackedComment = {
+      commentId: 'change-2',
+      fileId: 'doc-1',
+      trackedChange: true,
+      resolvedTime: null,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-2': { start: 1, end: 3, bounds: { top: 0, left: 0 } },
+    };
+
+    const nextPositions = {
+      'change-2': { start: 5, end: 8, bounds: { top: 12, left: 34 } },
+    };
+
+    store.handleEditorLocationsUpdate(nextPositions);
+    await nextTick();
+
+    expect(store.editorCommentPositions).toEqual(nextPositions);
+    expect(store.getFloatingComments).toHaveLength(1);
+  });
+
+  it('keeps imported comments with both ids visible when the live anchor uses importedId', () => {
+    store.commentsList = [
+      {
+        commentId: 'comment-2a',
+        importedId: 'import-2a',
+        fileId: 'doc-1',
+        resolvedTime: null,
+        selection: { source: 'super-editor', selectionBounds: {} },
+      },
+    ];
+    store.editorCommentPositions = {
+      'import-2a': { start: 5, end: 8, bounds: { top: 10, left: 20 } },
+    };
+
+    expect(store.getFloatingComments).toEqual([
+      expect.objectContaining({ commentId: 'comment-2a', importedId: 'import-2a' }),
+    ]);
+  });
+
+  it('removes stale tracked-change anchors when tracked marks no longer exist', () => {
+    const trackedComment = {
+      commentId: 'change-3',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    const regularComment = {
+      commentId: 'comment-1',
+      fileId: 'doc-1',
+      trackedChange: false,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment, regularComment];
+    store.editorCommentPositions = {
+      'change-3': { start: 1, end: 5 },
+      'comment-1': { start: 10, end: 15 },
+    };
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({
+      'comment-1': { start: 10, end: 15 },
+    });
+    expect(store.commentsList).toEqual([trackedComment, regularComment]);
+  });
+
+  it('clears active tracked-change thread when stale root uses importedId position key', () => {
+    const trackedComment = {
+      commentId: 'change-5',
+      importedId: 'import-change-5',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'import-change-5': { start: 1, end: 5 },
+    };
+    store.activeComment = 'change-5';
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.activeComment).toBeNull();
+  });
+
+  it('removes stale tracked-change anchor when live position key is commentId', () => {
+    const trackedComment = {
+      commentId: 'change-5b',
+      importedId: 'import-change-5b',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-5b': { start: 1, end: 5 },
+    };
+    store.activeComment = 'change-5b';
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.activeComment).toBeNull();
+  });
+
+  it('removes child anchors when stale importedId root is referenced by commentId', () => {
+    const trackedComment = {
+      commentId: 'change-6',
+      importedId: 'import-change-6',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    const replyComment = {
+      commentId: 'reply-1',
+      parentCommentId: 'change-6',
+      fileId: 'doc-1',
+      trackedChange: false,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment, replyComment];
+    store.editorCommentPositions = {
+      'import-change-6': { start: 1, end: 5 },
+      'reply-1': { start: 6, end: 9 },
+    };
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(2);
+    expect(store.editorCommentPositions).toEqual({});
+  });
+
+  it('keeps tracked-change anchors when tracked marks still exist', () => {
+    const trackedComment = {
+      commentId: 'change-4',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-4': { start: 5, end: 9 },
+    };
+
+    getTrackChangesMock.mockReturnValueOnce([
+      {
+        mark: { attrs: { id: 'change-4' } },
+        from: 5,
+        to: 9,
+      },
+    ]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(0);
+    expect(store.editorCommentPositions).toEqual({
+      'change-4': { start: 5, end: 9 },
+    });
+  });
+
+  it('prunes stale tracked-change comments and descendants during replay sync', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+    groupChangesMock.mockReturnValue([]);
+
+    store.commentsList = [
+      { commentId: 'tc-stale', trackedChange: true, fileId: 'doc-1' },
+      { commentId: 'tc-reply', parentCommentId: 'tc-stale', fileId: 'doc-1' },
+      { commentId: 'tc-import-reply', trackedChangeParentId: 'tc-stale', fileId: 'doc-1' },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ];
+    store.activeComment = 'tc-reply';
+
+    store.syncTrackedChangeComments({ superdoc: {}, editor });
+
+    expect(store.commentsList).toEqual([{ commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' }]);
+    expect(store.activeComment).toBeNull();
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('keeps tracked-change comments whose IDs are still present in marks', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-live' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'tc-live' } } } }]);
+
+    store.commentsList = [
+      { commentId: 'tc-live', trackedChange: true, trackedChangeText: 'Existing', fileId: 'doc-1' },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ];
+
+    store.syncTrackedChangeComments({ superdoc: {}, editor });
+
+    expect(store.commentsList).toEqual([
+      { commentId: 'tc-live', trackedChange: true, trackedChangeText: 'Existing', fileId: 'doc-1' },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ]);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('keeps tracked-change comments when importedId is live even if commentId differs', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-live-imported' } } }]);
+    groupChangesMock.mockReturnValue([]);
+
+    store.commentsList = [
+      {
+        commentId: 'runtime-id-123',
+        importedId: 'tc-live-imported',
+        trackedChange: true,
+        trackedChangeText: 'Existing',
+        fileId: 'doc-1',
+      },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ];
+
+    store.syncTrackedChangeComments({ superdoc: {}, editor });
+
+    expect(store.commentsList).toEqual([
+      {
+        commentId: 'runtime-id-123',
+        importedId: 'tc-live-imported',
+        trackedChange: true,
+        trackedChangeText: 'Existing',
+        fileId: 'doc-1',
+      },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ]);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('deduplicates tracked-change sync when grouped mark id matches existing importedId', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-live-imported' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'tc-live-imported' } } } }]);
+
+    store.commentsList = [
+      {
+        commentId: 'runtime-id-123',
+        importedId: 'tc-live-imported',
+        trackedChange: true,
+        trackedChangeText: 'Existing',
+        fileId: 'doc-1',
+      },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ];
+
+    store.syncTrackedChangeComments({ superdoc: {}, editor });
+
+    expect(store.commentsList).toEqual([
+      {
+        commentId: 'runtime-id-123',
+        importedId: 'tc-live-imported',
+        trackedChange: true,
+        trackedChangeText: 'Existing',
+        fileId: 'doc-1',
+      },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ]);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('creates tracked-change comments for active document when another document has the same id', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      config: { isInternal: false },
+      emit: vi.fn(),
+    };
+
+    __mockSuperdoc.documents.value = [
+      { id: 'doc-1', type: 'docx' },
+      { id: 'doc-2', type: 'docx' },
+    ];
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'shared-id-1' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'shared-id-1' } } } }]);
+
+    store.commentsList = [
+      {
+        commentId: 'shared-id-1',
+        trackedChange: true,
+        trackedChangeText: 'Existing doc-2',
+        fileId: 'doc-2',
+      },
+    ];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    const matchingComments = store.commentsList.filter((comment) => comment.commentId === 'shared-id-1');
+    expect(matchingComments).toHaveLength(2);
+    expect(matchingComments.map((comment) => comment.fileId).sort()).toEqual(['doc-1', 'doc-2']);
+    expect(matchingComments.find((comment) => comment.fileId === 'doc-2')?.trackedChangeText).toBe('Existing doc-2');
+    expect(matchingComments.find((comment) => comment.fileId === 'doc-1')?.trackedChangeText).toBe(
+      'tracked-shared-id-1',
+    );
+    expect(createOrUpdateTrackedChangeCommentMock).toHaveBeenCalledTimes(1);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('does not prune tracked-change comments from other documents during sync', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    __mockSuperdoc.documents.value = [
+      { id: 'doc-1', type: 'docx' },
+      { id: 'doc-2', type: 'docx' },
+    ];
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+    groupChangesMock.mockReturnValue([]);
+
+    store.commentsList = [
+      { commentId: 'tc-stale-1', trackedChange: true, fileId: 'doc-1' },
+      { commentId: 'tc-child-1', parentCommentId: 'tc-stale-1', fileId: 'doc-1' },
+      { commentId: 'tc-stale-2', trackedChange: true, fileId: 'doc-2' },
+      { commentId: 'tc-child-2', parentCommentId: 'tc-stale-2', fileId: 'doc-2' },
+    ];
+    store.activeComment = 'tc-child-2';
+
+    store.syncTrackedChangeComments({ superdoc: {}, editor });
+
+    expect(store.commentsList).toEqual([
+      { commentId: 'tc-stale-2', trackedChange: true, fileId: 'doc-2' },
+      { commentId: 'tc-child-2', parentCommentId: 'tc-stale-2', fileId: 'doc-2' },
+    ]);
+    expect(store.activeComment).toBe('tc-child-2');
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
   it('should load comments with correct created time', () => {
@@ -629,7 +1099,7 @@ describe('comments-store', () => {
       expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
     });
 
-    it('uses importedId over commentId when looking up positions', () => {
+    it('uses importedId when that is the available position key', () => {
       store.commentsList = [
         { commentId: 'uuid-1', importedId: 'imported-1', createdTime: 3 },
         { commentId: 'uuid-2', importedId: 'imported-2', createdTime: 1 },
@@ -762,6 +1232,28 @@ describe('comments-store', () => {
 
       expect(store.getCommentPosition('imported-1')).toEqual({ start: 20, end: 30 });
       expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
+    });
+
+    it('returns comment position through imported aliases when the lookup uses commentId', () => {
+      const comment = { commentId: 'uuid-1', importedId: 'imported-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'imported-1': { start: 20, end: 30 },
+      };
+
+      expect(store.getCommentPosition('uuid-1')).toEqual({ start: 20, end: 30 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
+    });
+
+    it('resolves imported-id lookups to commentId positions when only commentId is present', () => {
+      const comment = { commentId: 'uuid-1', importedId: 'imported-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'uuid-1': { start: 22, end: 31 },
+      };
+
+      expect(store.getCommentPosition('imported-1')).toEqual({ start: 22, end: 31 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 22, end: 31 });
     });
 
     it('returns anchored text when editor and positions are available', () => {
@@ -932,6 +1424,24 @@ describe('comments-store', () => {
   });
 
   describe('getFloatingComments filters resolved tracked changes', () => {
+    it('includes editor comments when commentId has positions but importedId does not', () => {
+      store.commentsList = [
+        {
+          commentId: 'uuid-1',
+          importedId: 'imported-1',
+          resolvedTime: null,
+          createdTime: 1,
+          selection: { source: 'super-editor' },
+        },
+      ];
+      store.editorCommentPositions = {
+        'uuid-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['uuid-1']);
+    });
+
     it('includes unresolved tracked changes that have position keys', () => {
       store.commentsList = [
         { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1 },

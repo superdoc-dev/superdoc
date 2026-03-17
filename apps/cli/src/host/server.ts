@@ -1,10 +1,8 @@
 import { createInterface } from 'node:readline';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { CliError, toCliError } from '../lib/errors';
 import { asRecord } from '../lib/guards';
 import type { CliIO } from '../lib/types';
+import { resolveCliPackageVersion } from '../lib/version';
 import { buildContractOperationDetail, buildContractOverview } from '../lib/contract';
 import { InMemorySessionPool, type SessionPool } from './session-pool';
 import { invokeCliFromHost } from './invoke';
@@ -31,23 +29,6 @@ type HostServerOptions = {
   maxStdinBytes?: number;
   sessionPool?: SessionPool;
 };
-
-function resolveCliVersion(): string {
-  try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const packagePath = resolve(__dirname, '../../package.json');
-    const raw = readFileSync(packagePath, 'utf8');
-    const parsed = JSON.parse(raw) as { version?: unknown };
-    if (typeof parsed.version === 'string' && parsed.version.length > 0) {
-      return parsed.version;
-    }
-  } catch {
-    // ignore and fall through
-  }
-
-  return '0.0.0';
-}
 
 function parseHostCommandTokens(tokens: string[]): { stdio: boolean; help: boolean } {
   let stdio = false;
@@ -192,7 +173,7 @@ class HostServer {
             protocolVersion: HOST_PROTOCOL_VERSION,
             features: [...HOST_PROTOCOL_FEATURES],
             notifications: [...HOST_PROTOCOL_NOTIFICATIONS],
-            cliVersion: resolveCliVersion(),
+            cliVersion: resolveCliPackageVersion(),
           }),
         );
       }

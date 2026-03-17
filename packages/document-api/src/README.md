@@ -37,15 +37,14 @@ lives in adapter layers that map engine behavior into discovery envelopes and ot
 ## Selector Semantics
 
 - For dual-context types (`sdt`, `image`), selectors without an explicit `kind` may return both block and inline matches.
-- Set `kind: 'block'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
+- For `find`, set `kind: 'block'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
 
 ## Find Result Contract
 
-- `find` always returns `items` as discovery items.
-- For text selectors (`{ type: 'text', ... }`), items include containing block addresses.
-- Exact matched spans are returned in `items[*].context.textRanges` as `TextAddress`.
-- Mutating operations should target `TextAddress` values from `items[*].context.textRanges`.
-- `insert` supports canonical `TextAddress` targeting or default insertion point when target is omitted.
+- `find` always returns `SDFindResult` with `items: SDNodeResult[]`.
+- Each item has `{ node, address }`, where `address` is a `NodeAddress`.
+- For precise mutation targeting, use `query.match`, which returns a canonical `SelectionTarget`, block addresses, and block/range metadata.
+- `insert` accepts either legacy text input with an optional `TextAddress` target or structural content with an optional `BlockNodeAddress` target. Omitting `target` inserts at the end of the document.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.
 
 ## Adapter Error Convention
@@ -91,13 +90,20 @@ The following examples show typical multi-step patterns using the Document API.
 
 ### Workflow: Find + Mutate
 
-Locate text in the document and replace it:
+Locate text in the document and replace the first exact match:
 
 ```ts
-const result = editor.doc.find({ type: 'text', pattern: 'foo' });
-const target = result.items?.[0]?.context?.textRanges?.[0];
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'foo' },
+  require: 'first',
+});
+
+const target = match.items?.[0]?.target;
 if (target) {
-  editor.doc.replace({ target, text: 'bar' });
+  editor.doc.replace({
+    target,
+    text: 'bar',
+  });
 }
 ```
 
@@ -111,7 +117,7 @@ const receipt = editor.doc.insert(
   { changeMode: 'tracked' },
 );
 // receipt.resolution.target contains the resolved insertion point
-// receipt.inserted contains TrackedChangeAddress entries for the new change
+// receipt.success tells you whether the tracked insert applied
 ```
 
 ### Workflow: Comment Thread Lifecycle
@@ -119,7 +125,19 @@ const receipt = editor.doc.insert(
 Add a comment, reply, then resolve the thread:
 
 ```ts
-const target = result.items?.[0]?.context?.textRanges?.[0];
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'Review this section' },
+  require: 'first',
+});
+const firstBlock = match.items?.[0]?.blocks?.[0];
+if (!firstBlock) return;
+
+const target = {
+  kind: 'text',
+  blockId: firstBlock.blockId,
+  range: { start: firstBlock.range.start, end: firstBlock.range.end },
+};
+
 const createReceipt = editor.doc.comments.create({ target, text: 'Review this section.' });
 // Use the comment ID from the receipt to reply
 const comments = editor.doc.comments.list();
@@ -134,8 +152,11 @@ Create a list, insert an item, then indent it:
 
 ```ts
 // Convert a paragraph into a new ordered list
-const paragraph = editor.doc.find({ type: 'node', nodeType: 'paragraph' });
-const target = paragraph.items[0]?.address;
+const paragraphMatch = editor.doc.query.match({
+  select: { type: 'node', nodeType: 'paragraph' },
+  require: 'first',
+});
+const target = paragraphMatch.items[0]?.address;
 const createResult = editor.doc.lists.create({ mode: 'empty', at: target, kind: 'ordered' });
 
 // Insert a new item after the first
@@ -175,19 +196,19 @@ Each operation has a dedicated section below. Grouped by namespace.
 
 ### `find`
 
-Search the document for nodes or text matching a selector. Returns discovery items via `items`. Text selectors include `items[*].context.textRanges` for precise span targeting.
+Search the document for nodes or text matching an SDM/1 selector. Returns paginated `items` where each item is an `SDNodeResult` (`{ node, address }`).
 
-- **Input**: `Selector | Query`
-- **Output**: `FindOutput`
+- **Input**: `SDFindInput`
+- **Output**: `SDFindResult`
 - **Mutates**: No
 - **Idempotency**: idempotent
 
 ### `getNode`
 
-Resolve a `NodeAddress` to full `NodeInfo` including typed properties (text content, attributes, node type). Throws `TARGET_NOT_FOUND` when the address is invalid.
+Resolve a `NodeAddress` to an `SDNodeResult` envelope with projected SDM/1 node and canonical address. Throws `TARGET_NOT_FOUND` when the address is invalid.
 
 - **Input**: `NodeAddress`
-- **Output**: `NodeInfo`
+- **Output**: `SDNodeResult`
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -196,7 +217,7 @@ Resolve a `NodeAddress` to full `NodeInfo` including typed properties (text cont
 Resolve a block node by its unique `nodeId`. Optionally constrain by `nodeType`. Throws `TARGET_NOT_FOUND` when the ID is not found.
 
 - **Input**: `GetNodeByIdInput` (`{ nodeId, nodeType? }`)
-- **Output**: `NodeInfo`
+- **Output**: `SDNodeResult`
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -220,33 +241,33 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert content at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, inserts at the end of the document.
+Insert content into the document. Legacy string input inserts at an optional `TextAddress`. Structural content inserts relative to an optional `BlockNodeAddress` using `placement`. When `target` is omitted, content appends at the end of the document.
 
 Supports dry-run and tracked mode.
 
-- **Input**: `InsertInput` (`{ target?, text }`)
+- **Input**: `InsertInput` (`{ value, type?, target?: TextAddress } | { content, target?: BlockNodeAddress, placement?, nestingPolicy? }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
+- **Output**: `SDMutationReceipt`
 - **Mutates**: Yes
 - **Idempotency**: non-idempotent
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+- **Failure codes**: see the generated reference docs for the full legacy vs. structural failure surface
 
 ### `replace`
 
-Replace text at a `TextAddress` target with new content. The target range must resolve to a valid span. Supports dry-run and tracked mode.
+Replace content at a contiguous selection. Text replacement accepts `SelectionTarget` or `ref`. Structural replacement accepts `BlockNodeAddress`, `SelectionTarget`, or `ref` with `content`. Supports dry-run and tracked mode.
 
-- **Input**: `ReplaceInput` (`{ target, text }`)
+- **Input**: `ReplaceInput` (`{ target?: SelectionTarget, ref?: string, text } | { target?: BlockNodeAddress | SelectionTarget, ref?: string, content, nestingPolicy? }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
+- **Output**: `SDMutationReceipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+- **Failure codes**: see the generated reference docs for the full text vs. structural failure surface
 
 ### `delete`
 
-Delete the text span covered by a `TextAddress` target. Supports dry-run and tracked mode.
+Delete content at a contiguous selection. Accepts either an explicit `SelectionTarget` or a mutation-ready `ref`. Supports dry-run and tracked mode.
 
-- **Input**: `DeleteInput` (`{ target }`)
+- **Input**: `DeleteInput` (`{ target?: SelectionTarget, ref?: string, behavior?: 'selection' | 'exact' }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes
@@ -303,9 +324,9 @@ Insert a new heading node at a specified location with a given level (1-6). Retu
 
 ### `format.apply`
 
-Apply explicit inline style changes (bold, italic, underline, strike) to a `TextAddress` range using directive semantics (`'on'`, `'off'`, `'clear'`). Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
+Apply explicit inline style changes (bold, italic, underline, strike) to a contiguous selection using directive semantics (`'on'`, `'off'`, `'clear'`). Accepts a `SelectionTarget` or `ref`. Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
 
-- **Input**: `StyleApplyInput` (`{ target, inline: { bold?, italic?, underline?, strike? } }`)
+- **Input**: `StyleApplyInput` (`{ target?: SelectionTarget, ref?: string, inline: { bold?, italic?, underline?, strike? } }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes

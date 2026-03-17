@@ -30,6 +30,13 @@ export function translateDocumentPartObj(params) {
   return result;
 }
 
+function sanitizeId(id) {
+  if (typeof id === 'string' && id.trim() !== '') {
+    return id.trim();
+  }
+  return undefined;
+}
+
 /**
  * Generate sdtPr element for document part object with passthrough support.
  * Builds core w:id and w:docPartObj elements, then appends any additional
@@ -46,7 +53,7 @@ function generateSdtPrForDocPartObj(attrs) {
   const existingDocPartGallery = existingDocPartObj?.elements?.find((el) => el.name === 'w:docPartGallery')
     ?.attributes?.['w:val'];
   const docPartGallery = attrs.docPartGallery ?? existingDocPartGallery ?? null;
-  const id = attrs.id ?? attrs.sdtPr?.elements?.find((el) => el.name === 'w:id')?.attributes?.['w:val'] ?? '';
+  const id = sanitizeId(attrs.id ?? attrs.sdtPr?.elements?.find((el) => el.name === 'w:id')?.attributes?.['w:val']);
   // Per OOXML spec: presence of w:docPartUnique element = true, absence = false
   const docPartUnique =
     attrs.docPartUnique ?? existingDocPartObj?.elements?.some((el) => el.name === 'w:docPartUnique') ?? false;
@@ -54,22 +61,32 @@ function generateSdtPrForDocPartObj(attrs) {
   // If we do not know the gallery type, prefer full passthrough to avoid emitting invalid XML
   if (docPartGallery === null) {
     if (attrs.sdtPr) {
-      return attrs.sdtPr;
+      // Filter out any w:id elements with empty values to avoid invalid XML, but preserve all other passthrough elements.
+      const filteredSdtPr = {
+        ...attrs.sdtPr,
+        elements: Array.isArray(attrs.sdtPr.elements)
+          ? attrs.sdtPr.elements.filter((el) => !(el.name === 'w:id' && el.attributes?.['w:val']?.trim() === ''))
+          : attrs.sdtPr.elements,
+      };
+      return filteredSdtPr;
+    }
+    const elements = [
+      {
+        name: 'w:docPartObj',
+        elements: [],
+      },
+    ];
+    if (id != undefined) {
+      elements.unshift({
+        name: 'w:id',
+        attributes: {
+          'w:val': id,
+        },
+      });
     }
     return {
       name: 'w:sdtPr',
-      elements: [
-        {
-          name: 'w:id',
-          attributes: {
-            'w:val': id,
-          },
-        },
-        {
-          name: 'w:docPartObj',
-          elements: [],
-        },
-      ],
+      elements,
     };
   }
 
@@ -90,16 +107,19 @@ function generateSdtPrForDocPartObj(attrs) {
   // Start with explicitly managed elements
   const sdtPrElements = [
     {
-      name: 'w:id',
-      attributes: {
-        'w:val': id,
-      },
-    },
-    {
       name: 'w:docPartObj',
       elements: docPartObjElements,
     },
   ];
+
+  if (id != undefined) {
+    sdtPrElements.unshift({
+      name: 'w:id',
+      attributes: {
+        'w:val': id,
+      },
+    });
+  }
 
   // Passthrough: preserve any sdtPr elements not explicitly managed
   if (attrs.sdtPr?.elements && Array.isArray(attrs.sdtPr.elements)) {

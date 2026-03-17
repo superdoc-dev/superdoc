@@ -32,12 +32,10 @@ Do not hand-edit generated output files. Regenerate instead.
 
 | Script | Kind | Purpose | Reads | Writes | Typical caller |
 | --- | --- | --- | --- | --- | --- |
-| `check-contract-outputs.ts` | check | Full generated-output gate across schemas/manifests/agent/reference + overview block | Contract snapshot + generated roots + docs overview | None | CI/local full verification |
-| `generate-contract-outputs.ts` | generate | Full regeneration across schemas/manifests/agent/reference + overview block | Contract snapshot + docs overview | `packages/document-api/generated/*`, `apps/docs/document-api/reference/*`, generated block in overview | Main local sync before commit |
+| `check-contract-outputs.ts` | check | Full generated-output gate across schemas/agent/reference + overview block | Contract snapshot + generated roots + docs overview | None | CI/local full verification |
+| `generate-contract-outputs.ts` | generate | Full regeneration across schemas/agent/reference + overview block | Contract snapshot + docs overview | `packages/document-api/generated/*`, `apps/docs/document-api/reference/*`, generated block in overview | Main local sync before commit |
 | `check-stable-schemas.ts` | check | Validate stable schema artifact drift | Contract snapshot + `packages/document-api/generated/schemas` | None | Focused check during schema work |
 | `generate-stable-schemas.ts` | generate | Regenerate stable schema artifacts | Contract snapshot | `packages/document-api/generated/schemas/*` | Focused schema regeneration |
-| `check-tool-manifests.ts` | check | Validate tool manifest artifact drift | Contract snapshot + `packages/document-api/generated/manifests` | None | Focused manifest check |
-| `generate-tool-manifests.ts` | generate | Regenerate tool manifest artifacts | Contract snapshot | `packages/document-api/generated/manifests/*` | Focused manifest regeneration |
 | `check-agent-artifacts.ts` | check | Validate agent artifact drift | Contract snapshot + `packages/document-api/generated/agent` | None | Focused agent-artifact check |
 | `generate-agent-artifacts.ts` | generate | Regenerate agent artifacts (remediation/workflow/compatibility) | Contract snapshot | `packages/document-api/generated/agent/*` | Focused agent-artifact regeneration |
 | `check-generated-reference-docs.ts` | check | Validate generated reference docs and overview generated block drift | Contract snapshot + `apps/docs/document-api/reference` + overview | None | Focused docs generation check |

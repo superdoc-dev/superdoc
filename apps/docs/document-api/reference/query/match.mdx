@@ -1,7 +1,7 @@
 ---
 title: query.match
 sidebarTitle: query.match
-description: Deterministic selector-based search with cardinality contracts for mutation targeting.
+description: Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Deterministic selector-based search with cardinality contracts for 
 
 ## Summary
 
-Deterministic selector-based search with cardinality contracts for mutation targeting.
+Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation.
 
 - Operation ID: `query.match`
 - API member path: `editor.doc.query.match(...)`
@@ -34,7 +34,10 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 | `offset` | integer | no |  |
 | `require` | enum | no | `"any"`, `"first"`, `"exactlyOne"`, `"all"` |
 | `select` | object(type="text") \\| object(type="node") | yes | One of: object(type="text"), object(type="node") |
-| `within` | NodeAddress | no | NodeAddress |
+| `within` | BlockNodeAddress | no | BlockNodeAddress |
+| `within.kind` | `"block"` | no | Constant: `"block"` |
+| `within.nodeId` | string | no |  |
+| `within.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 
 ### Example request
 
@@ -135,7 +138,20 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
       },
       "id": "id-001",
       "matchKind": "text",
-      "snippet": "...the quick brown fox..."
+      "snippet": "...the quick brown fox...",
+      "target": {
+        "end": {
+          "blockId": "block-abc123",
+          "kind": "text",
+          "offset": 0
+        },
+        "kind": "selection",
+        "start": {
+          "blockId": "block-abc123",
+          "kind": "text",
+          "offset": 0
+        }
+      }
     }
   ],
   "meta": {
@@ -245,6 +261,12 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
                 "comment",
                 "hyperlink",
                 "footnoteRef",
+                "endnoteRef",
+                "crossRef",
+                "indexEntry",
+                "citation",
+                "authorityEntry",
+                "sequenceField",
                 "tab",
                 "lineBreak"
               ]
@@ -261,7 +283,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
       ]
     },
     "within": {
-      "$ref": "#/$defs/NodeAddress"
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
   "required": [
@@ -287,7 +309,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
             "additionalProperties": false,
             "properties": {
               "address": {
-                "$ref": "#/$defs/NodeAddress"
+                "$ref": "#/$defs/BlockNodeAddress"
               },
               "blocks": {
                 "items": {
@@ -310,6 +332,9 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
               },
               "snippet": {
                 "type": "string"
+              },
+              "target": {
+                "$ref": "#/$defs/SelectionTarget"
               }
             },
             "required": [
@@ -317,6 +342,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
               "handle",
               "matchKind",
               "address",
+              "target",
               "snippet",
               "highlightRange",
               "blocks"

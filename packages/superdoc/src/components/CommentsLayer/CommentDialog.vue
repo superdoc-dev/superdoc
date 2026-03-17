@@ -3,6 +3,7 @@ import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'v
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
+import { PresentationEditor } from '@superdoc/super-editor';
 import { superdocIcons } from '@superdoc/icons.js';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
@@ -30,7 +31,14 @@ const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
 /* Comments store refs */
-const { addComment, cancelComment, deleteComment, removePendingComment } = commentsStore;
+const {
+  addComment,
+  cancelComment,
+  deleteComment,
+  removePendingComment,
+  requestInstantSidebarAlignment,
+  clearInstantSidebarAlignment,
+} = commentsStore;
 const {
   suppressInternalExternal,
   getConfig,
@@ -279,6 +287,13 @@ const hasTextContent = computed(() => {
 
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
+  const targetClientY = commentDialogElement.value?.getBoundingClientRect?.()?.top;
+  const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
+  if (willChangeActiveThread) {
+    requestInstantSidebarAlignment(targetClientY);
+  } else {
+    clearInstantSidebarAlignment();
+  }
 
   // Only set as active if not resolved (resolved comments can't be edited)
   if (!props.comment.resolvedTime) {
@@ -293,7 +308,20 @@ const setFocus = () => {
     const cursorId = props.comment.resolvedTime
       ? props.comment.commentId
       : props.comment.importedId || props.comment.commentId;
-    editor.commands?.setCursorById(cursorId);
+    if (props.comment.resolvedTime) {
+      editor.commands?.setCursorById(cursorId);
+    } else {
+      editor.commands?.setCursorById(cursorId, { preferredActiveThreadId: cursorId });
+    }
+
+    const presentation = props.comment.fileId ? PresentationEditor.getInstance(props.comment.fileId) : null;
+    if (presentation && Number.isFinite(targetClientY)) {
+      const fallbackThreadId = props.comment.commentId;
+      const scrolled = presentation.scrollThreadAnchorToClientY(cursorId, targetClientY, { behavior: 'auto' });
+      if (!scrolled && fallbackThreadId && fallbackThreadId !== cursorId) {
+        presentation.scrollThreadAnchorToClientY(fallbackThreadId, targetClientY, { behavior: 'auto' });
+      }
+    }
   }
 };
 
@@ -301,7 +329,7 @@ const handleClickOutside = (e) => {
   const targetElement = e.target instanceof Element ? e.target : e.target?.parentElement;
   const clickedIgnoredTarget = targetElement?.closest?.(
     [
-      '.n-dropdown-option-body__label',
+      '.comments-dropdown__option-label',
       '.superdoc-comment-highlight',
       '.sd-editor-comment-highlight',
       '.sd-editor-tracked-change-highlight',
@@ -994,9 +1022,6 @@ watch(editingCommentId, (commentId) => {
   margin-left: 5px;
 }
 
-.internal-dropdown {
-  display: inline-block;
-}
 .comment-editing {
   padding-bottom: 10px;
 }

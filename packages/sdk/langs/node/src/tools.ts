@@ -1,71 +1,11 @@
 import { readFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTRACT, type ContractOperationEntry } from './generated/contract.js';
 import type { InvokeOptions } from './runtime/process.js';
 import { SuperDocCliError } from './runtime/errors.js';
+import { dispatchIntentTool } from './generated/intent-dispatch.generated.js';
 
 export type ToolProvider = 'openai' | 'anthropic' | 'vercel' | 'generic';
-
-export type ToolGroup =
-  | 'core'
-  | 'format'
-  | 'create'
-  | 'tables'
-  | 'sections'
-  | 'lists'
-  | 'comments'
-  | 'trackChanges'
-  | 'toc'
-  | 'images'
-  | 'history'
-  | 'session';
-
-export type ToolChooserMode = 'essential' | 'all';
-
-export type ToolChooserInput = {
-  provider: ToolProvider;
-  groups?: ToolGroup[];
-  /** Default: 'essential'. When 'essential', only essential tools are returned (plus any from `groups`). */
-  mode?: ToolChooserMode;
-  /** Whether to include the discover_tools meta-tool. Default: true when mode='essential', false when mode='all'. */
-  includeDiscoverTool?: boolean;
-};
-
-export type ToolCatalog = {
-  contractVersion: string;
-  generatedAt: string | null;
-  namePolicyVersion: string;
-  exposureVersion: string;
-  toolCount: number;
-  tools: ToolCatalogEntry[];
-};
-
-type ToolCatalogEntry = {
-  operationId: string;
-  toolName: string;
-  profile: string;
-  source: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  outputSchema: Record<string, unknown>;
-  mutates: boolean;
-  category: string;
-  essential?: boolean;
-  capabilities: string[];
-  constraints?: Record<string, unknown>;
-  errors: string[];
-  examples: unknown[];
-  commandTokens: string[];
-  profileTags: string[];
-  requiredCapabilities: string[];
-  sessionRequirements: {
-    requiresOpenContext: boolean;
-    supportsSessionTargeting: boolean;
-  };
-  intentId?: string;
-};
 
 // Resolve tools directory relative to package root (works from both src/ and dist/)
 const toolsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'tools');
@@ -76,57 +16,30 @@ const providerFileByName: Record<ToolProvider, string> = {
   generic: 'tools.generic.json',
 };
 
-// Policy is loaded from the generated tools-policy.json artifact.
-type ToolsPolicy = {
-  policyVersion: string;
-  contractHash: string;
-  groups: string[];
-  groupDescriptions?: Record<string, string>;
-  essentialTools?: string[];
-  discoverTool?: {
-    name: string;
-    description: string;
-    schema: Record<string, unknown>;
-  };
-  defaults: {
-    mode?: string;
-    maxTools: number;
-    alwaysInclude: string[];
-    foundationalOperationIds: string[];
-  };
-  capabilityFeatures: Record<string, string[]>;
+export type ToolCatalog = {
+  contractVersion: string;
+  generatedAt: string | null;
+  toolCount: number;
+  tools: ToolCatalogEntry[];
 };
 
-let _policyCache: ToolsPolicy | null = null;
-function loadPolicy(): ToolsPolicy {
-  if (_policyCache) return _policyCache;
-  const raw = readFileSync(path.join(toolsDir, 'tools-policy.json'), 'utf8');
-  _policyCache = JSON.parse(raw) as ToolsPolicy;
-  return _policyCache;
-}
+type OperationEntry = {
+  operationId: string;
+  intentAction: string;
+  required?: string[];
+  requiredOneOf?: string[][];
+};
+
+type ToolCatalogEntry = {
+  toolName: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  mutates: boolean;
+  operations: OperationEntry[];
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
-}
-
-function isPresent(value: unknown): boolean {
-  if (value == null) return false;
-  if (Array.isArray(value)) return value.length > 0;
-  return true;
-}
-
-function extractProviderToolName(tool: Record<string, unknown>): string | null {
-  // Anthropic / Generic: top-level name
-  if (typeof tool.name === 'string') return tool.name;
-  // OpenAI / Vercel: nested under function.name
-  if (isRecord(tool.function) && typeof (tool.function as Record<string, unknown>).name === 'string') {
-    return (tool.function as Record<string, unknown>).name as string;
-  }
-  return null;
-}
-
-function invalidArgument(message: string, details?: Record<string, unknown>): never {
-  throw new SuperDocCliError(message, { code: 'INVALID_ARGUMENT', details });
 }
 
 async function readJson<T>(fileName: string): Promise<T> {
@@ -164,95 +77,57 @@ async function loadProviderBundle(provider: ToolProvider): Promise<{
   return readJson(providerFileByName[provider]);
 }
 
-async function loadToolNameMap(): Promise<Record<string, string>> {
-  return readJson<Record<string, string>>('tool-name-map.json');
-}
-
 async function loadCatalog(): Promise<ToolCatalog> {
   return readJson<ToolCatalog>('catalog.json');
 }
 
-/** All available tool groups from the policy. */
-export function getAvailableGroups(): ToolGroup[] {
-  const policy = loadPolicy();
-  return policy.groups as ToolGroup[];
+export async function getToolCatalog(): Promise<ToolCatalog> {
+  return loadCatalog();
 }
 
-const OPERATION_INDEX: Record<string, ContractOperationEntry> = Object.fromEntries(
-  Object.entries(CONTRACT.operations).map(([id, op]) => [id, op]),
-);
-
-function validateDispatchArgs(operationId: string, args: Record<string, unknown>): void {
-  const operation = OPERATION_INDEX[operationId];
-  if (!operation) {
-    invalidArgument(`Unknown operation id ${operationId}.`);
+export async function listTools(provider: ToolProvider): Promise<unknown[]> {
+  const bundle = await loadProviderBundle(provider);
+  const tools = bundle.tools;
+  if (!Array.isArray(tools)) {
+    throw new SuperDocCliError('Tool provider bundle is missing tools array.', {
+      code: 'TOOLS_ASSET_INVALID',
+      details: { provider },
+    });
   }
+  return tools;
+}
 
-  // Unknown-param rejection
-  const allowedParams = new Set<string>(operation.params.map((param: { name: string }) => String(param.name)));
-  for (const key of Object.keys(args)) {
-    if (!allowedParams.has(key)) {
-      invalidArgument(`Unexpected parameter ${key} for ${operationId}.`);
-    }
-  }
+export type ToolChooserInput = {
+  provider: ToolProvider;
+};
 
-  // Required-param enforcement
-  for (const param of operation.params) {
-    if ('required' in param && Boolean(param.required) && args[param.name] == null) {
-      invalidArgument(`Missing required parameter ${param.name} for ${operationId}.`);
-    }
-  }
+/**
+ * Select all intent tools for a specific provider.
+ *
+ * Returns all intent tools in the requested provider format.
+ *
+ * @example
+ * ```ts
+ * const { tools } = await chooseTools({ provider: 'openai' });
+ * ```
+ */
+export async function chooseTools(input: ToolChooserInput): Promise<{
+  tools: unknown[];
+  meta: {
+    provider: ToolProvider;
+    toolCount: number;
+  };
+}> {
+  const bundle = await loadProviderBundle(input.provider);
+  const tools = Array.isArray(bundle.tools) ? bundle.tools : [];
 
-  // Constraint validation (CLI handles schema-level type validation authoritatively)
-  const constraints = 'constraints' in operation ? (operation as Record<string, unknown>).constraints : undefined;
-  if (!constraints || !isRecord(constraints)) return;
-
-  const mutuallyExclusive = Array.isArray(constraints.mutuallyExclusive) ? constraints.mutuallyExclusive : [];
-  const requiresOneOf = Array.isArray(constraints.requiresOneOf) ? constraints.requiresOneOf : [];
-  const requiredWhen = Array.isArray(constraints.requiredWhen) ? constraints.requiredWhen : [];
-
-  for (const group of mutuallyExclusive) {
-    if (!Array.isArray(group)) continue;
-    const present = group.filter((name: string) => isPresent(args[name]));
-    if (present.length > 1) {
-      invalidArgument(`Arguments are mutually exclusive for ${operationId}: ${group.join(', ')}`, {
-        operationId,
-        group,
-      });
-    }
-  }
-
-  for (const group of requiresOneOf) {
-    if (!Array.isArray(group)) continue;
-    const hasAny = group.some((name: string) => isPresent(args[name]));
-    if (!hasAny) {
-      invalidArgument(`One of the following arguments is required for ${operationId}: ${group.join(', ')}`, {
-        operationId,
-        group,
-      });
-    }
-  }
-
-  for (const rule of requiredWhen) {
-    if (!isRecord(rule)) continue;
-    const whenValue = args[rule.whenParam as string];
-    let shouldRequire = false;
-    if (Object.prototype.hasOwnProperty.call(rule, 'equals')) {
-      shouldRequire = whenValue === rule.equals;
-    } else if (Object.prototype.hasOwnProperty.call(rule, 'present')) {
-      const present = rule.present === true;
-      shouldRequire = present ? isPresent(whenValue) : !isPresent(whenValue);
-    } else {
-      shouldRequire = isPresent(whenValue);
-    }
-
-    if (shouldRequire && !isPresent(args[rule.param as string])) {
-      invalidArgument(`Argument ${rule.param} is required by constraints for ${operationId}.`, {
-        operationId,
-        rule,
-      });
-    }
-  }
+  return {
+    tools,
+    meta: {
+      provider: input.provider,
+      toolCount: tools.length,
+    },
+  };
 }
 
 function resolveDocApiMethod(
@@ -282,132 +157,104 @@ function resolveDocApiMethod(
   return cursor as (args: unknown, options?: InvokeOptions) => Promise<unknown>;
 }
 
-export async function getToolCatalog(): Promise<ToolCatalog> {
-  return loadCatalog();
-}
+// Cached catalog instance — loaded once per process.
+let _catalogCache: ToolCatalog | null = null;
 
-export async function listTools(provider: ToolProvider): Promise<unknown[]> {
-  const bundle = await loadProviderBundle(provider);
-  const tools = bundle.tools;
-  if (!Array.isArray(tools)) {
-    throw new SuperDocCliError('Tool provider bundle is missing tools array.', {
-      code: 'TOOLS_ASSET_INVALID',
-      details: { provider },
-    });
+async function getCachedCatalog(): Promise<ToolCatalog> {
+  if (_catalogCache == null) {
+    _catalogCache = await loadCatalog();
   }
-  return tools;
-}
-
-export async function resolveToolOperation(toolName: string): Promise<string | null> {
-  const map = await loadToolNameMap();
-  return typeof map[toolName] === 'string' ? map[toolName] : null;
+  return _catalogCache;
 }
 
 /**
- * Select tools for a specific provider.
+ * Validate tool arguments against the catalog schema.
  *
- * **mode='essential'** (default): Returns only essential tools + discover_tools.
- * Pass `groups` to additionally load all tools from those categories.
- *
- * **mode='all'**: Returns all tools from requested groups (or all groups if
- * `groups` is omitted). No discover_tools included by default.
- *
- * @example
- * ```ts
- * // Default: 5 essential tools + discover_tools
- * const { tools } = await chooseTools({ provider: 'openai' });
- *
- * // Essential + all comment tools
- * const { tools } = await chooseTools({ provider: 'openai', groups: ['comments'] });
- *
- * // All tools (old behavior)
- * const { tools } = await chooseTools({ provider: 'openai', mode: 'all' });
- * ```
+ * Checks three things in order:
+ * 1. No unknown keys (additionalProperties: false in merged schema)
+ * 2. All universally-required keys present (merged schema `required`)
+ * 3. All action-specific required keys present (per-operation `required`)
  */
-export async function chooseTools(input: ToolChooserInput): Promise<{
-  tools: unknown[];
-  selected: Array<{
-    operationId: string;
-    toolName: string;
-    category: string;
-    mutates: boolean;
-  }>;
-  meta: {
-    provider: ToolProvider;
-    mode: string;
-    groups: string[];
-    selectedCount: number;
-  };
-}> {
-  const catalog = await loadCatalog();
-  const policy = loadPolicy();
+function validateToolArgs(toolName: string, args: Record<string, unknown>, tool: ToolCatalogEntry): void {
+  const schema = tool.inputSchema;
+  const properties = isRecord(schema.properties) ? schema.properties : {};
+  const required: string[] = Array.isArray(schema.required) ? (schema.required as string[]) : [];
 
-  const mode = input.mode ?? (policy.defaults.mode as ToolChooserMode) ?? 'essential';
-  const includeDiscover = input.includeDiscoverTool ?? mode === 'essential';
-
-  let selected: ToolCatalogEntry[];
-
-  if (mode === 'essential') {
-    // Essential tools + any explicitly requested groups
-    const essentialNames = new Set(policy.essentialTools ?? []);
-    const requestedGroups = input.groups ? new Set<string>(input.groups) : null;
-
-    selected = catalog.tools.filter((tool) => {
-      if (essentialNames.has(tool.toolName)) return true;
-      if (requestedGroups && requestedGroups.has(tool.category)) return true;
-      return false;
+  // 1. Reject unknown keys
+  const knownKeys = new Set(Object.keys(properties));
+  const unknownKeys = Object.keys(args).filter((k) => !knownKeys.has(k));
+  if (unknownKeys.length > 0) {
+    throw new SuperDocCliError(`Unknown argument(s) for ${toolName}: ${unknownKeys.join(', ')}`, {
+      code: 'INVALID_ARGUMENT',
+      details: { toolName, unknownKeys, knownKeys: [...knownKeys] },
     });
-  } else {
-    // mode='all': original behavior — filter by groups
-    const alwaysInclude = new Set(policy.defaults.alwaysInclude ?? ['core']);
-    let groups: Set<string>;
-    if (input.groups) {
-      groups = new Set([...input.groups, ...alwaysInclude]);
-    } else {
-      groups = new Set(policy.groups);
-    }
-    selected = catalog.tools.filter((tool) => groups.has(tool.category));
   }
 
-  // Build provider-formatted tools from the provider bundle
-  const bundle = await loadProviderBundle(input.provider);
-  const providerTools = Array.isArray(bundle.tools) ? bundle.tools : [];
-  const providerIndex = new Map(
-    providerTools
-      .filter((tool): tool is Record<string, unknown> => isRecord(tool))
-      .map((tool) => [extractProviderToolName(tool), tool] as const)
-      .filter((entry): entry is [string, Record<string, unknown>] => entry[0] !== null),
-  );
-
-  const selectedProviderTools = selected
-    .map((tool) => providerIndex.get(tool.toolName))
-    .filter((tool): tool is Record<string, unknown> => Boolean(tool));
-
-  // Append discover_tools if requested
-  if (includeDiscover) {
-    const discoverTool = providerIndex.get('discover_tools');
-    if (discoverTool) {
-      selectedProviderTools.push(discoverTool);
-    }
+  // 2. Reject missing universally-required keys
+  const missingKeys = required.filter((k) => args[k] == null);
+  if (missingKeys.length > 0) {
+    throw new SuperDocCliError(`Missing required argument(s) for ${toolName}: ${missingKeys.join(', ')}`, {
+      code: 'INVALID_ARGUMENT',
+      details: { toolName, missingKeys },
+    });
   }
 
-  const resolvedGroups = mode === 'essential' ? (input.groups ?? []) : (input.groups ?? policy.groups);
+  // 3. Reject missing per-operation required keys.
+  //    For multi-action tools, resolve the operation by action; for single-op
+  //    tools, use the sole operation entry.
+  const action = args.action;
+  let op: OperationEntry | undefined;
+  if (typeof action === 'string' && tool.operations.length > 1) {
+    op = tool.operations.find((o) => o.intentAction === action);
+  } else if (tool.operations.length === 1) {
+    op = tool.operations[0];
+  }
 
-  return {
-    tools: selectedProviderTools,
-    selected: selected.map((tool) => ({
-      operationId: tool.operationId,
-      toolName: tool.toolName,
-      category: tool.category,
-      mutates: tool.mutates,
-    })),
-    meta: {
-      provider: input.provider,
-      mode,
-      groups: [...resolvedGroups],
-      selectedCount: selectedProviderTools.length,
-    },
-  };
+  if (op) {
+    validateOperationRequired(toolName, action, args, op);
+  }
+}
+
+/**
+ * Check per-operation required constraints.
+ *
+ * Handles two shapes emitted by the codegen:
+ *   - `required: string[]`        — all listed keys must be present
+ *   - `requiredOneOf: string[][]`  — at least one branch must be fully satisfied
+ *     (mirrors JSON Schema `oneOf` with per-branch `required` arrays)
+ */
+function validateOperationRequired(
+  toolName: string,
+  action: unknown,
+  args: Record<string, unknown>,
+  op: OperationEntry,
+): void {
+  const actionLabel = typeof action === 'string' ? ` action "${action}"` : '';
+
+  if (op.requiredOneOf && op.requiredOneOf.length > 0) {
+    const satisfied = op.requiredOneOf.some((branch) => branch.every((k) => args[k] != null));
+    if (!satisfied) {
+      const options = op.requiredOneOf.map((b) => b.join(' + ')).join(' | ');
+      throw new SuperDocCliError(
+        `Missing required argument(s) for ${toolName}${actionLabel}: must provide one of: ${options}`,
+        {
+          code: 'INVALID_ARGUMENT',
+          details: { toolName, action, requiredOneOf: op.requiredOneOf },
+        },
+      );
+    }
+  } else if (op.required && op.required.length > 0) {
+    const missingActionKeys = op.required.filter((k) => args[k] == null);
+    if (missingActionKeys.length > 0) {
+      throw new SuperDocCliError(
+        `Missing required argument(s) for ${toolName}${actionLabel}: ${missingActionKeys.join(', ')}`,
+        {
+          code: 'INVALID_ARGUMENT',
+          details: { toolName, action, missingKeys: missingActionKeys },
+        },
+      );
+    }
+  }
 }
 
 export async function dispatchSuperDocTool(
@@ -416,19 +263,44 @@ export async function dispatchSuperDocTool(
   args: Record<string, unknown> = {},
   invokeOptions?: InvokeOptions,
 ): Promise<unknown> {
-  const operationId = await resolveToolOperation(toolName);
-  if (!operationId) {
-    throw new SuperDocCliError(`Unknown SuperDoc tool: ${toolName}`, {
-      code: 'TOOL_NOT_FOUND',
+  if (!isRecord(args)) {
+    throw new SuperDocCliError(`Tool arguments for ${toolName} must be an object.`, {
+      code: 'INVALID_ARGUMENT',
       details: { toolName },
     });
   }
 
-  if (!isRecord(args)) {
-    invalidArgument(`Tool arguments for ${toolName} must be an object.`);
+  // Validate against the tool schema before dispatch.
+  const catalog = await getCachedCatalog();
+  const tool = catalog.tools.find((t) => t.toolName === toolName);
+  if (tool == null) {
+    throw new SuperDocCliError(`Unknown tool: ${toolName}`, {
+      code: 'TOOL_DISPATCH_NOT_FOUND',
+      details: { toolName },
+    });
   }
+  validateToolArgs(toolName, args, tool);
 
-  validateDispatchArgs(operationId, args);
-  const method = resolveDocApiMethod(client, operationId);
-  return method(args, invokeOptions);
+  // Strip doc/sessionId — the SDK client manages session targeting after doc.open().
+  const { doc: _doc, sessionId: _sid, ...cleanArgs } = args;
+
+  return dispatchIntentTool(toolName, cleanArgs, (operationId, input) => {
+    const method = resolveDocApiMethod(client, operationId);
+    return method(input, invokeOptions);
+  });
+}
+
+/**
+ * Read the bundled system prompt for intent tools.
+ */
+export async function getSystemPrompt(): Promise<string> {
+  const promptPath = path.join(toolsDir, 'system-prompt.md');
+  try {
+    return await readFile(promptPath, 'utf8');
+  } catch {
+    throw new SuperDocCliError('System prompt not found.', {
+      code: 'TOOLS_ASSET_NOT_FOUND',
+      details: { filePath: promptPath },
+    });
+  }
 }

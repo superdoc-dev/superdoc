@@ -2069,8 +2069,8 @@ packages:
     resolution: {integrity: sha512-l63NF9y/cLROq/yqKXSLtcMeeyOfnSQlfMSlzFt/K73oIaD8DGaQWd7Z34X9GPiKqP5rbSh84Hl4bOlLcjiSrQ==}
 
   superdoc@file:../../packages/superdoc/superdoc.tgz:
-    resolution: {integrity: sha512-vasgfL+tW8P8X8kQEa5rOtsv83xKc6BHfo/I2V1S0BKbaGb3T86oHTi4biYLGnpFOdOIKHg3Gw/NfPCPMU7jvQ==, tarball: file:../../packages/superdoc/superdoc.tgz}
-    version: 1.16.0
+    resolution: {integrity: sha512-zkLAqTj0ghbPnHFJNtIH5r8H0CV69eWf+V4rQRC8cig3sqBuLDb29O8lCMC4wsP5msUt8HqIRW52Zr6l9CfHtw==, tarball: file:../../packages/superdoc/superdoc.tgz}
+    version: 1.18.0
     peerDependencies:
       '@hocuspocus/provider': ^2.13.6
       pdfjs-dist: ^5.4.296

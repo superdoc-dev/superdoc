@@ -96,6 +96,15 @@ describe('buildOperationArgv', () => {
     expect(argv[argv.indexOf('--query-json') + 1]).toBe(JSON.stringify(data));
   });
 
+  test('encodes json string scalar as a JSON string literal', () => {
+    const op = makeOp({
+      params: [{ name: 'delimiter', kind: 'jsonFlag', flag: 'delimiter-json', type: 'json' }],
+    });
+    const argv = buildOperationArgv(op, { delimiter: 'tab' }, {}, undefined);
+    expect(argv).toContain('--delimiter-json');
+    expect(argv[argv.indexOf('--delimiter-json') + 1]).toBe(JSON.stringify('tab'));
+  });
+
   test('skips null/undefined params', () => {
     const op = makeOp({
       params: [

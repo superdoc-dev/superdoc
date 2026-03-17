@@ -188,7 +188,7 @@ function getParagraphRunContext($pos, editor) {
   for (let depth = $pos.depth; depth >= 0; depth--) {
     const node = $pos.node(depth);
     if (node.type.name === 'run' && runProperties == null) {
-      runProperties = node.attrs?.runProperties || {};
+      runProperties = normalizeRunProperties(node.attrs?.runProperties);
     }
     if (node.type.name === 'paragraph') {
       const params = {
@@ -214,6 +214,11 @@ function getParagraphRunContext($pos, editor) {
     }
   }
   return null;
+}
+
+function normalizeRunProperties(runProperties) {
+  if (!runProperties || typeof runProperties !== 'object') return null;
+  return Object.keys(runProperties).length > 0 ? runProperties : null;
 }
 
 function createMarksFromRunProperties(state, runProperties, editor) {

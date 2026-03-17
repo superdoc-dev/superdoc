@@ -202,6 +202,51 @@ describe('getMarksFromSelection', () => {
     expect(result.inlineRunProperties).toEqual({ styleId: 'Heading1Char' });
   });
 
+  it('falls back to cursor marks when the surrounding run has no explicit runProperties', () => {
+    const runSchema = new Schema({
+      nodes: {
+        doc: { content: 'paragraph+' },
+        paragraph: {
+          content: 'inline*',
+          group: 'block',
+          toDOM() {
+            return ['p', 0];
+          },
+        },
+        run: {
+          content: 'text*',
+          group: 'inline',
+          inline: true,
+          attrs: { runProperties: { default: null } },
+          toDOM() {
+            return ['span', 0];
+          },
+        },
+        text: { group: 'inline' },
+      },
+      marks: {
+        bold: {
+          attrs: { value: { default: true } },
+          toDOM() {
+            return ['strong', 0];
+          },
+        },
+      },
+    });
+    const textNode = runSchema.text('Hello', [runSchema.marks.bold.create()]);
+    const testDoc = runSchema.node('doc', null, [
+      runSchema.node('paragraph', null, [runSchema.node('run', null, [textNode])]),
+    ]);
+    const state = EditorState.create({ schema: runSchema, doc: testDoc });
+    const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 3)));
+
+    const result = getSelectionFormattingState(cursorState);
+
+    expect(result.inlineRunProperties).toEqual({ bold: true });
+    expect(result.inlineMarks.some((mark) => mark.type.name === 'bold')).toBe(true);
+    expect(result.resolvedMarks.some((mark) => mark.type.name === 'bold')).toBe(true);
+  });
+
   it('resolves non-empty selections through the style cascade', () => {
     const rangeSchema = new Schema({
       nodes: {

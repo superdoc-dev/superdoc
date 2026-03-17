@@ -1,11 +1,11 @@
 ---
 title: LLM eval results
 sidebarTitle: Eval Results
-description: Which LLMs work best with SuperDoc's Document API — tested with Promptfoo across 6 models and 193 tools
+description: Which LLMs work best with SuperDoc's Document API — tested with Promptfoo across 6 models and 360+ tools
 keywords: "llm eval, model comparison, promptfoo, gpt-5.4, claude haiku, gemini, tool use, document api"
 ---
 
-SuperDoc's Document API exposes 193 operations as LLM tools. Six models were tested with [Promptfoo](https://promptfoo.dev) to measure how accurately each one calls them.
+SuperDoc's Document API exposes [360+ operations](/document-api/available-operations) as LLM tools. Six models were tested with [Promptfoo](https://promptfoo.dev) to measure how accurately each one calls them.
 
 <Tip>
 **Recommended models**
@@ -73,7 +73,7 @@ If you strip down the system prompt to save tokens, expect accuracy to drop. How
 
 ## Methodology
 
-Results come from a [Promptfoo](https://promptfoo.dev)-based eval framework running against SuperDoc's grouped intent tool set — 9 meta-tools that cover all 193 underlying operations.
+Results come from a [Promptfoo](https://promptfoo.dev)-based eval framework running against SuperDoc's grouped intent tool set — 9 meta-tools that cover all [360+ underlying operations](/document-api/available-operations).
 
 - **Level 1 (tool quality):** 31 synthetic test cases × 2 prompts × 6 models = 372 assertions. A test passes when the model produces a structurally valid tool call with correct arguments. Assertion types include `tool-call-f1` (set comparison), custom JavaScript checks, and latency thresholds.
 - **Level 2 (end-to-end):** 21 tests across 3 real `.docx` fixture documents. Each test runs a full agent loop and checks the resulting document content with `contains` / `not-contains` assertions.
@@ -101,7 +101,7 @@ Model behavior changes over time. These results are a point-in-time snapshot. Re
     icon="list"
     href="/document-api/available-operations"
   >
-    All 193 Document API operations by namespace
+    All Document API operations by namespace
   </Card>
 
   <Card

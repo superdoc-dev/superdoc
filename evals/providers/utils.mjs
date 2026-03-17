@@ -65,12 +65,47 @@ export function cleanArgs(args) {
   return rest;
 }
 
+// --- SDK fingerprint (for cache invalidation) ---
+
+/**
+ * Hash tool catalogs, system prompt, SDK dist, and CLI binary so that cache
+ * entries become invalid whenever anything in the local tool surface or
+ * runtime logic changes. This prevents stale results from a different branch,
+ * npm version, or generation run from being reused silently.
+ */
+function computeSdkFingerprint() {
+  const sdkToolsDir = resolve(EVALS_ROOT, '..', 'packages/sdk/tools');
+  const sdkDist = resolve(EVALS_ROOT, '..', 'packages/sdk/langs/node/dist/index.js');
+  const files = [
+    resolve(sdkToolsDir, 'tools.vercel.json'),
+    resolve(sdkToolsDir, 'tools.openai.json'),
+    PATHS.prompt,
+    sdkDist,
+    PATHS.cliBin,
+  ];
+
+  const hash = createHash('sha256');
+  for (const file of files) {
+    try {
+      hash.update(readFileSync(file));
+    } catch {
+      hash.update(`missing:${file}`);
+    }
+  }
+  return hash.digest('hex').slice(0, 12);
+}
+
+const SDK_FINGERPRINT = computeSdkFingerprint();
+
 // --- Cache ---
 
-/** Generate a cache key from model + fixture + task + prompt hash. */
+/** Generate a cache key from model + fixture + task + prompt hash + SDK fingerprint. */
 export function cacheKey(model, fixture, task, prompt) {
   const promptSig = prompt ? createHash('sha256').update(prompt).digest('hex').slice(0, 8) : '';
-  const hash = createHash('sha256').update(`${model}|${fixture}|${task}|${promptSig}`).digest('hex').slice(0, 16);
+  const hash = createHash('sha256')
+    .update(`${model}|${fixture}|${task}|${promptSig}|${SDK_FINGERPRINT}`)
+    .digest('hex')
+    .slice(0, 16);
   return hash;
 }
 

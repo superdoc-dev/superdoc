@@ -13,13 +13,18 @@ Run these commands from the repo root:
 
 ```bash
 pnpm install
-pnpm run generate:all                                  # if packages/sdk/tools/*.json are missing
 cp evals/.env.example evals/.env
 pnpm --filter @superdoc-testing/evals run eval:openai  # Level 1
-pnpm --prefix apps/cli run build                       # required for Level 2
-pnpm --filter @superdoc-testing/evals run eval:e2e    # Level 2
+pnpm --filter @superdoc-testing/evals run eval:e2e     # Level 2
 pnpm --filter @superdoc-testing/evals run view
 ```
+
+Tool artifacts are **automatically regenerated** before each eval run via pre-hooks:
+
+- **Level 1** (`eval`, `eval:openai`): regenerates SDK tool catalogs on the fast path, and automatically falls back to a one-time full bootstrap if prerequisites are missing
+- **Level 2** (`eval:e2e`): runs full `generate:all` (doc-api → CLI contract → SDK), then builds SDK + CLI
+
+You do not need to build or bootstrap manually unless you are running `eval:repeat` or `eval:analyze` (which bypass pre-hooks). On a fresh clone, the first Level 1 run may take longer because it auto-bootstraps the doc-api contract before switching back to the fast path.
 
 Edit `evals/.env` before running:
 
@@ -47,6 +52,8 @@ Both levels use the same **9 grouped public tools** from the SDK:
 | `superdoc_mutations` | Execute multi-step atomic edits in a single batch |
 
 Level 1 loads the generated SDK provider bundle through a thin Promptfoo adapter that returns the bundle's `tools` array. Level 2 uses `sdk.chooseTools()`. The system prompt comes from `packages/sdk/tools/system-prompt.md`.
+
+Both levels resolve `@superdoc-dev/sdk` from the **local workspace** (`workspace:*`), not from npm. A prepare script (`scripts/prepare-local-sdk.mjs`) runs automatically before each eval to regenerate tool artifacts, build the SDK/CLI, and verify the tool surface. See [Local SDK resolution](#local-sdk-resolution) for details.
 
 ## Two levels of testing
 
@@ -95,6 +102,8 @@ evals/
   tests/
     tool-quality.yaml               28 tool-selection / argument-shape tests
     execution.yaml                  21 real DOCX editing tests
+  scripts/
+    prepare-local-sdk.mjs           Pre-run pipeline: generate, build, verify
   providers/
     superdoc-agent-gateway.mjs      AI SDK + AI Gateway execution provider
     superdoc-agent.mjs              Legacy direct OpenAI execution provider
@@ -222,14 +231,38 @@ Add another entry to `promptfooconfig.e2e.yaml`:
     modelId: anthropic/claude-sonnet-4.6
 ```
 
+## Local SDK resolution
+
+Evals depend on `@superdoc-dev/sdk` via `workspace:*`, so pnpm always resolves to the local workspace package at `packages/sdk/langs/node/` — never to the published npm version.
+
+A prepare script (`scripts/prepare-local-sdk.mjs`) runs as a pre-hook before `eval`, `eval:openai`, and `eval:e2e`. It:
+
+1. **Regenerates** artifacts — full `generate:all` chain for Level 2, SDK-only catalog regeneration for Level 1
+   Level 1 automatically falls back to the full chain if the generated doc-api contract is missing.
+2. **Builds** the SDK and CLI (Level 2 only)
+3. **Verifies** all expected output files exist
+4. **Guards** that `@superdoc-dev/sdk` resolves from the workspace, not npm (Level 2 only)
+5. **Validates** the tool surface matches the expected 9 grouped public tools
+
+The provider cache (`results/.cache/`) includes an SDK fingerprint — a hash of the tool catalogs and system prompt. Switching branches or changing tool definitions automatically invalidates stale cache entries.
+
+To skip preparation during rapid iteration (when you know your builds are current):
+
+```bash
+SKIP_PREPARE=1 pnpm run eval:e2e
+```
+
+To intentionally test the published npm SDK, change the dependency in `evals/package.json` from `workspace:*` to a version number.
+
 ## Notes
 
-- If `packages/sdk/tools/*.json` are missing, run `pnpm run generate:all` from the repo root first.
+- Level 2 runs `generate:all` automatically. Level 1 uses the fast SDK-only path once prerequisites exist, and auto-falls-back to full bootstrap on a fresh clone.
 - Level 1 currently uses native OpenAI Promptfoo providers. Level 2 uses a custom provider that routes through Vercel AI Gateway.
 - `pnpm run view` is the correct script name. There is no `eval:view` script in the current package.
 - `pnpm run analyze` reads `results/latest.json`, writes `results/analysis.html`, and requires `ANTHROPIC_API_KEY`.
 - Promptfoo caches model responses. Clear Promptfoo's cache with `npx promptfoo cache clear`.
-- The custom execution provider also caches results in `results/.cache/`. Disable it with `PROMPTFOO_CACHE_ENABLED=false`.
+- The custom execution provider also caches results in `results/.cache/`. The cache key includes an SDK fingerprint, so tool surface changes automatically invalidate old entries. Disable provider caching entirely with `PROMPTFOO_CACHE_ENABLED=false`.
+- `eval:repeat` and `eval:analyze` bypass the pre-hook (they call `npx promptfoo` directly). Run `node scripts/prepare-local-sdk.mjs` manually before these if needed.
 
 ## Exit codes and troubleshooting
 

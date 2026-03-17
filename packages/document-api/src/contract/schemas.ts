@@ -1,6 +1,7 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
+import { SELECTION_EDGE_NODE_TYPES } from '../types/address.js';
 import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
 import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import {
@@ -62,6 +63,23 @@ function arraySchema(items: JsonSchema): JsonSchema {
 /** Returns a `{ $ref: '#/$defs/<name>' }` pointer for use in operation schemas. */
 function ref(name: string): JsonSchema {
   return { $ref: `#/$defs/${name}` };
+}
+
+/**
+ * Builds a `oneOf` schema that merges each TargetLocator branch with additional
+ * payload properties. This avoids the `allOf` + `additionalProperties: false`
+ * conflict where each branch would reject keys defined in the other schema.
+ */
+function targetLocatorWithPayload(
+  payloadProperties: Record<string, JsonSchema>,
+  payloadRequired: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema({ target: ref('SelectionTarget'), ...payloadProperties }, ['target', ...payloadRequired]),
+      objectSchema({ ref: { type: 'string' }, ...payloadProperties }, ['ref', ...payloadRequired]),
+    ],
+  };
 }
 
 /** Shared output/success/failure shape for ImagesMutationResult operations. */
@@ -159,6 +177,49 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['kind', 'segments'],
   ),
+
+  // -- Selection-based targeting --
+  SelectionEdgeNodeAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: [...SELECTION_EDGE_NODE_TYPES] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  SelectionPoint: {
+    oneOf: [
+      objectSchema({ kind: { const: 'text' }, blockId: { type: 'string' }, offset: { type: 'integer', minimum: 0 } }, [
+        'kind',
+        'blockId',
+        'offset',
+      ]),
+      objectSchema(
+        {
+          kind: { const: 'nodeEdge' },
+          node: ref('SelectionEdgeNodeAddress'),
+          edge: { enum: ['before', 'after'] },
+        },
+        ['kind', 'node', 'edge'],
+      ),
+    ],
+  } satisfies JsonSchema,
+  SelectionTarget: objectSchema(
+    {
+      kind: { const: 'selection' },
+      start: ref('SelectionPoint'),
+      end: ref('SelectionPoint'),
+    },
+    ['kind', 'start', 'end'],
+  ),
+  TargetLocator: {
+    oneOf: [
+      objectSchema({ target: ref('SelectionTarget') }, ['target']),
+      objectSchema({ ref: { type: 'string' } }, ['ref']),
+    ],
+  } satisfies JsonSchema,
+  DeleteBehavior: { enum: ['selection', 'exact'] } satisfies JsonSchema,
+
   BlockNodeAddress: objectSchema(
     {
       kind: { const: 'block' },
@@ -286,6 +347,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       target: ref('TextAddress'),
       range: ref('TextMutationRange'),
       text: { type: 'string' },
+      selectionTarget: ref('SelectionTarget'),
     },
     ['target', 'range', 'text'],
   ),
@@ -399,6 +461,9 @@ const nodeAddressSchema = ref('NodeAddress');
 const commentAddressSchema = ref('CommentAddress');
 const trackedChangeAddressSchema = ref('TrackedChangeAddress');
 const entityAddressSchema = ref('EntityAddress');
+const selectionTargetSchema = ref('SelectionTarget');
+const targetLocatorSchema = ref('TargetLocator');
+const deleteBehaviorSchema = ref('DeleteBehavior');
 const resolvedHandleSchema = ref('ResolvedHandle');
 const pageInfoSchema = ref('PageInfo');
 const receiptSuccessSchema = ref('ReceiptSuccess');
@@ -683,6 +748,7 @@ const matchContextSchema = objectSchema(
     snippet: { type: 'string' },
     highlightRange: rangeSchema,
     textRanges: arraySchema(textAddressSchema),
+    target: selectionTargetSchema,
   },
   ['address', 'snippet', 'highlightRange'],
 );
@@ -741,8 +807,8 @@ const sdTextSelectorSchema = objectSchema(
 const sdNodeSelectorSchema = objectSchema(
   {
     type: { const: 'node' },
-    kind: { enum: ['content', 'inline'] },
-    nodeKind: { type: 'string' },
+    kind: { enum: ['block', 'inline'] },
+    nodeType: { type: 'string' },
   },
   ['type'],
 );
@@ -751,20 +817,7 @@ const sdSelectorSchema: JsonSchema = {
   oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
 };
 
-const sdAddressSchema = objectSchema(
-  {
-    kind: { enum: ['content', 'inline', 'annotation', 'section'] },
-    stability: { enum: ['stable', 'ephemeral'] },
-    nodeId: { type: 'string' },
-    anchor: objectSchema({
-      start: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
-      end: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
-    }),
-    evaluatedRevision: { type: 'string' },
-    path: arraySchema({ oneOf: [{ type: 'string' }, { type: 'integer' }] }),
-  },
-  ['kind', 'stability'],
-);
+// sdAddressSchema removed — replaced by blockNodeAddressSchema, nodeAddressSchema, textAddressSchema
 
 const sdReadOptionsSchema = objectSchema({
   includeResolved: { type: 'boolean' },
@@ -775,7 +828,7 @@ const sdReadOptionsSchema = objectSchema({
 const sdFindInputSchema = objectSchema(
   {
     select: sdSelectorSchema,
-    within: sdAddressSchema,
+    within: blockNodeAddressSchema,
     limit: { type: 'integer' },
     offset: { type: 'integer' },
     options: sdReadOptionsSchema,
@@ -786,7 +839,7 @@ const sdFindInputSchema = objectSchema(
 const sdNodeResultSchema = objectSchema(
   {
     node: { type: 'object' },
-    address: sdAddressSchema,
+    address: nodeAddressSchema,
     context: { type: 'object' },
   },
   ['node', 'address'],
@@ -808,10 +861,11 @@ const sdFindResultSchema = objectSchema(
 
 const sdMutationResolutionSchema = objectSchema(
   {
-    requestedTarget: sdAddressSchema,
-    target: sdAddressSchema,
+    target: { oneOf: [textAddressSchema, blockNodeAddressSchema] },
+    range: textMutationRangeSchema,
+    selectionTarget: selectionTargetSchema,
   },
-  ['target'],
+  ['target', 'range'],
 );
 
 const sdMutationSuccessSchema = objectSchema(
@@ -1341,14 +1395,37 @@ const capabilitiesOutputSchema = objectSchema(
 
 const strictEmptyObjectSchema = objectSchema({});
 
-const insertInputSchema = objectSchema(
-  {
-    target: textAddressSchema,
-    value: { type: 'string' },
-    type: { type: 'string', enum: ['text', 'markdown', 'html'] },
-  },
-  ['value'],
-);
+const sdFragmentSchema: JsonSchema = {
+  oneOf: [{ type: 'object' }, { type: 'array', items: { type: 'object' } }],
+};
+
+const placementSchema: JsonSchema = { enum: ['before', 'after', 'insideStart', 'insideEnd'] };
+
+const nestingPolicySchema = objectSchema({
+  tables: { enum: ['forbid', 'allow'] },
+});
+
+const insertInputSchema: JsonSchema = {
+  oneOf: [
+    objectSchema(
+      {
+        target: textAddressSchema,
+        value: { type: 'string' },
+        type: { type: 'string', enum: ['text', 'markdown', 'html'] },
+      },
+      ['value'],
+    ),
+    objectSchema(
+      {
+        target: blockNodeAddressSchema,
+        content: sdFragmentSchema,
+        placement: placementSchema,
+        nestingPolicy: nestingPolicySchema,
+      },
+      ['content'],
+    ),
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Table operation shared schemas
@@ -1509,15 +1586,11 @@ function supportsImplicitTrueValue(operationId: FormatInlineAliasOperationId): b
 const formatInlineAliasOperationSchemas: Record<FormatInlineAliasOperationId, OperationSchemaSet> = Object.fromEntries(
   INLINE_PROPERTY_REGISTRY.map((entry) => {
     const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
-    const requiredFields = supportsImplicitTrueValue(operationId) ? ['target'] : ['target', 'value'];
+    const requiredFields = supportsImplicitTrueValue(operationId) ? [] : ['value'];
     const schema: OperationSchemaSet = {
-      input: objectSchema(
-        {
-          target: textAddressSchema,
-          value: entry.schema,
-        },
-        requiredFields,
-      ),
+      input: {
+        ...targetLocatorWithPayload({ value: entry.schema }, requiredFields),
+      },
       output: textMutationResultSchemaFor(operationId),
       success: textMutationSuccessSchema,
       failure: textMutationFailureSchemaFor(operationId),
@@ -2515,36 +2588,51 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: sdMutationFailureSchemaFor('insert'),
   },
   replace: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        text: { type: 'string' },
-      },
-      ['target', 'text'],
-    ),
+    input: {
+      oneOf: [
+        // Text replacement: TargetLocator + text
+        {
+          ...targetLocatorWithPayload({ text: { type: 'string' } }, ['text']),
+        },
+        // Structural replacement: exactly one of (target | ref) + content
+        {
+          oneOf: [
+            objectSchema(
+              {
+                target: { oneOf: [blockNodeAddressSchema, selectionTargetSchema] },
+                content: sdFragmentSchema,
+                nestingPolicy: nestingPolicySchema,
+              },
+              ['target', 'content'],
+            ),
+            objectSchema(
+              {
+                ref: { type: 'string' },
+                content: sdFragmentSchema,
+                nestingPolicy: nestingPolicySchema,
+              },
+              ['ref', 'content'],
+            ),
+          ],
+        },
+      ],
+    },
     output: sdMutationResultSchemaFor('replace'),
     success: sdMutationSuccessSchema,
     failure: sdMutationFailureSchemaFor('replace'),
   },
   delete: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
+    input: {
+      ...targetLocatorWithPayload({ behavior: deleteBehaviorSchema }),
+    },
     output: textMutationResultSchemaFor('delete'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('delete'),
   },
   'format.apply': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        inline: buildInlineRunPatchSchema(),
-      },
-      ['target', 'inline'],
-    ),
+    input: {
+      ...targetLocatorWithPayload({ inline: buildInlineRunPatchSchema() }, ['inline']),
+    },
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.apply'),
@@ -3845,7 +3933,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
         mode: { enum: ['strict', 'candidates'] },
         includeNodes: { type: 'boolean' },
@@ -3863,12 +3951,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       const textMatchItemSchema = discoveryItemSchema(
         {
           matchKind: { const: 'text' },
-          address: nodeAddressSchema,
+          address: blockNodeAddressSchema,
+          target: selectionTargetSchema,
           snippet: { type: 'string' },
           highlightRange: rangeSchema,
           blocks: { type: 'array', items: matchBlockSchema, minItems: 1 },
         },
-        ['matchKind', 'address', 'snippet', 'highlightRange', 'blocks'],
+        ['matchKind', 'address', 'target', 'snippet', 'highlightRange', 'blocks'],
       );
 
       // Node match item: id + handle + address + empty blocks
@@ -3897,7 +3986,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne', 'all'] },
       },
       ['by', 'select', 'require'],
@@ -3907,19 +3996,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'ref', type: 'string' },
         ref: { type: 'string' },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'ref'],
     );
 
-    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema] };
+    const targetWhereSchema = objectSchema(
+      {
+        by: { const: 'target', type: 'string' },
+        target: selectionTargetSchema,
+      },
+      ['by', 'target'],
+    );
+
+    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema, targetWhereSchema] };
 
     // Insert-only where (no 'all' require, no ref)
     const insertWhereSchema = objectSchema(
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne'] },
       },
       ['by', 'select', 'require'],
@@ -3930,7 +4027,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         by: { const: 'select', type: 'string' },
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: nodeAddressSchema,
+        within: blockNodeAddressSchema,
       },
       ['by', 'select'],
     );
@@ -4026,7 +4123,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         id: { type: 'string' },
         op: { const: 'text.delete', type: 'string' },
         where: stepWhereSchema,
-        args: objectSchema({}),
+        args: objectSchema({ behavior: deleteBehaviorSchema }),
       },
       ['id', 'op', 'where', 'args'],
     );
@@ -4081,7 +4178,87 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['atomic', 'changeMode', 'steps'],
     );
 
+    // ---------------------------------------------------------------
+    // ranges.resolve schema
+    // ---------------------------------------------------------------
+
+    const documentEdgeAnchorSchema = objectSchema(
+      {
+        kind: { const: 'document' },
+        edge: { enum: ['start', 'end'] },
+      },
+      ['kind', 'edge'],
+    );
+
+    const pointAnchorSchema = objectSchema(
+      {
+        kind: { const: 'point' },
+        point: ref('SelectionPoint'),
+      },
+      ['kind', 'point'],
+    );
+
+    const refBoundaryAnchorSchema = objectSchema(
+      {
+        kind: { const: 'ref' },
+        ref: { type: 'string', minLength: 1 },
+        boundary: { enum: ['start', 'end'] },
+      },
+      ['kind', 'ref', 'boundary'],
+    );
+
+    const rangeAnchorSchema: JsonSchema = {
+      oneOf: [documentEdgeAnchorSchema, pointAnchorSchema, refBoundaryAnchorSchema],
+    };
+
+    const rangeBlockPreviewSchema = objectSchema(
+      {
+        nodeId: { type: 'string' },
+        nodeType: { enum: [...blockNodeTypeValues] },
+        textPreview: { type: 'string' },
+      },
+      ['nodeId', 'nodeType', 'textPreview'],
+    );
+
+    const rangePreviewSchema = objectSchema(
+      {
+        text: { type: 'string' },
+        truncated: { type: 'boolean' },
+        blocks: arraySchema(rangeBlockPreviewSchema),
+      },
+      ['text', 'truncated', 'blocks'],
+    );
+
+    const resolveRangeOutputSchema = objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        handle: objectSchema(
+          {
+            ref: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+            refStability: { const: 'ephemeral' },
+            coversFullTarget: { type: 'boolean' },
+          },
+          ['ref', 'refStability', 'coversFullTarget'],
+        ),
+        target: selectionTargetSchema,
+        preview: rangePreviewSchema,
+      },
+      ['evaluatedRevision', 'handle', 'target', 'preview'],
+    );
+
     return {
+      'ranges.resolve': {
+        input: objectSchema(
+          {
+            start: rangeAnchorSchema,
+            end: rangeAnchorSchema,
+            expectedRevision: { type: 'string' },
+          },
+          ['start', 'end'],
+        ),
+        output: resolveRangeOutputSchema,
+      },
+
       'mutations.preview': {
         input: mutationsInputSchema,
         output: objectSchema(
@@ -5397,7 +5574,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // --- hyperlinks.* ---
   'hyperlinks.list': {
     input: objectSchema({
-      within: nodeAddressSchema,
+      within: blockNodeAddressSchema,
       hrefPattern: { type: 'string' },
       anchor: { type: 'string' },
       textPattern: { type: 'string' },

@@ -12,13 +12,16 @@
  *   so tr.replaceWith replaces the entire block, not just its text content.
  */
 
-import type { TextAddress } from '@superdoc/document-api';
+import type { BlockNodeAddress, TextAddress } from '@superdoc/document-api';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { resolveDefaultInsertTarget } from '../helpers/adapter-utils.js';
 import { getBlockIndex } from '../helpers/index-cache.js';
-import { findBlockByNodeIdOnly } from '../helpers/node-address-resolver.js';
+import { findBlockById, findBlockByNodeIdOnly } from '../helpers/node-address-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
+
+/** Target selector for structural operations — either a typed block address or a text address. */
+export type StructuralTarget = BlockNodeAddress | TextAddress;
 
 /** Resolved insertion target with absolute ProseMirror position. */
 export interface ResolvedInsertTarget {
@@ -45,61 +48,76 @@ export interface ResolvedReplaceTarget {
 }
 
 /**
- * Resolves an optional TextAddress target to an absolute ProseMirror insertion position.
+ * Resolves a block candidate from a structural target.
+ *
+ * For BlockNodeAddress targets, tries the composite `nodeType:nodeId` key first
+ * to disambiguate duplicate IDs, then falls back to nodeId-only lookup. The
+ * fallback is necessary because paragraph-backed blocks can change subtype
+ * (paragraph/heading/listItem) via mutable attrs — a saved address from
+ * find() or getNodeById() should still resolve after a restyle.
+ *
+ * TextAddress targets always use nodeId-only (alias-aware) resolution.
+ */
+function findBlockByTarget(index: ReturnType<typeof getBlockIndex>, target: StructuralTarget, operationName: string) {
+  const nodeId = target.kind === 'block' ? target.nodeId : target.blockId;
+  try {
+    if (target.kind === 'block') {
+      // Typed lookup first — handles duplicate IDs across different block types.
+      const typed = findBlockById(index, target);
+      if (typed) return typed;
+      // Fallback to nodeId-only — handles stale subtypes after restyle.
+      return findBlockByNodeIdOnly(index, nodeId);
+    }
+    return findBlockByNodeIdOnly(index, nodeId);
+  } catch {
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Cannot resolve ${operationName} target for block "${nodeId}".`,
+    );
+  }
+}
+
+/**
+ * Resolves an optional target to an absolute ProseMirror insertion position.
  *
  * Uses block-level lookup so ALL block types (paragraphs, tables, images, etc.)
  * are addressable — not just text blocks.
  *
  * When target is omitted, falls back to end-of-document insertion.
  */
-export function resolveInsertTarget(editor: Editor, target?: TextAddress): ResolvedInsertTarget {
+export function resolveInsertTarget(editor: Editor, target?: StructuralTarget): ResolvedInsertTarget {
   if (!target) {
     return resolveDocumentEndTarget(editor);
   }
 
-  // Block-level resolution: find the block by ID, supporting all block types.
   const index = getBlockIndex(editor);
-  let candidate;
-  try {
-    candidate = findBlockByNodeIdOnly(index, target.blockId);
-  } catch {
-    throw new DocumentApiAdapterError(
-      'TARGET_NOT_FOUND',
-      `Cannot resolve insert target for block "${target.blockId}".`,
-    );
-  }
+  const candidate = findBlockByTarget(index, target, 'insert');
 
   return {
     insertPos: candidate.end,
     structuralEnd: false,
-    effectiveTarget: target,
+    effectiveTarget:
+      target.kind === 'block' ? { kind: 'text', blockId: target.nodeId, range: { start: 0, end: 0 } } : target,
     targetNode: candidate.node,
     targetNodePos: candidate.pos,
   };
 }
 
 /**
- * Resolves a required TextAddress target for structural replace operations.
+ * Resolves a required target for structural replace operations.
  *
  * Resolves to the FULL block node range. This ensures tr.replaceWith
  * replaces the entire block — not just its text content.
  */
-export function resolveReplaceTarget(editor: Editor, target: TextAddress): ResolvedReplaceTarget {
+export function resolveReplaceTarget(editor: Editor, target: StructuralTarget): ResolvedReplaceTarget {
   const index = getBlockIndex(editor);
-  let candidate;
-  try {
-    candidate = findBlockByNodeIdOnly(index, target.blockId);
-  } catch {
-    throw new DocumentApiAdapterError(
-      'TARGET_NOT_FOUND',
-      `Cannot resolve replace target for block "${target.blockId}".`,
-    );
-  }
+  const candidate = findBlockByTarget(index, target, 'replace');
 
   return {
     from: candidate.pos,
     to: candidate.end,
-    effectiveTarget: target,
+    effectiveTarget:
+      target.kind === 'block' ? { kind: 'text', blockId: target.nodeId, range: { start: 0, end: 0 } } : target,
   };
 }
 

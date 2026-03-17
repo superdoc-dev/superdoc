@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import type {
   TextAddress,
+  SelectionTarget,
   MatchContext,
   TrackChangeType,
   CommentsListResult,
@@ -16,7 +17,7 @@ import type {
   ListsListResult,
 } from '@superdoc/document-api';
 
-export type { TextAddress, TextMutationReceipt, TrackChangeType };
+export type { TextAddress, SelectionTarget, TextMutationReceipt, TrackChangeType };
 export type ChangeMode = 'direct' | 'tracked';
 type MutationOptions = { changeMode?: ChangeMode; dryRun?: boolean; expectedRevision?: number };
 type ListMutationName = 'setValue' | 'continuePrevious' | 'setType' | 'separate';
@@ -123,6 +124,10 @@ export async function findTextContexts(
             if (!address || textRanges.length === 0) return null;
             return {
               address,
+              target:
+                item?.target?.kind === 'selection' && item?.target?.start && item?.target?.end
+                  ? item.target
+                  : undefined,
               snippet: typeof item?.snippet === 'string' ? item.snippet : (item?.context?.snippet ?? ''),
               highlightRange:
                 item?.highlightRange &&
@@ -173,6 +178,23 @@ export async function findFirstTextRange(
   });
   const context = contexts[options.occurrence ?? 0];
   return context?.textRanges?.[options.rangeIndex ?? 0] ?? null;
+}
+
+export async function findFirstSelectionTarget(
+  page: Page,
+  pattern: string,
+  options: {
+    occurrence?: number;
+    mode?: 'contains' | 'exact' | 'regex';
+    caseSensitive?: boolean;
+  } = {},
+): Promise<SelectionTarget | null> {
+  const contexts = await findTextContexts(page, pattern, {
+    mode: options.mode,
+    caseSensitive: options.caseSensitive,
+  });
+  const context = contexts[options.occurrence ?? 0];
+  return context?.target ?? null;
 }
 
 export async function addComment(page: Page, input: { target: TextAddress; text: string }): Promise<void> {

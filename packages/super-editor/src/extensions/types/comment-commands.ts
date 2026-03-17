@@ -203,10 +203,12 @@ export interface CommentCommands {
   /**
    * Set cursor position to a comment by ID
    * @param id - The comment ID to navigate to
+   * @param options - Optional navigation settings
+   * @param options.preferredActiveThreadId - Preserve this thread as active when overlapping marks exist
    * @example
    * editor.commands.setCursorById('comment-123')
    */
-  setCursorById: (id: string) => boolean;
+  setCursorById: (id: string, options?: { preferredActiveThreadId?: string }) => boolean;
 
   /**
    * Add a reply to an existing comment or tracked change

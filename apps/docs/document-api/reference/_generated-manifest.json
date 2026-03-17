@@ -13,8 +13,10 @@
     "apps/docs/document-api/reference/authorities/list.mdx",
     "apps/docs/document-api/reference/authorities/rebuild.mdx",
     "apps/docs/document-api/reference/authorities/remove.mdx",
+    "apps/docs/document-api/reference/blocks/delete-range.mdx",
     "apps/docs/document-api/reference/blocks/delete.mdx",
     "apps/docs/document-api/reference/blocks/index.mdx",
+    "apps/docs/document-api/reference/blocks/list.mdx",
     "apps/docs/document-api/reference/bookmarks/get.mdx",
     "apps/docs/document-api/reference/bookmarks/index.mdx",
     "apps/docs/document-api/reference/bookmarks/insert.mdx",
@@ -307,6 +309,8 @@
     "apps/docs/document-api/reference/mutations/preview.mdx",
     "apps/docs/document-api/reference/query/index.mdx",
     "apps/docs/document-api/reference/query/match.mdx",
+    "apps/docs/document-api/reference/ranges/index.mdx",
+    "apps/docs/document-api/reference/ranges/resolve.mdx",
     "apps/docs/document-api/reference/replace.mdx",
     "apps/docs/document-api/reference/sections/clear-header-footer-ref.mdx",
     "apps/docs/document-api/reference/sections/clear-page-borders.mdx",
@@ -417,7 +421,7 @@
     {
       "aliasMemberPaths": [],
       "key": "blocks",
-      "operationIds": ["blocks.delete"],
+      "operationIds": ["blocks.list", "blocks.delete", "blocks.deleteRange"],
       "pagePath": "apps/docs/document-api/reference/blocks/index.mdx",
       "title": "Blocks"
     },
@@ -937,8 +941,15 @@
       ],
       "pagePath": "apps/docs/document-api/reference/authorities/index.mdx",
       "title": "Table of Authorities"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "ranges",
+      "operationIds": ["ranges.resolve"],
+      "pagePath": "apps/docs/document-api/reference/ranges/index.mdx",
+      "title": "Ranges"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "eef969b01d52d99044ea5eb9c17085c5e31768001ced01042c4ebd90e6f00a24"
+  "sourceHash": "068dea933bf1591112019534c6bae48f811dc8d65c42f6cb94f365548028ea77"
 }

@@ -3,6 +3,7 @@ import { NodeTranslator } from '@translator';
 import { translateChildNodes } from '../../../../v2/exporter/helpers/index.js';
 import { cloneMark, cloneXmlNode, applyRunPropertiesTemplate, resolveFontFamily } from './helpers/helpers.js';
 import { ensureTrackedWrapper, prepareRunTrackingContext } from './helpers/track-change-helpers.js';
+import { appendTrackFormatChangeToRunProperties, findTrackFormatMark } from '../../helpers.js';
 import { translator as wHyperlinkTranslator } from '../hyperlink/hyperlink-translator.js';
 import { translator as wRPrTranslator } from '../rpr';
 import validXmlAttributes from './attributes/index.js';
@@ -28,6 +29,45 @@ const hasXmlNodeNamed = (node, targetName) => {
   if (node.name === targetName) return true;
   if (!Array.isArray(node.elements)) return false;
   return node.elements.some((child) => hasXmlNodeNamed(child, targetName));
+};
+
+const getRunPropertiesNode = (runNode) => {
+  if (!runNode) return null;
+  if (!Array.isArray(runNode.elements)) runNode.elements = [];
+
+  let runPropertiesNode = runNode.elements.find((element) => element?.name === 'w:rPr');
+  if (!runPropertiesNode) {
+    runPropertiesNode = { type: 'element', name: 'w:rPr', elements: [] };
+    runNode.elements.unshift(runPropertiesNode);
+  }
+
+  if (!Array.isArray(runPropertiesNode.elements)) {
+    runPropertiesNode.elements = [];
+  }
+
+  return runPropertiesNode;
+};
+
+const collectRunPropertyChanges = (runNode) => {
+  const runPropertiesNode = runNode?.elements?.find((element) => element?.name === 'w:rPr');
+  if (!Array.isArray(runPropertiesNode?.elements)) return [];
+
+  return runPropertiesNode.elements
+    .filter((element) => element?.name === 'w:rPrChange')
+    .map((element) => cloneXmlNode(element));
+};
+
+const restoreRunPropertyChanges = (runNode, runPropertyChanges = []) => {
+  if (!runPropertyChanges.length) return;
+
+  const runPropertiesNode = getRunPropertiesNode(runNode);
+  const existingNames = new Set(runPropertiesNode.elements.map((element) => element?.name));
+
+  runPropertyChanges.forEach((changeElement) => {
+    if (!changeElement?.name || existingNames.has(changeElement.name)) return;
+    runPropertiesNode.elements.push(changeElement);
+    existingNames.add(changeElement.name);
+  });
 };
 
 const ensureReferenceRunFormatting = (runNode, referenceXmlName) => {
@@ -213,6 +253,7 @@ const decode = (params, decodedAttrs = {}) => {
 
   // Separate out tracking marks
   const { runNode: runNodeForExport, trackingMarksByType } = prepareRunTrackingContext(node);
+  const runTrackFormatMark = findTrackFormatMark(runNodeForExport.marks);
 
   const runAttrs = runNodeForExport.attrs || {};
   const runProperties = runAttrs.runProperties || {};
@@ -238,6 +279,8 @@ const decode = (params, decodedAttrs = {}) => {
   const runPropsTemplate = runPropertiesElement ? cloneXmlNode(runPropertiesElement) : null;
   const applyBaseRunProps = (runNode) => applyRunPropertiesTemplate(runNode, runPropsTemplate);
   const replaceRunProps = (runNode) => {
+    const existingRunPropertyChanges = collectRunPropertyChanges(runNode);
+
     // Remove existing rPr if any
     if (Array.isArray(runNode.elements)) {
       runNode.elements = runNode.elements.filter((el) => el?.name !== 'w:rPr');
@@ -246,6 +289,13 @@ const decode = (params, decodedAttrs = {}) => {
     }
     if (runPropsTemplate) {
       runNode.elements.unshift(cloneXmlNode(runPropsTemplate));
+    }
+
+    restoreRunPropertyChanges(runNode, existingRunPropertyChanges);
+
+    if (!existingRunPropertyChanges.length && runTrackFormatMark) {
+      const runPropertiesNode = getRunPropertiesNode(runNode);
+      appendTrackFormatChangeToRunProperties(runPropertiesNode, [runTrackFormatMark]);
     }
   };
 

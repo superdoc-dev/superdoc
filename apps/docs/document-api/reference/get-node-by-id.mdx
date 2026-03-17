@@ -44,19 +44,7 @@ Returns an SDNodeResult envelope with the projected SDM/1 node and canonical add
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `address` | object | yes |  |
-| `address.anchor` | object | no |  |
-| `address.anchor.end` | object | no |  |
-| `address.anchor.end.blockId` | string | no |  |
-| `address.anchor.end.offset` | integer | no |  |
-| `address.anchor.start` | object | no |  |
-| `address.anchor.start.blockId` | string | no |  |
-| `address.anchor.start.offset` | integer | no |  |
-| `address.evaluatedRevision` | string | no |  |
-| `address.kind` | enum | yes | `"content"`, `"inline"`, `"annotation"`, `"section"` |
-| `address.nodeId` | string | no |  |
-| `address.path` | string \\| integer[] | no |  |
-| `address.stability` | enum | yes | `"stable"`, `"ephemeral"` |
+| `address` | NodeAddress | yes | NodeAddress |
 | `context` | object | no |  |
 | `node` | object | yes |  |
 
@@ -65,19 +53,9 @@ Returns an SDNodeResult envelope with the projected SDM/1 node and canonical add
 ```json
 {
   "address": {
-    "anchor": {
-      "end": {
-        "blockId": "block-abc123",
-        "offset": 0
-      },
-      "start": {
-        "blockId": "block-abc123",
-        "offset": 0
-      }
-    },
-    "kind": "content",
+    "kind": "block",
     "nodeId": "node-def456",
-    "stability": "stable"
+    "nodeType": "paragraph"
   },
   "context": {},
   "node": {}
@@ -130,85 +108,7 @@ Returns an SDNodeResult envelope with the projected SDM/1 node and canonical add
   "additionalProperties": false,
   "properties": {
     "address": {
-      "additionalProperties": false,
-      "properties": {
-        "anchor": {
-          "additionalProperties": false,
-          "properties": {
-            "end": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            },
-            "start": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "evaluatedRevision": {
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "content",
-            "inline",
-            "annotation",
-            "section"
-          ]
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "path": {
-          "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ]
-          },
-          "type": "array"
-        },
-        "stability": {
-          "enum": [
-            "stable",
-            "ephemeral"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "stability"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/NodeAddress"
     },
     "context": {
       "type": "object"

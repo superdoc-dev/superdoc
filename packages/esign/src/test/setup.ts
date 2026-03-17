@@ -30,9 +30,10 @@ const mockAppendRowsToStructuredContentTable = vi.fn();
 const mockGetStructuredContentTablesById = vi.fn(() => []);
 const mockSetZoom = vi.fn();
 const mockGetZoom = vi.fn(() => 100);
-const mockEventListeners = new Map<string, Function[]>();
+type EventHandler = (...args: unknown[]) => void;
+const mockEventListeners = new Map<string, EventHandler[]>();
 
-const mockOn = vi.fn((event: string, handler: Function) => {
+const mockOn = vi.fn((event: string, handler: EventHandler) => {
   if (!mockEventListeners.has(event)) {
     mockEventListeners.set(event, []);
   }

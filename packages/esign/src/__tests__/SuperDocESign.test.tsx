@@ -102,7 +102,7 @@ type SuperDocMockType = typeof SuperDoc & {
   mockGetZoom: MockFn;
   mockOn: MockFn;
   emitMockEvent: (event: string, data: any) => void;
-  mockEventListeners: Map<string, Function[]>;
+  mockEventListeners: Map<string, ((...args: unknown[]) => void)[]>;
   mockEditor: MockEditor;
 };
 

@@ -18,15 +18,14 @@ describe('getMarksFromSelection', () => {
     expect(result.some((mark) => mark.type === schema.marks.em)).toBe(true);
   });
 
-  it('collects marks across a range selection', () => {
+  it('returns only marks shared across a range selection', () => {
     const testDoc = doc(p(em('Hi '), strong('there')));
     const state = EditorState.create({ schema, doc: testDoc });
     const rangeState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1, testDoc.content.size - 1)));
 
     const result = getMarksFromSelection(rangeState);
 
-    expect(result.filter((mark) => mark.type === schema.marks.em).length).toBeGreaterThan(0);
-    expect(result.filter((mark) => mark.type === schema.marks.strong).length).toBeGreaterThan(0);
+    expect(result).toEqual([]);
   });
 
   describe('inherited runProperties from paragraph', () => {
@@ -202,4 +201,93 @@ describe('getMarksFromSelection', () => {
 
     expect(result.inlineRunProperties).toEqual({ styleId: 'Heading1Char' });
   });
+
+  it('resolves non-empty selections through the style cascade', () => {
+    const rangeSchema = new Schema({
+      nodes: {
+        doc: { content: 'paragraph+' },
+        paragraph: {
+          content: 'inline*',
+          group: 'block',
+          attrs: { paragraphProperties: { default: null } },
+          toDOM() {
+            return ['p', 0];
+          },
+        },
+        run: {
+          content: 'text*',
+          group: 'inline',
+          inline: true,
+          attrs: { runProperties: { default: null } },
+          toDOM() {
+            return ['span', 0];
+          },
+        },
+        text: { group: 'inline' },
+      },
+      marks: {
+        bold: {
+          attrs: { value: { default: true } },
+          toDOM() {
+            return ['strong', 0];
+          },
+        },
+        textStyle: {
+          attrs: { styleId: { default: null } },
+          toDOM() {
+            return ['span', 0];
+          },
+        },
+      },
+    });
+    const testDoc = rangeSchema.node('doc', null, [
+      rangeSchema.node('paragraph', null, [
+        rangeSchema.node('run', { runProperties: { styleId: 'Heading1Char' } }, [rangeSchema.text('Hello')]),
+        rangeSchema.node('run', { runProperties: { styleId: 'Heading1Char' } }, [rangeSchema.text('World')]),
+      ]),
+    ]);
+    const baseState = EditorState.create({ schema: rangeSchema, doc: testDoc });
+    const state = baseState.apply(statefulSelection(baseState, testDoc, 2, testDoc.content.size - 2));
+    const editor = {
+      converter: {
+        translatedLinkedStyles: {
+          docDefaults: {
+            runProperties: {},
+            paragraphProperties: {},
+          },
+          latentStyles: {},
+          styles: {
+            Normal: {
+              styleId: 'Normal',
+              type: 'paragraph',
+              default: true,
+              name: 'Normal',
+              runProperties: {},
+              paragraphProperties: {},
+            },
+            Heading1Char: {
+              styleId: 'Heading1Char',
+              type: 'character',
+              name: 'Heading 1 Char',
+              runProperties: { bold: true },
+              paragraphProperties: {},
+            },
+          },
+        },
+        numbering: {},
+        translatedNumbering: {},
+        convertedXml: {},
+      },
+    };
+
+    const result = getSelectionFormattingState(state, editor);
+
+    expect(result.resolvedRunProperties).toMatchObject({ bold: true });
+    expect(result.resolvedMarks.some((mark) => mark.type.name === 'bold')).toBe(true);
+    expect(result.inlineRunProperties).toEqual({ styleId: 'Heading1Char' });
+  });
 });
+
+function statefulSelection(state, testDoc, from, to) {
+  return state.tr.setSelection(TextSelection.create(testDoc, from, to));
+}

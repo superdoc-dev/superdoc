@@ -28,6 +28,18 @@ export function getFormattingStateAtPos(
   inlineRunProperties: Record<string, unknown> | null;
   styleRunProperties: Record<string, unknown> | null;
 };
+export function getFormattingStateForRange(
+  state: EditorState,
+  from: number,
+  to: number,
+  editor?: any,
+): {
+  resolvedMarks: Mark[];
+  inlineMarks: Mark[];
+  resolvedRunProperties: Record<string, unknown> | null;
+  inlineRunProperties: Record<string, unknown> | null;
+  styleRunProperties: Record<string, unknown> | null;
+};
 export function getInheritedRunProperties(
   $pos: any,
   editor?: any,

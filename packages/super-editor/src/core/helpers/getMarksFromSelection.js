@@ -18,20 +18,7 @@ export function getSelectionFormattingState(state, editor) {
     });
   }
 
-  const resolvedMarks = [];
-  const inlineMarks = [];
-  state.doc.nodesBetween(from, to, (node) => {
-    resolvedMarks.push(...node.marks);
-    inlineMarks.push(...node.marks);
-  });
-
-  return {
-    resolvedMarks,
-    inlineMarks,
-    resolvedRunProperties: decodeRPrFromMarks(inlineMarks),
-    inlineRunProperties: decodeRPrFromMarks(inlineMarks),
-    styleRunProperties: null,
-  };
+  return getFormattingStateForRange(state, from, to, editor);
 }
 
 export function getFormattingStateAtPos(state, pos, editor, options = {}) {
@@ -74,7 +61,8 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   );
   const resolvedRunProperties = resolvedFromSelection?.resolvedRunProperties ?? inlineRunProperties;
   const styleRunProperties = resolvedFromSelection?.styleRunProperties ?? null;
-  resolvedMarks.push(...inlineMarks);
+  const resolvedMarksFromProperties = createMarksFromRunProperties(state, resolvedRunProperties, editor);
+  resolvedMarks.push(...(resolvedMarksFromProperties.length ? resolvedMarksFromProperties : inlineMarks));
   if (storedMarks && includeCursorMarksWithStoredMarks) {
     resolvedMarks.push(...cursorMarks);
   }
@@ -86,6 +74,55 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
     inlineRunProperties,
     styleRunProperties,
   };
+}
+
+export function getFormattingStateForRange(state, from, to, editor) {
+  const segments = [];
+  const seen = new Set();
+
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText || node.text?.length === 0) return;
+    const segmentPos = pos + 1;
+    if (seen.has(segmentPos)) return;
+    seen.add(segmentPos);
+    segments.push(getFormattingStateAtPos(state, segmentPos, editor));
+  });
+
+  if (segments.length === 0) {
+    return getFormattingStateAtPos(state, from, editor);
+  }
+
+  return aggregateFormattingSegments(state, editor, segments);
+}
+
+function aggregateFormattingSegments(state, editor, segments) {
+  const resolvedRunProperties = intersectRunProperties(segments.map((segment) => segment.resolvedRunProperties));
+  const inlineRunProperties = intersectRunProperties(segments.map((segment) => segment.inlineRunProperties));
+  const styleRunProperties = intersectRunProperties(segments.map((segment) => segment.styleRunProperties));
+
+  return {
+    resolvedMarks: createMarksFromRunProperties(state, resolvedRunProperties, editor),
+    inlineMarks: createMarksFromRunProperties(state, inlineRunProperties, editor),
+    resolvedRunProperties,
+    inlineRunProperties,
+    styleRunProperties,
+  };
+}
+
+function intersectRunProperties(runPropertiesList) {
+  const filtered = runPropertiesList.filter((props) => props && typeof props === 'object');
+  if (filtered.length === 0) return null;
+
+  const first = filtered[0];
+  const intersection = {};
+  Object.keys(first).forEach((key) => {
+    const serialized = JSON.stringify(first[key]);
+    if (filtered.every((props) => JSON.stringify(props[key]) === serialized)) {
+      intersection[key] = first[key];
+    }
+  });
+
+  return Object.keys(intersection).length ? intersection : null;
 }
 
 /**

@@ -28,6 +28,20 @@ vi.stubGlobal('__SUPERDOC_AUDIT_MOCK__', (event: { type: string; data?: Record<s
 
 const mockAppendRowsToStructuredContentTable = vi.fn();
 const mockGetStructuredContentTablesById = vi.fn(() => []);
+const mockSetZoom = vi.fn();
+const mockGetZoom = vi.fn(() => 100);
+const mockEventListeners = new Map<string, Function[]>();
+
+const mockOn = vi.fn((event: string, handler: Function) => {
+  if (!mockEventListeners.has(event)) {
+    mockEventListeners.set(event, []);
+  }
+  mockEventListeners.get(event)!.push(handler);
+});
+
+const emitMockEvent = (event: string, data: any) => {
+  mockEventListeners.get(event)?.forEach((fn) => fn(data));
+};
 
 const mockEditor = {
   commands: {
@@ -70,7 +84,9 @@ const SuperDocMock = vi.fn((options: any = {}) => {
   return {
     destroy: mockDestroy,
     activeEditor: isPdf ? null : mockEditor,
-    on: vi.fn(),
+    on: mockOn,
+    setZoom: mockSetZoom,
+    getZoom: mockGetZoom,
   };
 });
 
@@ -85,6 +101,11 @@ export const resetLastConstructorOptions = () => {
 (SuperDocMock as any).mockAppendRowsToStructuredContentTable = mockAppendRowsToStructuredContentTable;
 (SuperDocMock as any).mockGetStructuredContentTablesById = mockGetStructuredContentTablesById;
 (SuperDocMock as any).mockDestroy = mockDestroy;
+(SuperDocMock as any).mockSetZoom = mockSetZoom;
+(SuperDocMock as any).mockGetZoom = mockGetZoom;
+(SuperDocMock as any).mockOn = mockOn;
+(SuperDocMock as any).emitMockEvent = emitMockEvent;
+(SuperDocMock as any).mockEventListeners = mockEventListeners;
 (SuperDocMock as any).mockAuditEvents = auditEvents;
 (SuperDocMock as any).resetAuditEvents = resetAuditEvents;
 (SuperDocMock as any).recordAuditEvent = recordAuditEvent;

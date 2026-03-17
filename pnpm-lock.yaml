@@ -1209,7 +1209,7 @@ importers:
         specifier: workspace:*
         version: link:..
       pdfjs-dist:
-        specifier: 5.4.624
+        specifier: 'catalog:'
         version: 5.4.624
       react:
         specifier: 'catalog:'

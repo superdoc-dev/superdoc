@@ -243,9 +243,9 @@ IMPORTANT: Never pass "doc" or "sessionId"...
 
 ## Tool Categories
 ## Recommended Workflow
-## query_match -- correct select formats
-## apply_mutations -- valid step ops
-## Standalone tools
+## superdoc_search -- targeting
+## superdoc_mutations -- valid step ops
+## Multi-action tools
 ## Common Errors</div>
             </div>
             <div class="card" style="padding:clamp(1rem,2vw,1.5rem);border:2px solid var(--red)">
@@ -338,7 +338,7 @@ Task: {{task}}</div>
     <span class="kw">task:</span> <span class="str">'Replace "old" with "new"'</span>
   <span class="kw">assert:</span>
     - <span class="kw">type:</span> tool-call-f1
-      <span class="kw">value:</span> [query_match, apply_mutations]
+      <span class="kw">value:</span> [superdoc_search, superdoc_edit]
     - <span class="kw">type:</span> javascript
       <span class="kw">value:</span> <span class="fn">checks.cjs:validOpNames</span>
     - <span class="kw">type:</span> javascript

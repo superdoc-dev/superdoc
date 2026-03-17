@@ -40,8 +40,8 @@ async function openDocument(sdk, docPath, stateDir) {
     startupTimeoutMs: 15_000,
     requestTimeoutMs: 30_000,
     watchdogTimeoutMs: 120_000,
-    env: { 
-      SUPERDOC_CLI_STATE_DIR: stateDir 
+    env: {
+      SUPERDOC_CLI_STATE_DIR: stateDir
     },
   });
   await client.connect();
@@ -76,10 +76,7 @@ function convertTool(fn, sdk, client, toolLog) {
 }
 
 async function buildTools(sdk, client) {
-  const { tools: sdkTools } = await sdk.chooseTools({
-    provider: 'vercel',
-    includeDiscoverTool: false,
-  });
+  const { tools: sdkTools } = await sdk.chooseTools({ provider: 'vercel' });
 
   const toolLog = [];
   const tools = {};
@@ -88,34 +85,6 @@ async function buildTools(sdk, client) {
     const fn = t.function;
     if (fn?.name) tools[fn.name] = convertTool(fn, sdk, client, toolLog);
   }
-
-  // discover_tools: loads additional tool groups on demand
-  tools['discover_tools'] = tool({
-    description: 'Load additional tool groups (e.g. tables, lists, comments, create).',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: { groups: { type: 'array', items: { type: 'string' } } },
-      required: ['groups'],
-    }),
-    execute: async (args) => {
-      const groups = Array.isArray(args.groups) ? args.groups : [];
-      const { tools: newTools } = await sdk.chooseTools({
-        provider: 'vercel',
-        groups,
-        mode: 'essential',
-        includeDiscoverTool: false,
-      });
-      let added = 0;
-      for (const t of newTools) {
-        const fn = t.function;
-        if (!fn?.name || tools[fn.name]) continue;
-        tools[fn.name] = convertTool(fn, sdk, client, toolLog);
-        added++;
-      }
-      toolLog.push({ tool: 'discover_tools', ok: true });
-      return { ok: true, loaded: groups, newTools: added };
-    },
-  });
 
   return { tools, toolLog };
 }
@@ -170,7 +139,7 @@ export default class SuperDocAgentGatewayProvider {
     try {
       const { totalUsage, steps } = await generateText({
         model: modelId,
-        system: SYSTEM_PROMPT.replace('{{task}}', task),
+        system: SYSTEM_PROMPT,
         prompt: task,
         tools,
         stopWhen: STOP_CONDITION,

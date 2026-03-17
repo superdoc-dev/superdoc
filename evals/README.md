@@ -15,7 +15,6 @@ Run these commands from the repo root:
 pnpm install
 pnpm run generate:all                                  # if packages/sdk/tools/*.json are missing
 cp evals/.env.example evals/.env
-pnpm --filter @superdoc-testing/evals run extract-tools
 pnpm --filter @superdoc-testing/evals run eval:openai  # Level 1
 pnpm --prefix apps/cli run build                       # required for Level 2
 pnpm --filter @superdoc-testing/evals run eval:e2e    # Level 2
@@ -31,18 +30,35 @@ Edit `evals/.env` before running:
 
 If you prefer to work inside `evals/`, the same scripts are available as `pnpm run <script>`.
 
+## Tool surface
+
+Both levels use the same **9 grouped public tools** from the SDK:
+
+| Tool | Purpose |
+|------|---------|
+| `superdoc_search` | Find text or nodes in the document |
+| `superdoc_get_content` | Read document content (text, markdown, html, info) |
+| `superdoc_edit` | Insert, replace, delete text, undo/redo |
+| `superdoc_format` | Apply inline and paragraph formatting |
+| `superdoc_create` | Create new paragraphs or headings |
+| `superdoc_list` | Create and manipulate bullet/numbered lists |
+| `superdoc_comment` | Create, update, delete, and list comments |
+| `superdoc_track_changes` | Review and resolve tracked changes |
+| `superdoc_mutations` | Execute multi-step atomic edits in a single batch |
+
+Level 1 loads the generated SDK provider bundle through a thin Promptfoo adapter that returns the bundle's `tools` array. Level 2 uses `sdk.chooseTools()`. The system prompt comes from `packages/sdk/tools/system-prompt.md`.
+
 ## Two levels of testing
 
 ### Level 1: Tool quality
 
-Give the model a task plus a small essential tool bundle. Check whether it chooses the right tools and arguments. No real document execution.
+Give the model a task plus the full public tool bundle. Check whether it chooses the right tools and arguments. No real document execution.
 
-- **31 tests** across 12 categories
-- **2 prompts**: `prompts/agent.txt` and `prompts/minimal.txt`
+- **28 tests** across 11 categories
+- **2 prompts**: `prompts/sdk-agent.cjs` (SDK system prompt + task) and `prompts/minimal.txt`
 - **3 active providers** via native Promptfoo OpenAI providers: GPT-4o, GPT-4.1-mini, GPT-5.4
-- **186 evaluations per full run**: 31 tests x 2 prompts x 3 providers
 - Config: `promptfooconfig.yaml`
-- Tool bundle: `lib/essential.json` (generated, gitignored)
+- Tool bundle: loaded from `../packages/sdk/tools/tools.openai.json` via `lib/sdk-tools.cjs:get_tools`
 
 ### Level 2: Execution (E2E)
 
@@ -57,7 +73,6 @@ Run the full agent loop on real `.docx` fixtures. Open the document, let the mod
 
 | Command | What it does |
 |---------|--------------|
-| `pnpm run extract-tools` | Generate `lib/essential.json` from SDK tool catalogs |
 | `pnpm run eval` | Level 1 across all active providers in `promptfooconfig.yaml` |
 | `pnpm run eval:openai` | Level 1 filtered to `GPT-*` providers; currently equivalent to `eval` |
 | `pnpm run eval:e2e` | Level 2 execution tests via AI Gateway |
@@ -75,10 +90,10 @@ evals/
   promptfooconfig.yaml              Level 1 tool-quality config
   promptfooconfig.e2e.yaml          Level 2 execution config
   prompts/
-    agent.txt                       Main system prompt
+    sdk-agent.cjs                   SDK system prompt + task injection
     minimal.txt                     Minimal baseline prompt
   tests/
-    tool-quality.yaml               31 tool-selection / argument-shape tests
+    tool-quality.yaml               28 tool-selection / argument-shape tests
     execution.yaml                  21 real DOCX editing tests
   providers/
     superdoc-agent-gateway.mjs      AI SDK + AI Gateway execution provider
@@ -88,8 +103,7 @@ evals/
   lib/
     checks.cjs                      Assertion helpers for tool-call validation
     normalize.cjs                   Cross-provider tool call normalization
-    extract.mjs                     SDK tool extraction script
-    essential.json                  Generated tool bundle: 7 essential tools + discover_tools
+    sdk-tools.cjs                   Promptfoo adapter for the SDK OpenAI tool bundle
     save-baseline.mjs               Save versioned result snapshots
     compare-baselines.mjs           Compare baseline snapshots
     analyze-results.mjs             Generate HTML analysis from eval output
@@ -114,17 +128,17 @@ evals/
 ### Tool quality test (Level 1)
 
 ```yaml
-- description: 'Replace uses text.rewrite, not bare replace'
+- description: 'Replace uses superdoc_search + superdoc_edit'
   metadata: { category: mutation }
   vars:
     task: 'Replace "old title" with "new title" in the document.'
   assert:
     - type: tool-call-f1
-      value: [query_match, apply_mutations]
+      value: [superdoc_search, superdoc_edit]
       threshold: 0.5
       metric: tool_selection
     - type: javascript
-      value: file://lib/checks.cjs:validOpNames
+      value: file://lib/checks.cjs:usesRewriteOp
       metric: argument_accuracy
     - type: javascript
       value: file://lib/checks.cjs:noHallucinatedParams
@@ -164,17 +178,19 @@ Execution tests should assert all three:
 | `stepFields` | Every mutation step has `op` and `where` |
 | `noRequireAny` | Mutations do not use `require: "any"` |
 | `noMixedBatch` | Text edits and `format.apply` are not mixed in one batch |
-| `correctFormatArgs` | `format.apply` nests formatting under `args.inline` |
-| `textSearchArgs` | `query_match` uses a valid text selector |
-| `nodeSearchArgs` | `query_match` uses a valid node selector |
-| `nodeSearchOrBlocksList` | Listing nodes uses `query_match` or `blocks_list` correctly |
-| `noTextInsertForStructure` | Headings/paragraphs use standalone create tools, not `text.insert` |
-| `validDiscoverGroups` | `discover_tools` loads valid group names |
+| `correctFormatArgs` | `superdoc_format` inline or `format.apply` nests formatting under `args.inline` |
+| `textSearchArgs` | `superdoc_search` uses a valid text selector |
+| `nodeSearchArgs` | `superdoc_search` uses a valid node selector |
+| `usesGetContentText` | `superdoc_get_content` called with `action: "text"` |
+| `noTextInsertForStructure` | Headings/paragraphs use `superdoc_create`, not `text.insert` |
+| `usesCreateAction` | `superdoc_create` called with the expected `action` value |
+| `usesCommentCreate` | `superdoc_comment` called with `action: "create"` |
+| `usesEditUndo` | `superdoc_edit` called with `action: "undo"` |
 | `isTrackedMode` | Tracked changes use `changeMode: "tracked"` |
 | `isNotTrackedMode` | Direct edits do not use tracked mode |
 | `atomicMultiStep` | Multi-step mutations are atomic and grouped together |
-| `usesDeleteOp` | The mutation includes a delete-style op |
-| `usesRewriteOp` | The mutation includes `text.rewrite` |
+| `usesDeleteOp` | The call includes a delete-style operation |
+| `usesRewriteOp` | The call includes a rewrite/replace operation |
 
 ## Adding a new model
 
@@ -188,7 +204,7 @@ Add another native provider to `promptfooconfig.yaml`:
   config:
     temperature: 0
     seed: 42
-    tools: file://lib/essential.json
+    tools: file://lib/sdk-tools.cjs:get_tools
     tool_choice: required
     timeout: 30000
 ```
@@ -208,8 +224,7 @@ Add another entry to `promptfooconfig.e2e.yaml`:
 
 ## Notes
 
-- `lib/essential.json` is generated and gitignored. If it is missing, run `pnpm run extract-tools`.
-- If `extract-tools` fails because `packages/sdk/tools/*.json` are missing, run `pnpm run generate:all` from the repo root first.
+- If `packages/sdk/tools/*.json` are missing, run `pnpm run generate:all` from the repo root first.
 - Level 1 currently uses native OpenAI Promptfoo providers. Level 2 uses a custom provider that routes through Vercel AI Gateway.
 - `pnpm run view` is the correct script name. There is no `eval:view` script in the current package.
 - `pnpm run analyze` reads `results/latest.json`, writes `results/analysis.html`, and requires `ANTHROPIC_API_KEY`.

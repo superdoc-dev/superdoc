@@ -1,8 +1,7 @@
 /**
- * Custom Promptfoo provider: Vercel AI SDK with tool calling + live discovery.
+ * Custom Promptfoo provider: Vercel AI SDK with tool calling.
  *
- * Tools from the SuperDoc SDK. discover_tools calls the real SDK.
- * All other tools return mock results and capture their args.
+ * Tools from the SuperDoc SDK. All tools return mock results and capture args.
  * Returns structured tool calls in OpenAI format for tool-call-f1 assertions.
  *
  * Config (set in YAML):
@@ -28,7 +27,7 @@ function convertTool(fn, capturedCalls) {
 
 async function buildTools(capturedCalls) {
   const sdk = await loadSdk();
-  const { tools: sdkTools } = await sdk.chooseTools({ provider: 'vercel', });
+  const { tools: sdkTools } = await sdk.chooseTools({ provider: 'vercel' });
 
   const tools = {};
   for (const t of sdkTools) {
@@ -41,40 +40,6 @@ async function buildTools(capturedCalls) {
       }
     }
   }
-
-  // discover_tools: calls real SDK, adds new tools to active set
-  tools['discover_tools'] = tool({
-    description: 'Load additional tool groups.',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: { groups: { type: 'array', items: { type: 'string' } } },
-      required: ['groups'],
-    }),
-    execute: async (args) => {
-      capturedCalls.push({ name: 'discover_tools', args });
-      const groups = Array.isArray(args.groups) ? args.groups : [];
-      const { tools: newSdkTools } = await sdk.chooseTools({
-        provider: 'vercel',
-        groups,
-        mode: 'essential',
-        includeDiscoverTool: false,
-      });
-
-      let added = 0;
-      for (const t of newSdkTools) {
-        const fn = t.function;
-        if (fn?.name && !tools[fn.name]) {
-          try {
-            tools[fn.name] = convertTool(fn, capturedCalls);
-            added++;
-          } catch (err) {
-            console.warn(`Failed to convert discovered tool "${fn.name}": ${err.message}`);
-          }
-        }
-      }
-      return { ok: true, loaded: groups, newTools: added, totalTools: Object.keys(tools).length };
-    },
-  });
 
   return tools;
 }

@@ -15,8 +15,7 @@ export const PATHS = {
   fixtures: resolve(EVALS_ROOT, 'fixtures'),
   output: resolve(EVALS_ROOT, 'results/output'),
   cache: resolve(EVALS_ROOT, 'results/.cache'),
-  prompt: resolve(EVALS_ROOT, 'prompts/agent.txt'),
-  essential: resolve(EVALS_ROOT, 'lib/essential.json'),
+  prompt: resolve(EVALS_ROOT, '..', 'packages/sdk/tools/system-prompt.md'),
   cliBin: resolve(EVALS_ROOT, '../apps/cli/dist/index.js'),
 };
 

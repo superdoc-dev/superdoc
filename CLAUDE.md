@@ -136,7 +136,7 @@ These directories are produced by `pnpm run generate:all`:
 
 | Directory | In git? | What it contains |
 |-----------|---------|-----------------|
-| `packages/document-api/generated/` | No (gitignored) | Agent tool schemas, JSON schemas, manifest |
+| `packages/document-api/generated/` | No (gitignored) | Agent artifacts, JSON schemas |
 | `apps/cli/generated/` | No (gitignored) | SDK contract JSON exported from CLI metadata |
 | `packages/sdk/langs/node/src/generated/` | No (gitignored) | Node SDK generated client code |
 | `packages/sdk/langs/python/superdoc/generated/` | No (gitignored) | Python SDK generated client code |

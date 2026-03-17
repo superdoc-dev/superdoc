@@ -16,34 +16,55 @@ function findParagraph($pos) {
 }
 
 /**
- * When the cursor is inside an empty paragraph, update
- * `paragraphProperties.runProperties` to match the current storedMarks
- * on the transaction.
- *
- * This keeps the paragraph's persisted run properties in sync with
- * what the user toggled via the toolbar, so that both the toolbar
- * (via getActiveFormatting) and wrapTextInRunsPlugin read the
- * correct formatting state.
+ * Adds a single mark's run-property representation to an empty paragraph's
+ * `paragraphProperties.runProperties`.
  *
  * @param {import('prosemirror-state').Transaction} tr
+ * @param {import('prosemirror-model').Mark | { type: import('prosemirror-model').MarkType | { name: string } | string, attrs?: Record<string, unknown> }} mark
  */
-export function syncParagraphRunProperties(tr) {
+export function addParagraphRunProperty(tr, mark) {
+  if (!mark) return;
+
+  updateEmptyParagraphRunProperties(tr, (currentRunProperties) => {
+    const nextRunProperties = { ...(currentRunProperties || {}) };
+    const decodedRunProperties = decodeRPrFromMarks([mark]);
+    if (decodedRunProperties && typeof decodedRunProperties === 'object') {
+      Object.assign(nextRunProperties, decodedRunProperties);
+    }
+    return Object.keys(nextRunProperties).length > 0 ? nextRunProperties : null;
+  });
+}
+
+/**
+ * Removes a single mark's run-property representation from an empty paragraph's
+ * `paragraphProperties.runProperties`.
+ *
+ * @param {import('prosemirror-state').Transaction} tr
+ * @param {import('prosemirror-model').Mark | { type: import('prosemirror-model').MarkType | { name: string } | string, attrs?: Record<string, unknown> }} mark
+ */
+export function removeParagraphRunProperty(tr, mark) {
+  if (!mark) return;
+
+  updateEmptyParagraphRunProperties(tr, (currentRunProperties) => {
+    const nextRunProperties = { ...(currentRunProperties || {}) };
+    removeRunPropertiesForMark(nextRunProperties, mark);
+    return Object.keys(nextRunProperties).length > 0 ? nextRunProperties : null;
+  });
+}
+
+function updateEmptyParagraphRunProperties(tr, updater) {
   const { selection } = tr;
   if (!selection.empty) return;
 
-  const $head = selection.$head;
-  const result = findParagraph($head);
+  const result = findParagraph(selection.$head);
   if (!result) return;
 
   const { node: paragraph, pos: paragraphPos } = result;
-
-  // Only act on empty paragraphs (no text content)
   if (paragraph.content.size > 0) return;
 
-  const storedMarks = tr.storedMarks;
-  const newRunProperties = storedMarks && storedMarks.length > 0 ? decodeRPrFromMarks(storedMarks) : null;
-
   const currentParagraphProperties = paragraph.attrs.paragraphProperties;
+  const currentRunProperties = currentParagraphProperties?.runProperties || null;
+  const newRunProperties = updater(currentRunProperties);
 
   tr.setNodeMarkup(paragraphPos, undefined, {
     ...paragraph.attrs,
@@ -52,4 +73,29 @@ export function syncParagraphRunProperties(tr) {
       runProperties: newRunProperties,
     },
   });
+}
+
+function removeRunPropertiesForMark(runProperties, mark) {
+  const type = mark?.type?.name ?? mark?.type;
+  if (!type) return;
+
+  if (type === 'textStyle') {
+    Object.keys(mark.attrs || {}).forEach((attr) => {
+      delete runProperties[attr];
+    });
+    return;
+  }
+
+  switch (type) {
+    case 'bold':
+    case 'italic':
+    case 'strike':
+    case 'underline':
+    case 'highlight':
+      delete runProperties[type];
+      break;
+    case 'link':
+      delete runProperties.styleId;
+      break;
+  }
 }

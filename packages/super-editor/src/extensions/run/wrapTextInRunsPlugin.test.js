@@ -413,6 +413,33 @@ describe('wrapTextInRunsPlugin', () => {
       expect(paragraph.firstChild.type.name).toBe('run');
       expect(paragraph.textContent).toBe('Test');
     });
+
+    it('handles converter getters that throw without crashing', () => {
+      const schema = makeSchema();
+      const converter = {
+        numbering: {},
+      };
+      Object.defineProperty(converter, 'convertedXml', {
+        get() {
+          throw new Error('converter not ready');
+        },
+      });
+
+      const mockEditor = { converter };
+      const paragraphWithStyle = schema.node('paragraph', {
+        paragraphProperties: { styleId: 'TestStyle' },
+      });
+
+      const doc = schema.node('doc', null, [paragraphWithStyle]);
+      const view = createView(schema, doc, mockEditor);
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      expect(paragraph.firstChild.type.name).toBe('run');
+      expect(paragraph.textContent).toBe('Test');
+    });
   });
 
   describe('structuredContent wrapping (SD-2011)', () => {

@@ -191,21 +191,14 @@ function getParagraphRunContext($pos, editor) {
       runProperties = normalizeRunProperties(node.attrs?.runProperties);
     }
     if (node.type.name === 'paragraph') {
-      const params = {
-        docx: editor?.converter?.convertedXml ?? {},
-        numbering: editor?.converter?.numbering ?? {},
-        translatedNumbering: editor?.converter?.translatedNumbering ?? {},
-        translatedLinkedStyles: editor?.converter?.translatedLinkedStyles ?? {},
-      };
       const paragraphAttrs = node.attrs || {};
+      const { params, resolvedPpr } = getSafeResolutionContext(editor, node, $pos, paragraphAttrs);
       return {
         params,
         isEmpty: node.content.size === 0,
         paragraphAttrs,
         runProperties,
-        resolvedPpr: editor
-          ? calculateResolvedParagraphProperties(editor, node, $pos)
-          : paragraphAttrs.paragraphProperties || {},
+        resolvedPpr,
         tableInfo,
         numberingDefinedInline: Boolean(paragraphAttrs.paragraphProperties?.numberingProperties),
       };
@@ -221,12 +214,48 @@ function normalizeRunProperties(runProperties) {
   return Object.keys(runProperties).length > 0 ? runProperties : null;
 }
 
+function getSafeResolutionContext(editor, node, $pos, paragraphAttrs) {
+  const fallback = {
+    params: {
+      docx: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {},
+    },
+    resolvedPpr: paragraphAttrs.paragraphProperties || {},
+  };
+
+  if (!editor) return fallback;
+
+  try {
+    return {
+      params: {
+        docx: editor?.converter?.convertedXml ?? {},
+        numbering: editor?.converter?.numbering ?? {},
+        translatedNumbering: editor?.converter?.translatedNumbering ?? {},
+        translatedLinkedStyles: editor?.converter?.translatedLinkedStyles ?? {},
+      },
+      resolvedPpr: calculateResolvedParagraphProperties(editor, node, $pos) || paragraphAttrs.paragraphProperties || {},
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function createMarksFromRunProperties(state, runProperties, editor) {
-  const docx = editor?.converter?.convertedXml ?? {};
+  const docx = getSafeConvertedXml(editor);
   return encodeMarksFromRPr(runProperties, docx)
     .map((def) => {
       const markType = state.schema.marks[def.type];
       return markType ? markType.create(def.attrs) : null;
     })
     .filter(Boolean);
+}
+
+function getSafeConvertedXml(editor) {
+  try {
+    return editor?.converter?.convertedXml ?? {};
+  } catch {
+    return {};
+  }
 }

@@ -1341,8 +1341,20 @@ export class HeaderFooterSessionManager {
     }
 
     // Map DOM client rects to layout coordinates.
-    const editorHostRect = (view.dom as HTMLElement).getBoundingClientRect();
+    //
+    // Range.getClientRects() measures in viewport pixels after PresentationEditor
+    // applies scale(zoom). Region coordinates, page offsets, and the rest of the
+    // selection pipeline use unscaled layout coordinates, so the DOM-derived
+    // deltas and sizes must be converted back out of zoom space here.
+    const editorDom = view.dom as HTMLElement;
+    const editorHostRect = editorDom.getBoundingClientRect();
     const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const zoom =
+      typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
+        ? layoutOptions.zoom
+        : 1;
+    const toLayoutUnits = (viewportPixels: number): number => viewportPixels / zoom;
     const layoutRects: LayoutRect[] = [];
 
     for (const clientRect of domRectList) {
@@ -1355,10 +1367,10 @@ export class HeaderFooterSessionManager {
         continue;
       }
 
-      const localX = clientRect.left - editorHostRect.left;
-      const localY = clientRect.top - editorHostRect.top;
-      const width = clientRect.width;
-      const height = clientRect.height;
+      const localX = toLayoutUnits(clientRect.left - editorHostRect.left);
+      const localY = toLayoutUnits(clientRect.top - editorHostRect.top);
+      const width = toLayoutUnits(clientRect.width);
+      const height = toLayoutUnits(clientRect.height);
 
       if (!Number.isFinite(localX) || !Number.isFinite(localY) || width <= 0 || height <= 0) {
         continue;

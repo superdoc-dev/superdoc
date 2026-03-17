@@ -31,8 +31,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate SDK artifacts
+        run: pnpm run generate:all
+
       - name: Build superdoc (dependency)
         run: pnpm run build:superdoc
+
+      - name: Build SDK (dependency)
+        run: pnpm --prefix packages/sdk/langs/node run build
 
       - name: Build
         run: pnpm --prefix apps/mcp run build

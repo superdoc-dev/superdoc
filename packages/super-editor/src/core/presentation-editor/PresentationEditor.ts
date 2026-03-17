@@ -2194,6 +2194,52 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Scroll a comment or tracked-change anchor so its top edge lands at the
+   * requested viewport Y coordinate.
+   *
+   * @param threadId - Comment or tracked-change identifier
+   * @param targetClientY - Desired top position in client/viewport coordinates
+   * @param options - Scrolling options
+   * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @returns True when the thread could be resolved and scrolling was applied
+   */
+  scrollThreadAnchorToClientY(
+    threadId: string,
+    targetClientY: number,
+    options: { behavior?: ScrollBehavior } = {},
+  ): boolean {
+    if (!threadId || !Number.isFinite(targetClientY)) return false;
+
+    const threadPosition = this.#collectCommentPositions()[threadId];
+    if (!threadPosition) return false;
+
+    const selectionBounds = this.getSelectionBounds(threadPosition.start, threadPosition.end);
+    const currentTop = selectionBounds?.bounds?.top;
+    if (!Number.isFinite(currentTop)) return false;
+
+    const deltaY = currentTop - targetClientY;
+    if (Math.abs(deltaY) < 1) return true;
+
+    const behavior = options.behavior ?? 'auto';
+    const scrollTarget = this.#scrollContainer ?? this.#visibleHost;
+
+    if (scrollTarget instanceof Window) {
+      const currentScrollY = scrollTarget.scrollY ?? scrollTarget.pageYOffset ?? 0;
+      scrollTarget.scrollTo({ top: currentScrollY + deltaY, behavior });
+      return true;
+    }
+
+    if (scrollTarget instanceof HTMLElement) {
+      const maxScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, scrollTarget.scrollTop + deltaY));
+      scrollTarget.scrollTo({ top: nextScrollTop, behavior });
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Find the DOM element containing a specific document position.
    * Returns the most specific (smallest range) matching element.
    */
@@ -3202,6 +3248,26 @@ export class PresentationEditor extends EventEmitter {
       },
       onUpdateAwarenessSession: () => {
         this.#updateAwarenessSession();
+      },
+      onSurfaceUpdate: ({ sourceEditor, surface, headerId, sectionType }) => {
+        this.emit('headerFooterUpdate', {
+          editor: this.#editor,
+          sourceEditor,
+          surface,
+          headerId,
+          sectionType,
+        });
+      },
+      onSurfaceTransaction: ({ sourceEditor, surface, headerId, sectionType, transaction, duration }) => {
+        this.emit('headerFooterTransaction', {
+          editor: this.#editor,
+          sourceEditor,
+          surface,
+          headerId,
+          sectionType,
+          transaction,
+          duration,
+        });
       },
     });
 
@@ -5410,21 +5476,42 @@ export class PresentationEditor extends EventEmitter {
    */
   #applyZoom() {
     if (this.#isSemanticFlowMode()) {
-      // Semantic mode: fill the container with fluid widths, no zoom scaling.
-      this.#viewportHost.style.width = '100%';
+      const zoom = this.#layoutOptions.zoom ?? 1;
+
+      // Semantic mode: fluid widths with optional zoom scaling.
       this.#viewportHost.style.minWidth = '';
       this.#viewportHost.style.minHeight = '';
-      this.#viewportHost.style.transform = '';
 
-      this.#painterHost.style.width = '100%';
-      this.#painterHost.style.minHeight = '';
-      this.#painterHost.style.transformOrigin = '';
-      this.#painterHost.style.transform = '';
+      if (zoom === 1) {
+        this.#viewportHost.style.width = '100%';
+        this.#viewportHost.style.transform = '';
 
-      this.#selectionOverlay.style.width = '100%';
-      this.#selectionOverlay.style.height = '100%';
-      this.#selectionOverlay.style.transformOrigin = '';
-      this.#selectionOverlay.style.transform = '';
+        this.#painterHost.style.width = '100%';
+        this.#painterHost.style.minHeight = '';
+        this.#painterHost.style.transformOrigin = '';
+        this.#painterHost.style.transform = '';
+
+        this.#selectionOverlay.style.width = '100%';
+        this.#selectionOverlay.style.height = '100%';
+        this.#selectionOverlay.style.transformOrigin = '';
+        this.#selectionOverlay.style.transform = '';
+      } else {
+        // Scale content while keeping fluid layout: set unscaled width to
+        // container/zoom so the reflowed content visually fills the container
+        // after the CSS transform enlarges it.
+        this.#viewportHost.style.width = `${100 / zoom}%`;
+        this.#viewportHost.style.transform = '';
+
+        this.#painterHost.style.width = '100%';
+        this.#painterHost.style.minHeight = '';
+        this.#painterHost.style.transformOrigin = 'top left';
+        this.#painterHost.style.transform = `scale(${zoom})`;
+
+        this.#selectionOverlay.style.width = '100%';
+        this.#selectionOverlay.style.height = '100%';
+        this.#selectionOverlay.style.transformOrigin = 'top left';
+        this.#selectionOverlay.style.transform = `scale(${zoom})`;
+      }
       return;
     }
 

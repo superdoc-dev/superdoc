@@ -193,7 +193,7 @@ describe('validateQuery', () => {
       select: { type: 'paragraph' },
     });
     expect(result.select.type).toBe('node');
-    expect((result.select as { nodeKind?: string }).nodeKind).toBe('paragraph');
+    expect((result.select as { nodeType?: string }).nodeType).toBe('paragraph');
   });
 
   test('validates with limit and offset', () => {
@@ -206,11 +206,11 @@ describe('validateQuery', () => {
     expect(result.offset).toBe(5);
   });
 
-  test('validates nodeKind via legacy nodeType key', () => {
+  test('validates nodeType on node selector', () => {
     const result = validateQuery({
       select: { type: 'node', nodeType: 'paragraph' },
     });
-    expect((result.select as { nodeKind?: string }).nodeKind).toBe('paragraph');
+    expect((result.select as { nodeType?: string }).nodeType).toBe('paragraph');
   });
 
   test('rejects non-object input', () => {

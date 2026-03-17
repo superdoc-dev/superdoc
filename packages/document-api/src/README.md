@@ -37,14 +37,14 @@ lives in adapter layers that map engine behavior into discovery envelopes and ot
 ## Selector Semantics
 
 - For dual-context types (`sdt`, `image`), selectors without an explicit `kind` may return both block and inline matches.
-- For `find`, set `kind: 'content'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
+- For `find`, set `kind: 'block'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
 
 ## Find Result Contract
 
 - `find` always returns `SDFindResult` with `items: SDNodeResult[]`.
-- Each item has `{ node, address }`, where `address` is an `SDAddress`.
-- For precise text spans/runs (for direct mutation targeting), use `query.match`, which returns `blocks[].range` and run-level metadata.
-- `insert` supports canonical `TextAddress` targeting or default insertion point when target is omitted.
+- Each item has `{ node, address }`, where `address` is a `NodeAddress`.
+- For precise mutation targeting, use `query.match`, which returns a canonical `SelectionTarget`, block addresses, and block/range metadata.
+- `insert` accepts either legacy text input with an optional `TextAddress` target or structural content with an optional `BlockNodeAddress` target. Omitting `target` inserts at the end of the document.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.
 
 ## Adapter Error Convention
@@ -98,14 +98,10 @@ const match = editor.doc.query.match({
   require: 'first',
 });
 
-const firstBlock = match.items?.[0]?.blocks?.[0];
-if (firstBlock) {
+const target = match.items?.[0]?.target;
+if (target) {
   editor.doc.replace({
-    target: {
-      kind: 'text',
-      blockId: firstBlock.blockId,
-      range: { start: firstBlock.range.start, end: firstBlock.range.end },
-    },
+    target,
     text: 'bar',
   });
 }
@@ -121,7 +117,7 @@ const receipt = editor.doc.insert(
   { changeMode: 'tracked' },
 );
 // receipt.resolution.target contains the resolved insertion point
-// receipt.inserted contains TrackedChangeAddress entries for the new change
+// receipt.success tells you whether the tracked insert applied
 ```
 
 ### Workflow: Comment Thread Lifecycle
@@ -245,33 +241,33 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert content at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, inserts at the end of the document.
+Insert content into the document. Legacy string input inserts at an optional `TextAddress`. Structural content inserts relative to an optional `BlockNodeAddress` using `placement`. When `target` is omitted, content appends at the end of the document.
 
 Supports dry-run and tracked mode.
 
-- **Input**: `InsertInput` (`{ target?, text }`)
+- **Input**: `InsertInput` (`{ value, type?, target?: TextAddress } | { content, target?: BlockNodeAddress, placement?, nestingPolicy? }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
+- **Output**: `SDMutationReceipt`
 - **Mutates**: Yes
 - **Idempotency**: non-idempotent
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+- **Failure codes**: see the generated reference docs for the full legacy vs. structural failure surface
 
 ### `replace`
 
-Replace text at a `TextAddress` target with new content. The target range must resolve to a valid span. Supports dry-run and tracked mode.
+Replace content at a contiguous selection. Text replacement accepts `SelectionTarget` or `ref`. Structural replacement accepts `BlockNodeAddress`, `SelectionTarget`, or `ref` with `content`. Supports dry-run and tracked mode.
 
-- **Input**: `ReplaceInput` (`{ target, text }`)
+- **Input**: `ReplaceInput` (`{ target?: SelectionTarget, ref?: string, text } | { target?: BlockNodeAddress | SelectionTarget, ref?: string, content, nestingPolicy? }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
+- **Output**: `SDMutationReceipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+- **Failure codes**: see the generated reference docs for the full text vs. structural failure surface
 
 ### `delete`
 
-Delete the text span covered by a `TextAddress` target. Supports dry-run and tracked mode.
+Delete content at a contiguous selection. Accepts either an explicit `SelectionTarget` or a mutation-ready `ref`. Supports dry-run and tracked mode.
 
-- **Input**: `DeleteInput` (`{ target }`)
+- **Input**: `DeleteInput` (`{ target?: SelectionTarget, ref?: string, behavior?: 'selection' | 'exact' }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes
@@ -328,9 +324,9 @@ Insert a new heading node at a specified location with a given level (1-6). Retu
 
 ### `format.apply`
 
-Apply explicit inline style changes (bold, italic, underline, strike) to a `TextAddress` range using directive semantics (`'on'`, `'off'`, `'clear'`). Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
+Apply explicit inline style changes (bold, italic, underline, strike) to a contiguous selection using directive semantics (`'on'`, `'off'`, `'clear'`). Accepts a `SelectionTarget` or `ref`. Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
 
-- **Input**: `StyleApplyInput` (`{ target, inline: { bold?, italic?, underline?, strike? } }`)
+- **Input**: `StyleApplyInput` (`{ target?: SelectionTarget, ref?: string, inline: { bold?, italic?, underline?, strike? } }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes

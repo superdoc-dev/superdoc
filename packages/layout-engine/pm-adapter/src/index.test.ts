@@ -3942,18 +3942,22 @@ describe('toFlowBlocks', () => {
         content: [
           listParagraph('(a)', [1], [{ type: 'text', text: 'Alpha item' }]),
           listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
-          listParagraph('(c)', [3], [
-            { type: 'text', text: 'Split item before image' },
-            {
-              type: 'image',
-              attrs: {
-                src: 'data:image/png;base64,iVBORw0KGgo=',
-                size: { width: 10, height: 10 },
-                wrap: { type: 'Square' },
+          listParagraph(
+            '(c)',
+            [3],
+            [
+              { type: 'text', text: 'Split item before image' },
+              {
+                type: 'image',
+                attrs: {
+                  src: 'data:image/png;base64,iVBORw0KGgo=',
+                  size: { width: 10, height: 10 },
+                  wrap: { type: 'Square' },
+                },
               },
-            },
-            { type: 'text', text: 'Split item after image' },
-          ]),
+              { type: 'text', text: 'Split item after image' },
+            ],
+          ),
           listParagraph('(d)', [4], [{ type: 'text', text: 'Delta should render as c' }]),
         ],
       };

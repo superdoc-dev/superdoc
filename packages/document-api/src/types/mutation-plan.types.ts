@@ -5,7 +5,7 @@
  * that changes document state is a step dispatched by the plan engine.
  */
 
-import type { NodeAddress } from './base.js';
+import type { BlockNodeAddress } from './base.js';
 import type { TextAddress, TrackedChangeAddress, SelectionTarget, DeleteBehavior } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
@@ -20,14 +20,14 @@ import type { Placement, NestingPolicy } from './placement.js';
 export type SelectWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
   require: 'first' | 'exactlyOne' | 'all';
 };
 
 export type RefWhere = {
   by: 'ref';
   ref: string;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
 export type TargetWhere = {
@@ -40,7 +40,7 @@ export type StepWhere = SelectWhere | RefWhere | TargetWhere;
 export type AssertWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
 // ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ export type TextInsertStep = {
   where: {
     by: 'select';
     select: TextSelector | NodeSelector;
-    within?: NodeAddress;
+    within?: BlockNodeAddress;
     require: 'first' | 'exactlyOne';
   };
   args: {

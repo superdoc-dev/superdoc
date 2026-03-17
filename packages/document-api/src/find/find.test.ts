@@ -169,7 +169,7 @@ describe('executeFind', () => {
     };
     const adapter: FindAdapter = { find: vi.fn(() => sdResult) };
     const input: SDFindInput = {
-      select: { type: 'node', nodeKind: 'paragraph' },
+      select: { type: 'node', nodeType: 'paragraph' },
       limit: 5,
     };
 

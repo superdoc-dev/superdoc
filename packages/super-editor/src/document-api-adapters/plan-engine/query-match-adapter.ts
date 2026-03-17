@@ -515,7 +515,8 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
         id,
         handle: buildResolvedHandle(ref, 'ephemeral', 'text'),
         matchKind: 'text',
-        address: raw.address,
+        // Text matches always resolve to a containing block address.
+        address: raw.address as import('@superdoc/document-api').BlockNodeAddress,
         target: buildSelectionTargetFromBlocks(blocks),
         snippet: snippetResult?.snippet ?? '',
         highlightRange: snippetResult?.highlightRange ?? { start: 0, end: 0 },

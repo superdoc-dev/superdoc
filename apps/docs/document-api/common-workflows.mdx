@@ -101,6 +101,42 @@ if (target) {
 }
 ```
 
+## Find text and insert at position
+
+Search for a heading (or any text) and insert a new paragraph relative to it:
+
+```ts
+// 1. Find the heading by text content
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'Materials and methods' },
+  require: 'first',
+});
+
+const address = match.items?.[0]?.address;
+if (!address) return;
+
+// 2. Insert a paragraph after the heading
+editor.doc.create.paragraph({
+  at: { kind: 'after', target: address },
+  text: 'New section content goes here.',
+});
+```
+
+The `address` from `query.match` is a `BlockNodeAddress` that works directly with `create.paragraph`, `create.heading`, and `create.table`. Use `kind: 'before'` to insert before the matched node instead.
+
+To insert as a tracked change, pass `changeMode: 'tracked'`:
+
+```ts
+editor.doc.create.paragraph(
+  { at: { kind: 'after', target: address }, text: 'Suggested addition.' },
+  { changeMode: 'tracked' },
+);
+```
+
+<Info>
+Use `query.match` (not `find`) for this workflow. `query.match` returns `BlockNodeAddress` objects that are directly compatible with mutation targets.
+</Info>
+
 For direct single-operation calls, prefer `item.target`. For plans or multi-step edits, prefer `item.handle.ref` so every step reuses the same resolved match.
 
 ## Build a selection explicitly with ranges.resolve

@@ -1,3 +1,18 @@
+## [1.18.2](https://github.com/superdoc-dev/superdoc/compare/v1.18.1...v1.18.2) (2026-03-11)
+
+
+### Bug Fixes
+
+* **anchor-nav:** use correct scroll container for sub-page bookmark navigation ([a300536](https://github.com/superdoc-dev/superdoc/commit/a300536111890565c6b53b0842551a5c2f4c191a)), closes [#scrollContainer](https://github.com/superdoc-dev/superdoc/issues/scrollContainer)
+* **rendering:** show comment highlight on text with Word highlight formatting ([f6d956e](https://github.com/superdoc-dev/superdoc/commit/f6d956ec38f12ff0ee3440f153edf1fa69406f2d))
+* **toc:** correct zoom scaling and rect.top bug in anchor scroll ([16c768f](https://github.com/superdoc-dev/superdoc/commit/16c768f1b81672c5126833cc1ffbe948a2c11ebd))
+
+## [1.18.1](https://github.com/superdoc-dev/superdoc/compare/v1.18.0...v1.18.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* **export:** prevent DOCX corruption from UTF-16 XML parts and schema violations (SD-2170) ([#2349](https://github.com/superdoc-dev/superdoc/issues/2349)) ([f6dbb40](https://github.com/superdoc-dev/superdoc/commit/f6dbb404ad998e502a49df7e0ffded9f2a236321))
 # [1.18.0](https://github.com/superdoc-dev/superdoc/compare/v1.17.0...v1.18.0) (2026-03-05)
 
 

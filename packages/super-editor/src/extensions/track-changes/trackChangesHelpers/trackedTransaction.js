@@ -20,7 +20,7 @@ export const trackedTransaction = ({ tr, state, user }) => {
   const notAllowedMeta = ['historyUndo', 'historyRedo', 'acceptReject'];
   const isProgrammaticInput = tr.getMeta('inputType') === 'programmatic';
   const ySyncMeta = tr.getMeta(ySyncPluginKey);
-  const allowedMeta = new Set([...onlyInputTypeMeta, ySyncPluginKey.key]);
+  const allowedMeta = new Set([...onlyInputTypeMeta, ySyncPluginKey.key, 'forceTrackChanges']);
   const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !allowedMeta.has(meta));
 
   if (

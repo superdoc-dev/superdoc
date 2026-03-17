@@ -832,6 +832,15 @@ export declare class PresentationEditor {
   scrollToPosition(pos: number, options?: { behavior?: ScrollBehavior; block?: ScrollLogicalPosition }): boolean;
 
   /**
+   * Scroll a comment or tracked-change anchor to a viewport Y coordinate.
+   */
+  scrollThreadAnchorToClientY(
+    threadId: string,
+    targetClientY: number,
+    options?: { behavior?: ScrollBehavior },
+  ): boolean;
+
+  /**
    * Scroll to a document position (async version).
    */
   scrollToPositionAsync(

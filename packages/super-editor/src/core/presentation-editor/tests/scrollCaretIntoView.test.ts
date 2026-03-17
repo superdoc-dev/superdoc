@@ -19,9 +19,7 @@ function scrollCaretIntoViewIfNeeded(
   scrollPageIntoView: (pageIndex: number) => void,
   caretLayout: { pageIndex: number },
 ): void {
-  const caretEl = selectionLayer?.querySelector(
-    '.presentation-editor__selection-caret',
-  ) as HTMLElement | null;
+  const caretEl = selectionLayer?.querySelector('.presentation-editor__selection-caret') as HTMLElement | null;
 
   if (!caretEl) {
     scrollPageIntoView(caretLayout.pageIndex);

@@ -332,6 +332,16 @@ _No fields._
 | `operations.blocks.delete.dryRun` | boolean | yes |  |
 | `operations.blocks.delete.reasons` | enum[] | no |  |
 | `operations.blocks.delete.tracked` | boolean | yes |  |
+| `operations.blocks.deleteRange` | object | yes |  |
+| `operations.blocks.deleteRange.available` | boolean | yes |  |
+| `operations.blocks.deleteRange.dryRun` | boolean | yes |  |
+| `operations.blocks.deleteRange.reasons` | enum[] | no |  |
+| `operations.blocks.deleteRange.tracked` | boolean | yes |  |
+| `operations.blocks.list` | object | yes |  |
+| `operations.blocks.list.available` | boolean | yes |  |
+| `operations.blocks.list.dryRun` | boolean | yes |  |
+| `operations.blocks.list.reasons` | enum[] | no |  |
+| `operations.blocks.list.tracked` | boolean | yes |  |
 | `operations.bookmarks.get` | object | yes |  |
 | `operations.bookmarks.get.available` | boolean | yes |  |
 | `operations.bookmarks.get.dryRun` | boolean | yes |  |
@@ -2347,2916 +2357,1831 @@ _No fields._
   },
   "global": {
     "comments": {
-      "enabled": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ]
+      "enabled": true
     },
     "dryRun": {
-      "enabled": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ]
+      "enabled": true
     },
     "history": {
-      "enabled": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ]
+      "enabled": true
     },
     "lists": {
-      "enabled": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ]
+      "enabled": true
     },
     "trackChanges": {
-      "enabled": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ]
+      "enabled": true
     }
   },
   "operations": {
     "authorities.configure": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.entries.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.entries.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.entries.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.entries.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.entries.update": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.rebuild": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "authorities.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "blocks.delete": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
+    },
+    "blocks.deleteRange": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "blocks.list": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
     },
     "bookmarks.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "bookmarks.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "bookmarks.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "bookmarks.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "bookmarks.rename": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "capabilities.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "captions.configure": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "captions.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "captions.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "captions.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "captions.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "captions.update": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.bibliography.configure": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.bibliography.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.bibliography.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.bibliography.rebuild": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.bibliography.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.sources.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.sources.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.sources.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.sources.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.sources.update": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "citations.update": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "clearContent": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "comments.create": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "comments.delete": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "comments.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "comments.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "comments.patch": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.appendContent": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.checkbox.getState": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.checkbox.setState": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.checkbox.setSymbolPair": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.checkbox.toggle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.choiceList.getItems": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.choiceList.setItems": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.choiceList.setSelected": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.clearBinding": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.clearContent": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.copy": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.date.clearValue": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.date.setCalendar": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.date.setDisplayFormat": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.date.setDisplayLocale": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.date.setStorageFormat": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.date.setValue": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.delete": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.getBinding": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.getContent": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.getParent": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.getRawProperties": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.group.ungroup": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.group.wrap": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.insertAfter": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.insertBefore": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.listChildren": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.listInRange": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.move": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.normalizeTagPayload": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.normalizeWordCompatibility": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.patch": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.patchRawProperties": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.prependContent": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.repeatingSection.cloneItem": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.repeatingSection.deleteItem": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.repeatingSection.insertItemAfter": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.repeatingSection.insertItemBefore": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.repeatingSection.listItems": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.repeatingSection.setAllowInsertDelete": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.replaceContent": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.selectByTag": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.selectByTitle": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.setBinding": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.setLockMode": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.setType": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.text.clearValue": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.text.setMultiline": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.text.setValue": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.unwrap": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "contentControls.validateWordCompatibility": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "contentControls.wrap": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "create.contentControl": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "create.heading": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "create.image": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "create.paragraph": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "create.sectionBreak": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "create.table": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "create.tableOfContents": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "crossRefs.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "crossRefs.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "crossRefs.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "crossRefs.rebuild": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "crossRefs.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "delete": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "fields.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "fields.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "fields.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "fields.rebuild": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "fields.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "find": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "footnotes.configure": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "footnotes.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "footnotes.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "footnotes.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "footnotes.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "footnotes.update": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "format.apply": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.bCs": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.bold": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.border": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.caps": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.charScale": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.color": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.contextualAlternates": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.cs": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.dstrike": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.eastAsianLayout": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.em": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.emboss": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.fitText": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.fontFamily": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.fontSize": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.fontSizeCs": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.highlight": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.iCs": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.imprint": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.italic": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.kerning": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.lang": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.letterSpacing": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.ligatures": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.numForm": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.numSpacing": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.oMath": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.outline": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.clearAlignment": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.clearAllTabStops": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.clearBorder": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.clearIndentation": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.clearShading": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.clearSpacing": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.clearTabStop": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.resetDirectFormatting": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setAlignment": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setBorder": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setFlowOptions": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setIndentation": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setKeepOptions": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setOutlineLevel": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setShading": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setSpacing": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.paragraph.setTabStop": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.position": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.rFonts": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.rStyle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.rtl": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.shading": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.shadow": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.smallCaps": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.snapToGrid": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.specVanish": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.strike": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.stylisticSets": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.underline": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.vanish": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "format.vertAlign": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "format.webHidden": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "getHtml": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "getMarkdown": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "getNode": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "getNodeById": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "getText": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "headerFooters.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "headerFooters.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "headerFooters.parts.create": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "headerFooters.parts.delete": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "headerFooters.parts.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "headerFooters.refs.clear": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "headerFooters.refs.set": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "headerFooters.refs.setLinkedToPrevious": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "headerFooters.resolve": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "history.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "history.redo": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "history.undo": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "hyperlinks.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "hyperlinks.insert": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "hyperlinks.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "hyperlinks.patch": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "hyperlinks.remove": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "hyperlinks.wrap": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.convertToFloating": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.convertToInline": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.crop": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.delete": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.flip": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "images.insertCaption": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "images.move": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.removeCaption": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.replaceSource": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.resetCrop": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.rotate": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.scale": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setAltText": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setAnchorOptions": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setDecorative": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setHyperlink": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setLockAspectRatio": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setName": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setPosition": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setSize": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setWrapDistances": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setWrapSide": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setWrapType": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.setZOrder": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "images.updateCaption": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "index.configure": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.entries.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.entries.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.entries.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.entries.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.entries.update": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.insert": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.rebuild": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "index.remove": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "info": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "insert": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "lists.applyPreset": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.applyTemplate": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.attach": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.canContinuePrevious": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "lists.canJoin": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "lists.captureTemplate": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "lists.clearLevelOverrides": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.continuePrevious": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.convertToText": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.create": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.detach": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "lists.indent": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.insert": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "lists.join": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "lists.outdent": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.separate": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevel": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelAlignment": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelBullet": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelIndents": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelMarkerFont": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelNumbering": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelPictureBullet": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelRestart": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setLevelTrailingCharacter": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setType": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "lists.setValue": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "markdownToFragment": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "mutations.apply": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
+      "dryRun": false,
       "tracked": true
     },
     "mutations.preview": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "query.match": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "ranges.resolve": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "replace": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "sections.clearHeaderFooterRef": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.clearPageBorders": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "sections.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "sections.setBreakType": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setColumns": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setHeaderFooterMargins": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setHeaderFooterRef": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setLineNumbering": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setLinkToPrevious": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setOddEvenHeadersFooters": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setPageBorders": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setPageMargins": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setPageNumbering": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setPageSetup": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setSectionDirection": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setTitlePage": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "sections.setVerticalAlign": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "styles.apply": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "styles.paragraph.clearStyle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "styles.paragraph.setStyle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.applyBorderPreset": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.clearBorder": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.clearCellSpacing": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.clearContents": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.clearDefaultStyle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.clearShading": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.clearStyle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.convertFromText": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.convertToText": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.delete": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "tables.deleteCell": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.deleteColumn": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "tables.deleteRow": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "tables.distributeColumns": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.distributeRows": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "tables.getCells": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "tables.getProperties": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "tables.getStyles": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "tables.insertCell": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.insertColumn": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "tables.insertRow": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
       "tracked": true
     },
     "tables.mergeCells": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.move": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setAltText": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setBorder": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setCellPadding": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setCellProperties": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setCellSpacing": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setColumnWidth": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setDefaultStyle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setLayout": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setRowHeight": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setRowOptions": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setShading": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setStyle": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setStyleOption": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.setTablePadding": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.sort": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.split": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.splitCell": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "tables.unmergeCells": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "toc.configure": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "toc.editEntry": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "toc.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "toc.getEntry": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "toc.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "toc.listEntries": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "toc.markEntry": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "toc.remove": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "toc.unmarkEntry": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "toc.update": {
       "available": true,
       "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "tracked": false
     },
     "trackChanges.decide": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "trackChanges.get": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     },
     "trackChanges.list": {
       "available": true,
-      "dryRun": true,
-      "reasons": [
-        "COMMAND_UNAVAILABLE"
-      ],
-      "tracked": true
+      "dryRun": false,
+      "tracked": false
     }
   },
   "planEngine": {
@@ -7317,6 +6242,76 @@ _No fields._
           "type": "object"
         },
         "blocks.delete": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "blocks.deleteRange": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "blocks.list": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -19546,7 +18541,9 @@ _No fields._
         "insert",
         "replace",
         "delete",
+        "blocks.list",
         "blocks.delete",
+        "blocks.deleteRange",
         "format.apply",
         "format.bold",
         "format.italic",

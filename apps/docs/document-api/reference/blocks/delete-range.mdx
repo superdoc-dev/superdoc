@@ -1,0 +1,290 @@
+---
+title: blocks.deleteRange
+sidebarTitle: blocks.deleteRange
+description: Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview.
+
+- Operation ID: `blocks.deleteRange`
+- API member path: `editor.doc.blocks.deleteRange(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each with ordinal, nodeId, nodeType, textPreview), before/after revision, and dryRun flag.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `end` | BlockNodeAddress | yes | BlockNodeAddress |
+| `end.kind` | `"block"` | yes | Constant: `"block"` |
+| `end.nodeId` | string | yes |  |
+| `end.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `start` | BlockNodeAddress | yes | BlockNodeAddress |
+| `start.kind` | `"block"` | yes | Constant: `"block"` |
+| `start.nodeId` | string | yes |  |
+| `start.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Example request
+
+```json
+{
+  "end": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "start": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deletedBlocks` | object[] | yes |  |
+| `deletedCount` | number | yes |  |
+| `dryRun` | boolean | yes |  |
+| `revision` | object | yes |  |
+| `revision.after` | string | yes |  |
+| `revision.before` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Example response
+
+```json
+{
+  "deletedBlocks": [
+    {
+      "nodeId": "node-def456",
+      "nodeType": "paragraph",
+      "ordinal": 1,
+      "textPreview": "example"
+    }
+  ],
+  "deletedCount": 12.5,
+  "dryRun": true,
+  "revision": {
+    "after": "example",
+    "before": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "end": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "start": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "required": [
+    "start",
+    "end"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deletedBlocks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeType": {
+            "type": "string"
+          },
+          "ordinal": {
+            "type": "number"
+          },
+          "textPreview": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ordinal",
+          "nodeId",
+          "nodeType",
+          "textPreview"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "deletedCount": {
+      "type": "number"
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "revision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "deletedCount",
+    "deletedBlocks",
+    "revision",
+    "dryRun"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deletedBlocks": {
+      "type": "array"
+    },
+    "deletedCount": {
+      "type": "number"
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "revision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "deletedCount",
+    "deletedBlocks",
+    "revision",
+    "dryRun"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "TARGET_NOT_FOUND",
+            "AMBIGUOUS_TARGET",
+            "INVALID_TARGET",
+            "INVALID_INPUT",
+            "CAPABILITY_UNAVAILABLE",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

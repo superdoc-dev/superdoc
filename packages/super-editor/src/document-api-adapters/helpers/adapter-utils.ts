@@ -59,12 +59,6 @@ function assertUnambiguous(matches: BlockCandidate[], blockId: string): void {
   }
 }
 
-function findInlineWithinTextBlock(index: BlockIndex, blockId: string): BlockCandidate | undefined {
-  const matches = findTextBlockCandidates(index, blockId);
-  assertUnambiguous(matches, blockId);
-  return matches[0];
-}
-
 /**
  * Resolves a {@link TextAddress} to absolute ProseMirror positions.
  *
@@ -386,42 +380,28 @@ export function resolveWithinScope(
 ): WithinResult {
   if (!query.within) return { ok: true, range: undefined };
 
-  if (query.within.kind === 'block') {
-    const within = findBlockById(index, query.within);
-    if (!within) {
-      addDiagnostic(
-        diagnostics,
-        `Within block "${query.within.nodeType}" with id "${query.within.nodeId}" was not found in the document.`,
-      );
-      return { ok: false };
+  // Try exact nodeType:nodeId match first.
+  let within = findBlockById(index, query.within);
+
+  // Fallback: nodeId-only lookup handles stale subtypes after paragraph ↔
+  // heading / listItem restyling (the PM node and its nodeId stay the same
+  // but the indexed nodeType changes).
+  if (!within && query.within.kind === 'block') {
+    try {
+      within = findBlockByNodeIdOnly(index, query.within.nodeId);
+    } catch {
+      // TARGET_NOT_FOUND / AMBIGUOUS_TARGET — fall through to diagnostic
     }
-    return { ok: true, range: { start: within.pos, end: within.end } };
   }
 
-  if (query.within.anchor.start.blockId !== query.within.anchor.end.blockId) {
-    addDiagnostic(diagnostics, 'Inline within anchors that span multiple blocks are not supported.');
-    return { ok: false };
-  }
-
-  const block = findInlineWithinTextBlock(index, query.within.anchor.start.blockId);
-  if (!block) {
+  if (!within) {
     addDiagnostic(
       diagnostics,
-      `Within inline anchor block "${query.within.anchor.start.blockId}" was not found in the document.`,
+      `Within block "${query.within.nodeType}" with id "${query.within.nodeId}" was not found in the document.`,
     );
     return { ok: false };
   }
-
-  const resolved = resolveTextRangeInBlock(block.node, block.pos, {
-    start: query.within.anchor.start.offset,
-    end: query.within.anchor.end.offset,
-  });
-  if (!resolved) {
-    addDiagnostic(diagnostics, 'Inline within anchor offsets could not be resolved in the target block.');
-    return { ok: false };
-  }
-
-  return { ok: true, range: { start: resolved.from, end: resolved.to } };
+  return { ok: true, range: { start: within.pos, end: within.end } };
 }
 
 /**

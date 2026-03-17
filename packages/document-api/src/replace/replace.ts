@@ -6,7 +6,7 @@
  * - Structural replacement (`content` field): continues through WriteAdapter.replaceStructured.
  *
  * Text path accepts `SelectionTarget` or `ref`. Structural path accepts
- * `SDAddress`, `SelectionTarget`, or `ref`.
+ * `BlockNodeAddress`, `SelectionTarget`, or `ref`.
  */
 
 import type { MutationOptions } from '../types/mutation-plan.types.js';
@@ -20,8 +20,7 @@ import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   isRecord,
-  isSDAddress,
-  isTextAddress,
+  isBlockNodeAddress,
   assertNoUnknownFields,
   validateNestingPolicyValue,
 } from '../validation-primitives.js';
@@ -180,12 +179,11 @@ function validateStructuralReplaceInput(input: Record<string, unknown>): void {
     });
   }
 
-  if (hasTarget && !isSDAddress(target) && !isTextAddress(target) && !isSelectionTarget(target)) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'target must be a valid address (SDAddress, TextAddress, or SelectionTarget).',
-      { field: 'target', value: target },
-    );
+  if (hasTarget && !isBlockNodeAddress(target) && !isSelectionTarget(target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a BlockNodeAddress or SelectionTarget.', {
+      field: 'target',
+      value: target,
+    });
   }
 
   if (hasRef && typeof refValue !== 'string') {

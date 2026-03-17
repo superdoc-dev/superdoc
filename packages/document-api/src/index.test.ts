@@ -112,10 +112,9 @@ function makeWriteAdapter(): WriteAdapter {
     success: true as const,
     resolution: {
       target: {
-        kind: 'content' as const,
-        stability: 'stable' as const,
-        nodeId: 'p1',
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 0 } },
+        kind: 'text' as const,
+        blockId: 'p1',
+        range: { start: 0, end: 0 },
       },
     },
   };
@@ -356,7 +355,7 @@ const PARAGRAPH_ADDRESS: NodeAddress = { kind: 'block', nodeType: 'paragraph', n
 
 const PARAGRAPH_NODE_RESULT: SDNodeResult = {
   node: { kind: 'paragraph', paragraph: { inlines: [] } },
-  address: { kind: 'content', stability: 'stable', nodeId: 'p1' },
+  address: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
 };
 
 const FIND_RESULT: SDFindResult = {
@@ -383,7 +382,7 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const input = { select: { type: 'node' as const, nodeKind: 'paragraph' } };
+    const input = { select: { type: 'node' as const, nodeType: 'paragraph' as const } };
     const result = api.find(input);
 
     expect(result).toEqual(FIND_RESULT);
@@ -1656,7 +1655,7 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
       api.replace({ target: sdTarget, content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] } });
       expect(writeAdpt.replaceStructured).toHaveBeenCalledTimes(1);
       expect(writeAdpt.write).not.toHaveBeenCalled();
@@ -1664,13 +1663,13 @@ describe('createDocumentApi', () => {
 
     it('rejects structural replace with empty fragment', () => {
       const api = makeApi();
-      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
       expect(() => api.replace({ target: sdTarget, content: [] } as any)).toThrow(/at least one node/);
     });
 
     it('rejects structural replace with invalid nestingPolicy.tables', () => {
       const api = makeApi();
-      const sdTarget = { kind: 'content' as const, stability: 'stable' as const, nodeId: 'p1' };
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
       expect(() =>
         api.replace({ target: sdTarget, content: { type: 'paragraph' }, nestingPolicy: { tables: 'yes' } } as any),
       ).toThrow(/nestingPolicy\.tables must be one of/);

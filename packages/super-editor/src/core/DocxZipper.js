@@ -13,6 +13,13 @@ const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', '
 const MIME_TYPE_FOR_EXT = { tif: 'tiff', jpg: 'jpeg' };
 const CUSTOM_XML_ITEM_PROPS_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
 
+/** OOXML content types for embedded font file extensions. */
+const FONT_CONTENT_TYPES = {
+  odttf: 'application/vnd.openxmlformats-officedocument.obfuscatedFont',
+  ttf: 'application/x-font-ttf',
+  otf: 'application/vnd.ms-opentype',
+};
+
 /**
  * Class to handle unzipping and zipping of docx files
  */
@@ -110,7 +117,7 @@ class DocxZipper {
   /**
    * Update [Content_Types].xml with extensions of new Image annotations
    */
-  async updateContentTypes(docx, media, fromJson, updatedDocs = {}) {
+  async updateContentTypes(docx, media, fromJson, updatedDocs = {}, fonts = {}) {
     const additionalPartNames = Object.keys(updatedDocs || {});
     const newMediaTypes = Object.keys(media)
       .map((name) => this.getFileExtension(name))
@@ -145,6 +152,21 @@ class DocxZipper {
       const newContentType = `<Default Extension="${type}" ContentType="image/${mime}"/>`;
       typesString += newContentType;
       seenTypes.add(type);
+    }
+
+    // Register content types for embedded font extensions
+    if (fonts) {
+      const fontExts = new Set(
+        Object.keys(fonts)
+          .map((name) => this.getFileExtension(name))
+          .filter((ext) => ext && FONT_CONTENT_TYPES[ext]),
+      );
+      for (const ext of fontExts) {
+        if (defaultMediaTypes.includes(ext)) continue;
+        if (seenTypes.has(ext)) continue;
+        typesString += `<Default Extension="${ext}" ContentType="${FONT_CONTENT_TYPES[ext]}"/>`;
+        seenTypes.add(ext);
+      }
     }
 
     // Update for comments and extensionless media overrides.
@@ -365,7 +387,7 @@ class DocxZipper {
     let zip;
 
     if (originalDocxFile) {
-      zip = await this.exportFromOriginalFile(originalDocxFile, updatedDocs, media);
+      zip = await this.exportFromOriginalFile(originalDocxFile, updatedDocs, media, fonts);
     } else {
       zip = await this.exportFromCollaborativeDocx(docx, updatedDocs, media, fonts);
     }
@@ -415,7 +437,7 @@ class DocxZipper {
       zip.file(fontName, fontUintArray);
     }
 
-    await this.updateContentTypes(zip, media, false, updatedDocs);
+    await this.updateContentTypes(zip, media, false, updatedDocs, fonts);
 
     // Reconcile package-level singleton metadata as a final safety pass.
     await this.#syncPackageMetadataInZip(zip);
@@ -430,7 +452,7 @@ class DocxZipper {
    * @param {Object} updatedDocs An object containing the updated docs (keys are relative file names)
    * @returns {Promise<JSZip>} The unzipped but updated docx file ready for zipping
    */
-  async exportFromOriginalFile(originalDocxFile, updatedDocs, media) {
+  async exportFromOriginalFile(originalDocxFile, updatedDocs, media, fonts) {
     const unzippedOriginalDocx = await this.unzip(originalDocxFile);
     const filePromises = [];
     unzippedOriginalDocx.forEach((relativePath, zipEntry) => {
@@ -457,7 +479,14 @@ class DocxZipper {
       unzippedOriginalDocx.file(path, media[path]);
     });
 
-    await this.updateContentTypes(unzippedOriginalDocx, media, false, updatedDocs);
+    // Export caller-supplied font files
+    if (fonts) {
+      for (const [fontName, fontUintArray] of Object.entries(fonts)) {
+        unzippedOriginalDocx.file(fontName, fontUintArray);
+      }
+    }
+
+    await this.updateContentTypes(unzippedOriginalDocx, media, false, updatedDocs, fonts);
 
     // Reconcile package-level singleton metadata as a final safety pass.
     await this.#syncPackageMetadataInZip(unzippedOriginalDocx);

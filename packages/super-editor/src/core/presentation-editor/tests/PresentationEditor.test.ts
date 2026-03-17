@@ -2088,6 +2088,200 @@ describe('PresentationEditor', () => {
       boundingSpy.mockRestore();
     });
 
+    it('re-emits live header/footer child editor updates and transactions', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const updateSpy = vi.fn();
+      const transactionSpy = vi.fn();
+      editor.on('headerFooterUpdate', updateSpy);
+      editor.on('headerFooterTransaction', transactionSpy);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+
+      const sourceEditor = editor.getActiveEditor();
+      expect(sourceEditor).toBeDefined();
+
+      const transaction = { docChanged: true };
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 9 });
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'header',
+          headerId: 'rId-header-default',
+          sectionType: 'default',
+        }),
+      );
+      expect(transactionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'header',
+          headerId: 'rId-header-default',
+          sectionType: 'default',
+          transaction,
+          duration: 9,
+        }),
+      );
+    });
+
+    it('stops re-emitting header/footer child editor events after exiting edit mode', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const updateSpy = vi.fn();
+      const transactionSpy = vi.fn();
+      editor.on('headerFooterUpdate', updateSpy);
+      editor.on('headerFooterTransaction', transactionSpy);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+
+      const sourceEditor = editor.getActiveEditor();
+      const transaction = { docChanged: true };
+
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 9 });
+
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      expect(transactionSpy).toHaveBeenCalledTimes(1);
+
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).not.toBe(sourceEditor));
+
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 11 });
+
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      expect(transactionSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-emits live footer child editor updates and transactions', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const updateSpy = vi.fn();
+      const transactionSpy = vi.fn();
+      editor.on('headerFooterUpdate', updateSpy);
+      editor.on('headerFooterTransaction', transactionSpy);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
+
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+
+      const sourceEditor = editor.getActiveEditor();
+      expect(sourceEditor).toBeDefined();
+
+      const transaction = { docChanged: true };
+      sourceEditor?.emit('update', { editor: sourceEditor });
+      sourceEditor?.emit('transaction', { editor: sourceEditor, transaction, duration: 12 });
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'footer',
+          headerId: 'rId-footer-default',
+          sectionType: 'default',
+        }),
+      );
+      expect(transactionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: expect.any(Object),
+          sourceEditor,
+          surface: 'footer',
+          headerId: 'rId-footer-default',
+          sectionType: 'default',
+          transaction,
+          duration: 12,
+        }),
+      );
+    });
+
     it('clears leftover footer transform when entering footer editing with non-negative minY', async () => {
       mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
 

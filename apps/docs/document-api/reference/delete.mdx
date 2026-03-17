@@ -26,14 +26,22 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Input fields
 
+### Variant 1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `behavior` | DeleteBehavior | no | DeleteBehavior |
-| `ref` | string | no |  |
-| `target` | SelectionTarget | no | SelectionTarget |
-| `target.end` | SelectionPoint | no | SelectionPoint |
-| `target.kind` | `"selection"` | no | Constant: `"selection"` |
-| `target.start` | SelectionPoint | no | SelectionPoint |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+
+### Variant 2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `behavior` | DeleteBehavior | no | DeleteBehavior |
+| `ref` | string | yes |  |
 
 ### Example request
 
@@ -58,7 +66,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -88,7 +96,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -193,17 +201,35 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 <Accordion title="Raw input schema">
 ```json
 {
-  "allOf": [
+  "oneOf": [
     {
-      "$ref": "#/$defs/TargetLocator"
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "$ref": "#/$defs/DeleteBehavior"
+        },
+        "target": {
+          "$ref": "#/$defs/SelectionTarget"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
     },
     {
       "additionalProperties": false,
       "properties": {
         "behavior": {
           "$ref": "#/$defs/DeleteBehavior"
+        },
+        "ref": {
+          "type": "string"
         }
       },
+      "required": [
+        "ref"
+      ],
       "type": "object"
     }
   ]

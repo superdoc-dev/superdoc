@@ -26,13 +26,21 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 
 ## Input fields
 
+### Variant 1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `ref` | string | no |  |
-| `target` | SelectionTarget | no | SelectionTarget |
-| `target.end` | SelectionPoint | no | SelectionPoint |
-| `target.kind` | `"selection"` | no | Constant: `"selection"` |
-| `target.start` | SelectionPoint | no | SelectionPoint |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+| `value` | object[] \\| null | yes | One of: object[], null |
+
+### Variant 2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ref` | string | yes |  |
 | `value` | object[] \\| null | yes | One of: object[], null |
 
 ### Example request
@@ -63,7 +71,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -93,7 +101,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -198,13 +206,13 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 <Accordion title="Raw input schema">
 ```json
 {
-  "allOf": [
-    {
-      "$ref": "#/$defs/TargetLocator"
-    },
+  "oneOf": [
     {
       "additionalProperties": false,
       "properties": {
+        "target": {
+          "$ref": "#/$defs/SelectionTarget"
+        },
         "value": {
           "oneOf": [
             {
@@ -233,6 +241,46 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
         }
       },
       "required": [
+        "target",
+        "value"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "number"
+                  },
+                  "val": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ref",
         "value"
       ],
       "type": "object"

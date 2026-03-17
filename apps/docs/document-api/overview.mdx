@@ -31,7 +31,7 @@ For mutation targeting and `getNode(...)`, use `NodeAddress`:
 }
 ```
 
-`find(...)` returns SDM/1 `SDAddress` values (for example `kind: "content"`). For text selectors, `query.match(...)` returns deterministic mutation-ready data: `item.target` as a canonical `SelectionTarget`, `item.handle.ref` as a reusable resolved handle, and `item.address` as the matching `NodeAddress`.
+`find(...)` returns `NodeAddress` values (for example `kind: "block"`). For text selectors, `query.match(...)` returns deterministic mutation-ready data: `item.target` as a canonical `SelectionTarget`, `item.handle.ref` as a reusable resolved handle, and `item.address` as the matching `NodeAddress`.
 
 ## Mutation targeting
 

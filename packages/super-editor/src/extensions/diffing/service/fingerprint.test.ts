@@ -31,4 +31,21 @@ describe('computeFingerprint', () => {
 
     expect(computeFingerprint(baseState)).not.toBe(computeFingerprint(changedState));
   });
+
+  it('changes when comment identity changes', () => {
+    const baseState: CanonicalDiffableState = {
+      body: { type: 'doc' },
+      comments: [{ commentId: 'c1', textJson: { type: 'doc', content: [{ type: 'text', text: 'Same' }] } }],
+      styles: null,
+      numbering: null,
+    };
+    const changedState: CanonicalDiffableState = {
+      body: { type: 'doc' },
+      comments: [{ commentId: 'c2', textJson: { type: 'doc', content: [{ type: 'text', text: 'Same' }] } }],
+      styles: null,
+      numbering: null,
+    };
+
+    expect(computeFingerprint(baseState)).not.toBe(computeFingerprint(changedState));
+  });
 });

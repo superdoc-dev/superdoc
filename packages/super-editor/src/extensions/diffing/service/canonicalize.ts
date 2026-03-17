@@ -28,16 +28,17 @@ export interface CanonicalDiffableState {
  * without changing the fingerprint.
  *
  * We therefore re-use the diff ignored-key list but explicitly keep
- * `textJson` and `elements` in the canonical output.
+ * `textJson`, `elements`, and `commentId` in the canonical output.
  */
 const CANONICAL_COMMENT_IGNORED_KEYS = COMMENT_ATTRS_DIFF_IGNORED_KEYS.filter(
-  (key) => key !== 'textJson' && key !== 'elements',
+  (key) => key !== 'textJson' && key !== 'elements' && key !== 'commentId',
 );
 
 /**
  * Strips non-semantic ownership fields from a comment for canonical
  * representation while preserving body-content fields (`textJson`,
- * `elements`) so they are covered by the fingerprint.
+ * `elements`) and identity fields (`commentId`) so they are covered by
+ * the fingerprint.
  */
 function canonicalizeComment(comment: CommentInput): Record<string, unknown> {
   const result: Record<string, unknown> = {};

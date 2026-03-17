@@ -179,6 +179,12 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   }
 
   const summary = buildDiffSummary(rawDiff);
+  const payload = structuredClone({
+    docDiffs: rawDiff.docDiffs as unknown as Record<string, unknown>[],
+    commentDiffs: rawDiff.commentDiffs as unknown as Record<string, unknown>[],
+    stylesDiff: rawDiff.stylesDiff as unknown as Record<string, unknown> | null,
+    numberingDiff: rawDiff.numberingDiff as unknown as Record<string, unknown> | null,
+  }) as Record<string, unknown>;
 
   return {
     version: PAYLOAD_VERSION,
@@ -187,12 +193,9 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     targetFingerprint: targetSnapshot.fingerprint,
     coverage: { ...V1_COVERAGE },
     summary,
-    payload: {
-      docDiffs: rawDiff.docDiffs as unknown as Record<string, unknown>[],
-      commentDiffs: rawDiff.commentDiffs as unknown as Record<string, unknown>[],
-      stylesDiff: rawDiff.stylesDiff as unknown as Record<string, unknown> | null,
-      numberingDiff: rawDiff.numberingDiff as unknown as Record<string, unknown> | null,
-    } as unknown as Record<string, unknown>,
+    // Detach the payload from editor-owned objects before returning it across
+    // the API boundary. Comment diffs can otherwise retain live comment refs.
+    payload,
   };
 }
 

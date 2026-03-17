@@ -95,7 +95,7 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `appliedOperations` | number | yes |  |
+| `appliedOperations` | integer | yes |  |
 | `baseFingerprint` | string | yes |  |
 | `coverage` | object | yes |  |
 | `coverage.body` | `true` | yes | Constant: `true` |
@@ -121,7 +121,7 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
 
 ```json
 {
-  "appliedOperations": 12.5,
+  "appliedOperations": 1,
   "baseFingerprint": "example",
   "coverage": {
     "body": true,
@@ -330,7 +330,7 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
   "additionalProperties": false,
   "properties": {
     "appliedOperations": {
-      "type": "number"
+      "type": "integer"
     },
     "baseFingerprint": {
       "type": "string"
@@ -471,7 +471,7 @@ Returns a DiffApplyResult with applied operation count and diagnostics.
   "additionalProperties": false,
   "properties": {
     "appliedOperations": {
-      "type": "number"
+      "type": "integer"
     },
     "baseFingerprint": {
       "type": "string"

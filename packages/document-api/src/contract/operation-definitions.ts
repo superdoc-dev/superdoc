@@ -5283,7 +5283,6 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED'],
     }),
     referenceDocPath: 'diff/capture.mdx',
     referenceGroup: 'diff',

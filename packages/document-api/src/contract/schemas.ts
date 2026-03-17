@@ -2552,7 +2552,7 @@ const diffPayloadSchema: JsonSchema = objectSchema(
 
 const diffApplyResultSchema: JsonSchema = objectSchema(
   {
-    appliedOperations: { type: 'number' },
+    appliedOperations: { type: 'integer' },
     baseFingerprint: { type: 'string' },
     targetFingerprint: { type: 'string' },
     coverage: diffCoverageSchema,

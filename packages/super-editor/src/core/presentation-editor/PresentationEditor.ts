@@ -3166,6 +3166,10 @@ export class PresentationEditor extends EventEmitter {
 
         if (data.kind === 'body') {
           this.#announce('Exited header/footer edit mode.');
+          // Ensure the selection overlay is immediately resynced to the body
+          // editor when leaving header/footer mode, so any stale header/footer
+          // highlights are cleared.
+          this.#scheduleSelectionUpdate({ immediate: true });
         } else {
           this.#announce(`Editing ${data.kind === 'header' ? 'Header' : 'Footer'} (${data.sectionType ?? 'default'})`);
 
@@ -3179,6 +3183,13 @@ export class PresentationEditor extends EventEmitter {
           headerFooterEditor.on?.('selectionUpdate', handler);
           this.#headerFooterEditor = headerFooterEditor;
           this.#headerFooterSelectionHandler = handler;
+
+          // Also trigger an initial selection sync immediately on entry so the
+          // body selection overlay is cleared or updated to match the current
+          // header/footer selection state, instead of leaving stale body
+          // highlights until the first selectionUpdate event fires.
+          this.#scheduleSelectionUpdate({ immediate: true });
+          this.#scheduleA11ySelectionAnnouncement({ immediate: true });
         }
       },
       onEditBlocked: (reason) => {
@@ -4250,7 +4261,7 @@ export class PresentationEditor extends EventEmitter {
     // selection changes (keyboard, mouse, image click, zoom) will.
     const shouldScrollIntoView = this.#shouldScrollSelectionIntoView;
     this.#shouldScrollSelectionIntoView = false;
-    
+
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
       this.#updateHeaderFooterSelection();
@@ -5929,8 +5940,12 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    const pageHeight = this.#headerFooterSession?.getPageHeight() ?? 1;
-    const pageGap = this.#layoutState.layout?.pageGap ?? 0;
+    // Header/footer selection rects are already mapped into body-page
+    // coordinates using the body page height and no page gap. To avoid
+    // double-applying any gap or using the header/footer layout height, use
+    // the body page height here and a zero page gap.
+    const pageHeight = this.#getBodyPageHeight();
+    const pageGap = 0;
 
     try {
       this.#localSelectionLayer.innerHTML = '';

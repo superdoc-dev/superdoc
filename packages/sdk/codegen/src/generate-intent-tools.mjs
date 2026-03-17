@@ -95,6 +95,66 @@ function buildInputSchemaFromParams(operation) {
 }
 
 // ---------------------------------------------------------------------------
+// Extract required-field constraints for an operation.
+//
+// Two sources of truth exist:
+//   1. CLI params (via buildInputSchemaFromParams) — use param names the tool
+//      schema exposes (e.g. "id", not contract's "commentId").
+//   2. Contract inputSchema — captures oneOf / discriminated-union constraints
+//      that CLI params can't express.
+//
+// Strategy:
+//   - Flat required → derive from CLI params (names match the grouped tool schema)
+//   - oneOf required → derive from contract inputSchema (property names verified
+//     to match CLI param names for all oneOf operations)
+//
+// Returns one of:
+//   { required: string[] }        — all listed keys must be present
+//   { requiredOneOf: string[][] } — at least one branch must be fully satisfied
+//   {}                            — no extractable constraints
+// ---------------------------------------------------------------------------
+
+function extractRequiredConstraints(operation) {
+  const cliSchema = buildInputSchemaFromParams(operation);
+  const cliParamNames = new Set(Object.keys(cliSchema.properties ?? {}));
+  const contractSchema = operation.inputSchema;
+
+  // oneOf in contract schema — collect per-branch required arrays.
+  // (Verified: all oneOf operations use property names matching CLI params.)
+  if (contractSchema && Array.isArray(contractSchema.oneOf)) {
+    const branches = [];
+    for (const branch of contractSchema.oneOf) {
+      if (Array.isArray(branch.oneOf)) {
+        for (const sub of branch.oneOf) {
+          if (Array.isArray(sub.required) && sub.required.length > 0) {
+            branches.push(sub.required);
+          }
+        }
+      } else if (Array.isArray(branch.required) && branch.required.length > 0) {
+        branches.push(branch.required);
+      }
+    }
+    if (branches.length > 0) return { requiredOneOf: branches };
+  }
+
+  // Flat required — union two sources:
+  //   1. Contract inputSchema.required filtered to CLI param names only
+  //      (contract is authoritative for required-ness, but may use different
+  //      property names, e.g. "commentId" vs CLI "id")
+  //   2. CLI params with required: true
+  //      (covers names that don't appear in the contract schema)
+  const required = new Set(cliSchema.required ?? []);
+  if (contractSchema && Array.isArray(contractSchema.required)) {
+    for (const key of contractSchema.required) {
+      if (cliParamNames.has(key)) required.add(key);
+    }
+  }
+  if (required.size > 0) return { required: [...required] };
+
+  return {};
+}
+
+// ---------------------------------------------------------------------------
 // Build intent tools from grouped operations
 // ---------------------------------------------------------------------------
 
@@ -134,7 +194,7 @@ function buildIntentTools(contract) {
         description: meta.description,
         inputSchema,
         mutates,
-        operations: [{ operationId, intentAction: operation.intentAction }],
+        operations: [{ operationId, intentAction: operation.intentAction, ...extractRequiredConstraints(operation) }],
       });
     } else {
       // Multi-op tool — add action discriminator
@@ -200,6 +260,7 @@ function buildIntentTools(contract) {
         operations: ops.map(({ operationId, operation }) => ({
           operationId,
           intentAction: operation.intentAction,
+          ...extractRequiredConstraints(operation),
         })),
       });
     }

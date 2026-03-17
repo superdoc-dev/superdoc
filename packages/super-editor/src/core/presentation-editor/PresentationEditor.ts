@@ -2816,7 +2816,6 @@ export class PresentationEditor extends EventEmitter {
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
-
     // Listen for comment selection changes to update Layout Engine highlighting
     const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
       if (this.#domPainter?.setActiveComment) {

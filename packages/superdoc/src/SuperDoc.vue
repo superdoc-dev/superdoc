@@ -1261,9 +1261,12 @@ watch(
       PresentationEditor.setGlobalZoom(zoomFactor);
     } else {
       // Web layout without layout engine — apply CSS transform directly
-      // to all sub-document containers so zoom works for PM fallback rendering.
+      // to non-PDF sub-document containers so zoom works for PM fallback rendering.
+      // PDF documents are excluded because pdfViewer.updateScale() handles their zoom
+      // separately below; applying both would result in double-zoom.
       const subDocs = layers.value?.querySelectorAll('.superdoc__sub-document');
       subDocs?.forEach((el) => {
+        if (el.querySelector('.sd-pdf-viewer')) return;
         if (zoomFactor === 1) {
           el.style.transformOrigin = '';
           el.style.transform = '';

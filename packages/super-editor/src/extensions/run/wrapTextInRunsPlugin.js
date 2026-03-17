@@ -1,8 +1,8 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
-import { decodeRPrFromMarks, encodeMarksFromRPr } from '@converter/styles.js';
+import { decodeRPrFromMarks } from '@converter/styles.js';
 import { carbonCopy } from '@core/utilities/carbonCopy';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
-import { getInheritedRunProperties } from '@core/helpers/getMarksFromSelection.js';
+import { getFormattingStateAtPos } from '@core/helpers/getMarksFromSelection.js';
 
 const getParagraphAtPos = (doc, pos) => {
   try {
@@ -79,21 +79,18 @@ const normalizeSelectionIntoRun = (tr, runType) => {
  * @returns {{ runProperties: Record<string, unknown> | undefined, textNode: import('prosemirror-model').Node }}
  */
 const copyRunPropertiesFromParagraph = (state, pos, textNode, runType, editor) => {
-  let runProperties;
   let updatedTextNode = textNode;
-  const $pos = state.doc.resolve(pos);
-  const inheritedRunProperties = getInheritedRunProperties($pos, editor, false);
+  const formattingState = getFormattingStateAtPos(state, pos, editor, {
+    preferParagraphRunProperties: true,
+  });
 
-  if (inheritedRunProperties) {
-    runProperties = carbonCopy(inheritedRunProperties);
-    const markDefs = encodeMarksFromRPr(runProperties, editor?.converter?.convertedXml ?? {});
-    const markInstances = markDefs.map((def) => state.schema.marks[def.type]?.create(def.attrs)).filter(Boolean);
-    if (markInstances.length) {
-      const mergedMarks = markInstances.reduce((set, mark) => mark.addToSet(set), updatedTextNode.marks);
-      updatedTextNode = updatedTextNode.mark(mergedMarks);
-    }
+  if (formattingState.resolvedMarks?.length) {
+    const mergedMarks = formattingState.resolvedMarks.reduce((set, mark) => mark.addToSet(set), updatedTextNode.marks);
+    updatedTextNode = updatedTextNode.mark(mergedMarks);
   }
-  return { runProperties, textNode: updatedTextNode };
+  // Only explicit paragraph run overrides should be copied into the new run node.
+  // Style/default-derived formatting stays visual so export semantics remain intact.
+  return { runProperties: formattingState.inlineRunProperties, textNode: updatedTextNode };
 };
 
 const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta = []) => {

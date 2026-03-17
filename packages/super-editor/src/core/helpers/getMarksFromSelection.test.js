@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { Schema } from 'prosemirror-model';
 import { schema, doc, p, em, strong } from 'prosemirror-test-builder';
-import { getMarksFromSelection } from './getMarksFromSelection.js';
+import { getMarksFromSelection, getSelectionFormattingState } from './getMarksFromSelection.js';
 
 describe('getMarksFromSelection', () => {
   it('returns marks for a collapsed selection including stored marks', () => {
@@ -156,5 +156,50 @@ describe('getMarksFromSelection', () => {
       expect(result.some((mark) => mark.type.name === 'bold')).toBe(true);
       expect(result.every((mark) => mark.type.name !== 'strike')).toBe(true);
     });
+  });
+
+  it('reads inline run properties from the surrounding run node instead of decoding visible marks', () => {
+    const runSchema = new Schema({
+      nodes: {
+        doc: { content: 'paragraph+' },
+        paragraph: {
+          content: 'inline*',
+          group: 'block',
+          toDOM() {
+            return ['p', 0];
+          },
+        },
+        run: {
+          content: 'text*',
+          group: 'inline',
+          inline: true,
+          attrs: { runProperties: { default: null } },
+          toDOM() {
+            return ['span', 0];
+          },
+        },
+        text: { group: 'inline' },
+      },
+      marks: {
+        bold: {
+          attrs: { value: { default: true } },
+          toDOM() {
+            return ['strong', 0];
+          },
+        },
+      },
+    });
+    const textNode = runSchema.text('Hello', [runSchema.marks.bold.create()]);
+    const testDoc = runSchema.node('doc', null, [
+      runSchema.node('paragraph', null, [
+        runSchema.node('run', { runProperties: { styleId: 'Heading1Char' } }, [textNode]),
+      ]),
+    ]);
+    const state = EditorState.create({ schema: runSchema, doc: testDoc });
+    const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 3)));
+
+    const result = getSelectionFormattingState(cursorState);
+
+    expect(result.inlineRunProperties).toEqual({ styleId: 'Heading1Char' });
   });
 });

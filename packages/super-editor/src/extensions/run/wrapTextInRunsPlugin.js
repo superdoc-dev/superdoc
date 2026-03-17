@@ -1,32 +1,7 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
 import { decodeRPrFromMarks } from '@converter/styles.js';
-import { carbonCopy } from '@core/utilities/carbonCopy';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 import { getFormattingStateAtPos } from '@core/helpers/getMarksFromSelection.js';
-
-const getParagraphAtPos = (doc, pos) => {
-  try {
-    const $pos = doc.resolve(pos);
-    for (let depth = $pos.depth; depth >= 0; depth--) {
-      const node = $pos.node(depth);
-      if (node.type.name === 'paragraph') {
-        return node;
-      }
-    }
-  } catch (_e) {
-    /* ignore invalid positions */
-  }
-  return null;
-};
-
-const hasParagraphStyleOverride = (paragraphNode) => {
-  const paragraphProperties = paragraphNode?.attrs?.paragraphProperties;
-  return Boolean(
-    paragraphProperties &&
-      typeof paragraphProperties === 'object' &&
-      Object.prototype.hasOwnProperty.call(paragraphProperties, 'styleId'),
-  );
-};
 
 /**
  * Converts an array of mark definitions into ProseMirror Mark instances.

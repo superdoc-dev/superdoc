@@ -57,9 +57,15 @@ test('passes text only', () => eq(checks.noMixedBatch([call('superdoc_mutations'
 
 // --- correctFormatArgs ---
 console.log('correctFormatArgs');
-test('passes superdoc_format inline', () => eq(checks.correctFormatArgs([call('superdoc_format', { action: 'inline', bold: true })]).pass, true));
+test('passes superdoc_format inline with nested payload', () => eq(checks.correctFormatArgs([call('superdoc_format', { action: 'inline', inline: { bold: true } })]).pass, true));
+test('fails superdoc_format inline without inline payload', () => eq(checks.correctFormatArgs([call('superdoc_format', { action: 'inline' })]).pass, false));
+test('fails superdoc_format inline with top-level style key', () => eq(checks.correctFormatArgs([call('superdoc_format', { action: 'inline', bold: true })]).pass, false));
+test('fails superdoc_format inline with empty inline object', () => eq(checks.correctFormatArgs([call('superdoc_format', { action: 'inline', inline: {} })]).pass, false));
+test('fails superdoc_format inline with unknown inline key', () => eq(checks.correctFormatArgs([call('superdoc_format', { action: 'inline', inline: { notAStyle: true } })]).pass, false));
 test('passes mutations format.apply with inline wrapper', () => eq(checks.correctFormatArgs([call('superdoc_mutations', { steps: [{ op: 'format.apply', where: {}, args: { inline: { bold: true } } }] })]).pass, true));
 test('fails mutations format.apply without wrapper', () => eq(checks.correctFormatArgs([call('superdoc_mutations', { steps: [{ op: 'format.apply', where: {}, args: { bold: true } }] })]).pass, false));
+test('fails mutations format.apply with empty inline object', () => eq(checks.correctFormatArgs([call('superdoc_mutations', { steps: [{ op: 'format.apply', where: {}, args: { inline: {} } }] })]).pass, false));
+test('fails mutations format.apply with unknown inline key', () => eq(checks.correctFormatArgs([call('superdoc_mutations', { steps: [{ op: 'format.apply', where: {}, args: { inline: { notAStyle: true } } }] })]).pass, false));
 test('validates mutations even with superdoc_format present', () => eq(checks.correctFormatArgs([call('superdoc_format', { action: 'inline' }), call('superdoc_mutations', { steps: [{ op: 'format.apply', where: {}, args: { bold: true } }] })]).pass, false));
 test('skips no formatting tools', () => eq(checks.correctFormatArgs([call('superdoc_search')]), true));
 

@@ -13,6 +13,8 @@
  * Returns: { pass, score, reason } or true (skip/not applicable).
  */
 
+const { resolve } = require('node:path');
+
 // --- Tool name constants ---
 
 const SEARCH = 'superdoc_search';
@@ -32,6 +34,11 @@ function findTool(output, name) {
   return output.find((c) => c.function?.name === name);
 }
 
+function findTools(output, name) {
+  if (!Array.isArray(output)) return [];
+  return output.filter((c) => c.function?.name === name);
+}
+
 function getArgs(call) {
   try { return JSON.parse(call.function.arguments || '{}'); }
   catch { return {}; }
@@ -46,6 +53,84 @@ function findMutations(output) {
 function getSteps(output) {
   const args = findMutations(output);
   return args?.steps || [];
+}
+
+function loadFormatSchemaInfo() {
+  try {
+    const bundle = require(resolve(__dirname, '../../packages/sdk/tools/tools.openai.json'));
+    const formatTool = bundle?.tools?.find((tool) => tool?.function?.name === FORMAT);
+    const parameters = formatTool?.function?.parameters;
+    const toolProperties = parameters?.properties;
+    const inlineProperties = toolProperties?.inline?.properties;
+    if (toolProperties && inlineProperties) {
+      return {
+        toolKeys: new Set(Object.keys(toolProperties)),
+        inlineKeys: new Set(Object.keys(inlineProperties)),
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to load generated tool schema for ${FORMAT}: ${message}`);
+  }
+
+  throw new Error(`Generated tool schema for ${FORMAT} is missing required inline metadata.`);
+}
+
+const { toolKeys: FORMAT_TOOL_KEYS, inlineKeys: FORMAT_INLINE_KEYS } = loadFormatSchemaInfo();
+
+function isRecord(value) {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function findUnknownKeys(candidate, allowedKeys) {
+  if (!isRecord(candidate)) return [];
+  return Object.keys(candidate).filter((key) => !allowedKeys.has(key));
+}
+
+function findMisnestedInlineKeys(candidate) {
+  if (!isRecord(candidate)) return [];
+  return Object.keys(candidate).filter((key) => key !== 'inline' && FORMAT_INLINE_KEYS.has(key));
+}
+
+function validateInlinePayload(inline, scope) {
+  if (!isRecord(inline)) {
+    return `${scope} must provide a non-null "inline" object`;
+  }
+
+  const inlineKeys = Object.keys(inline);
+  if (inlineKeys.length === 0) {
+    return `${scope} must provide at least one inline formatting key`;
+  }
+
+  const unknownInlineKeys = findUnknownKeys(inline, FORMAT_INLINE_KEYS);
+  if (unknownInlineKeys.length > 0) {
+    return `${scope} has unknown inline key(s): ${unknownInlineKeys.join(', ')}`;
+  }
+
+  return null;
+}
+
+function validateFormatToolInlineArgs(args) {
+  const misplacedInlineKeys = findMisnestedInlineKeys(args);
+  if (misplacedInlineKeys.length > 0) {
+    return `superdoc_format action "inline" must nest formatting under "inline", not top-level keys: ${misplacedInlineKeys.join(', ')}`;
+  }
+
+  const unknownKeys = findUnknownKeys(args, FORMAT_TOOL_KEYS);
+  if (unknownKeys.length > 0) {
+    return `superdoc_format action "inline" has unknown top-level key(s): ${unknownKeys.join(', ')}`;
+  }
+
+  return validateInlinePayload(args.inline, 'superdoc_format action "inline"');
+}
+
+function validateMutationFormatArgs(stepArgs) {
+  const misplacedInlineKeys = findMisnestedInlineKeys(stepArgs);
+  if (misplacedInlineKeys.length > 0) {
+    return `format.apply args must nest formatting under "inline", not top-level keys: ${misplacedInlineKeys.join(', ')}`;
+  }
+
+  return validateInlinePayload(stepArgs?.inline, 'format.apply args');
 }
 
 // --- Hygiene ---
@@ -102,26 +187,32 @@ module.exports.correctFormatArgs = (output) => {
   if (!Array.isArray(output)) return true;
 
   let hasValidFormat = false;
+  const formatCalls = findTools(output, FORMAT);
+  const mutationCalls = findTools(output, MUTATIONS);
 
-  // Path 1: superdoc_format with action "inline" — inline properties are at top level, always valid
-  const fmtCall = findTool(output, FORMAT);
-  if (fmtCall) {
+  // Path 1: superdoc_format with action "inline" — in Level 1 we validate the
+  // inline payload shape, but do not require runtime-resolved target/ref values.
+  for (const fmtCall of formatCalls) {
     const args = getArgs(fmtCall);
-    if (args.action === 'inline') hasValidFormat = true;
-  }
+    if (args.action !== 'inline') continue;
 
-  // Path 2: superdoc_mutations with format.apply steps — must use args.inline wrapper
-  const formatSteps = getSteps(output).filter((s) => s.op === 'format.apply');
-  for (const step of formatSteps) {
-    if (!step.args?.inline) {
-      const topLevelKeys = Object.keys(step.args || {}).filter((k) => k !== 'inline');
-      const hint = topLevelKeys.length > 0 ? ` (found top-level: ${topLevelKeys.join(', ')})` : '';
-      return { pass: false, score: 0, reason: `format.apply args must have "inline" wrapper: {inline: {bold: true}}, not {bold: true}${hint}` };
-    }
+    const error = validateFormatToolInlineArgs(args);
+    if (error) return { pass: false, score: 0, reason: error };
     hasValidFormat = true;
   }
 
-  if (!hasValidFormat && !fmtCall && !findMutations(output)) return true;
+  // Path 2: superdoc_mutations with format.apply steps — must use args.inline wrapper
+  for (const mutationCall of mutationCalls) {
+    const steps = getArgs(mutationCall).steps || [];
+    const formatSteps = steps.filter((s) => s.op === 'format.apply');
+    for (const step of formatSteps) {
+      const error = validateMutationFormatArgs(step.args);
+      if (error) return { pass: false, score: 0, reason: error };
+      hasValidFormat = true;
+    }
+  }
+
+  if (!hasValidFormat && formatCalls.length === 0 && mutationCalls.length === 0) return true;
   if (!hasValidFormat) return { pass: false, score: 0, reason: 'No formatting operation found' };
   return { pass: true, score: 1, reason: 'Correct format args' };
 };

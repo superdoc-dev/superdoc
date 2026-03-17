@@ -178,7 +178,7 @@ Execution tests should assert all three:
 | `stepFields` | Every mutation step has `op` and `where` |
 | `noRequireAny` | Mutations do not use `require: "any"` |
 | `noMixedBatch` | Text edits and `format.apply` are not mixed in one batch |
-| `correctFormatArgs` | `superdoc_format` inline or `format.apply` nests formatting under `args.inline` |
+| `correctFormatArgs` | `superdoc_format` inline and `format.apply` both require a non-empty `inline` payload (nested under `args.inline` for mutations) |
 | `textSearchArgs` | `superdoc_search` uses a valid text selector |
 | `nodeSearchArgs` | `superdoc_search` uses a valid node selector |
 | `usesGetContentText` | `superdoc_get_content` called with `action: "text"` |

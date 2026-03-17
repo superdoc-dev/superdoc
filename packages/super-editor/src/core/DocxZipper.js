@@ -409,6 +409,10 @@ class DocxZipper {
    * @returns {Promise<JSZip>} The unzipped but updated docx file ready for zipping
    */
   async exportFromCollaborativeDocx(docx, updatedDocs, media, fonts) {
+    if (!Array.isArray(docx)) {
+      throw new Error('Collaborative DOCX export requires base package entries');
+    }
+
     const zip = new JSZip();
 
     // Rebuild original files

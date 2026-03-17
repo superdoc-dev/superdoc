@@ -577,7 +577,11 @@ export class DocxExporter {
 
   #generate_xml_as_list(data, debug = false) {
     const json = JSON.parse(JSON.stringify(data));
-    const declaration = this.converter.declaration.attributes;
+    const declaration = this.converter.declaration?.attributes ?? {
+      version: '1.0',
+      encoding: 'UTF-8',
+      standalone: 'yes',
+    };
     const xmlTag = `<?xml${Object.entries(declaration)
       .map(([key, value]) => ` ${key}="${value}"`)
       .join('')}?>`;

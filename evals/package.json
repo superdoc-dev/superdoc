@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node lib/checks.test.mjs",
+    "test": "node lib/checks.test.mjs && node --test providers/utils.test.mjs",
     "view": "npx promptfoo view",
     "preeval": "node scripts/prepare-local-sdk.mjs --light",
     "preeval:openai": "node scripts/prepare-local-sdk.mjs --light",

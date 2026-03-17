@@ -3,8 +3,17 @@
  */
 
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -67,31 +76,81 @@ export function cleanArgs(args) {
 
 // --- SDK fingerprint (for cache invalidation) ---
 
-/**
- * Hash tool catalogs, system prompt, SDK dist, and CLI binary so that cache
- * entries become invalid whenever anything in the local tool surface or
- * runtime logic changes. This prevents stale results from a different branch,
- * npm version, or generation run from being reused silently.
- */
-function computeSdkFingerprint() {
-  const sdkToolsDir = resolve(EVALS_ROOT, '..', 'packages/sdk/tools');
-  const sdkDist = resolve(EVALS_ROOT, '..', 'packages/sdk/langs/node/dist/index.js');
-  const files = [
-    resolve(sdkToolsDir, 'tools.vercel.json'),
-    resolve(sdkToolsDir, 'tools.openai.json'),
-    PATHS.prompt,
-    sdkDist,
-    PATHS.cliBin,
-  ];
+const SDK_TOOLS_DIR = resolve(EVALS_ROOT, '..', 'packages/sdk/tools');
+const SDK_DIST_DIR = resolve(EVALS_ROOT, '..', 'packages/sdk/langs/node/dist');
+const SDK_FINGERPRINT_FILES = [
+  resolve(SDK_TOOLS_DIR, 'tools.vercel.json'),
+  resolve(SDK_TOOLS_DIR, 'tools.openai.json'),
+  PATHS.prompt,
+  PATHS.cliBin,
+];
+const SDK_FINGERPRINT_DIRECTORIES = [SDK_DIST_DIR];
 
+function normalizeFingerprintPath(path) {
+  return (path || '.').split(sep).join('/');
+}
+
+function updateHashWithFile(hash, filePath, rootPath = dirname(filePath)) {
+  const fingerprintPath = normalizeFingerprintPath(relative(rootPath, filePath));
+  hash.update(`file:${fingerprintPath}\n`);
+  hash.update(readFileSync(filePath));
+}
+
+function updateHashWithDirectory(hash, dirPath, rootPath = dirPath) {
+  const fingerprintPath = normalizeFingerprintPath(relative(rootPath, dirPath));
+  hash.update(`dir:${fingerprintPath}\n`);
+
+  let entries;
+  try {
+    entries = readdirSync(dirPath, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    hash.update(`missing-dir:${dirPath}\n`);
+    return;
+  }
+
+  for (const entry of entries) {
+    const entryPath = resolve(dirPath, entry.name);
+    const entryFingerprintPath = normalizeFingerprintPath(relative(rootPath, entryPath));
+
+    if (entry.isDirectory()) {
+      updateHashWithDirectory(hash, entryPath, rootPath);
+      continue;
+    }
+
+    if (entry.isFile()) {
+      updateHashWithFile(hash, entryPath, rootPath);
+      continue;
+    }
+
+    hash.update(`other:${entryFingerprintPath}\n`);
+  }
+}
+
+/**
+ * Compute the artifact fingerprint used to invalidate cached eval results when
+ * the local tool surface or runtime artifacts change.
+ *
+ * @param {{files?: string[], directories?: string[]}} [options]
+ * @returns {string}
+ */
+export function computeSdkFingerprint({
+  files = SDK_FINGERPRINT_FILES,
+  directories = SDK_FINGERPRINT_DIRECTORIES,
+} = {}) {
   const hash = createHash('sha256');
-  for (const file of files) {
+  for (const file of [...files].sort()) {
     try {
-      hash.update(readFileSync(file));
+      updateHashWithFile(hash, file);
     } catch {
       hash.update(`missing:${file}`);
     }
   }
+
+  for (const directory of [...directories].sort()) {
+    updateHashWithDirectory(hash, directory);
+  }
+
   return hash.digest('hex').slice(0, 12);
 }
 

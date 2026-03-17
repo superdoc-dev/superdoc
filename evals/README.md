@@ -244,7 +244,7 @@ A prepare script (`scripts/prepare-local-sdk.mjs`) runs as a pre-hook before `ev
 4. **Guards** that `@superdoc-dev/sdk` resolves from the workspace, not npm (Level 2 only)
 5. **Validates** the tool surface matches the expected 9 grouped public tools
 
-The provider cache (`results/.cache/`) includes an SDK fingerprint — a hash of the tool catalogs and system prompt. Switching branches or changing tool definitions automatically invalidates stale cache entries.
+The provider cache (`results/.cache/`) includes an SDK fingerprint — a hash of the tool catalogs, system prompt, full SDK `dist/` tree, and CLI binary. Switching branches or changing local tool/runtime artifacts automatically invalidates stale cache entries.
 
 To skip preparation during rapid iteration (when you know your builds are current):
 
@@ -261,7 +261,7 @@ To intentionally test the published npm SDK, change the dependency in `evals/pac
 - `pnpm run view` is the correct script name. There is no `eval:view` script in the current package.
 - `pnpm run analyze` reads `results/latest.json`, writes `results/analysis.html`, and requires `ANTHROPIC_API_KEY`.
 - Promptfoo caches model responses. Clear Promptfoo's cache with `npx promptfoo cache clear`.
-- The custom execution provider also caches results in `results/.cache/`. The cache key includes an SDK fingerprint, so tool surface changes automatically invalidate old entries. Disable provider caching entirely with `PROMPTFOO_CACHE_ENABLED=false`.
+- The custom execution provider also caches results in `results/.cache/`. The cache key includes an SDK fingerprint, so local tool/runtime changes automatically invalidate old entries. Disable provider caching entirely with `PROMPTFOO_CACHE_ENABLED=false`.
 - `eval:repeat` and `eval:analyze` bypass the pre-hook (they call `npx promptfoo` directly). Run `node scripts/prepare-local-sdk.mjs` manually before these if needed.
 
 ## Exit codes and troubleshooting

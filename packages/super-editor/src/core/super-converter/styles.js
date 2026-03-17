@@ -97,7 +97,9 @@ export function encodeMarksFromRPr(runProperties, docx) {
         });
         break;
       case 'styleId':
-        textStyleAttrs[key] = value;
+        if (value != null) {
+          textStyleAttrs[key] = value;
+        }
         break;
       case 'fontSize':
         // case 'fontSizeCs':
@@ -616,6 +618,11 @@ export function decodeRPrFromMarks(marks) {
               }
               break;
             }
+            case 'styleId':
+              if (value != null) {
+                runProperties.styleId = value;
+              }
+              break;
           }
         });
         break;

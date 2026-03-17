@@ -107,7 +107,8 @@
                   "document-api/overview",
                   "document-api/reference/index",
                   "document-api/common-workflows",
-                  "document-api/available-operations"
+                  "document-api/available-operations",
+                  "document-api/eval-results"
                 ]
               },
               {

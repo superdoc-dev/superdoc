@@ -983,4 +983,78 @@ describe('PresentationEditor - Zoom Functionality', () => {
       }
     });
   });
+
+  describe('semantic flow mode zoom', () => {
+    let semanticEditor: PresentationEditor;
+
+    afterEach(() => {
+      if (semanticEditor) {
+        semanticEditor.destroy();
+      }
+    });
+
+    it('should apply CSS transform when zoom is set in semantic mode', () => {
+      semanticEditor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc-semantic-zoom',
+        pageSize: { w: 612, h: 792 },
+        layoutEngineOptions: { flowMode: 'semantic' },
+      });
+
+      semanticEditor.setZoom(1.5);
+
+      const painterHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const viewportHost = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      const selectionOverlay = container.querySelector('.presentation-editor__selection-overlay') as HTMLElement;
+
+      expect(painterHost?.style.transform).toBe('scale(1.5)');
+      expect(painterHost?.style.transformOrigin).toBe('top left');
+
+      expect(selectionOverlay?.style.transform).toBe('scale(1.5)');
+      expect(selectionOverlay?.style.transformOrigin).toBe('top left');
+
+      // Viewport width should be narrowed to compensate for scale
+      expect(viewportHost?.style.width).toBe(`${100 / 1.5}%`);
+    });
+
+    it('should clear transforms when zoom is reset to 1 in semantic mode', () => {
+      semanticEditor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc-semantic-zoom-reset',
+        pageSize: { w: 612, h: 792 },
+        layoutEngineOptions: { flowMode: 'semantic' },
+      });
+
+      semanticEditor.setZoom(2);
+      semanticEditor.setZoom(1);
+
+      const painterHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const viewportHost = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      const selectionOverlay = container.querySelector('.presentation-editor__selection-overlay') as HTMLElement;
+
+      expect(painterHost?.style.transform).toBe('');
+      expect(painterHost?.style.transformOrigin).toBe('');
+      expect(selectionOverlay?.style.transform).toBe('');
+      expect(selectionOverlay?.style.transformOrigin).toBe('');
+      expect(viewportHost?.style.width).toBe('100%');
+    });
+
+    it('should keep fluid width on all elements in semantic mode', () => {
+      semanticEditor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc-semantic-zoom-fluid',
+        pageSize: { w: 612, h: 792 },
+        layoutEngineOptions: { flowMode: 'semantic' },
+      });
+
+      semanticEditor.setZoom(0.75);
+
+      const painterHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const selectionOverlay = container.querySelector('.presentation-editor__selection-overlay') as HTMLElement;
+
+      // painterHost and selectionOverlay keep 100% width (viewport is narrowed instead)
+      expect(painterHost?.style.width).toBe('100%');
+      expect(selectionOverlay?.style.width).toBe('100%');
+    });
+  });
 });

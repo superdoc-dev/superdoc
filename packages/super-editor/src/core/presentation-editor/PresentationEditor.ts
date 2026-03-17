@@ -5402,21 +5402,42 @@ export class PresentationEditor extends EventEmitter {
    */
   #applyZoom() {
     if (this.#isSemanticFlowMode()) {
-      // Semantic mode: fill the container with fluid widths, no zoom scaling.
-      this.#viewportHost.style.width = '100%';
+      const zoom = this.#layoutOptions.zoom ?? 1;
+
+      // Semantic mode: fluid widths with optional zoom scaling.
       this.#viewportHost.style.minWidth = '';
       this.#viewportHost.style.minHeight = '';
-      this.#viewportHost.style.transform = '';
 
-      this.#painterHost.style.width = '100%';
-      this.#painterHost.style.minHeight = '';
-      this.#painterHost.style.transformOrigin = '';
-      this.#painterHost.style.transform = '';
+      if (zoom === 1) {
+        this.#viewportHost.style.width = '100%';
+        this.#viewportHost.style.transform = '';
 
-      this.#selectionOverlay.style.width = '100%';
-      this.#selectionOverlay.style.height = '100%';
-      this.#selectionOverlay.style.transformOrigin = '';
-      this.#selectionOverlay.style.transform = '';
+        this.#painterHost.style.width = '100%';
+        this.#painterHost.style.minHeight = '';
+        this.#painterHost.style.transformOrigin = '';
+        this.#painterHost.style.transform = '';
+
+        this.#selectionOverlay.style.width = '100%';
+        this.#selectionOverlay.style.height = '100%';
+        this.#selectionOverlay.style.transformOrigin = '';
+        this.#selectionOverlay.style.transform = '';
+      } else {
+        // Scale content while keeping fluid layout: set unscaled width to
+        // container/zoom so the reflowed content visually fills the container
+        // after the CSS transform enlarges it.
+        this.#viewportHost.style.width = `${100 / zoom}%`;
+        this.#viewportHost.style.transform = '';
+
+        this.#painterHost.style.width = '100%';
+        this.#painterHost.style.minHeight = '';
+        this.#painterHost.style.transformOrigin = 'top left';
+        this.#painterHost.style.transform = `scale(${zoom})`;
+
+        this.#selectionOverlay.style.width = '100%';
+        this.#selectionOverlay.style.height = '100%';
+        this.#selectionOverlay.style.transformOrigin = 'top left';
+        this.#selectionOverlay.style.transform = `scale(${zoom})`;
+      }
       return;
     }
 

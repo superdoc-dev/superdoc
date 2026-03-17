@@ -1,4 +1,4 @@
-import { getMarksFromSelection } from '../helpers/getMarksFromSelection.js';
+import { getMarksFromSelection, getSelectionFormattingState } from '../helpers/getMarksFromSelection.js';
 
 /**
  * Cascade-aware toggle for marks that may be provided by styles (e.g., rStyle in runProperties).
@@ -22,16 +22,24 @@ export const toggleMarkCascade =
   ({ state, chain, editor }) => {
     const {
       negationAttrs = { value: '0' },
-      isNegation = (attrs) => attrs?.value === '0',
+      isNegation = (attrs) => attrs?.value === '0' || attrs?.value === false,
       styleDetector = defaultStyleDetector,
       extendEmptyMarkRange = false,
     } = options;
 
-    const selectionMarks = getMarksFromSelection(state, editor) || [];
-    const inlineMarks = selectionMarks.filter((m) => m.type?.name === markName);
-    const hasNegation = inlineMarks.some((m) => isNegation(m.attrs || {}));
-    const hasInline = inlineMarks.some((m) => !isNegation(m.attrs || {}));
-    const styleOn = styleDetector({ state, selectionMarks, markName, editor });
+    const formattingState = getSelectionFormattingState(state, editor);
+    const selectionMarks = formattingState?.resolvedMarks || getMarksFromSelection(state, editor) || [];
+    const directMarks = formattingState?.inlineMarks || [];
+    const directMarksForType = directMarks.filter((m) => m.type?.name === markName);
+    const hasNegation = directMarksForType.some((m) => isNegation(m.attrs || {}));
+    const hasInline = directMarksForType.some((m) => !isNegation(m.attrs || {}));
+    const styleOn = styleDetector({
+      state,
+      selectionMarks,
+      markName,
+      editor,
+      formattingState,
+    });
 
     const cmdChain = chain();
     // 1) If negation already present, remove it (turn back ON)
@@ -60,8 +68,13 @@ export const toggleMarkCascade =
  * @param {Object} params
  * @returns {boolean}
  */
-export function defaultStyleDetector({ state, selectionMarks, markName, editor }) {
+export function defaultStyleDetector({ state, selectionMarks, markName, editor, formattingState }) {
   try {
+    const styleRunProperties = formattingState?.styleRunProperties;
+    if (styleRunProperties && isRunPropertyEnabled(styleRunProperties[mapMarkToRunPropertyKey(markName)])) {
+      return true;
+    }
+
     const styleId = getEffectiveStyleId(state, selectionMarks);
     if (!styleId || !editor?.converter?.linkedStyles) return false;
     // Resolve styles with basedOn chain
@@ -86,6 +99,24 @@ export function defaultStyleDetector({ state, selectionMarks, markName, editor }
   } catch {
     return false;
   }
+}
+
+function mapMarkToRunPropertyKey(markName) {
+  if (markName === 'color' || markName === 'textStyle') return 'color';
+  return markName;
+}
+
+function isRunPropertyEnabled(value) {
+  if (value == null) return false;
+  if (typeof value === 'object') {
+    if ('w:val' in value) {
+      return isStyleTokenEnabled(value['w:val']);
+    }
+    if ('val' in value) {
+      return isStyleTokenEnabled(value.val);
+    }
+  }
+  return isStyleTokenEnabled(value);
 }
 
 /**

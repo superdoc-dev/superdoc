@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../helpers/getMarksFromSelection.js', () => ({
   getMarksFromSelection: vi.fn(),
+  getSelectionFormattingState: vi.fn(),
 }));
 
 let toggleMarkCascade;
@@ -10,15 +11,23 @@ let getStyleIdFromMarks;
 let mapMarkToStyleKey;
 let isStyleTokenEnabled;
 let getMarksFromSelection;
+let getSelectionFormattingState;
 
 beforeAll(async () => {
   ({ toggleMarkCascade, defaultStyleDetector, getStyleIdFromMarks, mapMarkToStyleKey, isStyleTokenEnabled } =
     await import('./toggleMarkCascade.js'));
-  ({ getMarksFromSelection } = await import('../helpers/getMarksFromSelection.js'));
+  ({ getMarksFromSelection, getSelectionFormattingState } = await import('../helpers/getMarksFromSelection.js'));
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getSelectionFormattingState.mockImplementation((state, editor) => ({
+    resolvedMarks: getMarksFromSelection(state, editor) || [],
+    inlineMarks: getMarksFromSelection(state, editor) || [],
+    resolvedRunProperties: null,
+    inlineRunProperties: null,
+    styleRunProperties: null,
+  }));
 });
 
 const makeInlineMark = (attrs = {}) => ({ type: { name: 'bold' }, attrs });
@@ -78,6 +87,23 @@ describe('toggleMarkCascade', () => {
     toggleMarkCascade('bold', { styleDetector: () => true, negationAttrs })({ state, chain: chainFn, editor });
 
     expect(chainApi.setMark).toHaveBeenCalledWith('bold', negationAttrs, { extendEmptyMarkRange: false });
+    expect(chainApi.unsetMark).not.toHaveBeenCalled();
+  });
+
+  it('adds a negation mark when resolved formatting is style-derived and no direct mark exists', () => {
+    getMarksFromSelection.mockReturnValue([makeInlineMark({ value: '1' })]);
+    getSelectionFormattingState.mockReturnValue({
+      resolvedMarks: [makeInlineMark({ value: '1' })],
+      inlineMarks: [],
+      resolvedRunProperties: { bold: true },
+      inlineRunProperties: {},
+      styleRunProperties: { bold: true },
+    });
+    const { chainApi, chainFn } = createChain();
+
+    toggleMarkCascade('bold')({ state, chain: chainFn, editor });
+
+    expect(chainApi.setMark).toHaveBeenCalledWith('bold', { value: '0' }, { extendEmptyMarkRange: false });
     expect(chainApi.unsetMark).not.toHaveBeenCalled();
   });
 
@@ -220,6 +246,18 @@ describe('defaultStyleDetector', () => {
       editor,
     });
     expect(result).toBe(false);
+  });
+
+  it('prefers resolved style-engine state when available', () => {
+    const result = defaultStyleDetector({
+      state: baseState,
+      selectionMarks: [],
+      markName: 'bold',
+      editor: { converter: { linkedStyles: [] } },
+      formattingState: { styleRunProperties: { bold: true } },
+    });
+
+    expect(result).toBe(true);
   });
 
   it('returns false when an error occurs', () => {

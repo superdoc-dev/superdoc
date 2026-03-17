@@ -356,20 +356,33 @@ describe('PresentationEditor - Focus Wrapping (#wrapHiddenEditorFocus)', () => {
       }).not.toThrow();
     });
 
-    it('schedules requestAnimationFrame as async scroll safety net', () => {
+    it('schedules requestAnimationFrame that restores scroll on async drift', () => {
       editor = new PresentationEditor({
         element: container,
         documentId: 'test-doc',
         pageSize: { w: 612, h: 792 },
       });
 
-      const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+      // Capture the RAF callback so we can invoke it manually
+      let rafCallback: FrameRequestCallback | null = null;
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        rafCallback = cb;
+        return 1;
+      });
+      const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 
+      // At focus time, scrollX=0 scrollY=0 → captured as beforeX=0 beforeY=0
       editor.editor.view.focus();
 
-      // RAF should be scheduled to catch async browser scroll after focus
       expect(rafSpy).toHaveBeenCalledTimes(1);
-      expect(rafSpy).toHaveBeenCalledWith(expect.any(Function));
+      expect(rafCallback).not.toBeNull();
+
+      // Simulate the browser async-scrolling to the hidden editor (drift from 0 to 500)
+      Object.defineProperty(window, 'scrollY', { value: 500, configurable: true });
+
+      // Run the RAF callback — it should detect drift and restore to beforeY=0
+      rafCallback!(0);
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
     });
 
     it('cancels focus-scroll RAF when scrollToPosition is called', () => {

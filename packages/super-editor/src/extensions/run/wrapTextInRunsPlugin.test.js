@@ -196,6 +196,52 @@ describe('wrapTextInRunsPlugin', () => {
     expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
   });
 
+  it('does not serialize style-derived marks into new run properties', () => {
+    const schema = makeSchema();
+    const mockEditor = {
+      converter: {
+        convertedXml: {},
+        numbering: {},
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {
+            runProperties: {},
+            paragraphProperties: {},
+          },
+          latentStyles: {},
+          styles: {
+            Normal: {
+              styleId: 'Normal',
+              type: 'paragraph',
+              default: true,
+              name: 'Normal',
+              runProperties: {},
+              paragraphProperties: {},
+            },
+            Heading1: {
+              styleId: 'Heading1',
+              type: 'paragraph',
+              name: 'Heading 1',
+              runProperties: { bold: true },
+              paragraphProperties: {},
+            },
+          },
+        },
+      },
+    };
+    const doc = schema.node('doc', null, [schema.node('paragraph', { paragraphProperties: { styleId: 'Heading1' } })]);
+    const view = createView(schema, doc, mockEditor);
+
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)).insertText('A');
+    view.dispatch(tr);
+
+    const paragraph = view.state.doc.firstChild;
+    const run = paragraph.firstChild;
+    expect(run.type.name).toBe('run');
+    expect(run.attrs.runProperties).toEqual({});
+    expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+  });
+
   describe('resolveRunPropertiesFromParagraphStyle', () => {
     it('resolves run properties from paragraph styleId', () => {
       const schema = makeSchema();

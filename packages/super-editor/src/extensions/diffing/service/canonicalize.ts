@@ -9,6 +9,7 @@ import type { Node as PMNode } from 'prosemirror-model';
 import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import type { CommentInput } from '../algorithm/comment-diffing';
 import { COMMENT_ATTRS_DIFF_IGNORED_KEYS } from '../algorithm/comment-diffing';
+import { normalizeDocJSON } from '../algorithm/semantic-normalization';
 
 /** The canonical diffable state of one document. */
 export interface CanonicalDiffableState {
@@ -63,7 +64,7 @@ export function buildCanonicalDiffableState(
   numbering: NumberingProperties | null | undefined,
 ): CanonicalDiffableState {
   return {
-    body: doc.toJSON() as Record<string, unknown>,
+    body: normalizeDocJSON(doc.toJSON() as Record<string, unknown>),
     comments: comments.map(canonicalizeComment),
     styles: styles ? (styles as unknown as Record<string, unknown>) : null,
     numbering: numbering ? (numbering as unknown as Record<string, unknown>) : null,

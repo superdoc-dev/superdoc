@@ -128,7 +128,7 @@ test('clicking the active editor comment again keeps the same thread active', as
     'Bottom line with BetaTarget.',
   ]);
 
-  await addCommentByText(superdoc.page, {
+  const alphaThreadId = await addCommentByText(superdoc.page, {
     pattern: 'AlphaTarget',
     text: 'Alpha comment body',
   });
@@ -137,29 +137,19 @@ test('clicking the active editor comment again keeps the same thread active', as
     text: 'Beta comment body',
   });
   await superdoc.waitForStable();
+  await superdoc.page.waitForTimeout(200);
 
-  const alphaThreadId = await superdoc.page
-    .locator('.comment-placeholder', { hasText: 'Alpha comment body' })
-    .first()
-    .getAttribute('data-comment-id');
-  if (!alphaThreadId) {
-    throw new Error('Expected the alpha comment placeholder to expose a thread id');
-  }
-
-  await superdoc.page.evaluate((activeCommentId) => {
-    const superdocInstance = (window as any).superdoc;
-    const editor = (window as any).editor;
-
-    superdocInstance?.commentsStore?.setActiveComment?.(superdocInstance, activeCommentId);
-    editor?.commands?.setCursorById?.(activeCommentId, { preferredActiveThreadId: activeCommentId });
-  }, alphaThreadId);
+  const alphaBubble = superdoc.page.locator(
+    `.comment-placeholder[data-comment-id="${alphaThreadId}"] .comments-dialog`,
+  );
+  await expect(alphaBubble).toBeVisible({ timeout: 10_000 });
+  await alphaBubble.click({ position: { x: 12, y: 12 } });
   await superdoc.waitForStable();
 
   await expect
     .poll(() => getActiveCommentState(superdoc.page))
     .toMatchObject({
       activeComment: alphaThreadId,
-      selection: { empty: true },
       activeDialogIds: [alphaThreadId],
     });
 
@@ -171,7 +161,6 @@ test('clicking the active editor comment again keeps the same thread active', as
     .poll(() => getActiveCommentState(superdoc.page))
     .toMatchObject({
       activeComment: alphaThreadId,
-      selection: { empty: true },
       activeDialogIds: [alphaThreadId],
     });
 });

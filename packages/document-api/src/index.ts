@@ -9,6 +9,8 @@ export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export type { DiffAdapter, DiffApi } from './diff/diff.js';
+export * from './diff/diff.types.js';
 export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
 export type {
   RangeAnchor,
@@ -284,6 +286,16 @@ import { buildDispatchTable } from './invoke/invoke.js';
 import type { HistoryAdapter, HistoryApi } from './history/history.js';
 import type { HistoryState, HistoryActionResult } from './history/history.types.js';
 import { executeHistoryGet, executeHistoryUndo, executeHistoryRedo } from './history/history.js';
+import type { DiffAdapter, DiffApi } from './diff/diff.js';
+import { executeDiffCapture, executeDiffCompare, executeDiffApply } from './diff/diff.js';
+import type {
+  DiffSnapshot,
+  DiffPayload,
+  DiffApplyResult,
+  DiffCompareInput,
+  DiffApplyInput,
+  DiffApplyOptions,
+} from './diff/diff.types.js';
 import { executeTableOperation } from './tables/tables.js';
 import type {
   ParagraphsAdapter,
@@ -1539,6 +1551,10 @@ export interface DocumentApi {
    */
   mutations: MutationsApi;
   /**
+   * Snapshot-based document comparison and replay.
+   */
+  diff: DiffApi;
+  /**
    * History operations (undo/redo) scoped to the active editor instance.
    * Session-scoped — reflects the runtime undo/redo stack, not persistent state.
    */
@@ -1603,6 +1619,7 @@ export interface DocumentApiAdapters {
   ranges: RangesAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
+  diff: DiffAdapter;
   history: HistoryAdapter;
 }
 
@@ -2806,6 +2823,17 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       apply(input: MutationsApplyInput): PlanReceipt {
         return adapters.mutations.apply(input);
+      },
+    },
+    diff: {
+      capture(): DiffSnapshot {
+        return executeDiffCapture(adapters.diff);
+      },
+      compare(input: DiffCompareInput): DiffPayload {
+        return executeDiffCompare(adapters.diff, input);
+      },
+      apply(input: DiffApplyInput, options?: DiffApplyOptions): DiffApplyResult {
+        return executeDiffApply(adapters.diff, input, options);
       },
     },
     history: {

@@ -62,7 +62,8 @@ export type ReferenceGroupKey =
   | 'fields'
   | 'citations'
   | 'authorities'
-  | 'ranges';
+  | 'ranges'
+  | 'diff';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -5267,6 +5268,61 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'authorities/entries-remove.mdx',
     referenceGroup: 'authorities',
+  },
+
+  // ---------------------------------------------------------------------------
+  // diff.*
+  // ---------------------------------------------------------------------------
+
+  'diff.capture': {
+    memberPath: 'diff.capture',
+    description:
+      "Capture the current document's diffable state as a versioned snapshot. " +
+      'v1 covers body, comments, styles, and numbering. Header/footer content is not included.',
+    expectedResult: 'Returns a DiffSnapshot with a fingerprint and opaque payload.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED'],
+    }),
+    referenceDocPath: 'diff/capture.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  'diff.compare': {
+    memberPath: 'diff.compare',
+    description:
+      'Compare the current document (base) against a previously captured target snapshot. ' +
+      'Returns a versioned diff payload describing the changes from base to target.',
+    expectedResult: 'Returns a DiffPayload with a summary and opaque payload.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED'],
+    }),
+    referenceDocPath: 'diff/compare.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  'diff.apply': {
+    memberPath: 'diff.apply',
+    description:
+      'Apply a previously computed diff payload to the current document. ' +
+      'The document fingerprint must match the diff base fingerprint. ' +
+      'Tracked mode governs body content only; styles, numbering, and comments are always applied directly.',
+    expectedResult: 'Returns a DiffApplyResult with applied operation count and diagnostics.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED', 'PRECONDITION_FAILED', 'CAPABILITY_UNAVAILABLE'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'diff/apply.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

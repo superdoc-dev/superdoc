@@ -2501,6 +2501,67 @@ const authorityEntryPatchSchema: JsonSchema = objectSchema({
 const authoritiesMutation = refMutationSchemas({ authorities: authoritiesAddressSchema }, ['authorities']);
 const authorityEntryMutation = refMutationSchemas({ entry: authorityEntryAddressSchema }, ['entry']);
 
+// --- Diff schemas ---
+
+const diffCoverageSchema: JsonSchema = objectSchema(
+  {
+    body: { type: 'boolean', const: true },
+    comments: { type: 'boolean' },
+    styles: { type: 'boolean' },
+    numbering: { type: 'boolean' },
+    headerFooters: { type: 'boolean', const: false },
+  },
+  ['body', 'comments', 'styles', 'numbering', 'headerFooters'],
+);
+
+const diffSummarySchema: JsonSchema = objectSchema(
+  {
+    hasChanges: { type: 'boolean' },
+    changedComponents: { type: 'array', items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering'] } },
+    body: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    comments: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    styles: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    numbering: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+  },
+  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering'],
+);
+
+const diffSnapshotSchema: JsonSchema = objectSchema(
+  {
+    version: { type: 'string', const: 'sd-diff-snapshot/v1' },
+    engine: { type: 'string', enum: ['super-editor'] },
+    fingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    payload: { type: 'object', description: 'Opaque engine-owned snapshot data.' },
+  },
+  ['version', 'engine', 'fingerprint', 'coverage', 'payload'],
+);
+
+const diffPayloadSchema: JsonSchema = objectSchema(
+  {
+    version: { type: 'string', const: 'sd-diff-payload/v1' },
+    engine: { type: 'string', enum: ['super-editor'] },
+    baseFingerprint: { type: 'string' },
+    targetFingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    summary: diffSummarySchema,
+    payload: { type: 'object', description: 'Opaque engine-owned diff data.' },
+  },
+  ['version', 'engine', 'baseFingerprint', 'targetFingerprint', 'coverage', 'summary', 'payload'],
+);
+
+const diffApplyResultSchema: JsonSchema = objectSchema(
+  {
+    appliedOperations: { type: 'number' },
+    baseFingerprint: { type: 'string' },
+    targetFingerprint: { type: 'string' },
+    coverage: diffCoverageSchema,
+    summary: diffSummarySchema,
+    diagnostics: { type: 'array', items: { type: 'string' } },
+  },
+  ['appliedOperations', 'baseFingerprint', 'targetFingerprint', 'coverage', 'summary', 'diagnostics'],
+);
+
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   get: {
     input: objectSchema({
@@ -6248,6 +6309,22 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'authorities.entries.remove': {
     input: objectSchema({ target: authorityEntryAddressSchema }, ['target']),
     ...authorityEntryMutation,
+  },
+
+  // --- diff.* ---
+  'diff.capture': {
+    input: objectSchema({}),
+    output: diffSnapshotSchema,
+  },
+  'diff.compare': {
+    input: objectSchema({ targetSnapshot: diffSnapshotSchema }, ['targetSnapshot']),
+    output: diffPayloadSchema,
+  },
+  'diff.apply': {
+    input: objectSchema({ diff: diffPayloadSchema }, ['diff']),
+    output: diffApplyResultSchema,
+    success: diffApplyResultSchema,
+    failure: { type: 'object' },
   },
 };
 

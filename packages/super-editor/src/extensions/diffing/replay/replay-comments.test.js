@@ -51,6 +51,96 @@ const testModifiesComment = () => {
 };
 
 /**
+ * Verifies added comment payloads are cloned before replay stores them.
+ * @returns {void}
+ */
+const testClonesAddedCommentPayloads = () => {
+  const comments = [];
+  const diff = {
+    action: 'added',
+    nodeType: 'comment',
+    commentId: 'c-1',
+    commentJSON: {
+      commentId: 'c-1',
+      commentText: 'New comment',
+      textJson: {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Nested text' }],
+      },
+    },
+    text: 'New comment',
+  };
+
+  replayComments({ comments, commentDiffs: [diff] });
+
+  expect(comments[0]).not.toBe(diff.commentJSON);
+  expect(comments[0].textJson).not.toBe(diff.commentJSON.textJson);
+
+  diff.commentJSON.commentText = 'Mutated';
+  diff.commentJSON.textJson.content[0].text = 'Mutated nested';
+
+  expect(comments).toEqual([
+    {
+      commentId: 'c-1',
+      commentText: 'New comment',
+      textJson: {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Nested text' }],
+      },
+    },
+  ]);
+};
+
+/**
+ * Verifies modified comment payloads are cloned before replay stores them.
+ * @returns {void}
+ */
+const testClonesModifiedCommentPayloads = () => {
+  const comments = [{ commentId: 'c-1', commentText: 'Old comment' }];
+  const diff = {
+    action: 'modified',
+    nodeType: 'comment',
+    commentId: 'c-1',
+    oldCommentJSON: { commentId: 'c-1', commentText: 'Old comment' },
+    newCommentJSON: {
+      commentId: 'c-1',
+      commentText: 'Updated comment',
+      elements: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Updated nested' }],
+        },
+      ],
+    },
+    oldText: 'Old comment',
+    newText: 'Updated comment',
+    contentDiff: [],
+    attrsDiff: null,
+  };
+
+  replayComments({ comments, commentDiffs: [diff] });
+
+  expect(comments[0]).not.toBe(diff.newCommentJSON);
+  expect(comments[0].elements).not.toBe(diff.newCommentJSON.elements);
+
+  diff.newCommentJSON.commentText = 'Mutated';
+  diff.newCommentJSON.elements[0].content[0].text = 'Mutated nested';
+
+  expect(comments).toEqual([
+    {
+      commentId: 'c-1',
+      commentText: 'Updated comment',
+      elements: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Updated nested' }],
+        },
+      ],
+    },
+  ]);
+};
+
+/**
  * Verifies deleted comment diffs remove by resolved comment id.
  * @returns {void}
  */
@@ -278,10 +368,11 @@ const testIncludesDocumentIdentityFromEditor = () => {
 };
 
 /**
- * Verifies replay keeps existing payload file/document ownership fields.
+ * Verifies replay always rebinds ownership to the active editor, even when
+ * the source payload has its own documentId/fileId values.
  * @returns {void}
  */
-const testPreservesExistingDocumentIdentity = () => {
+const testRebindsDocumentIdentityToActiveEditor = () => {
   const comments = [];
   const editor = {
     emit: vi.fn(),
@@ -309,8 +400,8 @@ const testPreservesExistingDocumentIdentity = () => {
       type: 'add',
       comment: expect.objectContaining({
         commentId: 'external-owned',
-        documentId: 'doc-9',
-        fileId: 'doc-9',
+        documentId: 'doc-2',
+        fileId: 'doc-2',
       }),
     }),
   );
@@ -323,13 +414,15 @@ const testPreservesExistingDocumentIdentity = () => {
 const runReplayCommentsSuite = () => {
   it('adds comments from added diffs', testAddsComment);
   it('replaces comments from modified diffs', testModifiesComment);
+  it('clones added comment payloads before storing them', testClonesAddedCommentPayloads);
+  it('clones modified comment payloads before storing them', testClonesModifiedCommentPayloads);
   it('deletes comments by resolved id', testDeletesCommentByResolvedId);
   it('skips missing modified comments with warnings', testSkipsMissingModifiedComment);
   it('aggregates results across multiple diffs', testAggregatesMultipleDiffs);
   it('emits commentsUpdate events for replayed diffs', testEmitsCommentsUpdateEvents);
   it('derives comment text from elements for replayed additions', testDerivesCommentTextFromElements);
   it('includes replay comment ownership metadata from editor document', testIncludesDocumentIdentityFromEditor);
-  it('preserves replay comment ownership metadata when already present', testPreservesExistingDocumentIdentity);
+  it('rebinds replay comment ownership to the active editor document', testRebindsDocumentIdentityToActiveEditor);
 };
 
 describe('replayComments', runReplayCommentsSuite);

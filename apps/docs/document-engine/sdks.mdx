@@ -1,6 +1,6 @@
 ---
 title: SDKs
-sidebarTitle: SDKs
+sidebarTitle: Overview
 description: Node.js and Python SDKs for programmatic document editing
 keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
 ---
@@ -172,6 +172,12 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 
 Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 The Python SDK also exposes synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
+
+## Need file-to-file diffing?
+
+For workflows where you already have `Doc1` and need to compare an uploaded `Doc2`, see [SDK Diffing](/document-engine/sdk-diffing).
+
+That guide covers the recommended `diff.capture -> diff.compare -> diff.apply` flow and how to save the result as a third `.docx` with tracked changes.
 
 ## User identity
 
@@ -521,6 +527,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
 | `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
 | `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 
@@ -956,6 +965,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
 | `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
 | `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 

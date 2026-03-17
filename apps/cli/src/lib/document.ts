@@ -2,10 +2,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { Editor } from 'superdoc/super-editor';
 import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
-import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
 import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
 
-import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
+import type { DocumentApi } from '@superdoc/document-api';
 import { createCliDomEnvironment } from './dom-environment';
 import type { CollaborationProfile } from './collaboration';
 import { createCollaborationRuntime } from './collaboration';
@@ -218,9 +217,6 @@ export async function openDocument(
     }
   }
 
-  const adapters = getDocumentApiAdapters(editor);
-  const docApi = createDocumentApi(adapters);
-  Object.defineProperty(editor, 'doc', { value: docApi, configurable: true, writable: true });
   const editorWithDoc = editor as EditorWithDoc;
 
   return {

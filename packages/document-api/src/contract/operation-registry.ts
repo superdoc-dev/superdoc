@@ -55,6 +55,14 @@ import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-cha
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
 import type { HistoryState, HistoryActionResult } from '../history/history.types.js';
 import type {
+  DiffSnapshot,
+  DiffPayload,
+  DiffApplyResult,
+  DiffCompareInput,
+  DiffApplyInput,
+  DiffApplyOptions,
+} from '../diff/diff.types.js';
+import type {
   ListsListQuery,
   ListsListResult,
   ListsGetInput,
@@ -1413,6 +1421,11 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: AuthorityEntryMutationResult;
   };
+
+  // --- diff.* ---
+  'diff.capture': { input: undefined; options: never; output: DiffSnapshot };
+  'diff.compare': { input: DiffCompareInput; options: never; output: DiffPayload };
+  'diff.apply': { input: DiffApplyInput; options: DiffApplyOptions; output: DiffApplyResult };
 }
 
 // --- Bidirectional completeness checks ---

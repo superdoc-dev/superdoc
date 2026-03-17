@@ -1588,7 +1588,11 @@ const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
  * pattern. mutations.apply returns PlanReceipt (always success: true) or throws.
  */
 const PLAN_ENGINE_META_OPS: ReadonlySet<OperationId> = new Set(['mutations.apply'] as OperationId[]);
-const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set(['history.undo', 'history.redo'] as OperationId[]);
+const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set([
+  'history.undo',
+  'history.redo',
+  'diff.apply',
+] as OperationId[]);
 
 /**
  * Content-control operations whose handlers always return `true` because they

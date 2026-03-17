@@ -490,5 +490,10 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'authorities.entries.insert': (input, options) => api.authorities.entries.insert(input, options),
     'authorities.entries.update': (input, options) => api.authorities.entries.update(input, options),
     'authorities.entries.remove': (input, options) => api.authorities.entries.remove(input, options),
+
+    // --- diff.* ---
+    'diff.capture': () => api.diff.capture(),
+    'diff.compare': (input) => api.diff.compare(input),
+    'diff.apply': (input, options) => api.diff.apply(input, options),
   };
 }

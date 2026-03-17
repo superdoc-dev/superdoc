@@ -162,6 +162,7 @@ import {
   tablesClearDefaultStyleAdapter,
 } from './tables-adapter.js';
 import { createHistoryAdapter } from './history-adapter.js';
+import { createDiffAdapter } from './diff-adapter.js';
 import {
   tocListWrapper,
   tocGetWrapper,
@@ -677,6 +678,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       preview: (input) => previewPlan(editor, input),
       apply: (input) => executePlan(editor, input),
     },
+    diff: createDiffAdapter(editor),
     history: createHistoryAdapter(editor),
   };
 }

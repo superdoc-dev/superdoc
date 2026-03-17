@@ -126,6 +126,10 @@
     "apps/docs/document-api/reference/cross-refs/rebuild.mdx",
     "apps/docs/document-api/reference/cross-refs/remove.mdx",
     "apps/docs/document-api/reference/delete.mdx",
+    "apps/docs/document-api/reference/diff/apply.mdx",
+    "apps/docs/document-api/reference/diff/capture.mdx",
+    "apps/docs/document-api/reference/diff/compare.mdx",
+    "apps/docs/document-api/reference/diff/index.mdx",
     "apps/docs/document-api/reference/fields/get.mdx",
     "apps/docs/document-api/reference/fields/index.mdx",
     "apps/docs/document-api/reference/fields/insert.mdx",
@@ -948,8 +952,15 @@
       "operationIds": ["ranges.resolve"],
       "pagePath": "apps/docs/document-api/reference/ranges/index.mdx",
       "title": "Ranges"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "diff",
+      "operationIds": ["diff.capture", "diff.compare", "diff.apply"],
+      "pagePath": "apps/docs/document-api/reference/diff/index.mdx",
+      "title": "Diff"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "068dea933bf1591112019534c6bae48f811dc8d65c42f6cb94f365548028ea77"
+  "sourceHash": "06cc64158e7f9880e7412dce06847a1164f8bb91c2027fb193b0931f9cca6174"
 }

@@ -842,6 +842,21 @@ _No fields._
 | `operations.delete.dryRun` | boolean | yes |  |
 | `operations.delete.reasons` | enum[] | no |  |
 | `operations.delete.tracked` | boolean | yes |  |
+| `operations.diff.apply` | object | yes |  |
+| `operations.diff.apply.available` | boolean | yes |  |
+| `operations.diff.apply.dryRun` | boolean | yes |  |
+| `operations.diff.apply.reasons` | enum[] | no |  |
+| `operations.diff.apply.tracked` | boolean | yes |  |
+| `operations.diff.capture` | object | yes |  |
+| `operations.diff.capture.available` | boolean | yes |  |
+| `operations.diff.capture.dryRun` | boolean | yes |  |
+| `operations.diff.capture.reasons` | enum[] | no |  |
+| `operations.diff.capture.tracked` | boolean | yes |  |
+| `operations.diff.compare` | object | yes |  |
+| `operations.diff.compare.available` | boolean | yes |  |
+| `operations.diff.compare.dryRun` | boolean | yes |  |
+| `operations.diff.compare.reasons` | enum[] | no |  |
+| `operations.diff.compare.tracked` | boolean | yes |  |
 | `operations.fields.get` | object | yes |  |
 | `operations.fields.get.available` | boolean | yes |  |
 | `operations.fields.get.dryRun` | boolean | yes |  |
@@ -2942,6 +2957,21 @@ _No fields._
       "available": true,
       "dryRun": true,
       "tracked": true
+    },
+    "diff.apply": {
+      "available": true,
+      "dryRun": false,
+      "tracked": true
+    },
+    "diff.capture": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
+    "diff.compare": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
     },
     "fields.get": {
       "available": true,
@@ -9812,6 +9842,111 @@ _No fields._
           "type": "object"
         },
         "delete": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "diff.apply": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "diff.capture": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "diff.compare": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -18889,7 +19024,10 @@ _No fields._
         "authorities.entries.get",
         "authorities.entries.insert",
         "authorities.entries.update",
-        "authorities.entries.remove"
+        "authorities.entries.remove",
+        "diff.capture",
+        "diff.compare",
+        "diff.apply"
       ],
       "type": "object"
     },

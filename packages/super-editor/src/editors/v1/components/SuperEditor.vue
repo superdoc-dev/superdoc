@@ -72,6 +72,10 @@ const isWebLayout = computed(() => {
   return props.options.viewOptions?.layout === 'web';
 });
 
+const isContained = computed(() => {
+  return Boolean(props.options.contained);
+});
+
 /**
  * Reactive ruler visibility state.
  * Uses a ref with a deep watcher to ensure proper reactivity when options.rulers changes.
@@ -1264,7 +1268,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="super-editor-container" :class="{ 'web-layout': isWebLayout }" :style="containerStyle">
+  <div
+    class="super-editor-container"
+    :class="{ 'web-layout': isWebLayout, contained: isContained }"
+    :style="containerStyle"
+  >
     <!-- Ruler: teleport to external container if specified, otherwise render inline (hidden in web layout) -->
     <Teleport
       v-if="options.rulerContainer && rulersVisible && !isWebLayout && !!activeEditor"
@@ -1402,5 +1410,21 @@ onBeforeUnmount(() => {
   color: initial;
   overflow: hidden;
   position: relative;
+}
+
+/* Contained mode: fixed-height container embedding with internal scrolling.
+ * The super-editor-container becomes the scroll container (overflow: auto).
+ * The .super-editor overflow is changed from hidden to visible so content
+ * flows through to the scroll container. The visibleHost (.presentation-editor)
+ * stays overflow: visible per PresentationEditor's design — it is NOT the scroller.
+ */
+.super-editor-container.contained {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.super-editor-container.contained .super-editor {
+  overflow: visible;
 }
 </style>

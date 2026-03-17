@@ -234,7 +234,11 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       {!hideToolbar && (
         <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' style={hideWhenLoading} />
       )}
-      <div id={containerId} className='superdoc-editor-container' style={hideWhenLoading} />
+      <div
+        id={containerId}
+        className='superdoc-editor-container'
+        style={{ ...hideWhenLoading, ...(restProps.contained && { height: '100%' }) }}
+      />
       {isLoading && !hasError && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
       {hasError && <div className='superdoc-error-container'>Failed to load editor. Check console for details.</div>}
     </div>

@@ -185,28 +185,35 @@ export function getInheritedRunProperties($pos, editor, inlineRunProperties) {
 function getParagraphRunContext($pos, editor) {
   let tableInfo = null;
   let runProperties = null;
+  let paragraphNode = null;
   for (let depth = $pos.depth; depth >= 0; depth--) {
     const node = $pos.node(depth);
     if (node.type.name === 'run' && runProperties == null) {
       runProperties = normalizeRunProperties(node.attrs?.runProperties);
     }
     if (node.type.name === 'paragraph') {
-      const paragraphAttrs = node.attrs || {};
-      const { params, resolvedPpr } = getSafeResolutionContext(editor, node, $pos, paragraphAttrs);
-      return {
-        params,
-        isEmpty: node.content.size === 0,
-        paragraphAttrs,
-        runProperties,
-        resolvedPpr,
-        tableInfo,
-        numberingDefinedInline: Boolean(paragraphAttrs.paragraphProperties?.numberingProperties),
-      };
+      paragraphNode = node;
     } else if (node.type.name === 'tableCell') {
       tableInfo = extractTableInfo($pos, depth);
+      if (paragraphNode) break;
     }
   }
-  return null;
+
+  if (!paragraphNode) {
+    return null;
+  }
+
+  const paragraphAttrs = paragraphNode.attrs || {};
+  const { params, resolvedPpr } = getSafeResolutionContext(editor, paragraphNode, $pos, paragraphAttrs);
+  return {
+    params,
+    isEmpty: paragraphNode.content.size === 0,
+    paragraphAttrs,
+    runProperties,
+    resolvedPpr,
+    tableInfo,
+    numberingDefinedInline: Boolean(paragraphAttrs.paragraphProperties?.numberingProperties),
+  };
 }
 
 function normalizeRunProperties(runProperties) {

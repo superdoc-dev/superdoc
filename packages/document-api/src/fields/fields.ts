@@ -1,6 +1,7 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { assertTargetPresent } from '../validation-primitives.js';
 import type {
   FieldAddress,
   FieldGetInput,
@@ -32,9 +33,7 @@ export type FieldsAdapter = FieldsApi;
 // ---------------------------------------------------------------------------
 
 function validateFieldTarget(target: unknown, operationName: string): asserts target is FieldAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
 
   const t = target as Record<string, unknown>;
   if (t.kind !== 'field' || typeof t.blockId !== 'string' || typeof t.occurrenceIndex !== 'number') {

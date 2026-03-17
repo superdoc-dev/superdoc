@@ -101,99 +101,83 @@ function validateRowLocator(
 }
 
 // ---------------------------------------------------------------------------
-// Locator category helpers — determine which validation to apply per operation
-// ---------------------------------------------------------------------------
-
-type TableLocatorInput = { target?: unknown; nodeId?: unknown };
-type TableScopedInput = { tableTarget?: unknown; tableNodeId?: unknown };
-type RowLocatorInput = TableLocatorInput & TableScopedInput & { rowIndex?: unknown };
-
-/**
- * Operations using the simple table locator (target/nodeId).
- */
-const TABLE_LOCATOR_OPS = new Set([
-  'tables.delete',
-  'tables.clearContents',
-  'tables.move',
-  'tables.split',
-  'tables.convertFromText',
-  'tables.convertToText',
-  'tables.setLayout',
-  'tables.distributeRows',
-  'tables.distributeColumns',
-  'tables.sort',
-  'tables.setAltText',
-  'tables.setStyle',
-  'tables.clearStyle',
-  'tables.setStyleOption',
-  'tables.setBorder',
-  'tables.clearBorder',
-  'tables.applyBorderPreset',
-  'tables.setShading',
-  'tables.clearShading',
-  'tables.setTablePadding',
-  'tables.setCellPadding',
-  'tables.setCellSpacing',
-  'tables.clearCellSpacing',
-  'tables.unmergeCells',
-  'tables.insertCell',
-  'tables.deleteCell',
-  'tables.splitCell',
-  'tables.setCellProperties',
-  'tables.get',
-  'tables.getCells',
-  'tables.getProperties',
-]);
-
-/**
- * Operations using the mixed row locator (direct OR table-scoped).
- */
-const ROW_LOCATOR_OPS = new Set([
-  'tables.insertRow',
-  'tables.deleteRow',
-  'tables.setRowHeight',
-  'tables.setRowOptions',
-]);
-
-/**
- * Operations using a table-scoped column locator (tableTarget/tableNodeId).
- */
-const COLUMN_LOCATOR_OPS = new Set(['tables.insertColumn', 'tables.deleteColumn', 'tables.setColumnWidth']);
-
-/**
- * Operations using a merge range locator (tableTarget/tableNodeId).
- */
-const MERGE_RANGE_LOCATOR_OPS = new Set(['tables.mergeCells']);
-
-// ---------------------------------------------------------------------------
-// Generic execute wrapper
+// Typed execute helpers — one per locator category
 // ---------------------------------------------------------------------------
 
 /**
- * Validates the input locator for a table operation and normalizes MutationOptions.
- *
- * @param operationName - The operation ID (e.g. 'tables.delete')
- * @param adapter - The adapter method to call
- * @param input - The raw input from the caller
- * @param options - Optional mutation options to normalize
- * @returns The adapter return value
+ * Execute a table operation that uses the simple table locator (target/nodeId).
+ * Validates the locator and normalizes MutationOptions.
  */
-export function executeTableOperation<TInput, TResult>(
+export function executeTableLocatorOp<TInput extends { target?: unknown; nodeId?: unknown }, TResult>(
   operationName: string,
   adapter: (input: TInput, options?: MutationOptions) => TResult,
   input: TInput,
   options?: MutationOptions,
 ): TResult {
-  // Validate locator based on operation category
-  if (TABLE_LOCATOR_OPS.has(operationName)) {
-    validateTableLocator(input as TableLocatorInput, operationName);
-  } else if (ROW_LOCATOR_OPS.has(operationName)) {
-    validateRowLocator(input as RowLocatorInput, operationName);
-  } else if (COLUMN_LOCATOR_OPS.has(operationName)) {
-    validateTableScopedLocator(input as TableScopedInput, operationName);
-  } else if (MERGE_RANGE_LOCATOR_OPS.has(operationName)) {
-    validateTableScopedLocator(input as TableScopedInput, operationName);
-  }
+  validateTableLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
 
+/**
+ * Execute a table operation that uses the mixed row locator
+ * (direct target/nodeId OR table-scoped tableTarget/tableNodeId + rowIndex).
+ * Validates the locator and normalizes MutationOptions.
+ */
+export function executeRowLocatorOp<
+  TInput extends {
+    target?: unknown;
+    nodeId?: unknown;
+    tableTarget?: unknown;
+    tableNodeId?: unknown;
+    rowIndex?: unknown;
+  },
+  TResult,
+>(
+  operationName: string,
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  validateRowLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Execute a table operation that uses a table-scoped column locator
+ * (tableTarget/tableNodeId). Validates the locator and normalizes MutationOptions.
+ */
+export function executeColumnLocatorOp<TInput extends { tableTarget?: unknown; tableNodeId?: unknown }, TResult>(
+  operationName: string,
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableScopedLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Execute a table operation that uses a merge-range locator
+ * (tableTarget/tableNodeId). Validates the locator and normalizes MutationOptions.
+ */
+export function executeMergeRangeLocatorOp<TInput extends { tableTarget?: unknown; tableNodeId?: unknown }, TResult>(
+  operationName: string,
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableScopedLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Execute a document-level table mutation (no locator validation needed).
+ * Only normalizes MutationOptions.
+ */
+export function executeDocumentLevelTableOp<TInput, TResult>(
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
   return adapter(input, normalizeMutationOptions(options));
 }

@@ -43,7 +43,7 @@ export type TextTarget = {
 };
 
 // ---------------------------------------------------------------------------
-// Selection-based mutation targeting (v1)
+// Selection-based mutation targeting
 // ---------------------------------------------------------------------------
 
 /**

@@ -1,4 +1,4 @@
-import { executeWrite, type MutationOptions, type WriteAdapter } from '../write/write.js';
+import { executeWrite, normalizeMutationOptions, type MutationOptions, type WriteAdapter } from '../write/write.js';
 import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
 import type { SDInsertInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
@@ -197,7 +197,7 @@ export function executeInsert(adapter: WriteAdapter, input: InsertInput, options
 
   // Structural content path — returns SDMutationReceipt directly
   if (isStructuralInsertInput(input)) {
-    return adapter.insertStructured(input as unknown as LegacyInsertInput, options);
+    return adapter.insertStructured(input, normalizeMutationOptions(options));
   }
 
   // Legacy string path
@@ -206,7 +206,7 @@ export function executeInsert(adapter: WriteAdapter, input: InsertInput, options
 
   // For non-text content types, delegate to the adapter's structured insert path.
   if (contentType !== 'text') {
-    return adapter.insertStructured(input, options);
+    return adapter.insertStructured(input, normalizeMutationOptions(options));
   }
 
   // Text path: use the existing write pipeline, wrap TextMutationReceipt → SDMutationReceipt

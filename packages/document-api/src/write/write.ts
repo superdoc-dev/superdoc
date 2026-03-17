@@ -5,6 +5,13 @@ import type { ReplaceInput } from '../replace/replace.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
+/**
+ * Subset of MutationOptions that provides only revision guarding.
+ *
+ * Used by operations that don't participate in the plan engine (comments,
+ * clearContent, trackChanges.decide) where changeMode and dryRun are not
+ * applicable.
+ */
 export interface RevisionGuardOptions {
   /** When provided, the engine rejects with REVISION_MISMATCH if the document has advanced past this revision. */
   expectedRevision?: string;
@@ -37,7 +44,10 @@ export type InsertWriteRequest = {
   text: string;
 } & Partial<BlockRelativeLocator>;
 
-/** @deprecated Use `InsertWriteRequest` directly. Delete and replace now use SelectionMutationAdapter. */
+/**
+ * Alias for `InsertWriteRequest`. Retained because super-editor adapter-utils
+ * and plan-wrappers still reference this name.
+ */
 export type WriteRequest = InsertWriteRequest;
 
 /**

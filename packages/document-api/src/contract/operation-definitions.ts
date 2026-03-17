@@ -190,7 +190,6 @@ const T_PLAN_ENGINE = [
 // All mutation operations include CAPABILITY_UNAVAILABLE (contract invariant).
 // _TRACKED suffix signals the operation also supports tracked change mode.
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
-const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
 
 // Image operations can throw AMBIGUOUS_TARGET when multiple images share an sdImageId.
 const T_IMAGE_COMMAND = ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
@@ -826,7 +825,8 @@ export const OPERATION_DEFINITIONS = {
   'sections.setOddEvenHeadersFooters': {
     memberPath: 'sections.setOddEvenHeadersFooters',
     description: 'Enable or disable odd/even header-footer mode in document settings.',
-    expectedResult: 'Returns a DocumentMutationResult receipt; reports NO_OP if the odd/even setting already matches.',
+    expectedResult:
+      'Returns a DocumentMutationResult (not SectionMutationResult) because odd/even headers-footers is a document-level setting, not per-section. Reports NO_OP if the setting already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -1941,7 +1941,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
     }),
     referenceDocPath: 'create/table.mdx',
     referenceGroup: 'create',
@@ -1976,7 +1976,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete.mdx',
     referenceGroup: 'tables',
@@ -2078,7 +2078,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/insert-row.mdx',
     referenceGroup: 'tables',
@@ -2093,7 +2093,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete-row.mdx',
     referenceGroup: 'tables',
@@ -2158,7 +2158,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/insert-column.mdx',
     referenceGroup: 'tables',
@@ -2173,7 +2173,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete-column.mdx',
     referenceGroup: 'tables',

@@ -23,4 +23,5 @@ export * from './blocks.types.js';
 export * from './toc.types.js';
 export * from './fragment.js';
 export * from './placement.js';
+export * from './adapter-result.js';
 export * from './structural-input.js';

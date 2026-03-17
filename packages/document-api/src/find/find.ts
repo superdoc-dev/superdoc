@@ -1,4 +1,4 @@
-import type { BlockNodeAddress, NodeSelector, Query, FindOutput, Selector, TextSelector } from '../types/index.js';
+import type { BlockNodeAddress, NodeSelector, Query, Selector, TextSelector } from '../types/index.js';
 import type { SDFindInput, SDFindResult } from '../types/sd-envelope.js';
 import { DocumentApiValidationError } from '../errors.js';
 
@@ -33,13 +33,6 @@ export interface FindAdapter {
    * @returns The find result as an SDFindResult envelope.
    */
   find(input: SDFindInput): SDFindResult;
-
-  /**
-   * Legacy query-based find, used internally by info-adapter.
-   * Returns the old FindOutput shape for backward compatibility.
-   * @internal
-   */
-  findLegacy?(query: Query): FindOutput;
 }
 
 /** Normalizes a selector shorthand into its canonical discriminated-union form.
@@ -118,24 +111,4 @@ export function normalizeFindQuery(selectorOrQuery: Selector | Query, options?: 
  */
 export function executeFind(adapter: FindAdapter, input: SDFindInput): SDFindResult {
   return adapter.find(input);
-}
-
-/**
- * Executes a legacy find using the old Query/Selector interface.
- * Used internally by info-adapter. Prefers `findLegacy` if available,
- * otherwise translates to SDFindInput.
- *
- * @internal
- */
-export function executeLegacyFind(
-  adapter: FindAdapter,
-  selectorOrQuery: Selector | Query,
-  options?: FindOptions,
-): FindOutput {
-  const query = normalizeFindQuery(selectorOrQuery, options);
-  if (adapter.findLegacy) {
-    return adapter.findLegacy(query);
-  }
-  // Fallback: shouldn't happen in practice since super-editor adapter provides findLegacy
-  throw new Error('Legacy find is not supported by this adapter');
 }

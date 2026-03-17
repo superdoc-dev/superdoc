@@ -112,16 +112,6 @@ function createNoopAdapters(): DocumentApiAdapters {
         },
       }),
     },
-    format: {
-      apply: () => ({
-        success: true,
-        resolution: {
-          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 1 } },
-          range: { from: 1, to: 2 },
-          text: 'x',
-        },
-      }),
-    },
     trackChanges: {
       list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
       get: ({ id }) => ({

@@ -267,7 +267,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'create.image': (input, options) => api.create.image(input, options),
 
     // --- images.* ---
-    'images.list': (input) => api.images.list(input ?? {}),
+    'images.list': (input) => api.images.list(input),
     'images.get': (input) => api.images.get(input),
     'images.delete': (input, options) => api.images.delete(input, options),
     'images.move': (input, options) => api.images.move(input, options),

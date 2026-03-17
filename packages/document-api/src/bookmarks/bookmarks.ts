@@ -1,6 +1,7 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { assertTargetPresent } from '../validation-primitives.js';
 import type {
   BookmarkAddress,
   BookmarkGetInput,
@@ -32,9 +33,7 @@ export type BookmarksAdapter = BookmarksApi;
 // ---------------------------------------------------------------------------
 
 function validateBookmarkTarget(target: unknown, operationName: string): asserts target is BookmarkAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
 
   const t = target as Record<string, unknown>;
   if (t.kind !== 'entity' || t.entityType !== 'bookmark' || typeof t.name !== 'string') {

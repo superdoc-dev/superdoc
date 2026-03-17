@@ -315,6 +315,7 @@ export class PresentationEditor extends EventEmitter {
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
   #scrollContainer: Element | Window | null = null;
+  #scrollContainerValidated = false;
   #sectionMetadata: SectionMetadata[] = [];
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
   #inputBridge: PresentationInputBridge | null = null;
@@ -3065,6 +3066,53 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Re-validates the detected scroll container after the first layout completes.
+   *
+   * At setup time, #findScrollableAncestor picks the first ancestor with
+   * overflow-y: auto|scroll — but it can't verify the element actually constrains
+   * content height (content isn't laid out yet). A consumer may set overflow:auto
+   * on the SuperDoc container without constraining its height, causing the element
+   * to expand to fit all content instead of scrolling.
+   *
+   * After layout, we can check scrollHeight vs clientHeight. If the detected
+   * container isn't actually scrollable, we walk further up to find one that is,
+   * or fall back to window.
+   */
+  #revalidateScrollContainer(): void {
+    if (this.#scrollContainerValidated) return;
+    this.#scrollContainerValidated = true;
+
+    if (!(this.#scrollContainer instanceof Element)) return;
+    if (this.#scrollContainer.scrollHeight > this.#scrollContainer.clientHeight + 1) return;
+
+    const win = this.#scrollContainer.ownerDocument?.defaultView;
+    let el: Element | null = this.#scrollContainer.parentElement;
+    let next: Element | Window | null = win ?? null;
+
+    while (el) {
+      const { overflowY } = getComputedStyle(el);
+      if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+        next = el;
+        break;
+      }
+      el = el.parentElement;
+    }
+
+    if (!next || next === this.#scrollContainer) return;
+
+    const prev = this.#scrollContainer;
+    prev.removeEventListener('scroll', this.#scrollHandler!);
+    this.#scrollContainer = next;
+
+    if (next instanceof Element) {
+      next.addEventListener('scroll', this.#scrollHandler!, { passive: true });
+    }
+    if (this.#domPainter && next instanceof HTMLElement) {
+      this.#domPainter.setScrollContainer(next);
+    }
+  }
+
+  /**
    * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
@@ -3798,6 +3846,7 @@ export class PresentationEditor extends EventEmitter {
       this.#epochMapper.onLayoutComplete(layoutEpoch);
       this.#selectionSync.onLayoutComplete(layoutEpoch);
       layoutCompleted = true;
+      this.#revalidateScrollContainer();
       this.#updatePermissionOverlay();
 
       // Reset error state on successful layout

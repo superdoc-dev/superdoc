@@ -3075,8 +3075,10 @@ export class PresentationEditor extends EventEmitter {
    * to expand to fit all content instead of scrolling.
    *
    * After layout, we can check scrollHeight vs clientHeight. If the detected
-   * container isn't actually scrollable, we walk further up to find one that is,
-   * or fall back to window.
+   * container isn't actually scrollable AND it grew beyond the viewport (ruling
+   * out properly constrained containers that simply don't have enough content
+   * yet), we walk further up to find one that actually scrolls, or fall back
+   * to window.
    */
   #revalidateScrollContainer(): void {
     if (this.#scrollContainerValidated) return;
@@ -3085,7 +3087,14 @@ export class PresentationEditor extends EventEmitter {
     if (!(this.#scrollContainer instanceof Element)) return;
     if (this.#scrollContainer.scrollHeight > this.#scrollContainer.clientHeight + 1) return;
 
+    // A properly constrained container (e.g. height:600px; overflow:auto) may
+    // not be overflowing yet if the document is short. Its clientHeight stays
+    // within viewport bounds. Only switch when the container grew beyond the
+    // viewport — a clear sign its height is unconstrained.
     const win = this.#scrollContainer.ownerDocument?.defaultView;
+    const viewportHeight = win?.innerHeight ?? 0;
+    if (this.#scrollContainer.clientHeight <= viewportHeight) return;
+
     let el: Element | null = this.#scrollContainer.parentElement;
     let next: Element | Window | null = win ?? null;
 
@@ -3107,9 +3116,7 @@ export class PresentationEditor extends EventEmitter {
     if (next instanceof Element) {
       next.addEventListener('scroll', this.#scrollHandler!, { passive: true });
     }
-    if (this.#domPainter && next instanceof HTMLElement) {
-      this.#domPainter.setScrollContainer(next);
-    }
+    this.#domPainter?.setScrollContainer?.(next instanceof HTMLElement ? next : null);
   }
 
   /**

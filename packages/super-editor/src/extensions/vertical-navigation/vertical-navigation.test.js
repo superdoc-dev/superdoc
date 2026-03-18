@@ -37,9 +37,62 @@ const createDomStructure = () => {
   return { line1, line2 };
 };
 
+const createTableLikeDomStructure = () => {
+  const page = document.createElement('div');
+  page.className = DOM_CLASS_NAMES.PAGE;
+  page.dataset.pageIndex = '0';
+
+  const fragment = document.createElement('div');
+  fragment.className = DOM_CLASS_NAMES.FRAGMENT;
+  page.appendChild(fragment);
+
+  const lines = [
+    { text: 'Before', top: 360, left: 120, width: 280, pmStart: 1, pmEnd: 7 },
+    { text: 'Here', top: 400, left: 120, width: 90, pmStart: 10, pmEnd: 14 },
+    { text: 'Is', top: 400, left: 320, width: 90, pmStart: 20, pmEnd: 22 },
+    { text: 'a', top: 400, left: 520, width: 90, pmStart: 30, pmEnd: 31 },
+    { text: 'table', top: 430, left: 120, width: 90, pmStart: 40, pmEnd: 45 },
+    { text: 'for', top: 430, left: 320, width: 90, pmStart: 50, pmEnd: 53 },
+    { text: 'Testing', top: 430, left: 520, width: 90, pmStart: 60, pmEnd: 67 },
+    { text: 'After', top: 470, left: 120, width: 280, pmStart: 70, pmEnd: 75 },
+  ].map(({ text, top, left, width, pmStart, pmEnd }) => {
+    const line = document.createElement('div');
+    line.className = DOM_CLASS_NAMES.LINE;
+    line.textContent = text;
+    line.dataset.pmStart = String(pmStart);
+    line.dataset.pmEnd = String(pmEnd);
+    vi.spyOn(line, 'getBoundingClientRect').mockReturnValue({
+      top,
+      bottom: top + 20,
+      left,
+      right: left + width,
+      width,
+      height: 20,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    });
+    fragment.appendChild(line);
+    return line;
+  });
+
+  document.body.appendChild(page);
+
+  return {
+    before: lines[0],
+    topLeft: lines[1],
+    topMiddle: lines[2],
+    topRight: lines[3],
+    bottomLeft: lines[4],
+    bottomMiddle: lines[5],
+    bottomRight: lines[6],
+    after: lines[7],
+  };
+};
+
 const createEnvironment = ({ presenting = true, selection = null, overrides = {} } = {}) => {
   const schema = createSchema();
-  const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('hello world')])]);
+  const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('x'.repeat(200))])]);
   const initialSelection = selection ?? TextSelection.create(doc, 1, 1);
 
   const visibleHost = document.createElement('div');
@@ -243,6 +296,70 @@ describe('VerticalNavigation', () => {
 
     const dispatchedTr = view.dispatch.mock.calls[0][0];
     expect(dispatchedTr.getMeta(VerticalNavigationPluginKey)).toMatchObject({ type: 'reset-goal-x' });
+  });
+
+  it('moves down within the same visual table column instead of DOM-adjacent cells', () => {
+    const { topMiddle, bottomMiddle } = createTableLikeDomStructure();
+    document.elementsFromPoint = vi.fn(() => [topMiddle]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    presentationEditor.hitTest.mockReturnValue({ pos: 52 });
+    presentationEditor.denormalizeClientPoint.mockReturnValue({ x: 350, y: 0 });
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(presentationEditor.hitTest).toHaveBeenCalledWith(350, 440);
+    expect(view.state.selection.head).toBe(52);
+    expect(bottomMiddle.dataset.pmStart).toBe('50');
+  });
+
+  it('moves up within the same visual table column instead of DOM-adjacent cells', () => {
+    const { topMiddle, bottomMiddle } = createTableLikeDomStructure();
+    document.elementsFromPoint = vi.fn(() => [bottomMiddle]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    presentationEditor.hitTest.mockReturnValue({ pos: 21 });
+    presentationEditor.denormalizeClientPoint.mockReturnValue({ x: 350, y: 0 });
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowUp', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(presentationEditor.hitTest).toHaveBeenCalledWith(350, 410);
+    expect(view.state.selection.head).toBe(21);
+    expect(topMiddle.dataset.pmStart).toBe('20');
+  });
+
+  it('exits the table upward to the nearest visual line above', () => {
+    const { before, topMiddle } = createTableLikeDomStructure();
+    document.elementsFromPoint = vi.fn(() => [topMiddle]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    presentationEditor.hitTest.mockReturnValue({ pos: 3 });
+    presentationEditor.denormalizeClientPoint.mockReturnValue({ x: 180, y: 0 });
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowUp', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(presentationEditor.hitTest).toHaveBeenCalledWith(180, 370);
+    expect(view.state.selection.head).toBe(3);
+    expect(before.dataset.pmStart).toBe('1');
+  });
+
+  it('exits the table downward to the nearest visual line below', () => {
+    const { after, bottomMiddle } = createTableLikeDomStructure();
+    document.elementsFromPoint = vi.fn(() => [bottomMiddle]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    presentationEditor.hitTest.mockReturnValue({ pos: 72 });
+    presentationEditor.denormalizeClientPoint.mockReturnValue({ x: 180, y: 0 });
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(presentationEditor.hitTest).toHaveBeenCalledWith(180, 480);
+    expect(view.state.selection.head).toBe(72);
+    expect(after.dataset.pmStart).toBe('70');
   });
 });
 

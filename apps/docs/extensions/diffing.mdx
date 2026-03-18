@@ -1,0 +1,144 @@
+---
+title: Diffing extension
+sidebarTitle: Diffing
+description: Compare two ProseMirror documents and replay differences as tracked changes
+keywords: "diffing, document comparison, compareDocuments, replayDifferences, diff, redline"
+---
+
+Compare two documents and replay the differences as tracked changes. The `Diffing` extension is included in the starter extensions by default.
+
+For usage guides, see [Document comparison](/guides/document-comparison/overview).
+
+## Commands
+
+### compareDocuments
+
+Compares the current document against an updated document and returns the differences. Does not modify the document.
+
+<CodeGroup>
+
+```javascript Usage
+const diff = editor.commands.compareDocuments(
+  updatedDocument,       // ProseMirror Node
+  updatedComments,       // CommentInput[] (optional)
+  updatedStyles,         // StylesDocumentProperties (optional)
+  updatedNumbering,      // NumberingProperties (optional)
+);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import { Editor, getStarterExtensions } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: baseFile,
+  user: { name: 'Reviewer', email: 'reviewer@example.com' },
+  onReady: async (superdoc) => {
+    const editor = superdoc.activeEditor;
+
+    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(targetFile);
+    const headless = new Editor({
+      isHeadless: true,
+      skipViewCreation: true,
+      extensions: getStarterExtensions(),
+      content: docx,
+      mode: 'docx',
+      media,
+      mediaFiles,
+      fonts,
+    });
+
+    const diff = editor.commands.compareDocuments(
+      headless.state.doc,
+      headless.converter?.comments ?? [],
+      headless.converter?.translatedLinkedStyles ?? null,
+      headless.converter?.translatedNumbering ?? null,
+    );
+
+    editor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+    headless.destroy();
+  },
+});
+```
+
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="updatedDocument" type="Node" required>
+  The ProseMirror document to compare against. Typically from a headless `Editor` instance.
+</ParamField>
+
+<ParamField path="updatedComments" type="CommentInput[]">
+  Comments from the updated document. Defaults to the current document's comments if omitted.
+</ParamField>
+
+<ParamField path="updatedStyles" type="StylesDocumentProperties | null">
+  OOXML styles from the updated document. Defaults to current styles if omitted.
+</ParamField>
+
+<ParamField path="updatedNumbering" type="NumberingProperties | null">
+  OOXML numbering from the updated document. Defaults to current numbering if omitted.
+</ParamField>
+
+**Returns:** A `DiffResult` object containing the computed differences.
+
+### replayDifferences
+
+Applies a `DiffResult` onto the current document. By default, changes are wrapped in tracked-change marks.
+
+<CodeGroup>
+
+```javascript Usage
+editor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: baseFile,
+  user: { name: 'Reviewer', email: 'reviewer@example.com' },
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+
+    // diff obtained from compareDocuments
+    editor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+  },
+});
+```
+
+</CodeGroup>
+
+**Parameters:**
+
+<ParamField path="diff" type="DiffResult" required>
+  The diff result from `compareDocuments`.
+</ParamField>
+
+<ParamField path="options.applyTrackedChanges" type="boolean" default="true">
+  When `true`, changes are tagged as tracked changes with author attribution. When `false`, changes are applied silently. Requires a `user` on the editor instance.
+</ParamField>
+
+## DiffResult
+
+The object returned by `compareDocuments`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `docDiffs` | `NodeDiff[]` | Block and inline structural differences |
+| `commentDiffs` | `CommentDiff[]` | Added, deleted, and modified comments |
+| `stylesDiff` | `StylesDiff \| null` | OOXML style changes |
+| `numberingDiff` | `NumberingDiff \| null` | OOXML numbering changes |
+
+Each `NodeDiff` has an `action` of `'added'`, `'deleted'`, or `'modified'`, with serialized node data and position anchors.
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/diffing/diffing.js" />

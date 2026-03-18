@@ -1,0 +1,148 @@
+---
+title: Client-side comparison
+sidebarTitle: Client-side
+description: Compare two DOCX documents in the browser and render differences as tracked changes
+keywords: "document comparison, client-side diff, browser diff, compare documents, redline, tracked changes"
+---
+
+Compare two DOCX documents in the browser using the `Diffing` extension commands. The differences are replayed onto the visible editor as tracked changes.
+
+## Quick start
+
+The core flow is three steps: parse the second document with a headless editor, compare, and replay.
+
+<CodeGroup>
+
+```javascript Usage
+// 1. Parse the second document headlessly
+const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(targetFile);
+
+const headless = new Editor({
+  isHeadless: true,
+  skipViewCreation: true,
+  extensions: getStarterExtensions(),
+  content: docx,
+  mode: 'docx',
+  media,
+  mediaFiles,
+  fonts,
+});
+
+// 2. Compare the visible editor against the headless document
+const diff = editor.commands.compareDocuments(
+  headless.state.doc,
+  headless.converter?.comments ?? [],
+  headless.converter?.translatedLinkedStyles ?? null,
+  headless.converter?.translatedNumbering ?? null,
+);
+
+// 3. Replay the differences as tracked changes
+editor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+headless.destroy();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import { Editor, getStarterExtensions } from 'superdoc/super-editor';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: baseFile,
+  user: { name: 'Reviewer', email: 'reviewer@example.com' },
+  onReady: async (superdoc) => {
+    const editor = superdoc.activeEditor;
+
+    // Parse the target document headlessly
+    const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(targetFile);
+
+    const headless = new Editor({
+      isHeadless: true,
+      skipViewCreation: true,
+      extensions: getStarterExtensions(),
+      content: docx,
+      mode: 'docx',
+      media,
+      mediaFiles,
+      fonts,
+    });
+
+    // Compare and replay
+    const diff = editor.commands.compareDocuments(
+      headless.state.doc,
+      headless.converter?.comments ?? [],
+      headless.converter?.translatedLinkedStyles ?? null,
+      headless.converter?.translatedNumbering ?? null,
+    );
+
+    editor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+    headless.destroy();
+  },
+});
+```
+
+</CodeGroup>
+
+After replay, the editor shows insertions, deletions, and formatting changes as tracked changes. Users can review them with the standard [accept/reject workflow](/extensions/track-changes).
+
+## Headless editor pattern
+
+The second document needs to be parsed into a ProseMirror document tree before comparison. Create a headless `Editor` instance — no DOM, no view — just the parsed document state.
+
+```javascript
+const headless = new Editor({
+  isHeadless: true,
+  skipViewCreation: true,
+  extensions: getStarterExtensions(),
+  content: docx,
+  mode: 'docx',
+  media,
+  mediaFiles,
+  fonts,
+});
+```
+
+Extract what you need from `headless.state.doc`, `headless.converter.comments`, `headless.converter.translatedLinkedStyles`, and `headless.converter.translatedNumbering`. Then call `headless.destroy()`.
+
+## Bidirectional comparison
+
+To show changes on both sides (like the [diffing example](https://github.com/superdoc-dev/superdoc/tree/main/examples/features/diffing)), run the comparison in both directions:
+
+```javascript
+// Left editor shows what Right changed
+const leftDiff = leftEditor.commands.compareDocuments(
+  rightHeadless.state.doc,
+  rightHeadless.converter?.comments ?? [],
+  rightHeadless.converter?.translatedLinkedStyles ?? null,
+  rightHeadless.converter?.translatedNumbering ?? null,
+);
+leftEditor.commands.replayDifferences(leftDiff, { applyTrackedChanges: true });
+
+// Right editor shows what Left changed
+const rightDiff = rightEditor.commands.compareDocuments(
+  leftHeadless.state.doc,
+  leftHeadless.converter?.comments ?? [],
+  leftHeadless.converter?.translatedLinkedStyles ?? null,
+  leftHeadless.converter?.translatedNumbering ?? null,
+);
+rightEditor.commands.replayDifferences(rightDiff, { applyTrackedChanges: true });
+```
+
+## Tracked changes vs silent apply
+
+By default, `replayDifferences` wraps every change in tracked-change marks. Set `applyTrackedChanges: false` to apply changes silently — useful when you want to merge documents without review.
+
+```javascript
+// Apply silently (no tracked changes)
+editor.commands.replayDifferences(diff, { applyTrackedChanges: false });
+```
+
+<Note>
+Tracked changes require a `user` on the SuperDoc or Editor instance. Without one, changes are applied silently regardless of the option.
+</Note>
+
+## API reference
+
+See the [Diffing extension](/extensions/diffing) page for the full command signatures and `DiffResult` type.

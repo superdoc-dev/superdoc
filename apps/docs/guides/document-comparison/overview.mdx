@@ -1,0 +1,59 @@
+---
+title: Compare documents
+sidebarTitle: Overview
+description: Compare two DOCX documents and surface every difference as tracked changes
+keywords: "document comparison, diff, diffing, redline, compare documents, tracked changes, version comparison, document review"
+---
+
+Load two DOCX documents, compare them, and see every difference as tracked changes — insertions, deletions, and formatting changes. Accept or reject each change individually, then export back to `.docx`.
+
+## How it works
+
+SuperDoc compares two documents at the paragraph level, detects what changed, and replays those changes onto the base document as tracked changes. The result looks exactly like a Word redline.
+
+1. **Compare** — Diff the document trees, comments, styles, and numbering
+2. **Replay** — Apply the differences as tracked changes with author attribution
+3. **Review** — Accept or reject each change using the standard [Track Changes](/extensions/track-changes) workflow
+
+## Two paths
+
+<CardGroup cols={2}>
+  <Card title="Client-side" icon="browser" href="/guides/document-comparison/client-side">
+    Compare documents in the browser using editor commands. Best for interactive review UIs where users pick two files and see the redline immediately.
+  </Card>
+  <Card title="Server-side" icon="server" href="/guides/document-comparison/server-side">
+    Compare documents headlessly with the Node.js or Python SDK. Best for automation — CI pipelines, webhook handlers, or batch processing.
+  </Card>
+</CardGroup>
+
+## What gets compared
+
+| Content | v1 support |
+|---------|-----------|
+| Body text and formatting | Yes |
+| Comments | Yes |
+| Styles | Yes |
+| Numbering / lists | Yes |
+| Headers and footers | Not yet |
+
+## Output
+
+The comparison produces a document based on the **base** document with all differences from the **target** surfaced as tracked changes. Comments, styles, and numbering changes are applied directly.
+
+Export the result as a `.docx` file and it opens in Microsoft Word with the tracked changes intact.
+
+## Example
+
+<Card
+  title="Diffing example"
+  icon="github"
+  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/features/diffing"
+>
+  Side-by-side comparison demo with bidirectional tracked changes
+</Card>
+
+## Related
+
+- [Track Changes](/extensions/track-changes) — Accept/reject workflow for reviewed changes
+- [Diffing extension](/extensions/diffing) — API reference for `compareDocuments` and `replayDifferences`
+- [diff.capture](/document-api/reference/diff/capture), [diff.compare](/document-api/reference/diff/compare), [diff.apply](/document-api/reference/diff/apply) — Document API operations

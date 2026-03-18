@@ -111,7 +111,7 @@
               },
               {
                 "group": "SDKs",
-                "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
+                "pages": ["document-engine/sdks", "guides/document-comparison/server-side"]
               },
               "document-engine/cli",
               {
@@ -160,6 +160,7 @@
                   "extensions/content-block",
                   "extensions/custom-selection",
                   "extensions/document",
+                  "extensions/diffing",
                   "extensions/document-index",
                   "extensions/dropcursor",
                   "extensions/font-family",
@@ -238,6 +239,14 @@
             "pages": [
               "guides/general/storage",
               "guides/general/stable-navigation",
+              {
+                "group": "Document Comparison",
+                "pages": [
+                  "guides/document-comparison/overview",
+                  "guides/document-comparison/client-side",
+                  "guides/document-comparison/server-side"
+                ]
+              },
               {
                 "group": "Collaboration",
                 "pages": [
@@ -405,6 +414,10 @@
     {
       "source": "/getting-started/ai-ready",
       "destination": "/getting-started/ai-agents"
+    },
+    {
+      "source": "/document-engine/sdk-diffing",
+      "destination": "/guides/document-comparison/server-side"
     },
     {
       "source": "/api-reference/documents/sign",

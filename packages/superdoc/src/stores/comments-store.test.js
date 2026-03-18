@@ -783,6 +783,58 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('emits deleted events when replay sync prunes stale tracked-change comments', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      emit: vi.fn(),
+      isCollaborative: true,
+      config: {
+        modules: { comments: true },
+        user: { name: 'Alice', email: 'alice@example.com' },
+      },
+      ydoc: { getArray: vi.fn() },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+    groupChangesMock.mockReturnValue([]);
+
+    const trackedComment = {
+      commentId: 'tc-stale',
+      trackedChange: true,
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({
+        commentId: 'tc-stale',
+        trackedChange: true,
+        fileId: 'doc-1',
+      })),
+    };
+
+    store.commentsList = [trackedComment];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
+      superdoc,
+      expect.objectContaining({
+        type: comments_module_events.DELETED,
+        comment: expect.objectContaining({ commentId: 'tc-stale' }),
+      }),
+    );
+    expect(superdoc.emit).toHaveBeenCalledWith(
+      'comments-update',
+      expect.objectContaining({
+        type: comments_module_events.DELETED,
+        comment: expect.objectContaining({ commentId: 'tc-stale' }),
+      }),
+    );
+  });
+
   it('keeps tracked-change comments whose IDs are still present in marks', () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };

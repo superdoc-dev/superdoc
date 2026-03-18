@@ -194,6 +194,9 @@ export const useCommentsStore = defineStore('comments', () => {
     comment.resolvedByName = null;
   };
 
+  const getCommentEventPayload = (comment) =>
+    typeof comment?.getValues === 'function' ? comment.getValues() : { ...comment };
+
   /**
    * Check if a comment originated from the super-editor (or has no explicit source).
    * Comments without a source are assumed to be editor-backed for backward compatibility.
@@ -1070,7 +1073,7 @@ export const useCommentsStore = defineStore('comments', () => {
    * @param {string | null} activeDocumentId Document currently being synced.
    * @returns {void}
    */
-  const pruneStaleTrackedChangeComments = (liveTrackedChangeIds, activeDocumentId) => {
+  const pruneStaleTrackedChangeComments = (liveTrackedChangeIds, activeDocumentId, superdoc = null) => {
     if (!(liveTrackedChangeIds instanceof Set) || !activeDocumentId) return;
 
     const removedIds = new Set();
@@ -1118,6 +1121,24 @@ export const useCommentsStore = defineStore('comments', () => {
       });
     }
 
+    const removedComments = previousComments.filter((comment) => {
+      if (!belongsToDocument(comment, activeDocumentId)) return false;
+      const commentId = comment.commentId != null ? String(comment.commentId) : null;
+      const importedId = comment.importedId != null ? String(comment.importedId) : null;
+      return (commentId && removedIds.has(commentId)) || (importedId && removedIds.has(importedId));
+    });
+
+    removedComments.forEach((comment) => {
+      const payload = getCommentEventPayload(comment);
+      const event = {
+        type: COMMENT_EVENTS.DELETED,
+        comment: payload,
+        changes: [{ key: 'deleted', commentId: payload.commentId, fileId: payload.fileId }],
+      };
+      syncCommentsToClients(superdoc, event);
+      superdoc?.emit?.('comments-update', event);
+    });
+
     const activeCommentId = activeComment.value != null ? String(activeComment.value) : null;
     const activeCommentBelongsToActiveDocument = previousComments.some((comment) => {
       const commentId = comment.commentId != null ? String(comment.commentId) : null;
@@ -1156,7 +1177,7 @@ export const useCommentsStore = defineStore('comments', () => {
       liveTrackedChangeIds.add(String(id));
     });
 
-    pruneStaleTrackedChangeComments(liveTrackedChangeIds, activeDocumentId);
+    pruneStaleTrackedChangeComments(liveTrackedChangeIds, activeDocumentId, superdoc);
     createCommentForTrackChanges(editor, superdoc, trackedChanges);
   };
 

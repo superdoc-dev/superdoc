@@ -2614,7 +2614,7 @@ export class DomPainter {
       const base = this.options.pageStyles ?? {};
       return {
         ...base,
-        background: base.background ?? 'var(--sd-layout-page-background, #fff)',
+        background: base.background ?? 'var(--sd-layout-page-bg, #fff)',
         boxShadow: 'none',
         border: 'none',
         margin: '0',

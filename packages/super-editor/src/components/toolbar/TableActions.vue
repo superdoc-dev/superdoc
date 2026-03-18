@@ -52,7 +52,7 @@ const handleClick = (item) => {
 .toolbar-table-actions__item {
   display: flex;
   gap: 5px;
-  background-color: var(--sd-ui-dropdown-surface, #ffffff);
+  background-color: var(--sd-ui-dropdown-bg, #ffffff);
   padding: 4px 10px;
   border-radius: var(--sd-ui-dropdown-option-radius, 3px);
   cursor: pointer;
@@ -61,7 +61,7 @@ const handleClick = (item) => {
 }
 
 .toolbar-table-actions__item:hover {
-  background-color: var(--sd-ui-dropdown-surface-hover, #d8dee5);
+  background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
 }
 
 .toolbar-table-actions__item--border:after {

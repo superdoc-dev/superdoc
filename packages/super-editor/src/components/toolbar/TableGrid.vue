@@ -163,7 +163,7 @@ onMounted(() => {
   }
 
   .toolbar-table-grid__item.selected {
-    background-color: var(--sd-ui-dropdown-surface-hover, #d8dee5);
+    background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
   }
 
   &.high-contrast {

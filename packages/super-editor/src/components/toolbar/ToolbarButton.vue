@@ -187,7 +187,7 @@ const caretIcon = computed(() => {
 }
 
 .toolbar-button:hover {
-  background-color: var(--sd-ui-toolbar-button-hover-surface, var(--sd-ui-surface-hover, #dbdbdb));
+  background-color: var(--sd-ui-toolbar-button-hover-bg, var(--sd-ui-hover-bg, #dbdbdb));
 
   .toolbar-icon {
     &.high-contrast {
@@ -203,7 +203,7 @@ const caretIcon = computed(() => {
 
 .toolbar-button:active,
 .active {
-  background-color: var(--sd-ui-toolbar-button-active-surface, var(--sd-ui-surface-active, #c8d0d8));
+  background-color: var(--sd-ui-toolbar-button-active-bg, var(--sd-ui-active-bg, #c8d0d8));
 }
 
 .button-label {

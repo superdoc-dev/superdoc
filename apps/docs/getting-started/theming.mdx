@@ -15,8 +15,8 @@ Every SuperDoc component reads its colors, spacing, and typography from `--sd-*`
 .my-theme {
   --sd-ui-action: #6366f1;               /* buttons, active states */
   --sd-ui-action-hover: #4f46e5;
-  --sd-ui-toolbar-background: #f8fafc;   /* toolbar surface */
-  --sd-ui-surface: #ffffff;              /* panels, cards */
+  --sd-ui-toolbar-bg: #f8fafc;   /* toolbar surface */
+  --sd-ui-bg: #ffffff;              /* panels, cards */
   --sd-ui-text: #1e293b;                /* body text */
 }
 ```
@@ -61,7 +61,7 @@ Each preset overrides 30-50 variables across toolbar, dropdown, context menu, co
 /* Start from the Docs preset, customize from there */
 .sd-theme-docs {
   --sd-ui-action: #your-brand-color;
-  --sd-ui-comments-panel-card-background: #f0f0f0;
+  --sd-ui-comments-card-bg: #f0f0f0;
 }
 ```
 
@@ -72,7 +72,7 @@ Variables are organized in three tiers. Higher tiers reference lower tiers, so c
 ```
 Primitives     →    UI semantic    →    Component-specific
 --sd-color-*        --sd-ui-*           --sd-ui-toolbar-*
---sd-font-size-*    --sd-ui-text        --sd-ui-comments-panel-*
+--sd-font-size-*    --sd-ui-text        --sd-ui-comments-*
 --sd-radius-*       --sd-ui-action      --sd-comments-highlight-*
 ```
 
@@ -98,8 +98,8 @@ Shared variables that many components reference. Change one of these and you aff
 | `--sd-ui-font-family` | `Arial, Helvetica, sans-serif` | Font for all UI elements |
 | `--sd-ui-text` | `#47484a` | Primary text color |
 | `--sd-ui-text-muted` | `gray-700` | Secondary/muted text |
-| `--sd-ui-surface` | `#ffffff` | Panel and card backgrounds |
-| `--sd-ui-surface-hover` | `gray-400` | Hover states |
+| `--sd-ui-bg` | `#ffffff` | Panel and card backgrounds |
+| `--sd-ui-hover-bg` | `gray-400` | Hover states |
 | `--sd-ui-border` | `gray-400` | Default borders |
 | `--sd-ui-action` | `blue-500` | Action/accent color (buttons, links) |
 | `--sd-ui-action-hover` | `blue-600` | Action hover state |
@@ -114,7 +114,7 @@ Fine-grained control over individual components. These override the semantic def
 
 1. **Toolbar** (`--sd-ui-toolbar-*`) — background, button colors, spacing
 2. **Dropdowns** (`--sd-ui-dropdown-*`) — surfaces, borders, shadows for all dropdown menus
-3. **Comments** (`--sd-ui-comments-panel-*`) — card backgrounds, text colors, input styling
+3. **Comments** (`--sd-ui-comments-*`) — card backgrounds, text colors, input styling
 4. **Comment highlights** (`--sd-comments-highlight-*`) — in-document highlight colors for internal/external comments
 5. **Tracked changes** (`--sd-tracked-changes-*`) — insert/delete/format highlight colors
 

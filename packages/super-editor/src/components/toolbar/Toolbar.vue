@@ -118,7 +118,7 @@ const restoreSelection = () => {
   display: flex;
   width: 100%;
   justify-content: space-between;
-  background: var(--sd-ui-toolbar-background, transparent);
+  background: var(--sd-ui-toolbar-bg, transparent);
   padding: var(--sd-ui-toolbar-padding-y, 4px) var(--sd-ui-toolbar-padding-x, 16px);
   box-sizing: border-box;
   font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);

@@ -10,11 +10,11 @@
 
 :root {
   /* ─── Semantic surfaces → UI tokens ─── */
-  --sd-surface-page: var(--sd-ui-surface);
+  --sd-surface-page: var(--sd-ui-bg);
   --sd-surface-canvas: var(--sd-color-gray-50);
-  --sd-surface-card: var(--sd-ui-surface);
-  --sd-surface-muted: var(--sd-ui-surface-disabled);
-  --sd-surface-hover: var(--sd-ui-surface-hover);
+  --sd-surface-card: var(--sd-ui-bg);
+  --sd-surface-muted: var(--sd-ui-disabled-bg);
+  --sd-surface-hover: var(--sd-ui-hover-bg);
   --sd-surface-selected: var(--sd-color-blue-100);
 
   /* ─── Semantic text → UI tokens ─── */
@@ -25,7 +25,7 @@
 
   /* ─── Semantic borders → UI tokens ─── */
   --sd-border-default: var(--sd-ui-border);
-  --sd-border-subtle: var(--sd-ui-comments-panel-separator);
+  --sd-border-subtle: var(--sd-ui-comments-separator);
   --sd-border-focus: var(--sd-ui-action);
 
   /* ─── Semantic actions → UI tokens ─── */
@@ -41,36 +41,36 @@
   --sd-radius-lg: var(--sd-radius-300);
 
   /* ─── Comment dialog ─── */
-  --sd-comment-bg: var(--sd-ui-comments-panel-card-background);
-  --sd-comment-bg-hover: var(--sd-ui-comments-panel-card-hover-background);
-  --sd-comment-bg-active: var(--sd-ui-comments-panel-card-active-background);
-  --sd-comment-bg-resolved: var(--sd-ui-comments-panel-card-resolved-background);
-  --sd-comment-border-active: var(--sd-ui-comments-panel-card-active-border);
-  --sd-comment-radius: var(--sd-ui-comments-panel-card-radius);
-  --sd-comment-padding: var(--sd-ui-comments-panel-card-padding);
-  --sd-comment-shadow: var(--sd-ui-comments-panel-card-shadow);
-  --sd-comment-separator: var(--sd-ui-comments-panel-separator);
-  --sd-comment-transition: var(--sd-ui-comments-panel-transition);
+  --sd-comment-bg: var(--sd-ui-comments-card-bg);
+  --sd-comment-bg-hover: var(--sd-ui-comments-card-hover-bg);
+  --sd-comment-bg-active: var(--sd-ui-comments-card-active-bg);
+  --sd-comment-bg-resolved: var(--sd-ui-comments-card-resolved-bg);
+  --sd-comment-border-active: var(--sd-ui-comments-card-active-border);
+  --sd-comment-radius: var(--sd-ui-comments-card-radius);
+  --sd-comment-padding: var(--sd-ui-comments-card-padding);
+  --sd-comment-shadow: var(--sd-ui-comments-card-shadow);
+  --sd-comment-separator: var(--sd-ui-comments-separator);
+  --sd-comment-transition: var(--sd-ui-comments-transition);
 
   /* Comment: author & timestamp */
-  --sd-comment-author-color: var(--sd-ui-comments-panel-author-text);
-  --sd-comment-author-size: var(--sd-ui-comments-panel-author-size);
-  --sd-comment-author-weight: var(--sd-ui-comments-panel-author-weight);
-  --sd-comment-time-color: var(--sd-ui-comments-panel-timestamp-text);
-  --sd-comment-time-size: var(--sd-ui-comments-panel-timestamp-size);
-  --sd-comment-body-size: var(--sd-ui-comments-panel-body-text-size);
+  --sd-comment-author-color: var(--sd-ui-comments-author-text);
+  --sd-comment-author-size: var(--sd-ui-comments-author-size);
+  --sd-comment-author-weight: var(--sd-ui-comments-author-weight);
+  --sd-comment-time-color: var(--sd-ui-comments-timestamp-text);
+  --sd-comment-time-size: var(--sd-ui-comments-timestamp-size);
+  --sd-comment-body-size: var(--sd-ui-comments-body-size);
 
   /* Comment: tracked change text colors */
-  --sd-comment-tc-insert-color: var(--sd-ui-comments-panel-tc-insert-text);
-  --sd-comment-tc-delete-color: var(--sd-ui-comments-panel-tc-delete-text);
+  --sd-comment-tc-insert-color: var(--sd-ui-comments-insert-text);
+  --sd-comment-tc-delete-color: var(--sd-ui-comments-delete-text);
 
   /* Comment: document highlights */
   --sd-comment-highlight-internal: var(--sd-comments-highlight-internal);
   --sd-comment-highlight-external: var(--sd-comments-highlight-external);
 
   /* Comment: internal/external toggle */
-  --sd-comment-internal-bg: var(--sd-ui-comments-panel-visibility-internal-background);
-  --sd-comment-external-bg: var(--sd-ui-comments-panel-visibility-external-background);
+  --sd-comment-internal-bg: var(--sd-ui-comments-internal-bg);
+  --sd-comment-external-bg: var(--sd-ui-comments-external-bg);
 
   /* ─── Tracked changes (old short names) ─── */
   --sd-track-insert-border: var(--sd-tracked-changes-insert-border);

@@ -53,10 +53,10 @@
   --sd-ui-text: #47484a;
   --sd-ui-text-muted: var(--sd-color-gray-700);
   --sd-ui-text-disabled: var(--sd-color-gray-500);
-  --sd-ui-surface: #ffffff;
-  --sd-ui-surface-hover: var(--sd-color-gray-400);
-  --sd-ui-surface-active: #c8d0d8;
-  --sd-ui-surface-disabled: var(--sd-color-gray-100);
+  --sd-ui-bg: #ffffff;
+  --sd-ui-hover-bg: var(--sd-color-gray-400);
+  --sd-ui-active-bg: #c8d0d8;
+  --sd-ui-disabled-bg: var(--sd-color-gray-100);
   --sd-ui-border: var(--sd-color-gray-400);
   --sd-ui-action: var(--sd-color-blue-500);
   --sd-ui-action-hover: var(--sd-color-blue-600);
@@ -73,17 +73,17 @@
 
   /* UI: dropdown — cascades surface/text/border from semantic tier */
   --sd-ui-dropdown-border: var(--sd-ui-border);
-  --sd-ui-dropdown-surface: var(--sd-ui-surface);
+  --sd-ui-dropdown-bg: var(--sd-ui-bg);
   --sd-ui-dropdown-option-radius: 3px;
   --sd-ui-dropdown-text: var(--sd-ui-text);
   --sd-ui-dropdown-hover-text: var(--sd-ui-dropdown-text);
   --sd-ui-dropdown-selected-text: var(--sd-ui-dropdown-text);
-  --sd-ui-dropdown-surface-hover: var(--sd-ui-surface-hover);
-  --sd-ui-dropdown-surface-active: var(--sd-ui-surface-active);
+  --sd-ui-dropdown-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-dropdown-active-bg: var(--sd-ui-active-bg);
   --sd-ui-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 
   /* UI: tooltip — intentionally inverted palette (dark bg, light text) */
-  --sd-ui-tooltip-surface: #262626;
+  --sd-ui-tooltip-bg: #262626;
   --sd-ui-tooltip-text: #ffffff;
   --sd-ui-tooltip-radius: var(--sd-radius-100);
   --sd-ui-tooltip-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
@@ -94,66 +94,66 @@
   --sd-ui-toolbar-padding-y: 4px;
   --sd-ui-toolbar-item-gap: 2px;
   --sd-ui-toolbar-item-padding: 5px;
-  --sd-ui-toolbar-background: transparent;
+  --sd-ui-toolbar-bg: transparent;
   --sd-ui-toolbar-button-text: var(--sd-ui-text);
-  --sd-ui-toolbar-button-hover-surface: var(--sd-ui-surface-hover);
-  --sd-ui-toolbar-button-active-surface: var(--sd-ui-surface-active);
+  --sd-ui-toolbar-button-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-toolbar-button-active-bg: var(--sd-ui-active-bg);
 
   /* UI: context menu — cascades surface/text/border/action from semantic tier */
-  --sd-ui-context-menu-surface: var(--sd-ui-surface);
-  --sd-ui-context-menu-text: var(--sd-ui-text);
-  --sd-ui-context-menu-font-size: var(--sd-font-size-200);
-  --sd-ui-context-menu-radius: 0;
-  --sd-ui-context-menu-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1);
-  --sd-ui-context-menu-border: var(--sd-ui-border);
-  --sd-ui-context-menu-input-border: var(--sd-ui-border);
-  --sd-ui-context-menu-input-focus-border: var(--sd-ui-action);
-  --sd-ui-context-menu-item-hover-surface: var(--sd-ui-surface-hover);
-  --sd-ui-context-menu-item-active-surface: var(--sd-ui-surface-active);
-  --sd-ui-context-menu-item-active-text: var(--sd-ui-action);
+  --sd-ui-menu-bg: var(--sd-ui-bg);
+  --sd-ui-menu-text: var(--sd-ui-text);
+  --sd-ui-menu-font-size: var(--sd-font-size-200);
+  --sd-ui-menu-radius: 0;
+  --sd-ui-menu-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1);
+  --sd-ui-menu-border: var(--sd-ui-border);
+  --sd-ui-menu-input-border: var(--sd-ui-border);
+  --sd-ui-menu-input-focus-border: var(--sd-ui-action);
+  --sd-ui-menu-item-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-menu-item-active-bg: var(--sd-ui-active-bg);
+  --sd-ui-menu-item-active-text: var(--sd-ui-action);
 
   /* UI: tools */
   --sd-ui-tools-gap: 6px;
   --sd-ui-tools-item-size: 50px;
   --sd-ui-tools-item-radius: var(--sd-radius-300);
-  --sd-ui-tools-item-surface: rgba(219, 219, 219, 0.6);
+  --sd-ui-tools-item-bg: rgba(219, 219, 219, 0.6);
   --sd-ui-tools-icon-size: 20px;
 
   /* UI: comments panel — cascades surface/text/border from semantic tier */
-  --sd-ui-comments-panel-card-background: #f3f6fd;
-  --sd-ui-comments-panel-card-hover-background: var(--sd-ui-comments-panel-card-background);
-  --sd-ui-comments-panel-card-active-background: var(--sd-ui-surface);
-  --sd-ui-comments-panel-card-resolved-background: var(--sd-ui-surface-disabled);
-  --sd-ui-comments-panel-card-active-border: var(--sd-ui-border);
-  --sd-ui-comments-panel-card-radius: var(--sd-radius-300);
-  --sd-ui-comments-panel-card-padding: 16px;
-  --sd-ui-comments-panel-card-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
-  --sd-ui-comments-panel-separator: var(--sd-ui-border);
-  --sd-ui-comments-panel-transition: all 200ms ease;
-  --sd-ui-comments-panel-author-text: var(--sd-ui-text);
-  --sd-ui-comments-panel-author-size: var(--sd-font-size-400);
-  --sd-ui-comments-panel-author-weight: 600;
-  --sd-ui-comments-panel-imported-tag-text: var(--sd-ui-text-muted);
-  --sd-ui-comments-panel-imported-tag-background: var(--sd-color-gray-200);
-  --sd-ui-comments-panel-timestamp-text: var(--sd-ui-text-muted);
-  --sd-ui-comments-panel-timestamp-size: var(--sd-font-size-200);
-  --sd-ui-comments-panel-body-text: var(--sd-ui-text);
-  --sd-ui-comments-panel-body-text-size: var(--sd-font-size-400);
-  --sd-ui-comments-panel-resolved-badge-text: var(--sd-color-green-500);
-  --sd-ui-comments-panel-tc-insert-text: var(--sd-color-green-500);
-  --sd-ui-comments-panel-tc-delete-text: var(--sd-color-rose-500);
-  --sd-ui-comments-panel-dropdown-border: var(--sd-ui-border);
-  --sd-ui-comments-panel-dropdown-background: var(--sd-ui-surface);
-  --sd-ui-comments-panel-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  --sd-ui-comments-panel-dropdown-option-text-size: var(--sd-font-size-400);
-  --sd-ui-comments-panel-dropdown-option-text: var(--sd-ui-comments-panel-body-text);
-  --sd-ui-comments-panel-dropdown-option-hover-text: var(--sd-ui-comments-panel-dropdown-option-text);
-  --sd-ui-comments-panel-dropdown-option-selected-text: var(--sd-ui-comments-panel-dropdown-option-text);
-  --sd-ui-comments-panel-dropdown-option-hover-background: var(--sd-ui-surface-hover);
-  --sd-ui-comments-panel-input-background: var(--sd-ui-surface);
-  --sd-ui-comments-panel-input-border: var(--sd-ui-border);
-  --sd-ui-comments-panel-visibility-internal-background: #cde6e6;
-  --sd-ui-comments-panel-visibility-external-background: #f5cfda;
+  --sd-ui-comments-card-bg: #f3f6fd;
+  --sd-ui-comments-card-hover-bg: var(--sd-ui-comments-card-bg);
+  --sd-ui-comments-card-active-bg: var(--sd-ui-bg);
+  --sd-ui-comments-card-resolved-bg: var(--sd-ui-disabled-bg);
+  --sd-ui-comments-card-active-border: var(--sd-ui-border);
+  --sd-ui-comments-card-radius: var(--sd-radius-300);
+  --sd-ui-comments-card-padding: 16px;
+  --sd-ui-comments-card-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
+  --sd-ui-comments-separator: var(--sd-ui-border);
+  --sd-ui-comments-transition: all 200ms ease;
+  --sd-ui-comments-author-text: var(--sd-ui-text);
+  --sd-ui-comments-author-size: var(--sd-font-size-400);
+  --sd-ui-comments-author-weight: 600;
+  --sd-ui-comments-tag-text: var(--sd-ui-text-muted);
+  --sd-ui-comments-tag-bg: var(--sd-color-gray-200);
+  --sd-ui-comments-timestamp-text: var(--sd-ui-text-muted);
+  --sd-ui-comments-timestamp-size: var(--sd-font-size-200);
+  --sd-ui-comments-body-text: var(--sd-ui-text);
+  --sd-ui-comments-body-size: var(--sd-font-size-400);
+  --sd-ui-comments-resolved-text: var(--sd-color-green-500);
+  --sd-ui-comments-insert-text: var(--sd-color-green-500);
+  --sd-ui-comments-delete-text: var(--sd-color-rose-500);
+  --sd-ui-comments-dropdown-border: var(--sd-ui-border);
+  --sd-ui-comments-dropdown-bg: var(--sd-ui-bg);
+  --sd-ui-comments-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --sd-ui-comments-option-size: var(--sd-font-size-400);
+  --sd-ui-comments-option-text: var(--sd-ui-comments-body-text);
+  --sd-ui-comments-option-hover-text: var(--sd-ui-comments-option-text);
+  --sd-ui-comments-option-selected-text: var(--sd-ui-comments-option-text);
+  --sd-ui-comments-option-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-comments-input-bg: var(--sd-ui-bg);
+  --sd-ui-comments-input-border: var(--sd-ui-border);
+  --sd-ui-comments-internal-bg: #cde6e6;
+  --sd-ui-comments-external-bg: #f5cfda;
 
   /* Styles: comments — document-level highlight colors, intentionally standalone */
   --sd-comments-highlight-external-base: #b1124b;
@@ -181,15 +181,15 @@
 
   /* Styles: content controls (SDT) — blue accent, intentionally standalone */
   --sd-content-controls-block-border: #629be7;
-  --sd-content-controls-block-hover-background: var(--sd-ui-surface-hover);
+  --sd-content-controls-block-hover-bg: var(--sd-ui-hover-bg);
   --sd-content-controls-inline-border: #629be7;
-  --sd-content-controls-inline-hover-background: var(--sd-ui-surface-hover);
+  --sd-content-controls-inline-hover-bg: var(--sd-ui-hover-bg);
   --sd-content-controls-label-border: #629be7;
-  --sd-content-controls-label-background: #629be7ee;
+  --sd-content-controls-label-bg: #629be7ee;
   --sd-content-controls-label-text: #ffffff;
-  --sd-content-controls-lock-hover-background: rgba(98, 155, 231, 0.08);
+  --sd-content-controls-lock-hover-bg: rgba(98, 155, 231, 0.08);
 
   /* Styles: layout — cascades surface from semantic tier */
-  --sd-layout-page-background: var(--sd-ui-surface);
+  --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }

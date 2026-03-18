@@ -79,7 +79,7 @@ onBeforeUnmount(() => {
     top: calc(100% + 3px);
     right: 0;
     padding: 4px 8px;
-    background-color: var(--sd-ui-dropdown-surface, #fff);
+    background-color: var(--sd-ui-dropdown-bg, #fff);
     border-radius: var(--sd-ui-radius, 6px);
     z-index: 100;
     box-shadow: var(--sd-ui-dropdown-shadow, 0 8px 24px rgba(0, 0, 0, 0.16));

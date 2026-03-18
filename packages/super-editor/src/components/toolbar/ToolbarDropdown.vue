@@ -374,7 +374,7 @@ onBeforeUnmount(() => {
   min-width: 80px;
   padding: 4px;
   border-radius: var(--sd-ui-radius, 6px);
-  background: var(--sd-ui-dropdown-surface, #fff);
+  background: var(--sd-ui-dropdown-bg, #fff);
   border: 1px solid var(--sd-ui-dropdown-border, #e4e6eb);
   box-shadow: var(--sd-ui-dropdown-shadow, 0 8px 24px rgba(0, 0, 0, 0.16));
   box-sizing: border-box;
@@ -414,12 +414,12 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-dropdown-option:hover {
-  background: var(--sd-ui-dropdown-surface-hover, #d8dee5);
+  background: var(--sd-ui-dropdown-hover-bg, #d8dee5);
   color: var(--sd-ui-dropdown-hover-text, #47484a);
 }
 
 .toolbar-dropdown-option.selected {
-  background: var(--sd-ui-dropdown-surface-active, #d8dee5);
+  background: var(--sd-ui-dropdown-active-bg, #d8dee5);
   color: var(--sd-ui-dropdown-selected-text, #47484a);
 }
 

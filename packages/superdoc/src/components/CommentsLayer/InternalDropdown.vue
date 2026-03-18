@@ -23,13 +23,13 @@ const options = [
     label: 'Internal',
     key: 'internal',
     iconString: superdocIcons.internal,
-    backgroundColor: 'var(--sd-ui-comments-panel-visibility-internal-background, #CDE6E6)',
+    backgroundColor: 'var(--sd-ui-comments-internal-bg, #CDE6E6)',
   },
   {
     label: 'External',
     key: 'external',
     iconString: superdocIcons.external,
-    backgroundColor: 'var(--sd-ui-comments-panel-visibility-external-background, #F5CFDA)',
+    backgroundColor: 'var(--sd-ui-comments-external-bg, #F5CFDA)',
   },
 ];
 

@@ -70,7 +70,7 @@ const handleSelect = (option) => {
 .option-grid-ctn {
   display: flex;
   flex-direction: column;
-  background-color: var(--sd-ui-dropdown-surface, #ffffff);
+  background-color: var(--sd-ui-dropdown-bg, #ffffff);
   z-index: 3;
   box-sizing: border-box;
   &__subtitle {

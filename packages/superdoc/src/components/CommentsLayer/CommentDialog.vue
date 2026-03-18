@@ -749,14 +749,14 @@ watch(editingCommentId, (commentId) => {
 .comments-dialog {
   display: flex;
   flex-direction: column;
-  padding: var(--sd-ui-comments-panel-card-padding, 16px);
-  border-radius: var(--sd-ui-comments-panel-card-radius, 12px);
-  background-color: var(--sd-ui-comments-panel-card-background, #f3f6fd);
+  padding: var(--sd-ui-comments-card-padding, 16px);
+  border-radius: var(--sd-ui-comments-card-radius, 12px);
+  background-color: var(--sd-ui-comments-card-bg, #f3f6fd);
   border: 1px solid transparent;
   font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
-  font-size: var(--sd-ui-comments-panel-body-text-size, 14px);
+  font-size: var(--sd-ui-comments-body-size, 14px);
   line-height: 1.5;
-  transition: var(--sd-ui-comments-panel-transition, all 200ms ease);
+  transition: var(--sd-ui-comments-transition, all 200ms ease);
   box-shadow: none;
   z-index: 5;
   max-width: 300px;
@@ -767,33 +767,33 @@ watch(editingCommentId, (commentId) => {
   cursor: pointer;
 }
 .comments-dialog:not(.is-active):not(.is-resolved):hover {
-  background-color: var(--sd-ui-comments-panel-card-hover-background, #f3f6fd);
+  background-color: var(--sd-ui-comments-card-hover-bg, #f3f6fd);
 }
 .comments-dialog:not(.is-resolved):hover :deep(.overflow-menu) {
   opacity: 1;
   pointer-events: auto;
 }
 .comments-dialog.is-active {
-  background-color: var(--sd-ui-comments-panel-card-active-background, #ffffff);
-  border-color: var(--sd-ui-comments-panel-card-active-border, #e0e0e0);
-  box-shadow: var(--sd-ui-comments-panel-card-shadow, 0px 4px 12px 0px rgba(50, 50, 50, 0.15));
+  background-color: var(--sd-ui-comments-card-active-bg, #ffffff);
+  border-color: var(--sd-ui-comments-card-active-border, #e0e0e0);
+  box-shadow: var(--sd-ui-comments-card-shadow, 0px 4px 12px 0px rgba(50, 50, 50, 0.15));
   z-index: 10;
 }
 .comments-dialog.is-resolved {
-  background-color: var(--sd-ui-comments-panel-card-resolved-background, #f0f0f0);
+  background-color: var(--sd-ui-comments-card-resolved-bg, #f0f0f0);
 }
 
 .comment-separator {
-  background-color: var(--sd-ui-comments-panel-separator, #e0e0e0);
+  background-color: var(--sd-ui-comments-separator, #e0e0e0);
   height: 1px;
   width: 100%;
   margin: 10px 0;
 }
 
 .comment {
-  font-size: var(--sd-ui-comments-panel-body-text-size, 14px);
+  font-size: var(--sd-ui-comments-body-size, 14px);
   line-height: 1.5;
-  color: var(--sd-ui-comments-panel-body-text, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
   margin: 4px 0 0 0;
 }
 .comment :deep(p) {
@@ -801,22 +801,22 @@ watch(editingCommentId, (commentId) => {
 }
 
 .tracked-change {
-  font-size: var(--sd-ui-comments-panel-body-text-size, 14px);
+  font-size: var(--sd-ui-comments-body-size, 14px);
   line-height: 1.5;
-  color: var(--sd-ui-comments-panel-body-text, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
   margin: 4px 0 0 0;
 }
 .change-type {
-  color: var(--sd-ui-comments-panel-body-text, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
 }
 .tracked-change-text {
-  color: var(--sd-ui-comments-panel-body-text, #212121);
+  color: var(--sd-ui-comments-body-text, #212121);
 }
 .tracked-change-text.is-deleted {
-  color: var(--sd-ui-comments-panel-tc-delete-text, #cb0e47);
+  color: var(--sd-ui-comments-delete-text, #cb0e47);
 }
 .tracked-change-text.is-inserted {
-  color: var(--sd-ui-comments-panel-tc-insert-text, #00853d);
+  color: var(--sd-ui-comments-insert-text, #00853d);
   font-weight: 500;
 }
 
@@ -827,7 +827,7 @@ watch(editingCommentId, (commentId) => {
   gap: 4px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--sd-ui-comments-panel-resolved-badge-text, #00853d);
+  color: var(--sd-ui-comments-resolved-text, #00853d);
   margin-bottom: 4px;
 }
 .resolved-badge__icon {
@@ -883,7 +883,7 @@ watch(editingCommentId, (commentId) => {
   --sd-comment-avatar-size: 20px;
   --sd-comment-avatar-font-size: 8px;
   margin-left: -4px;
-  border: 2px solid var(--sd-ui-comments-panel-card-active-background, #ffffff);
+  border: 2px solid var(--sd-ui-comments-card-active-bg, #ffffff);
 }
 .collapsed-avatars .mini-avatar:first-child {
   margin-left: 0;
@@ -891,10 +891,10 @@ watch(editingCommentId, (commentId) => {
 
 /* ── New comment input ── */
 .new-comment-input-wrapper {
-  border: 1.5px solid var(--sd-ui-comments-panel-input-border, #dbdbdb);
+  border: 1.5px solid var(--sd-ui-comments-input-border, #dbdbdb);
   border-radius: 12px;
   padding: 8.5px 10.5px;
-  background: var(--sd-ui-comments-panel-input-background, #ffffff);
+  background: var(--sd-ui-comments-input-bg, #ffffff);
   margin-top: 4px;
   max-height: 150px;
   overflow-y: auto;
@@ -938,10 +938,10 @@ watch(editingCommentId, (commentId) => {
   margin-top: 10px;
 }
 .reply-input-wrapper {
-  border: 1.5px solid var(--sd-ui-comments-panel-input-border, #dbdbdb);
+  border: 1.5px solid var(--sd-ui-comments-input-border, #dbdbdb);
   border-radius: 12px;
   padding: 8.5px 10.5px;
-  background: var(--sd-ui-comments-panel-input-background, #ffffff);
+  background: var(--sd-ui-comments-input-bg, #ffffff);
   max-height: 150px;
   overflow-y: auto;
 }

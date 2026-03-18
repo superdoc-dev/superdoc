@@ -16,12 +16,12 @@ Define a CSS class with your overrides and apply it to any ancestor element. Mos
   --sd-ui-action: #8b5cf6;
   --sd-ui-action-hover: #7c3aed;
   --sd-ui-text: #1e293b;
-  --sd-ui-surface: #f8fafc;
+  --sd-ui-bg: #f8fafc;
   --sd-ui-border: #e2e8f0;
 
   /* Then fine-tune specific components */
-  --sd-ui-toolbar-background: #f1f5f9;
-  --sd-ui-comments-panel-card-background: #f0f0ff;
+  --sd-ui-toolbar-bg: #f1f5f9;
+  --sd-ui-comments-card-bg: #f0f0ff;
 }
 ```
 
@@ -36,9 +36,9 @@ For a dark theme, you'll need to override the core surface and text variables, p
 ```css
 .dark-theme {
   /* Core surface inversion */
-  --sd-ui-surface: #1a1a2e;
-  --sd-ui-surface-hover: #2a2a3e;
-  --sd-ui-surface-active: #3a3a4e;
+  --sd-ui-bg: #1a1a2e;
+  --sd-ui-hover-bg: #2a2a3e;
+  --sd-ui-active-bg: #3a3a4e;
   --sd-ui-text: #e2e8f0;
   --sd-ui-text-muted: #94a3b8;
   --sd-ui-border: #334155;
@@ -46,25 +46,25 @@ For a dark theme, you'll need to override the core surface and text variables, p
   --sd-ui-action-hover: #93c5fd;
 
   /* Toolbar */
-  --sd-ui-toolbar-background: #0f172a;
+  --sd-ui-toolbar-bg: #0f172a;
   --sd-ui-toolbar-button-text: #e2e8f0;
-  --sd-ui-toolbar-button-hover-surface: #1e293b;
-  --sd-ui-toolbar-button-active-surface: #334155;
+  --sd-ui-toolbar-button-hover-bg: #1e293b;
+  --sd-ui-toolbar-button-active-bg: #334155;
 
   /* Dropdowns */
-  --sd-ui-dropdown-surface: #1e293b;
+  --sd-ui-dropdown-bg: #1e293b;
   --sd-ui-dropdown-border: #334155;
-  --sd-ui-dropdown-surface-hover: #2d3a4e;
+  --sd-ui-dropdown-hover-bg: #2d3a4e;
   --sd-ui-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 
   /* Comments */
-  --sd-ui-comments-panel-card-background: #1e293b;
-  --sd-ui-comments-panel-card-active-background: #0f172a;
-  --sd-ui-comments-panel-input-background: #1e293b;
-  --sd-ui-comments-panel-input-border: #475569;
-  --sd-ui-comments-panel-author-text: #e2e8f0;
-  --sd-ui-comments-panel-body-text: #cbd5e1;
-  --sd-ui-comments-panel-timestamp-text: #64748b;
+  --sd-ui-comments-card-bg: #1e293b;
+  --sd-ui-comments-card-active-bg: #0f172a;
+  --sd-ui-comments-input-bg: #1e293b;
+  --sd-ui-comments-input-border: #475569;
+  --sd-ui-comments-author-text: #e2e8f0;
+  --sd-ui-comments-body-text: #cbd5e1;
+  --sd-ui-comments-timestamp-text: #64748b;
 
   /* Page */
   --sd-layout-page-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
@@ -83,10 +83,10 @@ These are the top-level semantic variables. Most component-specific variables re
 | `--sd-ui-text` | `#47484a` | Primary text color |
 | `--sd-ui-text-muted` | `gray-700` | Secondary text |
 | `--sd-ui-text-disabled` | `gray-500` | Disabled state text |
-| `--sd-ui-surface` | `#ffffff` | Default surface/background |
-| `--sd-ui-surface-hover` | `gray-400` | Hover background |
-| `--sd-ui-surface-active` | `#c8d0d8` | Active/pressed background |
-| `--sd-ui-surface-disabled` | `gray-100` | Disabled surface |
+| `--sd-ui-bg` | `#ffffff` | Default surface/background |
+| `--sd-ui-hover-bg` | `gray-400` | Hover background |
+| `--sd-ui-active-bg` | `#c8d0d8` | Active/pressed background |
+| `--sd-ui-disabled-bg` | `gray-100` | Disabled surface |
 | `--sd-ui-border` | `gray-400` | Default border color |
 | `--sd-ui-action` | `blue-500` | Action/accent color |
 | `--sd-ui-action-hover` | `blue-600` | Action hover |
@@ -102,10 +102,10 @@ These are the top-level semantic variables. Most component-specific variables re
 | `--sd-ui-toolbar-padding-y` | `4px` | Vertical padding |
 | `--sd-ui-toolbar-item-gap` | `2px` | Gap between buttons |
 | `--sd-ui-toolbar-item-padding` | `5px` | Padding inside each button |
-| `--sd-ui-toolbar-background` | `transparent` | Toolbar background |
+| `--sd-ui-toolbar-bg` | `transparent` | Toolbar background |
 | `--sd-ui-toolbar-button-text` | `var(--sd-ui-text)` | Button text/icon color |
-| `--sd-ui-toolbar-button-hover-surface` | `var(--sd-ui-surface-hover)` | Button hover background |
-| `--sd-ui-toolbar-button-active-surface` | `var(--sd-ui-surface-active)` | Button active background |
+| `--sd-ui-toolbar-button-hover-bg` | `var(--sd-ui-hover-bg)` | Button hover background |
+| `--sd-ui-toolbar-button-active-bg` | `var(--sd-ui-active-bg)` | Button active background |
 
 ### Dropdowns
 
@@ -113,13 +113,13 @@ Applies to toolbar dropdowns (font picker, style picker, etc.) and the overflow 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-dropdown-surface` | `#ffffff` | Dropdown panel background |
+| `--sd-ui-dropdown-bg` | `#ffffff` | Dropdown panel background |
 | `--sd-ui-dropdown-border` | `#e4e6eb` | Panel border |
 | `--sd-ui-dropdown-text` | `var(--sd-ui-text)` | Option text |
 | `--sd-ui-dropdown-hover-text` | `var(--sd-ui-dropdown-text)` | Hovered option text |
 | `--sd-ui-dropdown-selected-text` | `var(--sd-ui-dropdown-text)` | Selected option text |
-| `--sd-ui-dropdown-surface-hover` | `#d8dee5` | Option hover background |
-| `--sd-ui-dropdown-surface-active` | `#d8dee5` | Option active/selected background |
+| `--sd-ui-dropdown-hover-bg` | `#d8dee5` | Option hover background |
+| `--sd-ui-dropdown-active-bg` | `#d8dee5` | Option active/selected background |
 | `--sd-ui-dropdown-option-radius` | `3px` | Option border radius |
 | `--sd-ui-dropdown-shadow` | `0 8px 24px rgba(0,0,0,0.16)` | Panel shadow |
 
@@ -129,23 +129,23 @@ The right-click context menu.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-context-menu-surface` | `#ffffff` | Menu background |
-| `--sd-ui-context-menu-text` | `#47484a` | Menu text |
-| `--sd-ui-context-menu-font-size` | `12px` | Menu text size |
-| `--sd-ui-context-menu-radius` | `0` | Menu border radius |
-| `--sd-ui-context-menu-border` | `#eee` | Menu border |
-| `--sd-ui-context-menu-shadow` | complex | Menu shadow |
-| `--sd-ui-context-menu-input-border` | `#ddd` | Search input border |
-| `--sd-ui-context-menu-input-focus-border` | `#0096fd` | Search input focus border |
-| `--sd-ui-context-menu-item-hover-surface` | `#f5f5f5` | Item hover background |
-| `--sd-ui-context-menu-item-active-surface` | `#edf6ff` | Active item background |
-| `--sd-ui-context-menu-item-active-text` | `#0096fd` | Active item text |
+| `--sd-ui-menu-bg` | `#ffffff` | Menu background |
+| `--sd-ui-menu-text` | `#47484a` | Menu text |
+| `--sd-ui-menu-font-size` | `12px` | Menu text size |
+| `--sd-ui-menu-radius` | `0` | Menu border radius |
+| `--sd-ui-menu-border` | `#eee` | Menu border |
+| `--sd-ui-menu-shadow` | complex | Menu shadow |
+| `--sd-ui-menu-input-border` | `#ddd` | Search input border |
+| `--sd-ui-menu-input-focus-border` | `#0096fd` | Search input focus border |
+| `--sd-ui-menu-item-hover-bg` | `#f5f5f5` | Item hover background |
+| `--sd-ui-menu-item-active-bg` | `#edf6ff` | Active item background |
+| `--sd-ui-menu-item-active-text` | `#0096fd` | Active item text |
 
 ### Tooltip
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-tooltip-surface` | `#262626` | Tooltip background |
+| `--sd-ui-tooltip-bg` | `#262626` | Tooltip background |
 | `--sd-ui-tooltip-text` | `#ffffff` | Tooltip text |
 | `--sd-ui-tooltip-radius` | `6px` | Tooltip border radius |
 | `--sd-ui-tooltip-shadow` | `0 3px 12px rgba(0,0,0,0.28)` | Tooltip shadow |
@@ -158,62 +158,62 @@ Card styling, typography, and input elements for the comments sidebar.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-comments-panel-card-background` | `#f3f6fd` | Default card background |
-| `--sd-ui-comments-panel-card-hover-background` | `#f3f6fd` | Hovered card |
-| `--sd-ui-comments-panel-card-active-background` | `#ffffff` | Selected/active card |
-| `--sd-ui-comments-panel-card-resolved-background` | `#f0f0f0` | Resolved comment card |
-| `--sd-ui-comments-panel-card-active-border` | `gray-300` | Active card border |
-| `--sd-ui-comments-panel-card-radius` | `12px` | Card border radius |
-| `--sd-ui-comments-panel-card-padding` | `16px` | Card inner padding |
-| `--sd-ui-comments-panel-card-shadow` | complex | Card shadow |
-| `--sd-ui-comments-panel-transition` | `all 200ms ease` | Card transition |
-| `--sd-ui-comments-panel-separator` | `gray-300` | Divider between comments |
+| `--sd-ui-comments-card-bg` | `#f3f6fd` | Default card background |
+| `--sd-ui-comments-card-hover-bg` | `#f3f6fd` | Hovered card |
+| `--sd-ui-comments-card-active-bg` | `#ffffff` | Selected/active card |
+| `--sd-ui-comments-card-resolved-bg` | `#f0f0f0` | Resolved comment card |
+| `--sd-ui-comments-card-active-border` | `gray-300` | Active card border |
+| `--sd-ui-comments-card-radius` | `12px` | Card border radius |
+| `--sd-ui-comments-card-padding` | `16px` | Card inner padding |
+| `--sd-ui-comments-card-shadow` | complex | Card shadow |
+| `--sd-ui-comments-transition` | `all 200ms ease` | Card transition |
+| `--sd-ui-comments-separator` | `gray-300` | Divider between comments |
 
 **Typography:**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-comments-panel-author-text` | `gray-900` | Author name color |
-| `--sd-ui-comments-panel-author-size` | `14px` | Author name size |
-| `--sd-ui-comments-panel-author-weight` | `600` | Author name weight |
-| `--sd-ui-comments-panel-timestamp-text` | `gray-600` | Timestamp color |
-| `--sd-ui-comments-panel-timestamp-size` | `12px` | Timestamp size |
-| `--sd-ui-comments-panel-body-text` | `gray-900` | Comment body text |
-| `--sd-ui-comments-panel-body-text-size` | `14px` | Comment body size |
+| `--sd-ui-comments-author-text` | `gray-900` | Author name color |
+| `--sd-ui-comments-author-size` | `14px` | Author name size |
+| `--sd-ui-comments-author-weight` | `600` | Author name weight |
+| `--sd-ui-comments-timestamp-text` | `gray-600` | Timestamp color |
+| `--sd-ui-comments-timestamp-size` | `12px` | Timestamp size |
+| `--sd-ui-comments-body-text` | `gray-900` | Comment body text |
+| `--sd-ui-comments-body-size` | `14px` | Comment body size |
 
 **Inputs:**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-comments-panel-input-background` | `#ffffff` | Comment input background |
-| `--sd-ui-comments-panel-input-border` | `gray-400` | Comment input border |
+| `--sd-ui-comments-input-bg` | `#ffffff` | Comment input background |
+| `--sd-ui-comments-input-border` | `gray-400` | Comment input border |
 
 **Status indicators:**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-comments-panel-resolved-badge-text` | `green-500` | "Resolved" badge text |
-| `--sd-ui-comments-panel-tc-insert-text` | `green-500` | Tracked change insert text |
-| `--sd-ui-comments-panel-tc-delete-text` | `rose-500` | Tracked change delete text |
+| `--sd-ui-comments-resolved-text` | `green-500` | "Resolved" badge text |
+| `--sd-ui-comments-insert-text` | `green-500` | Tracked change insert text |
+| `--sd-ui-comments-delete-text` | `rose-500` | Tracked change delete text |
 
 **Dropdown (filter/sort menu):**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-comments-panel-dropdown-background` | `#ffffff` | Dropdown background |
-| `--sd-ui-comments-panel-dropdown-border` | `gray-400` | Dropdown border |
-| `--sd-ui-comments-panel-dropdown-shadow` | complex | Dropdown shadow |
-| `--sd-ui-comments-panel-dropdown-option-text` | body text | Option text |
-| `--sd-ui-comments-panel-dropdown-option-hover-text` | option text | Hovered option text |
-| `--sd-ui-comments-panel-dropdown-option-hover-background` | `#f3f3f5` | Hovered option background |
-| `--sd-ui-comments-panel-dropdown-option-text-size` | `14px` | Option text size |
+| `--sd-ui-comments-dropdown-bg` | `#ffffff` | Dropdown background |
+| `--sd-ui-comments-dropdown-border` | `gray-400` | Dropdown border |
+| `--sd-ui-comments-dropdown-shadow` | complex | Dropdown shadow |
+| `--sd-ui-comments-option-text` | body text | Option text |
+| `--sd-ui-comments-option-hover-text` | option text | Hovered option text |
+| `--sd-ui-comments-option-hover-bg` | `#f3f3f5` | Hovered option background |
+| `--sd-ui-comments-option-size` | `14px` | Option text size |
 
 **Visibility toggle (internal/external):**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-ui-comments-panel-visibility-internal-background` | `#cde6e6` | Internal badge background |
-| `--sd-ui-comments-panel-visibility-external-background` | `#f5cfda` | External badge background |
+| `--sd-ui-comments-internal-bg` | `#cde6e6` | Internal badge background |
+| `--sd-ui-comments-external-bg` | `#f5cfda` | External badge background |
 
 ### Comment highlights (in-document)
 
@@ -254,13 +254,13 @@ Styling for DOCX content controls (SDTs) — form fields, dropdowns, date picker
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `--sd-content-controls-block-border` | `#629be7` | Block control border |
-| `--sd-content-controls-block-hover-background` | `#f2f2f2` | Block control hover |
+| `--sd-content-controls-block-hover-bg` | `#f2f2f2` | Block control hover |
 | `--sd-content-controls-inline-border` | `#629be7` | Inline control border |
-| `--sd-content-controls-inline-hover-background` | `#f2f2f2` | Inline control hover |
+| `--sd-content-controls-inline-hover-bg` | `#f2f2f2` | Inline control hover |
 | `--sd-content-controls-label-border` | `#629be7` | Label border |
-| `--sd-content-controls-label-background` | `#629be7ee` | Label background |
+| `--sd-content-controls-label-bg` | `#629be7ee` | Label background |
 | `--sd-content-controls-label-text` | `#ffffff` | Label text |
-| `--sd-content-controls-lock-hover-background` | `rgba(98,155,231,0.08)` | Locked control hover |
+| `--sd-content-controls-lock-hover-bg` | `rgba(98,155,231,0.08)` | Locked control hover |
 
 ### Layout
 
@@ -268,7 +268,7 @@ Page-level appearance in presentation/layout mode.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `--sd-layout-page-background` | `#ffffff` | Page background |
+| `--sd-layout-page-bg` | `#ffffff` | Page background |
 | `--sd-layout-page-shadow` | `0 4px 20px rgba(15,23,42,0.08)` | Page shadow |
 
 ### Tools (floating action toolbar)
@@ -280,7 +280,7 @@ The floating tools toolbar that appears for AI/insert actions.
 | `--sd-ui-tools-gap` | `6px` | Gap between tool items |
 | `--sd-ui-tools-item-size` | `50px` | Tool button size |
 | `--sd-ui-tools-item-radius` | `12px` | Tool button radius |
-| `--sd-ui-tools-item-surface` | `rgba(219,219,219,0.6)` | Tool button background |
+| `--sd-ui-tools-item-bg` | `rgba(219,219,219,0.6)` | Tool button background |
 | `--sd-ui-tools-icon-size` | `20px` | Icon size within buttons |
 
 ## Source files

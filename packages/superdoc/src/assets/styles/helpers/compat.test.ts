@@ -25,49 +25,109 @@ const extractReferencedVars = (css: string): Set<string> => {
   return vars;
 };
 
-describe('compat.css backward-compatibility aliases', () => {
+describe('backward compatibility', () => {
   const declaredInVariables = extractDeclaredVars(variablesCss);
   const declaredInCompat = extractDeclaredVars(compatCss);
   const referencedByCompat = extractReferencedVars(compatCss);
+  const referencedByVariables = extractReferencedVars(variablesCss);
 
-  it('every compat alias points to a variable defined in variables.css', () => {
-    const broken: string[] = [];
-    for (const ref of referencedByCompat) {
-      if (!declaredInVariables.has(ref)) {
-        broken.push(ref);
+  describe('compat.css aliases', () => {
+    it('every alias points to a variable defined in variables.css', () => {
+      const broken: string[] = [];
+      for (const ref of referencedByCompat) {
+        if (!declaredInVariables.has(ref)) {
+          broken.push(ref);
+        }
       }
-    }
-    expect(broken, `Compat aliases reference undefined variables: ${broken.join(', ')}`).toEqual([]);
+      expect(broken, `Compat aliases reference undefined variables: ${broken.join(', ')}`).toEqual([]);
+    });
+
+    it('does not re-declare any variable from variables.css', () => {
+      const collisions: string[] = [];
+      for (const name of declaredInCompat) {
+        if (declaredInVariables.has(name)) {
+          collisions.push(name);
+        }
+      }
+      expect(collisions, `Compat re-declares variables from variables.css: ${collisions.join(', ')}`).toEqual([]);
+    });
+
+    it('has no circular references with variables.css', () => {
+      // A circular reference: compat declares --old pointing to --new,
+      // AND variables.css declares --new pointing back to --old.
+      const circular: string[] = [];
+      for (const compatVar of declaredInCompat) {
+        // Find what this compat alias points to
+        const match = compatCss.match(
+          new RegExp(`${compatVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*var\\((--sd-[\\w-]+)`),
+        );
+        if (!match) continue;
+        const target = match[1];
+        // Check if variables.css references the compat var name
+        const targetDecl = variablesCss.match(
+          new RegExp(
+            `${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:[^;]*var\\(${compatVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+          ),
+        );
+        if (targetDecl) {
+          circular.push(`${compatVar} ↔ ${target}`);
+        }
+      }
+      expect(circular, `Circular references found: ${circular.join(', ')}`).toEqual([]);
+    });
   });
 
-  it('compat does not re-declare any variable from variables.css', () => {
-    const collisions: string[] = [];
-    for (const name of declaredInCompat) {
-      if (declaredInVariables.has(name)) {
-        collisions.push(name);
+  describe('old-name fallbacks in variables.css', () => {
+    it('honors old comment variable names', () => {
+      const expected: [string, string][] = [
+        ['--sd-ui-comments-card-bg', '--sd-comment-bg'],
+        ['--sd-ui-comments-card-hover-bg', '--sd-comment-bg-hover'],
+        ['--sd-ui-comments-card-active-bg', '--sd-comment-bg-active'],
+        ['--sd-ui-comments-separator', '--sd-comment-separator'],
+        ['--sd-ui-comments-author-text', '--sd-comment-author-color'],
+        ['--sd-ui-comments-timestamp-text', '--sd-comment-time-color'],
+        ['--sd-ui-comments-internal-bg', '--sd-comment-internal-bg'],
+        ['--sd-ui-comments-external-bg', '--sd-comment-external-bg'],
+      ];
+      for (const [newName, oldName] of expected) {
+        const pattern = new RegExp(
+          `${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*var\\(${oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        );
+        expect(variablesCss, `Expected ${newName} to fall back to ${oldName}`).toMatch(pattern);
       }
-    }
-    expect(collisions, `Compat re-declares variables from variables.css: ${collisions.join(', ')}`).toEqual([]);
-  });
+    });
 
-  it('maps key old names to the expected new names', () => {
-    const expected: Record<string, string> = {
-      '--sd-comment-bg': '--sd-ui-comments-card-bg',
-      '--sd-surface-card': '--sd-ui-bg',
-      '--sd-action-primary': '--sd-ui-action',
-      '--sd-border-default': '--sd-ui-border',
-      '--sd-track-insert-border': '--sd-tracked-changes-insert-border',
-      '--sd-track-delete-bg': '--sd-tracked-changes-delete-background',
-      '--sd-comment-highlight-internal': '--sd-comments-highlight-internal',
-      '--sd-text-primary': '--sd-ui-text',
-      '--sd-radius-sm': '--sd-radius-50',
-    };
+    it('honors old tracked change variable names', () => {
+      const expected: [string, string][] = [
+        ['--sd-tracked-changes-insert-border', '--sd-track-insert-border'],
+        ['--sd-tracked-changes-insert-background', '--sd-track-insert-bg'],
+        ['--sd-tracked-changes-delete-border', '--sd-track-delete-border'],
+        ['--sd-tracked-changes-delete-background', '--sd-track-delete-bg'],
+        ['--sd-tracked-changes-format-border', '--sd-track-format-border'],
+      ];
+      for (const [newName, oldName] of expected) {
+        const pattern = new RegExp(
+          `${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*var\\(${oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        );
+        expect(variablesCss, `Expected ${newName} to fall back to ${oldName}`).toMatch(pattern);
+      }
+    });
 
-    for (const [oldName, newName] of Object.entries(expected)) {
-      const pattern = new RegExp(
-        `${oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*var\\(${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
-      );
-      expect(compatCss, `Expected ${oldName} → ${newName}`).toMatch(pattern);
-    }
+    it('honors old semantic variable names', () => {
+      const expected: [string, string][] = [
+        ['--sd-ui-bg', '--sd-surface-card'],
+        ['--sd-ui-text', '--sd-text-primary'],
+        ['--sd-ui-border', '--sd-border-default'],
+        ['--sd-ui-action', '--sd-action-primary'],
+        ['--sd-ui-font-family', '--sd-font-family'],
+        ['--sd-ui-hover-bg', '--sd-surface-hover'],
+      ];
+      for (const [newName, oldName] of expected) {
+        const pattern = new RegExp(
+          `${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*var\\(${oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        );
+        expect(variablesCss, `Expected ${newName} to fall back to ${oldName}`).toMatch(pattern);
+      }
+    });
   });
 });

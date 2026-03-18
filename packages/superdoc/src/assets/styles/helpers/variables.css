@@ -37,29 +37,33 @@
   --sd-font-size-500: 15px;
   --sd-font-size-600: 16px;
 
-  /* Primitive: radius */
-  --sd-radius-50: 4px;
+  /* Primitive: radius — old names (--sd-radius-sm/md/lg) honored via fallback */
+  --sd-radius-50: var(--sd-radius-sm, 4px);
   --sd-radius-100: 6px;
-  --sd-radius-200: 8px;
-  --sd-radius-300: 12px;
+  --sd-radius-200: var(--sd-radius-md, 8px);
+  --sd-radius-300: var(--sd-radius-lg, 12px);
 
   /*
    * UI: general (semantic tier)
    *
    * These are the "5-variable theme" — change these and the entire UI updates.
    * Component-specific variables below cascade from these defaults.
+   *
+   * Old-name fallbacks (var(--sd-old-name, ...)) honor pre-existing customer
+   * overrides. They resolve at computed-value time, so setting the old name on
+   * any element still works. These fallbacks will be removed in the next major.
    */
-  --sd-ui-font-family: Arial, Helvetica, sans-serif;
-  --sd-ui-text: #47484a;
-  --sd-ui-text-muted: var(--sd-color-gray-700);
-  --sd-ui-text-disabled: var(--sd-color-gray-500);
-  --sd-ui-bg: #ffffff;
-  --sd-ui-hover-bg: var(--sd-color-gray-400);
+  --sd-ui-font-family: var(--sd-font-family, Arial, Helvetica, sans-serif);
+  --sd-ui-text: var(--sd-text-primary, #47484a);
+  --sd-ui-text-muted: var(--sd-text-muted, var(--sd-color-gray-700));
+  --sd-ui-text-disabled: var(--sd-text-placeholder, var(--sd-color-gray-500));
+  --sd-ui-bg: var(--sd-surface-card, #ffffff);
+  --sd-ui-hover-bg: var(--sd-surface-hover, var(--sd-color-gray-400));
   --sd-ui-active-bg: #c8d0d8;
-  --sd-ui-disabled-bg: var(--sd-color-gray-100);
-  --sd-ui-border: var(--sd-color-gray-400);
-  --sd-ui-action: var(--sd-color-blue-500);
-  --sd-ui-action-hover: var(--sd-color-blue-600);
+  --sd-ui-disabled-bg: var(--sd-surface-muted, var(--sd-color-gray-100));
+  --sd-ui-border: var(--sd-border-default, var(--sd-color-gray-400));
+  --sd-ui-action: var(--sd-action-primary, var(--sd-color-blue-500));
+  --sd-ui-action-hover: var(--sd-action-primary-hover, var(--sd-color-blue-600));
   --sd-ui-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   --sd-ui-radius: var(--sd-radius-100);
 
@@ -71,7 +75,7 @@
   --sd-ui-font-size-500: var(--sd-font-size-500);
   --sd-ui-font-size-600: var(--sd-font-size-600);
 
-  /* UI: dropdown — cascades surface/text/border from semantic tier */
+  /* UI: dropdown — cascades from semantic tier */
   --sd-ui-dropdown-border: var(--sd-ui-border);
   --sd-ui-dropdown-bg: var(--sd-ui-bg);
   --sd-ui-dropdown-option-radius: 3px;
@@ -88,7 +92,7 @@
   --sd-ui-tooltip-radius: var(--sd-radius-100);
   --sd-ui-tooltip-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
 
-  /* UI: toolbar — cascades text/hover from semantic tier */
+  /* UI: toolbar — cascades from semantic tier */
   --sd-ui-toolbar-height: 32px;
   --sd-ui-toolbar-padding-x: 16px;
   --sd-ui-toolbar-padding-y: 4px;
@@ -99,7 +103,7 @@
   --sd-ui-toolbar-button-hover-bg: var(--sd-ui-hover-bg);
   --sd-ui-toolbar-button-active-bg: var(--sd-ui-active-bg);
 
-  /* UI: context menu — cascades surface/text/border/action from semantic tier */
+  /* UI: context menu — cascades from semantic tier */
   --sd-ui-menu-bg: var(--sd-ui-bg);
   --sd-ui-menu-text: var(--sd-ui-text);
   --sd-ui-menu-font-size: var(--sd-font-size-200);
@@ -119,29 +123,29 @@
   --sd-ui-tools-item-bg: rgba(219, 219, 219, 0.6);
   --sd-ui-tools-icon-size: 20px;
 
-  /* UI: comments panel — cascades surface/text/border from semantic tier */
-  --sd-ui-comments-card-bg: #f3f6fd;
-  --sd-ui-comments-card-hover-bg: var(--sd-ui-comments-card-bg);
-  --sd-ui-comments-card-active-bg: var(--sd-ui-bg);
-  --sd-ui-comments-card-resolved-bg: var(--sd-ui-disabled-bg);
-  --sd-ui-comments-card-active-border: var(--sd-ui-border);
-  --sd-ui-comments-card-radius: var(--sd-radius-300);
-  --sd-ui-comments-card-padding: 16px;
-  --sd-ui-comments-card-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
-  --sd-ui-comments-separator: var(--sd-ui-border);
-  --sd-ui-comments-transition: all 200ms ease;
-  --sd-ui-comments-author-text: var(--sd-ui-text);
-  --sd-ui-comments-author-size: var(--sd-font-size-400);
-  --sd-ui-comments-author-weight: 600;
+  /* UI: comments — cascades from semantic tier, old names honored via fallback */
+  --sd-ui-comments-card-bg: var(--sd-comment-bg, #f3f6fd);
+  --sd-ui-comments-card-hover-bg: var(--sd-comment-bg-hover, var(--sd-ui-comments-card-bg));
+  --sd-ui-comments-card-active-bg: var(--sd-comment-bg-active, var(--sd-ui-bg));
+  --sd-ui-comments-card-resolved-bg: var(--sd-comment-bg-resolved, var(--sd-ui-disabled-bg));
+  --sd-ui-comments-card-active-border: var(--sd-comment-border-active, var(--sd-ui-border));
+  --sd-ui-comments-card-radius: var(--sd-comment-radius, var(--sd-radius-300));
+  --sd-ui-comments-card-padding: var(--sd-comment-padding, 16px);
+  --sd-ui-comments-card-shadow: var(--sd-comment-shadow, 0px 4px 12px 0px rgba(50, 50, 50, 0.15));
+  --sd-ui-comments-separator: var(--sd-comment-separator, var(--sd-ui-border));
+  --sd-ui-comments-transition: var(--sd-comment-transition, all 200ms ease);
+  --sd-ui-comments-author-text: var(--sd-comment-author-color, var(--sd-ui-text));
+  --sd-ui-comments-author-size: var(--sd-comment-author-size, var(--sd-font-size-400));
+  --sd-ui-comments-author-weight: var(--sd-comment-author-weight, 600);
   --sd-ui-comments-tag-text: var(--sd-ui-text-muted);
   --sd-ui-comments-tag-bg: var(--sd-color-gray-200);
-  --sd-ui-comments-timestamp-text: var(--sd-ui-text-muted);
-  --sd-ui-comments-timestamp-size: var(--sd-font-size-200);
+  --sd-ui-comments-timestamp-text: var(--sd-comment-time-color, var(--sd-ui-text-muted));
+  --sd-ui-comments-timestamp-size: var(--sd-comment-time-size, var(--sd-font-size-200));
   --sd-ui-comments-body-text: var(--sd-ui-text);
-  --sd-ui-comments-body-size: var(--sd-font-size-400);
+  --sd-ui-comments-body-size: var(--sd-comment-body-size, var(--sd-font-size-400));
   --sd-ui-comments-resolved-text: var(--sd-color-green-500);
-  --sd-ui-comments-insert-text: var(--sd-color-green-500);
-  --sd-ui-comments-delete-text: var(--sd-color-rose-500);
+  --sd-ui-comments-insert-text: var(--sd-comment-tc-insert-color, var(--sd-color-green-500));
+  --sd-ui-comments-delete-text: var(--sd-comment-tc-delete-color, var(--sd-color-rose-500));
   --sd-ui-comments-dropdown-border: var(--sd-ui-border);
   --sd-ui-comments-dropdown-bg: var(--sd-ui-bg);
   --sd-ui-comments-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
@@ -152,16 +156,16 @@
   --sd-ui-comments-option-hover-bg: var(--sd-ui-hover-bg);
   --sd-ui-comments-input-bg: var(--sd-ui-bg);
   --sd-ui-comments-input-border: var(--sd-ui-border);
-  --sd-ui-comments-internal-bg: #cde6e6;
-  --sd-ui-comments-external-bg: #f5cfda;
+  --sd-ui-comments-internal-bg: var(--sd-comment-internal-bg, #cde6e6);
+  --sd-ui-comments-external-bg: var(--sd-comment-external-bg, #f5cfda);
 
-  /* Styles: comments — document-level highlight colors, intentionally standalone */
+  /* Styles: comments — old names honored via fallback */
   --sd-comments-highlight-external-base: #b1124b;
-  --sd-comments-highlight-external: #b1124b40;
+  --sd-comments-highlight-external: var(--sd-comment-highlight-external, #b1124b40);
   --sd-comments-highlight-external-active: #b1124b66;
   --sd-comments-highlight-external-faded: #b1124b20;
   --sd-comments-highlight-internal-base: #078383;
-  --sd-comments-highlight-internal: #07838340;
+  --sd-comments-highlight-internal: var(--sd-comment-highlight-internal, #07838340);
   --sd-comments-highlight-internal-active: #07838366;
   --sd-comments-highlight-internal-faded: #07838320;
   --sd-comments-highlight-external-nested-border: #b1124b99;
@@ -169,12 +173,12 @@
   --sd-comments-highlight-hover: #1354ff55;
   --sd-comments-selection-background: #1354ff55;
 
-  /* Styles: tracked changes — document-level decoration colors, intentionally standalone */
-  --sd-tracked-changes-insert-background: #399c7222;
-  --sd-tracked-changes-insert-border: #00853d;
-  --sd-tracked-changes-delete-background: #cb0e4722;
-  --sd-tracked-changes-delete-border: #cb0e47;
-  --sd-tracked-changes-format-border: gold;
+  /* Styles: tracked changes — old names honored via fallback */
+  --sd-tracked-changes-insert-background: var(--sd-track-insert-bg, #399c7222);
+  --sd-tracked-changes-insert-border: var(--sd-track-insert-border, #00853d);
+  --sd-tracked-changes-delete-background: var(--sd-track-delete-bg, #cb0e4722);
+  --sd-tracked-changes-delete-border: var(--sd-track-delete-border, #cb0e47);
+  --sd-tracked-changes-format-border: var(--sd-track-format-border, gold);
   --sd-tracked-changes-insert-background-focused: #399c7244;
   --sd-tracked-changes-delete-background-focused: #cb0e4744;
   --sd-tracked-changes-format-background-focused: #ffd70033;
@@ -189,7 +193,7 @@
   --sd-content-controls-label-text: #ffffff;
   --sd-content-controls-lock-hover-bg: rgba(98, 155, 231, 0.08);
 
-  /* Styles: layout — cascades surface from semantic tier */
+  /* Styles: layout — cascades from semantic tier */
   --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }

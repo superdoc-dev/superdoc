@@ -27,12 +27,13 @@ test('scrollToComment scrolls to the comment and activates it', async ({ superdo
   });
   await superdoc.waitForStable();
 
-  // Call scrollToComment via the public API
-  const result = await superdoc.page.evaluate((id) => {
-    return (window as any).superdoc.scrollToComment(id);
-  }, commentId);
-
-  expect(result).toBe(true);
+  // Call scrollToComment via the public API.
+  // WebKit can lag on DOM attribute propagation, so poll until it succeeds.
+  await expect
+    .poll(async () => superdoc.page.evaluate((id) => (window as any).superdoc.scrollToComment(id), commentId), {
+      timeout: 10_000,
+    })
+    .toBe(true);
 
   // Verify the comment highlight is now visible in the viewport
   const highlight = superdoc.page.locator('.superdoc-comment-highlight').filter({ hasText: 'target text' });

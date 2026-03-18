@@ -1,8 +1,25 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { StylesApplyInput, NormalizedStylesApplyOptions, ValueSchema } from '@superdoc/document-api';
 import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import { DocumentApiAdapterError } from './errors.js';
+import { registerPartDescriptor, clearPartDescriptors } from '../core/parts/registry/part-registry.js';
+import { clearInvalidationHandlers } from '../core/parts/invalidation/part-invalidation-registry.js';
+import { stylesPartDescriptor } from '../core/parts/adapters/styles-part-descriptor.js';
+import { initRevision } from './plan-engine/revision-tracker.js';
+
+// ---------------------------------------------------------------------------
+// Parts system setup (descriptor must be registered for afterCommit hooks)
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  registerPartDescriptor(stylesPartDescriptor);
+});
+
+afterEach(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
+});
 
 // ---------------------------------------------------------------------------
 // Mock editor factory
@@ -38,14 +55,18 @@ function createMockEditor(opts: MockEditorOptions = {}) {
         translatedLinkedStyles: opts.translatedLinkedStyles ?? {},
       };
 
-  return {
+  const editor = {
     converter,
     options: {
       collaborationProvider: opts.collaborationProvider ?? null,
     },
     on: vi.fn(),
     emit: vi.fn(),
+    safeEmit: vi.fn(() => []),
   } as unknown as Parameters<typeof stylesApplyAdapter>[0];
+
+  initRevision(editor);
+  return editor;
 }
 
 /** Creates a minimal styles XML with w:styles root (enough to pass capability gates). */
@@ -107,14 +128,13 @@ describe('styles adapter: capability gates', () => {
     );
   });
 
-  it('throws CAPABILITY_UNAVAILABLE when collaboration is active', () => {
+  it('allows mutation when collaboration provider is synced', () => {
     const editor = createMockEditor({
       stylesXml: makeStylesXml(),
       collaborationProvider: { synced: true },
     });
-    expect(() => stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS)).toThrow(
-      DocumentApiAdapterError,
-    );
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
+    expect(result.success).toBe(true);
   });
 
   it('allows mutation when collaboration provider is not synced', () => {
@@ -295,8 +315,20 @@ describe('styles adapter: re-render trigger', () => {
   it('emits stylesDefaultsChanged after successful non-dry mutation', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
     stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
-    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).toHaveBeenCalledWith(
-      'stylesDefaultsChanged',
+    const emitSpy = (editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit;
+    expect(emitSpy).toHaveBeenCalledWith('stylesDefaultsChanged');
+  });
+
+  it('emits partChanged event via mutation pipeline', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
+    const safeEmitSpy = (editor as unknown as { safeEmit: ReturnType<typeof vi.fn> }).safeEmit;
+    expect(safeEmitSpy).toHaveBeenCalledWith(
+      'partChanged',
+      expect.objectContaining({
+        source: 'styles.apply',
+        parts: expect.arrayContaining([expect.objectContaining({ partId: 'word/styles.xml', operation: 'mutate' })]),
+      }),
     );
   });
 });

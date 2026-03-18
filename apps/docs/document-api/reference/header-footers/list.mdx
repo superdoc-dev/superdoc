@@ -1,0 +1,212 @@
+---
+title: headerFooters.list
+sidebarTitle: headerFooters.list
+description: List header/footer slot entries across sections.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List header/footer slot entries across sections.
+
+- Operation ID: `headerFooters.list`
+- API member path: `editor.doc.headerFooters.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a paginated DiscoveryOutput of HeaderFooterSlotEntry items.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum | no | `"header"`, `"footer"` |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `section` | SectionAddress | no | SectionAddress |
+| `section.kind` | `"section"` | no | Constant: `"section"` |
+| `section.sectionId` | string | no |  |
+
+### Example request
+
+```json
+{
+  "kind": "header",
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `page.limit` | integer | yes |  |
+| `page.offset` | integer | yes |  |
+| `page.returned` | integer | yes |  |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "isExplicit": true,
+      "kind": "header",
+      "refId": {},
+      "section": {
+        "kind": "section",
+        "sectionId": "example"
+      },
+      "sectionIndex": 1,
+      "variant": "default"
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `INVALID_TARGET`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "header",
+        "footer"
+      ]
+    },
+    "limit": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
+          "id": {
+            "type": "string"
+          },
+          "isExplicit": {
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "header",
+              "footer"
+            ]
+          },
+          "refId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "section": {
+            "$ref": "#/$defs/SectionAddress"
+          },
+          "sectionIndex": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "variant": {
+            "enum": [
+              "default",
+              "first",
+              "even"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "handle",
+          "section",
+          "sectionIndex",
+          "kind",
+          "variant",
+          "isExplicit"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "page": {
+      "$ref": "#/$defs/PageInfo"
+    },
+    "total": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "total",
+    "items",
+    "page"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

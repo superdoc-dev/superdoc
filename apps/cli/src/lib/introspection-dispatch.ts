@@ -245,6 +245,7 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
               document: {
                 path: metadata.sourcePath,
                 source: metadata.source,
+                sourceByteLength: metadata.sourceSnapshot?.size ?? null,
                 byteLength,
                 revision: metadata.revision,
               },
@@ -259,6 +260,9 @@ const INTROSPECTION_INVOKERS: Partial<Record<CliOperationId, IntrospectionInvoke
               `Context: ${metadata.contextId}`,
               `Default: ${activeSessionId ?? '<none>'}`,
               `Document: ${metadata.sourcePath ?? '<stdin>'}`,
+              `Source: ${metadata.source}`,
+              metadata.sourceSnapshot ? `Source size: ${metadata.sourceSnapshot.size} bytes` : undefined,
+              `Working size: ${byteLength} bytes`,
               `Session Type: ${metadata.sessionType}`,
               metadata.collaboration ? `Collab Doc ID: ${metadata.collaboration.documentId}` : undefined,
               `Revision: ${metadata.revision}`,

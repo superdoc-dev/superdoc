@@ -8,14 +8,14 @@ import { SNIPPET_MAX_LENGTH } from '@superdoc/document-api';
 // ---------------------------------------------------------------------------
 
 const mockedDeps = vi.hoisted(() => ({
-  findAdapter: vi.fn(),
+  findLegacyAdapter: vi.fn(),
   getBlockIndex: vi.fn(),
   captureRunsInRange: vi.fn(),
   getRevision: vi.fn(() => 'rev-1'),
 }));
 
 vi.mock('../find-adapter.js', () => ({
-  findAdapter: mockedDeps.findAdapter,
+  findLegacyAdapter: mockedDeps.findLegacyAdapter,
 }));
 
 vi.mock('../helpers/index-cache.js', () => ({
@@ -131,7 +131,7 @@ function makeEditorWithBlocks(
 
 /**
  * Builds a FindOutput-shaped mock from matches/context arrays.
- * Merges parallel arrays into per-item discovery items as the real findAdapter does.
+ * Merges parallel arrays into per-item discovery items as the real findLegacyAdapter does.
  */
 function setupFindResult(options: { matches: any[]; context?: any[]; total: number }) {
   const contextArr = options.context ?? [];
@@ -144,7 +144,7 @@ function setupFindResult(options: { matches: any[]; context?: any[]; total: numb
     if (contextArr[idx]) item.context = contextArr[idx];
     return item;
   });
-  mockedDeps.findAdapter.mockReturnValue({
+  mockedDeps.findLegacyAdapter.mockReturnValue({
     evaluatedRevision: '',
     total: options.total,
     items,
@@ -364,7 +364,7 @@ describe('queryMatchAdapter — offset-aware id', () => {
   });
 
   it('uses pagination offset in id (D20: post-filter pagination)', () => {
-    // With D20 fix, text selectors don't pass limit/offset to findAdapter.
+    // With D20 fix, text selectors don't pass limit/offset to findLegacyAdapter.
     // The adapter fetches ALL matches, filters zero-width, then paginates itself.
     // Set up 4 matches; request offset=2, limit=2 → should get items 2 and 3.
     const candidates = [

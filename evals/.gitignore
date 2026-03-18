@@ -1,0 +1,8 @@
+results/
+.promptfoo/
+node_modules/
+.env
+.env.local
+__*
+fixtures/.state*
+fixtures/tmp-*

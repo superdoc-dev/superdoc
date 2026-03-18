@@ -5,11 +5,13 @@
  * that changes document state is a step dispatched by the plan engine.
  */
 
-import type { NodeAddress } from './base.js';
-import type { TextAddress, TrackedChangeAddress } from './address.js';
+import type { BlockNodeAddress } from './base.js';
+import type { TextAddress, TrackedChangeAddress, SelectionTarget, DeleteBehavior } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
 import type { InlineRunPatch } from '../format/inline-run-patch.js';
+import type { SDFragment } from './fragment.js';
+import type { Placement, NestingPolicy } from './placement.js';
 
 // ---------------------------------------------------------------------------
 // Universal targeting model
@@ -18,22 +20,27 @@ import type { InlineRunPatch } from '../format/inline-run-patch.js';
 export type SelectWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
   require: 'first' | 'exactlyOne' | 'all';
 };
 
 export type RefWhere = {
   by: 'ref';
   ref: string;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
-export type StepWhere = SelectWhere | RefWhere;
+export type TargetWhere = {
+  by: 'target';
+  target: SelectionTarget;
+};
+
+export type StepWhere = SelectWhere | RefWhere | TargetWhere;
 
 export type AssertWhere = {
   by: 'select';
   select: TextSelector | NodeSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
 };
 
 // ---------------------------------------------------------------------------
@@ -90,7 +97,7 @@ export type TextInsertStep = {
   where: {
     by: 'select';
     select: TextSelector | NodeSelector;
-    within?: NodeAddress;
+    within?: BlockNodeAddress;
     require: 'first' | 'exactlyOne';
   };
   args: {
@@ -104,7 +111,10 @@ export type TextDeleteStep = {
   id: string;
   op: 'text.delete';
   where: StepWhere;
-  args: Record<string, never>;
+  args: {
+    /** Controls block-edge expansion. Defaults to `'selection'`. */
+    behavior?: DeleteBehavior;
+  };
 };
 
 export type StyleApplyStep = {
@@ -125,6 +135,27 @@ export type AssertStep = {
   };
 };
 
+export type StructuralInsertStep = {
+  id: string;
+  op: 'structural.insert';
+  where: StepWhere;
+  args: {
+    content: SDFragment;
+    placement?: Placement;
+    nestingPolicy?: NestingPolicy;
+  };
+};
+
+export type StructuralReplaceStep = {
+  id: string;
+  op: 'structural.replace';
+  where: StepWhere;
+  args: {
+    content: SDFragment;
+    nestingPolicy?: NestingPolicy;
+  };
+};
+
 export type DomainStep = {
   id: string;
   op: string;
@@ -132,7 +163,15 @@ export type DomainStep = {
   args: Record<string, unknown>;
 };
 
-export type MutationStep = TextRewriteStep | TextInsertStep | TextDeleteStep | StyleApplyStep | AssertStep | DomainStep;
+export type MutationStep =
+  | TextRewriteStep
+  | TextInsertStep
+  | TextDeleteStep
+  | StyleApplyStep
+  | StructuralInsertStep
+  | StructuralReplaceStep
+  | AssertStep
+  | DomainStep;
 
 // ---------------------------------------------------------------------------
 // Plan input
@@ -188,10 +227,18 @@ export type SpanStepResolution = {
   text: string;
 };
 
+/** Resolution for a selection-based target (may span multiple blocks). */
+export type SelectionStepResolution = {
+  selectionTarget: SelectionTarget;
+  range: { from: number; to: number };
+  text: string;
+};
+
 export type TextStepData = {
   domain: 'text';
   resolutions: TextStepResolution[];
   spanResolutions?: SpanStepResolution[];
+  selectionResolutions?: SelectionStepResolution[];
 };
 
 export type AssertStepData = {
@@ -210,7 +257,12 @@ export type TableStepData = {
   affectedColumns?: number[];
 };
 
-export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData;
+export type StructuralStepData = {
+  domain: 'structural';
+  insertedBlockIds?: string[];
+};
+
+export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData | StructuralStepData;
 
 export type StepOutcome = {
   stepId: string;
@@ -253,6 +305,7 @@ export type StepPreview = {
   op: string;
   resolutions?: TextStepResolution[];
   spanResolutions?: SpanStepResolution[];
+  selectionResolutions?: SelectionStepResolution[];
   style?: unknown;
 };
 

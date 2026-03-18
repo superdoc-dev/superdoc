@@ -1,0 +1,295 @@
+# Execution tests -- real document editing via SuperDoc CLI.
+#
+# Assertion rules:
+#   1. Every edit asserts new content exists AND old content is gone.
+#   2. Every test verifies unrelated content is intact (no collateral damage).
+#   3. Position tests use indexOf() for ordering.
+
+# =============================================================================
+# DOCUMENT.DOCX -- simple document with bullet lists
+# Known content: "A list of list features", "We support bullets, symbols and more",
+#   "All sorts of bullets.", "Nested lists", "Numbers", "Or letters",
+#   "All sorts of lists are supported"
+# =============================================================================
+
+- description: 'Read: lists document content'
+  vars:
+    fixture: document.docx
+    task: 'Get the full text of this document.'
+  assert:
+    - type: contains
+      value: 'A list of list features'
+    - type: contains
+      value: 'We support bullets, symbols and more'
+    - type: contains
+      value: 'All sorts of lists are supported'
+
+- description: 'Replace: bullets to bullet points, all occurrences'
+  vars:
+    fixture: document.docx
+    task: 'Replace "bullets" with "bullet points" everywhere in the document.'
+  assert:
+    - type: contains
+      value: 'bullet points'
+    - type: not-contains
+      value: 'support bullets'
+    - type: not-contains
+      value: 'sorts of bullets'
+    - type: contains
+      value: 'Nested lists'
+
+- description: 'Insert: paragraph appended at end'
+  vars:
+    fixture: document.docx
+    task: 'Add a new paragraph at the end of the document that says exactly "EVAL TEST PASSED".'
+  assert:
+    - type: contains
+      value: 'EVAL TEST PASSED'
+    - type: contains
+      value: 'A list of list features'
+    - type: javascript
+      value: "output.indexOf('EVAL TEST PASSED') > output.indexOf('All sorts of lists are supported')"
+
+- description: 'Insert: heading appended at end'
+  vars:
+    fixture: document.docx
+    task: 'Add a heading "Summary" at the end of the document.'
+  assert:
+    - type: contains
+      value: 'Summary'
+    - type: javascript
+      value: "output.indexOf('Summary') > output.indexOf('All sorts of lists are supported')"
+
+# =============================================================================
+# MEMORANDUM.DOCX -- legal memo
+# Known: "MEMORANDUM", "TO: General Counsel", "DATE: December 30, 2024",
+#   "$25,000,000", "$150,000,000", "March 1-31, 2025", "Acquiror",
+#   "reasonable best efforts", "[lawyer]", "Best regards,"
+# =============================================================================
+
+- description: 'Read: memo with all key sections'
+  vars:
+    fixture: memorandum.docx
+    task: 'Get the full text of this document.'
+  assert:
+    - type: contains
+      value: 'MEMORANDUM'
+    - type: contains
+      value: 'OPERATIONAL COVENANTS'
+    - type: contains
+      value: '$25,000,000'
+    - type: contains
+      value: 'Best regards,'
+
+- description: 'Replace: party name, all occurrences, amounts untouched'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
+  assert:
+    - type: contains
+      value: 'TO: Chief Legal Officer'
+    - type: contains
+      value: 'Dear Chief Legal Officer'
+    - type: not-contains
+      value: 'General Counsel'
+    - type: contains
+      value: '$25,000,000'
+
+- description: 'Replace: date changed, other dates untouched'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace the date "December 30, 2024" with "January 15, 2025".'
+  assert:
+    - type: contains
+      value: 'DATE: January 15, 2025'
+    - type: not-contains
+      value: 'December 30, 2024'
+    - type: contains
+      value: 'March 1-31, 2025'
+
+- description: 'Replace: $25M to $50M, $150M untouched'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace the acquisition limit of "$25,000,000" with "$50,000,000".'
+  assert:
+    - type: contains
+      value: '$50,000,000'
+    - type: not-contains
+      value: '$25,000,000'
+    - type: contains
+      value: '$150,000,000'
+
+- description: 'Replace: [lawyer] placeholder, signature intact'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" at the end of the document.'
+  assert:
+    - type: contains
+      value: 'Sarah Chen, Partner'
+    - type: not-contains
+      value: '[lawyer]'
+    - type: contains
+      value: 'Best regards,'
+    - type: javascript
+      value: "output.indexOf('Sarah Chen') > output.indexOf('Best regards')"
+
+- description: 'Insert: heading + paragraph after signature'
+  vars:
+    fixture: memorandum.docx
+    task: 'Add a new heading "CONFIDENTIALITY NOTICE" at the end of the document, followed by a paragraph that says "This memorandum is privileged and confidential."'
+  assert:
+    - type: contains
+      value: 'CONFIDENTIALITY NOTICE'
+    - type: contains
+      value: 'privileged and confidential'
+    - type: javascript
+      value: "output.indexOf('CONFIDENTIALITY NOTICE') > output.indexOf('Best regards')"
+
+- description: 'Replace: Acquiror to Buyer, amounts untouched'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace every instance of "Acquiror" with "Buyer" in this document.'
+  assert:
+    - type: contains
+      value: 'Buyer'
+    - type: not-contains
+      value: 'Acquiror'
+    - type: contains
+      value: '$25,000,000'
+
+- description: 'Replace: go-shop date, Dec date untouched'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace the go-shop period date "March 1-31, 2025" with "April 1-30, 2025" in the document.'
+  assert:
+    - type: contains
+      value: 'April 1-30, 2025'
+    - type: not-contains
+      value: 'March 1-31, 2025'
+    - type: contains
+      value: 'December 30, 2024'
+
+- description: 'Replace: legal terms, covenants section intact'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace "reasonable best efforts" with "commercially reasonable efforts" everywhere in the document.'
+  assert:
+    - type: contains
+      value: 'commercially reasonable efforts'
+    - type: not-contains
+      value: 'reasonable best efforts'
+    - type: contains
+      value: 'Maintain the company in good standing'
+
+# =============================================================================
+# TABLE DOC -- document with tables
+# =============================================================================
+
+- description: 'Table: reads headers and cell content'
+  vars:
+    fixture: table-doc.docx
+    task: 'Get the full text of this document.'
+  assert:
+    - type: contains
+      value: 'Component'
+    - type: contains
+      value: 'Version'
+    - type: contains
+      value: 'January 22, 2026'
+
+- description: 'Table: replace cell content, headers untouched'
+  vars:
+    fixture: table-doc.docx
+    task: 'Replace every cell that says "Test" with "Production" in the table.'
+  assert:
+    - type: contains
+      value: 'Production'
+    - type: contains
+      value: 'Component'
+    - type: contains
+      value: 'January 22, 2026'
+
+# =============================================================================
+# MULTI-STEP -- compound operations
+# =============================================================================
+
+- description: 'Multi-step: find section, insert paragraph after it'
+  vars:
+    fixture: memorandum.docx
+    task: 'Find the section about "Alternative Transaction Proposals" and add a paragraph right after it that says "NOTE: Legal review required for this section."'
+  assert:
+    - type: contains
+      value: 'NOTE: Legal review required for this section'
+    - type: javascript
+      value: "output.indexOf('NOTE: Legal review required') > output.indexOf('Alternative Transaction Proposals')"
+
+- description: 'Multi-step: replace placeholder AND add disclaimer at end'
+  vars:
+    fixture: memorandum.docx
+    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" and then add a new heading "DISCLAIMER" at the very end of the document followed by a paragraph "This document does not constitute legal advice."'
+  assert:
+    - type: contains
+      value: 'Sarah Chen, Partner'
+    - type: not-contains
+      value: '[lawyer]'
+    - type: contains
+      value: 'DISCLAIMER'
+    - type: contains
+      value: 'does not constitute legal advice'
+    - type: javascript
+      value: "output.indexOf('DISCLAIMER') > output.indexOf('Sarah Chen')"
+
+# =============================================================================
+# EXPORT -- save edited DOCX to results/output/
+# =============================================================================
+
+- description: 'Export: replace + heading + save'
+  vars:
+    fixture: memorandum.docx
+    keepFile: true
+    task: 'Replace "$25,000,000" with "$75,000,000" and add a heading "APPENDIX A" at the end of the document.'
+  assert:
+    - type: contains
+      value: '$75,000,000'
+    - type: not-contains
+      value: '$25,000,000'
+    - type: contains
+      value: '$150,000,000'
+    - type: contains
+      value: 'APPENDIX A'
+    - type: javascript
+      value: "output.indexOf('APPENDIX A') > output.indexOf('Best regards')"
+
+# =============================================================================
+# ASPIRATIONAL -- may not fully work yet. Failures are expected.
+# =============================================================================
+
+- description: 'Aspirational: glossary of defined terms at end'
+  vars:
+    fixture: memorandum.docx
+    task: 'Generate a glossary of defined terms at the end of the document. Include at least: "Acquiror", "go-shop period", "GAAP". Format as a heading "GLOSSARY" followed by the terms.'
+  assert:
+    - type: contains
+      value: 'GLOSSARY'
+    - type: javascript
+      value: "output.indexOf('GLOSSARY') > output.indexOf('Best regards')"
+
+- description: 'Aspirational: create table from bullet list'
+  vars:
+    fixture: document.docx
+    task: 'Turn this bulleted list into a two-column table. First column has the list items, second column is empty. The table should have a header row with "Feature" and "Notes".'
+  assert:
+    - type: contains
+      value: 'Feature'
+    - type: contains
+      value: 'Notes'
+
+- description: 'Aspirational: redline with tracked changes'
+  vars:
+    fixture: memorandum.docx
+    task: 'In the "Restrictive Covenants" section, replace "No liquidation" with "Company may not pursue liquidation" using tracked changes so it can be reviewed.'
+  assert:
+    - type: contains
+      value: 'Restrictive Covenants'
+    - type: contains
+      value: 'MEMORANDUM'

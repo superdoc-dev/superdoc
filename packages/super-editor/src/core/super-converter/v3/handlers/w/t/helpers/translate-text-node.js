@@ -8,17 +8,30 @@
  */
 import { translator as wRPrNodeTranslator } from '../../rpr/rpr-translator.js';
 import { combineRunProperties, decodeRPrFromMarks } from '@converter/styles.js';
+import { appendTrackFormatChangeToRunProperties, findTrackFormatMark } from '@converter/v3/handlers/helpers.js';
 
 export function getTextNodeForExport(text, marks, params) {
+  const normalizedMarks = Array.isArray(marks) ? marks : [];
   const hasLeadingOrTrailingSpace = /^\s|\s$/.test(text);
   const space = hasLeadingOrTrailingSpace ? 'preserve' : null;
   const nodeAttrs = space ? { 'xml:space': space } : null;
   const textNodes = [];
 
-  const textRunProperties = decodeRPrFromMarks(marks || []);
+  const textRunProperties = decodeRPrFromMarks(normalizedMarks);
   const parentRunProperties = params.extraParams?.runProperties || {};
   const combinedRunProperties = combineRunProperties([parentRunProperties, textRunProperties]);
-  const rPrNode = wRPrNodeTranslator.decode({ node: { attrs: { runProperties: combinedRunProperties } } });
+  const trackFormatMark = findTrackFormatMark(normalizedMarks);
+  let rPrNode = wRPrNodeTranslator.decode({ node: { attrs: { runProperties: combinedRunProperties } } });
+
+  if (!rPrNode && trackFormatMark) {
+    rPrNode = {
+      type: 'element',
+      name: 'w:rPr',
+      elements: [],
+    };
+  }
+
+  appendTrackFormatChangeToRunProperties(rPrNode, normalizedMarks);
 
   textNodes.push({
     name: 'w:t',
@@ -28,11 +41,10 @@ export function getTextNodeForExport(text, marks, params) {
 
   // For custom mark export, we need to add a bookmark start and end tag
   // And store attributes in the bookmark name
-  if (params) {
-    const { editor } = params;
-    const customMarks = editor.extensionService.extensions.filter((e) => e.isExternal === true);
+  if (params?.editor?.extensionService?.extensions) {
+    const customMarks = params.editor.extensionService.extensions.filter((extension) => extension.isExternal === true);
 
-    marks.forEach((mark) => {
+    normalizedMarks.forEach((mark) => {
       const isCustomMark = customMarks.some((customMark) => {
         const customMarkName = customMark.name;
         return mark.type === customMarkName;

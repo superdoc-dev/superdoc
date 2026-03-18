@@ -1,0 +1,137 @@
+---
+title: contentControls.choiceList.getItems
+sidebarTitle: contentControls.choiceList.getItems
+description: Get the list items and selected value of a comboBox or dropDownList content control.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get the list items and selected value of a comboBox or dropDownList content control.
+
+- Operation ID: `contentControls.choiceList.getItems`
+- API member path: `editor.doc.contentControls.choiceList.getItems(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ChoiceListGetItemsResult with items and selectedValue.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(nodeType="sdt") | yes |  |
+| `target.kind` | enum | yes | `"block"`, `"inline"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"sdt"` | yes | Constant: `"sdt"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "sdt"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | object[] | yes |  |
+| `selectedValue` | string | no |  |
+
+### Example response
+
+```json
+{
+  "items": [
+    {}
+  ],
+  "selectedValue": "example"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `TYPE_MISMATCH`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block",
+            "inline"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "sdt"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "selectedValue": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

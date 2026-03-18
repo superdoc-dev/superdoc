@@ -844,9 +844,11 @@ describe('comments plugin commands', () => {
 });
 
 describe('comments plugin pm plugin', () => {
-  it('skips plugin creation when editor is headless', () => {
-    const result = CommentsPlugin.config.addPmPlugins.call({ editor: { options: { isHeadless: true } } });
-    expect(result).toEqual([]);
+  it('creates state-only plugin in headless mode (no props or view)', () => {
+    const result = CommentsPlugin.config.addPmPlugins.call({ editor: { options: { isHeadless: true, comments: {} } } });
+    expect(result).toHaveLength(1);
+    expect(result[0].spec.props).toBeUndefined();
+    expect(result[0].spec.view).toBeUndefined();
   });
 
   it('initialises state with default values', () => {

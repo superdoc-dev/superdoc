@@ -89,6 +89,7 @@ describe('document-api story: all image commands', () => {
 
   const api = client as any;
   const readOperationIds = new Set<ImageCommandId>(['images.list', 'images.get']);
+  const lockAspectRatioBySession = new Map<string, boolean>();
 
   // -- helpers ---------------------------------------------------------------
 
@@ -455,13 +456,26 @@ describe('document-api story: all image commands', () => {
     {
       operationId: 'images.setLockAspectRatio',
       setup: 'inlineImage',
+      prepare: async (sessionId, fixture) => {
+        const f = requireFixture('images.setLockAspectRatio', fixture);
+        const image = unwrap<any>(
+          await api.doc.images.get({
+            sessionId,
+            imageId: f.imageId,
+          }),
+        );
+        const current = image?.properties?.lockAspectRatio;
+        lockAspectRatioBySession.set(sessionId, current === false ? true : false);
+      },
       run: async (sessionId, fixture) => {
         const f = requireFixture('images.setLockAspectRatio', fixture);
+        const locked = lockAspectRatioBySession.get(sessionId);
+        lockAspectRatioBySession.delete(sessionId);
         return unwrap<any>(
           await api.doc.images.setLockAspectRatio({
             sessionId,
             imageId: f.imageId,
-            locked: true,
+            locked: typeof locked === 'boolean' ? locked : false,
           }),
         );
       },

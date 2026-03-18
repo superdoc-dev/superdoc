@@ -1,0 +1,157 @@
+---
+title: SDK Diffing
+sidebarTitle: Diffing
+description: Generate tracked-change redlines from two documents with the Node.js and Python SDKs
+keywords: "sdk diffing, tracked changes, redline, compare documents, node sdk, python sdk"
+---
+
+SuperDoc SDKs expose snapshot-based diffing through `doc.diff.capture`, `doc.diff.compare`, and `doc.diff.apply`.
+
+This page covers the main file-to-file workflow:
+
+- You already have a base document, `Doc1`
+- A new document, `Doc2`, arrives later
+- You want to produce `Doc3`, which starts from `Doc1` and contains all `Doc2` changes as tracked changes
+
+## Recommended workflow
+
+Use two sessions:
+
+1. Open `Doc1` as the base session
+2. Open `Doc2` as a temporary target session
+3. Capture a diff snapshot from the target session
+4. Compare the base session against that snapshot
+5. Apply the diff back onto the base session with `changeMode: 'tracked'`
+6. Save the base session to a new output path as `Doc3`
+
+<Info>
+Tracked diff apply requires a user identity. Set `user` on the SDK client so tracked changes are attributed correctly.
+</Info>
+
+If your app already has `Doc1` open, keep using that session as the base session and only open the uploaded document as the temporary target session.
+
+## Node.js
+
+```typescript
+import { SuperDocClient } from '@superdoc-dev/sdk';
+
+const client = new SuperDocClient({
+  user: { name: 'Review Bot', email: 'bot@example.com' },
+});
+
+await client.doc.open({
+  sessionId: 'base',
+  doc: './Doc1.docx',
+});
+
+await client.doc.open({
+  sessionId: 'target',
+  doc: './Doc2.docx',
+});
+
+const targetSnapshot = await client.doc.diff.capture({
+  sessionId: 'target',
+});
+
+await client.doc.close({
+  sessionId: 'target',
+});
+
+const diff = await client.doc.diff.compare({
+  sessionId: 'base',
+  targetSnapshot,
+});
+
+await client.doc.diff.apply({
+  sessionId: 'base',
+  diff,
+  changeMode: 'tracked',
+});
+
+await client.doc.save({
+  sessionId: 'base',
+  out: './Doc3.docx',
+  force: true,
+});
+
+await client.doc.close({
+  sessionId: 'base',
+});
+```
+
+## Python
+
+```python
+import asyncio
+
+from superdoc import AsyncSuperDocClient
+
+
+async def main():
+    async with AsyncSuperDocClient(
+        user={"name": "Review Bot", "email": "bot@example.com"}
+    ) as client:
+        await client.doc.open({
+            "sessionId": "base",
+            "doc": "./Doc1.docx",
+        })
+
+        await client.doc.open({
+            "sessionId": "target",
+            "doc": "./Doc2.docx",
+        })
+
+        target_snapshot = await client.doc.diff.capture({
+            "sessionId": "target",
+        })
+
+        await client.doc.close({
+            "sessionId": "target",
+        })
+
+        diff = await client.doc.diff.compare({
+            "sessionId": "base",
+            "targetSnapshot": target_snapshot,
+        })
+
+        await client.doc.diff.apply({
+            "sessionId": "base",
+            "diff": diff,
+            "changeMode": "tracked",
+        })
+
+        await client.doc.save({
+            "sessionId": "base",
+            "out": "./Doc3.docx",
+            "force": True,
+        })
+
+        await client.doc.close({
+            "sessionId": "base",
+        })
+
+
+asyncio.run(main())
+```
+
+## What this produces
+
+- `Doc3` is based on `Doc1`, not `Doc2`
+- Body edits from `Doc2` are replayed onto `Doc1` as tracked changes
+- Comments, styles, and numbering changes are replayed directly
+- The output stays as a reviewable redline until someone accepts or rejects the tracked changes
+
+## Current v1 limits
+
+- Header and footer content is not diffed in v1
+- The diff payload is opaque and intended for replay, not semantic inspection
+- `diff.apply` checks that the current base document fingerprint still matches the diff's `baseFingerprint`
+
+If the base document changes after `diff.compare` and before `diff.apply`, re-run the compare step against the current base document state.
+
+## See also
+
+- [SDKs Overview](/document-engine/sdks)
+- [diff.capture reference](/document-api/reference/diff/capture)
+- [diff.compare reference](/document-api/reference/diff/compare)
+- [diff.apply reference](/document-api/reference/diff/apply)

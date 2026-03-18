@@ -39,10 +39,12 @@ import type {
   ListsConvertToTextResult,
   MutationOptions,
   ReceiptFailureCode,
+  PlanReceipt,
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, ensureTrackedCapability, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
+import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js';
 import {
@@ -103,6 +105,31 @@ function dispatchEditorTransaction(editor: Editor, tr: unknown): void {
     'Cannot apply list mutation because no transaction dispatcher is available.',
     { reason: 'missing_dispatch' },
   );
+}
+
+/**
+ * Execute a domain command with automatic numbering rollback.
+ *
+ * Wraps the handler in a compound mutation that snapshots
+ * `word/numbering.xml` and converter metadata. If the PM dispatch
+ * inside the handler fails, all numbering changes are rolled back.
+ */
+function executeDomainCommandWithRollback(
+  editor: Editor,
+  handler: () => boolean,
+  options?: { expectedRevision?: string },
+): PlanReceipt {
+  let receipt!: PlanReceipt;
+  compoundMutation({
+    editor,
+    source: 'lists',
+    affectedParts: ['word/numbering.xml'],
+    execute() {
+      receipt = executeDomainCommand(editor, handler, options);
+      return receipt.steps[0]?.effect === 'changed';
+    },
+  });
+  return receipt;
 }
 
 function resolveInsertedListItem(editor: Editor, sdBlockId: string): ListItemProjection {
@@ -408,7 +435,7 @@ export function listsCreateWrapper(
     }
 
     let numId: number | undefined;
-    const receipt = executeDomainCommand(
+    const receipt = executeDomainCommandWithRollback(
       editor,
       () => {
         numId = ListHelpers.getNewListId(editor);
@@ -458,7 +485,7 @@ export function listsCreateWrapper(
   }
 
   let numId: number | undefined;
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       numId = ListHelpers.getNewListId(editor);
@@ -677,7 +704,7 @@ export function listsSeparateWrapper(
   }
 
   let newNumId: number | undefined;
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       const result = ListHelpers.createNumDefinition(editor, abstractNumId, {
@@ -744,7 +771,7 @@ export function listsSetValueWrapper(
       return toListsFailure('NO_OP', 'No startOverride to remove.', { target: input.target });
     }
 
-    const receipt = executeDomainCommand(
+    const receipt = executeDomainCommandWithRollback(
       editor,
       () => {
         ListHelpers.removeLvlOverride(editor, target.numId!, level);
@@ -765,7 +792,7 @@ export function listsSetValueWrapper(
 
   if (isFirst) {
     // Simple case: set startOverride on existing numId
-    const receipt = executeDomainCommand(
+    const receipt = executeDomainCommandWithRollback(
       editor,
       () => {
         ListHelpers.setLvlOverride(editor, target.numId!, level, { startOverride: input.value as number });
@@ -792,7 +819,7 @@ export function listsSetValueWrapper(
 
   const itemsToReassign = getSequenceFromTarget(editor, target);
 
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       // 1. Create new numId pointing to same abstract, copying overrides
@@ -864,7 +891,7 @@ export function listsContinuePreviousWrapper(
   const sequence = getContiguousSequence(editor, target);
   const level = target.level ?? 0;
 
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       // Remove startOverride on target's level (if any)
@@ -917,7 +944,7 @@ export function listsSetLevelRestartWrapper(
 
   const scope = input.scope ?? 'definition';
 
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       if (scope === 'instance') {

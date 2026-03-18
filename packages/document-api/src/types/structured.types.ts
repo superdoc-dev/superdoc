@@ -1,18 +1,6 @@
-import type { BaseNodeInfo, NodeKind } from './base.js';
+import type { BaseNodeInfo } from './base.js';
 
-export interface SdtNodeInfo extends BaseNodeInfo {
-  nodeType: 'sdt';
-  kind: NodeKind;
-  properties: SdtProperties;
-}
-
-export interface SdtProperties {
-  tag?: string;
-  alias?: string;
-  type?: string;
-  appearance?: string;
-  placeholder?: string;
-}
+export type { ContentControlInfo } from '../content-controls/content-controls.types.js';
 
 export interface BookmarkNodeInfo extends BaseNodeInfo {
   nodeType: 'bookmark';

@@ -1,7 +1,7 @@
 ---
 title: replace
 sidebarTitle: replace
-description: Replace content at a target position with new text or inline content.
+description: Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Replace content at a target position with new text or inline conten
 
 ## Summary
 
-Replace content at a target position with new text or inline content.
+Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.
 
 - Operation ID: `replace`
 - API member path: `editor.doc.replace(...)`
@@ -22,30 +22,60 @@ Replace content at a target position with new text or inline content.
 
 ## Expected result
 
-Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.
+Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.
 
 ## Input fields
 
+### Variant 1.1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `target` | TextAddress | yes | TextAddress |
-| `target.blockId` | string | yes |  |
-| `target.kind` | `"text"` | yes | Constant: `"text"` |
-| `target.range` | Range | yes | Range |
-| `target.range.end` | integer | yes |  |
-| `target.range.start` | integer | yes |  |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
 | `text` | string | yes |  |
+
+### Variant 1.2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ref` | string | yes |  |
+| `text` | string | yes |  |
+
+### Variant 2.1
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object \\| object[] | yes | One of: object, object[] |
+| `nestingPolicy` | object | no |  |
+| `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
+| `target` | BlockNodeAddress \\| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
+
+### Variant 2.2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | object \\| object[] | yes | One of: object, object[] |
+| `nestingPolicy` | object | no |  |
+| `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
+| `ref` | string | yes |  |
 
 ### Example request
 
 ```json
 {
   "target": {
-    "blockId": "block-abc123",
-    "kind": "text",
-    "range": {
-      "end": 10,
-      "start": 0
+    "end": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 12
+    },
+    "kind": "selection",
+    "start": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
     }
   },
   "text": "Hello, world."
@@ -54,101 +84,69 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `inserted` | EntityAddress[] | no |  |
-| `removed` | EntityAddress[] | no |  |
-| `resolution` | TextMutationResolution | yes | TextMutationResolution |
-| `resolution.range` | TextMutationRange | yes | TextMutationRange |
-| `resolution.range.from` | integer | yes |  |
-| `resolution.range.to` | integer | yes |  |
-| `resolution.requestedTarget` | TextAddress | no | TextAddress |
-| `resolution.requestedTarget.blockId` | string | no |  |
-| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
-| `resolution.requestedTarget.range` | Range | no | Range |
-| `resolution.requestedTarget.range.end` | integer | no |  |
-| `resolution.requestedTarget.range.start` | integer | no |  |
-| `resolution.target` | TextAddress | yes | TextAddress |
-| `resolution.target.blockId` | string | yes |  |
-| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
-| `resolution.target.range` | Range | yes | Range |
-| `resolution.target.range.end` | integer | yes |  |
-| `resolution.target.range.start` | integer | yes |  |
-| `resolution.text` | string | yes |  |
+| `evaluatedRevision` | object | no |  |
+| `evaluatedRevision.after` | string | no |  |
+| `evaluatedRevision.before` | string | no |  |
+| `resolution` | object | no |  |
+| `resolution.range` | TextMutationRange | no | TextMutationRange |
+| `resolution.range.from` | integer | no |  |
+| `resolution.range.to` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `true` | yes | Constant: `true` |
-| `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `evaluatedRevision` | object | no |  |
+| `evaluatedRevision.after` | string | no |  |
+| `evaluatedRevision.before` | string | no |  |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"`, `"INVALID_NESTING"`, `"INVALID_PLACEMENT"`, `"INVALID_PAYLOAD"`, `"CAPABILITY_UNSUPPORTED"`, `"ADDRESS_STALE"`, `"DUPLICATE_ID"`, `"INVALID_CONTEXT"`, `"RAW_MODE_REQUIRED"`, `"PRESERVE_ONLY_VIOLATION"`, `"INVALID_INPUT"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
-| `resolution` | TextMutationResolution | yes | TextMutationResolution |
-| `resolution.range` | TextMutationRange | yes | TextMutationRange |
-| `resolution.range.from` | integer | yes |  |
-| `resolution.range.to` | integer | yes |  |
-| `resolution.requestedTarget` | TextAddress | no | TextAddress |
-| `resolution.requestedTarget.blockId` | string | no |  |
-| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
-| `resolution.requestedTarget.range` | Range | no | Range |
-| `resolution.requestedTarget.range.end` | integer | no |  |
-| `resolution.requestedTarget.range.start` | integer | no |  |
-| `resolution.target` | TextAddress | yes | TextAddress |
-| `resolution.target.blockId` | string | yes |  |
-| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
-| `resolution.target.range` | Range | yes | Range |
-| `resolution.target.range.end` | integer | yes |  |
-| `resolution.target.range.start` | integer | yes |  |
-| `resolution.text` | string | yes |  |
+| `resolution` | object | no |  |
+| `resolution.range` | TextMutationRange | no | TextMutationRange |
+| `resolution.range.from` | integer | no |  |
+| `resolution.range.to` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
+| `resolution.target` | TextAddress \\| BlockNodeAddress | no | One of: TextAddress, BlockNodeAddress |
 | `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
 ```json
 {
-  "inserted": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ],
+  "evaluatedRevision": {
+    "after": "rev-002",
+    "before": "rev-001"
+  },
   "resolution": {
     "range": {
       "from": 0,
-      "to": 10
-    },
-    "requestedTarget": {
-      "blockId": "block-abc123",
-      "kind": "text",
-      "range": {
-        "end": 10,
-        "start": 0
-      }
+      "to": 12
     },
     "target": {
       "blockId": "block-abc123",
       "kind": "text",
       "range": {
-        "end": 10,
+        "end": 12,
         "start": 0
       }
-    },
-    "text": "Hello, world."
-  },
-  "success": true,
-  "updated": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
     }
-  ]
+  },
+  "success": true
 }
 ```
 
@@ -157,31 +155,158 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
+- `ADDRESS_STALE`
+- `DUPLICATE_ID`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `CAPABILITY_UNSUPPORTED`
 
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
 - `NO_OP`
+- `INVALID_NESTING`
+- `INVALID_PLACEMENT`
+- `INVALID_PAYLOAD`
+- `CAPABILITY_UNSUPPORTED`
+- `ADDRESS_STALE`
+- `DUPLICATE_ID`
+- `INVALID_CONTEXT`
+- `RAW_MODE_REQUIRED`
+- `PRESERVE_ONLY_VIOLATION`
+- `INVALID_INPUT`
 
 ## Raw schemas
 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "target": {
-      "$ref": "#/$defs/TextAddress"
+  "oneOf": [
+    {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/SelectionTarget"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "ref": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ref",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
     },
-    "text": {
-      "type": "string"
+    {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "nestingPolicy": {
+              "additionalProperties": false,
+              "properties": {
+                "tables": {
+                  "enum": [
+                    "forbid",
+                    "allow"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/BlockNodeAddress"
+                },
+                {
+                  "$ref": "#/$defs/SelectionTarget"
+                }
+              ]
+            }
+          },
+          "required": [
+            "target",
+            "content"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "nestingPolicy": {
+              "additionalProperties": false,
+              "properties": {
+                "tables": {
+                  "enum": [
+                    "forbid",
+                    "allow"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ref",
+            "content"
+          ],
+          "type": "object"
+        }
+      ]
     }
-  },
-  "required": [
-    "target",
-    "text"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>
@@ -191,18 +316,95 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 {
   "oneOf": [
     {
-      "$ref": "#/$defs/TextMutationSuccess"
+      "additionalProperties": false,
+      "properties": {
+        "evaluatedRevision": {
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "type": "string"
+            },
+            "before": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "before",
+            "after"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "range": {
+              "$ref": "#/$defs/TextMutationRange"
+            },
+            "selectionTarget": {
+              "$ref": "#/$defs/SelectionTarget"
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/TextAddress"
+                },
+                {
+                  "$ref": "#/$defs/BlockNodeAddress"
+                }
+              ]
+            }
+          },
+          "required": [
+            "target",
+            "range"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
     },
     {
       "additionalProperties": false,
       "properties": {
+        "evaluatedRevision": {
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "type": "string"
+            },
+            "before": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "before",
+            "after"
+          ],
+          "type": "object"
+        },
         "failure": {
           "additionalProperties": false,
           "properties": {
             "code": {
               "enum": [
                 "INVALID_TARGET",
-                "NO_OP"
+                "NO_OP",
+                "INVALID_NESTING",
+                "INVALID_PLACEMENT",
+                "INVALID_PAYLOAD",
+                "CAPABILITY_UNSUPPORTED",
+                "ADDRESS_STALE",
+                "DUPLICATE_ID",
+                "INVALID_CONTEXT",
+                "RAW_MODE_REQUIRED",
+                "PRESERVE_ONLY_VIOLATION",
+                "INVALID_INPUT"
               ]
             },
             "details": {},
@@ -217,7 +419,30 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
           "type": "object"
         },
         "resolution": {
-          "$ref": "#/$defs/TextMutationResolution"
+          "additionalProperties": false,
+          "properties": {
+            "range": {
+              "$ref": "#/$defs/TextMutationRange"
+            },
+            "selectionTarget": {
+              "$ref": "#/$defs/SelectionTarget"
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/TextAddress"
+                },
+                {
+                  "$ref": "#/$defs/BlockNodeAddress"
+                }
+              ]
+            }
+          },
+          "required": [
+            "target",
+            "range"
+          ],
+          "type": "object"
         },
         "success": {
           "const": false
@@ -225,8 +450,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       },
       "required": [
         "success",
-        "failure",
-        "resolution"
+        "failure"
       ],
       "type": "object"
     }
@@ -238,7 +462,58 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 <Accordion title="Raw success schema">
 ```json
 {
-  "$ref": "#/$defs/TextMutationSuccess"
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "range": {
+          "$ref": "#/$defs/TextMutationRange"
+        },
+        "selectionTarget": {
+          "$ref": "#/$defs/SelectionTarget"
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TextAddress"
+            },
+            {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "range"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
 }
 ```
 </Accordion>
@@ -248,13 +523,39 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 {
   "additionalProperties": false,
   "properties": {
+    "evaluatedRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
     "failure": {
       "additionalProperties": false,
       "properties": {
         "code": {
           "enum": [
             "INVALID_TARGET",
-            "NO_OP"
+            "NO_OP",
+            "INVALID_NESTING",
+            "INVALID_PLACEMENT",
+            "INVALID_PAYLOAD",
+            "CAPABILITY_UNSUPPORTED",
+            "ADDRESS_STALE",
+            "DUPLICATE_ID",
+            "INVALID_CONTEXT",
+            "RAW_MODE_REQUIRED",
+            "PRESERVE_ONLY_VIOLATION",
+            "INVALID_INPUT"
           ]
         },
         "details": {},
@@ -269,7 +570,30 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "type": "object"
     },
     "resolution": {
-      "$ref": "#/$defs/TextMutationResolution"
+      "additionalProperties": false,
+      "properties": {
+        "range": {
+          "$ref": "#/$defs/TextMutationRange"
+        },
+        "selectionTarget": {
+          "$ref": "#/$defs/SelectionTarget"
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TextAddress"
+            },
+            {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "range"
+      ],
+      "type": "object"
     },
     "success": {
       "const": false
@@ -277,8 +601,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
   },
   "required": [
     "success",
-    "failure",
-    "resolution"
+    "failure"
   ],
   "type": "object"
 }

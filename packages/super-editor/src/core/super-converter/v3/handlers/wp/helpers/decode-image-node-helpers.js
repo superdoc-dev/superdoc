@@ -278,6 +278,19 @@ export const translateImageNode = (params) => {
 
   const drawingXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const pictureXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+  const blipEffects = [];
+  if (attrs.grayscale) {
+    blipEffects.push({ name: 'a:grayscl' });
+  }
+  if (attrs.lum && (Number.isFinite(attrs.lum.bright) || Number.isFinite(attrs.lum.contrast))) {
+    blipEffects.push({
+      name: 'a:lum',
+      attributes: {
+        ...(Number.isFinite(attrs.lum.bright) ? { bright: Math.round(attrs.lum.bright) } : {}),
+        ...(Number.isFinite(attrs.lum.contrast) ? { contrast: Math.round(attrs.lum.contrast) } : {}),
+      },
+    });
+  }
 
   // Resolve hyperlink relationship once; shared by wp:docPr and pic:cNvPr.
   const hlinkRId = resolveHyperlinkRId(attrs, params);
@@ -330,11 +343,7 @@ export const translateImageNode = (params) => {
                         attributes: {
                           'r:embed': imageId,
                         },
-                        ...(attrs.grayscale
-                          ? {
-                              elements: [{ name: 'a:grayscl' }],
-                            }
-                          : {}),
+                        ...(blipEffects.length ? { elements: blipEffects } : {}),
                       },
                       ...(rawSrcRect ? [rawSrcRect] : []),
                       {

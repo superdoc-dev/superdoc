@@ -101,7 +101,7 @@ describe('SD-1495 auto page breaks', () => {
     loadedFixtures.forEach(({ filename, data }) => {
       fixtureCache.set(filename, data);
     });
-  }, 30000);
+  }, 60000);
 
   it.each(FIXTURES)('pushes heading to next page for %s', async ({ filename, headingText }) => {
     const cachedFixture = fixtureCache.get(filename);

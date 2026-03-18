@@ -161,6 +161,41 @@ describe('handleNodePath', () => {
     expect(state.tr.setNodeMarkup).toHaveBeenCalledWith(0, undefined, expect.objectContaining({ size: existingSize }));
   });
 
+  it('syncs image data to Y.Doc media map when in collaboration mode', () => {
+    const base64 = `data:image/png;base64,${Buffer.from('test-image').toString('base64')}`;
+    const foundImages = [{ node: { attrs: { src: base64 } }, pos: 0 }];
+
+    const state = createStateStub();
+    const mediaMapSet = vi.fn();
+    const editor = {
+      ...createEditorStub(),
+      options: {
+        mode: 'docx',
+        ydoc: { getMap: vi.fn(() => ({ set: mediaMapSet })) },
+      },
+    };
+
+    handleNodePath(foundImages, editor, state);
+
+    expect(editor.options.ydoc.getMap).toHaveBeenCalledWith('media');
+    expect(mediaMapSet).toHaveBeenCalledTimes(1);
+    expect(mediaMapSet).toHaveBeenCalledWith(expect.stringMatching(/^word\/media\//), base64);
+  });
+
+  it('does not write to Y.Doc media map when not in collaboration mode', () => {
+    const base64 = `data:image/png;base64,${Buffer.from('test-image').toString('base64')}`;
+    const foundImages = [{ node: { attrs: { src: base64 } }, pos: 0 }];
+
+    const state = createStateStub();
+    const editor = createEditorStub(); // no ydoc
+
+    handleNodePath(foundImages, editor, state);
+
+    // Should not throw — just silently skip collab sync
+    const mediaEntries = Object.entries(editor.storage.image.media);
+    expect(mediaEntries).toHaveLength(1);
+  });
+
   it('infers size from compact WxH path segment', () => {
     const sourceUrl = 'https://example.com/images/800x600';
     const foundImages = [{ node: { attrs: { src: sourceUrl } }, pos: 0 }];

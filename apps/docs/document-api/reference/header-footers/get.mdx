@@ -1,0 +1,186 @@
+---
+title: headerFooters.get
+sidebarTitle: headerFooters.get
+description: Get a single header/footer slot entry by address.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get a single header/footer slot entry by address.
+
+- Operation ID: `headerFooters.get`
+- API member path: `editor.doc.headerFooters.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HeaderFooterSlotEntry for the targeted section slot.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="headerFooterSlot") | yes |  |
+| `target.headerFooterKind` | enum | yes | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | yes | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | yes | SectionAddress |
+| `target.section.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.section.sectionId` | string | yes |  |
+| `target.variant` | enum | yes | `"default"`, `"first"`, `"even"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "headerFooterKind": "header",
+    "kind": "headerFooterSlot",
+    "section": {
+      "kind": "section",
+      "sectionId": "example"
+    },
+    "variant": "default"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `isExplicit` | boolean | yes |  |
+| `kind` | enum | yes | `"header"`, `"footer"` |
+| `refId` | any | no |  |
+| `section` | SectionAddress | yes | SectionAddress |
+| `section.kind` | `"section"` | yes | Constant: `"section"` |
+| `section.sectionId` | string | yes |  |
+| `sectionIndex` | integer | yes |  |
+| `variant` | enum | yes | `"default"`, `"first"`, `"even"` |
+
+### Example response
+
+```json
+{
+  "isExplicit": true,
+  "kind": "header",
+  "refId": {},
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "sectionIndex": 1,
+  "variant": "default"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "headerFooterKind": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "kind": {
+          "const": "headerFooterSlot"
+        },
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "variant": {
+          "enum": [
+            "default",
+            "first",
+            "even"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "section",
+        "headerFooterKind",
+        "variant"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "isExplicit": {
+      "type": "boolean"
+    },
+    "kind": {
+      "enum": [
+        "header",
+        "footer"
+      ]
+    },
+    "refId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "sectionIndex": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "variant": {
+      "enum": [
+        "default",
+        "first",
+        "even"
+      ]
+    }
+  },
+  "required": [
+    "section",
+    "sectionIndex",
+    "kind",
+    "variant",
+    "isExplicit"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -1,0 +1,153 @@
+---
+title: diff.capture
+sidebarTitle: diff.capture
+description: "Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included.
+
+- Operation ID: `diff.capture`
+- API member path: `editor.doc.diff.capture(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a DiffSnapshot with a fingerprint and opaque payload.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `coverage` | object | yes |  |
+| `coverage.body` | `true` | yes | Constant: `true` |
+| `coverage.comments` | boolean | yes |  |
+| `coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `coverage.numbering` | boolean | yes |  |
+| `coverage.styles` | boolean | yes |  |
+| `engine` | enum | yes | `"super-editor"` |
+| `fingerprint` | string | yes |  |
+| `payload` | object | yes |  |
+| `version` | `"sd-diff-snapshot/v1"` | yes | Constant: `"sd-diff-snapshot/v1"` |
+
+### Example response
+
+```json
+{
+  "coverage": {
+    "body": true,
+    "comments": true,
+    "headerFooters": false,
+    "numbering": true,
+    "styles": true
+  },
+  "engine": "super-editor",
+  "fingerprint": "example",
+  "payload": {},
+  "version": "sd-diff-snapshot/v1"
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "const": true,
+          "type": "boolean"
+        },
+        "comments": {
+          "type": "boolean"
+        },
+        "headerFooters": {
+          "const": false,
+          "type": "boolean"
+        },
+        "numbering": {
+          "type": "boolean"
+        },
+        "styles": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "body",
+        "comments",
+        "styles",
+        "numbering",
+        "headerFooters"
+      ],
+      "type": "object"
+    },
+    "engine": {
+      "enum": [
+        "super-editor"
+      ],
+      "type": "string"
+    },
+    "fingerprint": {
+      "type": "string"
+    },
+    "payload": {
+      "description": "Opaque engine-owned snapshot data.",
+      "type": "object"
+    },
+    "version": {
+      "const": "sd-diff-snapshot/v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "engine",
+    "fingerprint",
+    "coverage",
+    "payload"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -22,7 +22,7 @@ Retrieve a single node by target position.
 
 ## Expected result
 
-Returns a NodeInfo object with the node type, address, content, and typed properties.
+Returns an SDNodeResult envelope with the projected SDM/1 node and canonical address.
 
 ## Input fields
 
@@ -46,7 +46,7 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 | `anchor.start.blockId` | string | yes |  |
 | `anchor.start.offset` | integer | yes |  |
 | `kind` | `"inline"` | yes | Constant: `"inline"` |
-| `nodeType` | enum | yes | `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"sdt"`, `"image"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
+| `nodeType` | enum | yes | `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"sdt"`, `"image"`, `"footnoteRef"`, `"endnoteRef"`, `"crossRef"`, `"indexEntry"`, `"citation"`, `"authorityEntry"`, `"sequenceField"`, `"tab"`, `"lineBreak"` |
 
 ### Example request
 
@@ -62,34 +62,28 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `bodyNodes` | object[] | no |  |
-| `bodyText` | string | no |  |
-| `kind` | enum | yes | `"block"`, `"inline"` |
-| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
-| `nodes` | object[] | no |  |
-| `properties` | object | no |  |
-| `summary` | object | no |  |
-| `summary.label` | string | no |  |
-| `summary.text` | string | no |  |
-| `text` | string | no |  |
+| `address` | NodeAddress | yes | NodeAddress |
+| `context` | object | no |  |
+| `node` | object | yes |  |
 
 ### Example response
 
 ```json
 {
-  "kind": "block",
-  "nodeType": "paragraph",
-  "summary": {
-    "label": "Paragraph 1",
-    "text": "Hello, world."
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
   },
-  "text": "Hello, world."
+  "context": {},
+  "node": {}
 }
 ```
 
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
+- `ADDRESS_STALE`
 
 ## Non-applied failure codes
 
@@ -110,69 +104,19 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 {
   "additionalProperties": false,
   "properties": {
-    "bodyNodes": {
-      "items": {
-        "type": "object"
-      },
-      "type": "array"
+    "address": {
+      "$ref": "#/$defs/NodeAddress"
     },
-    "bodyText": {
-      "type": "string"
-    },
-    "kind": {
-      "enum": [
-        "block",
-        "inline"
-      ]
-    },
-    "nodes": {
-      "items": {
-        "type": "object"
-      },
-      "type": "array"
-    },
-    "nodeType": {
-      "enum": [
-        "paragraph",
-        "heading",
-        "listItem",
-        "table",
-        "tableRow",
-        "tableCell",
-        "tableOfContents",
-        "image",
-        "sdt",
-        "run",
-        "bookmark",
-        "comment",
-        "hyperlink",
-        "footnoteRef",
-        "tab",
-        "lineBreak"
-      ]
-    },
-    "properties": {
+    "context": {
       "type": "object"
     },
-    "summary": {
-      "additionalProperties": false,
-      "properties": {
-        "label": {
-          "type": "string"
-        },
-        "text": {
-          "type": "string"
-        }
-      },
+    "node": {
       "type": "object"
-    },
-    "text": {
-      "type": "string"
     }
   },
   "required": [
-    "nodeType",
-    "kind"
+    "node",
+    "address"
   ],
   "type": "object"
 }

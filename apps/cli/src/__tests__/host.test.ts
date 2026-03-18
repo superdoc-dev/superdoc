@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { CliOperationId } from '../cli';
@@ -9,6 +9,16 @@ import { resolveSourceDocFixture } from './fixtures';
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
 const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
+const CLI_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/cli/package.json');
+
+async function readCliPackageVersion(): Promise<string> {
+  const raw = await readFile(CLI_PACKAGE_JSON, 'utf8');
+  const parsed = JSON.parse(raw) as { version?: unknown };
+  if (typeof parsed.version !== 'string' || parsed.version.length === 0) {
+    throw new Error('Expected apps/cli/package.json to include a non-empty version field.');
+  }
+  return parsed.version;
+}
 
 type JsonRpcMessage = {
   jsonrpc: '2.0';
@@ -173,6 +183,7 @@ describe('CLI host mode', () => {
     const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
     cleanup.push(stateDir);
     await mkdir(stateDir, { recursive: true });
+    const expectedCliVersion = await readCliPackageVersion();
 
     const host = launchHost(stateDir);
 
@@ -185,11 +196,13 @@ describe('CLI host mode', () => {
     const capabilityPayload = capabilities.result as {
       protocolVersion: string;
       features: string[];
+      cliVersion: string;
     };
     expect(capabilityPayload.protocolVersion).toBe('1.0');
     expect(capabilityPayload.features).toEqual(
       expect.arrayContaining(['cli.invoke', 'host.shutdown', 'host.describe', 'host.describe.command']),
     );
+    expect(capabilityPayload.cliVersion).toBe(expectedCliVersion);
 
     const describe = await host.request('host.describe');
     expect(describe.error).toBeUndefined();
@@ -220,6 +233,20 @@ describe('CLI host mode', () => {
     expect(invokeResult.command).toBe('status');
     expect(invokeResult.data.active).toBe(false);
     expect(invokeResult.meta.elapsedMs).toBeGreaterThanOrEqual(0);
+
+    const invokeVersion = await host.request('cli.invoke', {
+      argv: ['--version'],
+      stdinBase64: '',
+    });
+    expect(invokeVersion.error).toBeUndefined();
+    const invokeVersionResult = invokeVersion.result as {
+      command: string;
+      data: { version: string };
+      meta: { elapsedMs: number };
+    };
+    expect(invokeVersionResult.command).toBe('version');
+    expect(invokeVersionResult.data.version).toBe(expectedCliVersion);
+    expect(invokeVersionResult.meta.elapsedMs).toBeGreaterThanOrEqual(0);
 
     await host.shutdown();
   });
@@ -262,23 +289,24 @@ describe('CLI host mode', () => {
     ]);
     const findResult = findData.result as {
       items?: Array<{
-        address?: Record<string, unknown>;
-        context?: { textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }> };
+        node?: { kind?: string; [key: string]: unknown };
+        address?: { kind?: string; nodeId?: string };
       }>;
     };
     const firstItem = findResult.items?.[0];
-    const firstAddress = firstItem?.address;
-    expect(firstAddress).toBeDefined();
-    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(firstAddress)]);
+    const address = firstItem?.address;
+    const nodeKind = firstItem?.node?.kind ?? 'paragraph';
+    expect(address?.nodeId).toBeDefined();
 
-    const textTarget = firstItem?.context?.textRanges?.[0];
-    expect(textTarget).toBeDefined();
+    // Build a NodeAddress for getNode which expects { kind: 'block', nodeType, nodeId }
+    const blockAddress = { kind: 'block', nodeType: nodeKind, nodeId: address!.nodeId };
+    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(blockAddress)]);
+
+    // Build a collapsed text target from the block address
     const collapsedTarget = {
-      ...textTarget,
-      range: {
-        start: textTarget!.range.start,
-        end: textTarget!.range.start,
-      },
+      kind: 'text',
+      blockId: address!.nodeId,
+      range: { start: 0, end: 0 },
     };
     await invokeAndValidate('doc.insert', [
       'insert',

@@ -1,0 +1,273 @@
+---
+title: headerFooters.refs.set
+sidebarTitle: headerFooters.refs.set
+description: Set an explicit header/footer reference on a section slot.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set an explicit header/footer reference on a section slot.
+
+- Operation ID: `headerFooters.refs.set`
+- API member path: `editor.doc.headerFooters.refs.set(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if the reference already matches, INVALID_TARGET if the relationship does not exist.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `refId` | string | yes |  |
+| `target` | object(kind="headerFooterSlot") | yes |  |
+| `target.headerFooterKind` | enum | yes | `"header"`, `"footer"` |
+| `target.kind` | `"headerFooterSlot"` | yes | Constant: `"headerFooterSlot"` |
+| `target.section` | SectionAddress | yes | SectionAddress |
+| `target.section.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.section.sectionId` | string | yes |  |
+| `target.variant` | enum | yes | `"default"`, `"first"`, `"even"` |
+
+### Example request
+
+```json
+{
+  "refId": "example",
+  "target": {
+    "headerFooterKind": "header",
+    "kind": "headerFooterSlot",
+    "section": {
+      "kind": "section",
+      "sectionId": "example"
+    },
+    "variant": "default"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `section` | SectionAddress | yes | SectionAddress |
+| `section.kind` | `"section"` | yes | Constant: `"section"` |
+| `section.sectionId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "refId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "headerFooterKind": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "kind": {
+          "const": "headerFooterSlot"
+        },
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "variant": {
+          "enum": [
+            "default",
+            "first",
+            "even"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "section",
+        "headerFooterKind",
+        "variant"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "refId"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "section"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "section"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

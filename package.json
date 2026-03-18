@@ -52,10 +52,11 @@
     "pack": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix ./packages/superdoc run pack",
     "release": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release",
     "release:dry-run": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release --dry-run",
-    "release:local": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release --no-ci",
+    "release:local": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs",
     "prepare": "if [ -z \"$CI\" ]; then lefthook install; fi",
     "test:layout": "bun scripts/test-layout.mjs",
     "test:visual": "bun scripts/test-visual.mjs",
+    "corpus:upload": "pnpm --filter @superdoc-testing/visual docs:upload",
     "layout:snapshots": "bun tests/layout/export-layout-snapshots.mjs",
     "layout:snapshots:npm": "bun tests/layout/export-layout-snapshots-npm.mjs",
     "layout:compare": "bun tests/layout/compare-layout-snapshots.mjs",
@@ -86,7 +87,6 @@
   "devDependencies": {
     "@clack/prompts": "^1.0.1",
     "@commitlint/cli": "catalog:",
-    "concurrently": "catalog:",
     "@commitlint/config-conventional": "catalog:",
     "@eslint/js": "catalog:",
     "@semantic-release/changelog": "catalog:",
@@ -96,6 +96,7 @@
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "concurrently": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "eslint-import-resolver-typescript": "catalog:",
@@ -134,6 +135,31 @@
       "@vue/server-renderer": "3.5.25",
       "@vue/shared": "3.5.25",
       "vite": "npm:rolldown-vite@7.3.1"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "@parcel/watcher",
+      "@playwright/browser-chromium",
+      "@swc/core",
+      "lmdb",
+      "msgpackr-extract",
+      "msw",
+      "onnxruntime-node",
+      "protobufjs"
+    ],
+    "onlyBuiltDependencies": [
+      "@vscode/vsce-sign",
+      "better-sqlite3",
+      "canvas",
+      "esbuild",
+      "keytar",
+      "lefthook",
+      "puppeteer",
+      "sharp",
+      "unrs-resolver",
+      "vue-demi"
+    ]
+  },
+  "dependencies": {
+    "superdoc": "link:../../../packages/superdoc"
   }
 }

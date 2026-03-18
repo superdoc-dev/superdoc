@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeWordParagraphLayout, DEFAULT_LIST_HANGING_PX } from '../src/index.js';
+import { computeWordParagraphLayout, DEFAULT_LIST_HANGING_PX, LIST_MARKER_GAP } from '../src/index.js';
 import type { WordParagraphLayoutInput } from '../src/types.js';
 
 const buildInput = (overrides: Partial<WordParagraphLayoutInput> = {}): WordParagraphLayoutInput => ({
@@ -30,6 +30,10 @@ describe('computeWordParagraphLayout', () => {
     expect(layout.tabsPx).toEqual([72]);
     expect(layout.defaultTabIntervalPx).toBe(720);
     expect(layout.marker?.markerText).toBe('3.');
+    expect(layout.marker?.markerBoxWidthPx).toBe(18);
+    expect(layout.marker?.markerX).toBe(18);
+    expect(layout.marker?.textStartX).toBe(36);
+    expect(layout.marker?.gutterWidthPx).toBe(LIST_MARKER_GAP);
     expect(layout.marker?.justification).toBe('left');
     expect(layout.marker?.suffix).toBe('tab');
     expect(layout.marker?.run.fontFamily).toBe('Calibri');

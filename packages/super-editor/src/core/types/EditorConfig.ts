@@ -295,6 +295,14 @@ export interface EditorOptions {
   /** Whether the editor is editable */
   editable?: boolean;
 
+  /**
+   * Allow text selection in viewing mode.
+   * When true, users can select and copy text while in viewing mode,
+   * but editing (typing, paste, delete) remains blocked.
+   * @default false
+   */
+  allowSelectionInViewMode?: boolean;
+
   /** Editor properties */
   editorProps?: Record<string, unknown>;
 

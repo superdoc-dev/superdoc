@@ -80,6 +80,26 @@ function isPresent(value: unknown): boolean {
   return true;
 }
 
+function isTextAddressLike(value: unknown): value is {
+  kind: 'text';
+  blockId: string;
+  range: { start: number; end: number };
+} {
+  if (!isRecord(value) || value.kind !== 'text' || typeof value.blockId !== 'string') return false;
+  if (!isRecord(value.range)) return false;
+  return typeof value.range.start === 'number' && typeof value.range.end === 'number';
+}
+
+function acceptsLegacyTextAddressTarget(
+  operationId: CliOperationId,
+  param: CliOperationParamSpec,
+  value: unknown,
+): boolean {
+  if (param.name !== 'target' || !isTextAddressLike(value)) return false;
+  const docApiId = toDocApiId(operationId);
+  return docApiId === 'replace' || docApiId === 'delete' || docApiId?.startsWith('format.') === true;
+}
+
 export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec, path: string): void {
   if ('const' in schema) {
     if (value !== schema.const) {
@@ -146,14 +166,21 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
       }
     }
 
-    const knownKeys = new Set(Object.keys(schema.properties));
-    for (const key of Object.keys(value)) {
-      if (!knownKeys.has(key)) {
-        throw new CliError('VALIDATION_ERROR', `${path}.${key} is not allowed by schema.`);
+    const propertyEntries = Object.entries(schema.properties);
+    const shouldRestrictUnknownKeys = propertyEntries.length > 0 || required.length > 0;
+
+    // If no object fields are declared, treat it as an unconstrained JSON object.
+    // This keeps input validation aligned with generated schemas like `{ type: 'object' }`.
+    if (shouldRestrictUnknownKeys) {
+      const knownKeys = new Set(propertyEntries.map(([key]) => key));
+      for (const key of Object.keys(value)) {
+        if (!knownKeys.has(key)) {
+          throw new CliError('VALIDATION_ERROR', `${path}.${key} is not allowed by schema.`);
+        }
       }
     }
 
-    for (const [key, propSchema] of Object.entries(schema.properties)) {
+    for (const [key, propSchema] of propertyEntries) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
       validateValueAgainstTypeSpec(value[key], propSchema, `${path}.${key}`);
     }
@@ -409,6 +436,9 @@ export function validateOperationInputData(operationId: CliOperationId, input: u
     if (!isPresent(value)) continue;
 
     if ('schema' in param && param.schema) {
+      if (acceptsLegacyTextAddressTarget(operationId, param, value)) {
+        continue;
+      }
       validateValueAgainstTypeSpec(value, param.schema, `${commandName}:input.${param.name}`);
       continue;
     }
@@ -471,6 +501,7 @@ export function parseOperationArgs<TOperationId extends CliOperationId>(
     if (!('schema' in param) || !param.schema) continue;
     const value = argsRecord[param.name];
     if (!isPresent(value)) continue;
+    if (acceptsLegacyTextAddressTarget(operationId, param, value)) continue;
     validateValueAgainstTypeSpec(value, param.schema, `${commandName}:${param.name}`);
   }
 

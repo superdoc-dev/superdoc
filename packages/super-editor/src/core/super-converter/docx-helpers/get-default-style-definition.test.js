@@ -38,6 +38,28 @@ describe('getDefaultStyleDefinition', () => {
     expect(res).toEqual({ lineSpaceBefore: null, lineSpaceAfter: null });
   });
 
+  it('returns minimal object when matching style has no elements', () => {
+    const docx = {
+      'word/styles.xml': {
+        elements: [
+          {
+            elements: [
+              {
+                name: 'w:style',
+                attributes: { 'w:styleId': 'Heading1' },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const res = getDefaultStyleDefinition('Heading1', docx);
+
+    expect(res).toEqual({ lineSpaceBefore: null, lineSpaceAfter: null });
+    expect(parseMarks).not.toHaveBeenCalled();
+  });
+
   it('parses style definition with spacing, indent, flags, and marks', () => {
     const docx = {
       'word/styles.xml': {

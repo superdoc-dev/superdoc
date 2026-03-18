@@ -70,6 +70,14 @@ function yamlQuote(value: string): string {
   return value;
 }
 
+/**
+ * Escape MDX expression delimiters in plain prose so generated docs don't
+ * evaluate `{ ... }` fragments as JavaScript at runtime.
+ */
+function escapeMdxText(value: string): string {
+  return value.replace(/[{}]/gu, '\\$&');
+}
+
 function renderList(values: readonly string[]): string {
   if (values.length === 0) return '- None';
   return values.map((value) => `- \`${value}\``).join('\n');
@@ -213,6 +221,12 @@ function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
     return `enum`;
   }
 
+  // allOf — flatten and derive type from merged schema
+  if (Array.isArray(schema.allOf)) {
+    const flat = flattenAllOf(schema, $defs);
+    return schemaTypeLabel(flat, $defs);
+  }
+
   // oneOf / anyOf
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = schema[keyword];
@@ -264,6 +278,11 @@ function schemaDescription(schema: JsonSchema, $defs: Defs): string {
     return (schema.enum as unknown[]).map((v) => `\`${JSON.stringify(v)}\``).join(', ');
   }
 
+  if (Array.isArray(schema.allOf)) {
+    const flat = flattenAllOf(schema, $defs);
+    return schemaDescription(flat, $defs);
+  }
+
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = schema[keyword];
     if (Array.isArray(variants)) {
@@ -300,6 +319,88 @@ function collectConstDiscriminators(
   return discriminators;
 }
 
+function hasTopLevelUnion(schema: JsonSchema): boolean {
+  return (
+    (Array.isArray(schema.oneOf) && schema.oneOf.length > 0) || (Array.isArray(schema.anyOf) && schema.anyOf.length > 0)
+  );
+}
+
+function preferredDiscriminator(
+  discriminators: Array<{ path: string; value: unknown }>,
+): { path: string; value: unknown } | undefined {
+  if (discriminators.length === 0) return undefined;
+
+  const priorities = [/^success$/u, /(^|\.)(type|kind|mode|channel)$/u];
+  for (const pattern of priorities) {
+    const match = discriminators.find((entry) => pattern.test(entry.path));
+    if (match) return match;
+  }
+
+  return discriminators[0];
+}
+
+function combineVariantTitles(parentTitle: string, childTitle?: string): string {
+  if (!childTitle) return parentTitle;
+
+  const parentMatch = /^Variant (\d+)(.*)$/u.exec(parentTitle);
+  const childMatch = /^Variant (\d+)(.*)$/u.exec(childTitle);
+  if (parentMatch && childMatch) {
+    return `Variant ${parentMatch[1]}.${childMatch[1]}${childMatch[2]}`;
+  }
+
+  return `${parentTitle} / ${childTitle}`;
+}
+
+/**
+ * If `schema` contains an `allOf` array, merge all members' properties and
+ * required fields into a single flat object schema. Recursively resolves
+ * `$ref` pointers inside each member. Returns the original schema unchanged
+ * when no `allOf` is present.
+ */
+function flattenAllOf(schema: JsonSchema, $defs: Defs): JsonSchema {
+  const allOf = schema.allOf;
+  if (!Array.isArray(allOf) || allOf.length === 0) return schema;
+
+  const mergedProperties: Record<string, JsonSchema> = {};
+  const mergedRequired = new Set<string>();
+
+  for (const member of allOf as JsonSchema[]) {
+    const { resolved } = resolveRef(member, $defs);
+    // Recursively flatten nested allOf
+    const flat = flattenAllOf(resolved, $defs);
+
+    if (flat.properties && typeof flat.properties === 'object') {
+      Object.assign(mergedProperties, flat.properties);
+    }
+    if (Array.isArray(flat.required)) {
+      for (const r of flat.required as string[]) mergedRequired.add(r);
+    }
+
+    // For oneOf/anyOf TargetLocator-style schemas, extract properties from
+    // each variant so they appear in the merged field table.
+    for (const keyword of ['oneOf', 'anyOf'] as const) {
+      const variants = flat[keyword];
+      if (!Array.isArray(variants)) continue;
+      for (const variant of variants as JsonSchema[]) {
+        const { resolved: varResolved } = resolveRef(variant, $defs);
+        if (varResolved.properties && typeof varResolved.properties === 'object') {
+          // Only merge the properties — requirement is optional since
+          // these are union alternatives, not all simultaneously required.
+          Object.assign(mergedProperties, varResolved.properties);
+        }
+      }
+    }
+  }
+
+  // Preserve any top-level non-allOf keys (e.g. type, description)
+  const result: JsonSchema = { ...schema, type: 'object', properties: mergedProperties };
+  delete result.allOf;
+  if (mergedRequired.size > 0) {
+    result.required = [...mergedRequired];
+  }
+  return result;
+}
+
 /**
  * Build field table rows from an object schema's properties.
  * Recursively flattens nested objects into dot-path rows.
@@ -308,10 +409,11 @@ function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequ
   if (depth > 8) return [];
 
   const { resolved } = resolveRef(schema, $defs);
-  const properties = resolved.properties as Record<string, JsonSchema> | undefined;
-  if (!properties || resolved.type !== 'object') return [];
+  const flat = flattenAllOf(resolved, $defs);
+  const properties = flat.properties as Record<string, JsonSchema> | undefined;
+  if (!properties || flat.type !== 'object') return [];
 
-  const requiredSet = new Set<string>(Array.isArray(resolved.required) ? (resolved.required as string[]) : []);
+  const requiredSet = new Set<string>(Array.isArray(flat.required) ? (flat.required as string[]) : []);
   const rows: FieldRow[] = [];
 
   for (const field of Object.keys(properties).sort()) {
@@ -335,28 +437,36 @@ function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequ
 /** Build field sections, splitting top-level oneOf/anyOf schemas into explicit variants. */
 function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
   const { resolved } = resolveRef(schema, $defs);
+  // Flatten allOf first — the merged schema may itself contain oneOf/anyOf.
+  const flat = flattenAllOf(resolved, $defs);
 
   for (const keyword of ['oneOf', 'anyOf'] as const) {
-    const variants = resolved[keyword];
+    const variants = flat[keyword];
     if (!Array.isArray(variants) || variants.length === 0) continue;
 
-    return variants.map((variant, index) => {
-      const variantSchema = resolveRef(variant as JsonSchema, $defs).resolved;
+    return variants.flatMap((variant, index) => {
+      const variantSchema = flattenAllOf(resolveRef(variant as JsonSchema, $defs).resolved, $defs);
       const discriminators = collectConstDiscriminators(variantSchema, $defs);
-      const preferred =
-        discriminators.find((entry) => /(^|\.)(type|kind|mode|channel)$/u.test(entry.path)) ?? discriminators[0];
+      const preferred = preferredDiscriminator(discriminators);
       const label = preferred
         ? `Variant ${index + 1} (${preferred.path}=${JSON.stringify(preferred.value)})`
         : `Variant ${index + 1}`;
+      const rows = buildFieldRows(variantSchema, $defs);
+      if (rows.length === 0 && hasTopLevelUnion(variantSchema)) {
+        return buildFieldSections(variantSchema, $defs).map((section) => ({
+          title: combineVariantTitles(label, section.title),
+          rows: section.rows,
+        }));
+      }
 
       return {
         title: label,
-        rows: buildFieldRows(variantSchema, $defs),
+        rows,
       };
     });
   }
 
-  return [{ rows: buildFieldRows(resolved, $defs) }];
+  return [{ rows: buildFieldRows(flat, $defs) }];
 }
 
 /** Escape pipe characters inside markdown table cells. */
@@ -527,6 +637,21 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return result;
   }
 
+  // allOf — generate per-member and merge. This preserves oneOf/anyOf
+  // variant selection (first-variant-only) instead of flattening all
+  // variant properties into a single object.
+  if (Array.isArray(schema.allOf)) {
+    const merged: Record<string, unknown> = {};
+    for (const member of schema.allOf as JsonSchema[]) {
+      const { resolved } = resolveRef(member, $defs);
+      const memberExample = generateExample(resolved, $defs, fieldName, depth + 1);
+      if (typeof memberExample === 'object' && memberExample !== null && !Array.isArray(memberExample)) {
+        Object.assign(merged, memberExample as Record<string, unknown>);
+      }
+    }
+    return merged;
+  }
+
   // oneOf / anyOf — first variant (non-object union fallback)
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = schema[keyword];
@@ -551,6 +676,123 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   if (schema.type === 'boolean') return true;
 
   return {};
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function buildCapabilitiesOutputExample(snapshot: ReturnType<typeof buildContractSnapshot>): unknown {
+  const operation = snapshot.operations.find((entry) => entry.operationId === 'capabilities.get');
+  if (!operation) return {};
+
+  const generic = generateExample(operation.schemas.output, snapshot.$defs);
+  if (!isObjectRecord(generic)) return generic;
+
+  return {
+    ...generic,
+    global: {
+      trackChanges: { enabled: true },
+      comments: { enabled: true },
+      lists: { enabled: true },
+      dryRun: { enabled: true },
+      history: { enabled: true },
+    },
+    operations: Object.fromEntries(
+      snapshot.operations.map((entry) => [
+        entry.operationId,
+        {
+          available: true,
+          tracked: entry.metadata.supportsTrackedMode,
+          dryRun: entry.metadata.supportsDryRun,
+        },
+      ]),
+    ),
+  };
+}
+
+function getOperationExamples(
+  operation: ContractOperationSnapshot,
+  snapshot: ReturnType<typeof buildContractSnapshot>,
+): { input: unknown; output: unknown } {
+  const inputOverrides: Partial<Record<ContractOperationSnapshot['operationId'], unknown>> = {
+    insert: {
+      target: {
+        kind: 'block',
+        nodeId: 'node-def456',
+        nodeType: 'paragraph',
+      },
+      content: {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'example' }],
+      },
+      placement: 'after',
+    },
+    replace: {
+      target: {
+        kind: 'selection',
+        start: {
+          kind: 'text',
+          blockId: 'block-abc123',
+          offset: 0,
+        },
+        end: {
+          kind: 'text',
+          blockId: 'block-abc123',
+          offset: 12,
+        },
+      },
+      text: 'Hello, world.',
+    },
+  };
+
+  const outputOverrides: Partial<Record<ContractOperationSnapshot['operationId'], unknown>> = {
+    'capabilities.get': buildCapabilitiesOutputExample(snapshot),
+    insert: {
+      success: true,
+      evaluatedRevision: {
+        before: 'rev-001',
+        after: 'rev-002',
+      },
+      resolution: {
+        target: {
+          kind: 'block',
+          nodeId: 'node-def456',
+          nodeType: 'paragraph',
+        },
+        range: {
+          from: 42,
+          to: 42,
+        },
+      },
+    },
+    replace: {
+      success: true,
+      evaluatedRevision: {
+        before: 'rev-001',
+        after: 'rev-002',
+      },
+      resolution: {
+        target: {
+          kind: 'text',
+          blockId: 'block-abc123',
+          range: {
+            start: 0,
+            end: 12,
+          },
+        },
+        range: {
+          from: 0,
+          to: 12,
+        },
+      },
+    },
+  };
+
+  return {
+    input: inputOverrides[operation.operationId] ?? generateExample(operation.schemas.input, snapshot.$defs),
+    output: outputOverrides[operation.operationId] ?? generateExample(operation.schemas.output, snapshot.$defs),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -602,19 +844,24 @@ function buildOperationGroups(operations: ContractOperationSnapshot[]): Operatio
   });
 }
 
-function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs): string {
+function renderOperationPage(
+  operation: ContractOperationSnapshot,
+  snapshot: ReturnType<typeof buildContractSnapshot>,
+): string {
+  const $defs = snapshot.$defs;
   const title = operation.operationId;
   const metadata = operation.metadata;
   const description = OPERATION_DESCRIPTION_MAP[operation.operationId];
+  const escapedDescription = escapeMdxText(description);
   const expectedResult = OPERATION_EXPECTED_RESULT_MAP[operation.operationId];
+  const escapedExpectedResult = escapeMdxText(expectedResult);
 
   const inputFields = renderFieldSections(operation.schemas.input, $defs);
   const outputFields = renderFieldSections(operation.schemas.output, $defs);
 
-  const inputExample = generateExample(operation.schemas.input, $defs);
-  const outputExample = generateExample(operation.schemas.output, $defs);
+  const { input: inputExample, output: outputExample } = getOperationExamples(operation, snapshot);
   const stepOpsSection = renderStepOpsSection(operation);
-  const expectedResultSection = `${expectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
+  const expectedResultSection = `${escapedExpectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
 
   // -- Build raw-schema accordion blocks --
   const rawSchemaBlocks: string[] = [];
@@ -639,7 +886,7 @@ ${GENERATED_MARKER}
 
 ## Summary
 
-${description}
+${escapedDescription}
 
 - Operation ID: \`${operation.operationId}\`
 - API member path: \`${formatMemberPath(operation.memberPath)}\`
@@ -888,7 +1135,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
 
   const operationFiles = snapshot.operations.map((operation) => ({
     path: toOperationDocPath(operation.operationId),
-    content: renderOperationPage(operation, snapshot.$defs),
+    content: renderOperationPage(operation, snapshot),
   }));
 
   const groupFiles = groups.map((group) => ({

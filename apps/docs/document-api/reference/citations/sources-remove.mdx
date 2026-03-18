@@ -1,0 +1,272 @@
+---
+title: citations.sources.remove
+sidebarTitle: citations.sources.remove
+description: Remove a citation source from the document store.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Remove a citation source from the document store.
+
+- Operation ID: `citations.sources.remove`
+- API member path: `editor.doc.citations.sources.remove(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CitationSourceMutationResult indicating success or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="entity") | yes |  |
+| `target.entityType` | `"citationSource"` | yes | Constant: `"citationSource"` |
+| `target.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `target.sourceId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "target": {
+    "entityType": "citationSource",
+    "kind": "entity",
+    "sourceId": "example"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `source` | object(kind="entity") | yes |  |
+| `source.entityType` | `"citationSource"` | yes | Constant: `"citationSource"` |
+| `source.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `source.sourceId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "source": {
+    "entityType": "citationSource",
+    "kind": "entity",
+    "sourceId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "citationSource"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "sourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "sourceId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "entityType": {
+              "const": "citationSource"
+            },
+            "kind": {
+              "const": "entity"
+            },
+            "sourceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "entityType",
+            "sourceId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "source"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "citationSource"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "sourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "sourceId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "source"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

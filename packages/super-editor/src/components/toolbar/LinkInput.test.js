@@ -843,4 +843,90 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
       expect(mockClosePopover).not.toHaveBeenCalled();
     });
   });
+
+  describe('URL normalization', () => {
+    it('defaults bare domains to https when submitting a new link', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      await wrapper.find('input[name="link"]').setValue('example.com');
+      await nextTick();
+
+      wrapper.vm.handleSubmit();
+
+      expect(mockEditor.commands.toggleLink).toHaveBeenCalledWith(
+        expect.objectContaining({ href: 'https://example.com' }),
+      );
+    });
+
+    it('preserves explicit http links when submitting an existing link', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'http://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      wrapper.vm.handleSubmit();
+
+      expect(mockEditor.commands.toggleLink).toHaveBeenCalledWith(
+        expect.objectContaining({ href: 'http://example.com' }),
+      );
+    });
+
+    it('blocks unsafe schemes in both submit and open-link flows', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      await wrapper.find('input[name="link"]').setValue('javascript:foo.bar()');
+      await nextTick();
+
+      const openLinkBtn = wrapper.find('.open-link-icon');
+      expect(openLinkBtn.classes()).toContain('disabled');
+
+      wrapper.vm.handleSubmit();
+      await openLinkBtn.trigger('click');
+
+      expect(wrapper.vm.urlError).toBe(true);
+      expect(mockEditor.commands.toggleLink).not.toHaveBeenCalled();
+      expect(mockClosePopover).not.toHaveBeenCalled();
+      expect(openSpy).not.toHaveBeenCalled();
+
+      openSpy.mockRestore();
+    });
+  });
 });

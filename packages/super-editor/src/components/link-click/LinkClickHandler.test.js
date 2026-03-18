@@ -23,15 +23,21 @@ vi.mock('prosemirror-state', () => ({
 
 describe('LinkClickHandler', () => {
   let mockEditor;
+  let mockPresentationEditor;
   let mockOpenPopover;
   let mockClosePopover;
   let mockSurfaceElement;
+  let windowOpenSpy;
 
   beforeEach(() => {
     // Reset all mocks before each test
     vi.clearAllMocks();
 
     // Create mock editor with state
+    mockPresentationEditor = {
+      goToAnchor: vi.fn(),
+    };
+
     mockEditor = {
       state: {
         selection: {
@@ -63,6 +69,7 @@ describe('LinkClickHandler', () => {
         focus: vi.fn(),
       },
       dispatch: vi.fn(),
+      presentationEditor: mockPresentationEditor,
       options: {
         documentMode: 'editing',
         onException: vi.fn(),
@@ -86,6 +93,7 @@ describe('LinkClickHandler', () => {
 
     // Setup getEditorSurfaceElement mock to return the surface element
     getEditorSurfaceElement.mockReturnValue(mockSurfaceElement);
+    windowOpenSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
   });
 
   afterEach(() => {
@@ -614,6 +622,76 @@ describe('LinkClickHandler', () => {
     expect(mockEditor.dispatch).toHaveBeenCalledTimes(1);
   });
 
+  it('should open external hyperlinks in viewing mode instead of showing the popover', async () => {
+    mockEditor.options.documentMode = 'viewing';
+
+    mount(LinkClickHandler, {
+      props: {
+        editor: mockEditor,
+        openPopover: mockOpenPopover,
+        closePopover: mockClosePopover,
+      },
+    });
+
+    const linkElement = document.createElement('a');
+    linkElement.dataset.pmStart = '10';
+
+    const linkClickEvent = new CustomEvent('superdoc-link-click', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        href: 'https://example.com',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        element: linkElement,
+        clientX: 250,
+        clientY: 250,
+      },
+    });
+
+    mockSurfaceElement.dispatchEvent(linkClickEvent);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(windowOpenSpy).toHaveBeenCalledWith('https://example.com', '_blank', 'noopener,noreferrer');
+    expect(mockOpenPopover).not.toHaveBeenCalled();
+    expect(mockEditor.dispatch).not.toHaveBeenCalled();
+    expect(moveCursorToMouseEvent).not.toHaveBeenCalled();
+  });
+
+  it('should navigate internal anchors in viewing mode via editor.goToAnchor', async () => {
+    mockEditor.options.documentMode = 'viewing';
+
+    mount(LinkClickHandler, {
+      props: {
+        editor: mockEditor,
+        openPopover: mockOpenPopover,
+        closePopover: mockClosePopover,
+      },
+    });
+
+    const linkElement = document.createElement('a');
+    linkElement.dataset.pmStart = '10';
+
+    const linkClickEvent = new CustomEvent('superdoc-link-click', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        href: '#section-1',
+        element: linkElement,
+        clientX: 250,
+        clientY: 250,
+      },
+    });
+
+    mockSurfaceElement.dispatchEvent(linkClickEvent);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(mockPresentationEditor.goToAnchor).toHaveBeenCalledWith('#section-1');
+    expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(mockOpenPopover).not.toHaveBeenCalled();
+    expect(mockEditor.dispatch).not.toHaveBeenCalled();
+  });
+
   // =========================================================================
   // linkPopoverResolver tests
   // =========================================================================
@@ -981,19 +1059,23 @@ describe('LinkClickHandler', () => {
     // ─── External type (framework-agnostic) ───────────────────────────────
 
     describe('external type', () => {
+      let editorContainer;
       let editorWrapper;
 
       beforeEach(() => {
         // External popovers need a parent container to mount into.
-        // Mirrors the real DOM: .super-editor > surface
+        // Mirrors the real DOM: .super-editor-container > .super-editor > surface
+        editorContainer = document.createElement('div');
+        editorContainer.classList.add('super-editor-container');
         editorWrapper = document.createElement('div');
         editorWrapper.classList.add('super-editor');
+        editorContainer.appendChild(editorWrapper);
         editorWrapper.appendChild(mockSurfaceElement);
-        document.body.appendChild(editorWrapper);
+        document.body.appendChild(editorContainer);
       });
 
       afterEach(() => {
-        editorWrapper.remove();
+        editorContainer.remove();
       });
 
       it('should call render with container, closePopover, editor, and href', async () => {
@@ -1019,7 +1101,7 @@ describe('LinkClickHandler', () => {
         expect(ctx.href).toBe('https://example.com');
       });
 
-      it('should append a positioned container to the editor wrapper', async () => {
+      it('should append a positioned container to .super-editor-container (not .super-editor)', async () => {
         const renderFn = vi.fn();
         const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
 
@@ -1035,7 +1117,8 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        // Must mount to .super-editor-container (not .super-editor) to avoid overflow:hidden clipping
+        expect(container.parentElement).toBe(editorContainer);
         expect(container.classList.contains('sd-external-link-popover')).toBe(true);
         expect(container.style.position).toBe('absolute');
         expect(container.style.left).toBe('150px');
@@ -1060,7 +1143,7 @@ describe('LinkClickHandler', () => {
 
         const ctx = renderFn.mock.calls[0][0];
         const container = ctx.container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         // Close the external popover
         ctx.closePopover();
@@ -1085,7 +1168,7 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         renderFn.mock.calls[0][0].closePopover();
         expect(container.parentElement).toBeNull();
@@ -1108,7 +1191,7 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
@@ -1133,7 +1216,7 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         // Click outside the container
         document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
@@ -1216,7 +1299,7 @@ describe('LinkClickHandler', () => {
         });
 
         // Container should have been removed (not left in DOM)
-        const orphanedContainers = editorWrapper.querySelectorAll('[style*="position: absolute"]');
+        const orphanedContainers = editorContainer.querySelectorAll('[style*="position: absolute"]');
         expect(orphanedContainers.length).toBe(0);
 
         // Should fallback to default popover

@@ -1,4 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { getListOrdinalFromPath, getListRendering } from '@superdoc/common/list-rendering';
 import { getHeadingLevel, type BlockCandidate } from './node-address-resolver.js';
 import type { InlineCandidate } from './inline-address-resolver.js';
 import { resolveCommentIdFromAttrs, toFiniteNumber } from './value-utils.js';
@@ -20,7 +21,6 @@ import type {
   ParagraphNodeInfo,
   ParagraphProperties,
   RunNodeInfo,
-  SdtNodeInfo,
   TabNodeInfo,
   TableCellNodeInfo,
   TableNodeInfo,
@@ -36,6 +36,7 @@ import type {
   TableMeasurement,
 } from '../../extensions/types/node-attributes.js';
 import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
+import { buildContentControlInfoFromAttrs } from './content-controls/sdt-info-builder.js';
 
 function resolveMeasurement(value: number | TableMeasurement | null | undefined): number | undefined {
   if (typeof value === 'number') return value;
@@ -101,15 +102,13 @@ function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): Parag
 }
 
 function mapListNumbering(attrs: ParagraphAttrs | null | undefined): ListNumbering | undefined {
-  const listRendering = attrs?.listRendering ?? undefined;
+  const listRendering = getListRendering(attrs?.listRendering);
   if (!listRendering) return undefined;
 
   const listNumbering: ListNumbering = {};
   if (listRendering.markerText) listNumbering.marker = listRendering.markerText;
   if (Array.isArray(listRendering.path)) listNumbering.path = listRendering.path;
-  if (Array.isArray(listRendering.path) && listRendering.path.length > 0) {
-    listNumbering.ordinal = listRendering.path[listRendering.path.length - 1];
-  }
+  listNumbering.ordinal = getListOrdinalFromPath(listRendering.path);
   return Object.keys(listNumbering).length ? listNumbering : undefined;
 }
 
@@ -319,19 +318,6 @@ function buildImageInfo(
 
   return {
     nodeType: 'image',
-    kind,
-    properties,
-  };
-}
-
-function buildSdtInfo(attrs: StructuredContentBlockAttrs | undefined, kind: 'block' | 'inline'): SdtNodeInfo {
-  const properties = {
-    tag: attrs?.tag ?? undefined,
-    alias: attrs?.alias ?? undefined,
-  };
-
-  return {
-    nodeType: 'sdt',
     kind,
     properties,
   };
@@ -580,7 +566,7 @@ export function mapNodeInfo(
     }
     case 'sdt': {
       const attrs = candidate.node?.attrs as StructuredContentBlockAttrs | undefined;
-      return buildSdtInfo(attrs, kind);
+      return buildContentControlInfoFromAttrs(attrs as Record<string, unknown> | undefined, kind);
     }
     case 'tableOfContents':
       if (kind !== 'block')

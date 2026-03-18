@@ -75,6 +75,11 @@ export const TrackDelete = Mark.create({
         },
       },
 
+      sourceId: {
+        default: '',
+        rendered: false,
+      },
+
       importedAuthor: {
         default: '',
         rendered: false,

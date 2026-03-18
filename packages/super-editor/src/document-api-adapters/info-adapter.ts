@@ -1,6 +1,6 @@
 import type { DocumentInfo, FindOutput, InfoInput, NodeInfo, NodeType } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
-import { findAdapter } from './find-adapter.js';
+import { findLegacyAdapter } from './find-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
 
@@ -69,7 +69,7 @@ function countDistinctCommentIds(result: FindOutput): number {
 }
 
 function findByNodeType(editor: Editor, nodeType: NodeType, includeNodes = false): FindOutput {
-  return findAdapter(editor, {
+  return findLegacyAdapter(editor, {
     select: { type: 'node', nodeType },
     includeNodes,
   });

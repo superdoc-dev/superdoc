@@ -1,0 +1,279 @@
+---
+title: bookmarks.rename
+sidebarTitle: bookmarks.rename
+description: Rename an existing bookmark.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Rename an existing bookmark.
+
+- Operation ID: `bookmarks.rename`
+- API member path: `editor.doc.bookmarks.rename(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a BookmarkMutationResult indicating success with the updated bookmark address or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `newName` | string | yes |  |
+| `target` | object(kind="entity") | yes |  |
+| `target.entityType` | `"bookmark"` | yes | Constant: `"bookmark"` |
+| `target.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `target.name` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "newName": "example",
+  "target": {
+    "entityType": "bookmark",
+    "kind": "entity",
+    "name": "example"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bookmark` | object(kind="entity") | yes |  |
+| `bookmark.entityType` | `"bookmark"` | yes | Constant: `"bookmark"` |
+| `bookmark.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `bookmark.name` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "bookmark": {
+    "entityType": "bookmark",
+    "kind": "entity",
+    "name": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "newName": {
+      "type": "string"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "bookmark"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "newName"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "bookmark": {
+          "additionalProperties": false,
+          "properties": {
+            "entityType": {
+              "const": "bookmark"
+            },
+            "kind": {
+              "const": "entity"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "entityType",
+            "name"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "bookmark"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "bookmark": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "bookmark"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "name"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "bookmark"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

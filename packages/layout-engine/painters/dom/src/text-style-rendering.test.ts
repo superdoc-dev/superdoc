@@ -322,6 +322,169 @@ describe('DomPainter text style CSS rendering', () => {
       expectCssColor(span?.style.color ?? '', '#ff0000');
     });
 
+    it('should apply vertical-align super for superscript', () => {
+      const block = createParagraphBlock('para-va-1', [
+        {
+          text: '1st',
+          fontFamily: 'Arial',
+          fontSize: 10.4,
+          vertAlign: 'superscript' as const,
+          pmStart: 0,
+          pmEnd: 3,
+        },
+      ]);
+
+      const measure = createParagraphMeasure();
+      const layout = createParagraphLayout('para-va-1');
+
+      const painter = createDomPainter({
+        blocks: [block],
+        measures: [measure],
+      });
+
+      painter.paint(layout, container);
+
+      const span = container.querySelector('span');
+      expect(span).toBeTruthy();
+      expect(span?.style.verticalAlign).toBe('super');
+    });
+
+    it('should apply vertical-align sub for subscript', () => {
+      const block = createParagraphBlock('para-va-2', [
+        {
+          text: '2',
+          fontFamily: 'Arial',
+          fontSize: 10.4,
+          vertAlign: 'subscript' as const,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ]);
+
+      const measure = createParagraphMeasure();
+      const layout = createParagraphLayout('para-va-2');
+
+      const painter = createDomPainter({
+        blocks: [block],
+        measures: [measure],
+      });
+
+      painter.paint(layout, container);
+
+      const span = container.querySelector('span');
+      expect(span).toBeTruthy();
+      expect(span?.style.verticalAlign).toBe('sub');
+    });
+
+    it('should apply vertical-align with pt offset for baselineShift', () => {
+      const block = createParagraphBlock('para-va-3', [
+        {
+          text: 'shifted',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          baselineShift: 3,
+          pmStart: 0,
+          pmEnd: 7,
+        },
+      ]);
+
+      const measure = createParagraphMeasure();
+      const layout = createParagraphLayout('para-va-3');
+
+      const painter = createDomPainter({
+        blocks: [block],
+        measures: [measure],
+      });
+
+      painter.paint(layout, container);
+
+      const span = container.querySelector('span');
+      expect(span).toBeTruthy();
+      expect(span?.style.verticalAlign).toBe('3pt');
+    });
+
+    it('should not apply vertical-align when neither vertAlign nor baselineShift is set', () => {
+      const block = createParagraphBlock('para-va-4', [
+        {
+          text: 'normal',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 0,
+          pmEnd: 6,
+        },
+      ]);
+
+      const measure = createParagraphMeasure();
+      const layout = createParagraphLayout('para-va-4');
+
+      const painter = createDomPainter({
+        blocks: [block],
+        measures: [measure],
+      });
+
+      painter.paint(layout, container);
+
+      const span = container.querySelector('span');
+      expect(span).toBeTruthy();
+      expect(span?.style.verticalAlign).toBe('');
+    });
+
+    it('should use baselineShift over vertAlign when both are set', () => {
+      const block = createParagraphBlock('para-va-5', [
+        {
+          text: '1st',
+          fontFamily: 'Arial',
+          fontSize: 10.4,
+          vertAlign: 'superscript' as const,
+          baselineShift: 4,
+          pmStart: 0,
+          pmEnd: 3,
+        },
+      ]);
+
+      const measure = createParagraphMeasure();
+      const layout = createParagraphLayout('para-va-5');
+
+      const painter = createDomPainter({
+        blocks: [block],
+        measures: [measure],
+      });
+
+      painter.paint(layout, container);
+
+      const span = container.querySelector('span');
+      expect(span).toBeTruthy();
+      // baselineShift takes precedence — should be "4pt", not "super"
+      expect(span?.style.verticalAlign).toBe('4pt');
+    });
+
+    it('should apply negative baselineShift', () => {
+      const block = createParagraphBlock('para-va-6', [
+        {
+          text: 'lowered',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          baselineShift: -2.5,
+          pmStart: 0,
+          pmEnd: 7,
+        },
+      ]);
+
+      const measure = createParagraphMeasure();
+      const layout = createParagraphLayout('para-va-6');
+
+      const painter = createDomPainter({
+        blocks: [block],
+        measures: [measure],
+      });
+
+      painter.paint(layout, container);
+
+      const span = container.querySelector('span');
+      expect(span).toBeTruthy();
+      expect(span?.style.verticalAlign).toBe('-2.5pt');
+    });
+
     it('should handle empty text with textTransform', () => {
       const block = createParagraphBlock('para-8', [
         {

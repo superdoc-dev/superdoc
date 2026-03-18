@@ -1,0 +1,288 @@
+---
+title: footnotes.update
+sidebarTitle: footnotes.update
+description: Update the content of an existing footnote or endnote.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Update the content of an existing footnote or endnote.
+
+- Operation ID: `footnotes.update`
+- API member path: `editor.doc.footnotes.update(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a FootnoteMutationResult indicating success with the updated footnote address or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.content` | string | no |  |
+| `target` | object(kind="entity") | yes |  |
+| `target.entityType` | `"footnote"` | yes | Constant: `"footnote"` |
+| `target.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `target.noteId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "patch": {
+    "content": "example"
+  },
+  "target": {
+    "entityType": "footnote",
+    "kind": "entity",
+    "noteId": "example"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `footnote` | object(kind="entity") | yes |  |
+| `footnote.entityType` | `"footnote"` | yes | Constant: `"footnote"` |
+| `footnote.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `footnote.noteId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "footnote": {
+    "entityType": "footnote",
+    "kind": "entity",
+    "noteId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "patch": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "footnote"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "noteId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "noteId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "patch"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "footnote": {
+          "additionalProperties": false,
+          "properties": {
+            "entityType": {
+              "const": "footnote"
+            },
+            "kind": {
+              "const": "entity"
+            },
+            "noteId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "entityType",
+            "noteId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "footnote"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "footnote": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "footnote"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "noteId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "noteId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "footnote"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

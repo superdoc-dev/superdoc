@@ -10,11 +10,11 @@
  *   TargetSelector → target-resolver → placement-resolver → insertion position
  */
 
-import type { SDFragment, SDContentNode, NestingPolicy, Placement, TextAddress } from '@superdoc/document-api';
+import type { SDFragment, SDContentNode, NestingPolicy, Placement } from '@superdoc/document-api';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { materializeFragment, type SDWriteOp } from './node-materializer.js';
-import { resolveInsertTarget, resolveReplaceTarget } from './target-resolver.js';
+import { resolveInsertTarget, resolveReplaceTarget, type StructuralTarget } from './target-resolver.js';
 import { resolvePlacement } from './placement-resolver.js';
 import { enforceNestingPolicy } from './nesting-guard.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
@@ -28,7 +28,7 @@ import { DocumentApiAdapterError } from '../errors.js';
 
 /** Options for structural insert. */
 export interface StructuralInsertOptions {
-  target?: TextAddress;
+  target?: StructuralTarget;
   content: SDFragment;
   placement?: Placement;
   nestingPolicy?: NestingPolicy;
@@ -40,13 +40,19 @@ export interface StructuralInsertOptions {
 
 /** Options for structural replace. */
 export interface StructuralReplaceOptions {
-  target: TextAddress;
+  target: StructuralTarget;
   content: SDFragment;
   nestingPolicy?: NestingPolicy;
   /** Tracked or direct mode. When 'tracked', the transaction carries tracked-change metadata. */
   changeMode?: 'direct' | 'tracked';
   /** When true, runs all validation (target resolution, materialization, nesting policy) but skips the transaction dispatch. */
   dryRun?: boolean;
+  /**
+   * Pre-resolved replacement range. When present, skips single-block target
+   * resolution and uses this range directly. Used by the wrapper for
+   * multi-block locators (SelectionTarget spanning blocks, multi-segment refs).
+   */
+  resolvedRange?: { from: number; to: number };
 }
 
 /** Result of a structural write operation. */
@@ -111,11 +117,14 @@ export function executeStructuralInsert(editor: Editor, options: StructuralInser
  * (from pos to pos + nodeSize) is replaced, not just its text content.
  */
 export function executeStructuralReplace(editor: Editor, options: StructuralReplaceOptions): StructuralWriteResult {
-  const { content, nestingPolicy, target, changeMode, dryRun } = options;
+  const { content, nestingPolicy, target, changeMode, dryRun, resolvedRange } = options;
   const schema = editor.state.schema;
 
-  // 1. Resolve target range (full block node range)
-  const resolved = resolveReplaceTarget(editor, target);
+  // 1. Resolve target range — use pre-resolved range for multi-block locators,
+  //    otherwise resolve from the single-block TextAddress target.
+  const resolved = resolvedRange
+    ? { from: resolvedRange.from, to: resolvedRange.to, effectiveTarget: target }
+    : resolveReplaceTarget(editor, target);
 
   // 2. Validate section references in the fragment
   validateSectionReferences(editor, content);

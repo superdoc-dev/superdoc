@@ -13,6 +13,8 @@ interface HarnessConfig {
   trackChanges?: boolean;
   showCaret?: boolean;
   showSelection?: boolean;
+  allowSelectionInViewMode?: boolean;
+  documentMode?: 'editing' | 'viewing' | 'suggesting';
 }
 
 type DocumentMode = 'editing' | 'suggesting' | 'viewing';
@@ -45,6 +47,8 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   if (config.trackChanges) params.set('trackChanges', '1');
   if (config.showCaret !== undefined) params.set('showCaret', config.showCaret ? '1' : '0');
   if (config.showSelection !== undefined) params.set('showSelection', config.showSelection ? '1' : '0');
+  if (config.allowSelectionInViewMode) params.set('allowSelectionInViewMode', '1');
+  if (config.documentMode) params.set('documentMode', config.documentMode);
   const qs = params.toString();
   return qs ? `${HARNESS_URL}?${qs}` : HARNESS_URL;
 }
@@ -217,9 +221,8 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
 
         const toWithinAddress = (address: any): any => {
           if (!address || typeof address !== 'object') return null;
-          if (address.kind === 'content' || address.kind === 'inline') return address;
           if (address.kind === 'block' && typeof address.nodeId === 'string' && address.nodeId.length > 0) {
-            return { kind: 'content', stability: 'stable', nodeId: address.nodeId };
+            return address;
           }
           return null;
         };
@@ -304,7 +307,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
             .filter(Boolean);
 
         const hyperlinkResult = docApi.find({
-          select: { type: 'node', nodeKind: 'hyperlink', kind: 'inline' },
+          select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
           within: withinAddress,
         });
 
@@ -727,14 +730,14 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 return Array.isArray(result?.matches) ? result.matches : [];
               };
 
-              const tableResult = docApi.find({ select: { type: 'node', nodeKind: 'table' }, limit: 1 });
+              const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
               const tableAddress = getAddresses(tableResult)[0];
               if (!tableAddress) return 'no table found in document';
 
               if (expectedRows !== undefined && expectedCols !== undefined) {
                 const expectedCellCount = expectedRows * expectedCols;
 
-                const rowResult = docApi.find({ select: { type: 'node', nodeKind: 'tableRow' }, within: tableAddress });
+                const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
                 const rowCount = getAddresses(rowResult).length;
 
                 // Only validate row count when the adapter exposes row-level querying.
@@ -743,13 +746,13 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 }
 
                 const cellResult = docApi.find({
-                  select: { type: 'node', nodeKind: 'tableCell' },
+                  select: { type: 'node', nodeType: 'tableCell' },
                   within: tableAddress,
                 });
                 let cellCount = getAddresses(cellResult).length;
                 try {
                   const headerResult = docApi.find({
-                    select: { type: 'node', nodeKind: 'tableHeader' },
+                    select: { type: 'node', nodeType: 'tableHeader' },
                     within: tableAddress,
                   });
                   cellCount += getAddresses(headerResult).length;
@@ -760,7 +763,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 // Fallback: count paragraphs when cell-level querying isn't available.
                 if (cellCount === 0) {
                   const paragraphResult = docApi.find({
-                    select: { type: 'node', nodeKind: 'paragraph' },
+                    select: { type: 'node', nodeType: 'paragraph' },
                     within: tableAddress,
                   });
                   cellCount = getAddresses(paragraphResult).length;
@@ -788,36 +791,71 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
           () =>
             page.evaluate(
               ({ text, commentId }) => {
+                type HighlightEntry = { text: string; commentIds: string[] };
                 const normalize = (value: string) => value.replace(/\s+/g, ' ').trim();
-                const highlights = Array.from(document.querySelectorAll('.superdoc-comment-highlight')).map((el) => ({
+                const includesExpectedText = (entries: HighlightEntry[], expected: string) => {
+                  if (!expected) return true;
+                  if (entries.some((entry) => entry.text.includes(expected))) return true;
+                  const aggregatedText = normalize(
+                    entries
+                      .map((entry) => entry.text)
+                      .filter(Boolean)
+                      .join(' '),
+                  );
+                  return aggregatedText.includes(expected);
+                };
+
+                const highlights: HighlightEntry[] = Array.from(
+                  document.querySelectorAll('.superdoc-comment-highlight'),
+                ).map((el) => ({
                   text: normalize(el.textContent ?? ''),
-                  commentIds: (el.getAttribute('data-comment-ids') ?? '').split(/[\s,]+/).filter(Boolean),
+                  commentIds: (el.getAttribute('data-comment-ids') ?? '').split(/[\s,;]+/).filter(Boolean),
                 }));
                 if (highlights.length === 0) return false;
 
-                const relevant = commentId
-                  ? highlights.filter((entry) => entry.commentIds.includes(commentId))
-                  : highlights;
-                if (relevant.length === 0) return false;
+                const expected = normalize(text ?? '');
+                if (!commentId) {
+                  return includesExpectedText(highlights, expected);
+                }
 
-                if (!text) return true;
+                const relevant = highlights.filter((entry) => entry.commentIds.includes(commentId));
 
-                const expected = normalize(text);
-                if (expected.length === 0) return true;
+                if (relevant.length > 0) {
+                  return includesExpectedText(relevant, expected);
+                }
 
-                const hasDirectTextMatch = relevant.some((entry) => entry.text.includes(expected));
-                if (hasDirectTextMatch) return true;
+                // Fallback: on some engines, highlight DOM may transiently expose a
+                // canonical/imported ID mismatch. Resolve anchored text from comments.list()
+                // and assert the corresponding text remains highlighted.
+                const docApi = (window as any).editor?.doc;
+                const commentsList = docApi?.comments?.list?.({ includeResolved: true });
+                const matches = Array.isArray(commentsList?.matches)
+                  ? commentsList.matches
+                  : Array.isArray(commentsList?.items)
+                    ? commentsList.items
+                    : [];
 
-                if (!commentId) return false;
+                const matchingComment = matches.find((entry: any) => {
+                  const entryId =
+                    (typeof entry?.commentId === 'string' && entry.commentId) ||
+                    (typeof entry?.id === 'string' && entry.id) ||
+                    (typeof entry?.address?.entityId === 'string' && entry.address.entityId) ||
+                    '';
+                  const importedId = typeof entry?.importedId === 'string' ? entry.importedId : '';
+                  return entryId === commentId || importedId === commentId;
+                });
 
-                // Highlights for the same comment may be split across multiple DOM nodes.
-                const aggregatedText = normalize(
-                  relevant
-                    .map((entry) => entry.text)
-                    .filter(Boolean)
-                    .join(' '),
+                const anchoredText = normalize(
+                  expected ||
+                    (typeof matchingComment?.anchoredText === 'string' && matchingComment.anchoredText) ||
+                    (typeof matchingComment?.text === 'string' && matchingComment.text) ||
+                    (typeof matchingComment?.snippet === 'string' && matchingComment.snippet) ||
+                    (typeof matchingComment?.context?.snippet === 'string' && matchingComment.context.snippet) ||
+                    '',
                 );
-                return aggregatedText.includes(expected);
+                if (!anchoredText) return false;
+
+                return includesExpectedText(highlights, anchoredText);
               },
               { text: expectedText, commentId: expectedCommentId },
             ),

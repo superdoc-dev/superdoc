@@ -209,6 +209,15 @@ const handleRemove = () => {
     props.closePopover();
   }
 };
+
+const navigateToAnchor = (url) => {
+  const presentationEditor = props.editor?.presentationEditor ?? null;
+  if (presentationEditor) {
+    presentationEditor.goToAnchor(url);
+  } else if (props.goToAnchor) {
+    props.goToAnchor(url);
+  }
+};
 </script>
 
 <template>
@@ -271,7 +280,9 @@ const handleRemove = () => {
     </div>
 
     <div v-else-if="isAnchor" class="input-row go-to-anchor clickable">
-      <a @click.stop.prevent="goToAnchor">Go to {{ rawUrl.startsWith('#_') ? rawUrl.substring(2) : rawUrl }}</a>
+      <a @click.stop.prevent="navigateToAnchor(rawUrl)"
+        >Go to {{ rawUrl.startsWith('#_') ? rawUrl.substring(2) : rawUrl }}</a
+      >
     </div>
   </div>
 </template>

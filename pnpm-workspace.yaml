@@ -9,6 +9,8 @@ packages:
   - packages/**/*
   - shared/*
   - examples/*
+  - evals
+  - examples/*/*
 
 catalog:
   '@commitlint/cli': ^19.8.1
@@ -60,7 +62,6 @@ catalog:
   lefthook: ^1.11.13
   lib0: ^0.2.114
   marked: ^16.2.0
-  naive-ui: ^2.43.1
   nodemon: ^3.1.10
   patch-package: ^8.0.1
   pdfjs-dist: ^5.4.296

@@ -150,7 +150,7 @@ describe('Multi-Section Document Page Count', () => {
 
     // Load/convert once; this conversion is expensive under full-suite parallel runs.
     loadedFixture = await docxToPMJson(MULTI_SECTION_DOCX_PATH);
-  }, 30000);
+  }, 60000);
 
   it('should render multi_section_doc.docx as exactly 4 pages', async () => {
     if (!loadedFixture) {

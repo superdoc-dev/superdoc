@@ -24,6 +24,9 @@ vi.mock('@superdoc/super-editor', () => ({
       return () => h('textarea', slots.default?.());
     },
   }),
+  PresentationEditor: {
+    getInstance: vi.fn(() => null),
+  },
 }));
 
 const simpleStub = (name, emits = []) =>
@@ -93,12 +96,6 @@ vi.mock('@superdoc/components/CommentsLayer/CommentHeader.vue', () => ({ default
 vi.mock('@superdoc/components/CommentsLayer/CommentInput.vue', () => ({ default: CommentInputStub }));
 vi.mock('@superdoc/components/general/Avatar.vue', () => ({ default: AvatarStub }));
 
-vi.mock('naive-ui', () => ({
-  NDropdown: simpleStub('NDropdown'),
-  NTooltip: simpleStub('NTooltip'),
-  NSelect: simpleStub('NSelect'),
-}));
-
 vi.mock('@superdoc/core/collaboration/permissions.js', () => ({
   PERMISSIONS: { MANAGE_COMMENTS: 'manage' },
   isAllowed: () => true,
@@ -140,6 +137,8 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     cancelComment: vi.fn(),
     deleteComment: vi.fn(),
     removePendingComment: vi.fn(),
+    requestInstantSidebarAlignment: vi.fn(),
+    clearInstantSidebarAlignment: vi.fn(),
     setActiveComment: vi.fn(),
     getPendingComment: vi.fn(() => ({
       commentId: 'pending-1',
@@ -228,7 +227,9 @@ describe('CommentDialog.vue', () => {
 
     await nextTick();
     expect(baseComment.setActive).toHaveBeenCalledWith(superdocStub);
-    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId, {
+      preferredActiveThreadId: baseComment.commentId,
+    });
     expect(commentsStoreStub.activeComment.value).toBe(baseComment.commentId);
 
     // Click the reply pill to expand the editor
@@ -250,6 +251,23 @@ describe('CommentDialog.vue', () => {
       superdoc: superdocStub,
       comment: expect.objectContaining({ commentId: 'pending-1' }),
     });
+  });
+
+  it('does not pass preferred thread override for resolved comments', async () => {
+    const { baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        resolvedTime: Date.now(),
+      },
+    });
+
+    await nextTick();
+
+    expect(baseComment.setActive).not.toHaveBeenCalled();
+    expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(superdocStub.activeEditor.commands.setCursorById).not.toHaveBeenCalledWith(
+      baseComment.commentId,
+      expect.objectContaining({ preferredActiveThreadId: baseComment.commentId }),
+    );
   });
 
   it('handles resolve and reject for tracked change comments', async () => {

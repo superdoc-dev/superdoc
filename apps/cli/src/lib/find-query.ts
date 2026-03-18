@@ -35,7 +35,7 @@ function buildFlatFindQueryDraft(parsed: ParsedArgs): unknown {
     return {
       select: {
         type: 'node',
-        nodeKind: getStringOption(parsed, 'node-type'),
+        nodeType: getStringOption(parsed, 'node-type'),
         kind: getStringOption(parsed, 'kind'),
       },
       limit: getNumberOption(parsed, 'limit'),
@@ -47,7 +47,7 @@ function buildFlatFindQueryDraft(parsed: ParsedArgs): unknown {
   const select = kind
     ? {
         type: 'node',
-        nodeKind: selectorType,
+        nodeType: selectorType,
         kind,
       }
     : {

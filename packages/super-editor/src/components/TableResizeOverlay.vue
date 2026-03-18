@@ -78,6 +78,7 @@ const emit = defineEmits(['resize-start', 'resize-move', 'resize-end', 'resize-s
 
 const overlayEl = ref(null);
 const overlayRect = ref(null);
+const isViewingMode = () => props.editor?.options?.documentMode === 'viewing';
 /**
  * Parsed table metadata from data-table-boundaries attribute
  * @type {import('vue').Ref<{columns: Array<{i: number, x: number, w: number, min: number, r?: number}>} | null>}
@@ -727,6 +728,10 @@ function onHandleMouseDown(event, resizableBoundaryIndex) {
   event.preventDefault();
   event.stopPropagation();
 
+  if (isViewingMode()) {
+    return;
+  }
+
   if (!tableMetadata.value?.columns) return;
 
   const boundary = resizableBoundaries.value[resizableBoundaryIndex];
@@ -1114,6 +1119,10 @@ function updateCellColwidths(tr, tableNode, tablePos, affectedColumns, newWidths
 function onRowHandleMouseDown(event, rowBoundaryIndex) {
   event.preventDefault();
   event.stopPropagation();
+
+  if (isViewingMode()) {
+    return;
+  }
 
   const rowBoundary = resizableRowBoundaries.value[rowBoundaryIndex];
   if (!rowBoundary) return;

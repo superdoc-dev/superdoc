@@ -43,9 +43,8 @@ vi.mock('@superdoc/url-validation', () => {
   };
 });
 
-vi.mock('@core/super-converter/docx-helpers/document-rels.js', () => ({
-  findRelationshipIdFromTarget: vi.fn(),
-  insertNewRelationship: vi.fn(),
+vi.mock('@core/parts/adapters/relationships-mutation.js', () => ({
+  findOrCreateRelationship: vi.fn(),
 }));
 
 vi.mock('../../utils/rangeUtils.js', () => ({
@@ -66,10 +65,7 @@ vi.mock('../../utils/rangeUtils.js', () => ({
 }));
 
 import { sanitizeHref } from '@superdoc/url-validation';
-import {
-  findRelationshipIdFromTarget,
-  insertNewRelationship,
-} from '@core/super-converter/docx-helpers/document-rels.js';
+import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import {
   maybeAddProtocol,
   detectPasteUrl,
@@ -319,12 +315,14 @@ describe('handlePlainTextUrlPaste', () => {
     const editor = createMockEditor({ mode: 'docx' });
     const view = createMockView({ selectionFrom: 0, selectionTo: 0 });
 
-    findRelationshipIdFromTarget.mockReturnValue(null);
-    insertNewRelationship.mockReturnValue('rId5');
+    findOrCreateRelationship.mockReturnValue('rId5');
 
     handlePlainTextUrlPaste(editor, view, 'https://example.com', { href: 'https://example.com' });
 
-    expect(insertNewRelationship).toHaveBeenCalledWith('https://example.com', 'hyperlink', editor);
+    expect(findOrCreateRelationship).toHaveBeenCalledWith(editor, 'paste-link-normalizer:allocateRelationshipId', {
+      target: 'https://example.com',
+      type: 'hyperlink',
+    });
   });
 
   it('does not allocate rId for child editor', () => {
@@ -333,7 +331,7 @@ describe('handlePlainTextUrlPaste', () => {
 
     handlePlainTextUrlPaste(editor, view, 'https://example.com', { href: 'https://example.com' });
 
-    expect(insertNewRelationship).not.toHaveBeenCalled();
+    expect(findOrCreateRelationship).not.toHaveBeenCalled();
   });
 
   it('returns false when link mark type is not in schema', () => {
@@ -412,8 +410,7 @@ describe('normalizePastedLinks', () => {
 
   it('allocates fresh rId for main docx editor', () => {
     const editor = createMockEditor({ mode: 'docx' });
-    findRelationshipIdFromTarget.mockReturnValue(null);
-    insertNewRelationship.mockReturnValue('rId10');
+    findOrCreateRelationship.mockReturnValue('rId10');
 
     const { tr } = createTransactionWithLinks([
       { from: 0, to: 10, attrs: { href: 'https://example.com', rId: 'rId1' } },
@@ -421,7 +418,10 @@ describe('normalizePastedLinks', () => {
 
     normalizePastedLinks(tr, editor);
 
-    expect(insertNewRelationship).toHaveBeenCalledWith('https://example.com', 'hyperlink', editor);
+    expect(findOrCreateRelationship).toHaveBeenCalledWith(editor, 'paste-link-normalizer:allocateRelationshipId', {
+      target: 'https://example.com',
+      type: 'hyperlink',
+    });
 
     const addedMark = tr.addMark.mock.calls[0][2];
     expect(addedMark.attrs.rId).toBe('rId10');
@@ -435,7 +435,7 @@ describe('normalizePastedLinks', () => {
 
     normalizePastedLinks(tr, editor);
 
-    expect(insertNewRelationship).not.toHaveBeenCalled();
+    expect(findOrCreateRelationship).not.toHaveBeenCalled();
 
     const addedMark = tr.addMark.mock.calls[0][2];
     expect(addedMark.attrs.rId).toBeNull();

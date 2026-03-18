@@ -22,7 +22,7 @@ Delete an entire block node (paragraph, heading, list item, table, image, or sdt
 
 ## Expected result
 
-Returns a BlocksDeleteResult receipt confirming the block was removed from the document.
+Returns a BlocksDeleteResult receipt confirming the block was removed, including a deletedBlock summary with ordinal, nodeType, and textPreview.
 
 ## Input fields
 
@@ -53,6 +53,11 @@ Returns a BlocksDeleteResult receipt confirming the block was removed from the d
 | `deleted.kind` | `"block"` | yes | Constant: `"block"` |
 | `deleted.nodeId` | string | yes |  |
 | `deleted.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
+| `deletedBlock` | object | no |  |
+| `deletedBlock.nodeId` | string | no |  |
+| `deletedBlock.nodeType` | string | no |  |
+| `deletedBlock.ordinal` | number | no |  |
+| `deletedBlock.textPreview` | string \\| null | no | One of: string, null |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Example response
@@ -63,6 +68,10 @@ Returns a BlocksDeleteResult receipt confirming the block was removed from the d
     "kind": "block",
     "nodeId": "node-def456",
     "nodeType": "paragraph"
+  },
+  "deletedBlock": {
+    "nodeId": "node-def456",
+    "ordinal": 1
   },
   "success": true
 }
@@ -108,6 +117,31 @@ Returns a BlocksDeleteResult receipt confirming the block was removed from the d
     "deleted": {
       "$ref": "#/$defs/DeletableBlockNodeAddress"
     },
+    "deletedBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "type": "string"
+        },
+        "ordinal": {
+          "type": "number"
+        },
+        "textPreview": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
     "success": {
       "const": true
     }
@@ -128,6 +162,31 @@ Returns a BlocksDeleteResult receipt confirming the block was removed from the d
   "properties": {
     "deleted": {
       "$ref": "#/$defs/DeletableBlockNodeAddress"
+    },
+    "deletedBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "type": "string"
+        },
+        "ordinal": {
+          "type": "number"
+        },
+        "textPreview": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
     },
     "success": {
       "const": true

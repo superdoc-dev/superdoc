@@ -10,7 +10,7 @@ import { executeStructuralInsert, executeStructuralReplace, materializeFragment 
 import { enforceNestingPolicy } from './nesting-guard.js';
 import { validateDocumentFragment } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
-import type { SDFragment } from '@superdoc/document-api';
+import type { SDFragment, SelectionTarget, SDReplaceInput } from '@superdoc/document-api';
 
 let docData: Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -207,7 +207,7 @@ describe('replaceStructuredWrapper', () => {
     });
     const blockId = seed.insertedBlockIds[0]!;
 
-    const target = { kind: 'text' as const, blockId, range: { start: 0, end: 8 } };
+    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: blockId };
     const result = replaceStructuredWrapper(editor, {
       target,
       content: { type: 'paragraph', content: [{ type: 'text', text: 'replaced' }] },
@@ -215,7 +215,9 @@ describe('replaceStructuredWrapper', () => {
 
     expect(result.success).toBe(true);
     expect(result.resolution).toBeDefined();
-    expect(result.resolution!.target.nodeId).toBe(blockId);
+    // Block-targeted structural replace preserves BlockNodeAddress in the receipt.
+    expect(result.resolution!.target.kind).toBe('block');
+    expect((result.resolution!.target as { nodeId: string }).nodeId).toBe(blockId);
     expect(editor.state.doc.textContent).toContain('replaced');
     expect(editor.state.doc.textContent).not.toContain('old text');
   });
@@ -226,17 +228,52 @@ describe('replaceStructuredWrapper', () => {
     });
     const blockId = seed.insertedBlockIds[0]!;
 
-    const target = { kind: 'text' as const, blockId, range: { start: 0, end: 11 } };
+    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: blockId };
     const result = replaceStructuredWrapper(editor, {
       target,
       content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] },
     });
 
     expect(result.success).toBe(true);
-    // SDMutationReceipt resolution carries SDAddress (nodeId + anchor), not text snapshot.
-    // Verify the replace target was correctly resolved via the SDAddress.
     expect(result.resolution).toBeDefined();
-    expect(result.resolution!.target.nodeId).toBe(blockId);
+    // Block-targeted structural replace preserves BlockNodeAddress in the receipt.
+    expect(result.resolution!.target.kind).toBe('block');
+    expect((result.resolution!.target as { nodeId: string }).nodeId).toBe(blockId);
+  });
+
+  it('resolves a block-targeted replace after the paragraph subtype changes', () => {
+    // Seed a plain paragraph and capture its address as nodeType: 'paragraph'.
+    const seed = executeStructuralInsert(editor, {
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'will restyle' }] },
+    });
+    const blockId = seed.insertedBlockIds[0]!;
+    const staleAddress = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: blockId };
+
+    // Restyle the paragraph to a heading by setting styleId — this changes
+    // mapBlockNodeType() from 'paragraph' to 'heading', making the saved
+    // nodeType stale.
+    const { doc, tr } = editor.state;
+    doc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && node.attrs.sdBlockId === blockId) {
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          paragraphProperties: { ...node.attrs.paragraphProperties, styleId: 'Heading1' },
+        });
+        return false;
+      }
+    });
+    editor.dispatch(tr);
+
+    // The stale address (nodeType: 'paragraph') should still resolve because
+    // the structural target resolver falls back to nodeId-only lookup.
+    const result = replaceStructuredWrapper(editor, {
+      target: staleAddress,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'after restyle' }] },
+    });
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('after restyle');
+    expect(editor.state.doc.textContent).not.toContain('will restyle');
   });
 
   it('replaces a table block via the wrapper', () => {
@@ -255,7 +292,7 @@ describe('replaceStructuredWrapper', () => {
     });
     const tableBlockId = seed.insertedBlockIds[0]!;
 
-    const target = { kind: 'text' as const, blockId: tableBlockId, range: { start: 0, end: 0 } };
+    const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: tableBlockId };
     const result = replaceStructuredWrapper(editor, {
       target,
       content: { type: 'paragraph', content: [{ type: 'text', text: 'table replaced' }] },
@@ -288,7 +325,7 @@ describe('replaceStructuredWrapper', () => {
     expect(() => validateDocumentFragment(parsed.fragment)).not.toThrow();
 
     const result = replaceStructuredWrapper(editor, {
-      target: { kind: 'text', blockId: tableBlockId, range: { start: 0, end: 0 } },
+      target: { kind: 'block', nodeType: 'table' as const, nodeId: tableBlockId },
       content: parsed.fragment,
     });
 
@@ -315,7 +352,7 @@ describe('replaceStructuredWrapper', () => {
     const blockId = seed.insertedBlockIds[0]!;
     const textBefore = editor.state.doc.textContent;
 
-    const target = { kind: 'text' as const, blockId, range: { start: 0, end: 7 } };
+    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: blockId };
     const result = replaceStructuredWrapper(
       editor,
       {
@@ -340,7 +377,7 @@ describe('replaceStructuredWrapper', () => {
     const result = replaceStructuredWrapper(
       editor,
       {
-        target: { kind: 'text', blockId, range: { start: 0, end: 11 } },
+        target: { kind: 'block', nodeType: 'paragraph' as const, nodeId: blockId },
         content: { type: 'paragraph', content: [{ type: 'text', text: 'tracked new' }] },
       },
       { changeMode: 'tracked' },
@@ -361,7 +398,7 @@ describe('replaceStructuredWrapper', () => {
     const paragraphInCellId = requireFirstParagraphInsideTableCellBlockId(editor);
 
     const input = {
-      target: { kind: 'text' as const, blockId: paragraphInCellId, range: { start: 0, end: 0 } },
+      target: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: paragraphInCellId },
       content: tableFragment,
     };
 
@@ -389,7 +426,7 @@ describe('insertStructuredWrapper — placement receipt', () => {
     });
     const blockId = seed.insertedBlockIds[0]!;
 
-    const target = { kind: 'text' as const, blockId, range: { start: 0, end: 6 } };
+    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: blockId };
     const result = insertStructuredWrapper(editor, {
       target,
       content: { type: 'paragraph', content: [{ type: 'text', text: 'before' }] },
@@ -397,7 +434,7 @@ describe('insertStructuredWrapper — placement receipt', () => {
     });
 
     expect(result.success).toBe(true);
-    // "before" placement: receipt carries a valid SDAddress resolution.
+    // "before" placement: receipt carries a valid TextAddress resolution.
     expect(result.resolution).toBeDefined();
     expect(result.resolution!.target).toBeDefined();
   });
@@ -408,7 +445,7 @@ describe('insertStructuredWrapper — placement receipt', () => {
     });
     const blockId = seed.insertedBlockIds[0]!;
 
-    const target = { kind: 'text' as const, blockId, range: { start: 0, end: 6 } };
+    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: blockId };
     const resultAfter = insertStructuredWrapper(editor, {
       target,
       content: { type: 'paragraph', content: [{ type: 'text', text: 'after' }] },
@@ -423,7 +460,7 @@ describe('insertStructuredWrapper — placement receipt', () => {
 
     expect(resultAfter.success).toBe(true);
     expect(resultBefore.success).toBe(true);
-    // Both inserts target the same block, so the SDAddress anchors reflect insertion points.
+    // Both inserts target the same block, so the TextAddress anchors reflect insertion points.
     // Verify both receipts carry valid resolution.
     expect(resultBefore.resolution).toBeDefined();
     expect(resultAfter.resolution).toBeDefined();
@@ -456,7 +493,7 @@ describe('insertStructuredWrapper — placement receipt', () => {
     const cellBlockId = requireFirstTableCellBlockId(editor);
 
     const input = {
-      target: { kind: 'text' as const, blockId: cellBlockId, range: { start: 0, end: 0 } },
+      target: { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: cellBlockId },
       content: tableFragment,
       placement: 'insideStart' as const,
     };
@@ -1063,5 +1100,348 @@ describe('enforceNestingPolicy — SDM/1 kind dispatch', () => {
         /table inside another table/,
       );
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-block structural replace (SelectionTarget, ref, receipt accuracy)
+// ---------------------------------------------------------------------------
+
+describe('replaceStructuredWrapper — multi-block and locator forms', () => {
+  /**
+   * Seeds N paragraphs and returns their blockIds in document order.
+   */
+  function seedParagraphs(texts: string[]): string[] {
+    const ids: string[] = [];
+    for (const text of texts) {
+      const seed = executeStructuralInsert(editor, {
+        content: { type: 'paragraph', content: [{ type: 'text', text }] },
+      });
+      ids.push(seed.insertedBlockIds[0]!);
+    }
+    return ids;
+  }
+
+  /**
+   * Builds a SelectionTarget spanning from the start of blockA to the end of blockB.
+   */
+  function spanSelection(
+    startBlockId: string,
+    startOffset: number,
+    endBlockId: string,
+    endOffset: number,
+  ): SelectionTarget {
+    return {
+      kind: 'selection',
+      start: { kind: 'text', blockId: startBlockId, offset: startOffset },
+      end: { kind: 'text', blockId: endBlockId, offset: endOffset },
+    };
+  }
+
+  it('replaces multiple blocks when target is a cross-block SelectionTarget', () => {
+    const ids = seedParagraphs(['alpha', 'bravo', 'charlie']);
+
+    const target = spanSelection(ids[0]!, 0, ids[2]!, 7);
+    const result = replaceStructuredWrapper(editor, {
+      target,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'merged' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('merged');
+    expect(editor.state.doc.textContent).not.toContain('alpha');
+    expect(editor.state.doc.textContent).not.toContain('bravo');
+    expect(editor.state.doc.textContent).not.toContain('charlie');
+  });
+
+  it('includes selectionTarget in receipt for cross-block SelectionTarget', () => {
+    const ids = seedParagraphs(['first', 'second']);
+
+    const target = spanSelection(ids[0]!, 0, ids[1]!, 6);
+    const result = replaceStructuredWrapper(editor, {
+      target,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'combined' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(result.resolution).toBeDefined();
+    // Cross-block receipt should carry selectionTarget.
+    expect(result.resolution!.selectionTarget).toBeDefined();
+    expect(result.resolution!.selectionTarget!.kind).toBe('selection');
+  });
+
+  it('replaces a single block via raw nodeId ref', () => {
+    const ids = seedParagraphs(['ref-target']);
+
+    const result = replaceStructuredWrapper(editor, {
+      ref: ids[0]!,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'ref-replaced' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('ref-replaced');
+    expect(editor.state.doc.textContent).not.toContain('ref-target');
+  });
+
+  it('ref-based structural replace produces a valid resolution without extra fields', () => {
+    const ids = seedParagraphs(['no-requested']);
+
+    const result = replaceStructuredWrapper(editor, {
+      ref: ids[0]!,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'done' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(result.resolution).toBeDefined();
+    expect(result.resolution!.target).toBeDefined();
+    expect(result.resolution!.range).toBeDefined();
+  });
+
+  it('replaces a single block via single-block SelectionTarget (no selectionTarget in receipt)', () => {
+    const ids = seedParagraphs(['solo']);
+
+    const target = spanSelection(ids[0]!, 0, ids[0]!, 4);
+    const result = replaceStructuredWrapper(editor, {
+      target,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'replaced-solo' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('replaced-solo');
+    // Single-block selection: selectionTarget should be absent.
+    expect(result.resolution!.selectionTarget).toBeUndefined();
+  });
+
+  it('throws INVALID_TARGET when neither target nor ref is provided', () => {
+    expect(() =>
+      replaceStructuredWrapper(editor, {
+        content: { type: 'paragraph', content: [{ type: 'text', text: 'orphan' }] },
+      } as SDReplaceInput),
+    ).toThrow(DocumentApiAdapterError);
+  });
+
+  it('supports dry-run for cross-block SelectionTarget without mutating', () => {
+    const ids = seedParagraphs(['keep-a', 'keep-b']);
+    const textBefore = editor.state.doc.textContent;
+
+    const target = spanSelection(ids[0]!, 0, ids[1]!, 6);
+    const result = replaceStructuredWrapper(
+      editor,
+      {
+        target,
+        content: { type: 'paragraph', content: [{ type: 'text', text: 'gone' }] },
+      } as SDReplaceInput,
+      { dryRun: true },
+    );
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toBe(textBefore);
+  });
+
+  it('receipt reflects expanded block boundaries for partial-offset cross-block selection', () => {
+    const ids = seedParagraphs(['hello', 'world']);
+
+    // Partial selection: offset 2 in first block, offset 3 in second block.
+    // Structural replace expands to full block boundaries.
+    const target = spanSelection(ids[0]!, 2, ids[1]!, 3);
+    const result = replaceStructuredWrapper(editor, {
+      target,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'expanded' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    // Both blocks should be fully replaced despite partial offsets.
+    expect(editor.state.doc.textContent).toContain('expanded');
+    expect(editor.state.doc.textContent).not.toContain('hello');
+    expect(editor.state.doc.textContent).not.toContain('world');
+
+    // The effective selectionTarget should describe full block boundaries
+    // (offset 0 on first block, full length on last block), not the
+    // original partial offsets.
+    const sel = result.resolution!.selectionTarget!;
+    expect(sel).toBeDefined();
+    expect(sel.kind).toBe('selection');
+    const startPt = sel.start as { kind: 'text'; blockId: string; offset: number };
+    const endPt = sel.end as { kind: 'text'; blockId: string; offset: number };
+    expect(startPt.offset).toBe(0);
+    expect(endPt.offset).toBe(5); // 'world'.length
+  });
+
+  it('receipt reflects expanded block boundary for partial single-block selection', () => {
+    const ids = seedParagraphs(['abcdef']);
+
+    // Partial single-block selection: offset 2 to 4.
+    // Structural replace expands to the full block.
+    const target = spanSelection(ids[0]!, 2, ids[0]!, 4);
+    const result = replaceStructuredWrapper(editor, {
+      target,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'full' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('full');
+    expect(editor.state.doc.textContent).not.toContain('abcdef');
+
+    // Single-block: no selectionTarget needed.
+    expect(result.resolution!.selectionTarget).toBeUndefined();
+    // The target should report full block (offset 0), not the partial offset.
+    expect(result.resolution!.target.blockId).toBe(ids[0]);
+  });
+
+  it('multi-segment text: ref replaces all segments and includes selectionTarget', () => {
+    const ids = seedParagraphs(['seg-one', 'seg-two', 'seg-three']);
+
+    // Build a synthetic multi-segment V3 text ref.
+    const refPayload = {
+      v: 3,
+      rev: 'ignored', // structural replace does not check ref revision
+      scope: 'body',
+      segments: [
+        { blockId: ids[0]!, blockIndex: 0, runIndex: 0, from: 0, to: 7 },
+        { blockId: ids[1]!, blockIndex: 1, runIndex: 0, from: 0, to: 7 },
+        { blockId: ids[2]!, blockIndex: 2, runIndex: 0, from: 0, to: 9 },
+      ],
+    };
+    const ref = `text:${btoa(JSON.stringify(refPayload))}`;
+
+    const result = replaceStructuredWrapper(editor, {
+      ref,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'all-merged' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('all-merged');
+    expect(editor.state.doc.textContent).not.toContain('seg-one');
+    expect(editor.state.doc.textContent).not.toContain('seg-two');
+    expect(editor.state.doc.textContent).not.toContain('seg-three');
+
+    // Multi-block ref: receipt should carry selectionTarget.
+    expect(result.resolution!.selectionTarget).toBeDefined();
+    expect(result.resolution!.selectionTarget!.kind).toBe('selection');
+  });
+
+  it('single-segment text: ref replaces one block without selectionTarget', () => {
+    const ids = seedParagraphs(['only-one']);
+
+    const refPayload = {
+      v: 3,
+      rev: 'ignored',
+      scope: 'body',
+      segments: [{ blockId: ids[0]!, blockIndex: 0, runIndex: 0, from: 0, to: 8 }],
+    };
+    const ref = `text:${btoa(JSON.stringify(refPayload))}`;
+
+    const result = replaceStructuredWrapper(editor, {
+      ref,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'single-ref' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('single-ref');
+    expect(editor.state.doc.textContent).not.toContain('only-one');
+
+    // Single-segment: no selectionTarget.
+    expect(result.resolution!.selectionTarget).toBeUndefined();
+  });
+
+  it('receipt emits nodeEdge endpoint when replacement boundary lands on a table', () => {
+    // Seed a paragraph followed by a table.
+    const paraIds = seedParagraphs(['before-table']);
+    const tableSeed = executeStructuralInsert(editor, {
+      content: {
+        type: 'table',
+        rows: [
+          {
+            type: 'tableRow',
+            cells: [{ type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'cell' }] }] }],
+          },
+        ],
+      },
+    });
+    const tableId = tableSeed.insertedBlockIds[0]!;
+
+    // Cross-block SelectionTarget: text start on paragraph, nodeEdge end on table.
+    const target: SelectionTarget = {
+      kind: 'selection',
+      start: { kind: 'text', blockId: paraIds[0]!, offset: 0 },
+      end: { kind: 'nodeEdge', node: { kind: 'block', nodeType: 'table', nodeId: tableId }, edge: 'after' },
+    };
+
+    const result = replaceStructuredWrapper(editor, {
+      target,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'replaced-both' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('replaced-both');
+    expect(editor.state.doc.textContent).not.toContain('before-table');
+    expect(editor.state.doc.textContent).not.toContain('cell');
+
+    // The effective selectionTarget should use kind:'text' for the paragraph
+    // and kind:'nodeEdge' for the table.
+    const sel = result.resolution!.selectionTarget!;
+    expect(sel).toBeDefined();
+    expect(sel.kind).toBe('selection');
+    expect(sel.start.kind).toBe('text');
+    expect(sel.end.kind).toBe('nodeEdge');
+    const endPt = sel.end as {
+      kind: 'nodeEdge';
+      node: { kind: 'block'; nodeType: string; nodeId: string };
+      edge: string;
+    };
+    expect(endPt.node.nodeType).toBe('table');
+    expect(endPt.edge).toBe('after');
+  });
+
+  it('receipt emits nodeEdge start when first boundary block is a table', () => {
+    // Seed a table, then explicitly place a paragraph after it (default insert
+    // targets the last text block, which would place it before the table).
+    const tableSeed = executeStructuralInsert(editor, {
+      content: {
+        type: 'table',
+        rows: [
+          {
+            type: 'tableRow',
+            cells: [
+              { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'tdata' }] }] },
+            ],
+          },
+        ],
+      },
+    });
+    const tableId = tableSeed.insertedBlockIds[0]!;
+
+    // Place tail paragraph explicitly after the table.
+    const tailSeed = executeStructuralInsert(editor, {
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'tail-text' }] },
+      target: { kind: 'text', blockId: tableId, range: { start: 0, end: 0 } },
+      placement: 'after',
+    });
+    const tailId = tailSeed.insertedBlockIds[0]!;
+
+    // Cross-block SelectionTarget: nodeEdge start on table, text end on tail paragraph.
+    const target: SelectionTarget = {
+      kind: 'selection',
+      start: { kind: 'nodeEdge', node: { kind: 'block', nodeType: 'table', nodeId: tableId }, edge: 'before' },
+      end: { kind: 'text', blockId: tailId, offset: 9 },
+    };
+
+    const result = replaceStructuredWrapper(editor, {
+      target,
+      content: { type: 'paragraph', content: [{ type: 'text', text: 'replaced-all' }] },
+    } as SDReplaceInput);
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('replaced-all');
+
+    // The effective selectionTarget should use kind:'nodeEdge' for the table
+    // and kind:'text' for the paragraph.
+    const sel = result.resolution!.selectionTarget!;
+    expect(sel).toBeDefined();
+    expect(sel.start.kind).toBe('nodeEdge');
+    expect(sel.end.kind).toBe('text');
+    const startPt = sel.start as { kind: 'nodeEdge'; node: { kind: 'block'; nodeType: string }; edge: string };
+    expect(startPt.node.nodeType).toBe('table');
+    expect(startPt.edge).toBe('before');
   });
 });

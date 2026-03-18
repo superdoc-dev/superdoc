@@ -22,6 +22,30 @@ Minimal, self-contained examples showing how to use SuperDoc.
 | [collaboration](./collaboration) | Real-time editing with various Yjs providers | [Guides](https://docs.superdoc.dev/guides) |
 | [headless](./headless) | Server-side AI redlining with Node.js | [AI Agents](https://docs.superdoc.dev/getting-started/ai-agents) |
 
+## AI Integrations
+
+Connect SuperDoc's Document Engine to cloud AI platforms and agent frameworks.
+
+### Cloud Platforms
+
+| Integration | Description | Docs |
+|-------------|-------------|------|
+| [AWS Bedrock](./ai/bedrock) | Bedrock Converse API with tool use | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
+| [Google Vertex AI](./ai/vertex) | Gemini with function calling | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
+
+### Agent Frameworks
+
+| Integration | Description | Docs |
+|-------------|-------------|------|
+| [Vercel AI SDK](./ai/vercel-ai) | Any model via the Vercel AI SDK | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
+| [LangChain](./ai/langchain) | LangGraph ReAct agent | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
+
+### Demos
+
+| Example | Description | Docs |
+|---------|-------------|------|
+| [Contract Review](./ai/contract-review) | Full demo: agentic + headless contract review | [AI Agents](https://docs.superdoc.dev/getting-started/ai-agents) |
+
 ## Running an example
 
 ```bash

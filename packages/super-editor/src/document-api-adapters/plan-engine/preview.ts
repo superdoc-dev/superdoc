@@ -62,6 +62,9 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
         if ('spanResolutions' in outcome.data && outcome.data.spanResolutions?.length) {
           preview.spanResolutions = outcome.data.spanResolutions;
         }
+        if ('selectionResolutions' in outcome.data && outcome.data.selectionResolutions?.length) {
+          preview.selectionResolutions = outcome.data.selectionResolutions;
+        }
       }
 
       stepPreviews.push(preview);

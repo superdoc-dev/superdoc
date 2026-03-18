@@ -30,6 +30,11 @@ export type ConverterContext = {
    */
   footnoteNumberById?: Record<string, number>;
   /**
+   * Optional mapping from OOXML endnote id -> display number.
+   * Same semantics as footnoteNumberById but for endnotes.
+   */
+  endnoteNumberById?: Record<string, number>;
+  /**
    * Paragraph properties inherited from the containing table's style.
    * Per OOXML spec, table styles can define pPr that applies to all
    * paragraphs within the table. This is set by the table converter

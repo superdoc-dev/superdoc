@@ -1,12 +1,14 @@
 <script setup>
-import { computed, ref, h, watch, onBeforeUnmount } from 'vue';
+import { computed, getCurrentInstance, ref, watch, onBeforeUnmount } from 'vue';
 import ToolbarButton from './ToolbarButton.vue';
 import ToolbarSeparator from './ToolbarSeparator.vue';
 import OverflowMenu from './OverflowMenu.vue';
-import { NDropdown, NTooltip } from 'naive-ui';
+import ToolbarDropdown from './ToolbarDropdown.vue';
+import SdTooltip from './SdTooltip.vue';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 
 const emit = defineEmits(['command', 'item-clicked', 'dropdown-update-show']);
+const { proxy } = getCurrentInstance();
 
 const toolbarItemRefs = ref([]);
 const buttonGroupRef = ref(null);
@@ -67,11 +69,44 @@ const isButton = (item) => item.type === 'button';
 const isDropdown = (item) => item.type === 'dropdown';
 const isSeparator = (item) => item.type === 'separator';
 const isOverflow = (item) => item.type === 'overflow';
+
+const getExpanded = (item) => {
+  if (!item) return false;
+  const expand = item.expand;
+  if (typeof expand === 'object' && expand !== null && 'value' in expand) {
+    return Boolean(expand.value);
+  }
+  return Boolean(expand);
+};
+
+const setExpanded = (item, open) => {
+  if (!item?.expand) return;
+  item.expand.value = open;
+};
+
 const handleToolbarButtonClick = (item, argument = null) => {
-  emit('item-clicked');
-  currentItem.value = item;
-  currentItem.value.expand = !currentItem.value.expand;
   if (item.disabled.value) return;
+
+  if (isOverflow(item)) {
+    const willOpen = !getExpanded(item);
+    if (willOpen) {
+      closeDropdowns();
+    }
+    setExpanded(item, willOpen);
+    currentItem.value = willOpen ? item : null;
+    emit('item-clicked');
+    return;
+  }
+
+  if (isDropdown(item)) {
+    return;
+  }
+
+  if (currentItem.value && isDropdown(currentItem.value) && getExpanded(currentItem.value)) {
+    closeDropdowns();
+  }
+
+  emit('item-clicked');
   emit('command', { item, argument });
 };
 
@@ -82,8 +117,17 @@ const handleToolbarButtonTextSubmit = (item, argument) => {
 };
 
 const closeDropdowns = () => {
-  if (!currentItem.value) return;
-  currentItem.value.expand = false;
+  const toolbarItems = proxy?.$toolbar?.toolbarItems || [];
+  const overflowItems = proxy?.$toolbar?.overflowItems || [];
+  const allItems = [...toolbarItems, ...overflowItems];
+
+  const itemsToClose = allItems.length ? allItems : props.toolbarItems;
+  itemsToClose.forEach((toolbarItem) => {
+    const shouldCloseOverflow = isOverflow(toolbarItem) && !props.fromOverflow;
+    if (isDropdown(toolbarItem) || shouldCloseOverflow) {
+      setExpanded(toolbarItem, false);
+    }
+  });
   currentItem.value = null;
 };
 
@@ -97,11 +141,12 @@ const handleSelect = (item, option) => {
 const dropdownOptions = (item) => {
   if (!item.nestedOptions?.value?.length) return [];
   return item.nestedOptions.value.map((option) => {
+    const isSelected = option?.type !== 'render' && item.selectedValue.value === option.key;
     return {
       ...option,
       props: {
         ...option.props,
-        class: item.selectedValue.value === option.key ? 'selected' : '',
+        class: isSelected ? 'selected' : '',
       },
     };
   });
@@ -205,21 +250,30 @@ const handleFocus = (e) => {
   }
 };
 
-const handleDropdownUpdateShow = (open) => {
+const handleDropdownUpdateShowForItem = (open, item) => {
+  emit('item-clicked');
+
   if (!open) {
     closeDropdowns();
+    emit('dropdown-update-show', false);
+    return;
   }
-  emit('dropdown-update-show', open);
+
+  closeDropdowns();
+  currentItem.value = item;
+  setExpanded(item, true);
+
+  emit('dropdown-update-show', true);
 };
 
 const handleDocumentPointerDown = (event) => {
   if (!currentItem.value) return;
 
   const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
+  if (!(target instanceof Element)) return;
 
-  // Naive UI dropdown content is rendered in a portal outside the toolbar group.
-  // Treat it as "inside" so option clicks do not close the menu before selection.
+  // Dropdown content is teleported outside the toolbar group.
+  // Treat menu clicks as "inside" so option clicks do not close before selection.
   if (target.closest('.sd-toolbar-dropdown-menu')) return;
   if (buttonGroupRef.value?.contains(target)) return;
 
@@ -227,10 +281,7 @@ const handleDocumentPointerDown = (event) => {
 };
 
 const isCurrentItemExpanded = () => {
-  if (!currentItem.value) return false;
-  const { expand } = currentItem.value;
-  if (typeof expand === 'object' && expand !== null) return Boolean(expand.value);
-  return Boolean(expand);
+  return getExpanded(currentItem.value);
 };
 
 watch(
@@ -270,45 +321,48 @@ onBeforeUnmount(() => {
       <ToolbarSeparator v-if="isSeparator(item)" style="width: 20px" />
 
       <!-- Toolbar button -->
-      <n-dropdown
+      <ToolbarDropdown
         v-if="isDropdown(item) && item.nestedOptions?.value?.length"
         :options="dropdownOptions(item)"
-        :trigger="item.disabled.value ? null : 'click'"
-        :show="item.expand.value"
+        :disabled="item.disabled.value"
+        :show="getExpanded(item)"
         :content-style="{ fontFamily: props.uiFontFamily }"
-        size="medium"
         placement="bottom-start"
-        class="toolbar-button toolbar-dropdown sd-editor-toolbar-dropdown"
-        :class="{ 'high-contrast': isHighContrastMode }"
+        class="toolbar-button sd-editor-toolbar-dropdown"
         @select="(key, option) => handleSelect(item, option)"
-        @update-show="handleDropdownUpdateShow"
+        @update:show="(open) => handleDropdownUpdateShowForItem(open, item)"
         :style="item.dropdownStyles.value"
         :menu-props="
           () => ({
             role: 'menu',
             style: { fontFamily: props.uiFontFamily },
-            class: 'sd-toolbar-dropdown-menu',
+            class: ['sd-toolbar-dropdown-menu', { 'high-contrast': isHighContrastMode }],
           })
         "
         :node-props="(option) => getDropdownAttributes(option, item)"
       >
-        <n-tooltip trigger="hover" :disabled="!item.tooltip?.value" :content-style="{ fontFamily: props.uiFontFamily }">
-          <template #trigger>
-            <ToolbarButton
-              :toolbar-item="item"
-              :disabled="item.disabled.value"
-              @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
-              @buttonClick="handleToolbarButtonClick(item)"
-            />
-          </template>
-          <div>
-            {{ item.tooltip }}
-            <span v-if="item.disabled.value">(disabled)</span>
-          </div>
-        </n-tooltip>
-      </n-dropdown>
+        <template #trigger>
+          <SdTooltip
+            trigger="hover"
+            :disabled="!item.tooltip?.value"
+            :content-style="{ fontFamily: props.uiFontFamily }"
+          >
+            <template #trigger>
+              <ToolbarButton
+                :toolbar-item="item"
+                :disabled="item.disabled.value"
+                @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
+              />
+            </template>
+            <div>
+              {{ item.tooltip }}
+              <span v-if="item.disabled.value">(disabled)</span>
+            </div>
+          </SdTooltip>
+        </template>
+      </ToolbarDropdown>
 
-      <n-tooltip
+      <SdTooltip
         trigger="hover"
         v-else-if="isButton(item)"
         class="sd-editor-toolbar-tooltip"
@@ -326,7 +380,7 @@ onBeforeUnmount(() => {
           {{ item.tooltip }}
           <span v-if="item.disabled.value">(disabled)</span>
         </div>
-      </n-tooltip>
+      </SdTooltip>
 
       <!-- Overflow menu -->
       <OverflowMenu
@@ -339,65 +393,6 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-<style lang="postcss">
-.sd-editor-toolbar-dropdown {
-  border-radius: 8px;
-  min-width: 80px;
-  cursor: pointer;
-}
-
-.sd-editor-toolbar-dropdown {
-  &.high-contrast {
-    .n-dropdown-option-body {
-      &:hover {
-        &::before,
-        &::after {
-          background-color: #000 !important;
-        }
-      }
-
-      &.selected[data-item='btn-fontFamily-option'],
-      &.selected[data-item='btn-fontSize-option'] {
-        &::before,
-        &::after {
-          background-color: #000 !important;
-        }
-      }
-
-      &__label {
-        &:hover {
-          color: #fff !important;
-        }
-      }
-    }
-  }
-
-  .n-dropdown-option-body {
-    &:hover {
-      &::before,
-      &::after {
-        background-color: #d8dee5 !important;
-      }
-    }
-
-    &.selected[data-item='btn-fontFamily-option'],
-    &.selected[data-item='btn-fontSize-option'] {
-      &::before,
-      &::after {
-        background-color: #d8dee5 !important;
-      }
-    }
-  }
-}
-
-.sd-editor-toolbar-tooltip,
-.sd-editor-toolbar-tooltip.n-popover {
-  background-color: #333333 !important;
-  font-size: 14px;
-  border-radius: 8px !important;
-}
-</style>
 
 <style lang="postcss" scoped>
 .button-group {

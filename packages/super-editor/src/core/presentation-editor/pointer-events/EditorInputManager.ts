@@ -17,6 +17,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { CellSelection } from 'prosemirror-tables';
 import type { Editor } from '../../Editor.js';
 import type { Layout, FlowBlock, Measure } from '@superdoc/contracts';
+import { comments_module_events } from '@superdoc/common';
 import type { CellAnchorState, PendingMarginClick, HeaderFooterRegion } from '../types.js';
 import type { PositionHit, PageGeometryHelper, TableHitResult } from '@superdoc/layout-bridge';
 import type { SelectionDebugHudState } from '../selection/SelectionDebug.js';
@@ -38,6 +39,7 @@ import {
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildInlineImagePmSelector } from '@superdoc/painter-dom';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
+import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
 // =============================================================================
 // Constants
@@ -49,6 +51,7 @@ const AUTO_SCROLL_EDGE_PX = 32;
 const AUTO_SCROLL_MAX_SPEED_PX = 24;
 /** Tolerance for detecting scrollability to handle sub-pixel rounding in browsers */
 const SCROLL_DETECTION_TOLERANCE_PX = 1;
+const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
@@ -59,6 +62,49 @@ const clamp = (value: number, min: number, max: number): number => Math.max(min,
  */
 function isFootnoteBlockId(blockId: string): boolean {
   return typeof blockId === 'string' && (blockId.startsWith('footnote-') || isSemanticFootnoteBlockId(blockId));
+}
+
+function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
+  if (!(target instanceof Element)) {
+    return [];
+  }
+
+  const highlight = target.closest(COMMENT_HIGHLIGHT_SELECTOR);
+  const threadIds = highlight?.getAttribute('data-comment-ids');
+
+  if (!threadIds) {
+    return [];
+  }
+
+  return threadIds
+    .split(',')
+    .map((threadId) => threadId.trim())
+    .filter(Boolean);
+}
+
+function getActiveCommentThreadId(editor: Editor): string | null {
+  const pluginState = CommentsPluginKey.getState(editor.state) as { activeThreadId?: unknown } | null;
+  const activeThreadId = pluginState?.activeThreadId;
+
+  if (typeof activeThreadId !== 'string' || activeThreadId.length === 0) {
+    return null;
+  }
+
+  return activeThreadId;
+}
+
+function shouldIgnoreRepeatClickOnActiveComment(target: EventTarget | null, activeThreadId: string | null): boolean {
+  if (!activeThreadId) {
+    return false;
+  }
+
+  const clickedThreadIds = getCommentHighlightThreadIds(target);
+
+  if (clickedThreadIds.length !== 1) {
+    return false;
+  }
+
+  return clickedThreadIds[0] === activeThreadId;
 }
 
 // =============================================================================
@@ -878,6 +924,11 @@ export class EditorInputManager {
       return;
     }
 
+    const editor = this.#deps.getEditor();
+    if (this.#handleRepeatClickOnActiveComment(event, target, editor)) {
+      return;
+    }
+
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) {
       this.#handleClickWithoutLayout(event, isDraggableAnnotation);
@@ -932,7 +983,6 @@ export class EditorInputManager {
       pageGeometryHelper ?? undefined,
     );
 
-    const editor = this.#deps.getEditor();
     const doc = editor.state?.doc;
     const epochMapper = this.#deps.getEpochMapper();
     const mapped =
@@ -1231,6 +1281,20 @@ export class EditorInputManager {
       event.stopPropagation();
       this.#handleAnnotationDoubleClick(event, annotationEl);
       return;
+    }
+
+    // When editing a header/footer, let the ProseMirror editor inside the
+    // overlay handle double-click word/paragraph selection. Do not re-run
+    // header/footer hit-testing for double-clicks that occur inside the
+    // active editor host.
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      const activeEditorHost = this.#deps.getHeaderFooterSession()?.overlayManager?.getActiveEditorHost?.();
+      const clickedInsideEditorHost =
+        activeEditorHost && (activeEditorHost.contains(target as Node) || activeEditorHost === target);
+      if (clickedInsideEditorHost) {
+        return;
+      }
     }
 
     const layoutState = this.#deps.getLayoutState();
@@ -2035,5 +2099,22 @@ export class EditorInputManager {
 
     editorDom.focus();
     view?.focus();
+  }
+
+  #handleRepeatClickOnActiveComment(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
+    const activeThreadId = getActiveCommentThreadId(editor);
+
+    if (!shouldIgnoreRepeatClickOnActiveComment(target, activeThreadId)) {
+      return false;
+    }
+
+    event.preventDefault();
+    this.#focusEditor();
+    editor.emit?.('commentsUpdate', {
+      type: comments_module_events.SELECTED,
+      activeCommentId: activeThreadId,
+    });
+
+    return true;
   }
 }

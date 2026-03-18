@@ -60,6 +60,30 @@ export const BookmarkStart = Node.create({
           return {};
         },
       },
+
+      /**
+       * @category Attribute
+       * @param {number|string} [colFirst] - First table column index for table-column bookmarks
+       */
+      colFirst: {
+        default: null,
+      },
+
+      /**
+       * @category Attribute
+       * @param {number|string} [colLast] - Last table column index for table-column bookmarks
+       */
+      colLast: {
+        default: null,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string} [displacedByCustomXml] - Indicates if bookmark was displaced by custom XML
+       */
+      displacedByCustomXml: {
+        default: null,
+      },
     };
   },
 
@@ -119,6 +143,76 @@ export const BookmarkStart = Node.create({
             return true;
           }
           return false;
+        },
+
+      renameBookmark:
+        (name, newName) =>
+        ({ state, dispatch }) => {
+          let found = false;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'bookmarkStart' && node.attrs.name === name) {
+              if (dispatch) {
+                const tr = state.tr.setNodeMarkup(pos, undefined, {
+                  ...node.attrs,
+                  name: newName,
+                });
+                dispatch(tr);
+              }
+              found = true;
+              return false;
+            }
+          });
+          return found;
+        },
+
+      removeBookmark:
+        (name) =>
+        ({ state, dispatch }) => {
+          let startPos = null;
+          let startNode = null;
+          let bookmarkId = null;
+
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'bookmarkStart' && node.attrs.name === name) {
+              startPos = pos;
+              startNode = node;
+              bookmarkId = node.attrs.id;
+              return false;
+            }
+          });
+
+          if (startPos === null || startNode === null) return false;
+
+          if (dispatch) {
+            const tr = state.tr;
+
+            // Find and delete bookmarkEnd with matching id
+            if (bookmarkId) {
+              let endPos = null;
+              let endNode = null;
+              tr.doc.descendants((node, pos) => {
+                if (node.type.name === 'bookmarkEnd' && node.attrs.id === bookmarkId) {
+                  endPos = pos;
+                  endNode = node;
+                  return false;
+                }
+              });
+              // Delete end first (if after start) to avoid position shifts
+              if (endPos !== null && endNode !== null && endPos > startPos) {
+                tr.delete(endPos, endPos + endNode.nodeSize);
+              }
+            }
+
+            // Delete bookmarkStart (position may have shifted if end was before)
+            const currentStart = tr.doc.nodeAt(startPos);
+            if (currentStart) {
+              tr.delete(startPos, startPos + currentStart.nodeSize);
+            }
+
+            dispatch(tr);
+          }
+
+          return true;
         },
     };
   },

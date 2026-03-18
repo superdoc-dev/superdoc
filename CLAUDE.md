@@ -59,7 +59,8 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 |------|----------|
 | React integration | `packages/react/src/SuperDocEditor.tsx` |
 | Editing features | `super-editor/src/extensions/` |
-| Presentation mode visuals | `layout-engine/painters/dom/src/renderer.ts` |
+| Presentation mode visuals | `layout-engine/painters/dom/src/features/feature-registry.ts` → feature module |
+| Rendering orchestration | `layout-engine/painters/dom/src/renderer.ts` |
 | DOCX import/export | `super-editor/src/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
 | Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
@@ -79,7 +80,7 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 
 ## When to Modify Which System
 
-- **Visual rendering**: Modify `pm-adapter/` (to feed data) and/or `painters/dom/` (to render it)
+- **Visual rendering**: Check `painters/dom/src/features/feature-registry.ts` to find the feature module, then modify it. If no module exists yet, create one (see layout-engine CLAUDE.md). Feed data via `pm-adapter/`
 - **Style resolution**: Modify `style-engine/` — called by pm-adapter during conversion
 - **Editing commands/behavior**: Modify `super-editor/src/extensions/`
 - **State bridging**: Modify `PresentationEditor.ts`
@@ -111,13 +112,31 @@ Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., 
 - `pnpm dev` - Start dev server (from examples/)
 - `pnpm run generate:all` - Generate all derived artifacts (schemas, SDK clients, tool catalogs, reference docs)
 
+## AI Eval Suite
+
+The `evals/` directory contains a Promptfoo-based evaluation suite for validating AI tool call quality.
+
+| Command | What it does | Cost |
+|---------|-------------|------|
+| `pnpm --filter @superdoc-testing/evals run eval` | Run deterministic evals (reading + argument tests) | ~$0.30 |
+| `pnpm --filter @superdoc-testing/evals run eval:reading` | Run reading tool tests only | ~$0.15 |
+| `pnpm --filter @superdoc-testing/evals run eval:gdpval` | Run GDPval benchmark (Model+SuperDoc vs Model-Only) | ~$1-2 |
+| `pnpm --filter @superdoc-testing/evals run eval:view` | Open Promptfoo web UI with results | Free |
+| `pnpm --filter @superdoc-testing/evals run baseline:save <label>` | Save versioned results snapshot | Free |
+
+Tool definitions are extracted from `packages/sdk/tools/` via `evals/tools/extract.mjs`. Run `pnpm run generate:all` first if SDK artifacts are missing.
+
+Test files are YAML in `evals/tests/`. Each test has a `vars.task` prompt and JavaScript assertions that check tool call structure (Level 1: tool selection + argument accuracy, not execution).
+
+The system prompt at `evals/prompts/agent.txt` is a copy of the proven prompt from `examples/eval-demo/lib/agent.ts`. Update both when changing the prompt.
+
 ## Generated Artifacts
 
 These directories are produced by `pnpm run generate:all`:
 
 | Directory | In git? | What it contains |
 |-----------|---------|-----------------|
-| `packages/document-api/generated/` | No (gitignored) | Agent tool schemas, JSON schemas, manifest |
+| `packages/document-api/generated/` | No (gitignored) | Agent artifacts, JSON schemas |
 | `apps/cli/generated/` | No (gitignored) | SDK contract JSON exported from CLI metadata |
 | `packages/sdk/langs/node/src/generated/` | No (gitignored) | Node SDK generated client code |
 | `packages/sdk/langs/python/superdoc/generated/` | No (gitignored) | Python SDK generated client code |

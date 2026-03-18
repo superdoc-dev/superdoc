@@ -70,7 +70,4 @@ defineExpose({ focus });
   max-width: 100%;
   transition: all 250ms ease;
 }
-.internal-dropdown {
-  display: inline-block;
-}
 </style>

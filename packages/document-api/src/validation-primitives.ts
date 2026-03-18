@@ -8,8 +8,8 @@
  * Internal — not exported from the package root.
  */
 
-import type { TextAddress } from './types/index.js';
-import type { SDAddress } from './types/sd-envelope.js';
+import type { BlockNodeAddress, TextAddress } from './types/index.js';
+import { BLOCK_NODE_TYPES } from './types/base.js';
 import { TABLE_NESTING_POLICY_VALUES } from './types/placement.js';
 import { DocumentApiValidationError } from './errors.js';
 
@@ -32,20 +32,15 @@ export function isTextAddress(value: unknown): value is TextAddress {
   return range.start <= range.end;
 }
 
-const SD_ADDRESS_KINDS: ReadonlySet<string> = new Set(['content', 'inline', 'annotation', 'section']);
-const SD_ADDRESS_STABILITIES: ReadonlySet<string> = new Set(['stable', 'ephemeral']);
+const BLOCK_NODE_TYPES_SET: ReadonlySet<string> = new Set(BLOCK_NODE_TYPES);
 
-/** Type guard for SDAddress. Checks shape, not semantic validity. */
-export function isSDAddress(value: unknown): value is SDAddress {
+/** Type guard for BlockNodeAddress. Checks shape and nodeType membership. */
+export function isBlockNodeAddress(value: unknown): value is BlockNodeAddress {
   if (!isRecord(value)) return false;
-  if (typeof value.kind !== 'string' || !SD_ADDRESS_KINDS.has(value.kind)) return false;
-  if (typeof value.stability !== 'string' || !SD_ADDRESS_STABILITIES.has(value.stability)) return false;
+  if (value.kind !== 'block') return false;
+  if (typeof value.nodeType !== 'string' || !BLOCK_NODE_TYPES_SET.has(value.nodeType)) return false;
+  if (typeof value.nodeId !== 'string') return false;
   return true;
-}
-
-/** Returns true when value is a valid target (either TextAddress or SDAddress). */
-export function isValidTarget(value: unknown): value is TextAddress | SDAddress {
-  return isTextAddress(value) || isSDAddress(value);
 }
 
 /**

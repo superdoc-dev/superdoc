@@ -29,7 +29,8 @@ It does NOT do layout logic - that's in `layout-engine/`.
 
 | Task | Where to look |
 |------|---------------|
-| Change how element renders | `painters/dom/src/renderer.ts` |
+| Change how OOXML element renders | `painters/dom/src/features/feature-registry.ts` → feature module |
+| Change rendering orchestration | `painters/dom/src/renderer.ts` |
 | Change pagination/layout | `layout-engine/src/index.ts` |
 | Add new block type | `pm-adapter/src/converters/` + `painters/dom/` |
 | Change style resolution | `style-engine/` |
@@ -73,9 +74,45 @@ setActiveComment(commentId) → increments layoutVersion → clears pageIndexToS
 Maps block IDs to entries for change detection. Only changed pages re-render.
 See `blockIdToEntry` in `painters/dom/src/renderer.ts`.
 
+## DomPainter Feature Modules (`painters/dom/src/features/`)
+
+Rendering logic for specific OOXML features is extracted into **feature modules** under `painters/dom/src/features/<feature-name>/`. This keeps `renderer.ts` focused on orchestration while feature-specific logic lives in discoverable, self-contained modules.
+
+### How to find where an OOXML element renders
+
+1. **Search `features/feature-registry.ts`** — maps OOXML element names (e.g., `w:pBdr`, `w:shd`) to their feature module
+2. Each entry has: `feature` (folder name), `module` (import path), `handles` (OOXML elements), `spec` (ECMA-376 section)
+3. Open the feature's `index.ts` for its public API and `@ooxml`/`@spec` annotations
+
+### Adding a new rendering feature
+
+1. **Add a registry entry** in `features/feature-registry.ts` first — this is the source of truth
+2. **Create the feature folder** at `features/<feature-name>/`:
+   - `index.ts` — barrel exports with `@ooxml` and `@spec` JSDoc annotations
+   - Split logic into focused files (e.g., `group-analysis.ts`, `border-layer.ts`)
+   - `types.ts` — shared types if needed
+3. **Import from the feature module** in `renderer.ts` — renderer calls feature functions, features don't import from renderer
+4. **Remove extracted code** from `renderer.ts` — don't leave dead copies
+5. **Update imports** in any other files that used the old renderer exports (e.g., `table/renderTableCell.ts`)
+
+### Feature module conventions
+
+- **Folder name** = human-readable feature name, matches the `feature` field in the registry
+- **`@ooxml` annotations** on `index.ts` list every OOXML element the module handles
+- **`@spec` annotations** reference the ECMA-376 section numbers
+- **No circular imports** — features import from `@superdoc/contracts`, not from `renderer.ts`
+- **Co-locate tests** as `<feature-name>.test.ts` next to the source
+
+### Existing feature modules
+
+| Feature | OOXML elements | Folder |
+|---------|---------------|--------|
+| Paragraph borders & shading | `w:pBdr`, `w:shd` | `features/paragraph-borders/` |
+
 ## Entry Points
 
-- `painters/dom/src/renderer.ts` - Main DOM rendering (large file)
+- `painters/dom/src/renderer.ts` - Main DOM rendering orchestrator (large file — feature logic is being extracted to `features/`)
+- `painters/dom/src/features/feature-registry.ts` - OOXML element → feature module lookup
 - `painters/dom/src/styles.ts` - CSS class definitions
 - `layout-bridge/src/layout-pipeline.ts` - Pipeline orchestration
 - `pm-adapter/src/internal.ts` - PM → FlowBlock conversion

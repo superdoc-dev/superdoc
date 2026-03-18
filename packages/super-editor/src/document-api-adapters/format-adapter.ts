@@ -6,6 +6,7 @@ import type {
   FormatStrikethroughInput,
   MutationOptions,
   TextAddress,
+  SelectionTarget,
   TextMutationReceipt,
 } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
@@ -26,7 +27,15 @@ const FORMAT_OPERATION_LABEL = {
 
 type FormatOperationId = keyof typeof FORMAT_OPERATION_LABEL;
 type FormatMarkName = 'bold' | 'italic' | 'underline' | 'strike';
-type FormatOperationInput = { target?: TextAddress; blockId?: string; start?: number; end?: number };
+/** @deprecated Legacy format input. Use SelectionMutationAdapter for new code. */
+type FormatOperationInput = {
+  target?: TextAddress | SelectionTarget;
+  ref?: string;
+  blockId?: string;
+  start?: number;
+  end?: number;
+  value?: unknown;
+};
 
 /**
  * Normalize block-relative locator fields into a canonical TextAddress.
@@ -34,7 +43,11 @@ type FormatOperationInput = { target?: TextAddress; blockId?: string; start?: nu
  * blockId + start + end → TextAddress with range { start, end }.
  * Returns the original input unchanged when no friendly locator is present.
  */
+/** @deprecated Legacy normalizer. New code uses SelectionMutationAdapter. */
 function normalizeFormatLocator(input: FormatOperationInput): FormatOperationInput {
+  // New-style inputs: pass through when target is a SelectionTarget.
+  if (input.target && input.target.kind === 'selection') return input;
+
   const hasBlockId = input.blockId !== undefined;
   const hasStart = input.start !== undefined;
   const hasEnd = input.end !== undefined;
@@ -91,16 +104,17 @@ function formatMarkAdapter(
 ): TextMutationReceipt {
   checkRevision(editor, options?.expectedRevision);
   const normalizedInput = normalizeFormatLocator(input);
-  const range = resolveTextTarget(editor, normalizedInput.target!);
+  const textTarget = normalizedInput.target as TextAddress | undefined;
+  const range = resolveTextTarget(editor, textTarget!);
   if (!range) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Format target could not be resolved.', {
-      target: normalizedInput.target,
+      target: textTarget,
     });
   }
 
   const resolution = buildTextMutationResolution({
-    requestedTarget: input.target,
-    target: normalizedInput.target!,
+    requestedTarget: textTarget,
+    target: textTarget!,
     range,
     text: readTextAtResolvedRange(editor, range),
   });

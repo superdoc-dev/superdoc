@@ -16,7 +16,6 @@ import {
   OPERATION_IDS,
 } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
-import { isCollaborationActive } from './collaboration-detection.js';
 
 type EditorCommandName = string;
 type EditorWithBlockNodeHelper = Editor & {
@@ -117,6 +116,78 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'toc.markEntry': ['insertTableOfContentsEntryAt'],
   'toc.unmarkEntry': ['deleteTableOfContentsEntryAt'],
   'toc.editEntry': ['updateTableOfContentsEntryAt'],
+  // Bookmark operations — insertBookmark proves the bookmark extension is loaded:
+  'bookmarks.list': ['insertBookmark'],
+  'bookmarks.get': ['insertBookmark'],
+  'bookmarks.insert': ['insertBookmark'],
+  'bookmarks.rename': ['insertBookmark'],
+  'bookmarks.remove': ['insertBookmark'],
+  // Footnote operations — insertContent proves content insertion capability:
+  'footnotes.list': ['insertContent'],
+  'footnotes.get': ['insertContent'],
+  'footnotes.insert': ['insertContent'],
+  'footnotes.update': ['insertContent'],
+  'footnotes.remove': ['insertContent'],
+  'footnotes.configure': ['insertContent'],
+  // Cross-reference operations — insertContent proves crossReference insertion:
+  'crossRefs.list': ['insertContent'],
+  'crossRefs.get': ['insertContent'],
+  'crossRefs.insert': ['insertContent'],
+  'crossRefs.rebuild': ['insertContent'],
+  'crossRefs.remove': ['insertContent'],
+  // Index operations — insertContent proves index/indexEntry insertion:
+  'index.list': ['insertContent'],
+  'index.get': ['insertContent'],
+  'index.insert': ['insertContent'],
+  'index.configure': ['insertContent'],
+  'index.rebuild': ['insertContent'],
+  'index.remove': ['insertContent'],
+  'index.entries.list': ['insertContent'],
+  'index.entries.get': ['insertContent'],
+  'index.entries.insert': ['insertContent'],
+  'index.entries.update': ['insertContent'],
+  'index.entries.remove': ['insertContent'],
+  // Caption operations — insertContent proves caption paragraph insertion:
+  'captions.list': ['insertContent'],
+  'captions.get': ['insertContent'],
+  'captions.insert': ['insertContent'],
+  'captions.update': ['insertContent'],
+  'captions.remove': ['insertContent'],
+  'captions.configure': ['insertContent'],
+  // Field operations — insertContent proves field insertion:
+  'fields.list': ['insertContent'],
+  'fields.get': ['insertContent'],
+  'fields.insert': ['insertContent'],
+  'fields.rebuild': ['insertContent'],
+  'fields.remove': ['insertContent'],
+  // Citation operations — insertContent proves citation node insertion:
+  'citations.list': ['insertContent'],
+  'citations.get': ['insertContent'],
+  'citations.insert': ['insertContent'],
+  'citations.update': ['insertContent'],
+  'citations.remove': ['insertContent'],
+  'citations.sources.list': ['insertContent'],
+  'citations.sources.get': ['insertContent'],
+  'citations.sources.insert': ['insertContent'],
+  'citations.sources.update': ['insertContent'],
+  'citations.sources.remove': ['insertContent'],
+  'citations.bibliography.get': ['insertContent'],
+  'citations.bibliography.insert': ['insertContent'],
+  'citations.bibliography.configure': ['insertContent'],
+  'citations.bibliography.rebuild': ['insertContent'],
+  'citations.bibliography.remove': ['insertContent'],
+  // Authority operations — insertContent proves authority node insertion:
+  'authorities.list': ['insertContent'],
+  'authorities.get': ['insertContent'],
+  'authorities.insert': ['insertContent'],
+  'authorities.configure': ['insertContent'],
+  'authorities.rebuild': ['insertContent'],
+  'authorities.remove': ['insertContent'],
+  'authorities.entries.list': ['insertContent'],
+  'authorities.entries.get': ['insertContent'],
+  'authorities.entries.insert': ['insertContent'],
+  'authorities.entries.update': ['insertContent'],
+  'authorities.entries.remove': ['insertContent'],
   // Image operations — setImage proves the image extension is loaded:
   'create.image': ['setImage'],
   'images.delete': ['setImage'],
@@ -174,12 +245,71 @@ const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>
   'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.setDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.clearDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  // headerFooters: refs.set and refs.setLinkedToPrevious require converter for relationship validation;
+  // parts.* operations require converter for relationship/part lifecycle management.
+  'headerFooters.refs.set': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.refs.setLinkedToPrevious': (editor) =>
+    Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.list': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.create': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'headerFooters.parts.delete': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   // Picture bullet requires the numbering part to support lvlPicBulletId references.
   'lists.setLevelPictureBullet': (editor) => {
     const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
     return Boolean(converter?.convertedXml?.['word/numbering.xml']);
   },
 };
+
+// ---------------------------------------------------------------------------
+// Schema-node gating for specialized namespaces
+// ---------------------------------------------------------------------------
+// Each wrapper throws CAPABILITY_UNAVAILABLE when the required schema node is
+// absent.  Mirror that check here so capabilities() never advertises an
+// operation that would immediately fail.
+
+function hasSchemaNode(editor: Editor, ...names: string[]): boolean {
+  const nodes = editor.schema?.nodes;
+  if (!nodes) return false;
+  return names.some((n) => Boolean(nodes[n]));
+}
+
+/** Maps operation-id prefixes to the schema node(s) that must exist. */
+const SCHEMA_NODE_GATES: Array<{ prefix: string; nodes: string[] }> = [
+  { prefix: 'crossRefs.', nodes: ['crossReference'] },
+  { prefix: 'citations.bibliography.', nodes: ['bibliography'] },
+  { prefix: 'citations.sources.', nodes: ['citation'] },
+  // citations (inline) — citation node
+  { prefix: 'citations.', nodes: ['citation'] },
+  { prefix: 'authorities.entries.', nodes: ['authorityEntry'] },
+  { prefix: 'authorities.', nodes: ['tableOfAuthorities'] },
+  { prefix: 'index.entries.', nodes: ['indexEntry'] },
+  { prefix: 'index.', nodes: ['documentIndex', 'index'] },
+  { prefix: 'fields.', nodes: ['sequenceField'] },
+  { prefix: 'footnotes.', nodes: ['footnoteReference', 'endnoteReference'] },
+];
+
+// Populate REQUIRED_HELPERS from the schema-node gate table so that
+// isOperationAvailable / hasRequiredHelpers correctly reports false when the
+// schema node is missing.  Gates are ordered most-specific first; once an
+// operation is claimed by a specific prefix it is not overwritten by a
+// broader one (e.g. authorities.entries.* only requires authorityEntry,
+// not also tableOfAuthorities).
+const schemaGatedIds = new Set<OperationId>();
+for (const gate of SCHEMA_NODE_GATES) {
+  const matchingIds = (Object.keys(REQUIRED_COMMANDS) as OperationId[]).filter(
+    (id) => id.startsWith(gate.prefix) && !schemaGatedIds.has(id),
+  );
+  for (const id of matchingIds) {
+    schemaGatedIds.add(id);
+    const existingCheck = REQUIRED_HELPERS[id];
+    if (existingCheck) {
+      // Compose with existing (non-schema) check
+      REQUIRED_HELPERS[id] = (editor) => existingCheck(editor) && hasSchemaNode(editor, ...gate.nodes);
+    } else {
+      REQUIRED_HELPERS[id] = (editor) => hasSchemaNode(editor, ...gate.nodes);
+    }
+  }
+}
 
 function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {
   const check = REQUIRED_HELPERS[operationId];
@@ -294,7 +424,6 @@ function isStylesApplyAvailable(editor: Editor): boolean {
   const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
   if (!converter?.convertedXml?.['word/styles.xml']) return false;
   if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return false;
-  if (isCollaborationActive(editor)) return false;
   return true;
 }
 
@@ -306,7 +435,6 @@ function getStylesApplyUnavailableReason(editor: Editor): CapabilityReasonCode |
   if (!converter) return 'OPERATION_UNAVAILABLE';
   if (!converter.convertedXml?.['word/styles.xml']) return 'STYLES_PART_MISSING';
   if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return 'STYLES_PART_MISSING';
-  if (isCollaborationActive(editor)) return 'COLLABORATION_ACTIVE';
   return undefined;
 }
 
@@ -322,7 +450,7 @@ function isOperationAvailable(editor: Editor, operationId: OperationId): boolean
     return isInlinePropertyAvailable(editor, INLINE_PROPERTY_BY_KEY[inlineKey]);
   }
 
-  // styles.apply requires converter + styles part + no collaboration
+  // styles.apply requires converter + styles part
   if (operationId === 'styles.apply') {
     return isStylesApplyAvailable(editor);
   }

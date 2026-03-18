@@ -7,7 +7,9 @@ import type {
   ParagraphBlock,
   ColumnLayout,
   SectionBreakBlock,
+  NormalizedColumnLayout,
 } from '@superdoc/contracts';
+import { cloneColumnLayout, normalizeColumnLayout } from '@superdoc/contracts';
 import {
   layoutDocument,
   layoutHeaderFooter,
@@ -125,30 +127,26 @@ const footnoteColumnKey = (pageIndex: number, columnIndex: number): string => `$
 
 const COLUMN_EPSILON = 0.01;
 
-type NormalizedColumns = ColumnLayout & { width: number };
+type NormalizedColumns = NormalizedColumnLayout;
 type PageColumns = NormalizedColumns & { left: number; contentWidth: number };
 
-const normalizeColumnsForFootnotes = (input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns => {
-  const rawCount = Number.isFinite(input?.count) ? Math.floor(input!.count) : 1;
-  const count = Math.max(1, rawCount || 1);
-  const gap = Math.max(0, input?.gap ?? 0);
-  const totalGap = gap * (count - 1);
-  const width = (contentWidth - totalGap) / count;
-
-  if (!Number.isFinite(width) || width <= COLUMN_EPSILON) {
-    return {
-      count: 1,
-      gap: 0,
-      width: Math.max(0, contentWidth),
-    };
-  }
-
-  return { count, gap, width };
+// TODO: Footnotes are measured against the widest column width for the section.
+// If a footnote ultimately lands in a narrower column, its wrapping can be slightly off.
+const resolveMaxColumnWidth = (contentWidth: number, columns?: ColumnLayout): number => {
+  if (!columns || columns.count <= 1) return contentWidth;
+  const normalized = normalizeColumnsForFootnotes(columns, contentWidth);
+  return normalized.width;
 };
+
+const normalizeColumnsForFootnotes = (input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns => {
+  return normalizeColumnLayout(input, contentWidth, COLUMN_EPSILON);
+};
+
+const ooXmlSectionColumns = (columns?: ColumnLayout): ColumnLayout => cloneColumnLayout(columns);
 
 const resolveSectionColumnsByIndex = (options: LayoutOptions, blocks?: FlowBlock[]): Map<number, ColumnLayout> => {
   const result = new Map<number, ColumnLayout>();
-  let activeColumns: ColumnLayout = options.columns ?? { count: 1, gap: 0 };
+  let activeColumns: ColumnLayout = cloneColumnLayout(options.columns);
 
   if (blocks && blocks.length > 0) {
     for (const block of blocks) {
@@ -156,15 +154,13 @@ const resolveSectionColumnsByIndex = (options: LayoutOptions, blocks?: FlowBlock
       const sectionIndexRaw = (block.attrs as { sectionIndex?: number } | undefined)?.sectionIndex;
       const sectionIndex =
         typeof sectionIndexRaw === 'number' && Number.isFinite(sectionIndexRaw) ? sectionIndexRaw : result.size;
-      if (block.columns) {
-        activeColumns = { count: block.columns.count, gap: block.columns.gap };
-      }
-      result.set(sectionIndex, { ...activeColumns });
+      activeColumns = ooXmlSectionColumns(block.columns);
+      result.set(sectionIndex, cloneColumnLayout(activeColumns));
     }
   }
 
   if (result.size === 0) {
-    result.set(0, { ...activeColumns });
+    result.set(0, cloneColumnLayout(activeColumns));
   }
 
   return result;
@@ -228,9 +224,23 @@ const assignFootnotesToColumns = (
     if (columns && columns.count > 1 && page) {
       const fragment = findFragmentForPos(page, ref.pos);
       if (fragment && typeof fragment.x === 'number') {
-        const columnStride = columns.width + columns.gap;
-        const rawIndex = columnStride > 0 ? Math.floor((fragment.x - columns.left) / columnStride) : 0;
-        columnIndex = Math.max(0, Math.min(columns.count - 1, rawIndex));
+        const widths = Array.isArray(columns.widths) && columns.widths.length > 0 ? columns.widths : undefined;
+        if (widths) {
+          let cursorX = columns.left;
+          for (let index = 0; index < columns.count; index += 1) {
+            const columnWidth = widths[index] ?? columns.width;
+            if (fragment.x < cursorX + columnWidth + columns.gap / 2) {
+              columnIndex = index;
+              break;
+            }
+            cursorX += columnWidth + columns.gap;
+            columnIndex = Math.min(columns.count - 1, index + 1);
+          }
+        } else {
+          const columnStride = columns.width + columns.gap;
+          const rawIndex = columnStride > 0 ? Math.floor((fragment.x - columns.left) / columnStride) : 0;
+          columnIndex = Math.max(0, Math.min(columns.count - 1, rawIndex));
+        }
       }
     }
 
@@ -260,7 +270,7 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
     left: normalizeMargin(options.margins?.left, DEFAULT_MARGINS.left),
   };
   let width = pageSize.w - (margins.left + margins.right);
-  let activeColumns: ColumnLayout = options.columns ?? { count: 1, gap: 0 };
+  let activeColumns: ColumnLayout = cloneColumnLayout(options.columns);
   let activePageSize = pageSize;
   let activeMargins = { ...margins };
 
@@ -280,9 +290,7 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
         right: normalizeMargin(block.margins?.right, activeMargins.right),
         left: normalizeMargin(block.margins?.left, activeMargins.left),
       };
-      if (block.columns) {
-        activeColumns = { count: block.columns.count, gap: block.columns.gap };
-      }
+      activeColumns = ooXmlSectionColumns(block.columns);
       const w = resolveColumnWidth();
       if (w > 0 && w < width) width = w;
     }
@@ -2001,17 +2009,10 @@ function computePerSectionConstraints(
     bottom: normalizeMargin(options.margins?.bottom, DEFAULT_MARGINS.bottom),
     left: normalizeMargin(options.margins?.left, DEFAULT_MARGINS.left),
   };
-  const computeColumnWidth = (contentWidth: number, columns?: { count: number; gap?: number }): number => {
-    if (!columns || columns.count <= 1) return contentWidth;
-    const gap = Math.max(0, columns.gap ?? 0);
-    const totalGap = gap * (columns.count - 1);
-    return (contentWidth - totalGap) / columns.count;
-  };
-
   const defaultContentWidth = pageSize.w - (defaultMargins.left + defaultMargins.right);
   const defaultContentHeight = pageSize.h - (defaultMargins.top + defaultMargins.bottom);
   const defaultConstraints = {
-    maxWidth: computeColumnWidth(defaultContentWidth, options.columns),
+    maxWidth: resolveMaxColumnWidth(defaultContentWidth, options.columns),
     maxHeight: defaultContentHeight,
   };
 
@@ -2032,7 +2033,7 @@ function computePerSectionConstraints(
       const contentHeight = sectionPageSize.h - (sectionMargins.top + sectionMargins.bottom);
       if (contentWidth > 0 && contentHeight > 0) {
         current = {
-          maxWidth: computeColumnWidth(contentWidth, sb.columns ?? options.columns),
+          maxWidth: resolveMaxColumnWidth(contentWidth, ooXmlSectionColumns(sb.columns)),
           maxHeight: contentHeight,
         };
       }
@@ -2132,14 +2133,7 @@ export function resolveMeasurementConstraints(
   const baseContentWidth = pageSize.w - (margins.left + margins.right);
   const baseContentHeight = pageSize.h - (margins.top + margins.bottom);
 
-  const computeColumnWidth = (contentWidth: number, columns?: { count: number; gap?: number }): number => {
-    if (!columns || columns.count <= 1) return contentWidth;
-    const gap = Math.max(0, columns.gap ?? 0);
-    const totalGap = gap * (columns.count - 1);
-    return (contentWidth - totalGap) / columns.count;
-  };
-
-  let measurementWidth = computeColumnWidth(baseContentWidth, options.columns);
+  let measurementWidth = resolveMaxColumnWidth(baseContentWidth, options.columns);
   let measurementHeight = baseContentHeight;
 
   if (blocks && blocks.length > 0) {
@@ -2155,7 +2149,7 @@ export function resolveMeasurementConstraints(
       const contentWidth = sectionPageSize.w - (sectionMargins.left + sectionMargins.right);
       const contentHeight = sectionPageSize.h - (sectionMargins.top + sectionMargins.bottom);
       if (contentWidth <= 0 || contentHeight <= 0) continue;
-      const columnWidth = computeColumnWidth(contentWidth, block.columns ?? options.columns);
+      const columnWidth = resolveMaxColumnWidth(contentWidth, ooXmlSectionColumns(block.columns));
       if (columnWidth > measurementWidth) {
         measurementWidth = columnWidth;
       }

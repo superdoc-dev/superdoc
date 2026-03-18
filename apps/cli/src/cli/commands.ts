@@ -18,6 +18,7 @@ import {
   type CliOperationId,
 } from './operation-set';
 import { buildHelperSpecs } from './helper-commands.js';
+import { DOC_COMMAND_EXAMPLES } from './command-examples.js';
 
 // ---------------------------------------------------------------------------
 // Build command specs for doc-backed operations
@@ -38,7 +39,7 @@ function buildDocBackedSpec(docApiId: string, cliOpId: CliOperationId): CliComma
     requiresDocumentContext: cliRequiresDocumentContext(cliOpId),
     alias: false,
     canonicalKey: key,
-    examples: [],
+    examples: DOC_COMMAND_EXAMPLES[docApiId] ?? [],
   };
 }
 
@@ -148,6 +149,15 @@ export const CLI_MAX_COMMAND_TOKENS: number = Math.max(...CLI_COMMAND_SPECS.map(
 
 function buildHelpText(): string {
   const lines: string[] = ['Usage: superdoc <command> [options]', ''];
+
+  // Common tasks section — surface the most useful commands upfront
+  lines.push('Common tasks:');
+  lines.push('  Find mutation target    →  query match');
+  lines.push('  Insert between list items  →  lists insert');
+  lines.push('  Create a paragraph     →  create paragraph');
+  lines.push('  Insert inline text     →  insert');
+  lines.push('  Batch formatting changes  →  mutations apply');
+  lines.push('');
 
   const categories = new Map<string, CliCommandSpec[]>();
   for (const spec of CLI_COMMAND_SPECS) {

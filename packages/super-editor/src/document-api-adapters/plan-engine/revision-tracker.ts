@@ -27,6 +27,16 @@ export function incrementRevision(editor: Editor): string {
   return String(next);
 }
 
+/**
+ * Restore revision to a previously captured value.
+ *
+ * Used for rollback when a compound operation (e.g. structured insert)
+ * partially commits parts mutations but the overall operation fails.
+ */
+export function restoreRevision(editor: Editor, revision: string): void {
+  revisionMap.set(editor, Number(revision));
+}
+
 export function initRevision(editor: Editor): void {
   if (!revisionMap.has(editor)) {
     revisionMap.set(editor, 0);

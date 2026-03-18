@@ -42,6 +42,15 @@ type ErrorEnvelope = {
   };
 };
 
+type MutationReceiptEnvelope = SuccessEnvelope<{
+  receipt: {
+    success: boolean;
+    resolution?: {
+      target: TextRange;
+    };
+  };
+}>;
+
 const TEST_DIR = join(import.meta.dir, 'fixtures-cli');
 const STATE_DIR = join(TEST_DIR, 'state');
 const SAMPLE_DOC = join(TEST_DIR, 'sample.docx');
@@ -103,8 +112,8 @@ function hasPrettyProperties(node: unknown): boolean {
 }
 
 async function firstTextRange(args: string[]): Promise<TextRange> {
-  // SDM/1: find returns SDNodeResult with SDAddress. For text searches,
-  // the address is content-level (the containing block). We extract the
+  // SDM/1: find returns SDNodeResult with NodeAddress. For text searches,
+  // the address is block-level (the containing block). We extract the
   // blockId and find the pattern position within the node's text content.
   const result = await runCli(args);
   expect(result.code).toBe(0);
@@ -665,7 +674,7 @@ describe('superdoc CLI', () => {
     expect(envelope.error.message).toContain('query.include');
   });
 
-  test('find text queries return content addresses with node projections', async () => {
+  test('find text queries return block addresses with node projections', async () => {
     const result = await runCli([
       'find',
       SAMPLE_DOC,
@@ -682,7 +691,7 @@ describe('superdoc CLI', () => {
         result: {
           items?: Array<{
             node?: { kind?: string };
-            address?: { kind?: string; nodeId?: string };
+            address?: { kind?: string; nodeType?: string; nodeId?: string };
           }>;
         };
       }>
@@ -690,7 +699,8 @@ describe('superdoc CLI', () => {
 
     const firstItem = envelope.data.result.items?.[0];
     expect(firstItem).toBeDefined();
-    expect(firstItem?.address?.kind).toBe('content');
+    expect(firstItem?.address?.kind).toBe('block');
+    expect(firstItem?.address?.nodeType).toBeDefined();
     expect(firstItem?.address?.nodeId).toBeDefined();
     expect(firstItem?.node?.kind).toBeDefined();
   });
@@ -710,8 +720,7 @@ describe('superdoc CLI', () => {
     const address = findEnvelope.data.result.items[0]?.address;
     expect(address).toBeDefined();
 
-    // SDM/1 addresses use kind: 'content' for block-level nodes
-    // getNode still accepts the old NodeAddress format, so we construct one
+    // find returns NodeAddress with kind: 'block' for block-level nodes
     const nodeId = address?.nodeId as string;
     expect(nodeId).toBeDefined();
 
@@ -776,13 +785,13 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          items: Array<{ node: { kind: string }; address: { kind: string; nodeId: string } }>;
+          items: Array<{ node: { kind: string }; address: { kind: string; nodeType: string; nodeId: string } }>;
         };
       }>
     >(findResult);
 
     const firstItem = findEnvelope.data.result.items[0];
-    expect(firstItem.address.kind).toBe('content');
+    expect(firstItem.address.kind).toBe('block');
 
     const getByIdResult = await runCli([
       'get-node-by-id',
@@ -806,13 +815,13 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          items: Array<{ node: { kind: string }; address: { kind: string; nodeId: string } }>;
+          items: Array<{ node: { kind: string }; address: { kind: string; nodeType: string; nodeId: string } }>;
         };
       }>
     >(findResult);
 
     const firstItem = findEnvelope.data.result.items[0];
-    expect(firstItem.address.kind).toBe('content');
+    expect(firstItem.address.kind).toBe('block');
 
     const prettyResult = await runCli([
       'get-node-by-id',
@@ -947,19 +956,13 @@ describe('superdoc CLI', () => {
 
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.start.offset).toBe(0);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.end.offset).toBe(0);
+    const target = insertEnvelope.data.receipt.resolution?.target;
+    expect(target?.kind).toBe('text');
+    expect(target?.blockId).toBeDefined();
+    expect(target?.range.start).toBe(0);
+    expect(target?.range.end).toBe(0);
 
     const verifyResult = await runCli([
       'find',
@@ -1002,21 +1005,14 @@ describe('superdoc CLI', () => {
     ]);
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
 
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    const anchor = insertEnvelope.data.receipt.resolution?.target.anchor;
-    expect(anchor?.start.offset).toBe(0);
-    expect(anchor?.end.offset).toBe(0);
+    const target = insertEnvelope.data.receipt.resolution?.target;
+    expect(target?.kind).toBe('text');
+    expect(target?.blockId).toBeDefined();
+    expect(target?.range.start).toBe(0);
+    expect(target?.range.end).toBe(0);
 
     const verifyResult = await runCli([
       'find',
@@ -1087,20 +1083,13 @@ describe('superdoc CLI', () => {
 
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
     // blockId alone → offset defaults to 0 → collapsed range at start
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.start.offset).toBe(0);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.end.offset).toBe(0);
+    const resolvedTarget = insertEnvelope.data.receipt.resolution?.target;
+    expect(resolvedTarget?.kind).toBe('text');
+    expect(resolvedTarget?.range.start).toBe(0);
+    expect(resolvedTarget?.range.end).toBe(0);
   });
 
   test('insert with --offset but no --block-id returns INVALID_ARGUMENT', async () => {
@@ -1793,19 +1782,13 @@ describe('superdoc CLI', () => {
     const insertResult = await runCli(['insert', '--value', 'STATEFUL_DEFAULT_INSERT_1597']);
     expect(insertResult.code).toBe(0);
 
-    const insertEnvelope = parseJsonOutput<
-      SuccessEnvelope<{
-        receipt: {
-          success: boolean;
-          resolution?: {
-            target: { anchor?: { start: { offset: number }; end: { offset: number } } };
-          };
-        };
-      }>
-    >(insertResult);
+    const insertEnvelope = parseJsonOutput<MutationReceiptEnvelope>(insertResult);
     expect(insertEnvelope.data.receipt.success).toBe(true);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.start.offset).toBe(0);
-    expect(insertEnvelope.data.receipt.resolution?.target.anchor?.end.offset).toBe(0);
+    const target = insertEnvelope.data.receipt.resolution?.target;
+    expect(target?.kind).toBe('text');
+    expect(target?.blockId).toBeDefined();
+    expect(target?.range.start).toBe(0);
+    expect(target?.range.end).toBe(0);
 
     const verifyResult = await runCli(['find', '--type', 'text', '--pattern', 'STATEFUL_DEFAULT_INSERT_1597']);
     expect(verifyResult.code).toBe(0);

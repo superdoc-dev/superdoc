@@ -20,7 +20,14 @@ import type {
   CreateHeadingInput,
   CreateHeadingResult,
 } from '../types/create.types.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
+} from '../types/blocks.types.js';
 
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
@@ -47,6 +54,14 @@ import type { TrackChangesListInput, TrackChangesGetInput, ReviewDecideInput } f
 import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-changes.types.js';
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
 import type { HistoryState, HistoryActionResult } from '../history/history.types.js';
+import type {
+  DiffSnapshot,
+  DiffPayload,
+  DiffApplyResult,
+  DiffCompareInput,
+  DiffApplyInput,
+  DiffApplyOptions,
+} from '../diff/diff.types.js';
 import type {
   ListsListQuery,
   ListsListResult,
@@ -138,6 +153,7 @@ import type {
   SectionsSetVerticalAlignInput,
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
+import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -199,6 +215,124 @@ import type {
   TocEntryMutationResult,
 } from '../toc/toc.types.js';
 import type {
+  BookmarkListInput,
+  BookmarksListResult,
+  BookmarkGetInput,
+  BookmarkInfo,
+  BookmarkInsertInput,
+  BookmarkRenameInput,
+  BookmarkRemoveInput,
+  BookmarkMutationResult,
+} from '../bookmarks/bookmarks.types.js';
+
+import type {
+  FootnoteListInput,
+  FootnotesListResult,
+  FootnoteGetInput,
+  FootnoteInfo,
+  FootnoteInsertInput,
+  FootnoteUpdateInput,
+  FootnoteRemoveInput,
+  FootnoteMutationResult,
+  FootnoteConfigureInput,
+  FootnoteConfigResult,
+} from '../footnotes/footnotes.types.js';
+import type {
+  CrossRefListInput,
+  CrossRefsListResult,
+  CrossRefGetInput,
+  CrossRefInfo,
+  CrossRefInsertInput,
+  CrossRefRebuildInput,
+  CrossRefRemoveInput,
+  CrossRefMutationResult,
+} from '../cross-refs/cross-refs.types.js';
+import type {
+  IndexListInput,
+  IndexListResult,
+  IndexGetInput,
+  IndexInfo,
+  IndexInsertInput,
+  IndexConfigureInput,
+  IndexRebuildInput,
+  IndexRemoveInput,
+  IndexMutationResult,
+  IndexEntryListInput,
+  IndexEntryListResult,
+  IndexEntryGetInput,
+  IndexEntryInfo,
+  IndexEntryInsertInput,
+  IndexEntryUpdateInput,
+  IndexEntryRemoveInput,
+  IndexEntryMutationResult,
+} from '../index/index.types.js';
+import type {
+  CaptionListInput,
+  CaptionsListResult,
+  CaptionGetInput,
+  CaptionInfo,
+  CaptionInsertInput,
+  CaptionUpdateInput,
+  CaptionRemoveInput,
+  CaptionMutationResult,
+  CaptionConfigureInput,
+  CaptionConfigResult,
+} from '../captions/captions.types.js';
+import type {
+  FieldListInput,
+  FieldsListResult,
+  FieldGetInput,
+  FieldInfo,
+  FieldInsertInput,
+  FieldRebuildInput,
+  FieldRemoveInput,
+  FieldMutationResult,
+} from '../fields/fields.types.js';
+import type {
+  CitationListInput,
+  CitationsListResult,
+  CitationGetInput,
+  CitationInfo,
+  CitationInsertInput,
+  CitationUpdateInput,
+  CitationRemoveInput,
+  CitationMutationResult,
+  CitationSourceListInput,
+  CitationSourcesListResult,
+  CitationSourceGetInput,
+  CitationSourceInfo,
+  CitationSourceInsertInput,
+  CitationSourceUpdateInput,
+  CitationSourceRemoveInput,
+  CitationSourceMutationResult,
+  BibliographyGetInput,
+  BibliographyInfo,
+  BibliographyInsertInput,
+  BibliographyRebuildInput,
+  BibliographyConfigureInput,
+  BibliographyRemoveInput,
+  BibliographyMutationResult,
+} from '../citations/citations.types.js';
+import type {
+  AuthoritiesListInput,
+  AuthoritiesListResult,
+  AuthoritiesGetInput,
+  AuthoritiesInfo,
+  AuthoritiesInsertInput,
+  AuthoritiesConfigureInput,
+  AuthoritiesRebuildInput,
+  AuthoritiesRemoveInput,
+  AuthoritiesMutationResult,
+  AuthorityEntryListInput,
+  AuthorityEntryListResult,
+  AuthorityEntryGetInput,
+  AuthorityEntryInfo,
+  AuthorityEntryInsertInput,
+  AuthorityEntryUpdateInput,
+  AuthorityEntryRemoveInput,
+  AuthorityEntryMutationResult,
+} from '../authorities/authorities.types.js';
+import type {
   CreateTableInput,
   CreateTableResult,
   TablesConvertFromTextInput,
@@ -259,6 +393,22 @@ import type {
   HyperlinksRemoveInput,
   HyperlinkMutationResult,
 } from '../hyperlinks/hyperlinks.types.js';
+import type {
+  HeaderFootersListQuery,
+  HeaderFootersListResult,
+  HeaderFootersGetInput,
+  HeaderFooterSlotEntry,
+  HeaderFootersResolveInput,
+  HeaderFooterResolveResult,
+  HeaderFootersRefsSetInput,
+  HeaderFootersRefsClearInput,
+  HeaderFootersRefsSetLinkedToPreviousInput,
+  HeaderFootersPartsListQuery,
+  HeaderFootersPartsListResult,
+  HeaderFootersPartsCreateInput,
+  HeaderFootersPartsDeleteInput,
+  HeaderFooterPartsMutationResult,
+} from '../header-footers/header-footers.types.js';
 import type {
   ContentControlInfo,
   ContentControlMutationResult,
@@ -354,7 +504,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- blocks.* ---
+  'blocks.list': { input: BlocksListInput | undefined; options: never; output: BlocksListResult };
   'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
+  'blocks.deleteRange': { input: BlocksDeleteRangeInput; options: MutationOptions; output: BlocksDeleteRangeResult };
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
@@ -633,6 +785,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };
 
+  // --- ranges.* ---
+  'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
+
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };
   'mutations.apply': { input: MutationsApplyInput; options: never; output: PlanReceipt };
@@ -794,6 +949,45 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'hyperlinks.insert': { input: HyperlinksInsertInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.patch': { input: HyperlinksPatchInput; options: MutationOptions; output: HyperlinkMutationResult };
   'hyperlinks.remove': { input: HyperlinksRemoveInput; options: MutationOptions; output: HyperlinkMutationResult };
+
+  // --- headerFooters.* ---
+  'headerFooters.list': {
+    input: HeaderFootersListQuery | undefined;
+    options: never;
+    output: HeaderFootersListResult;
+  };
+  'headerFooters.get': { input: HeaderFootersGetInput; options: never; output: HeaderFooterSlotEntry };
+  'headerFooters.resolve': { input: HeaderFootersResolveInput; options: never; output: HeaderFooterResolveResult };
+  'headerFooters.refs.set': {
+    input: HeaderFootersRefsSetInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.refs.clear': {
+    input: HeaderFootersRefsClearInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.refs.setLinkedToPrevious': {
+    input: HeaderFootersRefsSetLinkedToPreviousInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'headerFooters.parts.list': {
+    input: HeaderFootersPartsListQuery | undefined;
+    options: never;
+    output: HeaderFootersPartsListResult;
+  };
+  'headerFooters.parts.create': {
+    input: HeaderFootersPartsCreateInput;
+    options: MutationOptions;
+    output: HeaderFooterPartsMutationResult;
+  };
+  'headerFooters.parts.delete': {
+    input: HeaderFootersPartsDeleteInput;
+    options: MutationOptions;
+    output: HeaderFooterPartsMutationResult;
+  };
 
   // --- create.contentControl ---
   'create.contentControl': {
@@ -1083,6 +1277,155 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ContentControlMutationResult;
   };
+
+  // --- bookmarks.* ---
+  'bookmarks.list': { input: BookmarkListInput | undefined; options: never; output: BookmarksListResult };
+  'bookmarks.get': { input: BookmarkGetInput; options: never; output: BookmarkInfo };
+  'bookmarks.insert': { input: BookmarkInsertInput; options: MutationOptions; output: BookmarkMutationResult };
+  'bookmarks.rename': { input: BookmarkRenameInput; options: MutationOptions; output: BookmarkMutationResult };
+  'bookmarks.remove': { input: BookmarkRemoveInput; options: MutationOptions; output: BookmarkMutationResult };
+
+  // --- footnotes.* ---
+  'footnotes.list': { input: FootnoteListInput | undefined; options: never; output: FootnotesListResult };
+  'footnotes.get': { input: FootnoteGetInput; options: never; output: FootnoteInfo };
+  'footnotes.insert': { input: FootnoteInsertInput; options: MutationOptions; output: FootnoteMutationResult };
+  'footnotes.update': { input: FootnoteUpdateInput; options: MutationOptions; output: FootnoteMutationResult };
+  'footnotes.remove': { input: FootnoteRemoveInput; options: MutationOptions; output: FootnoteMutationResult };
+  'footnotes.configure': { input: FootnoteConfigureInput; options: MutationOptions; output: FootnoteConfigResult };
+
+  // --- crossRefs.* ---
+  'crossRefs.list': { input: CrossRefListInput | undefined; options: never; output: CrossRefsListResult };
+  'crossRefs.get': { input: CrossRefGetInput; options: never; output: CrossRefInfo };
+  'crossRefs.insert': { input: CrossRefInsertInput; options: MutationOptions; output: CrossRefMutationResult };
+  'crossRefs.rebuild': { input: CrossRefRebuildInput; options: MutationOptions; output: CrossRefMutationResult };
+  'crossRefs.remove': { input: CrossRefRemoveInput; options: MutationOptions; output: CrossRefMutationResult };
+
+  // --- index.* ---
+  'index.list': { input: IndexListInput | undefined; options: never; output: IndexListResult };
+  'index.get': { input: IndexGetInput; options: never; output: IndexInfo };
+  'index.insert': { input: IndexInsertInput; options: MutationOptions; output: IndexMutationResult };
+  'index.configure': { input: IndexConfigureInput; options: MutationOptions; output: IndexMutationResult };
+  'index.rebuild': { input: IndexRebuildInput; options: MutationOptions; output: IndexMutationResult };
+  'index.remove': { input: IndexRemoveInput; options: MutationOptions; output: IndexMutationResult };
+
+  // --- index.entries.* ---
+  'index.entries.list': { input: IndexEntryListInput | undefined; options: never; output: IndexEntryListResult };
+  'index.entries.get': { input: IndexEntryGetInput; options: never; output: IndexEntryInfo };
+  'index.entries.insert': { input: IndexEntryInsertInput; options: MutationOptions; output: IndexEntryMutationResult };
+  'index.entries.update': { input: IndexEntryUpdateInput; options: MutationOptions; output: IndexEntryMutationResult };
+  'index.entries.remove': { input: IndexEntryRemoveInput; options: MutationOptions; output: IndexEntryMutationResult };
+
+  // --- captions.* ---
+  'captions.list': { input: CaptionListInput | undefined; options: never; output: CaptionsListResult };
+  'captions.get': { input: CaptionGetInput; options: never; output: CaptionInfo };
+  'captions.insert': { input: CaptionInsertInput; options: MutationOptions; output: CaptionMutationResult };
+  'captions.update': { input: CaptionUpdateInput; options: MutationOptions; output: CaptionMutationResult };
+  'captions.remove': { input: CaptionRemoveInput; options: MutationOptions; output: CaptionMutationResult };
+  'captions.configure': { input: CaptionConfigureInput; options: MutationOptions; output: CaptionConfigResult };
+
+  // --- fields.* ---
+  'fields.list': { input: FieldListInput | undefined; options: never; output: FieldsListResult };
+  'fields.get': { input: FieldGetInput; options: never; output: FieldInfo };
+  'fields.insert': { input: FieldInsertInput; options: MutationOptions; output: FieldMutationResult };
+  'fields.rebuild': { input: FieldRebuildInput; options: MutationOptions; output: FieldMutationResult };
+  'fields.remove': { input: FieldRemoveInput; options: MutationOptions; output: FieldMutationResult };
+
+  // --- citations.* ---
+  'citations.list': { input: CitationListInput | undefined; options: never; output: CitationsListResult };
+  'citations.get': { input: CitationGetInput; options: never; output: CitationInfo };
+  'citations.insert': { input: CitationInsertInput; options: MutationOptions; output: CitationMutationResult };
+  'citations.update': { input: CitationUpdateInput; options: MutationOptions; output: CitationMutationResult };
+  'citations.remove': { input: CitationRemoveInput; options: MutationOptions; output: CitationMutationResult };
+
+  // --- citations.sources.* ---
+  'citations.sources.list': {
+    input: CitationSourceListInput | undefined;
+    options: never;
+    output: CitationSourcesListResult;
+  };
+  'citations.sources.get': { input: CitationSourceGetInput; options: never; output: CitationSourceInfo };
+  'citations.sources.insert': {
+    input: CitationSourceInsertInput;
+    options: MutationOptions;
+    output: CitationSourceMutationResult;
+  };
+  'citations.sources.update': {
+    input: CitationSourceUpdateInput;
+    options: MutationOptions;
+    output: CitationSourceMutationResult;
+  };
+  'citations.sources.remove': {
+    input: CitationSourceRemoveInput;
+    options: MutationOptions;
+    output: CitationSourceMutationResult;
+  };
+
+  // --- citations.bibliography.* ---
+  'citations.bibliography.get': { input: BibliographyGetInput; options: never; output: BibliographyInfo };
+  'citations.bibliography.insert': {
+    input: BibliographyInsertInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+  'citations.bibliography.rebuild': {
+    input: BibliographyRebuildInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+  'citations.bibliography.configure': {
+    input: BibliographyConfigureInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+  'citations.bibliography.remove': {
+    input: BibliographyRemoveInput;
+    options: MutationOptions;
+    output: BibliographyMutationResult;
+  };
+
+  // --- authorities.* ---
+  'authorities.list': { input: AuthoritiesListInput | undefined; options: never; output: AuthoritiesListResult };
+  'authorities.get': { input: AuthoritiesGetInput; options: never; output: AuthoritiesInfo };
+  'authorities.insert': { input: AuthoritiesInsertInput; options: MutationOptions; output: AuthoritiesMutationResult };
+  'authorities.configure': {
+    input: AuthoritiesConfigureInput;
+    options: MutationOptions;
+    output: AuthoritiesMutationResult;
+  };
+  'authorities.rebuild': {
+    input: AuthoritiesRebuildInput;
+    options: MutationOptions;
+    output: AuthoritiesMutationResult;
+  };
+  'authorities.remove': { input: AuthoritiesRemoveInput; options: MutationOptions; output: AuthoritiesMutationResult };
+
+  // --- authorities.entries.* ---
+  'authorities.entries.list': {
+    input: AuthorityEntryListInput | undefined;
+    options: never;
+    output: AuthorityEntryListResult;
+  };
+  'authorities.entries.get': { input: AuthorityEntryGetInput; options: never; output: AuthorityEntryInfo };
+  'authorities.entries.insert': {
+    input: AuthorityEntryInsertInput;
+    options: MutationOptions;
+    output: AuthorityEntryMutationResult;
+  };
+  'authorities.entries.update': {
+    input: AuthorityEntryUpdateInput;
+    options: MutationOptions;
+    output: AuthorityEntryMutationResult;
+  };
+  'authorities.entries.remove': {
+    input: AuthorityEntryRemoveInput;
+    options: MutationOptions;
+    output: AuthorityEntryMutationResult;
+  };
+
+  // --- diff.* ---
+  'diff.capture': { input: undefined; options: never; output: DiffSnapshot };
+  'diff.compare': { input: DiffCompareInput; options: never; output: DiffPayload };
+  'diff.apply': { input: DiffApplyInput; options: DiffApplyOptions; output: DiffApplyResult };
 }
 
 // --- Bidirectional completeness checks ---

@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach } from 'vitest';
-import { createSuperDocClient, type SuperDocClient } from '@superdoc-dev/sdk';
+import { createSuperDocClient, type SuperDocClient, type SuperDocClientOptions } from '@superdoc-dev/sdk';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const STORIES_ROOT = path.resolve(import.meta.dirname, '..');
@@ -78,6 +78,10 @@ export interface StoryHarnessOptions {
    * When true, the directory is cleaned once (first test setup) instead of before every test.
    */
   preserveResults?: boolean;
+  /** Optional SDK client configuration for this story harness. */
+  clientOptions?: SuperDocClientOptions;
+  /** Choose which CLI binary the harness should use. */
+  cliBinMode?: 'auto' | 'dist' | 'source';
 }
 
 export function useStoryHarness(storyName: string, options: StoryHarnessOptions = {}): StoryContext {
@@ -85,6 +89,8 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
   let ctx: StoryContext | null = null;
   let hasPreparedResultsDir = false;
   const preserveResults = options.preserveResults ?? false;
+  const clientOptions = options.clientOptions ?? {};
+  const cliBinMode = options.cliBinMode ?? 'auto';
 
   const original = {
     open: undefined as any,
@@ -98,20 +104,27 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
     }
     await mkdir(resultsDir, { recursive: true });
 
-    const cliBin = await access(CLI_DIST_BIN).then(
-      () => CLI_DIST_BIN,
-      () => CLI_SRC_BIN,
-    );
+    const cliBin =
+      cliBinMode === 'source'
+        ? CLI_SRC_BIN
+        : cliBinMode === 'dist'
+          ? CLI_DIST_BIN
+          : await access(CLI_DIST_BIN).then(
+              () => CLI_DIST_BIN,
+              () => CLI_SRC_BIN,
+            );
     const stateDir = path.join(resultsDir, '.superdoc-cli-state');
 
     const client = createSuperDocClient({
-      env: {
-        SUPERDOC_CLI_BIN: cliBin,
-        SUPERDOC_CLI_STATE_DIR: stateDir,
-      },
       requestTimeoutMs: 30_000,
       startupTimeoutMs: 30_000,
       shutdownTimeoutMs: 30_000,
+      ...clientOptions,
+      env: {
+        ...clientOptions.env,
+        SUPERDOC_CLI_BIN: cliBin,
+        SUPERDOC_CLI_STATE_DIR: stateDir,
+      },
     });
 
     await client.connect();

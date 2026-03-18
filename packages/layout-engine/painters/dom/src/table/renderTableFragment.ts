@@ -1,5 +1,4 @@
 import type {
-  CellSpacing,
   DrawingBlock,
   Fragment,
   Line,
@@ -15,7 +14,8 @@ import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
-import { applyBorder, borderValueToSpec } from './border-utils.js';
+import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
+import { getTableCellGridBounds } from './grid-geometry.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
 /**
@@ -455,38 +455,43 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         // Resolve borders for the ghost cell
         const srcCell = block.rows[r]?.cells?.[ci];
         const cellBordersAttr = srcCell?.attrs?.borders;
-        const hasExplicitBorders =
-          cellBordersAttr &&
-          (cellBordersAttr.top !== undefined ||
-            cellBordersAttr.right !== undefined ||
-            cellBordersAttr.bottom !== undefined ||
-            cellBordersAttr.left !== undefined);
-        const isFirstCol = gridCol === 0;
-        const isLastCol = gridCol + colSpan >= effectiveColumnWidths.length;
+        const explicit = hasExplicitCellBorders(cellBordersAttr);
+        const cellBounds = getTableCellGridBounds({
+          rowIndex: r,
+          rowSpan,
+          gridColumnStart: gridCol,
+          colSpan,
+          totalRows: block.rows.length,
+          totalCols: effectiveColumnWidths.length,
+        });
+        const cellEndsWithinFragment = effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow;
 
-        if (hasExplicitBorders && tableBorders) {
-          // Use cell's borders, with table top border for continuation
-          applyBorder(ghostDiv, 'Top', cellBordersAttr.top ?? borderValueToSpec(tableBorders.top));
+        if (tableBorders) {
+          // Explicit cell borders override table borders; otherwise fall through to table defaults
+          applyBorder(
+            ghostDiv,
+            'Top',
+            (explicit ? cellBordersAttr.top : undefined) ?? borderValueToSpec(tableBorders.top),
+          );
           applyBorder(
             ghostDiv,
             'Left',
-            cellBordersAttr.left ?? borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV),
+            (explicit ? cellBordersAttr.left : undefined) ??
+              borderValueToSpec(cellBounds.touchesLeftEdge ? tableBorders.left : tableBorders.insideV),
           );
           applyBorder(
             ghostDiv,
             'Right',
-            cellBordersAttr.right ?? borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV),
+            (explicit ? cellBordersAttr.right : undefined) ??
+              borderValueToSpec(cellBounds.touchesRightEdge ? tableBorders.right : tableBorders.insideV),
           );
-          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
-            applyBorder(ghostDiv, 'Bottom', cellBordersAttr.bottom ?? borderValueToSpec(tableBorders.insideH));
-          }
-        } else if (tableBorders) {
-          // Resolve from table borders
-          applyBorder(ghostDiv, 'Top', borderValueToSpec(tableBorders.top));
-          applyBorder(ghostDiv, 'Left', borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV));
-          applyBorder(ghostDiv, 'Right', borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV));
-          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
-            applyBorder(ghostDiv, 'Bottom', borderValueToSpec(tableBorders.insideH));
+          if (cellEndsWithinFragment) {
+            applyBorder(
+              ghostDiv,
+              'Bottom',
+              (explicit ? cellBordersAttr.bottom : undefined) ??
+                borderValueToSpec(cellBounds.touchesBottomEdge ? tableBorders.bottom : tableBorders.insideH),
+            );
           }
         }
 

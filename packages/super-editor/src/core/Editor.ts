@@ -2,6 +2,7 @@ import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
 import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
+import type { Doc as YDoc } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
 import type { ChainableCommandObject, CanObject, EditorCommands } from './types/ChainedCommands.js';
@@ -34,9 +35,10 @@ import {
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData, cancelDebouncedDocxUpdate } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
+import { seedPartsFromEditor } from '@extensions/collaboration/part-sync/seed-parts.js';
+import { onCollaborationProviderSynced } from './helpers/collaboration-provider-sync.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
-import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
 import { canRenderFont } from './helpers/canRenderFont.js';
 import {
@@ -60,6 +62,8 @@ import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 import type { DocumentApi } from '@superdoc/document-api';
 import { createDocumentApi } from '@superdoc/document-api';
 import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
+import { initPartsRuntime } from './parts/init-parts-runtime.js';
+import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -798,27 +802,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // Blank document (source is undefined or null)
         // For docx mode without pre-parsed content, load the blank.docx template
         const shouldLoadBlankDocx =
-          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown;
 
         if (shouldLoadBlankDocx) {
-          // Decode base64 blank.docx without fetch
-          const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
-          const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
-          const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
-          // Use Uint8Array to ensure compatibility with both Node Buffer and browser Blob
-          const uint8Array = new Uint8Array(arrayBuffer);
-          let fileSource: File | Blob | Buffer;
-          if (canUseBuffer) {
-            fileSource = Buffer.from(uint8Array);
-          } else if (typeof Blob !== 'undefined') {
-            fileSource = new Blob([uint8Array as BlobPart]);
-          } else {
-            throw new Error('Blob is not available to create blank DOCX');
-          }
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
-          resolvedOptions.content = docx;
-          resolvedOptions.mediaFiles = mediaFiles;
-          resolvedOptions.fonts = fonts;
+          const { content, mediaFiles, fonts, fileSource } = await this.#loadBlankDocxTemplate();
+          resolvedOptions.content = content;
+          resolvedOptions.mediaFiles = {
+            ...mediaFiles,
+            ...(options?.mediaFiles ?? {}),
+          };
+          resolvedOptions.fonts = {
+            ...fonts,
+            ...(options?.fonts ?? {}),
+          };
           resolvedOptions.fileSource = fileSource;
           resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;
@@ -839,6 +835,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       // Create converter
       this.#createConverter();
+      initPartsRuntime(this);
 
       // Initialize media
       this.#initMedia();
@@ -981,6 +978,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#createCommandService();
     this.#createSchema();
     this.#createConverter();
+    initPartsRuntime(this);
     this.#initMedia();
 
     this.on('beforeCreate', this.options.onBeforeCreate!);
@@ -1489,21 +1487,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Initialize data for collaborative editing
-   * If we are replacing data and have a valid provider, listen for synced event
-   * so that we can initialize the data
+   * If we are replacing data and have a valid provider, wait for provider sync
+   * before inserting data into the shared Yjs document.
    */
   initializeCollaborationData(): void {
     if (!this.options.isNewFile || !this.options.collaborationProvider) return;
-    const provider = this.options.collaborationProvider;
-
-    const postSyncInit = () => {
-      provider.off?.('synced', postSyncInit);
+    onCollaborationProviderSynced(this.options.collaborationProvider, () => {
       this.#insertNewFileData();
-    };
-
-    if (provider.synced) this.#insertNewFileData();
-    // If we are not sync'd yet, wait for the event then insert the data
-    else provider.on?.('synced', postSyncInit);
+    });
   }
 
   /**
@@ -1521,12 +1512,45 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     this.#createConverter();
+    initPartsRuntime(this);
     this.#initMedia();
 
     const doc = this.#generatePmData();
     const tr = this.state.tr.replaceWith(0, this.state.doc.content.size, doc);
     tr.setMeta('replaceContent', true);
     this.#dispatchTransaction(tr);
+  }
+
+  /**
+   * Sync root-level document attrs without mutating the first top-level node.
+   */
+  #syncDocumentAttrs(nextAttrs: Record<string, unknown> = {}): void {
+    const currentAttrs = (this.state.doc?.attrs ?? {}) as Record<string, unknown>;
+    const docAttrSpecs = (this.schema?.topNodeType?.spec?.attrs ?? {}) as Record<string, { default?: unknown }>;
+    const attrKeys = new Set([...Object.keys(docAttrSpecs), ...Object.keys(currentAttrs), ...Object.keys(nextAttrs)]);
+
+    if (attrKeys.size === 0) return;
+
+    const valuesMatch = (a: unknown, b: unknown): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+    const tr = this.state.tr.setMeta('addToHistory', false);
+    let changed = false;
+
+    for (const key of attrKeys) {
+      const hasNextValue = Object.prototype.hasOwnProperty.call(nextAttrs, key);
+      const nextValue = hasNextValue ? nextAttrs[key] : docAttrSpecs[key]?.default;
+
+      if (valuesMatch(currentAttrs[key], nextValue)) {
+        continue;
+      }
+
+      tr.setDocAttribute(key, nextValue);
+      changed = true;
+    }
+
+    if (changed) {
+      this.#dispatchTransaction(tr);
+    }
   }
 
   /**
@@ -1537,9 +1561,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (!this.options.isNewFile) return;
     this.options.isNewFile = false;
     const doc = this.#generatePmData();
+    const nextBodySectPr = JSON.parse(JSON.stringify(doc.attrs?.bodySectPr ?? null));
     // hiding this transaction from history so it doesn't appear in undo stack
     const tr = this.state.tr.replaceWith(0, this.state.doc.content.size, doc).setMeta('addToHistory', false);
     this.#dispatchTransaction(tr);
+
+    const ydoc = this.options.ydoc as YDoc | null;
+    if (ydoc) {
+      ydoc.getMap('meta').set('bodySectPr', nextBodySectPr);
+    }
+
+    this.#syncDocumentAttrs((doc.attrs ?? {}) as Record<string, unknown>);
 
     setTimeout(() => {
       this.#initComments();
@@ -1688,6 +1720,49 @@ export class Editor extends EventEmitter<EditorEventMap> {
         isNewFile: this.options.isNewFile ?? false,
       });
     }
+  }
+
+  async #loadBlankDocxTemplate(): Promise<{
+    content: DocxFileEntry[];
+    mediaFiles: Record<string, unknown>;
+    fonts: Record<string, unknown>;
+    fileSource: File | Blob | Buffer;
+  }> {
+    const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
+    const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
+    const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    let fileSource: File | Blob | Buffer;
+    if (canUseBuffer) {
+      fileSource = Buffer.from(uint8Array);
+    } else if (typeof Blob !== 'undefined') {
+      fileSource = new Blob([uint8Array as BlobPart]);
+    } else {
+      throw new Error('Blob is not available to create blank DOCX');
+    }
+
+    const [content, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
+    return { content, mediaFiles, fonts, fileSource };
+  }
+
+  async #getBaseDocxEntriesForExport(): Promise<DocxFileEntry[]> {
+    if (Array.isArray(this.options.content)) {
+      return this.options.content as DocxFileEntry[];
+    }
+
+    const blankDocx = await this.#loadBlankDocxTemplate();
+    this.options.content = blankDocx.content;
+    this.options.mediaFiles = {
+      ...blankDocx.mediaFiles,
+      ...(this.options.mediaFiles ?? {}),
+    };
+    this.options.fonts = {
+      ...blankDocx.fonts,
+      ...(this.options.fonts ?? {}),
+    };
+
+    return blankDocx.content;
   }
 
   /**
@@ -2122,7 +2197,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     if (!this.options.isNewFile) {
       this.#initComments();
-      updateYdocDocxData(this, this.options.ydoc);
     }
   }
 
@@ -2722,6 +2796,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       }
 
+      const bibliographyPartPaths =
+        typeof this.converter.getBibliographyPartExportPaths === 'function'
+          ? this.converter.getBibliographyPartExportPaths()
+          : [];
+
+      for (const path of bibliographyPartPaths) {
+        const partData = this.converter.convertedXml[path];
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
       const zipper = new DocxZipper();
 
       if (getUpdatedDocs) {
@@ -2732,12 +2818,32 @@ export class Editor extends EventEmitter<EditorEventMap> {
           media,
           true,
           updatedDocs,
+          this.options.fonts,
         );
+
+        // Reconcile package-level singleton metadata (content-type overrides
+        // and root relationships) against the final set of output entries.
+        // this.options.content is DocxFileEntry[] | Record<string, unknown> | string | null.
+        // The synchronizer accepts an array of {name, content} or a key→content map.
+        const content = this.options.content;
+        const baseFiles = Array.isArray(content) || (content && typeof content === 'object') ? content : null;
+        const { contentTypesXml, relsXml } = syncPackageMetadata({
+          baseFiles: baseFiles as Parameters<typeof syncPackageMetadata>[0]['baseFiles'],
+          updatedDocs,
+        });
+        updatedDocs['[Content_Types].xml'] = contentTypesXml;
+        updatedDocs['_rels/.rels'] = relsXml;
+
         return updatedDocs;
       }
 
+      const baseDocxEntries =
+        !this.options.fileSource && !Array.isArray(this.options.content)
+          ? await this.#getBaseDocxEntriesForExport()
+          : this.options.content;
+
       const result = await zipper.updateZip({
-        docx: this.options.content,
+        docx: baseDocxEntries,
         updatedDocs: updatedDocs,
         originalDocxFile: this.options.fileSource,
         media,
@@ -3196,16 +3302,63 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.options.replacedFile = true;
 
     this.#createConverter();
+    initPartsRuntime(this);
     this.#initMedia();
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      // Cancel any pending debounced docx update — we are about to do a
-      // fresh export with the new file data. Without cancel, the debounced
-      // export from the previous transaction cycle could fire redundantly.
-      cancelDebouncedDocxUpdate(this);
-      await updateYdocDocxData(this, this.options.ydoc);
-      this.initializeCollaborationData();
+      const ydoc = this.options.ydoc as import('yjs').Doc;
+      const provider = this.options.collaborationProvider;
+
+      const doReplaceFileSync = () => {
+        // 1. Insert new PM doc into Y fragment (must happen first)
+        this.#insertNewFileData();
+
+        // 2. Seed parts from new converter snapshot (prunes stale parts)
+        seedPartsFromEditor(this, ydoc, { replaceExisting: true });
+
+        // 3. Replace media map (prune stale + upsert new)
+        const mediaFiles = this.options.mediaFiles ?? {};
+        const mediaMap = ydoc.getMap('media');
+        for (const key of mediaMap.keys()) {
+          if (!(key in mediaFiles)) mediaMap.delete(key);
+        }
+        Object.entries(mediaFiles).forEach(([key, value]) => {
+          mediaMap.set(key, value);
+        });
+      };
+
+      const SYNC_TIMEOUT_MS = 10_000;
+
+      await new Promise<void>((resolve, reject) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let settled = false;
+
+        const cleanup = onCollaborationProviderSynced(provider, () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try {
+            doReplaceFileSync();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        if (!settled) {
+          timer = setTimeout(() => {
+            settled = true;
+            cleanup();
+            reject(
+              new Error(
+                `replaceFile(): collaboration provider did not sync within ${SYNC_TIMEOUT_MS}ms. ` +
+                  `The provider exposes on/off but never emitted sync(true) or synced.`,
+              ),
+            );
+          }, SYNC_TIMEOUT_MS);
+        }
+      });
     } else {
       this.#insertNewFileData();
     }

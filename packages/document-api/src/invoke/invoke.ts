@@ -75,7 +75,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     delete: (input, options) => api.delete(input, options),
 
     // --- blocks.* ---
+    'blocks.list': (input) => api.blocks.list(input),
     'blocks.delete': (input, options) => api.blocks.delete(input, options),
+    'blocks.deleteRange': (input, options) => api.blocks.deleteRange(input, options),
 
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),
@@ -179,6 +181,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- query.* ---
     'query.match': (input) => api.query.match(input),
+
+    // --- ranges.* ---
+    'ranges.resolve': (input) => api.ranges.resolve(input),
 
     // --- mutations.* ---
     'mutations.preview': (input) => api.mutations.preview(input),
@@ -302,6 +307,18 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'hyperlinks.patch': (input, options) => api.hyperlinks.patch(input, options),
     'hyperlinks.remove': (input, options) => api.hyperlinks.remove(input, options),
 
+    // --- headerFooters.* ---
+    'headerFooters.list': (input) => api.headerFooters.list(input),
+    'headerFooters.get': (input) => api.headerFooters.get(input),
+    'headerFooters.resolve': (input) => api.headerFooters.resolve(input),
+    'headerFooters.refs.set': (input, options) => api.headerFooters.refs.set(input, options),
+    'headerFooters.refs.clear': (input, options) => api.headerFooters.refs.clear(input, options),
+    'headerFooters.refs.setLinkedToPrevious': (input, options) =>
+      api.headerFooters.refs.setLinkedToPrevious(input, options),
+    'headerFooters.parts.list': (input) => api.headerFooters.parts.list(input),
+    'headerFooters.parts.create': (input, options) => api.headerFooters.parts.create(input, options),
+    'headerFooters.parts.delete': (input, options) => api.headerFooters.parts.delete(input, options),
+
     // --- create.contentControl ---
     'create.contentControl': (input, options) => api.create.contentControl(input, options),
 
@@ -385,5 +402,98 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- contentControls.group.* ---
     'contentControls.group.wrap': (input, options) => api.contentControls.group.wrap(input, options),
     'contentControls.group.ungroup': (input, options) => api.contentControls.group.ungroup(input, options),
+
+    // --- bookmarks.* ---
+    'bookmarks.list': (input) => api.bookmarks.list(input),
+    'bookmarks.get': (input) => api.bookmarks.get(input),
+    'bookmarks.insert': (input, options) => api.bookmarks.insert(input, options),
+    'bookmarks.rename': (input, options) => api.bookmarks.rename(input, options),
+    'bookmarks.remove': (input, options) => api.bookmarks.remove(input, options),
+
+    // --- footnotes.* ---
+    'footnotes.list': (input) => api.footnotes.list(input),
+    'footnotes.get': (input) => api.footnotes.get(input),
+    'footnotes.insert': (input, options) => api.footnotes.insert(input, options),
+    'footnotes.update': (input, options) => api.footnotes.update(input, options),
+    'footnotes.remove': (input, options) => api.footnotes.remove(input, options),
+    'footnotes.configure': (input, options) => api.footnotes.configure(input, options),
+
+    // --- crossRefs.* ---
+    'crossRefs.list': (input) => api.crossRefs.list(input),
+    'crossRefs.get': (input) => api.crossRefs.get(input),
+    'crossRefs.insert': (input, options) => api.crossRefs.insert(input, options),
+    'crossRefs.rebuild': (input, options) => api.crossRefs.rebuild(input, options),
+    'crossRefs.remove': (input, options) => api.crossRefs.remove(input, options),
+
+    // --- index.* ---
+    'index.list': (input) => api.index.list(input),
+    'index.get': (input) => api.index.get(input),
+    'index.insert': (input, options) => api.index.insert(input, options),
+    'index.configure': (input, options) => api.index.configure(input, options),
+    'index.rebuild': (input, options) => api.index.rebuild(input, options),
+    'index.remove': (input, options) => api.index.remove(input, options),
+
+    // --- index.entries.* ---
+    'index.entries.list': (input) => api.index.entries.list(input),
+    'index.entries.get': (input) => api.index.entries.get(input),
+    'index.entries.insert': (input, options) => api.index.entries.insert(input, options),
+    'index.entries.update': (input, options) => api.index.entries.update(input, options),
+    'index.entries.remove': (input, options) => api.index.entries.remove(input, options),
+
+    // --- captions.* ---
+    'captions.list': (input) => api.captions.list(input),
+    'captions.get': (input) => api.captions.get(input),
+    'captions.insert': (input, options) => api.captions.insert(input, options),
+    'captions.update': (input, options) => api.captions.update(input, options),
+    'captions.remove': (input, options) => api.captions.remove(input, options),
+    'captions.configure': (input, options) => api.captions.configure(input, options),
+
+    // --- fields.* ---
+    'fields.list': (input) => api.fields.list(input),
+    'fields.get': (input) => api.fields.get(input),
+    'fields.insert': (input, options) => api.fields.insert(input, options),
+    'fields.rebuild': (input, options) => api.fields.rebuild(input, options),
+    'fields.remove': (input, options) => api.fields.remove(input, options),
+
+    // --- citations.* ---
+    'citations.list': (input) => api.citations.list(input),
+    'citations.get': (input) => api.citations.get(input),
+    'citations.insert': (input, options) => api.citations.insert(input, options),
+    'citations.update': (input, options) => api.citations.update(input, options),
+    'citations.remove': (input, options) => api.citations.remove(input, options),
+
+    // --- citations.sources.* ---
+    'citations.sources.list': (input) => api.citations.sources.list(input),
+    'citations.sources.get': (input) => api.citations.sources.get(input),
+    'citations.sources.insert': (input, options) => api.citations.sources.insert(input, options),
+    'citations.sources.update': (input, options) => api.citations.sources.update(input, options),
+    'citations.sources.remove': (input, options) => api.citations.sources.remove(input, options),
+
+    // --- citations.bibliography.* ---
+    'citations.bibliography.get': (input) => api.citations.bibliography.get(input),
+    'citations.bibliography.insert': (input, options) => api.citations.bibliography.insert(input, options),
+    'citations.bibliography.rebuild': (input, options) => api.citations.bibliography.rebuild(input, options),
+    'citations.bibliography.configure': (input, options) => api.citations.bibliography.configure(input, options),
+    'citations.bibliography.remove': (input, options) => api.citations.bibliography.remove(input, options),
+
+    // --- authorities.* ---
+    'authorities.list': (input) => api.authorities.list(input),
+    'authorities.get': (input) => api.authorities.get(input),
+    'authorities.insert': (input, options) => api.authorities.insert(input, options),
+    'authorities.configure': (input, options) => api.authorities.configure(input, options),
+    'authorities.rebuild': (input, options) => api.authorities.rebuild(input, options),
+    'authorities.remove': (input, options) => api.authorities.remove(input, options),
+
+    // --- authorities.entries.* ---
+    'authorities.entries.list': (input) => api.authorities.entries.list(input),
+    'authorities.entries.get': (input) => api.authorities.entries.get(input),
+    'authorities.entries.insert': (input, options) => api.authorities.entries.insert(input, options),
+    'authorities.entries.update': (input, options) => api.authorities.entries.update(input, options),
+    'authorities.entries.remove': (input, options) => api.authorities.entries.remove(input, options),
+
+    // --- diff.* ---
+    'diff.capture': () => api.diff.capture(),
+    'diff.compare': (input) => api.diff.compare(input),
+    'diff.apply': (input, options) => api.diff.apply(input, options),
   };
 }

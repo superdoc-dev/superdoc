@@ -49,11 +49,16 @@ describe('renderTableRow', () => {
     ...overrides,
   });
 
+  const getRenderedCellCall = (): { borders?: { top?: unknown; right?: unknown; bottom?: unknown; left?: unknown } } =>
+    renderTableCellMock.mock.calls[0][0] as {
+      borders?: { top?: unknown; right?: unknown; bottom?: unknown; left?: unknown };
+    };
+
   it('does not draw insideH on top edge for continuation fragments with cell spacing', () => {
     renderTableRow(createDeps({ continuesFromPrev: true }) as never);
 
     expect(renderTableCellMock).toHaveBeenCalledTimes(1);
-    const call = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: unknown; bottom?: unknown } };
+    const call = getRenderedCellCall();
     expect(call.borders?.top).toBeUndefined();
     expect(call.borders?.bottom).toBeDefined();
   });
@@ -62,8 +67,81 @@ describe('renderTableRow', () => {
     renderTableRow(createDeps({ continuesOnNext: true }) as never);
 
     expect(renderTableCellMock).toHaveBeenCalledTimes(1);
-    const call = renderTableCellMock.mock.calls[0][0] as { borders?: { top?: unknown; bottom?: unknown } };
+    const call = getRenderedCellCall();
     expect(call.borders?.top).toBeDefined();
     expect(call.borders?.bottom).toBeUndefined();
+  });
+
+  it('applies the table right border to a merged cell that spans the final column in collapsed mode', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 0,
+        totalRows: 5,
+        cellSpacingPx: 0,
+        columnWidths: [100, 100],
+        rowMeasure: {
+          height: 20,
+          cells: [{ width: 200, height: 20, gridColumnStart: 0, colSpan: 2, rowSpan: 1 }],
+        },
+      }) as never,
+    );
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(1);
+    const call = getRenderedCellCall();
+    expect(call.borders?.right).toBeDefined();
+    expect(call.borders?.left).toBeDefined();
+  });
+
+  it('falls back to the table right border when an explicit-border cell spans the final column', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 0,
+        totalRows: 5,
+        cellSpacingPx: 0,
+        columnWidths: [100, 100],
+        rowMeasure: {
+          height: 20,
+          cells: [{ width: 200, height: 20, gridColumnStart: 0, colSpan: 2, rowSpan: 1 }],
+        },
+        row: {
+          id: 'row-1',
+          cells: [
+            {
+              id: 'cell-1',
+              attrs: {
+                borders: {
+                  top: { style: 'single', width: 2, color: '#123456' },
+                },
+              },
+              blocks: [{ kind: 'paragraph', id: 'p1', runs: [] }],
+            },
+          ],
+        },
+      }) as never,
+    );
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(1);
+    const call = getRenderedCellCall();
+    expect(call.borders?.top).toBeDefined();
+    expect(call.borders?.right).toBeDefined();
+  });
+
+  it('applies the table bottom border to a rowspan cell that reaches the final row', () => {
+    renderTableRow(
+      createDeps({
+        rowIndex: 3,
+        totalRows: 5,
+        cellSpacingPx: 0,
+        columnWidths: [100, 100],
+        rowMeasure: {
+          height: 20,
+          cells: [{ width: 100, height: 20, gridColumnStart: 1, colSpan: 1, rowSpan: 2 }],
+        },
+      }) as never,
+    );
+
+    expect(renderTableCellMock).toHaveBeenCalledTimes(1);
+    const call = getRenderedCellCall();
+    expect(call.borders?.bottom).toBeDefined();
   });
 });

@@ -105,6 +105,7 @@ const REFERENCE_GROUP_TO_CATEGORY: Record<string, CliCategory> = {
   toc: 'toc',
   images: 'images',
   history: 'history',
+  diff: 'core',
 };
 
 function deriveCategoryFromDocApi(docApiId: OperationId): CliCategory {

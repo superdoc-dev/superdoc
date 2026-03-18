@@ -572,6 +572,61 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
+### `scrollToComment`
+
+Scroll to a comment in the document and set it as active.
+
+<ParamField path="commentId" type="string" required>
+  The comment ID to scroll to
+</ParamField>
+
+<ParamField path="options" type="object">
+  Scroll behavior options
+  <Expandable>
+    <ParamField path="behavior" type="ScrollBehavior" default="smooth">
+      Scroll behavior — `"smooth"`, `"instant"`, or `"auto"`
+    </ParamField>
+    <ParamField path="block" type="ScrollLogicalPosition" default="start">
+      Vertical alignment — `"start"`, `"center"`, `"end"`, or `"nearest"`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Returns:** `boolean` — `true` if the comment was found, `false` otherwise.
+
+<CodeGroup>
+
+```javascript Usage
+// Get a comment ID from the document API
+const { items } = superdoc.editor.doc.comments.list();
+const commentId = items[0].id;
+
+// Scroll to it
+superdoc.scrollToComment(commentId);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  modules: { comments: {} },
+  onReady: (superdoc) => {
+    const { items } = superdoc.editor.doc.comments.list();
+    if (items.length > 0) {
+      superdoc.scrollToComment(items[0].id, {
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  },
+});
+```
+
+</CodeGroup>
+
 ## User management
 
 ### `addSharedUser`

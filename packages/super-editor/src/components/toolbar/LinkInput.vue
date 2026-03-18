@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
+import { sanitizeHref } from '@superdoc/url-validation';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 import { TextSelection } from 'prosemirror-state';
@@ -120,20 +121,19 @@ const isAnchor = ref(false);
 
 const HAS_PROTOCOL = /^[a-z][a-z0-9+.-]*:/i;
 
-// Default to https:// when no protocol is specified
+// Default to https:// when no scheme is specified. Validation stays centralized in sanitizeHref.
 const url = computed(() => {
   if (!rawUrl.value) return '';
   if (rawUrl.value.startsWith('#') || HAS_PROTOCOL.test(rawUrl.value)) return rawUrl.value;
   return 'https://' + rawUrl.value;
 });
 
-const validUrl = computed(() => {
-  // anchors (starting with #) are always considered valid
-  if (url.value.startsWith('#')) return true;
-
-  const urlSplit = url.value.split('.').filter(Boolean);
-  return url.value.includes('.') && urlSplit.length > 1;
+const sanitizedUrl = computed(() => {
+  if (!url.value) return null;
+  return sanitizeHref(url.value);
 });
+
+const validUrl = computed(() => sanitizedUrl.value !== null);
 
 // --- CASE LOGIC ---
 const isEditing = computed(() => !isAnchor.value && !!getLinkHrefAtSelection());
@@ -143,7 +143,9 @@ const isDisabled = computed(() => !validUrl.value);
 const isViewingMode = computed(() => props.editor?.options?.documentMode === 'viewing');
 
 const openLink = () => {
-  window.open(url.value, '_blank');
+  const href = sanitizedUrl.value?.href;
+  if (!href) return;
+  window.open(href, '_blank');
 };
 
 const updateFromEditor = () => {
@@ -191,10 +193,16 @@ const handleSubmit = () => {
     return;
   }
 
-  const finalText = text.value || url.value;
+  const href = sanitizedUrl.value?.href;
+  if (!href) {
+    urlError.value = true;
+    return;
+  }
+
+  const finalText = text.value || href;
 
   if (editor.commands?.toggleLink) {
-    editor.commands.toggleLink({ href: url.value, text: finalText });
+    editor.commands.toggleLink({ href, text: finalText });
   }
 
   // Move cursor to end of link and refocus editor.

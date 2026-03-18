@@ -507,7 +507,7 @@ function applyRunAttributePatch(
   if (overlappingRuns.length === 0) return false;
 
   if (Object.prototype.hasOwnProperty.call(updates, 'fontFamily')) {
-    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, ['fontFamily']);
+    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, [{ key: 'fontFamily', preferExisting: true }]);
   }
 
   let changed = false;

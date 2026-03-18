@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { importCommentData } from '@converter/v2/importer/documentCommentsImporter.js';
+import DocxZipper from '@core/DocxZipper.js';
 
 const extractNodeText = (node) => {
   if (!node) return '';
@@ -444,6 +445,31 @@ describe('preserveCommentsOnEmpty flag behavior', () => {
       expect(exportedXml['word/commentsExtended.xml']).toBeUndefined();
       expect(exportedXml['word/commentsExtensible.xml']).toBeUndefined();
       expect(exportedXml['word/commentsIds.xml']).toBeUndefined();
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('removes comment files from the exported zip when preserveCommentsOnEmpty is false', async () => {
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalCommentCount = editor.converter.comments.length;
+      expect(originalCommentCount).toBeGreaterThan(0);
+
+      const zipped = await editor.exportDocx({
+        comments: [],
+        commentsType: 'external',
+        preserveCommentsOnEmpty: false,
+      });
+
+      const zipper = new DocxZipper();
+      const zip = await zipper.unzip(zipped);
+
+      expect(zip.file('word/comments.xml')).toBeNull();
+      expect(zip.file('word/commentsExtended.xml')).toBeNull();
+      expect(zip.file('word/commentsExtensible.xml')).toBeNull();
+      expect(zip.file('word/commentsIds.xml')).toBeNull();
     } finally {
       editor.destroy();
     }

@@ -144,7 +144,7 @@ class DocxZipper {
 
     const hasFile = (filename) => {
       if (updatedDocs && Object.prototype.hasOwnProperty.call(updatedDocs, filename)) {
-        return true;
+        return updatedDocs[filename] !== null;
       }
       if (!docx?.files) return false;
       if (!fromJson) return Boolean(docx.files[filename]);
@@ -292,10 +292,14 @@ class DocxZipper {
       zip.file(file.name, content);
     }
 
-    // Replace updated docs
+    // Replace updated docs (null values remove the file from the zip)
     Object.keys(updatedDocs).forEach((key) => {
       const content = updatedDocs[key];
-      zip.file(key, content);
+      if (content === null) {
+        zip.remove(key);
+      } else {
+        zip.file(key, content);
+      }
     });
 
     Object.keys(media).forEach((path) => {
@@ -330,9 +334,13 @@ class DocxZipper {
     });
     await Promise.all(filePromises);
 
-    // Make replacements of updated docs
+    // Make replacements of updated docs (null values remove the file from the zip)
     Object.keys(updatedDocs).forEach((key) => {
-      unzippedOriginalDocx.file(key, updatedDocs[key]);
+      if (updatedDocs[key] === null) {
+        unzippedOriginalDocx.remove(key);
+      } else {
+        unzippedOriginalDocx.file(key, updatedDocs[key]);
+      }
     });
 
     Object.keys(media).forEach((path) => {

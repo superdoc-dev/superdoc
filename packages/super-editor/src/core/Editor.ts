@@ -2543,28 +2543,28 @@ export class Editor extends EventEmitter<EditorEventMap> {
         updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
       }
 
-      // Check if comment files exist in convertedXml (they're removed when cleaning or empty array)
+      // Serialize comment files if they exist, or mark them for removal from the zip
+      const commentFileKeys = [
+        'word/comments.xml',
+        'word/commentsExtended.xml',
+        'word/commentsExtensible.xml',
+        'word/commentsIds.xml',
+      ] as const;
+
       const commentsFile = this.converter.convertedXml['word/comments.xml'];
       if (commentsFile?.elements?.[0]) {
-        const commentsXml = this.converter.schemaToXml(commentsFile.elements[0]);
-        updatedDocs['word/comments.xml'] = String(commentsXml);
+        updatedDocs['word/comments.xml'] = String(this.converter.schemaToXml(commentsFile.elements[0]));
 
-        const commentsExtended = this.converter.convertedXml['word/commentsExtended.xml'];
-        if (commentsExtended?.elements?.[0]) {
-          const commentsExtendedXml = this.converter.schemaToXml(commentsExtended.elements[0]);
-          updatedDocs['word/commentsExtended.xml'] = String(commentsExtendedXml);
+        for (const key of commentFileKeys.slice(1)) {
+          const file = this.converter.convertedXml[key];
+          if (file?.elements?.[0]) {
+            updatedDocs[key] = String(this.converter.schemaToXml(file.elements[0]));
+          }
         }
-
-        const commentsExtensible = this.converter.convertedXml['word/commentsExtensible.xml'];
-        if (commentsExtensible?.elements?.[0]) {
-          const commentsExtensibleXml = this.converter.schemaToXml(commentsExtensible.elements[0]);
-          updatedDocs['word/commentsExtensible.xml'] = String(commentsExtensibleXml);
-        }
-
-        const commentsIds = this.converter.convertedXml['word/commentsIds.xml'];
-        if (commentsIds?.elements?.[0]) {
-          const commentsIdsXml = this.converter.schemaToXml(commentsIds.elements[0]);
-          updatedDocs['word/commentsIds.xml'] = String(commentsIdsXml);
+      } else {
+        // Comments were removed — tell DocxZipper to strip these files from the zip
+        for (const key of commentFileKeys) {
+          updatedDocs[key] = null as unknown as string;
         }
       }
 

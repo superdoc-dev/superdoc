@@ -1019,34 +1019,14 @@ class SuperConverter {
       editor,
     );
 
-    // Update content types and comments files as needed
-    // Empty array preserves existing comments unless preserveCommentsOnEmpty is true
-    let updatedXml = { ...this.convertedXml };
-    let commentsRels = [];
-    const { documentXml, relationships } = this.#prepareCommentsXmlFilesForExport({
+    // Update comments files based on export type and preserveCommentsOnEmpty flag
+    const { documentXml, relationships: commentsRels } = this.#prepareCommentsXmlFilesForExport({
       defs: params.exportedCommentDefs,
       exportType: commentsExportType,
       commentsWithParaIds,
       preserveCommentsOnEmpty,
     });
-    updatedXml = { ...documentXml };
-    commentsRels = relationships;
-
-    this.convertedXml = { ...this.convertedXml, ...updatedXml };
-
-    // Explicitly delete comment files when exporting with no comments
-    // (spread merge doesn't remove keys that exist in the original object)
-    const shouldRemoveComments =
-      commentsExportType === 'clean' || (commentsWithParaIds.length === 0 && preserveCommentsOnEmpty === false);
-    if (shouldRemoveComments) {
-      const commentFileKeys = [
-        'word/comments.xml',
-        'word/commentsExtended.xml',
-        'word/commentsExtensible.xml',
-        'word/commentsIds.xml',
-      ];
-      commentFileKeys.forEach((key) => delete this.convertedXml[key]);
-    }
+    this.convertedXml = documentXml;
 
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
 

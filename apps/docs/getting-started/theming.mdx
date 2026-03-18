@@ -4,35 +4,29 @@ sidebarTitle: Theming
 keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, css customization, styling"
 ---
 
-Customize how SuperDoc looks using CSS variables. Change five variables and your brand colors flow through every component — toolbar, comments, dropdowns, everything.
-
-## Quick start
-
-Every SuperDoc component reads its colors, spacing, and typography from `--sd-*` CSS custom properties. Override them on any parent element and the changes cascade down.
+Change five CSS variables and your brand colors flow through every SuperDoc component — toolbar, comments, dropdowns, everything. No JavaScript needed.
 
 ```css
-/* Your custom theme — add to your stylesheet */
 .my-theme {
-  --sd-ui-action: #6366f1;               /* buttons, active states */
+  --sd-ui-action: #6366f1;
   --sd-ui-action-hover: #4f46e5;
-  --sd-ui-toolbar-bg: #f8fafc;   /* toolbar surface */
-  --sd-ui-bg: #ffffff;              /* panels, cards */
-  --sd-ui-text: #1e293b;                /* body text */
+  --sd-ui-toolbar-bg: #f8fafc;
+  --sd-ui-bg: #ffffff;
+  --sd-ui-text: #1e293b;
 }
 ```
 
 ```html
-<!-- Apply it -->
 <html class="my-theme">
   <div id="editor"></div>
 </html>
 ```
 
-That's it. No JavaScript config needed for visual customization.
+Every `--sd-*` CSS custom property can be overridden on any parent element. The changes cascade down to all child components.
 
 ## Preset themes
 
-SuperDoc ships three preset themes you can use out of the box. Add the class to your `<html>` or any wrapper element.
+Three preset themes ship out of the box. Add the class to `<html>` or any wrapper element.
 
 <CardGroup cols={3}>
   <Card title="Docs" icon="google">
@@ -42,7 +36,7 @@ SuperDoc ships three preset themes you can use out of the box. Add the class to 
     ```
   </Card>
   <Card title="Word" icon="microsoft">
-    Microsoft Word aesthetic. Fluent-style surfaces and borders.
+    Microsoft Word aesthetic. Fluent-style borders and surfaces.
     ```html
     <html class="sd-theme-word">
     ```
@@ -55,75 +49,45 @@ SuperDoc ships three preset themes you can use out of the box. Add the class to 
   </Card>
 </CardGroup>
 
-Each preset overrides 30-50 variables across toolbar, dropdown, context menu, comments, and layout. You can layer your own overrides on top of a preset:
+You can layer your own overrides on top of a preset:
 
 ```css
-/* Start from the Docs preset, customize from there */
 .sd-theme-docs {
   --sd-ui-action: #your-brand-color;
   --sd-ui-comments-card-bg: #f0f0f0;
 }
 ```
 
-## Token architecture
+## How the token system works
 
 Variables are organized in three tiers. Higher tiers reference lower tiers, so changing a primitive cascades everywhere.
 
 ```
-Primitives     →    UI semantic    →    Component-specific
---sd-color-*        --sd-ui-*           --sd-ui-toolbar-*
---sd-font-size-*    --sd-ui-text        --sd-ui-comments-*
---sd-radius-*       --sd-ui-action      --sd-comments-highlight-*
+Primitives          UI semantic         Component-specific
+--sd-color-*        --sd-ui-text        --sd-ui-toolbar-*
+--sd-font-size-*    --sd-ui-bg          --sd-ui-comments-*
+--sd-radius-*       --sd-ui-action      --sd-ui-dropdown-*
 ```
 
-### Tier 1: Primitives
+**Tier 1 — Primitives.** Raw color scales, font sizes, and radii. You rarely need to touch these directly.
 
-Raw color, sizing, and radius values. These are the building blocks.
-
-| Variable | Default | What it controls |
-|----------|---------|-----------------|
-| `--sd-color-blue-500` | `#1355ff` | Brand blue used throughout |
-| `--sd-color-gray-*` | 50-900 scale | Neutral palette |
-| `--sd-font-size-200` | `12px` | Small text (toolbar labels, timestamps) |
-| `--sd-font-size-400` | `14px` | Body text (comments, inputs) |
-| `--sd-radius-100` | `6px` | Default border radius |
-| `--sd-radius-300` | `12px` | Larger radius (cards, panels) |
-
-### Tier 2: UI semantic
-
-Shared variables that many components reference. Change one of these and you affect the entire UI.
+**Tier 2 — UI semantic.** The "5-variable theme." Change these and every component updates:
 
 | Variable | Default | What it controls |
 |----------|---------|-----------------|
-| `--sd-ui-font-family` | `Arial, Helvetica, sans-serif` | Font for all UI elements |
+| `--sd-ui-font-family` | `Arial, Helvetica, sans-serif` | Font for all UI chrome |
 | `--sd-ui-text` | `#47484a` | Primary text color |
-| `--sd-ui-text-muted` | `gray-700` | Secondary/muted text |
-| `--sd-ui-bg` | `#ffffff` | Panel and card backgrounds |
-| `--sd-ui-hover-bg` | `gray-400` | Hover states |
-| `--sd-ui-border` | `gray-400` | Default borders |
-| `--sd-ui-action` | `blue-500` | Action/accent color (buttons, links) |
-| `--sd-ui-action-hover` | `blue-600` | Action hover state |
-| `--sd-ui-shadow` | `0 4px 12px rgba(0,0,0,0.12)` | Default shadow |
-| `--sd-ui-radius` | `6px` | Default border radius for UI elements |
+| `--sd-ui-bg` | `#ffffff` | Panels, cards, dropdowns |
+| `--sd-ui-border` | `#dbdbdb` | All borders |
+| `--sd-ui-action` | `#1355ff` | Buttons, links, active states |
 
-### Tier 3: Component-specific
+**Tier 3 — Component-specific.** Fine-grained overrides for individual components. These default to the semantic tier, so you only set them when a component needs to look different from the rest. See the [full reference](/guides/general/custom-themes).
 
-Fine-grained control over individual components. These override the semantic defaults for specific UI pieces. See the [custom themes guide](/guides/general/custom-themes) for the full reference.
+## JavaScript config
 
-**Five groups to know:**
-
-1. **Toolbar** (`--sd-ui-toolbar-*`) — background, button colors, spacing
-2. **Dropdowns** (`--sd-ui-dropdown-*`) — surfaces, borders, shadows for all dropdown menus
-3. **Comments** (`--sd-ui-comments-*`) — card backgrounds, text colors, input styling
-4. **Comment highlights** (`--sd-comments-highlight-*`) — in-document highlight colors for internal/external comments
-5. **Tracked changes** (`--sd-tracked-changes-*`) — insert/delete/format highlight colors
-
-## What about the JavaScript config?
-
-The `trackChangesConfig` and `commentsConfig` JavaScript options still work and take priority over CSS variables when set. Use the JS API for runtime changes, CSS variables for static theming.
+The `trackChangesConfig` and `commentsConfig` JavaScript options still work. They take priority over CSS variables when set. Use the JS API for runtime changes, CSS variables for static theming.
 
 ```javascript
-// This still works — it overrides the CSS variable at runtime
 new SuperDoc({
   selector: '#editor',
   commentsConfig: {
@@ -135,7 +99,7 @@ new SuperDoc({
 });
 ```
 
-## What's next
+## Next steps
 
 <CardGroup cols={2}>
   <Card
@@ -143,13 +107,13 @@ new SuperDoc({
     icon="palette"
     href="/guides/general/custom-themes"
   >
-    Per-component variable reference with every token, default value, and which component it controls.
+    Full variable reference by component. Dark theme starter. How to build your own preset.
   </Card>
   <Card
     title="Migration guide"
     icon="arrow-right-arrow-left"
     href="/guides/migration/css-variables"
   >
-    Mapping from old CSS variable names to the new system.
+    Old-to-new variable name mapping. Backward compatibility details.
   </Card>
 </CardGroup>

@@ -118,11 +118,13 @@ const text = ref('');
 const rawUrl = ref('');
 const isAnchor = ref(false);
 
-// Prepend http if missing
+const HAS_PROTOCOL = /^[a-z][a-z0-9+.-]*:/i;
+
+// Default to https:// when no protocol is specified
 const url = computed(() => {
   if (!rawUrl.value) return '';
-  if (!rawUrl.value.startsWith('https') && !rawUrl.value.startsWith('#')) return 'https://' + rawUrl.value;
-  return rawUrl.value;
+  if (rawUrl.value.startsWith('#') || HAS_PROTOCOL.test(rawUrl.value)) return rawUrl.value;
+  return 'https://' + rawUrl.value;
 });
 
 const validUrl = computed(() => {

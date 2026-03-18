@@ -843,4 +843,32 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
       expect(mockClosePopover).not.toHaveBeenCalled();
     });
   });
+
+  describe('URL normalization', () => {
+    it('preserves explicit http links when submitting an existing link', async () => {
+      const mockEditor = createMockEditor();
+      mockEditor.options = { documentMode: 'editing' };
+      const linkMark = mockEditor.state.schema.marks.link;
+      mockEditor.state.selection.$from.nodeAfter = {
+        marks: [{ type: linkMark, attrs: { href: 'http://example.com' } }],
+      };
+
+      const wrapper = mount(LinkInput, {
+        props: {
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          showInput: true,
+        },
+      });
+
+      await nextTick();
+      await nextTick();
+
+      wrapper.vm.handleSubmit();
+
+      expect(mockEditor.commands.toggleLink).toHaveBeenCalledWith(
+        expect.objectContaining({ href: 'http://example.com' }),
+      );
+    });
+  });
 });

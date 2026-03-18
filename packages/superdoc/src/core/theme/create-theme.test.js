@@ -152,6 +152,11 @@ describe('createTheme', () => {
       expect(result.css).toContain('--sd-ui-action: #f00');
     });
 
+    it('does not inject styles into the DOM', () => {
+      buildTheme({ name: 'no-inject', colors: { action: '#abc' } });
+      expect(document.querySelector('[data-sd-theme="sd-theme-no-inject"]')).toBeNull();
+    });
+
     it('wraps css in the class selector', () => {
       const { css } = buildTheme({ name: 'selector', colors: { bg: '#fff' } });
       expect(css).toMatch(/^\.sd-theme-selector \{/);

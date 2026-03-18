@@ -111,6 +111,9 @@ function injectThemeStyle(className, css) {
  * Returns a CSS class name. Apply it to `<html>` to activate the theme.
  * The style element is injected into the document automatically.
  *
+ * For strict CSP environments that require a nonce, use `buildTheme()` instead
+ * and inject the CSS yourself with the appropriate nonce attribute.
+ *
  * @param {ThemeConfig} config
  * @returns {string} The generated CSS class name
  *
@@ -135,7 +138,8 @@ export function createTheme(config) {
 
 /**
  * Build a SuperDoc theme and return both the class name and raw CSS.
- * Use this for SSR where you need to inject styles into the HTML template.
+ * Pure function — does NOT inject styles into the DOM. Use this for SSR
+ * or when you need to control style injection yourself (e.g., CSP nonce).
  *
  * @param {ThemeConfig} config
  * @returns {{ className: string, css: string }}
@@ -152,7 +156,5 @@ export function createTheme(config) {
  * ```
  */
 export function buildTheme(config) {
-  const { className, css } = generateTheme(config);
-  injectThemeStyle(className, css);
-  return { className, css };
+  return generateTheme(config);
 }

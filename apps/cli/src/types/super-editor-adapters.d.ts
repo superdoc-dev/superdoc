@@ -12,8 +12,8 @@ declare module '@superdoc/super-editor/document-api-adapters' {
   /**
    * Build the full set of document-api adapters from a super-editor Editor instance.
    * The `editor` param is typed as `unknown` at this boundary because the CLI
-   * imports `Editor` from `superdoc/super-editor` (dist types), while the
-   * adapter function's source signature uses the internal source `Editor` type.
+   * resolves `Editor` through a source path alias while the adapter function's
+   * signature still lives in the super-editor source tree.
    */
   export function getDocumentApiAdapters(editor: unknown): DocumentApiAdapters;
 }

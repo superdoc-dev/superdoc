@@ -65,8 +65,11 @@ import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 import { initPartsRuntime } from './parts/init-parts-runtime.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 
-declare const __APP_VERSION__: string;
+declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
+
+const CURRENT_APP_VERSION =
+  (typeof __APP_VERSION__ === 'string' && __APP_VERSION__) || (typeof version === 'string' && version) || '0.0.0';
 
 /**
  * Constants for layout calculations
@@ -3255,7 +3258,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Process collaboration migrations
    */
   processCollaborationMigrations(): unknown | void {
-    console.debug('[checkVersionMigrations] Current editor version', __APP_VERSION__);
+    console.debug('[checkVersionMigrations] Current editor version', CURRENT_APP_VERSION);
     if (!this.options.ydoc) return;
 
     const metaMap = (this.options.ydoc as { getMap: (name: string) => Map<string, unknown> }).getMap('meta');

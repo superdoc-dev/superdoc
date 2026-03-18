@@ -16,6 +16,7 @@ import {
   countTrackedChanges,
   countSdtFields,
   countLists,
+  countPages,
 } from './live-document-counts.js';
 
 vi.mock('./index-cache.js', () => ({
@@ -95,6 +96,8 @@ function makeEditor(doc: Record<string, unknown> = {}): Editor {
     },
   } as Editor;
 }
+
+const EMPTY_EDITOR = makeEditor();
 
 describe('countWordsFromText', () => {
   it('counts whitespace-delimited tokens', () => {
@@ -341,6 +344,20 @@ describe('countLists', () => {
   });
 });
 
+describe('countPages', () => {
+  it('returns page count when currentTotalPages is available', () => {
+    const editorWithPages = {
+      ...EMPTY_EDITOR,
+      currentTotalPages: 5,
+    } as unknown as Editor;
+    expect(countPages(editorWithPages)).toBe(5);
+  });
+
+  it('returns undefined when no presentationEditor', () => {
+    expect(countPages(EMPTY_EDITOR)).toBeUndefined();
+  });
+});
+
 describe('getLiveDocumentCounts', () => {
   beforeEach(() => {
     getBlockIndexMock.mockReset();
@@ -405,6 +422,31 @@ describe('getLiveDocumentCounts', () => {
       sdtFields: 2,
       lists: 2,
     });
+  });
+
+  it('includes pages when currentTotalPages is available', () => {
+    getTextAdapterMock.mockReturnValue('hello');
+    getBlockIndexMock.mockReturnValue(makeBlockIndex([]));
+    getInlineIndexMock.mockReturnValue(makeInlineIndex([]));
+    groupTrackedChangesMock.mockReturnValue([] as ReturnType<typeof groupTrackedChanges>);
+    findAllSdtNodesMock.mockReturnValue([] as ReturnType<typeof findAllSdtNodes>);
+
+    const editorWithPages = { ...EMPTY_EDITOR, currentTotalPages: 7 } as unknown as Editor;
+    const result = getLiveDocumentCounts(editorWithPages);
+
+    expect(result.pages).toBe(7);
+  });
+
+  it('omits pages key when pagination is inactive', () => {
+    getTextAdapterMock.mockReturnValue('hello');
+    getBlockIndexMock.mockReturnValue(makeBlockIndex([]));
+    getInlineIndexMock.mockReturnValue(makeInlineIndex([]));
+    groupTrackedChangesMock.mockReturnValue([] as ReturnType<typeof groupTrackedChanges>);
+    findAllSdtNodesMock.mockReturnValue([] as ReturnType<typeof findAllSdtNodes>);
+
+    const result = getLiveDocumentCounts(EMPTY_EDITOR);
+
+    expect('pages' in result).toBe(false);
   });
 
   it('words and characters derive from the same text projection', () => {

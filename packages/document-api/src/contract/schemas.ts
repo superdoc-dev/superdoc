@@ -907,6 +907,7 @@ const documentInfoCountsSchema = objectSchema(
     trackedChanges: { type: 'integer' },
     sdtFields: { type: 'integer' },
     lists: { type: 'integer' },
+    pages: { type: 'integer' },
   },
   [
     'words',

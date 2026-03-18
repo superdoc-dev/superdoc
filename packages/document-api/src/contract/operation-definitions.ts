@@ -379,9 +379,9 @@ export const OPERATION_DEFINITIONS = {
   info: {
     memberPath: 'info',
     description:
-      'Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities.',
+      'Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities.',
     expectedResult:
-      'Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists), document outline, capability flags, and revision.',
+      'Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists, and optionally pages when pagination is active), document outline, capability flags, and revision.',
     requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',

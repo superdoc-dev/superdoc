@@ -21,6 +21,8 @@ export interface LiveDocumentCounts {
   trackedChanges: number;
   sdtFields: number;
   lists: number;
+  /** Page count from the layout engine, if pagination is active. */
+  pages?: number;
 }
 
 type LiveDocumentCountsCacheEntry = {
@@ -52,6 +54,7 @@ const liveDocumentCountsCache = new WeakMap<Editor, LiveDocumentCountsCacheEntry
  * - `sdtFields`: field-like SDT/content-control nodes (text/date/checkbox/choice controls)
  * - `lists`: unique list sequences, not individual list items. When list items
  *    are visible but `numId` is unavailable, counts fall back to visible runs.
+ * - `pages`: layout page count (omitted when pagination is inactive)
  */
 export function getLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
   const currentDoc = editor.state.doc;
@@ -74,6 +77,7 @@ function computeLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
 
   const blockCounts = countBlockNodeTypes(blockIndex);
   const inlineImages = countInlineImages(inlineIndex);
+  const pages = countPages(editor);
 
   return {
     words: countWordsFromText(text),
@@ -86,6 +90,7 @@ function computeLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
     trackedChanges: countTrackedChanges(editor),
     sdtFields: countSdtFields(editor),
     lists: countLists(editor, blockIndex),
+    ...(pages != null ? { pages } : {}),
   };
 }
 
@@ -268,4 +273,13 @@ function resolveVisibleListLevel(item: ListItemProjection): number | undefined {
   }
 
   return item.path && item.path.length > 0 ? item.path.length - 1 : undefined;
+}
+
+/**
+ * Returns the current page count when pagination is active.
+ * Delegates to `editor.currentTotalPages`, which returns `undefined`
+ * when no PresentationEditor exists or layout hasn't completed.
+ */
+export function countPages(editor: Editor): number | undefined {
+  return editor.currentTotalPages;
 }

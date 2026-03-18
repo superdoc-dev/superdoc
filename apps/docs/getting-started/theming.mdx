@@ -22,11 +22,11 @@ Change five CSS variables and your brand colors flow through every SuperDoc comp
 </html>
 ```
 
-Every `--sd-*` CSS custom property can be overridden on any parent element. The changes cascade down to all child components.
+Override any `--sd-*` CSS custom property on the `<html>` element and the changes cascade to all components.
 
 ## Preset themes
 
-Three preset themes ship out of the box. Add the class to `<html>` or any wrapper element.
+Three preset themes ship out of the box. Add the class to `<html>` — some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>` to pick up the theme.
 
 <CardGroup cols={3}>
   <Card title="Docs" icon="google">

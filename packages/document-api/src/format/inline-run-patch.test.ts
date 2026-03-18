@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { INLINE_PROPERTY_BY_KEY } from './inline-run-patch.js';
+import { INLINE_PROPERTY_BY_KEY, validateInlineRunPatch } from './inline-run-patch.js';
+import { DocumentApiValidationError } from '../errors.js';
 
 describe('INLINE_PROPERTY_REGISTRY: caps entry', () => {
   const entry = INLINE_PROPERTY_BY_KEY['caps'];
@@ -26,6 +27,34 @@ describe('INLINE_PROPERTY_REGISTRY: caps entry', () => {
 
   it('maps to the w:caps OOXML element', () => {
     expect(entry.ooxmlElement).toBe('w:caps');
+  });
+});
+
+describe('validateInlineRunPatch: rejects Object.prototype keys', () => {
+  it('rejects toString as an unknown inline property', () => {
+    expect(() => validateInlineRunPatch({ toString: true })).toThrow(DocumentApiValidationError);
+    expect(() => validateInlineRunPatch({ toString: true })).toThrow('Unknown inline property: "toString"');
+  });
+
+  it('rejects constructor as an unknown inline property', () => {
+    expect(() => validateInlineRunPatch({ constructor: true })).toThrow(DocumentApiValidationError);
+    expect(() => validateInlineRunPatch({ constructor: true })).toThrow('Unknown inline property: "constructor"');
+  });
+
+  it('rejects hasOwnProperty as an unknown inline property', () => {
+    expect(() => validateInlineRunPatch({ hasOwnProperty: true })).toThrow(DocumentApiValidationError);
+  });
+
+  it('rejects __proto__ as an unknown inline property', () => {
+    // JSON.parse produces __proto__ as an own property (not the setter)
+    const patch = JSON.parse('{"__proto__": true}');
+    expect(() => validateInlineRunPatch(patch)).toThrow(DocumentApiValidationError);
+  });
+
+  it('still accepts valid inline properties', () => {
+    expect(() => validateInlineRunPatch({ bold: true })).not.toThrow();
+    expect(() => validateInlineRunPatch({ italic: null })).not.toThrow();
+    expect(() => validateInlineRunPatch({ fontSize: 12 })).not.toThrow();
   });
 });
 

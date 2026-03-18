@@ -132,31 +132,47 @@ test('link is not editable in viewing mode', async ({ superdoc }) => {
   await applyLink(superdoc, 'https://example.com');
   await superdoc.snapshot('link created in editing mode');
 
-  // Switch to viewing mode via toolbar dropdown
-  const modeButton = superdoc.page.locator('[data-item="btn-documentMode"]');
-  await modeButton.click();
+  // Switch to viewing mode
+  await superdoc.setDocumentMode('viewing');
   await superdoc.waitForStable();
-
-  const viewingOption = superdoc.page.locator('[data-item="btn-documentMode-option"]').filter({ hasText: 'Viewing' });
-  await viewingOption.click();
-  await superdoc.waitForStable();
+  await superdoc.assertDocumentMode('viewing');
   await superdoc.snapshot('switched to viewing mode');
 
   // Link toolbar button should be disabled in viewing mode
   const linkButton = superdoc.page.locator('[data-item="btn-link"]');
   await expect(linkButton).toHaveClass(/disabled/);
 
-  // Click on the linked text in the document to trigger link details popup
+  // Stub window.open so we can assert navigation without depending on popup handling
+  await superdoc.page.evaluate(() => {
+    (window as any).__sdOpenedLinks = [];
+    const originalOpen = window.open.bind(window);
+    (window as any).__sdOriginalWindowOpen = originalOpen;
+    window.open = (...args) => {
+      (window as any).__sdOpenedLinks.push(args);
+      return null;
+    };
+  });
+
+  // Clicking the rendered link should navigate, not open the read-only link popup
   const linkElement = superdoc.page.locator('.superdoc-link:has-text("website")');
   await linkElement.click();
   await superdoc.waitForStable();
 
-  // Should show "Link details" (not "Edit link") — use .first() since there may be
-  // a stale toolbar dropdown element in addition to the link details popup
-  await expect(superdoc.page.locator('.link-title').first()).toHaveText('Link details');
-  await superdoc.snapshot('link details popup in viewing mode');
-
-  // Remove and Apply buttons should not be visible
+  await expect(superdoc.page.locator('.link-title').filter({ hasText: 'Link details' })).toBeHidden();
   await expect(superdoc.page.locator('[data-item="btn-link-remove"]')).toHaveCount(0);
   await expect(superdoc.page.locator('[data-item="btn-link-apply"]')).toHaveCount(0);
+  await expect
+    .poll(() => superdoc.page.evaluate(() => (window as any).__sdOpenedLinks))
+    .toEqual([['https://example.com', '_blank', 'noopener,noreferrer']]);
+  await superdoc.snapshot('link navigates in viewing mode');
+
+  // Restore window.open for cleanliness in the browser context
+  await superdoc.page.evaluate(() => {
+    const originalOpen = (window as any).__sdOriginalWindowOpen;
+    if (originalOpen) {
+      window.open = originalOpen;
+    }
+    delete (window as any).__sdOriginalWindowOpen;
+    delete (window as any).__sdOpenedLinks;
+  });
 });

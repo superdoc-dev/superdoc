@@ -24,6 +24,21 @@ type ReplayEditor = {
 };
 
 /**
+ * Creates an editor-owned copy of a comment payload before replay stores or emits it.
+ *
+ * Comment payloads come from opaque diff input, so replay must not retain the
+ * caller's object references.
+ *
+ * @param comment Source comment payload.
+ * @returns Deep-cloned comment payload.
+ */
+function cloneCommentPayload(
+  comment: import('../algorithm/comment-diffing').CommentInput,
+): import('../algorithm/comment-diffing').CommentInput {
+  return structuredClone(comment);
+}
+
+/**
  * Builds a replay event payload with stable id and document ownership metadata.
  *
  * @param params.comment Source comment payload.
@@ -40,25 +55,20 @@ function buildReplayCommentEventPayload({
   commentId: string;
   editor?: ReplayEditor;
 }): import('../algorithm/comment-diffing').CommentInput {
-  const payload = {
-    ...comment,
-  };
+  const payload = cloneCommentPayload(comment);
 
   if (!payload.commentId) {
     payload.commentId = commentId;
   }
 
   const editorDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
-  const payloadDocumentId = payload.documentId != null ? String(payload.documentId) : null;
-  const payloadFileId = payload.fileId != null ? String(payload.fileId) : null;
-  const documentId = payloadDocumentId ?? editorDocumentId;
-  const fileId = payloadFileId ?? documentId ?? editorDocumentId;
 
-  if (!payload.documentId && documentId) {
-    payload.documentId = documentId;
-  }
-  if (!payload.fileId && fileId) {
-    payload.fileId = fileId;
+  // Always rebind ownership to the active editor's document scope.
+  // Source-editor values must not leak into the replay target — the active
+  // editor is the authoritative owner of replayed comments.
+  if (editorDocumentId) {
+    payload.documentId = editorDocumentId;
+    payload.fileId = editorDocumentId;
   }
 
   return payload;
@@ -114,14 +124,15 @@ function replayCommentDiff({
       return result;
     }
 
-    comments.push(diff.commentJSON);
+    const storedComment = cloneCommentPayload(diff.commentJSON);
+    comments.push(storedComment);
     result.applied += 1;
     const payload = buildReplayCommentEventPayload({
-      comment: diff.commentJSON,
+      comment: storedComment,
       commentId: diff.commentId,
       editor,
     });
-    const resolvedText = resolveCommentTextPayload({ comment: diff.commentJSON, fallbackText: diff.text });
+    const resolvedText = resolveCommentTextPayload({ comment: storedComment, fallbackText: diff.text });
     if (!payload.commentText && resolvedText) {
       payload.commentText = resolvedText;
     }
@@ -160,14 +171,15 @@ function replayCommentDiff({
       return result;
     }
 
-    comments.splice(existingIndex, 1, diff.newCommentJSON);
+    const storedComment = cloneCommentPayload(diff.newCommentJSON);
+    comments.splice(existingIndex, 1, storedComment);
     result.applied += 1;
     const payload = buildReplayCommentEventPayload({
-      comment: diff.newCommentJSON,
+      comment: storedComment,
       commentId: diff.commentId,
       editor,
     });
-    const resolvedText = resolveCommentTextPayload({ comment: diff.newCommentJSON, fallbackText: diff.newText });
+    const resolvedText = resolveCommentTextPayload({ comment: storedComment, fallbackText: diff.newText });
     if (!payload.commentText && resolvedText) {
       payload.commentText = resolvedText;
     }

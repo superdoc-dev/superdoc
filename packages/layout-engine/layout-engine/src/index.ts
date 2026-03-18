@@ -26,7 +26,9 @@ import type {
   DrawingFragment,
   SectionNumbering,
   FlowMode,
+  NormalizedColumnLayout,
 } from '@superdoc/contracts';
+import { normalizeColumnLayout } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
@@ -44,6 +46,7 @@ import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty } from './layout-utils.js';
 import { balancePageColumns } from './column-balancing.js';
 import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
+import { cloneColumnLayout, widthsEqual } from './column-utils.js';
 
 type PageSize = { w: number; h: number };
 type Margins = {
@@ -55,7 +58,14 @@ type Margins = {
   footer?: number;
 };
 
-type NormalizedColumns = ColumnLayout & { width: number };
+type NormalizedColumns = NormalizedColumnLayout;
+
+const getColumnWidthAt = (columns: NormalizedColumns, columnIndex: number): number => {
+  if (Array.isArray(columns.widths) && columns.widths.length > 0) {
+    return columns.widths[Math.max(0, Math.min(columnIndex, columns.widths.length - 1))] ?? columns.width;
+  }
+  return columns.width;
+};
 
 /**
  * Default paragraph line height in pixels used for vertical alignment calculations
@@ -764,8 +774,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   let pendingPageSize: { w: number; h: number } | null = null;
 
   // Track active and pending columns
-  let activeColumns = options.columns ?? { count: 1, gap: 0 };
-  let pendingColumns: { count: number; gap: number } | null = null;
+  let activeColumns = cloneColumnLayout(options.columns);
+  let pendingColumns: ColumnLayout | null = null;
 
   // Track active and pending orientation
   let activeOrientation: 'portrait' | 'landscape' | null = null;
@@ -862,11 +872,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // Update columns - if section has columns, use them; if undefined, reset to single column.
       // In OOXML, absence of <w:cols> means single column (default).
       if (block.columns) {
-        next.activeColumns = { count: block.columns.count, gap: block.columns.gap };
+        next.activeColumns = cloneColumnLayout(block.columns);
         next.pendingColumns = null;
       } else {
         // No columns specified = reset to single column (OOXML default)
-        next.activeColumns = { count: 1, gap: 0 };
+        next.activeColumns = cloneColumnLayout(undefined);
         next.pendingColumns = null;
       }
       // Schedule section refs for first section (will be applied on first page creation)
@@ -944,7 +954,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // or implicitly resetting to single column (undefined = single column in OOXML)
     const isColumnsChanging =
       (block.columns &&
-        (block.columns.count !== next.activeColumns.count || block.columns.gap !== next.activeColumns.gap)) ||
+        (block.columns.count !== next.activeColumns.count ||
+          block.columns.gap !== next.activeColumns.gap ||
+          block.columns.equalWidth !== next.activeColumns.equalWidth ||
+          !widthsEqual(block.columns.widths, next.activeColumns.widths))) ||
       (!block.columns && next.activeColumns.count > 1);
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
@@ -971,8 +984,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       layoutLog(`[Layout] Compat fallback: Scheduled pendingSectionRefs:`, pendingSectionRefs);
     }
     // Helper to get column config: use block.columns if defined, otherwise reset to single column (OOXML default)
-    const getColumnConfig = () =>
-      block.columns ? { count: block.columns.count, gap: block.columns.gap } : { count: 1, gap: 0 };
+    const getColumnConfig = () => cloneColumnLayout(block.columns);
 
     if (block.attrs?.requirePageBoundary) {
       next.pendingColumns = getColumnConfig();
@@ -1309,7 +1321,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     state: PageState | null;
     constraintIndex: number;
     contentWidth: number;
-    colsConfig: { count: number; gap: number } | null;
+    colsConfig: ColumnLayout | null;
     normalized: NormalizedColumns | null;
   } = { state: null, constraintIndex: -2, contentWidth: -1, colsConfig: null, normalized: null };
 
@@ -1325,6 +1337,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       cachedColumnsState.contentWidth === currentContentWidth &&
       cachedColumnsState.colsConfig?.count === colsConfig.count &&
       cachedColumnsState.colsConfig?.gap === colsConfig.gap &&
+      cachedColumnsState.colsConfig?.equalWidth === colsConfig.equalWidth &&
+      widthsEqual(cachedColumnsState.colsConfig?.widths, colsConfig.widths) &&
       cachedColumnsState.normalized
     ) {
       return cachedColumnsState.normalized;
@@ -1335,10 +1349,17 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       state,
       constraintIndex,
       contentWidth: currentContentWidth,
-      colsConfig: { count: colsConfig.count, gap: colsConfig.gap },
+      colsConfig: cloneColumnLayout(colsConfig),
       normalized,
     };
     return normalized;
+  };
+
+  const getCurrentColumnWidth = (): number => {
+    const cols = getCurrentColumns();
+    const state = states[states.length - 1] ?? null;
+    const columnIndex = state?.columnIndex ?? 0;
+    return getColumnWidthAt(cols, columnIndex);
   };
 
   // Helper to get column X position
@@ -1347,7 +1368,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const advanceColumn = paginator.advanceColumn;
 
   // Start a new mid-page region with different column configuration
-  const startMidPageRegion = (state: PageState, newColumns: { count: number; gap: number }): void => {
+  const startMidPageRegion = (state: PageState, newColumns: ColumnLayout): void => {
     // Record the boundary at current Y position
     const boundary: ConstraintBoundary = {
       y: state.cursorY,
@@ -1365,7 +1386,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}`);
 
     // Update activeColumns so subsequent pages use this column configuration
-    activeColumns = newColumns;
+    activeColumns = cloneColumnLayout(newColumns);
 
     // Invalidate columns cache to ensure recalculation with new region
     cachedColumnsState.state = null;
@@ -1904,7 +1925,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         {
           block,
           measure,
-          columnWidth: getCurrentColumns().width,
+          columnWidth: getCurrentColumnWidth(),
           ensurePage: paginator.ensurePage,
           advanceColumn: paginator.advanceColumn,
           columnX,
@@ -1934,7 +1955,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // Only vRelativeFrom=paragraph is supported.
       if (tablesForPara) {
         const state = paginator.ensurePage();
-        const columnWidthForTable = getCurrentColumns().width;
+        const columnWidthForTable = getCurrentColumnWidth();
         let tableBottomY = state.cursorY;
         for (const { block: tableBlock, measure: tableMeasure } of tablesForPara) {
           if (placedAnchoredTableIds.has(tableBlock.id)) continue;
@@ -1988,7 +2009,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         } else if (relativeFrom === 'margin') {
           maxWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
         } else {
-          maxWidth = cols.width;
+          maxWidth = getColumnWidthAt(cols, state.columnIndex);
         }
 
         const aspectRatio = imgMeasure.width > 0 && imgMeasure.height > 0 ? imgMeasure.width / imgMeasure.height : 1.0;
@@ -2092,7 +2113,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       layoutTableBlock({
         block: block as TableBlock,
         measure: measure as TableMeasure,
-        columnWidth: getCurrentColumns().width,
+        columnWidth: getCurrentColumnWidth(),
         ensurePage: paginator.ensurePage,
         advanceColumn: paginator.advanceColumn,
         columnX,
@@ -2239,6 +2260,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     const measureMap = new Map<string, { kind: string; lines?: Array<{ lineHeight: number }>; height?: number }>();
     // Build blockId -> sectionIndex map to filter fragments by section
     const blockSectionMap = new Map<string, number>();
+    const sectionColumnsMap = new Map<number, ColumnLayout>();
     blocks.forEach((block, idx) => {
       const measure = measures[idx];
       if (measure) {
@@ -2250,6 +2272,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       const sectionIdx = blockWithAttrs.attrs?.sectionIndex;
       if (typeof sectionIdx === 'number') {
         blockSectionMap.set(block.id, sectionIdx);
+        if (block.kind === 'sectionBreak' && block.columns) {
+          sectionColumnsMap.set(sectionIdx, cloneColumnLayout(block.columns));
+        }
       }
     });
 
@@ -2257,6 +2282,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // Balance the last page (section ends at document end).
       // TODO: Track section boundaries and balance at each continuous section break.
       if (page === pages[pages.length - 1] && page.fragments.length > 0) {
+        const finalSectionColumns = sectionColumnsMap.get(activeSectionIndex) ?? activeColumns;
+        // Word does not rebalance the final page for sections that use explicit
+        // per-column widths. Preserve the natural left-to-right fill order there.
+        const hasExplicitColumnWidths =
+          finalSectionColumns?.equalWidth === false &&
+          Array.isArray(finalSectionColumns.widths) &&
+          finalSectionColumns.widths.length > 0;
+
+        if (hasExplicitColumnWidths) {
+          continue;
+        }
+
         // Skip balancing if fragments are already in multiple columns (e.g., explicit column breaks).
         // Balancing should only apply when all content flows naturally in column 0.
         const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
@@ -2295,6 +2332,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           : page.fragments;
 
         if (fragmentsToBalance.length > 0) {
+          const availableHeight = pageSize.h - activeBottomMargin - activeTopMargin;
           balancePageColumns(
             fragmentsToBalance as {
               x: number;
@@ -2309,6 +2347,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             normalizedCols,
             { left: activeLeftMargin },
             activeTopMargin,
+            availableHeight,
             measureMap,
           );
         }
@@ -2528,25 +2567,7 @@ export function layoutHeaderFooter(
  * // Returns { count: 1, gap: 0, width: 600 }
  */
 function normalizeColumns(input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns {
-  const rawCount = Number.isFinite(input?.count) ? Math.floor(input!.count) : 1;
-  const count = Math.max(1, rawCount || 1);
-  const gap = Math.max(0, input?.gap ?? 0);
-  const totalGap = gap * (count - 1);
-  const width = (contentWidth - totalGap) / count;
-
-  if (width <= COLUMN_EPSILON) {
-    return {
-      count: 1,
-      gap: 0,
-      width: contentWidth,
-    };
-  }
-
-  return {
-    count,
-    gap,
-    width,
-  };
+  return normalizeColumnLayout(input, contentWidth, COLUMN_EPSILON);
 }
 
 const _buildMeasureMap = (blocks: FlowBlock[], measures: Measure[]): Map<string, Measure> => {

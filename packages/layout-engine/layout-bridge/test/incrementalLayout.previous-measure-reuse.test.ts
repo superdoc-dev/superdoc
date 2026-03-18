@@ -73,4 +73,57 @@ describe('incrementalLayout previous-measure reuse', () => {
     expect(secondPassBodyMeasure.lines?.[0]?.width).toBe(80);
     expect(measureBlock).toHaveBeenCalledTimes(1);
   });
+
+  it('measures pre-section content using single-column width when a following section break omits columns', async () => {
+    const options = {
+      pageSize: { w: 300, h: 400 },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      columns: { count: 2, gap: 20 },
+    };
+
+    const intro = makeParagraph('intro', 'Intro paragraph');
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'section-0',
+      attrs: { isFirstSection: true, sectionIndex: 0, source: 'sectPr' },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+    };
+    const nextSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'section-1',
+      attrs: { sectionIndex: 1, source: 'sectPr' },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      columns: { count: 2, gap: 20 },
+    };
+    const body = makeParagraph('body', 'Body paragraph');
+
+    const blocks: FlowBlock[] = [firstSection, intro, nextSection, body];
+
+    const measureBlock = vi.fn(async (_block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => {
+      return {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: constraints.maxWidth,
+            ascent: 8,
+            descent: 2,
+            lineHeight: 10,
+          },
+        ],
+        totalHeight: 10,
+      } satisfies ParagraphMeasure;
+    });
+
+    const result = await incrementalLayout([], null, blocks, options, measureBlock);
+
+    const introMeasure = result.measures[1] as ParagraphMeasure;
+    const bodyMeasure = result.measures[3] as ParagraphMeasure;
+
+    expect(introMeasure.lines?.[0]?.width).toBe(260);
+    expect(bodyMeasure.lines?.[0]?.width).toBe(120);
+  });
 });

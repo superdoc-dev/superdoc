@@ -66,18 +66,13 @@ export interface StyleApplyInput {
   inline: InlineRunPatch;
 }
 
-/** Options for `format.apply` — same shape as all other mutations. */
+/**
+ * Named alias for MutationOptions on format.apply.
+ *
+ * Exists as a distinct type so the styles system can add style-specific
+ * options (e.g. scope, priority) without changing the public API shape.
+ */
 export type StyleApplyOptions = MutationOptions;
-
-// ---------------------------------------------------------------------------
-// Legacy FormatAdapter — kept temporarily for inline aliases that still
-// route through the old path. Will be fully retired once all aliases migrate.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use SelectionMutationAdapter instead. Kept for inline-alias compatibility. */
-export interface FormatAdapter {
-  apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
-}
 
 // ---------------------------------------------------------------------------
 // Public API surface

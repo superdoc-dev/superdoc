@@ -93,7 +93,7 @@ export const FormatCommands = Extension.create({
         ({ chain }) => {
           // If we don't have a saved style, save the current one
           if (!this.storage.storedStyle) {
-            const marks = getMarksFromSelection(this.editor.state);
+            const marks = getMarksFromSelection(this.editor.state, this.editor);
             this.storage.storedStyle = marks;
             return true;
           }

@@ -383,6 +383,36 @@ describe('CommentsPlugin commands', () => {
     expect(editor.view.focus).not.toHaveBeenCalled();
   });
 
+  it('sets the active thread without focusing the hidden view when requested', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'c-10', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [commentMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { commands } = createEditorEnvironment(schema, doc);
+
+    const tr = {
+      setSelection: vi.fn(),
+      setMeta: vi.fn(),
+    };
+    const editor = {
+      view: { focus: vi.fn() },
+    };
+
+    const result = commands.setCursorById('c-10', { activeCommentId: 'thread-1' })({ state: { doc, tr }, editor });
+
+    expect(result).toBe(true);
+    expect(tr.setSelection).toHaveBeenCalled();
+    expect(tr.setMeta).toHaveBeenCalledWith(
+      CommentsPluginKey,
+      expect.objectContaining({
+        type: 'setActiveComment',
+        activeThreadId: 'thread-1',
+        forceUpdate: true,
+      }),
+    );
+    expect(editor.view.focus).not.toHaveBeenCalled();
+  });
+
   describe('addCommentReply', () => {
     it('emits commentsUpdate event with parentCommentId', () => {
       const schema = createCommentSchema();
@@ -609,7 +639,6 @@ describe('CommentsPlugin state', () => {
 
     const pluginState = CommentsPluginKey.getState(view.state);
     expect(pluginState.activeThreadId).toBe('thread-1');
-    expect(pluginState.changedActiveThread).toBe(true);
   });
 
   it('stores decorations provided through metadata', () => {

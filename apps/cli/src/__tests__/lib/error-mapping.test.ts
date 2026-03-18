@@ -274,3 +274,28 @@ describe('mapFailedReceipt: plan-engine code passthrough', () => {
     expect(result!.code).toBe('INVALID_ARGUMENT');
   });
 });
+
+// ---------------------------------------------------------------------------
+// textMutation: INVALID_INPUT ordering — plan-engine must win over adapter remap
+// ---------------------------------------------------------------------------
+
+describe('mapInvokeError: textMutation INVALID_INPUT ordering', () => {
+  test('plan-engine INVALID_INPUT passes through verbatim for text mutations', () => {
+    const error = Object.assign(new Error('step schema invalid'), {
+      code: 'INVALID_INPUT',
+      details: {
+        stepIndex: 0,
+        operation: 'text.rewrite',
+        remediation: 'Fix the step payload.',
+      },
+    });
+
+    const result = mapInvokeError('format.inline.apply' as any, error);
+    expect(result).toBeInstanceOf(CliError);
+    // Must preserve INVALID_INPUT — not remap to INVALID_ARGUMENT
+    expect(result.code).toBe('INVALID_INPUT');
+    expect(result.details).toMatchObject({
+      details: { stepIndex: 0, operation: 'text.rewrite' },
+    });
+  });
+});

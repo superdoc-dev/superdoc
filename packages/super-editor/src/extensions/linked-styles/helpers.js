@@ -322,7 +322,6 @@ export const generateLinkedStyleString = (linkedStyle, basedOnStyle, node, paren
  */
 export const applyLinkedStyleToTransaction = (tr, editor, style) => {
   if (!style) return false;
-  tr.setMeta('sdStyleMarks', []);
 
   let selection = tr.selection;
   const state = editor.state;

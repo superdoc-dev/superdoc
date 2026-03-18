@@ -69,41 +69,13 @@ export function executeTrackChangesGet(adapter: TrackChangesAdapter, input: Trac
   return adapter.get(input);
 }
 
-export function executeTrackChangesAccept(
-  adapter: TrackChangesAdapter,
-  input: TrackChangesAcceptInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.accept(input, options);
-}
-
-export function executeTrackChangesReject(
-  adapter: TrackChangesAdapter,
-  input: TrackChangesRejectInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.reject(input, options);
-}
-
-export function executeTrackChangesAcceptAll(
-  adapter: TrackChangesAdapter,
-  input: TrackChangesAcceptAllInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.acceptAll(input, options);
-}
-
-export function executeTrackChangesRejectAll(
-  adapter: TrackChangesAdapter,
-  input: TrackChangesRejectAllInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.rejectAll(input, options);
-}
-
 /**
  * Executes the consolidated `trackChanges.decide` operation by routing to the
  * appropriate adapter method based on the discriminated input.
+ *
+ * Accepting/rejecting changes is a resolution action, not a content mutation —
+ * changeMode and dryRun are not applicable, so this accepts
+ * {@link RevisionGuardOptions} rather than `MutationOptions`.
  */
 export function executeTrackChangesDecide(
   adapter: TrackChangesAdapter,

@@ -1,5 +1,6 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import { getAttributesDiff, getMarksDiff, type AttributesDiff, type MarksDiff } from './attributes-diffing';
+import { normalizeInlineNodeJSON, normalizeInlineNodeAttrs, semanticInlineNodeKey } from './semantic-normalization';
 import { diffSequences } from './sequence-diffing';
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
@@ -237,7 +238,9 @@ export function getInlineDiff(
     buildDeleted: (token, oldIdx) => buildInlineDiff('deleted', token, oldIdx),
     buildModified: (oldToken, newToken, oldIdx) => {
       if (oldToken.kind !== 'text' && newToken.kind !== 'text') {
-        const attrsDiff = getAttributesDiff(oldToken.node.attrs, newToken.node.attrs);
+        const oldNormalized = normalizeInlineNodeAttrs(oldToken.node.type.name, oldToken.node.attrs);
+        const newNormalized = normalizeInlineNodeAttrs(newToken.node.type.name, newToken.node.attrs);
+        const attrsDiff = getAttributesDiff(oldNormalized, newNormalized);
         return {
           action: 'modified',
           idx: oldIdx,
@@ -270,7 +273,8 @@ export function getInlineDiff(
 
 /**
  * Compares two inline tokens to decide if they can be considered equal for the Myers diff.
- * Text tokens compare character equality while inline nodes compare their type.
+ * Text tokens compare character equality. Inline nodes compare by semantic identity
+ * (normalized JSON), not just type name, so that distinct images are not falsely paired.
  */
 function inlineComparator(a: InlineDiffToken, b: InlineDiffToken): boolean {
   if (a.kind !== b.kind) {
@@ -281,7 +285,7 @@ function inlineComparator(a: InlineDiffToken, b: InlineDiffToken): boolean {
     return a.char === b.char;
   }
   if (a.kind === 'inlineNode' && b.kind === 'inlineNode') {
-    return a.node.type.name === b.node.type.name;
+    return semanticInlineNodeKey(a.node) === semanticInlineNodeKey(b.node);
   }
   return false;
 }
@@ -299,8 +303,8 @@ function shouldProcessEqualAsModification(oldToken: InlineDiffToken, newToken: I
   }
 
   if (oldToken.kind === 'inlineNode' && newToken.kind === 'inlineNode') {
-    const oldJSON = oldToken.node.toJSON();
-    const newJSON = newToken.node.toJSON();
+    const oldJSON = normalizeInlineNodeJSON(oldToken.node.toJSON());
+    const newJSON = normalizeInlineNodeJSON(newToken.node.toJSON());
     return JSON.stringify(oldJSON) !== JSON.stringify(newJSON);
   }
 

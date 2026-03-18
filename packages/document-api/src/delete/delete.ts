@@ -9,6 +9,7 @@ import type { SelectionTarget, DeleteBehavior } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
 import type { MutationOptions } from '../types/mutation-plan.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
+import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
 import { isSelectionTarget } from '../validation/selection-target-validator.js';
@@ -105,6 +106,6 @@ export function executeDelete(
       ref: input.ref,
       behavior: input.behavior ?? 'selection',
     },
-    options,
+    normalizeMutationOptions(options),
   );
 }

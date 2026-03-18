@@ -1,7 +1,7 @@
 import type { DocumentApiAdapters } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { getAdapter } from './get-adapter.js';
-import { sdFindAdapter, findLegacyAdapter } from './find-adapter.js';
+import { sdFindAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { getMarkdownAdapter } from './get-markdown-adapter.js';
@@ -162,6 +162,7 @@ import {
   tablesClearDefaultStyleAdapter,
 } from './tables-adapter.js';
 import { createHistoryAdapter } from './history-adapter.js';
+import { createDiffAdapter } from './diff-adapter.js';
 import {
   tocListWrapper,
   tocGetWrapper,
@@ -332,7 +333,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     find: {
       find: (input) => sdFindAdapter(editor, input),
-      findLegacy: (query) => findLegacyAdapter(editor, query),
     },
     getNode: {
       getNode: (address) => getNodeAdapter(editor, address),
@@ -677,6 +677,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       preview: (input) => previewPlan(editor, input),
       apply: (input) => executePlan(editor, input),
     },
+    diff: createDiffAdapter(editor),
     history: createHistoryAdapter(editor),
   };
 }

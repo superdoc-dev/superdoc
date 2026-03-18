@@ -1,5 +1,5 @@
-import { executeFind, executeLegacyFind, normalizeFindQuery } from './find.js';
-import type { Query, FindOutput, Selector } from '../types/index.js';
+import { executeFind, normalizeFindQuery } from './find.js';
+import type { Query, Selector } from '../types/index.js';
 import type { SDFindInput, SDFindResult } from '../types/sd-envelope.js';
 import type { FindAdapter } from './find.js';
 
@@ -196,43 +196,5 @@ describe('executeFind', () => {
 
     expect(result).toBe(sdResult);
     expect(adapter.find).toHaveBeenCalledWith(input);
-  });
-});
-
-describe('executeLegacyFind', () => {
-  it('normalizes input and delegates to findLegacy', () => {
-    const envelope: FindOutput = {
-      evaluatedRevision: 'r1',
-      total: 0,
-      items: [],
-      page: { limit: 5, offset: 0, returned: 0 },
-    };
-    const adapter: FindAdapter = {
-      find: vi.fn(() => ({ total: 0, limit: 0, offset: 0, items: [] })),
-      findLegacy: vi.fn(() => envelope),
-    };
-
-    const result = executeLegacyFind(adapter, { nodeType: 'paragraph' }, { limit: 5 });
-
-    expect(result).toBe(envelope);
-    expect(adapter.findLegacy).toHaveBeenCalledWith({
-      select: { type: 'node', nodeType: 'paragraph' },
-      limit: 5,
-      offset: undefined,
-      within: undefined,
-      require: undefined,
-      includeNodes: undefined,
-      includeUnknown: undefined,
-    });
-  });
-
-  it('throws when findLegacy is not available', () => {
-    const adapter: FindAdapter = {
-      find: vi.fn(() => ({ total: 0, limit: 0, offset: 0, items: [] })),
-    };
-
-    expect(() => executeLegacyFind(adapter, { nodeType: 'paragraph' })).toThrow(
-      'Legacy find is not supported by this adapter',
-    );
   });
 });

@@ -66,6 +66,21 @@ export interface FileOutputMeta {
   byteLength: number;
 }
 
+function bindCurrentDocumentApi(editor: Editor): EditorWithDoc {
+  const editorWithDoc = editor as EditorWithDoc;
+
+  // `superdoc/super-editor` resolves to the published dist bundle, which can
+  // lag the source-backed document-api contract used by the CLI tests. Shadow
+  // the bundled getter with a source-backed DocumentApi so runtime behavior and
+  // response validation stay on the same contract version.
+  Object.defineProperty(editorWithDoc, 'doc', {
+    configurable: true,
+    value: createDocumentApi(getDocumentApiAdapters(editor)),
+  });
+
+  return editorWithDoc;
+}
+
 function toUint8Array(data: unknown): Uint8Array {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
@@ -218,10 +233,7 @@ export async function openDocument(
     }
   }
 
-  const adapters = getDocumentApiAdapters(editor);
-  const docApi = createDocumentApi(adapters);
-  Object.defineProperty(editor, 'doc', { value: docApi, configurable: true, writable: true });
-  const editorWithDoc = editor as EditorWithDoc;
+  const editorWithDoc = bindCurrentDocumentApi(editor);
 
   return {
     editor: editorWithDoc,

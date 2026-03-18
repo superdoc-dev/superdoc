@@ -1,6 +1,6 @@
 ---
 title: SDKs
-sidebarTitle: SDKs
+sidebarTitle: Overview
 description: Node.js and Python SDKs for programmatic document editing
 keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
 ---
@@ -172,6 +172,12 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 
 Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 The Python SDK also exposes synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
+
+## Need file-to-file diffing?
+
+For workflows where you already have `Doc1` and need to compare an uploaded `Doc2`, see [SDK Diffing](/document-engine/sdk-diffing).
+
+That guide covers the recommended `diff.capture -> diff.compare -> diff.apply` flow and how to save the result as a third `.docx` with tracked changes.
 
 ## User identity
 
@@ -374,7 +380,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities. |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -521,6 +527,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
 | `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
 | `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 
@@ -809,7 +818,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities. |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -956,6 +965,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
 | `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
 | `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 
@@ -1232,6 +1244,26 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
   </Tab>
 </Tabs>
 {/* SDK_OPERATIONS_END */}
+
+## SDK vs browser integration model
+
+The SDKs are request/response wrappers around the CLI. They do **not** expose browser event subscriptions like `editor.on('update', ...)` or `superdoc.on('editor-update', ...)`.
+
+- Call `doc.info()` at workflow boundaries — after opening, after edits, or before saving — not in a polling loop.
+- If you are building a browser live counter, use the [SuperEditor events](/core/supereditor/events) or [SuperDoc events](/core/superdoc/events) instead.
+
+```ts
+const doc = await client.open('./report.docx');
+const info = doc.info();
+console.log(
+  `${info.counts.words} words, ` +
+    `${info.counts.characters} characters, ` +
+    `${info.counts.trackedChanges} tracked changes, ` +
+    `${info.counts.sdtFields} SDT fields, ` +
+    `${info.counts.lists} lists`,
+);
+await doc.close();
+```
 
 ## Related
 

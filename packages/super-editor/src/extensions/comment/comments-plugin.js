@@ -408,14 +408,24 @@ export const CommentsPlugin = Extension.create({
         ({ state, editor }) => {
           const { from } = findRangeById(state.doc, id) || {};
           if (from != null) {
-            state.tr.setSelection(TextSelection.create(state.doc, from));
-            if (options.preferredActiveThreadId) {
-              state.tr.setMeta(CommentsPluginKey, {
+            const tr = state.tr;
+            tr.setSelection(TextSelection.create(state.doc, from));
+            if (options.activeCommentId) {
+              tr.setMeta(CommentsPluginKey, {
+                type: 'setActiveComment',
+                activeThreadId: options.activeCommentId,
+                forceUpdate: true,
+              });
+            } else if (options.preferredActiveThreadId) {
+              tr.setMeta(CommentsPluginKey, {
                 type: 'setCursorById',
                 preferredActiveThreadId: options.preferredActiveThreadId,
               });
             }
-            if (editor.view && typeof editor.view.focus === 'function') {
+            // Skip view.focus() when activating from the sidebar (activeCommentId set).
+            // Focusing the hidden PM view can trigger a DOM selection sync transaction
+            // that overwrites the activeThreadId via position-based detection.
+            if (!options.activeCommentId && editor.view && typeof editor.view.focus === 'function') {
               editor.view.focus();
             }
             return true;
@@ -443,7 +453,6 @@ export const CommentsPlugin = Extension.create({
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],
-            changedActiveThread: false,
             trackedChanges: {},
           };
         },
@@ -473,7 +482,6 @@ export const CommentsPlugin = Extension.create({
             return {
               ...pluginState,
               activeThreadId: newActiveThreadId,
-              changedActiveThread: true,
             };
           }
 
@@ -525,7 +533,7 @@ export const CommentsPlugin = Extension.create({
             }
           }
 
-          return pluginState;
+          return { ...pluginState };
         },
       },
     };

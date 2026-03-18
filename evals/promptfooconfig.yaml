@@ -2,14 +2,13 @@
 # Run: pnpm run eval
 # Filter: pnpm run eval -- --filter-providers "GPT-*"
 #
-# IMPORTANT: vercel: providers do NOT support tool calling in Promptfoo.
-# They return text instead of structured tool calls. Use native provider IDs.
+# Tools come from the SDK public bundle (9 grouped superdoc_* tools).
 # For cross-provider execution tests, use eval:e2e (custom provider handles tools).
 
 description: 'SuperDoc Tool Evals'
 
 prompts:
-  - file://prompts/agent.txt
+  - file://prompts/sdk-agent.cjs
   - file://prompts/minimal.txt
 
 providers:
@@ -19,7 +18,7 @@ providers:
     config: &openai-config
       temperature: 0
       seed: 42
-      tools: file://lib/essential.json
+      tools: file://lib/sdk-tools.cjs:get_tools
       tool_choice: required
       timeout: 30000
 
@@ -37,7 +36,7 @@ providers:
   #   delay: 1000
   #   config:
   #     temperature: 0
-  #     tools: file://lib/essential.json
+  #     tools: file://lib/sdk-tools.anthropic.cjs:get_tools
   #     tool_choice: auto
   #     timeout: 30000
   #     max_tokens: 1024
@@ -49,7 +48,7 @@ providers:
   #   delay: 500
   #   config:
   #     temperature: 0
-  #     tools: file://lib/essential.json
+  #     tools: file://lib/sdk-tools.generic.cjs:get_tools
   #     maxOutputTokens: 1024
   #     timeout: 30000
 

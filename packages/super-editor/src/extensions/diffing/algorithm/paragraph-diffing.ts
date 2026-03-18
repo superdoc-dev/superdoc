@@ -2,6 +2,7 @@ import type { Node as PMNode } from 'prosemirror-model';
 import { getInlineDiff, tokenizeInlineContent, type InlineDiffToken, type InlineDiffResult } from './inline-diffing';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing';
 import { getInsertionPos, type NodePositionInfo } from './diff-utils';
+import { normalizeParagraphAttrs, normalizeParagraphNodeJSON, semanticInlineNodeKey } from './semantic-normalization';
 import { levenshteinDistance } from './similarity';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
@@ -23,6 +24,8 @@ export interface ParagraphNodeInfo {
   endPos: number;
   /** Plain-text representation of the paragraph content. */
   fullText: string;
+  /** Semantic fingerprint of all inline content (text + nodes), used for identity matching. */
+  contentSignature: string;
 }
 
 /**
@@ -97,7 +100,28 @@ export function createParagraphSnapshot(paragraph: PMNode, paragraphPos: number,
     text,
     endPos: paragraphPos + 1 + paragraph.content.size,
     fullText: text.map((token) => (token.kind === 'text' ? token.char : '')).join(''),
+    contentSignature: buildContentSignature(text),
   };
+}
+
+/**
+ * Builds a semantic fingerprint from inline tokens that covers both
+ * text characters and inline nodes (images, etc.).
+ *
+ * Text-only paragraphs produce the same result as `fullText`.
+ * Image-only paragraphs produce a unique key per distinct image,
+ * so that the paragraph comparator can tell them apart.
+ */
+function buildContentSignature(tokens: InlineDiffToken[]): string {
+  return tokens
+    .map((token) => {
+      if (token.kind === 'text') {
+        return token.char;
+      }
+      // Null bytes delimit inline node keys so they can't collide with text
+      return `\0${semanticInlineNodeKey(token.node)}\0`;
+    })
+    .join('');
 }
 
 /**
@@ -111,11 +135,16 @@ export function shouldProcessEqualAsModification(
   oldParagraph: ParagraphNodeInfo,
   newParagraph: ParagraphNodeInfo,
 ): boolean {
-  return JSON.stringify(oldParagraph.node.toJSON()) !== JSON.stringify(newParagraph.node.toJSON());
+  const oldNormalized = normalizeParagraphNodeJSON(oldParagraph.node.toJSON());
+  const newNormalized = normalizeParagraphNodeJSON(newParagraph.node.toJSON());
+  return JSON.stringify(oldNormalized) !== JSON.stringify(newNormalized);
 }
 
 /**
- * Compares two paragraphs for identity based on paraId or text content.
+ * Compares two paragraphs for identity based on paraId, then content signature.
+ *
+ * The content signature covers both text and inline nodes (images, etc.),
+ * so image-only paragraphs with different images are not falsely paired.
  */
 export function paragraphComparator(oldParagraph: ParagraphNodeInfo, newParagraph: ParagraphNodeInfo): boolean {
   const oldId = oldParagraph?.node?.attrs?.paraId;
@@ -123,7 +152,11 @@ export function paragraphComparator(oldParagraph: ParagraphNodeInfo, newParagrap
   if (oldId && newId && oldId === newId) {
     return true;
   }
-  return oldParagraph?.fullText === newParagraph?.fullText;
+  // Content signature includes inline node fingerprints, so it distinguishes
+  // image-only paragraphs that would otherwise all have empty fullText.
+  const oldSig = oldParagraph?.contentSignature ?? oldParagraph?.fullText;
+  const newSig = newParagraph?.contentSignature ?? newParagraph?.fullText;
+  return oldSig === newSig;
 }
 
 /**
@@ -165,7 +198,10 @@ export function buildModifiedParagraphDiff(
 ): ModifiedParagraphDiff | null {
   const contentDiff = getInlineDiff(oldParagraph.text, newParagraph.text, oldParagraph.endPos);
 
-  const attrsDiff = getAttributesDiff(oldParagraph.node.attrs, newParagraph.node.attrs);
+  const attrsDiff = getAttributesDiff(
+    normalizeParagraphAttrs(oldParagraph.node.attrs),
+    normalizeParagraphAttrs(newParagraph.node.attrs),
+  );
   if (contentDiff.length === 0 && !attrsDiff) {
     return null;
   }

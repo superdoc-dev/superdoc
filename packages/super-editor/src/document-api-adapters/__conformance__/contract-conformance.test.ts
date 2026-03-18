@@ -1588,7 +1588,11 @@ const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
  * pattern. mutations.apply returns PlanReceipt (always success: true) or throws.
  */
 const PLAN_ENGINE_META_OPS: ReadonlySet<OperationId> = new Set(['mutations.apply'] as OperationId[]);
-const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set(['history.undo', 'history.redo'] as OperationId[]);
+const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set([
+  'history.undo',
+  'history.redo',
+  'diff.apply',
+] as OperationId[]);
 
 /**
  * Content-control operations whose handlers always return `true` because they
@@ -2532,8 +2536,8 @@ const MISSING_SDT_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, n
 const RS_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: 'rs-1' };
 
 /** Create an SDT editor whose commands return false — triggers NO_OP failure. */
-function makeNoOpSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
-  const editor = makeSdtEditor(overrideAttrs);
+function makeNoOpSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent = 'SDT content'): Editor {
+  const editor = makeSdtEditor(overrideAttrs, textContent);
   (editor.commands as any).updateStructuredContentById = vi.fn(() => false);
   (editor.commands as any).deleteStructuredContentById = vi.fn(() => false);
   (editor.commands as any).insertStructuredContentBlock = vi.fn(() => false);
@@ -2550,7 +2554,7 @@ function makeNoOpSdtEditorWithRepeatingSectionItems(): Editor {
   return editor;
 }
 
-function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
+function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent = 'SDT content'): Editor {
   const sdtAttrs = {
     id: 'sdt-1',
     tag: 'test-tag',
@@ -2562,7 +2566,7 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
     ...overrideAttrs,
   };
 
-  const textNode = createNode('text', [], { text: 'SDT content' });
+  const textNode = createNode('text', [], { text: textContent });
   const innerParagraph = createNode('paragraph', [textNode], {
     attrs: { sdBlockId: 'inner-p' },
     isBlock: true,
@@ -7147,8 +7151,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.appendContent({ target: MISSING_SDT_TARGET, content: 'appended' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
-      return adapter.appendContent({ target: SDT_TARGET, content: 'appended' }, { changeMode: 'direct' });
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.appendContent({ target: SDT_TARGET, content: '' }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const adapter = createContentControlsAdapter(makeSdtEditor());
@@ -7365,7 +7369,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.clearContent({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      const adapter = createContentControlsAdapter(makeSdtEditor({}, ''));
       return adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -7623,8 +7627,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.prependContent({ target: MISSING_SDT_TARGET, content: 'prepended' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
-      return adapter.prependContent({ target: SDT_TARGET, content: 'prepended' }, { changeMode: 'direct' });
+      const adapter = createContentControlsAdapter(makeSdtEditor());
+      return adapter.prependContent({ target: SDT_TARGET, content: '' }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const adapter = createContentControlsAdapter(makeSdtEditor());
@@ -7716,7 +7720,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.replaceContent({ target: MISSING_SDT_TARGET, content: 'replaced' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor());
+      const adapter = createContentControlsAdapter(makeSdtEditor({}, 'replaced'));
       return adapter.replaceContent({ target: SDT_TARGET, content: 'replaced' }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -7781,7 +7785,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.text.clearValue({ target: MISSING_SDT_TARGET }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'text', type: 'text' }));
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }, ''));
       return adapter.text.clearValue({ target: SDT_TARGET }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -7809,7 +7813,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return adapter.text.setValue({ target: MISSING_SDT_TARGET, value: 'hello' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const adapter = createContentControlsAdapter(makeNoOpSdtEditor({ controlType: 'text', type: 'text' }));
+      const adapter = createContentControlsAdapter(makeSdtEditor({ controlType: 'text', type: 'text' }, 'hello'));
       return adapter.text.setValue({ target: SDT_TARGET, value: 'hello' }, { changeMode: 'direct' });
     },
     applyCase: () => {

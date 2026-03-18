@@ -1,7 +1,7 @@
 ---
 title: info
 sidebarTitle: info
-description: Return document metadata including revision, node count, and capabilities.
+description: Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Return document metadata including revision, node count, and capabi
 
 ## Summary
 
-Return document metadata including revision, node count, and capabilities.
+Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities.
 
 - Operation ID: `info`
 - API member path: `editor.doc.info(...)`
@@ -22,7 +22,7 @@ Return document metadata including revision, node count, and capabilities.
 
 ## Expected result
 
-Returns a DocumentInfo object with revision, word/paragraph/heading counts, and capability flags.
+Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists), document outline, capability flags, and revision.
 
 ## Input fields
 
@@ -44,11 +44,15 @@ _No fields._
 | `capabilities.canGetNode` | boolean | yes |  |
 | `capabilities.canReplace` | boolean | yes |  |
 | `counts` | object | yes |  |
+| `counts.characters` | integer | yes |  |
 | `counts.comments` | integer | yes |  |
 | `counts.headings` | integer | yes |  |
 | `counts.images` | integer | yes |  |
+| `counts.lists` | integer | yes |  |
 | `counts.paragraphs` | integer | yes |  |
+| `counts.sdtFields` | integer | yes |  |
 | `counts.tables` | integer | yes |  |
+| `counts.trackedChanges` | integer | yes |  |
 | `counts.words` | integer | yes |  |
 | `outline` | object[] | yes |  |
 | `revision` | string | yes |  |
@@ -64,11 +68,15 @@ _No fields._
     "canReplace": true
   },
   "counts": {
+    "characters": 1,
     "comments": 0,
     "headings": 3,
     "images": 2,
+    "lists": 1,
     "paragraphs": 12,
+    "sdtFields": 1,
     "tables": 1,
+    "trackedChanges": 1,
     "words": 250
   },
   "outline": [
@@ -134,6 +142,9 @@ _No fields._
     "counts": {
       "additionalProperties": false,
       "properties": {
+        "characters": {
+          "type": "integer"
+        },
         "comments": {
           "type": "integer"
         },
@@ -143,10 +154,19 @@ _No fields._
         "images": {
           "type": "integer"
         },
+        "lists": {
+          "type": "integer"
+        },
         "paragraphs": {
           "type": "integer"
         },
+        "sdtFields": {
+          "type": "integer"
+        },
         "tables": {
+          "type": "integer"
+        },
+        "trackedChanges": {
           "type": "integer"
         },
         "words": {
@@ -155,11 +175,15 @@ _No fields._
       },
       "required": [
         "words",
+        "characters",
         "paragraphs",
         "headings",
         "tables",
         "images",
-        "comments"
+        "comments",
+        "trackedChanges",
+        "sdtFields",
+        "lists"
       ],
       "type": "object"
     },

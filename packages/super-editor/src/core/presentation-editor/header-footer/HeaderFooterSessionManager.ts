@@ -13,7 +13,6 @@
 
 import type { Layout, FlowBlock, Measure, Page, SectionMetadata, Fragment } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
-import { selectionToRects } from '@superdoc/layout-bridge';
 
 import type { Editor } from '../../Editor.js';
 import type {
@@ -42,6 +41,7 @@ import {
   type HeaderFooterLayoutResult,
   type MultiSectionHeaderFooterIdentifier,
 } from '@superdoc/layout-bridge';
+import { deduplicateOverlappingRects } from '../dom/DomSelectionGeometry.js';
 
 // =============================================================================
 // Types
@@ -827,6 +827,26 @@ export class HeaderFooterSessionManager {
         editor.setEditable(true);
         editor.setOptions({ documentMode: 'editing' });
 
+        // Ensure the header/footer editor receives focus on user interaction.
+        // Without this, subsequent clicks in newly-activated editors may not
+        // update ProseMirror selection because the view never regains focus.
+        try {
+          const editorView = editor.view;
+          if (editorView && editorHost) {
+            const focusHandler = () => {
+              try {
+                editorView.focus();
+              } catch {
+                // Ignore focus errors; selection updates will still work when possible.
+              }
+            };
+            editorHost.addEventListener('mousedown', focusHandler);
+            this.#managerCleanups.push(() => editorHost.removeEventListener('mousedown', focusHandler));
+          }
+        } catch {
+          // Best-effort: if we can't wire the focus handler, continue without it.
+        }
+
         // Move caret to end of content
         try {
           const doc = editor.state?.doc;
@@ -848,9 +868,6 @@ export class HeaderFooterSessionManager {
         });
         return;
       }
-
-      // Hide layout selection overlay
-      this.#overlayManager.hideSelectionOverlay();
 
       this.#activeEditor = editor;
       this.#setupActiveEditorEventBridge(editor);
@@ -1260,8 +1277,30 @@ export class HeaderFooterSessionManager {
 
   /**
    * Compute selection rectangles in header/footer mode.
+   *
+   * This method intentionally does NOT use layout-engine geometry. Header/footer
+   * editing is driven by a dedicated ProseMirror editor instance mounted inside
+   * an overlay host. For selection, we rely on the browser's native DOM selection
+   * rectangles from that editor and then remap them into layout coordinates using
+   * the current region and body page height.
+   *
+   * Selection rectangles are therefore derived from:
+   * - Native ProseMirror selection → DOM Range → client rects
+   * - Header/footer region → pageIndex / local offset
    */
   computeSelectionRects(from: number, to: number): LayoutRect[] {
+    // Guard: must be in header/footer mode with an active editor and region context.
+    if (this.#session.mode === 'body') {
+      return [];
+    }
+    const activeEditor = this.#activeEditor;
+    if (!activeEditor?.view) {
+      return [];
+    }
+
+    const view = activeEditor.view;
+
+    // Resolve layout context for the active header/footer region.
     const context = this.getContext();
     if (!context) {
       console.warn('[HeaderFooterSessionManager] Header/footer context unavailable for selection rects', {
@@ -1271,20 +1310,82 @@ export class HeaderFooterSessionManager {
       return [];
     }
 
-    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
-    const rects = selectionToRects(context.layout, context.blocks, context.measures, from, to, undefined) ?? [];
-    const headerPageHeight = context.layout.pageSize?.h ?? context.region.height ?? 1;
+    const region = context.region;
+    const pageIndex = region.pageIndex;
 
-    return rects.map((rect: LayoutRect) => {
-      const headerLocalY = rect.y - rect.pageIndex * headerPageHeight;
-      return {
-        pageIndex: context.region.pageIndex,
-        x: rect.x + context.region.localX,
-        y: context.region.pageIndex * bodyPageHeight + context.region.localY + headerLocalY,
-        width: rect.width,
-        height: rect.height,
-      };
-    });
+    // Compute DOM-based rectangles local to the editor host. We intentionally
+    // ignore the numeric from/to arguments and any cached ProseMirror
+    // selection, and instead rely solely on the live DOM selection inside the
+    // active header/footer editor. This avoids stale selection state when
+    // switching between multiple header/footer editors.
+    const domSelection = view.dom.ownerDocument?.getSelection?.();
+    let domRectList: DOMRect[] = [];
+
+    if (domSelection && domSelection.rangeCount > 0) {
+      for (let i = 0; i < domSelection.rangeCount; i += 1) {
+        const range = domSelection.getRangeAt(i);
+        if (!range) continue;
+        const rangeRects = Array.from(range.getClientRects()) as unknown as DOMRect[];
+        domRectList.push(...rangeRects);
+      }
+
+      // Normalize to a minimal set of rects. Browsers often return both a
+      // line-box rect and a text-content rect on the same line; without
+      // deduplication this produces overlapping highlights that look like
+      // intersecting selections.
+      domRectList = deduplicateOverlappingRects(domRectList);
+    }
+
+    if (!domRectList.length) {
+      return [];
+    }
+
+    // Map DOM client rects to layout coordinates.
+    //
+    // Range.getClientRects() measures in viewport pixels after PresentationEditor
+    // applies scale(zoom). Region coordinates, page offsets, and the rest of the
+    // selection pipeline use unscaled layout coordinates, so the DOM-derived
+    // deltas and sizes must be converted back out of zoom space here.
+    const editorDom = view.dom as HTMLElement;
+    const editorHostRect = editorDom.getBoundingClientRect();
+    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const zoom =
+      typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
+        ? layoutOptions.zoom
+        : 1;
+    const toLayoutUnits = (viewportPixels: number): number => viewportPixels / zoom;
+    const layoutRects: LayoutRect[] = [];
+
+    for (const clientRect of domRectList) {
+      // Ignore rects that do not intersect the active editor host. This
+      // prevents stale DOM selections from other header/footer editors (or the
+      // body editor) from contributing rectangles when switching between hosts.
+      const horizontallyOverlaps = clientRect.right > editorHostRect.left && clientRect.left < editorHostRect.right;
+      const verticallyOverlaps = clientRect.bottom > editorHostRect.top && clientRect.top < editorHostRect.bottom;
+      if (!horizontallyOverlaps || !verticallyOverlaps) {
+        continue;
+      }
+
+      const localX = toLayoutUnits(clientRect.left - editorHostRect.left);
+      const localY = toLayoutUnits(clientRect.top - editorHostRect.top);
+      const width = toLayoutUnits(clientRect.width);
+      const height = toLayoutUnits(clientRect.height);
+
+      if (!Number.isFinite(localX) || !Number.isFinite(localY) || width <= 0 || height <= 0) {
+        continue;
+      }
+
+      layoutRects.push({
+        pageIndex,
+        x: region.localX + localX,
+        y: pageIndex * bodyPageHeight + region.localY + localY,
+        width,
+        height,
+      });
+    }
+
+    return layoutRects;
   }
 
   /**

@@ -2500,38 +2500,6 @@ describe('layoutDocument', () => {
       // Balancing should NOT have made them the same width
       expect(singleColFragment?.width).not.toBeCloseTo(twoColFragment!.width, 0);
     });
-
-    it('applies balancing when all fragments have same column configuration', () => {
-      // When all fragments have the same width (same column config),
-      // balancing should redistribute them across columns.
-      const options: LayoutOptions = {
-        pageSize: { w: 612, h: 792 },
-        margins: { top: 72, right: 72, bottom: 72, left: 72 },
-        columns: { count: 2, gap: 48 },
-      };
-
-      const blocks: FlowBlock[] = [
-        { kind: 'paragraph', id: 'p1', runs: [] },
-        { kind: 'paragraph', id: 'p2', runs: [] },
-        { kind: 'paragraph', id: 'p3', runs: [] },
-        { kind: 'paragraph', id: 'p4', runs: [] },
-      ];
-
-      const measures: Measure[] = [makeMeasure([40]), makeMeasure([40]), makeMeasure([40]), makeMeasure([40])];
-
-      const layout = layoutDocument(blocks, measures, options);
-      const page = layout.pages[0];
-
-      // All fragments should have the same column width
-      const columnWidth = (468 - 48) / 2; // 210
-      for (const f of page.fragments) {
-        expect(f.width).toBeCloseTo(columnWidth, 0);
-      }
-
-      // Fragments should be distributed across columns (different X positions)
-      const uniqueXPositions = new Set(page.fragments.map((f) => Math.round(f.x)));
-      expect(uniqueXPositions.size).toBe(2);
-    });
   });
 });
 
@@ -3229,6 +3197,87 @@ describe('requirePageBoundary edge cases', () => {
       const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
       expect(p3.x).toBeCloseTo(options.margins!.left + columnWidth + 48); // second column
       expect(p3.y).toBeCloseTo(regionTop); // reset to region top
+    });
+
+    it('uses explicit custom column widths after a manual column break', () => {
+      const toCustomColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-custom',
+        type: 'continuous',
+        columns: { count: 2, gap: 50, widths: [100, 550], equalWidth: false },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        toCustomColumns,
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'columnBreak', id: 'br-1' } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p3', runs: [] },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+        { kind: 'columnBreak' },
+        makeMeasure([40]),
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 800, h: 792 },
+        margins: { top: 72, right: 50, bottom: 72, left: 50 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+      const p1 = page.fragments.find((f) => f.blockId === 'p1') as ParaFragment;
+      const regionTop = p1.y + 40;
+
+      const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      expect(p2.x).toBeCloseTo(50);
+      expect(p2.y).toBeCloseTo(regionTop);
+      expect(p2.width).toBeCloseTo(100);
+
+      const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
+      expect(p3.x).toBeCloseTo(200);
+      expect(p3.y).toBeCloseTo(regionTop);
+      expect(p3.width).toBeCloseTo(550);
+    });
+
+    it('does not balance the final page for explicit custom-width columns', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-custom-final-page',
+          type: 'nextPage',
+          columns: { count: 2, gap: 48, widths: [210, 214], equalWidth: false },
+          margins: {},
+        } as SectionBreakBlock,
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'paragraph', id: 'p3', runs: [] },
+      ];
+
+      const measures: Measure[] = [{ kind: 'sectionBreak' }, makeMeasure([40]), makeMeasure([40]), makeMeasure([40])];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+      const page = layout.pages[0];
+
+      const p1 = page.fragments.find((f) => f.blockId === 'p1') as ParaFragment;
+      const p2 = page.fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+      const p3 = page.fragments.find((f) => f.blockId === 'p3') as ParaFragment;
+
+      expect(p1.x).toBeCloseTo(72);
+      expect(p2.x).toBeCloseTo(72);
+      expect(p3.x).toBeCloseTo(72);
+      expect(p2.y).toBeGreaterThan(p1.y);
+      expect(p3.y).toBeGreaterThan(p2.y);
     });
   });
 

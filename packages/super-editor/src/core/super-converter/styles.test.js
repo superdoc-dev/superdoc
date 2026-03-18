@@ -51,6 +51,15 @@ describe('encodeMarksFromRPr', () => {
     });
   });
 
+  it('should encode highlight from a hash-prefixed w:val', () => {
+    const rPr = { highlight: { 'w:val': '#ECCF35' } };
+    const marks = encodeMarksFromRPr(rPr, {});
+    expect(marks).toContainEqual({
+      type: 'highlight',
+      attrs: { color: '#ECCF35' },
+    });
+  });
+
   it('should encode highlight from w:shd', () => {
     const rPr = { shading: { fill: 'FFA500' } };
     const marks = encodeMarksFromRPr(rPr, {});
@@ -84,6 +93,15 @@ describe('encodeMarksFromRPr', () => {
     expect(marks).toContainEqual({
       type: 'textStyle',
       attrs: { vertAlign: 'subscript', position: '2pt' },
+    });
+  });
+
+  it('encodes styleId into textStyle', () => {
+    const rPr = { styleId: 'Heading1Char' };
+    const marks = encodeMarksFromRPr(rPr, {});
+    expect(marks).toContainEqual({
+      type: 'textStyle',
+      attrs: { styleId: 'Heading1Char' },
     });
   });
 });
@@ -145,6 +163,11 @@ describe('decodeRPrFromMarks', () => {
   it('decodes vertAlign and position from textStyle mark', () => {
     const marks = [{ type: { name: 'textStyle' }, attrs: { vertAlign: 'subscript', position: '1.5pt' } }];
     expect(decodeRPrFromMarks(marks)).toMatchObject({ vertAlign: 'subscript', position: 3 });
+  });
+
+  it('decodes styleId from textStyle mark', () => {
+    const marks = [{ type: { name: 'textStyle' }, attrs: { styleId: 'Heading1Char' } }];
+    expect(decodeRPrFromMarks(marks)).toMatchObject({ styleId: 'Heading1Char' });
   });
 
   it('does not write debug output while decoding marks', () => {

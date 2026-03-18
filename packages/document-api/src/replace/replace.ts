@@ -211,7 +211,7 @@ export function executeReplace(
 
   // Structural content path — returns SDMutationReceipt directly
   if (isStructuralReplaceInput(input)) {
-    return writeAdapter.replaceStructured(input as unknown as ReplaceInput, options);
+    return writeAdapter.replaceStructured(input as unknown as ReplaceInput, normalizeMutationOptions(options));
   }
 
   // Text replacement path — route through SelectionMutationAdapter

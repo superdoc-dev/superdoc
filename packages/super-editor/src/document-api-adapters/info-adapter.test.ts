@@ -1,21 +1,26 @@
-import type { Query, FindOutput, FindItemDomain } from '@superdoc/document-api';
+import type { FindOutput, FindItemDomain } from '@superdoc/document-api';
 import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../core/Editor.js';
 import { findLegacyAdapter } from './find-adapter.js';
-import { getTextAdapter } from './get-text-adapter.js';
+import { getLiveDocumentCounts } from './helpers/live-document-counts.js';
+import type { LiveDocumentCounts } from './helpers/live-document-counts.js';
 import { infoAdapter } from './info-adapter.js';
 
 vi.mock('./find-adapter.js', () => ({
   findLegacyAdapter: vi.fn(),
 }));
 
-vi.mock('./get-text-adapter.js', () => ({
-  getTextAdapter: vi.fn(),
+vi.mock('./helpers/live-document-counts.js', () => ({
+  getLiveDocumentCounts: vi.fn(),
+}));
+
+vi.mock('./plan-engine/revision-tracker.js', () => ({
+  getRevision: vi.fn(() => '42'),
 }));
 
 const findLegacyAdapterMock = vi.mocked(findLegacyAdapter);
-const getTextAdapterMock = vi.mocked(getTextAdapter);
+const getLiveDocumentCountsMock = vi.mocked(getLiveDocumentCounts);
 
 function makeFindOutput(
   overrides: {
@@ -43,16 +48,40 @@ function makeFindOutput(
   };
 }
 
-function resolveFindResult(query: Query): FindOutput {
-  if (query.select.type === 'text') {
-    throw new Error('infoAdapter should only perform node-type queries.');
-  }
+const DEFAULT_COUNTS: LiveDocumentCounts = {
+  words: 5,
+  characters: 29,
+  paragraphs: 5,
+  headings: 2,
+  tables: 1,
+  images: 3,
+  comments: 2,
+  trackedChanges: 1,
+  sdtFields: 4,
+  lists: 2,
+};
 
-  switch (query.select.nodeType) {
-    case 'paragraph':
-      return makeFindOutput({ total: 5 });
-    case 'heading':
-      return makeFindOutput({
+describe('infoAdapter', () => {
+  beforeEach(() => {
+    findLegacyAdapterMock.mockReset();
+    getLiveDocumentCountsMock.mockReset();
+  });
+
+  it('delegates counts to getLiveDocumentCounts', () => {
+    getLiveDocumentCountsMock.mockReturnValue(DEFAULT_COUNTS);
+    findLegacyAdapterMock.mockReturnValue(makeFindOutput());
+
+    const result = infoAdapter({} as Editor, {});
+
+    expect(result.counts).toBe(DEFAULT_COUNTS);
+    expect(result.counts.characters).toBe(29);
+    expect(getLiveDocumentCountsMock).toHaveBeenCalledOnce();
+  });
+
+  it('builds outline from heading find query', () => {
+    getLiveDocumentCountsMock.mockReturnValue(DEFAULT_COUNTS);
+    findLegacyAdapterMock.mockReturnValue(
+      makeFindOutput({
         total: 2,
         items: [
           {
@@ -74,90 +103,42 @@ function resolveFindResult(query: Query): FindOutput {
             },
           },
         ],
-      });
-    case 'table':
-      return makeFindOutput({ total: 1 });
-    case 'image':
-      return makeFindOutput({ total: 3 });
-    case 'comment':
-      return makeFindOutput({
-        total: 4,
-        items: [
-          {
-            address: {
-              kind: 'inline',
-              nodeType: 'comment',
-              anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
-            },
-            node: { nodeType: 'comment', kind: 'inline', properties: { commentId: 'c-1' } },
-          },
-          {
-            address: {
-              kind: 'inline',
-              nodeType: 'comment',
-              anchor: { start: { blockId: 'p1', offset: 2 }, end: { blockId: 'p1', offset: 3 } },
-            },
-            node: { nodeType: 'comment', kind: 'inline', properties: { commentId: 'c-1' } },
-          },
-          {
-            address: {
-              kind: 'inline',
-              nodeType: 'comment',
-              anchor: { start: { blockId: 'p1', offset: 4 }, end: { blockId: 'p1', offset: 5 } },
-            },
-            node: { nodeType: 'comment', kind: 'inline', properties: { commentId: 'c-2' } },
-          },
-        ],
-      });
-    default:
-      return makeFindOutput({});
-  }
-}
-
-describe('infoAdapter', () => {
-  beforeEach(() => {
-    findLegacyAdapterMock.mockReset();
-    getTextAdapterMock.mockReset();
-  });
-
-  it('computes counts and outline from find/get-text adapters', () => {
-    getTextAdapterMock.mockReturnValue('hello world from info adapter');
-    findLegacyAdapterMock.mockImplementation((editor: Editor, query: Query) => resolveFindResult(query));
+      }),
+    );
 
     const result = infoAdapter({} as Editor, {});
 
-    expect(result.counts).toEqual({
-      words: 5,
-      paragraphs: 5,
-      headings: 2,
-      tables: 1,
-      images: 3,
-      comments: 2,
-    });
     expect(result.outline).toEqual([
       { level: 2, text: 'Overview', nodeId: 'H1' },
       { level: 6, text: 'Details', nodeId: 'H2' },
     ]);
+  });
+
+  it('includes capabilities and revision', () => {
+    getLiveDocumentCountsMock.mockReturnValue(DEFAULT_COUNTS);
+    findLegacyAdapterMock.mockReturnValue(makeFindOutput());
+
+    const result = infoAdapter({} as Editor, {});
+
     expect(result.capabilities).toEqual({
       canFind: true,
       canGetNode: true,
       canComment: true,
       canReplace: true,
     });
+    expect(result.revision).toBe('42');
   });
 
-  it('falls back to total comment count when includeNodes does not return comment nodes', () => {
-    getTextAdapterMock.mockReturnValue('');
-    findLegacyAdapterMock.mockImplementation((editor: Editor, query: Query) => {
-      if (query.select.type === 'text') return makeFindOutput({});
-      if (query.select.nodeType === 'comment') {
-        return makeFindOutput({ total: 7 });
-      }
-      return makeFindOutput({});
+  it('only calls findLegacyAdapter for heading query (not for counts)', () => {
+    getLiveDocumentCountsMock.mockReturnValue(DEFAULT_COUNTS);
+    findLegacyAdapterMock.mockReturnValue(makeFindOutput());
+
+    infoAdapter({} as Editor, {});
+
+    expect(findLegacyAdapterMock).toHaveBeenCalledOnce();
+    expect(findLegacyAdapterMock).toHaveBeenCalledWith(expect.anything(), {
+      select: { type: 'node', nodeType: 'heading' },
+      includeNodes: true,
     });
-
-    const result = infoAdapter({} as Editor, {});
-
-    expect(result.counts.comments).toBe(7);
   });
 });

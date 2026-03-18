@@ -189,6 +189,47 @@ describe('comments-store', () => {
     expect(store.activeComment).toBeNull();
   });
 
+  it('keeps the current active thread when removePendingComment is used for edit cleanup', () => {
+    const removeCommentSpy = vi.fn();
+    const superdoc = {
+      activeEditor: {
+        commands: {
+          removeComment: removeCommentSpy,
+        },
+      },
+    };
+
+    store.activeComment = 'comment-2';
+    store.pendingComment = null;
+    store.currentCommentText = '<p>Draft</p>';
+
+    store.removePendingComment(superdoc);
+
+    expect(store.activeComment).toBe('comment-2');
+    expect(store.currentCommentText).toBe('');
+    expect(removeCommentSpy).toHaveBeenCalledWith({ commentId: 'pending' });
+  });
+
+  it('clears the active thread when an actual pending comment is removed', () => {
+    const removeCommentSpy = vi.fn();
+    const superdoc = {
+      activeEditor: {
+        commands: {
+          removeComment: removeCommentSpy,
+        },
+      },
+    };
+
+    store.activeComment = 'pending-thread';
+    store.pendingComment = { commentId: 'pending' };
+
+    store.removePendingComment(superdoc);
+
+    expect(store.activeComment).toBeNull();
+    expect(store.pendingComment).toBeNull();
+    expect(removeCommentSpy).toHaveBeenCalledWith({ commentId: 'pending' });
+  });
+
   it('still syncs editor active comment when store was pre-updated by caller', () => {
     const setActiveCommentSpy = vi.fn();
     const superdoc = {

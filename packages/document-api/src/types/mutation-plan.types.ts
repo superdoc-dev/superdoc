@@ -177,7 +177,8 @@ export type MutationStep =
 // Plan input
 // ---------------------------------------------------------------------------
 
-export type ChangeMode = 'direct' | 'tracked';
+import type { ChangeMode } from '../write/write.js';
+export type { ChangeMode } from '../write/write.js';
 
 export type MutationsApplyInput = {
   expectedRevision?: string;
@@ -328,14 +329,7 @@ export type PlanExecutionError = {
 };
 
 // ---------------------------------------------------------------------------
-// Revision guard options
+// Revision guard options — canonical definitions in write/write.ts
 // ---------------------------------------------------------------------------
 
-export type RevisionGuardOptions = {
-  expectedRevision?: string;
-};
-
-export type MutationOptions = RevisionGuardOptions & {
-  changeMode?: ChangeMode;
-  dryRun?: boolean;
-};
+export type { RevisionGuardOptions, MutationOptions } from '../write/write.js';

@@ -13,6 +13,16 @@ import { BLOCK_NODE_TYPES } from './types/base.js';
 import { TABLE_NESTING_POLICY_VALUES } from './types/placement.js';
 import { DocumentApiValidationError } from './errors.js';
 
+/**
+ * Throws INVALID_TARGET if target is null or undefined.
+ * Shared preamble for optional adapter namespace validators.
+ */
+export function assertTargetPresent(target: unknown, operationName: string): void {
+  if (target === undefined || target === null) {
+    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
+  }
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
 }
@@ -44,7 +54,8 @@ export function isBlockNodeAddress(value: unknown): value is BlockNodeAddress {
 }
 
 /**
- * Throws INVALID_TARGET if any key on the input object is not in the allowlist.
+ * Throws INVALID_INPUT if any key on the input object is not in the allowlist.
+ * Unknown fields are a payload shape issue, not a locator problem.
  */
 export function assertNoUnknownFields(
   input: Record<string, unknown>,
@@ -54,24 +65,11 @@ export function assertNoUnknownFields(
   for (const key of Object.keys(input)) {
     if (!allowlist.has(key)) {
       throw new DocumentApiValidationError(
-        'INVALID_TARGET',
+        'INVALID_INPUT',
         `Unknown field "${key}" on ${operationName} input. Allowed fields: ${[...allowlist].join(', ')}.`,
         { field: key },
       );
     }
-  }
-}
-
-/**
- * Throws INVALID_TARGET if the value is not a non-negative integer.
- */
-export function assertNonNegativeInteger(value: unknown, fieldName: string): void {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `${fieldName} must be a non-negative integer, got ${JSON.stringify(value)}.`,
-      { field: fieldName, value },
-    );
   }
 }
 

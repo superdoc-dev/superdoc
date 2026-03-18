@@ -222,6 +222,50 @@ const editor = await Editor.open(yourFile, {
 ```
 </CodeGroup>
 
+## Subscribing after initialization
+
+Use `editor.on(...)` and `editor.off(...)` to subscribe to events at any time after the editor is created. This is useful for adding listeners from external code that does not control the initial configuration.
+
+<CodeGroup>
+```javascript Usage
+editor.on('update', ({ editor }) => {
+  const { counts } = editor.doc.info();
+  updateDocumentStatsUI({
+    words: counts.words,
+    characters: counts.characters,
+    trackedChanges: counts.trackedChanges,
+    sdtFields: counts.sdtFields,
+    lists: counts.lists,
+  });
+});
+```
+
+```javascript Full Example
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(yourFile, {
+  element: document.querySelector('#editor'),
+});
+
+// Subscribe to updates after creation
+const handler = ({ editor }) => {
+  const { counts } = editor.doc.info();
+  document.getElementById('stats').textContent =
+    `${counts.words} words, ${counts.characters} characters, ` +
+    `${counts.trackedChanges} tracked changes`;
+};
+
+editor.on('update', handler);
+
+// Later, unsubscribe
+editor.off('update', handler);
+```
+</CodeGroup>
+
+<Info>
+Constructor callbacks like `onUpdate` and runtime subscriptions like `editor.on('update', ...)` both fire on the same events. Use constructor callbacks when the listener is known at creation time, and `editor.on(...)` when adding listeners dynamically.
+</Info>
+
 ## Features
 
 ### `onCommentsUpdate`

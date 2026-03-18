@@ -53,4 +53,20 @@ describe('Json override export', () => {
       editor.destroy();
     }
   });
+
+  it('exports a DOCX when base package entries are missing before export', async () => {
+    const editor = await Editor.open(undefined, { json: SAMPLE_JSON });
+
+    try {
+      editor.options.fileSource = null;
+      editor.options.content = '';
+
+      const exported = await editor.exportDocx();
+      expect(Buffer.isBuffer(exported)).toBe(true);
+      expect(exported.length).toBeGreaterThan(0);
+      expect(Array.isArray(editor.options.content)).toBe(true);
+    } finally {
+      editor.destroy();
+    }
+  });
 });

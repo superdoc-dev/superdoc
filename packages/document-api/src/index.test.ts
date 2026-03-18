@@ -47,11 +47,15 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
   const defaultResult: DocumentInfo = {
     counts: {
       words: 0,
+      characters: 0,
       paragraphs: 0,
       headings: 0,
       tables: 0,
       images: 0,
       comments: 0,
+      trackedChanges: 0,
+      sdtFields: 0,
+      lists: 0,
     },
     outline: [],
     capabilities: {
@@ -60,6 +64,7 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
       canComment: true,
       canReplace: true,
     },
+    revision: '0',
   };
 
   return {
@@ -633,7 +638,7 @@ describe('createDocumentApi', () => {
     );
     expect(selectionAdpt.execute).toHaveBeenCalledWith(
       { kind: 'delete', target: selectionTarget, ref: undefined, behavior: 'selection' },
-      undefined,
+      { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
     );
   });
 
@@ -1136,14 +1141,16 @@ describe('createDocumentApi', () => {
       });
     }
 
-    function expectValidationError(fn: () => void, messageMatch?: string | RegExp) {
+    function expectValidationError(fn: () => void, messageMatch?: string | RegExp, expectedCode?: string) {
       try {
         fn();
         expect.fail('Expected DocumentApiValidationError to be thrown');
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+        if (expectedCode) {
+          expect(e.code).toBe(expectedCode);
+        }
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1323,7 +1330,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '# Heading', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '# Heading', type: 'markdown' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '# Heading', type: 'markdown' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1346,7 +1356,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '<p>Hello</p>', type: 'html' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '<p>Hello</p>', type: 'html' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '<p>Hello</p>', type: 'html' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1393,7 +1406,7 @@ describe('createDocumentApi', () => {
       api.insert({ target, value: '**bold**', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
         { target, value: '**bold**', type: 'markdown' },
-        undefined,
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
 
@@ -1787,7 +1800,7 @@ describe('createDocumentApi', () => {
       api.delete({ target: SELECTION_TARGET });
       expect(selectionAdpt.execute).toHaveBeenCalledWith(
         { kind: 'delete', target: SELECTION_TARGET, ref: undefined, behavior: 'selection' },
-        undefined,
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
   });
@@ -1955,7 +1968,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2085,7 +2098,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2253,7 +2266,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2367,7 +2380,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);

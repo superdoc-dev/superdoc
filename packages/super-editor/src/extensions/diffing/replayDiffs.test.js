@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { Editor } from '@core/Editor.js';
+import { BLANK_DOCX_BASE64 } from '@core/blank-docx.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
@@ -431,6 +432,36 @@ describe('replayDiffs tracked changes', runTrackedReplayDiffsSuite);
 describe('replayDiffs tracked-change ids', () => {
   it('keeps tracked mark ids populated for diff_before8 replay', async () => {
     await expectTrackedReplayMarksHaveIds('diff_before8.docx', 'diff_after8.docx');
+  });
+});
+describe('replayDiffs tracked append regression', () => {
+  it('tracks appended text in a simple paragraph diff', async () => {
+    const user = { name: 'Test User', email: 'test@example.com' };
+    const openBlankDocx = async (text) => {
+      const editor = await Editor.open(Buffer.from(BLANK_DOCX_BASE64, 'base64'), {
+        isHeadless: true,
+        extensions: getStarterExtensions(),
+        user,
+      });
+      editor.dispatch(editor.state.tr.insertText(text, 1));
+      return editor;
+    };
+    const beforeEditor = await openBlankDocx('Section 1. Payment is due within thirty days.');
+    const afterEditor = await openBlankDocx(
+      'Section 1. Payment is due within thirty days. Renewal requires written approval.',
+    );
+
+    try {
+      const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+      const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+      expect(success).toBe(true);
+      expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+      expect(getTrackChanges(beforeEditor.state).length).toBeGreaterThan(0);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
   });
 });
 describe('replayDiffs table style', () => {

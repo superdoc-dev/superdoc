@@ -431,6 +431,22 @@ describe('DocxZipper - updateContentTypes', () => {
 });
 
 describe('DocxZipper - exportFromCollaborativeDocx media handling', () => {
+  it('throws when collaborative export has no original docx entries to rebuild from', async () => {
+    const zipper = new DocxZipper();
+
+    await expect(
+      zipper.updateZip({
+        docx: null,
+        updatedDocs: {
+          'word/document.xml': '<w:document/>',
+        },
+        media: {},
+        fonts: {},
+        isHeadless: true,
+      }),
+    ).rejects.toThrow('Collaborative DOCX export requires base package entries');
+  });
+
   it('handles both base64 string and ArrayBuffer media values', async () => {
     const zipper = new DocxZipper();
 

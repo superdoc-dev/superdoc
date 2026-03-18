@@ -286,6 +286,7 @@ export class PresentationEditor extends EventEmitter {
   #errorBannerMessage: HTMLElement | null = null;
   #renderScheduled = false;
   #pendingDocChange = false;
+  #focusScrollRafId: number | null = null;
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
   #selectionSync = new SelectionSyncCoordinator();
@@ -315,6 +316,7 @@ export class PresentationEditor extends EventEmitter {
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
   #scrollContainer: Element | Window | null = null;
+  #scrollContainerValidated = false;
   #sectionMetadata: SectionMetadata[] = [];
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
   #inputBridge: PresentationInputBridge | null = null;
@@ -329,6 +331,8 @@ export class PresentationEditor extends EventEmitter {
   #ariaLiveRegion: HTMLElement | null = null;
   #a11ySelectionAnnounceTimeout: number | null = null;
   #a11yLastAnnouncedSelectionKey: string | null = null;
+  #headerFooterSelectionHandler: ((...args: unknown[]) => void) | null = null;
+  #headerFooterEditor: Editor | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
     pmStart: number;
@@ -773,6 +777,21 @@ export class PresentationEditor extends EventEmitter {
       if (win.scrollX !== beforeX || win.scrollY !== beforeY) {
         win.scrollTo(beforeX, beforeY);
       }
+
+      // Safety net: the browser may asynchronously scroll after ProseMirror's
+      // selectionToDOM() modifies the DOM selection inside the hidden editor.
+      // A single requestAnimationFrame catches this post-layout scroll.
+      // The RAF ID is stored so scrollToPosition() can cancel it — otherwise
+      // intentional scrolls (e.g. search navigation) would be undone.
+      if (this.#focusScrollRafId != null) {
+        win.cancelAnimationFrame(this.#focusScrollRafId);
+      }
+      this.#focusScrollRafId = win.requestAnimationFrame(() => {
+        this.#focusScrollRafId = null;
+        if (win.scrollX !== beforeX || win.scrollY !== beforeY) {
+          win.scrollTo(beforeX, beforeY);
+        }
+      });
     };
   }
 
@@ -2146,6 +2165,14 @@ export class PresentationEditor extends EventEmitter {
     pos: number,
     options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
   ): boolean {
+    // Cancel any pending focus-scroll RAF so this intentional scroll is not undone
+    // by the wrapHiddenEditorFocus safety net (e.g. search navigation after focus).
+    if (this.#focusScrollRafId != null) {
+      const win = this.#visibleHost.ownerDocument?.defaultView;
+      if (win) win.cancelAnimationFrame(this.#focusScrollRafId);
+      this.#focusScrollRafId = null;
+    }
+
     const activeEditor = this.getActiveEditor();
     const doc = activeEditor?.state?.doc;
     if (!doc) return false;
@@ -2521,6 +2548,15 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
+    // Cancel pending focus-scroll safety net RAF
+    if (this.#focusScrollRafId != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#focusScrollRafId!);
+        this.#focusScrollRafId = null;
+      }, 'Focus scroll RAF');
+    }
+
     // Cancel pending decoration sync RAF
     if (this.#decorationSyncRafHandle != null) {
       safeCleanup(() => {
@@ -2860,7 +2896,6 @@ export class PresentationEditor extends EventEmitter {
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
-
     // Listen for comment selection changes to update Layout Engine highlighting
     const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
       if (this.#domPainter?.setActiveComment) {
@@ -3065,6 +3100,60 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Re-validates the detected scroll container after the first layout completes.
+   *
+   * At setup time, #findScrollableAncestor picks the first ancestor with
+   * overflow-y: auto|scroll — but it can't verify the element actually constrains
+   * content height (content isn't laid out yet). A consumer may set overflow:auto
+   * on the SuperDoc container without constraining its height, causing the element
+   * to expand to fit all content instead of scrolling.
+   *
+   * After layout, we can check scrollHeight vs clientHeight. If the detected
+   * container isn't actually scrollable AND it grew beyond the viewport (ruling
+   * out properly constrained containers that simply don't have enough content
+   * yet), we walk further up to find one that actually scrolls, or fall back
+   * to window.
+   */
+  #revalidateScrollContainer(): void {
+    if (this.#scrollContainerValidated) return;
+    this.#scrollContainerValidated = true;
+
+    if (!(this.#scrollContainer instanceof Element)) return;
+    if (this.#scrollContainer.scrollHeight > this.#scrollContainer.clientHeight + 1) return;
+
+    // A properly constrained container (e.g. height:600px; overflow:auto) may
+    // not be overflowing yet if the document is short. Its clientHeight stays
+    // within viewport bounds. Only switch when the container grew beyond the
+    // viewport — a clear sign its height is unconstrained.
+    const win = this.#scrollContainer.ownerDocument?.defaultView;
+    const viewportHeight = win?.innerHeight ?? 0;
+    if (this.#scrollContainer.clientHeight <= viewportHeight) return;
+
+    let el: Element | null = this.#scrollContainer.parentElement;
+    let next: Element | Window | null = win ?? null;
+
+    while (el) {
+      const { overflowY } = getComputedStyle(el);
+      if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+        next = el;
+        break;
+      }
+      el = el.parentElement;
+    }
+
+    if (!next || next === this.#scrollContainer) return;
+
+    const prev = this.#scrollContainer;
+    prev.removeEventListener('scroll', this.#scrollHandler!);
+    this.#scrollContainer = next;
+
+    if (next instanceof Element) {
+      next.addEventListener('scroll', this.#scrollHandler!, { passive: true });
+    }
+    this.#domPainter?.setScrollContainer?.(next instanceof HTMLElement ? next : null);
+  }
+
+  /**
    * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
@@ -3200,11 +3289,41 @@ export class PresentationEditor extends EventEmitter {
       },
       onEditingContext: (data) => {
         this.emit('headerFooterEditingContext', data);
-        this.#announce(
-          data.kind === 'body'
-            ? 'Exited header/footer edit mode.'
-            : `Editing ${data.kind === 'header' ? 'Header' : 'Footer'} (${data.sectionType ?? 'default'})`,
-        );
+
+        // Clean up any previous header/footer selection listener
+        if (this.#headerFooterEditor && this.#headerFooterSelectionHandler) {
+          this.#headerFooterEditor.off?.('selectionUpdate', this.#headerFooterSelectionHandler);
+          this.#headerFooterEditor = null;
+          this.#headerFooterSelectionHandler = null;
+        }
+
+        if (data.kind === 'body') {
+          this.#announce('Exited header/footer edit mode.');
+          // Ensure the selection overlay is immediately resynced to the body
+          // editor when leaving header/footer mode, so any stale header/footer
+          // highlights are cleared.
+          this.#scheduleSelectionUpdate({ immediate: true });
+        } else {
+          this.#announce(`Editing ${data.kind === 'header' ? 'Header' : 'Footer'} (${data.sectionType ?? 'default'})`);
+
+          // Wire selection updates from the active header/footer editor into
+          // the shared selection overlay + aria-live announcements.
+          const headerFooterEditor = data.editor;
+          const handler = () => {
+            this.#scheduleSelectionUpdate();
+            this.#scheduleA11ySelectionAnnouncement();
+          };
+          headerFooterEditor.on?.('selectionUpdate', handler);
+          this.#headerFooterEditor = headerFooterEditor;
+          this.#headerFooterSelectionHandler = handler;
+
+          // Also trigger an initial selection sync immediately on entry so the
+          // body selection overlay is cleared or updated to match the current
+          // header/footer selection state, instead of leaving stale body
+          // highlights until the first selectionUpdate event fires.
+          this.#scheduleSelectionUpdate({ immediate: true });
+          this.#scheduleA11ySelectionAnnouncement({ immediate: true });
+        }
       },
       onEditBlocked: (reason) => {
         this.emit('headerFooterEditBlocked', { reason });
@@ -3798,6 +3917,7 @@ export class PresentationEditor extends EventEmitter {
       this.#epochMapper.onLayoutComplete(layoutEpoch);
       this.#selectionSync.onLayoutComplete(layoutEpoch);
       layoutCompleted = true;
+      this.#revalidateScrollContainer();
       this.#updatePermissionOverlay();
 
       // Reset error state on successful layout
@@ -4296,10 +4416,9 @@ export class PresentationEditor extends EventEmitter {
     const shouldScrollIntoView = this.#shouldScrollSelectionIntoView;
     this.#shouldScrollSelectionIntoView = false;
 
-    // In header/footer mode, the ProseMirror editor handles its own caret
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
-      this.#clearSelectedFieldAnnotationClass();
+      this.#updateHeaderFooterSelection();
       return;
     }
 
@@ -4662,7 +4781,10 @@ export class PresentationEditor extends EventEmitter {
       ...(firstSection?.margins?.header != null ? { header: firstSection.margins.header } : {}),
       ...(firstSection?.margins?.footer != null ? { footer: firstSection.margins.footer } : {}),
     };
-    const columns = firstSection?.columns ?? defaults.columns;
+    // For the first emitted section break, absence of w:cols means OOXML single-column default.
+    // Falling back to document defaults here is wrong because bodySectPr often reflects the
+    // final section, which can leak a later multi-column configuration into the document start.
+    const columns = firstSection ? (firstSection.columns ?? { count: 1, gap: 0 }) : defaults.columns;
 
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
@@ -4960,8 +5082,6 @@ export class PresentationEditor extends EventEmitter {
 
   #announceSelectionNow(): void {
     if (!this.#ariaLiveRegion) return;
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') return;
     const announcement = computeA11ySelectionAnnouncementFromHelper(this.getActiveEditor().state);
     if (!announcement) return;
 
@@ -5953,6 +6073,70 @@ export class PresentationEditor extends EventEmitter {
         'Layout engine hit an error. Your document is safe — try reloading layout.';
       if (this.#layoutOptions.debugLabel) {
         this.#errorBannerMessage.textContent += ` (${this.#layoutOptions.debugLabel}: ${error.message})`;
+      }
+    }
+  }
+
+  /**
+   * Updates the selection overlay while editing headers/footers.
+   *
+   * Uses header/footer layout data from HeaderFooterSessionManager to compute
+   * selection rectangles in layout space, then renders them into the shared
+   * selection overlay so selection behaves consistently with body content.
+   *
+   * Caret rendering is left to the ProseMirror header/footer editor; this
+   * overlay only mirrors non-collapsed selections.
+   */
+  #updateHeaderFooterSelection() {
+    this.#clearSelectedFieldAnnotationClass();
+
+    if (!this.#localSelectionLayer) {
+      return;
+    }
+
+    const activeEditor = this.getActiveEditor();
+    const selection = activeEditor?.state?.selection;
+    if (!selection) {
+      try {
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
+    const { from, to } = selection;
+
+    // Let the header/footer ProseMirror editor handle caret rendering.
+    if (from === to) {
+      try {
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
+    const rects = this.#computeHeaderFooterSelectionRects(from, to);
+    if (!rects.length) {
+      return;
+    }
+
+    // Header/footer selection rects are already mapped into body-page
+    // coordinates using the body page height and no page gap. To avoid
+    // double-applying any gap or using the header/footer layout height, use
+    // the body page height here and a zero page gap.
+    const pageHeight = this.#getBodyPageHeight();
+    const pageGap = 0;
+
+    try {
+      this.#localSelectionLayer.innerHTML = '';
+      renderSelectionRects({
+        localSelectionLayer: this.#localSelectionLayer,
+        rects,
+        pageHeight,
+        pageGap,
+        convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+      });
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PresentationEditor] Failed to render header/footer selection rects:', error);
       }
     }
   }

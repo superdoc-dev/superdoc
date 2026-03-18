@@ -56,12 +56,7 @@ import {
   type ResolvedWrite,
 } from '../helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from '../helpers/text-mutation-resolution.js';
-import {
-  ensureTrackedCapability,
-  requireEditorCommand,
-  requireSchemaMark,
-  rejectTrackedMode,
-} from '../helpers/mutation-helpers.js';
+import { ensureTrackedCapability, requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
@@ -80,6 +75,7 @@ import {
   type BlockCandidate,
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
+import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue } from './inline-property-guards.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -441,45 +437,15 @@ function noOpFailure(resolution: TextMutationResolution, operation: string): Tex
 }
 
 function ensureInlinePropertyCapabilities(editor: Editor, keys: readonly InlineRunPatchKey[]): void {
-  let requiresTextStyle = false;
-  let requiresRunNode = false;
-
-  for (const key of keys) {
-    const entry = INLINE_PROPERTY_BY_KEY[key];
-    if (!entry) continue;
-
-    if (entry.storage === 'mark') {
-      const carrier = entry.carrier;
-      if (carrier.storage !== 'mark') continue;
-      if (carrier.markName === 'textStyle') {
-        requiresTextStyle = true;
-        continue;
-      }
-      requireSchemaMark(editor, carrier.markName, 'format.apply');
-      continue;
-    }
-
-    requiresRunNode = true;
-  }
-
-  if (requiresTextStyle) {
-    requireSchemaMark(editor, 'textStyle', 'format.apply');
-  }
-
-  if (requiresRunNode && !editor.state.schema.nodes.run) {
-    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'format.apply requires a run node in the schema.');
-  }
+  const issue = getInlinePropertyCapabilityIssue(editor, keys);
+  if (!issue) return;
+  throw new DocumentApiAdapterError(issue.code, issue.message, issue.details);
 }
 
 function ensureTrackedInlinePropertySupport(keys: readonly InlineRunPatchKey[]): void {
-  const unsupportedTrackedKeys = keys.filter((key) => INLINE_PROPERTY_BY_KEY[key]?.tracked === false);
-  if (unsupportedTrackedKeys.length === 0) return;
-
-  throw new DocumentApiAdapterError(
-    'CAPABILITY_UNAVAILABLE',
-    `format.apply tracked mode is not available for: ${unsupportedTrackedKeys.join(', ')}`,
-    { keys: unsupportedTrackedKeys, changeMode: 'tracked' },
-  );
+  const issue = getTrackedInlinePropertySupportIssue(keys);
+  if (!issue) return;
+  throw new DocumentApiAdapterError(issue.code, issue.message, issue.details);
 }
 
 /** @deprecated Legacy wrapper. New code routes through selectionMutationWrapper. */

@@ -340,8 +340,17 @@ function getInlineAliasKey(operationId: OperationId): InlineRunPatchKey | undefi
 function isInlinePropertyAvailable(editor: Editor, property: InlinePropertyRegistryEntry): boolean {
   if (property.storage === 'mark') {
     if (property.carrier.storage !== 'mark') return false;
-    const markName = property.carrier.markName === 'textStyle' ? 'textStyle' : property.carrier.markName;
-    return hasMarkCapability(editor, markName);
+    const markName = property.carrier.markName;
+    if (!hasMarkCapability(editor, markName)) return false;
+    if (markName === 'textStyle' && property.carrier.textStyleAttr) {
+      const textStyleMark = editor.schema.marks.textStyle as {
+        spec?: { attrs?: Record<string, unknown> };
+        attrs?: Record<string, unknown>;
+      };
+      const markAttrs = textStyleMark?.spec?.attrs ?? textStyleMark?.attrs;
+      if (!markAttrs || !Object.prototype.hasOwnProperty.call(markAttrs, property.carrier.textStyleAttr)) return false;
+    }
+    return true;
   }
   return Boolean(editor.schema?.nodes?.run);
 }

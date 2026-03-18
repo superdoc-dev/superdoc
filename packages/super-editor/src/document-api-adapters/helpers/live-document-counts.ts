@@ -6,7 +6,7 @@ import { getTextAdapter } from '../get-text-adapter.js';
 import { resolveCommentIdFromAttrs } from './value-utils.js';
 import { groupTrackedChanges } from './tracked-change-resolver.js';
 import { findAllSdtNodes, resolveControlType } from './content-controls/index.js';
-import { projectListItemCandidate } from './list-item-resolver.js';
+import { projectListItemCandidate, type ListItemProjection } from './list-item-resolver.js';
 import { computeSequenceIdMap } from './list-sequence-helpers.js';
 
 /** Snapshot of document-level counts derived from the current editor state. */
@@ -23,14 +23,21 @@ export interface LiveDocumentCounts {
   lists: number;
 }
 
+type LiveDocumentCountsCacheEntry = {
+  doc: Editor['state']['doc'];
+  counts: LiveDocumentCounts;
+};
+
 const FIELD_LIKE_SDT_TYPES = new Set(['text', 'date', 'checkbox', 'comboBox', 'dropDownList']);
+const liveDocumentCountsCache = new WeakMap<Editor, LiveDocumentCountsCacheEntry>();
 
 /**
  * Computes live document counts from the current editor snapshot.
  *
- * All counts are derived from already-cached block/inline indexes and the
- * Document API text projection. No dedicated counts cache is maintained —
- * the underlying indexes are cached by document snapshot in `index-cache.ts`.
+ * The helper caches the fully-derived counts by immutable ProseMirror
+ * document snapshot. Repeated `doc.info()` reads against the same snapshot
+ * reuse the cached result instead of rescanning text, tracked changes, or
+ * content controls.
  *
  * Count semantics:
  * - `words`: whitespace-delimited tokens from the Document API text projection
@@ -43,9 +50,24 @@ const FIELD_LIKE_SDT_TYPES = new Set(['text', 'date', 'checkbox', 'comboBox', 'd
  * - `comments`: unique anchored comment IDs from inline candidates
  * - `trackedChanges`: grouped tracked-change entities from the current snapshot
  * - `sdtFields`: field-like SDT/content-control nodes (text/date/checkbox/choice controls)
- * - `lists`: unique list sequences, not individual list items
+ * - `lists`: unique list sequences, not individual list items. When list items
+ *    are visible but `numId` is unavailable, counts fall back to visible runs.
  */
 export function getLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
+  const currentDoc = editor.state.doc;
+  const cached = liveDocumentCountsCache.get(editor);
+
+  if (cached && cached.doc === currentDoc) {
+    return cloneLiveDocumentCounts(cached.counts);
+  }
+
+  const counts = computeLiveDocumentCounts(editor);
+  liveDocumentCountsCache.set(editor, { doc: currentDoc, counts });
+
+  return cloneLiveDocumentCounts(counts);
+}
+
+function computeLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
   const text = getTextAdapter(editor, {});
   const blockIndex = getBlockIndex(editor);
   const inlineIndex = getInlineIndex(editor);
@@ -65,6 +87,10 @@ export function getLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
     sdtFields: countSdtFields(editor),
     lists: countLists(editor, blockIndex),
   };
+}
+
+function cloneLiveDocumentCounts(counts: LiveDocumentCounts): LiveDocumentCounts {
+  return { ...counts };
 }
 
 /**
@@ -167,18 +193,79 @@ export function countSdtFields(editor: Editor): number {
 /**
  * Counts unique list sequences in document order.
  *
- * Multiple contiguous items in the same list count as one list. This aligns
- * with the existing `listId` semantics exposed by the lists adapter.
+ * Multiple contiguous items in the same list count as one list. Numbered
+ * lists preserve the existing `listId`/sequence semantics. When imported
+ * list items are visibly rendered but do not yet expose a `numId`, the
+ * counter falls back to visible list runs so those lists still count.
  */
 export function countLists(editor: Editor, blockIndex: BlockIndex): number {
-  const listItems = blockIndex.candidates
-    .filter((candidate) => candidate.nodeType === 'listItem')
-    .map((candidate) => projectListItemCandidate(editor, candidate));
+  const listItems = getListItemProjections(editor, blockIndex);
+  if (listItems.length === 0) return 0;
 
   const sequenceIds = computeSequenceIdMap(listItems);
-  const uniqueSequences = new Set<string>();
-  for (const id of sequenceIds.values()) {
-    if (id) uniqueSequences.add(id);
+  let listCount = 0;
+  let previousSequenceId: string | undefined;
+  let previousFallbackItem: ListItemProjection | undefined;
+
+  for (const item of listItems) {
+    const sequenceId = sequenceIds.get(item.address.nodeId) ?? '';
+
+    if (sequenceId) {
+      if (sequenceId !== previousSequenceId) {
+        listCount += 1;
+      }
+      previousSequenceId = sequenceId;
+      previousFallbackItem = undefined;
+      continue;
+    }
+
+    previousSequenceId = undefined;
+    if (!previousFallbackItem || startsNewFallbackListSequence(previousFallbackItem, item)) {
+      listCount += 1;
+    }
+    previousFallbackItem = item;
   }
-  return uniqueSequences.size;
+
+  return listCount;
+}
+
+function getListItemProjections(editor: Editor, blockIndex: BlockIndex): ListItemProjection[] {
+  return blockIndex.candidates
+    .filter((candidate) => candidate.nodeType === 'listItem')
+    .map((candidate) => projectListItemCandidate(editor, candidate));
+}
+
+function startsNewFallbackListSequence(previous: ListItemProjection, current: ListItemProjection): boolean {
+  if (hasKnownListKindChange(previous, current)) {
+    return true;
+  }
+
+  return hasOrdinalRestartAtSameVisibleLevel(previous, current);
+}
+
+function hasKnownListKindChange(previous: ListItemProjection, current: ListItemProjection): boolean {
+  return previous.kind != null && current.kind != null && previous.kind !== current.kind;
+}
+
+function hasOrdinalRestartAtSameVisibleLevel(previous: ListItemProjection, current: ListItemProjection): boolean {
+  const previousLevel = resolveVisibleListLevel(previous);
+  const currentLevel = resolveVisibleListLevel(current);
+
+  if (previousLevel == null || currentLevel == null || previousLevel !== currentLevel) {
+    return false;
+  }
+
+  if (previous.ordinal == null || current.ordinal == null) {
+    return false;
+  }
+
+  return current.ordinal <= previous.ordinal;
+}
+
+function resolveVisibleListLevel(item: ListItemProjection): number | undefined {
+  if (item.level != null) {
+    return item.level;
+  }
+
+  return item.path && item.path.length > 0 ? item.path.length - 1 : undefined;
 }

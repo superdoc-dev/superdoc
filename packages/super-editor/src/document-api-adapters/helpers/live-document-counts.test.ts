@@ -88,11 +88,13 @@ function makeInlineIndex(candidates: InlineCandidate[]): InlineIndex {
   };
 }
 
-const EMPTY_EDITOR = {
-  state: {
-    doc: {},
-  },
-} as Editor;
+function makeEditor(doc: Record<string, unknown> = {}): Editor {
+  return {
+    state: {
+      doc,
+    },
+  } as Editor;
+}
 
 describe('countWordsFromText', () => {
   it('counts whitespace-delimited tokens', () => {
@@ -233,7 +235,7 @@ describe('countTrackedChanges', () => {
       typeof groupTrackedChanges
     >);
 
-    expect(countTrackedChanges(EMPTY_EDITOR)).toBe(3);
+    expect(countTrackedChanges(makeEditor())).toBe(3);
   });
 });
 
@@ -252,7 +254,7 @@ describe('countSdtFields', () => {
       { kind: 'block', pos: 5, node: { attrs: { controlType: 'unknown' } } },
     ] as ReturnType<typeof findAllSdtNodes>);
 
-    expect(countSdtFields(EMPTY_EDITOR)).toBe(3);
+    expect(countSdtFields(makeEditor())).toBe(3);
   });
 });
 
@@ -275,11 +277,67 @@ describe('countLists', () => {
     index.candidates[1]!.nodeId = 'li-2';
     index.candidates[2]!.nodeId = 'li-3';
 
-    expect(countLists(EMPTY_EDITOR, index)).toBe(2);
+    expect(countLists(makeEditor(), index)).toBe(2);
+  });
+
+  it('counts visible list runs when list items have marker/path data but no numId', () => {
+    const index = makeBlockIndex([
+      makeBlockCandidate('listItem', {
+        listRendering: { markerText: '1.', path: [1], numberingType: 'decimal' },
+      }),
+      makeBlockCandidate('listItem', {
+        listRendering: { markerText: '2.', path: [2], numberingType: 'decimal' },
+      }),
+    ]);
+
+    index.candidates[0]!.nodeId = 'li-visible-1';
+    index.candidates[1]!.nodeId = 'li-visible-2';
+
+    expect(countLists(makeEditor(), index)).toBe(1);
+  });
+
+  it('counts visible list runs when list items only expose ilvl metadata', () => {
+    const index = makeBlockIndex([
+      makeBlockCandidate('listItem', {
+        paragraphProperties: { numberingProperties: { ilvl: 0 } },
+      }),
+      makeBlockCandidate('listItem', {
+        paragraphProperties: { numberingProperties: { ilvl: 0 } },
+      }),
+    ]);
+
+    index.candidates[0]!.nodeId = 'li-ilvl-1';
+    index.candidates[1]!.nodeId = 'li-ilvl-2';
+
+    expect(countLists(makeEditor(), index)).toBe(1);
+  });
+
+  it('starts a new visible list when fallback ordinals restart at the same level', () => {
+    const index = makeBlockIndex([
+      makeBlockCandidate('listItem', {
+        listRendering: { markerText: '1.', path: [1], numberingType: 'decimal' },
+      }),
+      makeBlockCandidate('listItem', {
+        listRendering: { markerText: '2.', path: [2], numberingType: 'decimal' },
+      }),
+      makeBlockCandidate('listItem', {
+        listRendering: { markerText: '1.', path: [1], numberingType: 'decimal' },
+      }),
+      makeBlockCandidate('listItem', {
+        listRendering: { markerText: '2.', path: [2], numberingType: 'decimal' },
+      }),
+    ]);
+
+    index.candidates[0]!.nodeId = 'li-reset-1';
+    index.candidates[1]!.nodeId = 'li-reset-2';
+    index.candidates[2]!.nodeId = 'li-reset-3';
+    index.candidates[3]!.nodeId = 'li-reset-4';
+
+    expect(countLists(makeEditor(), index)).toBe(2);
   });
 
   it('returns 0 when no list items exist', () => {
-    expect(countLists(EMPTY_EDITOR, makeBlockIndex([makeBlockCandidate('paragraph')]))).toBe(0);
+    expect(countLists(makeEditor(), makeBlockIndex([makeBlockCandidate('paragraph')]))).toBe(0);
   });
 });
 
@@ -293,6 +351,7 @@ describe('getLiveDocumentCounts', () => {
   });
 
   it('assembles all counts from indexes and text projection', () => {
+    const editor = makeEditor();
     getTextAdapterMock.mockReturnValue('hello world from the document');
     const blockIndex = makeBlockIndex([
       makeBlockCandidate('paragraph'),
@@ -332,7 +391,7 @@ describe('getLiveDocumentCounts', () => {
       { kind: 'block', pos: 2, node: { attrs: { controlType: 'group' } } },
     ] as ReturnType<typeof findAllSdtNodes>);
 
-    const result = getLiveDocumentCounts(EMPTY_EDITOR);
+    const result = getLiveDocumentCounts(editor);
 
     expect(result).toEqual({
       words: 5,
@@ -349,6 +408,7 @@ describe('getLiveDocumentCounts', () => {
   });
 
   it('words and characters derive from the same text projection', () => {
+    const editor = makeEditor();
     const text = 'one two three';
     getTextAdapterMock.mockReturnValue(text);
     getBlockIndexMock.mockReturnValue(makeBlockIndex([]));
@@ -356,9 +416,54 @@ describe('getLiveDocumentCounts', () => {
     groupTrackedChangesMock.mockReturnValue([] as ReturnType<typeof groupTrackedChanges>);
     findAllSdtNodesMock.mockReturnValue([] as ReturnType<typeof findAllSdtNodes>);
 
-    const result = getLiveDocumentCounts(EMPTY_EDITOR);
+    const result = getLiveDocumentCounts(editor);
 
     expect(result.words).toBe(3);
     expect(result.characters).toBe(text.length);
+  });
+
+  it('reuses cached counts for repeated reads of the same document snapshot', () => {
+    const editor = makeEditor({ docId: 'snapshot-1' });
+
+    getTextAdapterMock.mockReturnValue('one two');
+    getBlockIndexMock.mockReturnValue(makeBlockIndex([makeBlockCandidate('paragraph')]));
+    getInlineIndexMock.mockReturnValue(makeInlineIndex([]));
+    groupTrackedChangesMock.mockReturnValue([{ id: 'tc-1' }] as ReturnType<typeof groupTrackedChanges>);
+    findAllSdtNodesMock.mockReturnValue([
+      { kind: 'block', pos: 0, node: { attrs: { controlType: 'text' } } },
+    ] as ReturnType<typeof findAllSdtNodes>);
+
+    const first = getLiveDocumentCounts(editor);
+    const second = getLiveDocumentCounts(editor);
+
+    expect(first).toEqual(second);
+    expect(first).not.toBe(second);
+    expect(getTextAdapterMock).toHaveBeenCalledOnce();
+    expect(getBlockIndexMock).toHaveBeenCalledOnce();
+    expect(getInlineIndexMock).toHaveBeenCalledOnce();
+    expect(groupTrackedChangesMock).toHaveBeenCalledOnce();
+    expect(findAllSdtNodesMock).toHaveBeenCalledOnce();
+  });
+
+  it('invalidates the cache when the editor doc snapshot changes', () => {
+    const editor = makeEditor({ docId: 'snapshot-1' }) as Editor & { state: { doc: Record<string, unknown> } };
+
+    getTextAdapterMock.mockReturnValueOnce('one').mockReturnValueOnce('one two');
+    getBlockIndexMock.mockReturnValue(makeBlockIndex([makeBlockCandidate('paragraph')]));
+    getInlineIndexMock.mockReturnValue(makeInlineIndex([]));
+    groupTrackedChangesMock.mockReturnValue([] as ReturnType<typeof groupTrackedChanges>);
+    findAllSdtNodesMock.mockReturnValue([] as ReturnType<typeof findAllSdtNodes>);
+
+    const first = getLiveDocumentCounts(editor);
+    editor.state.doc = { docId: 'snapshot-2' };
+    const second = getLiveDocumentCounts(editor);
+
+    expect(first.words).toBe(1);
+    expect(second.words).toBe(2);
+    expect(getTextAdapterMock).toHaveBeenCalledTimes(2);
+    expect(getBlockIndexMock).toHaveBeenCalledTimes(2);
+    expect(getInlineIndexMock).toHaveBeenCalledTimes(2);
+    expect(groupTrackedChangesMock).toHaveBeenCalledTimes(2);
+    expect(findAllSdtNodesMock).toHaveBeenCalledTimes(2);
   });
 });

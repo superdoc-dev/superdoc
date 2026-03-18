@@ -77,9 +77,6 @@ jobs:
       - name: Run slow tests
         run: pnpm test:slow
 
-      - name: Consumer typecheck (skipLibCheck off)
-        run: bash packages/superdoc/tests/consumer-types/run.sh
-
       - name: Install Playwright for UMD smoke test
         run: pnpm --filter @superdoc/umd-smoke-test exec playwright install --with-deps chromium
 

@@ -1,58 +1,32 @@
 ---
 title: Theming
 sidebarTitle: Theming
-keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, css customization, createTheme, styling"
+keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, css customization, styling"
 ---
 
-Set your brand colors in JavaScript and every SuperDoc component updates — toolbar, comments, dropdowns, everything.
+Change five CSS variables and your brand colors flow through every SuperDoc component — toolbar, comments, dropdowns, everything. No JavaScript needed.
 
-```javascript
-import { createTheme } from 'superdoc';
-
-const theme = createTheme({
-  colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b', border: '#e2e8f0' },
-  font: 'Inter, sans-serif',
-});
-
-document.documentElement.classList.add(theme);
+```css
+.my-theme {
+  --sd-ui-action: #6366f1;
+  --sd-ui-action-hover: #4f46e5;
+  --sd-ui-toolbar-bg: #f8fafc;
+  --sd-ui-bg: #ffffff;
+  --sd-ui-text: #1e293b;
+}
 ```
 
-That's it. Five properties theme the entire UI.
-
-## `createTheme()` API
-
-Pass a config object, get back a CSS class name. Apply it to `<html>`.
-
-```javascript
-import { createTheme } from 'superdoc';
-
-const theme = createTheme({
-  name: 'my-brand',                // optional — generates sd-theme-my-brand
-  font: 'Inter, sans-serif',
-  radius: '8px',
-  colors: {
-    action: '#6366f1',             // buttons, links, active states
-    actionHover: '#4f46e5',
-    bg: '#ffffff',                 // panels, cards, dropdowns
-    text: '#1e293b',               // primary text
-    textMuted: '#64748b',          // secondary text
-    border: '#e2e8f0',             // all borders
-  },
-  // Fine-tune individual components (optional)
-  toolbar: { bg: '#f8fafc' },
-  comments: { cardBg: '#f0f0ff' },
-});
-
-document.documentElement.classList.add(theme);
+```html
+<html class="my-theme">
+  <div id="editor"></div>
+</html>
 ```
 
-The `colors` object controls the semantic tier — every component inherits from it. Component-level overrides (`toolbar`, `comments`, `dropdown`, `menu`, etc.) are optional and only needed when a specific component should look different.
-
-See the [full API reference](/guides/general/custom-themes) for all available options.
+Override any `--sd-*` CSS custom property on the `<html>` element and the changes cascade to all components.
 
 ## Preset themes
 
-Three presets ship out of the box. Add the class to `<html>` — some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>`.
+Three preset themes ship out of the box. Add the class to `<html>` — some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>` to pick up the theme.
 
 <CardGroup cols={3}>
   <Card title="Docs" icon="google">
@@ -75,40 +49,54 @@ Three presets ship out of the box. Add the class to `<html>` — some SuperDoc e
   </Card>
 </CardGroup>
 
-## CSS variables (advanced)
-
-`createTheme()` generates CSS variables under the hood. You can also set them directly if you prefer raw CSS:
+You can layer your own overrides on top of a preset:
 
 ```css
-:root {
-  --sd-ui-action: #6366f1;
-  --sd-ui-bg: #ffffff;
-  --sd-ui-text: #1e293b;
-  --sd-ui-border: #e2e8f0;
-  --sd-ui-font-family: Inter, sans-serif;
+.sd-theme-docs {
+  --sd-ui-action: #your-brand-color;
+  --sd-ui-comments-card-bg: #f0f0f0;
 }
 ```
 
-See the [full variable reference](/guides/general/custom-themes#variable-reference) for every token.
+## How the token system works
 
-## SSR support
+Variables are organized in three tiers. Higher tiers reference lower tiers, so changing a primitive cascades everywhere.
 
-For server-side rendering, use `buildTheme()` to get the raw CSS string:
+```
+Primitives          UI semantic         Component-specific
+--sd-color-*        --sd-ui-text        --sd-ui-toolbar-*
+--sd-font-size-*    --sd-ui-bg          --sd-ui-comments-*
+--sd-radius-*       --sd-ui-action      --sd-ui-dropdown-*
+```
+
+**Tier 1 — Primitives.** Raw color scales, font sizes, and radii. You rarely need to touch these directly.
+
+**Tier 2 — UI semantic.** The "5-variable theme." Change these and every component updates:
+
+| Variable | Default | What it controls |
+|----------|---------|-----------------|
+| `--sd-ui-font-family` | `Arial, Helvetica, sans-serif` | Font for all UI chrome |
+| `--sd-ui-text` | `#47484a` | Primary text color |
+| `--sd-ui-bg` | `#ffffff` | Panels, cards, dropdowns |
+| `--sd-ui-border` | `#dbdbdb` | All borders |
+| `--sd-ui-action` | `#1355ff` | Buttons, links, active states |
+
+**Tier 3 — Component-specific.** Fine-grained overrides for individual components. These default to the semantic tier, so you only set them when a component needs to look different from the rest. See the [full reference](/guides/general/custom-themes).
+
+## JavaScript config
+
+The `trackChangesConfig` and `commentsConfig` JavaScript options still work. They take priority over CSS variables when set. Use the JS API for runtime changes, CSS variables for static theming.
 
 ```javascript
-import { buildTheme } from 'superdoc';
-
-const { className, css } = buildTheme({
-  colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b' },
+new SuperDoc({
+  selector: '#editor',
+  commentsConfig: {
+    highlightHoverColor: '#ff000055',
+    trackChangeHighlightColors: {
+      insertBorder: '#00ff00',
+    },
+  },
 });
-
-// Inject into your HTML template
-const html = `
-  <html class="${className}">
-    <head><style>${css}</style></head>
-    <body><div id="editor"></div></body>
-  </html>
-`;
 ```
 
 ## Next steps
@@ -119,7 +107,7 @@ const html = `
     icon="palette"
     href="/guides/general/custom-themes"
   >
-    Full createTheme() API reference. Dark theme starter. All CSS variables by component.
+    Full variable reference by component. Dark theme starter. How to build your own preset.
   </Card>
   <Card
     title="Migration guide"

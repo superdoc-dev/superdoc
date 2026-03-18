@@ -229,15 +229,20 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
   const hideWhenLoading: CSSProperties | undefined = isLoading ? { display: 'none' } : undefined;
 
+  const wrapperStyle: CSSProperties = {
+    ...style,
+    ...(restProps.contained && { display: 'flex', flexDirection: 'column' as const }),
+  };
+
   return (
-    <div className={wrapperClassName} style={style}>
+    <div className={wrapperClassName} style={wrapperStyle}>
       {!hideToolbar && (
         <div ref={toolbarContainerRef} id={toolbarId} className='superdoc-toolbar-container' style={hideWhenLoading} />
       )}
       <div
         id={containerId}
         className='superdoc-editor-container'
-        style={{ ...hideWhenLoading, ...(restProps.contained && { height: '100%' }) }}
+        style={{ ...hideWhenLoading, ...(restProps.contained && { flex: 1, minHeight: 0 }) }}
       />
       {isLoading && !hasError && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
       {hasError && <div className='superdoc-error-container'>Failed to load editor. Check console for details.</div>}

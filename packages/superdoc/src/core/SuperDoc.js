@@ -820,7 +820,7 @@ export class SuperDoc extends EventEmitter {
     const element = root.querySelector(`[data-thread-id="${escaped}"]`);
     if (!element) return false;
 
-    const { behavior = 'smooth', block = 'start' } = options;
+    const { behavior = 'smooth', block = 'start' } = options ?? {};
     element.scrollIntoView({ behavior, block });
     this.commentsStore?.setActiveComment?.(this, commentId);
     return true;

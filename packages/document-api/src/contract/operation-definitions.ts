@@ -963,8 +963,10 @@ export const OPERATION_DEFINITIONS = {
 
   'styles.paragraph.setStyle': {
     memberPath: 'styles.paragraph.setStyle',
-    description: 'Set the paragraph style reference (w:pStyle) on a paragraph-like block.',
-    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the style already matches.',
+    description:
+      'Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references.',
+    expectedResult:
+      'Returns a ParagraphMutationResult; reports NO_OP if the style already matches. When the style changes, direct run formatting is cleared while character-style references are preserved.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',

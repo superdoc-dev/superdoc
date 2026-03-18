@@ -1,7 +1,7 @@
 ---
 title: styles.paragraph.setStyle
 sidebarTitle: styles.paragraph.setStyle
-description: "Set the paragraph style reference (w:pStyle) on a paragraph-like block."
+description: "Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: "Set the paragraph style reference (w:pStyle) on a paragraph-like b
 
 ## Summary
 
-Set the paragraph style reference (w:pStyle) on a paragraph-like block.
+Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references.
 
 - Operation ID: `styles.paragraph.setStyle`
 - API member path: `editor.doc.styles.paragraph.setStyle(...)`
@@ -22,7 +22,7 @@ Set the paragraph style reference (w:pStyle) on a paragraph-like block.
 
 ## Expected result
 
-Returns a ParagraphMutationResult; reports NO_OP if the style already matches.
+Returns a ParagraphMutationResult; reports NO_OP if the style already matches. When the style changes, direct run formatting is cleared while character-style references are preserved.
 
 ## Input fields
 

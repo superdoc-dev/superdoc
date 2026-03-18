@@ -48,7 +48,8 @@ import { executeDomainCommand } from './plan-wrappers.js';
 // ---------------------------------------------------------------------------
 
 const PARAGRAPH_NODE_TYPES = new Set(['paragraph', 'heading', 'listItem']);
-const LINKED_STYLE_FORMATTING_MARK_NAMES = new Set([
+const TEXT_STYLE_CHARACTER_STYLE_ATTR = 'styleId';
+const DIRECT_FORMATTING_MARK_NAMES = new Set([
   'textStyle',
   'bold',
   'italic',
@@ -93,23 +94,61 @@ function noOpResult(operation: string): ParagraphMutationResult {
   };
 }
 
-function clearFormattingMarksInBlock(
-  tr: {
-    doc?: {
-      nodesBetween?: (
-        from: number,
-        to: number,
-        callback: (
-          node: { isText?: boolean; marks?: ReadonlyArray<{ type?: { name?: string } }>; nodeSize?: number },
-          pos: number,
-        ) => boolean | void,
-      ) => void;
-    };
-    removeMark?: (from: number, to: number, mark: unknown) => unknown;
-  },
-  pos: number,
-  nodeSize: number,
+type MarkLike = {
+  type?: { name?: string; create?: (attrs: Record<string, unknown>) => unknown };
+  attrs?: Record<string, unknown>;
+};
+
+type TransactionWithMarkMutations = {
+  doc?: {
+    nodesBetween?: (
+      from: number,
+      to: number,
+      callback: (
+        node: { isText?: boolean; marks?: ReadonlyArray<MarkLike>; nodeSize?: number },
+        pos: number,
+      ) => boolean | void,
+    ) => void;
+  };
+  removeMark?: (from: number, to: number, mark: unknown) => unknown;
+  addMark?: (from: number, to: number, mark: unknown) => unknown;
+};
+
+function getPreservedCharacterStyleAttrs(mark: MarkLike): Record<string, string> | null {
+  const styleId = mark.attrs?.[TEXT_STYLE_CHARACTER_STYLE_ATTR];
+  if (typeof styleId !== 'string' || styleId.length === 0) return null;
+  return { [TEXT_STYLE_CHARACTER_STYLE_ATTR]: styleId };
+}
+
+function hasTextStyleDirectFormatting(mark: MarkLike): boolean {
+  return Object.entries(mark.attrs ?? {}).some(
+    ([key, value]) => key !== TEXT_STYLE_CHARACTER_STYLE_ATTR && value != null,
+  );
+}
+
+function clearTextStyleDirectFormatting(
+  tr: TransactionWithMarkMutations,
+  from: number,
+  to: number,
+  mark: MarkLike,
 ): boolean {
+  const preservedCharacterStyle = getPreservedCharacterStyleAttrs(mark);
+  const hadDirectFormatting = hasTextStyleDirectFormatting(mark);
+
+  if (!hadDirectFormatting && preservedCharacterStyle) {
+    return false;
+  }
+
+  tr.removeMark?.(from, to, mark);
+
+  if (hadDirectFormatting && preservedCharacterStyle && mark.type?.create && tr.addMark) {
+    tr.addMark(from, to, mark.type.create(preservedCharacterStyle));
+  }
+
+  return true;
+}
+
+function clearDirectFormattingInBlock(tr: TransactionWithMarkMutations, pos: number, nodeSize: number): boolean {
   if (!tr.doc?.nodesBetween || !tr.removeMark || nodeSize <= 2) return false;
 
   let changed = false;
@@ -120,8 +159,14 @@ function clearFormattingMarksInBlock(
 
     node.marks.forEach((mark) => {
       const markName = mark?.type?.name;
-      if (!markName || !LINKED_STYLE_FORMATTING_MARK_NAMES.has(markName)) return;
-      tr.removeMark?.(nodePos, nodePos + node.nodeSize!, mark);
+      if (!markName || !DIRECT_FORMATTING_MARK_NAMES.has(markName)) return;
+
+      if (markName === 'textStyle') {
+        changed = clearTextStyleDirectFormatting(tr, nodePos, nodePos + node.nodeSize!, mark) || changed;
+        return;
+      }
+
+      tr.removeMark(nodePos, nodePos + node.nodeSize!, mark);
       changed = true;
     });
 
@@ -150,7 +195,7 @@ function mutateParagraphProperties(
   transform: (pPr: PPr) => PPr,
   options?: MutationOptions,
   extras?: {
-    clearFormattingMarks?: boolean;
+    clearDirectFormatting?: boolean;
   },
 ): ParagraphMutationResult {
   if (options?.dryRun) return successResult(target);
@@ -164,20 +209,15 @@ function mutateParagraphProperties(
       const existing = (node.attrs as { paragraphProperties?: PPr }).paragraphProperties ?? {};
       const updated = transform({ ...existing });
 
+      if (JSON.stringify(existing) === JSON.stringify(updated)) return false;
+
       const tr = editor.state.tr;
-      let changed = false;
 
-      if (extras?.clearFormattingMarks) {
-        changed = clearFormattingMarksInBlock(tr, candidate.pos, node.nodeSize) || changed;
+      if (extras?.clearDirectFormatting) {
+        clearDirectFormattingInBlock(tr, candidate.pos, node.nodeSize);
       }
 
-      if (JSON.stringify(existing) !== JSON.stringify(updated)) {
-        tr.setNodeMarkup(candidate.pos, undefined, { ...node.attrs, paragraphProperties: updated });
-        changed = true;
-      }
-
-      if (!changed) return false;
-
+      tr.setNodeMarkup(candidate.pos, undefined, { ...node.attrs, paragraphProperties: updated });
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -281,7 +321,7 @@ export function paragraphsSetStyleWrapper(
       styleId: input.styleId,
     }),
     options,
-    { clearFormattingMarks: true },
+    { clearDirectFormatting: true },
   );
 }
 

@@ -36,7 +36,7 @@
       "import": "./dist/super-editor/docx-zipper.es.js"
     },
     "./super-editor": {
-      "types": "./dist/super-editor/src/index.d.ts",
+      "types": "./dist/superdoc/src/super-editor.d.ts",
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
     },
@@ -49,7 +49,7 @@
   "typesVersions": {
     "*": {
       "super-editor": [
-        "./dist/super-editor/src/index.d.ts"
+        "./dist/superdoc/src/super-editor.d.ts"
       ],
       "types": [
         "./dist/super-editor/src/types.d.ts"

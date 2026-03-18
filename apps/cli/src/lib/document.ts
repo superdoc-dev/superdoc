@@ -1,10 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Editor } from '@superdoc/super-editor/editor';
-import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
-import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
-import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
-import { initPartsRuntime } from '@superdoc/super-editor/parts-runtime';
+import {
+  Editor,
+  BLANK_DOCX_BASE64,
+  getDocumentApiAdapters,
+  markdownToPmDoc,
+  initPartsRuntime,
+} from 'superdoc/super-editor';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import { createCliDomEnvironment } from './dom-environment';
@@ -219,8 +221,7 @@ export async function openDocument(
     try {
       const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
       const tr = editor.state.tr;
-      // The PM Fragment type is opaque at the CLI boundary — cast through unknown.
-      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content as any);
+      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content);
       editor.dispatch(tr);
     } catch (error) {
       editor.destroy();

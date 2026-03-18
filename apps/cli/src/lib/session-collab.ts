@@ -1,4 +1,4 @@
-import type { Editor } from '@superdoc/super-editor/editor';
+import type { Editor } from 'superdoc/super-editor';
 import { markContextUpdated, type ContextMetadata, type ContextPaths, writeContextMetadata } from './context';
 import { exportToPath, getFileChecksum } from './document';
 import { CliError } from './errors';

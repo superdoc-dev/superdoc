@@ -9,6 +9,7 @@ const distRoot = path.resolve(__dirname, '..', 'dist');
 
 const requiredEntryPoints = [
   'superdoc/src/index.d.ts',
+  'superdoc/src/super-editor.d.ts',
   'super-editor/src/index.d.ts',
   'super-editor/src/types.d.ts',
 ];
@@ -146,6 +147,30 @@ for (const filePath of dtsFiles) {
 
 if (fixedFiles > 0) {
   console.log(`[ensure-types] ✓ Fixed ${totalReplacements} import paths in ${fixedFiles} .d.ts files`);
+}
+
+// ---------------------------------------------------------------------------
+// Normalize the public superdoc/super-editor facade types.
+//
+// The runtime bundle intentionally exposes a curated facade over the packaged
+// super-editor output. vite-plugin-dts currently collapses this file down to a
+// plain `export *` and drops the extra helper re-exports, so patch the entry
+// point explicitly to keep the type surface aligned with runtime.
+// ---------------------------------------------------------------------------
+
+const superEditorFacadePath = path.join(distRoot, 'superdoc/src/super-editor.d.ts');
+const expectedSuperEditorFacade = [
+  "export * from '../../super-editor/src/index.js';",
+  "export { BLANK_DOCX_BASE64 } from '../../super-editor/src/core/blank-docx.js';",
+  "export { getDocumentApiAdapters } from '../../super-editor/src/document-api-adapters/index.js';",
+  "export { markdownToPmDoc } from '../../super-editor/src/core/helpers/markdown/index.js';",
+  "export { initPartsRuntime } from '../../super-editor/src/core/parts/init-parts-runtime.js';",
+  '',
+].join('\n');
+
+if (fs.readFileSync(superEditorFacadePath, 'utf8') !== expectedSuperEditorFacade) {
+  fs.writeFileSync(superEditorFacadePath, expectedSuperEditorFacade);
+  console.log('[ensure-types] ✓ Normalized superdoc/super-editor facade types');
 }
 
 // ---------------------------------------------------------------------------

@@ -512,6 +512,10 @@ export const useCommentsStore = defineStore('comments', () => {
     if (event === 'add') {
       const existing = findTrackedChangeById();
       if (existing) {
+        // Undo/redo after accept/reject can rematerialize a previously resolved
+        // tracked change. Reopen the thread so the bubble is actionable again.
+        if (existing.resolvedTime) clearResolvedMetadata(existing);
+
         // Already exists (e.g. created during batch import) — update instead of duplicating
         // Partial resolution can turn a replacement into insert-only/delete-only, so
         // clear fields explicitly when the updated payload no longer includes them.
@@ -533,6 +537,7 @@ export const useCommentsStore = defineStore('comments', () => {
       // If we have an update event, simply update the composable comment
       const existingTrackedChange = findTrackedChangeById();
       if (!existingTrackedChange) return;
+      if (existingTrackedChange.resolvedTime) clearResolvedMetadata(existingTrackedChange);
 
       // Partial resolution can turn a replacement into insert-only/delete-only, so
       // clear fields explicitly when the updated payload no longer includes them.
@@ -959,15 +964,18 @@ export const useCommentsStore = defineStore('comments', () => {
     const activeDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
     if (!activeDocumentId) return;
 
-    // Build a Set of existing tracked-change IDs for O(1) lookup.
+    // Build a Set of existing unresolved tracked-change IDs for O(1) lookup.
     // Include both runtime and imported IDs to avoid duplicate threads when
     // replay/import flows remap commentId but marks still reference importedId.
-    const existingIds = new Set();
+    // Resolved tracked-change threads are intentionally excluded so undo can
+    // reopen them when the tracked marks reappear.
+    const existingUnresolvedIds = new Set();
     commentsList.value.forEach((comment) => {
       if (!comment?.trackedChange) return;
       if (!belongsToDocument(comment, activeDocumentId)) return;
-      if (comment.commentId != null) existingIds.add(String(comment.commentId));
-      if (comment.importedId != null) existingIds.add(String(comment.importedId));
+      if (comment.resolvedTime) return;
+      if (comment.commentId != null) existingUnresolvedIds.add(String(comment.commentId));
+      if (comment.importedId != null) existingUnresolvedIds.add(String(comment.importedId));
     });
 
     // Build a Map of change ID → tracked change entries for O(1) lookup per group.
@@ -984,7 +992,7 @@ export const useCommentsStore = defineStore('comments', () => {
     // Build comment params directly from grouped changes — no PM dispatch needed
     groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
       const id = insertedMark?.mark.attrs.id || deletionMark?.mark.attrs.id || formatMark?.mark.attrs.id;
-      if (!id || existingIds.has(id)) return;
+      if (!id || existingUnresolvedIds.has(id)) return;
 
       const marks = {
         ...(insertedMark && { insertedMark: insertedMark.mark }),
@@ -1005,9 +1013,9 @@ export const useCommentsStore = defineStore('comments', () => {
 
       if (params) {
         handleTrackedChangeUpdate({ superdoc, params });
-        existingIds.add(String(id));
-        if (params.changeId != null) existingIds.add(String(params.changeId));
-        if (params.importedId != null) existingIds.add(String(params.importedId));
+        existingUnresolvedIds.add(String(id));
+        if (params.changeId != null) existingUnresolvedIds.add(String(params.changeId));
+        if (params.importedId != null) existingUnresolvedIds.add(String(params.importedId));
       }
     });
 

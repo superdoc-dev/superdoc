@@ -990,7 +990,10 @@ const onEditorTransaction = (payload = {}) => {
   // This could be extended to other listeners in the future
   if (inputType === 'historyUndo' || inputType === 'historyRedo') {
     const documentId = editor?.options?.documentId;
+    // separation is useful because functions have different inputs
+    // different side effects, and different reuse points.
     syncTrackedChangePositionsWithDocument({ documentId, editor });
+    syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor });
   }
 
   emitEditorTransaction(buildEditorTransactionPayload(payload));

@@ -265,6 +265,46 @@ describe('comments-store', () => {
     );
   });
 
+  it('reopens resolved tracked change comments on update events', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-reopen-update',
+      trackedChangeText: 'old',
+      trackedChangeType: 'both',
+      deletedText: 'removed earlier',
+      resolvedTime: 123,
+      resolvedByEmail: 'old@example.com',
+      resolvedByName: 'Old Reviewer',
+      getValues: vi.fn(() => ({ commentId: 'change-reopen-update' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'change-reopen-update',
+        trackedChangeText: 'new text',
+        trackedChangeType: 'insert',
+        deletedText: null,
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.resolvedTime).toBeNull();
+    expect(existingComment.resolvedByEmail).toBeNull();
+    expect(existingComment.resolvedByName).toBeNull();
+  });
+
   it('clears stale tracked-change metadata when an update removes one side of a replacement', () => {
     const superdoc = {
       emit: vi.fn(),
@@ -401,6 +441,45 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' },
       }),
     );
+  });
+
+  it('reopens resolved tracked change comments when add event dedupes an existing thread', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-reopen-add',
+      trackedChangeText: 'old',
+      trackedChangeType: 'both',
+      deletedText: 'removed earlier',
+      resolvedTime: 456,
+      resolvedByEmail: 'old@example.com',
+      resolvedByName: 'Old Reviewer',
+      getValues: vi.fn(() => ({ commentId: 'change-reopen-add' })),
+    };
+
+    store.commentsList = [existingComment];
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'change-reopen-add',
+        trackedChangeText: 'new text',
+        trackedChangeType: 'insert',
+        deletedText: null,
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.resolvedTime).toBeNull();
+    expect(existingComment.resolvedByEmail).toBeNull();
+    expect(existingComment.resolvedByName).toBeNull();
   });
 
   it('creates tracked-change comments with super-editor source', () => {
@@ -686,6 +765,41 @@ describe('comments-store', () => {
       { commentId: 'tc-live', trackedChange: true, trackedChangeText: 'Existing', fileId: 'doc-1' },
       { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
     ]);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('reopens resolved tracked-change comments when synced marks reappear', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const superdoc = { emit: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-reopen' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'tc-reopen' } } } }]);
+
+    const existingComment = {
+      commentId: 'tc-reopen',
+      trackedChange: true,
+      trackedChangeText: 'Existing',
+      resolvedTime: 123,
+      resolvedByEmail: 'old@example.com',
+      resolvedByName: 'Old Reviewer',
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({ commentId: 'tc-reopen' })),
+    };
+    store.commentsList = [existingComment];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(existingComment.resolvedTime).toBeNull();
+    expect(existingComment.resolvedByEmail).toBeNull();
+    expect(existingComment.resolvedByName).toBeNull();
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });

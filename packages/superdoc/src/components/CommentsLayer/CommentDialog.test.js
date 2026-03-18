@@ -181,6 +181,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
         resolveComment: vi.fn(),
       },
     },
+    focus: vi.fn(),
     emit: vi.fn(),
   };
 
@@ -282,15 +283,19 @@ describe('CommentDialog.vue', () => {
 
     const header = wrapper.findComponent(CommentHeaderStub);
     header.vm.$emit('resolve');
+    await nextTick();
     expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
     expect(baseComment.resolveComment).toHaveBeenCalledWith({
       email: superdocStoreStub.user.email,
       name: superdocStoreStub.user.name,
       superdoc: expect.any(Object),
     });
+    expect(superdocStub.focus).toHaveBeenCalledTimes(1);
 
     header.vm.$emit('reject');
+    await nextTick();
     expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(superdocStub.focus).toHaveBeenCalledTimes(2);
   });
 
   it('calls custom accept handler instead of default behavior when configured', async () => {

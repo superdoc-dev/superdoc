@@ -177,6 +177,7 @@ const buildCommentsStore = () => ({
   handleEditorLocationsUpdate: vi.fn(),
   clearEditorCommentPositions: vi.fn(),
   handleTrackedChangeUpdate: vi.fn(),
+  syncTrackedChangePositionsWithDocument: vi.fn(),
   syncTrackedChangeComments: vi.fn(),
   removePendingComment: vi.fn(),
   setActiveComment: vi.fn(),
@@ -517,6 +518,52 @@ describe('SuperDoc.vue', () => {
 
     options.onCommentLocationsUpdate({ allCommentPositions: { 'tc-new': { start: 1, end: 2 } } });
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+  });
+
+  it('resyncs tracked-change threads on undo/redo transactions', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    const makeTransaction = (inputType) => ({
+      getMeta: vi.fn((key) => (key === 'inputType' ? inputType : undefined)),
+    });
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction('historyUndo'),
+      duration: 4,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+    });
+
+    commentsStoreStub.syncTrackedChangePositionsWithDocument.mockClear();
+    commentsStoreStub.syncTrackedChangeComments.mockClear();
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction('historyRedo'),
+      duration: 5,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+    });
   });
 
   it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {

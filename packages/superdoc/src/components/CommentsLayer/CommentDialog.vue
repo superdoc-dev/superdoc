@@ -405,6 +405,7 @@ const handleReject = () => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
     commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+    proxy.$superdoc.focus?.();
   });
 };
 
@@ -432,6 +433,7 @@ const handleResolve = () => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
     commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
+    proxy.$superdoc.focus?.();
   });
 };
 

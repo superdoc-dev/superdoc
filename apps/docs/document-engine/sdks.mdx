@@ -380,7 +380,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities. |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -818,7 +818,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities. |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -1244,6 +1244,26 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
   </Tab>
 </Tabs>
 {/* SDK_OPERATIONS_END */}
+
+## SDK vs browser integration model
+
+The SDKs are request/response wrappers around the CLI. They do **not** expose browser event subscriptions like `editor.on('update', ...)` or `superdoc.on('editor-update', ...)`.
+
+- Call `doc.info()` at workflow boundaries — after opening, after edits, or before saving — not in a polling loop.
+- If you are building a browser live counter, use the [SuperEditor events](/core/supereditor/events) or [SuperDoc events](/core/superdoc/events) instead.
+
+```ts
+const doc = await client.open('./report.docx');
+const info = doc.info();
+console.log(
+  `${info.counts.words} words, ` +
+    `${info.counts.characters} characters, ` +
+    `${info.counts.trackedChanges} tracked changes, ` +
+    `${info.counts.sdtFields} SDT fields, ` +
+    `${info.counts.lists} lists`,
+);
+await doc.close();
+```
 
 ## Related
 

@@ -247,6 +247,73 @@ editor2.destroy();
 No ID is guaranteed to survive all Microsoft Word round-trips. Re-extract addresses after major external edits or transformations, since Word (or other tools) may rewrite paragraph IDs and SuperDoc may rewrite duplicate IDs on import.
 </Warning>
 
+## Read document counts
+
+`doc.info()` returns a snapshot of current document statistics including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts.
+
+```ts
+const info = editor.doc.info();
+
+console.log(info.counts.words);      // whitespace-delimited word count
+console.log(info.counts.characters); // full text projection length (with spaces)
+console.log(info.counts.paragraphs); // excludes headings and list items
+console.log(info.counts.headings);   // style-based heading detection
+console.log(info.counts.tables);     // top-level table containers
+console.log(info.counts.images);     // block + inline images
+console.log(info.counts.comments);   // unique anchored comment IDs
+console.log(info.counts.trackedChanges); // grouped tracked-change entities
+console.log(info.counts.sdtFields);      // field-like SDT/content-control nodes
+console.log(info.counts.lists);          // unique list sequences
+```
+
+All counts reflect the current editor state, not OOXML metadata. They update naturally as the document changes.
+
+### Build a live counter in the browser
+
+`doc.info()` is a snapshot read. To build a live counter, subscribe to document-change events and refresh counts in the handler — do not poll in a render loop.
+
+**SuperEditor (raw editor):**
+
+```ts
+editor.on('update', ({ editor }) => {
+  const { counts } = editor.doc.info();
+  updateDocumentStatsUI({
+    words: counts.words,
+    characters: counts.characters,
+    trackedChanges: counts.trackedChanges,
+    sdtFields: counts.sdtFields,
+    lists: counts.lists,
+  });
+});
+```
+
+**SuperDoc (wrapper):**
+
+```ts
+superdoc.on('editor-update', ({ editor }) => {
+  const { counts } = editor.doc.info();
+  updateDocumentStatsUI({
+    words: counts.words,
+    characters: counts.characters,
+    trackedChanges: counts.trackedChanges,
+    sdtFields: counts.sdtFields,
+    lists: counts.lists,
+  });
+});
+```
+
+### SDK usage
+
+The SDKs do not expose browser event subscriptions. Call `doc.info()` at workflow boundaries — after opening a document, after a batch of mutations, or before saving.
+
+```ts
+const doc = await client.open('./contract.docx');
+const info = doc.info();
+console.log(
+  `${info.counts.words} words, ${info.counts.characters} characters, ${info.counts.trackedChanges} tracked changes`,
+);
+```
+
 ## Dry-run preview
 
 Pass `dryRun: true` to validate an operation without applying it:

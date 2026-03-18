@@ -24,9 +24,21 @@ function makeAdapters() {
   const getTextAdapter = { getText: vi.fn(() => 'hello') };
   const infoAdapter = {
     info: vi.fn(() => ({
-      counts: { words: 1, paragraphs: 1, headings: 0, tables: 0, images: 0, comments: 0 },
+      counts: {
+        words: 1,
+        characters: 5,
+        paragraphs: 1,
+        headings: 0,
+        tables: 0,
+        images: 0,
+        comments: 0,
+        trackedChanges: 0,
+        sdtFields: 0,
+        lists: 1,
+      },
       outline: [],
       capabilities: { canFind: true, canGetNode: true, canComment: true, canReplace: true },
+      revision: '0',
     })),
   };
   const capabilitiesAdapter: CapabilitiesAdapter = {

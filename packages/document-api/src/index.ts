@@ -1435,7 +1435,7 @@ export interface DocumentApi {
    */
   markdownToFragment(input: MarkdownToFragmentInput): SDMarkdownToFragmentResult;
   /**
-   * Return document summary info used by `doc.info`.
+   * Return document summary info including document counts and capabilities.
    */
   info(input: InfoInput): DocumentInfo;
   /**

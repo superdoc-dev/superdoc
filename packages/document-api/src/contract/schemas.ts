@@ -898,13 +898,28 @@ function sdMutationResultSchemaFor(operationId: OperationId): JsonSchema {
 const documentInfoCountsSchema = objectSchema(
   {
     words: { type: 'integer' },
+    characters: { type: 'integer' },
     paragraphs: { type: 'integer' },
     headings: { type: 'integer' },
     tables: { type: 'integer' },
     images: { type: 'integer' },
     comments: { type: 'integer' },
+    trackedChanges: { type: 'integer' },
+    sdtFields: { type: 'integer' },
+    lists: { type: 'integer' },
   },
-  ['words', 'paragraphs', 'headings', 'tables', 'images', 'comments'],
+  [
+    'words',
+    'characters',
+    'paragraphs',
+    'headings',
+    'tables',
+    'images',
+    'comments',
+    'trackedChanges',
+    'sdtFields',
+    'lists',
+  ],
 );
 
 const documentInfoOutlineItemSchema = objectSchema(

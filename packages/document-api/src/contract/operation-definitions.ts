@@ -378,8 +378,10 @@ export const OPERATION_DEFINITIONS = {
   },
   info: {
     memberPath: 'info',
-    description: 'Return document metadata including revision, node count, and capabilities.',
-    expectedResult: 'Returns a DocumentInfo object with revision, word/paragraph/heading counts, and capability flags.',
+    description:
+      'Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities.',
+    expectedResult:
+      'Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists), document outline, capability flags, and revision.',
     requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',

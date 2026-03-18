@@ -976,21 +976,21 @@ watch(editingCommentId, (commentId) => {
   border: none;
   font-size: 13px;
   font-weight: 500;
-  color: var(--sd-color-gray-700, #666666);
+  color: var(--sd-ui-text-muted, #666666);
   cursor: pointer;
   padding: 0;
   font-family: inherit;
   transition: color 150ms;
 }
 .reply-btn-cancel:hover {
-  color: var(--sd-color-gray-900, #212121);
+  color: var(--sd-ui-text, #212121);
 }
 .reply-btn-primary {
   background: var(--sd-ui-action, #1355ff);
   border: none;
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--sd-ui-bg, #ffffff);
   cursor: pointer;
   padding: 6px 16px;
   border-radius: 9999px;

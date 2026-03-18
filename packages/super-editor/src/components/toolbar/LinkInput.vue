@@ -340,7 +340,7 @@ const handleRemove = () => {
     position: absolute;
     left: 25px;
     width: auto;
-    color: #999;
+    color: var(--sd-ui-text-disabled, #ababab);
     pointer-events: none;
   }
 
@@ -351,12 +351,12 @@ const handleRemove = () => {
 
   &.high-contrast {
     .input-icon {
-      color: #000;
+      color: var(--sd-ui-text, #47484a);
     }
 
     .input-row input {
-      color: #000;
-      border-color: #000;
+      color: var(--sd-ui-text, #47484a);
+      border-color: var(--sd-ui-text, #47484a);
     }
   }
 }
@@ -427,6 +427,7 @@ const handleRemove = () => {
 .link-title {
   font-size: var(--sd-ui-font-size-400, 14px);
   font-weight: 600;
+  color: var(--sd-ui-text, #47484a);
   margin-bottom: 10px;
 }
 
@@ -464,7 +465,7 @@ const handleRemove = () => {
   outline: none;
   border: none;
   background-color: var(--sd-ui-action, #1355ff);
-  color: white;
+  color: var(--sd-ui-bg, #ffffff);
   font-weight: 400;
   font-size: var(--sd-ui-font-size-300, 13px);
   cursor: pointer;

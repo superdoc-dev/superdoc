@@ -65,11 +65,13 @@ test.describe('selection across mark boundaries (SD-2024)', () => {
   test('selecting exactly at a mark boundary produces a visible highlight', async ({ superdoc }) => {
     await setupMixedFormattingText(superdoc);
 
-    // Select just the boundary between "Bold" and "Italic"
-    // "NormalBoldItalic" — place selection from end of "Bold" into start of "Italic"
+    // Select exactly across the Bold→Italic mark boundary.
+    // boldPos = start of the bold run (Normal→Bold boundary),
+    // italicPos = start of the italic run (Bold→Italic boundary).
+    // Both endpoints land on a mark boundary so this exercises the SD-2024 edge case.
     const boldPos = await superdoc.findTextPos('Bold');
     const italicPos = await superdoc.findTextPos('Italic');
-    await superdoc.setTextSelection(boldPos + 2, italicPos + 2);
+    await superdoc.setTextSelection(boldPos, italicPos);
     await superdoc.waitForStable();
 
     const rectCount = await getSelectionOverlayRectCount(superdoc);
@@ -129,6 +131,7 @@ test.describe('selection across mark boundaries (SD-2024)', () => {
 
     // Drag across the line in small increments, sampling overlay at each step
     let minRects = Infinity;
+    let sampledSteps = 0;
     const steps = 8;
     for (let i = 1; i <= steps; i++) {
       const x = startX + ((endX - startX) * i) / steps;
@@ -138,6 +141,7 @@ test.describe('selection across mark boundaries (SD-2024)', () => {
 
       const sel = await superdoc.getSelection();
       if (sel.to - sel.from > 0) {
+        sampledSteps++;
         const rects = await getSelectionOverlayRectCount(superdoc);
         minRects = Math.min(minRects, rects);
       }
@@ -146,6 +150,9 @@ test.describe('selection across mark boundaries (SD-2024)', () => {
     await superdoc.page.mouse.up();
     await superdoc.waitForStable();
 
+    // Guard: the drag must have produced at least one non-collapsed selection sample,
+    // otherwise minRects stays Infinity and the next assertion passes vacuously.
+    expect(sampledSteps).toBeGreaterThan(0);
     // At no point during the drag should the overlay have dropped to zero rects
     // when there was a non-collapsed selection
     expect(minRects).toBeGreaterThan(0);
@@ -218,16 +225,51 @@ test.describe('drag selection near tables (SD-2024)', () => {
     await superdoc.executeCommand('insertTable', { rows: 2, cols: 2, withHeaderRow: false });
     await superdoc.waitForStable();
 
-    // Navigate past the table and type text after it
-    // Tab through all 4 cells to get past the table
-    await superdoc.press('Tab');
-    await superdoc.press('Tab');
-    await superdoc.press('Tab');
-    await superdoc.press('Tab'); // exits table, creates/moves to paragraph after
+    // Insert a real paragraph after the table via PM transaction.
+    // Tab in the last cell calls addRowAfter().goToNextCell() instead of
+    // exiting the table, so we cannot use Tab to leave.
+    const afterTablePos = await superdoc.page.evaluate(() => {
+      const { state, view } = (window as any).editor;
+      let tableEndPos = -1;
+      state.doc.descendants((node: any, pos: number) => {
+        if (node.type.name === 'table' && tableEndPos === -1) {
+          tableEndPos = pos + node.nodeSize;
+          return false; // skip children
+        }
+      });
+      if (tableEndPos === -1) throw new Error('Table not found');
+      const { tr, schema } = state;
+      tr.insert(tableEndPos, schema.nodes.paragraph.create());
+      view.dispatch(tr);
+      return tableEndPos + 1; // content position inside the new paragraph
+    });
     await superdoc.waitForStable();
 
+    await superdoc.setTextSelection(afterTablePos);
+    await superdoc.waitForStable();
     await superdoc.type('Text after table');
     await superdoc.waitForStable();
+
+    // Verify "Text after table" is actually outside the table
+    const textIsOutsideTable = await superdoc.page.evaluate(() => {
+      const { state } = (window as any).editor;
+      let tableEnd = -1;
+      state.doc.descendants((node: any, pos: number) => {
+        if (node.type.name === 'table' && tableEnd === -1) {
+          tableEnd = pos + node.nodeSize;
+          return false;
+        }
+      });
+      let textPos = -1;
+      state.doc.descendants((node: any, pos: number) => {
+        if (node.isText && node.text?.includes('Text after table')) {
+          textPos = pos;
+          return false;
+        }
+      });
+      return textPos > tableEnd;
+    });
+    expect(textIsOutsideTable).toBe(true);
 
     // Select from before the table to after it using PM positions
     const beforePos = await superdoc.findTextPos('Text before table');

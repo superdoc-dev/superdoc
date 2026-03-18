@@ -145,18 +145,22 @@ _No fields._
   },
   "properties": {
     "after": {
+      "description": "Space after paragraph in twips (20 twips = 1pt).",
       "minimum": 0,
       "type": "integer"
     },
     "before": {
+      "description": "Space before paragraph in twips (20 twips = 1pt).",
       "minimum": 0,
       "type": "integer"
     },
     "line": {
+      "description": "Line spacing value. Meaning depends on lineRule. Must be provided together with lineRule.",
       "minimum": 1,
       "type": "integer"
     },
     "lineRule": {
+      "description": "Line spacing rule. Required when 'line' is set.",
       "enum": [
         "auto",
         "exact",

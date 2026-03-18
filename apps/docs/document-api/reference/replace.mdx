@@ -190,7 +190,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "properties": {
             "target": {
               "$ref": "#/$defs/SelectionTarget",
-              "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}."
+              "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
             },
             "text": {
               "description": "Replacement text content.",
@@ -207,7 +207,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "additionalProperties": false,
           "properties": {
             "ref": {
-              "description": "Reference handle from a previous search result.",
+              "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
               "type": "string"
             },
             "text": {

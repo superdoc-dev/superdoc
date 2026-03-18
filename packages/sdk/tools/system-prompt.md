@@ -24,7 +24,10 @@ Every editing tool needs a **target** — an address telling the API *where* to 
 
 Use `superdoc_search` to find content. Each match item returns:
 
-- **`handle`** — an opaque reference for text-level operations. Pass it directly as `target` to `superdoc_edit` and `superdoc_format` (for inline styles like bold, italic, etc.).
+- **`handle.ref`** — a ref string for text-level operations. Pass the ref string as:
+  - `ref` parameter on `superdoc_format` (for inline styles like bold, italic)
+  - `ref` parameter on `superdoc_edit` (for text replacement, deletion)
+  - Example: `superdoc_format({action: "inline", ref: "text:eyJ...", inline: {bold: true}})`
 - **`address`** — a block-level address like `{ "kind": "block", "nodeType": "paragraph", "nodeId": "abc123" }`. Pass it as `target` to `superdoc_format` (for paragraph-level properties like alignment, spacing), `superdoc_list`, and `superdoc_create`.
 
 ### Text search results

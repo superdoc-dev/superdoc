@@ -81,7 +81,7 @@ function targetLocatorWithPayload(
           target: {
             ...ref('SelectionTarget'),
             description:
-              "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}.",
+              "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle.",
           },
           ...payloadProperties,
         },
@@ -89,7 +89,11 @@ function targetLocatorWithPayload(
       ),
       objectSchema(
         {
-          ref: { type: 'string', description: 'Reference handle from a previous search result.' },
+          ref: {
+            type: 'string',
+            description:
+              "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
+          },
           ...payloadProperties,
         },
         ['ref', ...payloadRequired],
@@ -2754,7 +2758,16 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'format.apply': {
     input: {
-      ...targetLocatorWithPayload({ inline: buildInlineRunPatchSchema() }, ['inline']),
+      ...targetLocatorWithPayload(
+        {
+          inline: {
+            ...buildInlineRunPatchSchema(),
+            description:
+              'Inline formatting properties to apply. Set a property to apply it, use null to clear it. Example: {bold: true, italic: true} or {bold: null} to remove bold.',
+          },
+        },
+        ['inline'],
+      ),
     },
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
@@ -2915,10 +2928,18 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ...objectSchema(
         {
           target: paragraphTargetSchema,
-          left: { type: 'integer', minimum: 0 },
-          right: { type: 'integer', minimum: 0 },
-          firstLine: { type: 'integer', minimum: 0 },
-          hanging: { type: 'integer', minimum: 0 },
+          left: { type: 'integer', minimum: 0, description: 'Left indentation in twips (1440 = 1 inch).' },
+          right: { type: 'integer', minimum: 0, description: 'Right indentation in twips (1440 = 1 inch).' },
+          firstLine: {
+            type: 'integer',
+            minimum: 0,
+            description: 'First line indent in twips. Cannot be combined with hanging.',
+          },
+          hanging: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Hanging indent in twips. Cannot be combined with firstLine.',
+          },
         },
         ['target'],
       ),
@@ -2940,10 +2961,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ...objectSchema(
         {
           target: paragraphTargetSchema,
-          before: { type: 'integer', minimum: 0 },
-          after: { type: 'integer', minimum: 0 },
-          line: { type: 'integer', minimum: 1 },
-          lineRule: { enum: [...LINE_RULES] },
+          before: { type: 'integer', minimum: 0, description: 'Space before paragraph in twips (20 twips = 1pt).' },
+          after: { type: 'integer', minimum: 0, description: 'Space after paragraph in twips (20 twips = 1pt).' },
+          line: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Line spacing value. Meaning depends on lineRule. Must be provided together with lineRule.',
+          },
+          lineRule: {
+            enum: [...LINE_RULES],
+            description: "Line spacing rule. Required when 'line' is set.",
+          },
         },
         ['target'],
       ),

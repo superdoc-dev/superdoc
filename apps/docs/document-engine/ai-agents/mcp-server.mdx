@@ -71,18 +71,23 @@ Install once. Your MCP client spawns the server automatically on each conversati
 Every interaction follows the same pattern: open, read or edit, save, close.
 
 ```
-superdoc_open → superdoc_find / superdoc_get_text → edit tools → superdoc_save → superdoc_close
+superdoc_open → superdoc_get_content / superdoc_search → intent tools → superdoc_save → superdoc_close
 ```
 
 1. `superdoc_open` loads a `.docx` file and returns a `session_id`
-2. `superdoc_find` locates content and returns target addresses
-3. Edit tools (`superdoc_insert`, `superdoc_replace`, `superdoc_delete`, `superdoc_format`) use those addresses
+2. `superdoc_get_content` reads the current document and `superdoc_search` finds stable handles or addresses
+3. Intent tools use `session_id` plus `action` to edit, format, create, comment, review track changes, or run batched mutations
 4. `superdoc_save` writes changes to disk
 5. `superdoc_close` releases the session
 
 ## Tools
 
-23 tools in eight groups. All tools take a `session_id` from `superdoc_open`.
+The MCP server exposes 12 tools total:
+
+- 3 lifecycle tools: `superdoc_open`, `superdoc_save`, `superdoc_close`
+- 9 grouped intent tools generated from the SDK catalog
+
+All tools except `superdoc_open` take a `session_id` from `superdoc_open`.
 
 ### Lifecycle
 
@@ -92,70 +97,25 @@ superdoc_open → superdoc_find / superdoc_get_text → edit tools → superdoc_
 | `superdoc_save` | `session_id`, `out?` | Save to the original path, or to `out` if specified |
 | `superdoc_close` | `session_id` | Close the session. Unsaved changes are lost |
 
-### Query
+### Intent tools
 
-| Tool | Input | Description |
+| Tool | Actions | Description |
 | --- | --- | --- |
-| `superdoc_find` | `session_id`, `type?`, `pattern?`, `limit?`, `offset?` | Search by node type, text pattern, or both. Returns matches with addresses |
-| `superdoc_get_node` | `session_id`, `address` | Get details about a specific node by its address |
-| `superdoc_info` | `session_id` | Document metadata: structure summary, node counts, capabilities |
-| `superdoc_get_text` | `session_id` | Full plain-text content of the document |
+| `superdoc_get_content` | `text`, `markdown`, `html`, `info` | Read document content in different formats |
+| `superdoc_search` | `match` | Find text or nodes and return handles or addresses for later edits |
+| `superdoc_edit` | `insert`, `replace`, `delete`, `undo`, `redo` | Perform text edits and history actions |
+| `superdoc_format` | `inline`, `set_style`, `set_alignment`, `set_indentation`, `set_spacing` | Apply inline or paragraph formatting |
+| `superdoc_create` | `paragraph`, `heading` | Create structural block elements |
+| `superdoc_list` | `insert`, `create`, `detach`, `indent`, `outdent`, `set_level`, `set_type` | Create and manipulate lists |
+| `superdoc_comment` | `create`, `update`, `delete`, `get`, `list` | Manage comment threads |
+| `superdoc_track_changes` | `list`, `decide` | Review and resolve tracked changes |
+| `superdoc_mutations` | `preview`, `apply` | Execute multi-step atomic edits as a batch |
 
-### Mutation
+Multi-action tools use an `action` argument to select the underlying operation. `superdoc_search` is a single-action tool and does not require `action`.
 
-All mutation tools accept `suggest?` — set to `true` to make the edit a tracked change instead of a direct edit.
+## Tracked changes
 
-| Tool | Input | Description |
-| --- | --- | --- |
-| `superdoc_insert` | `session_id`, `text`, `target`, `suggest?` | Insert text at a target position |
-| `superdoc_replace` | `session_id`, `text`, `target`, `suggest?` | Replace content at a target range |
-| `superdoc_delete` | `session_id`, `target`, `suggest?` | Delete content at a target range |
-
-### Format
-
-| Tool | Input | Description |
-| --- | --- | --- |
-| `superdoc_format` | `session_id`, `style`, `target`, `suggest?` | Toggle formatting on a text range. Styles: `bold`, `italic`, `underline`, `strikethrough` |
-
-### Create
-
-| Tool | Input | Description |
-| --- | --- | --- |
-| `superdoc_create` | `session_id`, `type`, `text?`, `level?`, `at?`, `suggest?` | Create a block element. Types: `paragraph`, `heading` (headings require `level` 1-6) |
-
-### Track changes
-
-Review and resolve tracked changes (suggestions) in the document.
-
-| Tool | Input | Description |
-| --- | --- | --- |
-| `superdoc_list_changes` | `session_id`, `type?`, `limit?`, `offset?` | List tracked changes with type, author, date, and excerpt |
-| `superdoc_accept_change` | `session_id`, `id` | Accept a single change, applying it to the document |
-| `superdoc_reject_change` | `session_id`, `id` | Reject a single change, reverting it |
-| `superdoc_accept_all_changes` | `session_id` | Accept all tracked changes at once |
-| `superdoc_reject_all_changes` | `session_id` | Reject all tracked changes at once |
-
-### Comments
-
-Add and manage comments anchored to text ranges.
-
-| Tool | Input | Description |
-| --- | --- | --- |
-| `superdoc_add_comment` | `session_id`, `text`, `target` | Add a comment anchored to a text range |
-| `superdoc_list_comments` | `session_id`, `include_resolved?` | List all comments with author, status, and anchored text |
-| `superdoc_reply_comment` | `session_id`, `comment_id`, `text` | Reply to an existing comment thread |
-| `superdoc_resolve_comment` | `session_id`, `comment_id` | Mark a comment as resolved |
-
-### Lists
-
-| Tool | Input | Description |
-| --- | --- | --- |
-| `superdoc_insert_list` | `session_id`, `target`, `position`, `text?` | Insert a list item before or after an existing one |
-| `superdoc_list_set_type` | `session_id`, `target`, `kind` | Change a list between `ordered` (numbered) and `bullet` |
-
-## Suggesting mode
-
-Set `suggest=true` on any mutation, format, or create tool to make edits appear as tracked changes. The document stays unchanged until someone accepts the suggestions — in Word, in SuperDoc's browser editor, or programmatically via the track changes tools.
+Actions that support tracked edits use the underlying Document API's `changeMode: "tracked"` option. Review or resolve tracked edits with `superdoc_track_changes`.
 
 ## How it works
 

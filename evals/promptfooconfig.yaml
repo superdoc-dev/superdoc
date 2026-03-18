@@ -1,0 +1,69 @@
+# SuperDoc Tool Evals -- native providers for tool calling.
+# Run: pnpm run eval
+# Filter: pnpm run eval -- --filter-providers "GPT-*"
+#
+# IMPORTANT: vercel: providers do NOT support tool calling in Promptfoo.
+# They return text instead of structured tool calls. Use native provider IDs.
+# For cross-provider execution tests, use eval:e2e (custom provider handles tools).
+
+description: 'SuperDoc Tool Evals'
+
+prompts:
+  - file://prompts/agent.txt
+  - file://prompts/minimal.txt
+
+providers:
+  # --- OpenAI ---
+  - id: openai:chat:gpt-4o
+    label: GPT-4o
+    config: &openai-config
+      temperature: 0
+      seed: 42
+      tools: file://lib/essential.json
+      tool_choice: required
+      timeout: 30000
+
+  - id: openai:chat:gpt-4.1-mini
+    label: GPT-4.1-mini
+    config: *openai-config
+
+  - id: openai:chat:gpt-5.4
+    label: GPT-5.4
+    config: *openai-config
+
+  # --- Anthropic ---
+  # - id: anthropic:messages:claude-haiku-4-5-20251001
+  #   label: Claude Haiku 4.5
+  #   delay: 1000
+  #   config:
+  #     temperature: 0
+  #     tools: file://lib/essential.json
+  #     tool_choice: auto
+  #     timeout: 30000
+  #     max_tokens: 1024
+  #     maxRetries: 3
+
+  # # --- Google ---
+  # - id: google:gemini-2.5-flash
+  #   label: Gemini 2.5 Flash
+  #   delay: 500
+  #   config:
+  #     temperature: 0
+  #     tools: file://lib/essential.json
+  #     maxOutputTokens: 1024
+  #     timeout: 30000
+
+defaultTest:
+  options:
+    transform: file://lib/normalize.cjs
+  assert:
+    - type: latency
+      threshold: 30000
+
+evaluateOptions:
+  maxConcurrency: 10
+  delay: 500
+  timeoutMs: 300000
+
+tests:
+  - file://tests/tool-quality.yaml

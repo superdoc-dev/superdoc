@@ -1,0 +1,25 @@
+{
+  "name": "@superdoc-testing/evals",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "view": "npx promptfoo view",
+    "extract-tools": "node lib/extract.mjs",
+    "eval": "npx promptfoo eval --env-file .env -o results/latest.json",
+    "eval:e2e": "npx promptfoo eval --env-file .env -c promptfooconfig.e2e.yaml -o results/latest-e2e.json",
+    "eval:openai": "npx promptfoo eval --env-file .env --filter-providers 'GPT-*' -o results/latest-openai.json",
+    "eval:repeat": "npx promptfoo eval --env-file .env --repeat 3 --no-cache",
+    "analyze": "node lib/analyze-results.mjs",
+    "eval:analyze": "npx promptfoo eval --env-file .env -o results/latest.json && node lib/analyze-results.mjs",
+    "baseline:save": "node lib/save-baseline.mjs",
+    "baseline:compare": "node lib/compare-baselines.mjs"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@superdoc-dev/sdk": "1.0.0-alpha.38",
+    "ai": "^6.0.116",
+    "openai": "^6.25.0",
+    "promptfoo": "^0.121.1"
+  }
+}

@@ -118,8 +118,37 @@ export const VerticalNavigation = Extension.create({
           const adjacent = getAdjacentLineClientTarget(editor, coords, event.key === 'ArrowUp' ? -1 : 1);
           if (!adjacent) return false;
 
-          // 3. Hit test at (goal X, adjacent line center Y)
-          const hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
+          // 3. Hit test at (goal X, adjacent line center Y).
+          //    When the adjacent line is outside the visible viewport (e.g., crossing
+          //    a page boundary), hit testing with screen coordinates produces incorrect
+          //    positions. In that case, fall back to layout-based position resolution
+          //    using the line's PM position range and computeCaretLayoutRect.
+          let hit = getHitFromLayoutCoords(editor, goalX, adjacent.clientY, coords, adjacent.pageIndex);
+
+          // Check if the hit test result is plausible: if the adjacent line has PM
+          // position data, the hit should land within or very close to that range.
+          // A miss indicates off-screen coordinate mapping failure or fragment
+          // boundary misalignment (adjacent line center Y mapping to wrong fragment).
+          //
+          // Tolerance is kept small (5 positions) to catch cases where the hit
+          // lands on the current line's fragment start instead of the adjacent
+          // line — this causes the cursor to appear stuck since the "new" position
+          // equals the current one.
+          if (adjacent.pmStart != null && adjacent.pmEnd != null) {
+            const TOLERANCE = 5;
+            const hitPos = hit?.pos;
+            if (
+              !hit ||
+              !Number.isFinite(hitPos) ||
+              hitPos < adjacent.pmStart - TOLERANCE ||
+              hitPos > adjacent.pmEnd + TOLERANCE
+            ) {
+              // Hit test produced a position outside the adjacent line's range.
+              // Resolve position directly from layout data using binary search at goalX.
+              hit = resolvePositionAtGoalX(editor, adjacent.pmStart, adjacent.pmEnd, goalX);
+            }
+          }
+
           if (!hit || !Number.isFinite(hit.pos)) return false;
 
           // 4. Move selection
@@ -207,10 +236,15 @@ function getCurrentCoords(editor, selection) {
 
 /**
  * Finds the adjacent line center Y in client space and associated page index.
+ * Also returns the PM position range from the line's data attributes so that
+ * when the adjacent line is outside the viewport (off-screen), the caller can
+ * resolve the target position directly from layout data rather than relying on
+ * hit testing with potentially inaccurate screen coordinates.
+ *
  * @param {Object} editor
  * @param {{ clientX: number, clientY: number, height: number }} coords
  * @param {number} direction -1 for up, 1 for down.
- * @returns {{ clientY: number, pageIndex?: number } | null}
+ * @returns {{ clientY: number, pageIndex?: number, pmStart?: number, pmEnd?: number } | null}
  */
 function getAdjacentLineClientTarget(editor, coords, direction) {
   const presentationEditor = editor.presentationEditor;
@@ -226,9 +260,16 @@ function getAdjacentLineClientTarget(editor, coords, direction) {
   const rect = adjacentLine.getBoundingClientRect();
   const clientY = rect.top + rect.height / 2;
   if (!Number.isFinite(clientY)) return null;
+
+  // Read PM position range from data attributes for layout-based fallback
+  const pmStart = Number(adjacentLine.dataset?.pmStart);
+  const pmEnd = Number(adjacentLine.dataset?.pmEnd);
+
   return {
     clientY,
     pageIndex: Number.isFinite(pageIndex) ? pageIndex : undefined,
+    pmStart: Number.isFinite(pmStart) ? pmStart : undefined,
+    pmEnd: Number.isFinite(pmEnd) ? pmEnd : undefined,
   };
 }
 
@@ -332,6 +373,61 @@ function findAdjacentLineElement(currentLine, direction) {
     return getEdgeLineFromFragment(pageFragments[0], direction);
   }
   return getEdgeLineFromFragment(pageFragments[pageFragments.length - 1], direction);
+}
+
+/**
+ * Resolves the PM position at a given goalX within a line's position range.
+ *
+ * Uses binary search with computeCaretLayoutRect to find the position within
+ * [pmStart, pmEnd] whose layout X is closest to goalX. This avoids relying on
+ * screen-space hit testing, which fails when the target line is outside the
+ * visible viewport (e.g., after crossing a page boundary).
+ *
+ * @param {Object} editor
+ * @param {number} pmStart - Start PM position of the target line.
+ * @param {number} pmEnd - End PM position of the target line.
+ * @param {number} goalX - Target X coordinate in layout space.
+ * @returns {{ pos: number } | null}
+ */
+export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
+  const presentationEditor = editor.presentationEditor;
+  let bestPos = pmStart;
+  let bestDist = Infinity;
+
+  // Binary search: characters within a single line have monotonically increasing X.
+  // NOTE: assumes LTR text. For RTL, X decreases with position so the search
+  // direction would be inverted. bestPos/bestDist tracking limits the impact.
+  let lo = pmStart;
+  let hi = pmEnd;
+
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const rect = presentationEditor.computeCaretLayoutRect(mid);
+    if (!rect || !Number.isFinite(rect.x)) {
+      // Can't measure this position (e.g. inline node boundary) — skip it
+      // and continue searching. Breaking here would fall back to pmStart,
+      // causing the caret to jump to the line start.
+      lo = mid + 1;
+      continue;
+    }
+
+    const dist = Math.abs(rect.x - goalX);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestPos = mid;
+    }
+
+    if (rect.x < goalX) {
+      lo = mid + 1;
+    } else if (rect.x > goalX) {
+      hi = mid - 1;
+    } else {
+      // Exact match
+      break;
+    }
+  }
+
+  return { pos: bestPos };
 }
 
 /**

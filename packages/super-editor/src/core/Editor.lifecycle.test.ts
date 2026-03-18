@@ -969,7 +969,7 @@ describe('Editor Lifecycle API', () => {
       expect(typeof docAfterReopen.find).toBe('function');
 
       // find should execute without throwing
-      const result = docAfterReopen.find({ select: { type: 'node', nodeKind: 'paragraph' } });
+      const result = docAfterReopen.find({ select: { type: 'node', nodeType: 'paragraph' } });
       expect(result).toBeDefined();
     });
   });

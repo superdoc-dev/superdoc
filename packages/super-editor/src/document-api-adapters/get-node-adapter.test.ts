@@ -188,6 +188,52 @@ describe('getNodeAdapter — block', () => {
       }),
     ).toThrow('Multiple nodes share paragraph id "dup".');
   });
+
+  it('falls back to nodeId when nodeType is stale after paragraph → heading restyle', () => {
+    // The block is now a heading (via styleId), but the saved address still says 'paragraph'.
+    const paragraph = createNode('paragraph', [], {
+      attrs: { sdBlockId: 'p-restyle', paragraphProperties: { styleId: 'Heading1' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = makeEditor(doc);
+
+    // Address saved before the restyle had nodeType: 'paragraph'
+    const result = getNodeAdapter(editor, {
+      kind: 'block',
+      nodeType: 'paragraph',
+      nodeId: 'p-restyle',
+    });
+
+    expect(result.node.kind).toBe('heading');
+    // The returned address should reflect the current (correct) nodeType
+    expect(result.address).toMatchObject({ kind: 'block', nodeType: 'heading', nodeId: 'p-restyle' });
+  });
+
+  it('falls back to nodeId when nodeType is stale after paragraph → listItem restyle', () => {
+    const paragraph = createNode('paragraph', [], {
+      attrs: { sdBlockId: 'p-list', paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const editor = makeEditor(doc);
+
+    // Saved address has nodeType: 'paragraph', but the block is now indexed as 'listItem'.
+    // The lookup should succeed (not throw) and return the canonical address.
+    const result = getNodeAdapter(editor, {
+      kind: 'block',
+      nodeType: 'paragraph',
+      nodeId: 'p-list',
+    });
+
+    // projectContentNode returns 'paragraph' kind for PM paragraph nodes with
+    // numbering (unlike headings which check styleId), but the address reflects
+    // the block index's canonical nodeType.
+    expect(result.node.kind).toBe('paragraph');
+    expect(result.address).toMatchObject({ kind: 'block', nodeType: 'listItem', nodeId: 'p-list' });
+  });
 });
 
 describe('getNodeByIdAdapter', () => {
@@ -204,7 +250,7 @@ describe('getNodeByIdAdapter', () => {
     const result = getNodeByIdAdapter(editor, { nodeId: 'p1' });
 
     expect(result.node.kind).toBe('paragraph');
-    expect(result.address.kind).toBe('content');
+    expect(result.address.kind).toBe('block');
   });
 
   it('resolves a block node by id with nodeType', () => {

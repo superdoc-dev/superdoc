@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperDoc AI Eval Framework</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+    <style>
+        :root {
+            --bg: #ffffff; --bg2: #f7f8fa; --bg3: #f0f1f4;
+            --fg: #18181b; --fg2: #3f3f46; --fg3: #71717a;
+            --brand: #1355FF; --brand-bg: #ebf0ff; --brand-border: #c7d7ff;
+            --purple: #7c3aed; --purple-bg: #f3e8ff;
+            --orange: #c2410c; --orange-bg: #fff7ed;
+            --green: #16a34a; --green-bg: #dcfce7;
+            --red: #dc2626; --red-bg: #fee2e2;
+            --border: #e4e4e7;
+            --mono: 'JetBrains Mono', monospace;
+            --sans: 'Inter', system-ui, sans-serif;
+            --h1: clamp(2.4rem, 7vw, 5.5rem);
+            --h2: clamp(1.6rem, 4.2vw, 3.2rem);
+            --h3: clamp(1.1rem, 2.5vw, 1.6rem);
+            --body: clamp(0.88rem, 1.5vw, 1.15rem);
+            --sm: clamp(0.75rem, 1.1vw, 0.95rem);
+            --xs: clamp(0.65rem, 0.9vw, 0.82rem);
+            --code: clamp(0.7rem, 1vw, 0.9rem);
+            --pad: clamp(1.5rem, 4vw, 5rem);
+            --gap: clamp(0.75rem, 2vw, 1.75rem);
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow-x: hidden; }
+        html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+        body { font-family: var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+        .slide { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; scroll-snap-align: start; display: flex; flex-direction: column; position: relative; }
+        .sc { flex: 1; display: flex; flex-direction: column; justify-content: center; max-height: 100%; overflow: hidden; padding: var(--pad); }
+        h1 { font-size: var(--h1); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
+        h2 { font-size: var(--h2); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+        h3 { font-size: var(--h3); font-weight: 600; line-height: 1.3; }
+        p { font-size: var(--body); line-height: 1.6; color: var(--fg2); }
+        .accent { color: var(--brand); } .red { color: var(--red); }
+        code { font-family: var(--mono); font-size: 0.9em; background: var(--bg2); padding: 1px 5px; border-radius: 3px; }
+        @media (max-height: 700px) { :root { --pad: clamp(0.75rem,3vw,2rem); --h1: clamp(1.5rem,5vw,3rem); --h2: clamp(1.2rem,3vw,2rem); } }
+        @media (max-height: 600px) { :root { --pad: clamp(0.5rem,2.5vw,1.5rem); --gap: clamp(0.3rem,1vw,0.75rem); --h1: clamp(1.1rem,4vw,2rem); --body: clamp(0.7rem,1.2vw,0.95rem); } .nav-dots,.counter{display:none;} .cb{max-height:min(30vh,180px)} }
+        @media (max-height: 500px) { :root { --pad: clamp(0.4rem,2vw,1rem); --h1: clamp(1rem,3.5vw,1.5rem); --h2: clamp(0.9rem,2.5vw,1.25rem); --body: clamp(0.65rem,1vw,0.85rem); } }
+        @media (max-width: 600px) { .cols { grid-template-columns: 1fr !important; } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; } html { scroll-behavior: auto; } }
+
+        .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); }
+        .slide.visible .reveal { opacity: 1; transform: translateY(0); }
+        .reveal:nth-child(1){transition-delay:.05s} .reveal:nth-child(2){transition-delay:.12s}
+        .reveal:nth-child(3){transition-delay:.2s} .reveal:nth-child(4){transition-delay:.28s}
+        .reveal:nth-child(5){transition-delay:.36s} .reveal:nth-child(6){transition-delay:.44s}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+        .progress{position:fixed;top:0;left:0;height:2px;background:linear-gradient(90deg,var(--brand),var(--purple));z-index:100;transition:width .3s}
+        .nav-dots{position:fixed;right:clamp(.75rem,1.5vw,1.25rem);top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;z-index:100}
+        .nav-dot{width:6px;height:6px;border-radius:50%;background:var(--fg3);cursor:pointer;transition:all .3s;border:none;padding:0}
+        .nav-dot.active{background:var(--brand);transform:scale(1.5)}
+        .counter{position:fixed;bottom:clamp(.75rem,1.5vw,1.25rem);right:clamp(.75rem,1.5vw,1.25rem);font:var(--xs) var(--mono);color:var(--fg3);z-index:100}
+
+        .tag{display:inline-block;padding:2px 8px;border-radius:4px;font:500 var(--xs) var(--mono);letter-spacing:.02em}
+        .tag-b{background:var(--brand-bg);color:var(--brand);border:1px solid var(--brand-border)}
+        .tag-g{background:var(--green-bg);color:var(--green);border:1px solid #bbf7d0}
+        .tag-r{background:var(--red-bg);color:var(--red);border:1px solid #fecaca}
+        .tag-p{background:var(--purple-bg);color:var(--purple);border:1px solid #e9d5ff}
+        .tag-o{background:var(--orange-bg);color:var(--orange);border:1px solid #fed7aa}
+
+        .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+        .card-brand{border:2px solid var(--brand);box-shadow:0 4px 16px rgba(19,85,255,.06)}
+        .cols{display:grid;gap:clamp(.5rem,1.2vw,1rem)}
+        .cols-2{grid-template-columns:1fr 1fr} .cols-3{grid-template-columns:repeat(3,1fr)} .cols-4{grid-template-columns:repeat(4,1fr)}
+
+        .metric{text-align:center;padding:clamp(.6rem,1.2vw,1rem)}
+        .metric-val{font-size:clamp(1.8rem,5vw,3.5rem);font-weight:800;color:var(--brand)}
+        .metric-label{font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+
+        .cb{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:clamp(.5rem,1.2vw,1rem);font:var(--code) var(--mono);line-height:1.65;overflow:hidden;position:relative;white-space:pre;color:var(--fg)}
+        .cb::before{content:attr(data-l);position:absolute;top:6px;right:10px;font-size:var(--xs);color:var(--fg3);text-transform:uppercase;letter-spacing:.06em}
+        .kw{color:#7c3aed} .str{color:#16a34a} .fn{color:#1355FF} .cm{color:#888;font-style:italic} .num{color:#c2410c}
+
+        .sec{font:var(--sm) var(--mono);color:var(--brand);letter-spacing:.1em;margin-bottom:clamp(.3rem,.8vw,.6rem)}
+        .logo{height:clamp(2rem,4vw,3rem);width:auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.08))}
+        .sub{font:var(--sm) var(--mono);color:var(--fg3)}
+        .blink::after{content:'▋';animation:blink 1s step-end infinite;color:var(--brand);margin-left:2px}
+        .title .sc{justify-content:center;align-items:center;text-align:center}
+        .mw{max-width:min(90vw,1050px);margin:0 auto;width:100%}
+
+        .glow{background:radial-gradient(ellipse at 15% 85%,rgba(19,85,255,.05) 0%,transparent 45%),radial-gradient(ellipse at 85% 15%,rgba(124,58,237,.03) 0%,transparent 45%),var(--bg)}
+        .grid-bg{background-image:linear-gradient(rgba(19,85,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(19,85,255,.04) 1px,transparent 1px);background-size:48px 48px}
+    </style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+<nav class="nav-dots" id="dots" aria-label="Slide navigation"></nav>
+<div class="counter" id="ctr"></div>
+
+<!-- ========== 1: TITLE ========== -->
+<section class="slide title glow grid-bg">
+    <div class="sc">
+        <img class="reveal logo" src="https://www.superdoc.dev/logo.jpg" alt="SuperDoc" style="margin-bottom:clamp(.5rem,1vw,.8rem)">
+        <p class="reveal sub" style="margin-bottom:.3em">SuperDoc / evals</p>
+        <h1 class="reveal">LLM Tool<br><span class="accent">Eval Framework</span></h1>
+        <p class="reveal sub blink" style="margin-top:clamp(.6rem,1.2vw,1rem)">testing tools, not agents</p>
+    </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     ACT 1: SETUP — Here's the world
+     ══════════════════════════════════════════ -->
+
+<!-- ========== 2: THE WORLD ========== -->
+<section class="slide glow">
+    <div class="sc mw">
+        <div class="sec reveal">THE WORLD WE LIVE IN</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">SuperDoc gives AI agents <span class="accent">193 tools</span><br>to edit .docx documents</h2>
+        <div class="reveal" style="display:flex;align-items:center;gap:clamp(.4rem,.8vw,.6rem);justify-content:center;flex-wrap:wrap">
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:.4em .8em;font:500 var(--sm) var(--mono)">User prompt</div>
+            <span style="color:var(--fg3)">→</span>
+            <div style="background:var(--brand-bg);border:1px solid var(--brand-border);border-radius:8px;padding:.4em .8em;font:600 var(--sm) var(--mono);color:var(--brand)">LLM picks tools</div>
+            <span style="color:var(--fg3)">→</span>
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:.4em .8em;font:500 var(--sm) var(--mono)">CLI executes</div>
+            <span style="color:var(--fg3)">→</span>
+            <div style="background:var(--green-bg);border:1px solid #bbf7d0;border-radius:8px;padding:.4em .8em;font:600 var(--sm) var(--mono);color:var(--green)">Document edited</div>
+        </div>
+        <div class="reveal cols cols-2" style="margin-top:var(--gap);align-items:start">
+            <div style="display:flex;flex-direction:column;gap:clamp(.2rem,.4vw,.3rem)">
+                <p style="margin:0;color:var(--fg);font-weight:500">The LLM never touches the document.</p>
+                <p style="margin:0;font-size:var(--sm)">It reads JSON Schema tool definitions, picks the best match for the user's task, and outputs a structured function call. Your code runs it. This is how Claude Code, Cursor, and every AI agent works.</p>
+            </div>
+            <div class="cb" data-l="the loop" style="font-size:clamp(.55rem,.85vw,.72rem)">
+<span class="cm">// SuperDoc agent loop (simplified)</span>
+<span class="kw">while</span> (hasToolCalls) {
+  response = <span class="fn">llm</span>(prompt, tools)  <span class="cm">// LLM picks</span>
+  result = <span class="fn">cli</span>(response.tool)    <span class="cm">// CLI runs</span>
+  prompt.add(result)              <span class="cm">// feed back</span>
+}</div>
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     ACT 2: CONFLICT — What can go wrong
+     ══════════════════════════════════════════ -->
+
+<!-- ========== 3: THE RISK ========== -->
+<section class="slide grid-bg">
+    <div class="sc mw">
+        <div class="sec reveal">THE RISK</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">This chain has <span class="red">four moving parts</span>.</h2>
+        <!-- The chain visualization -->
+        <div class="reveal" style="display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:var(--gap)">
+            <div style="flex:1;border:2px solid var(--brand);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--brand)">01</div>
+                <p style="margin:0;font-weight:700;color:var(--brand);font-size:var(--body)">Model</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">GPT-5.4 ships. Claude updates. Tool selection changes overnight.</p>
+            </div>
+            <div style="width:clamp(1rem,2vw,1.5rem);height:2px;background:var(--border);flex-shrink:0"></div>
+            <div style="flex:1;border:2px solid var(--purple);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50%);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--purple)">02</div>
+                <p style="margin:0;font-weight:700;color:var(--purple);font-size:var(--body)">Tool definitions</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Rename a tool. Rewrite a description. Every agent breaks.</p>
+            </div>
+            <div style="width:clamp(1rem,2vw,1.5rem);height:2px;background:var(--border);flex-shrink:0"></div>
+            <div style="flex:1;border:2px solid var(--orange);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50%);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--orange)">03</div>
+                <p style="margin:0;font-weight:700;color:var(--orange);font-size:var(--body)">CLI</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Refactor execution. Change response format. New validation rules.</p>
+            </div>
+            <div style="width:clamp(1rem,2vw,1.5rem);height:2px;background:var(--border);flex-shrink:0"></div>
+            <div style="flex:1;border:2px solid var(--green);border-radius:12px;padding:clamp(.6rem,1.2vw,1rem);text-align:center;position:relative;background:#fff">
+                <div style="position:absolute;top:clamp(-.5rem,-.8vw,-.6rem);left:50%;transform:translateX(-50%);background:#fff;padding:0 .4em;font:700 var(--xs) var(--mono);color:var(--green)">04</div>
+                <p style="margin:0;font-weight:700;color:var(--green);font-size:var(--body)">System prompt</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Tweak instructions. Model picks different tools entirely.</p>
+            </div>
+        </div>
+        <!-- Punchline -->
+        <div class="reveal" style="background:var(--red-bg);border:1px solid #fecaca;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+            <p style="margin:0;font-size:var(--body);color:var(--red);font-weight:600">Any one changes silently. The customer's $25M becomes $150M and nobody notices.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     ACT 3: CLIMAX — The solution + proof
+     ══════════════════════════════════════════ -->
+
+<!-- ========== 4: THE ANSWER ========== -->
+<section class="slide grid-bg">
+    <div class="sc mw" style="align-items:center">
+        <p class="reveal" style="font:var(--sm) var(--mono);color:var(--fg3);letter-spacing:.1em;margin-bottom:clamp(.2rem,.5vw,.3rem)">HOW DO WE CATCH THIS BEFORE THE CUSTOMER DOES?</p>
+        <h2 class="reveal" style="margin-bottom:var(--gap);text-align:center">Run every task against every model<br>with every prompt. <span class="accent">Automatically.</span></h2>
+        <div class="reveal" style="display:flex;align-items:center;justify-content:center;gap:clamp(.5rem,1.2vw,1rem);flex-wrap:wrap">
+            <div style="background:var(--brand-bg);border:1px solid var(--brand-border);border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--brand)">31</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">tasks</div>
+            </div>
+            <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--fg3)">&times;</div>
+            <div style="background:var(--purple-bg);border:1px solid #e9d5ff;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--purple)">5</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">models</div>
+            </div>
+            <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--fg3)">&times;</div>
+            <div style="background:var(--orange-bg);border:1px solid #fed7aa;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--orange)">2</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">prompts</div>
+            </div>
+            <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--fg3)">=</div>
+            <div style="background:var(--green-bg);border:1px solid #bbf7d0;border-radius:10px;padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+                <div style="font:700 clamp(1.2rem,2.5vw,2rem) var(--sans);color:var(--green)">310</div>
+                <div style="font:var(--xs) var(--mono);color:var(--fg3);text-transform:uppercase">assertions</div>
+            </div>
+        </div>
+        <div class="reveal cols cols-2" style="margin-top:var(--gap);gap:clamp(.5rem,1vw,.8rem)">
+            <div class="card card-brand" style="padding:.6em .8em">
+                <p style="margin:0;font:600 var(--sm) var(--sans);color:var(--brand)">Level 1: Tool Quality</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Did the LLM pick the right tool with valid args? No execution. 31 tests &times; 5 models &times; 2 prompts. 67 seconds.</p>
+            </div>
+            <div class="card" style="padding:.6em .8em;border:2px solid var(--purple)">
+                <p style="margin:0;font:600 var(--sm) var(--sans);color:var(--purple)">Level 2: Execution</p>
+                <p style="margin:.2em 0 0;font-size:var(--xs);color:var(--fg2)">Full agent loop on real .docx files. 21 tests &times; 3 providers via AI Gateway. Assert content changed.</p>
+            </div>
+        </div>
+        <p class="reveal" style="margin-top:var(--gap);font-size:var(--sm);color:var(--fg3);text-align:center">Change any variable. Run the suite. See exactly what regressed and where.</p>
+    </div>
+</section>
+
+<!-- ========== 5: WHAT WE MEASURED ========== -->
+<section class="slide glow">
+    <div class="sc mw">
+        <div class="sec reveal">WHAT WE MEASURED</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">Same 31 tests, same 5 models.<br>Two very different prompts.</h2>
+        <div class="reveal cols cols-2" style="gap:clamp(1rem,2vw,1.5rem);align-items:stretch">
+            <div class="card card-brand" style="padding:clamp(1rem,2vw,1.5rem)">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6em">
+                    <span class="tag tag-b">FULL PROMPT</span>
+                    <span style="font:var(--xs) var(--mono);color:var(--fg3)">127 lines</span>
+                </div>
+                <div class="cb" style="font-size:clamp(.55rem,.85vw,.72rem);border:none;padding:.6em;background:var(--brand-bg);max-height:min(30vh,200px)">You edit .docx files using SuperDoc tools.
+Be efficient -- minimize tool calls.
+
+IMPORTANT: Never pass "doc" or "sessionId"...
+
+## Tool Categories
+## Recommended Workflow
+## query_match -- correct select formats
+## apply_mutations -- valid step ops
+## Standalone tools
+## Common Errors</div>
+            </div>
+            <div class="card" style="padding:clamp(1rem,2vw,1.5rem);border:2px solid var(--red)">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6em">
+                    <span class="tag tag-r">MINIMAL PROMPT</span>
+                    <span style="font:var(--xs) var(--mono);color:var(--fg3)">2 lines</span>
+                </div>
+                <div class="cb" style="font-size:clamp(.55rem,.85vw,.72rem);border:none;padding:.6em;background:var(--red-bg);max-height:min(30vh,200px)">You help users edit .docx documents
+using the provided tools.
+
+Task: {{task}}</div>
+                <p style="margin:.8em 0 0;font-size:var(--sm);color:var(--fg3)">This is what a customer would write. No tool guidance, no API examples, no rules.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========== 6: WHAT WE LEARNED ========== -->
+<section class="slide grid-bg">
+    <div class="sc mw">
+        <div class="sec reveal">WHAT WE LEARNED</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">A good prompt helps. But we <span class="red">can't control</span> what the customer writes.</h2>
+        <div class="reveal" style="display:flex;flex-direction:column;gap:clamp(.3rem,.6vw,.5rem)">
+            <!-- Chart rows: each model with two bars (full=blue, minimal=gray) and the gap highlighted -->
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:0;font:var(--xs) var(--mono);color:var(--fg3);padding:0 .5em .2em">
+                <span></span><span>Full prompt (127 lines)</span><span>Minimal prompt (2 lines)</span><span style="text-align:right;color:var(--red)">Gap</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">Gemini Flash</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:90%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">90%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:68%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--fg3)">68%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-22</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">GPT-4o</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:87%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">87%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:58%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--red)">58%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-29</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">GPT-4.1-mini</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:87%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">87%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:77%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--fg3)">77%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-10</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">GPT-5.4</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:87%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--green)">87%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:74%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--fg3)">74%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-13</span>
+            </div>
+            <div style="display:grid;grid-template-columns:10em 1fr 1fr 4em;gap:clamp(.3rem,.5vw,.4rem);align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:clamp(.35rem,.7vw,.5rem) clamp(.5rem,1vw,.8rem)">
+                <span style="font:600 var(--sm) var(--sans)">Claude Haiku</span>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:74%;background:var(--brand);border-radius:4px"></div><span style="font:600 var(--xs) var(--mono);color:var(--orange)">74%</span></div>
+                <div style="display:flex;align-items:center;gap:.4em"><div style="height:clamp(.6rem,1vw,.8rem);width:45%;background:#d4d4d8;border-radius:4px"></div><span style="font:var(--xs) var(--mono);color:var(--red)">45%</span></div>
+                <span style="text-align:right;font:700 var(--sm) var(--mono);color:var(--red)">-29</span>
+            </div>
+        </div>
+        <!-- Takeaway -->
+        <div class="reveal card card-brand" style="margin-top:var(--gap);padding:clamp(.5rem,1vw,.8rem) clamp(.8rem,1.5vw,1.2rem);text-align:center">
+            <p style="margin:0;font-size:var(--body);font-weight:600;color:var(--brand)">The gap is what we must close with better tool definitions.</p>
+            <p style="margin:.2em 0 0;font-size:var(--sm);color:var(--fg2)">Tool names, descriptions, and schemas are the only thing we control. The smaller the gap, the less our tools depend on prompt crutches.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ========== 7: LEVEL 1 DETAIL ========== -->
+<section class="slide glow">
+    <div class="sc mw">
+        <div class="sec reveal">LEVEL 1 DETAIL</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">31 tests across 10 categories</h2>
+        <div class="reveal cols cols-2" style="align-items:start">
+            <div style="display:flex;flex-direction:column;gap:clamp(.15rem,.35vw,.25rem)">
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Reading</span><span style="font-family:var(--mono);color:var(--fg3)">4</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Mutations</span><span style="font-family:var(--mono);color:var(--fg3)">4</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Formatting</span><span style="font-family:var(--mono);color:var(--fg3)">4</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Structural</span><span style="font-family:var(--mono);color:var(--fg3)">2</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Tables</span><span style="font-family:var(--mono);color:var(--fg3)">2</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Comments</span><span style="font-family:var(--mono);color:var(--fg3)">2</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Tracked changes</span><span style="font-family:var(--mono);color:var(--fg3)">2</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Lists</span><span style="font-family:var(--mono);color:var(--fg3)">2</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm)"><span style="font-weight:500">Hygiene + history</span><span style="font-family:var(--mono);color:var(--fg3)">3</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:var(--sm);color:var(--fg3)"><span style="font-weight:500">Aspirational</span><span style="font-family:var(--mono)">6</span></div>
+                <div style="border-top:1px solid var(--border);margin-top:.3em;padding-top:.3em;display:flex;justify-content:space-between;font-size:var(--sm);font-weight:600"><span>Total</span><span style="font-family:var(--mono)">31</span></div>
+            </div>
+            <div class="cb" data-l="yaml" style="font-size:clamp(.55rem,.85vw,.75rem)">
+<span class="cm"># Each test: explicit assertions</span>
+- <span class="kw">description:</span> <span class="str">'Replace uses text.rewrite'</span>
+  <span class="kw">vars:</span>
+    <span class="kw">task:</span> <span class="str">'Replace "old" with "new"'</span>
+  <span class="kw">assert:</span>
+    - <span class="kw">type:</span> tool-call-f1
+      <span class="kw">value:</span> [query_match, apply_mutations]
+    - <span class="kw">type:</span> javascript
+      <span class="kw">value:</span> <span class="fn">checks.cjs:validOpNames</span>
+    - <span class="kw">type:</span> javascript
+      <span class="kw">value:</span> <span class="fn">checks.cjs:noHallucinatedParams</span></div>
+        </div>
+    </div>
+</section>
+
+<!-- ========== 8: LEVEL 2 DETAIL ========== -->
+<section class="slide grid-bg">
+    <div class="sc mw">
+        <div class="sec reveal">LEVEL 2 DETAIL</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">21 execution tests on 3 real DOCX files</h2>
+        <div class="reveal cols cols-2" style="align-items:start">
+            <div class="cb" data-l="execution.yaml" style="font-size:clamp(.55rem,.85vw,.75rem)">
+<span class="cm"># Assert new + old + no collateral</span>
+- <span class="kw">description:</span> <span class="str">'Replace $25M with $50M'</span>
+  <span class="kw">vars:</span>
+    <span class="kw">fixture:</span> memorandum.docx
+    <span class="kw">task:</span> <span class="str">'Replace "$25,000,000"...'</span>
+  <span class="kw">assert:</span>
+    - <span class="kw">type:</span> <span class="fn">contains</span>
+      <span class="kw">value:</span> <span class="str">'$50,000,000'</span>
+    - <span class="kw">type:</span> <span class="fn">not-contains</span>
+      <span class="kw">value:</span> <span class="str">'$25,000,000'</span>
+    - <span class="kw">type:</span> <span class="fn">contains</span>
+      <span class="kw">value:</span> <span class="str">'$150,000,000'</span></div>
+            <div style="display:flex;flex-direction:column;gap:clamp(.3rem,.6vw,.5rem)">
+                <div class="card"><p style="margin:0;font-size:var(--sm);font-weight:600">document.docx</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg2)">Bullet lists. Read, replace, insert heading/paragraph.</p></div>
+                <div class="card"><p style="margin:0;font-size:var(--sm);font-weight:600">memorandum.docx</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg2)">Legal memo. Dates, dollar amounts, party names, placeholders.</p></div>
+                <div class="card"><p style="margin:0;font-size:var(--sm);font-weight:600">table-doc.docx</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg2)">Tables. Read headers, replace cell content.</p></div>
+                <div class="card" style="background:var(--bg2)"><p style="margin:0;font-size:var(--sm);font-weight:600;color:var(--fg3)">+ multi-step, export, aspirational</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg3)">Compound edits. Saved DOCX output. Expected-failure tests.</p></div>
+                <div class="card" style="border-color:var(--purple)"><p style="margin:0;font-size:var(--sm);font-weight:600;color:var(--purple)">Powered by Vercel AI SDK + AI Gateway</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg2)">One provider file. <code>config.modelId</code> routes to any model. Adding a provider = 3 lines of YAML.</p></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========== 9: TECH DEMO ========== -->
+<section class="slide" style="background:var(--fg)">
+    <div class="sc mw" style="align-items:center;text-align:center">
+        <div class="reveal" style="font:var(--sm) var(--mono);color:rgba(255,255,255,.4);letter-spacing:.1em;margin-bottom:clamp(.3rem,.8vw,.6rem)">TECH DEMO</div>
+        <h2 class="reveal" style="color:#fff;margin-bottom:var(--gap)">Let's run it live.</h2>
+        <div class="reveal" style="display:flex;flex-direction:column;gap:clamp(.3rem,.6vw,.5rem);max-width:min(80vw,500px)">
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.5em 1em;font:var(--code) var(--mono);color:rgba(255,255,255,.7);text-align:left">
+                <span style="color:rgba(255,255,255,.3)">$</span> <span style="color:#86efac">pnpm run eval</span> <span style="color:rgba(255,255,255,.3)"># Level 1: 31 tests × 5 models × 2 prompts</span>
+            </div>
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.5em 1em;font:var(--code) var(--mono);color:rgba(255,255,255,.7);text-align:left">
+                <span style="color:rgba(255,255,255,.3)">$</span> <span style="color:#93c5fd">pnpm run eval:e2e</span> <span style="color:rgba(255,255,255,.3)"># Level 2: 21 tests × 3 providers</span>
+            </div>
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.5em 1em;font:var(--code) var(--mono);color:rgba(255,255,255,.7);text-align:left">
+                <span style="color:rgba(255,255,255,.3)">$</span> <span style="color:#c4b5fd">pnpm run eval:view</span> <span style="color:rgba(255,255,255,.3)"># open results in browser</span>
+            </div>
+        </div>
+        <p class="reveal" style="margin-top:var(--gap);color:rgba(255,255,255,.35);font-size:var(--sm);font-family:var(--mono)">switch to terminal ↓</p>
+    </div>
+</section>
+
+<!-- ========== 10: WHAT'S NEXT ========== -->
+<section class="slide grid-bg">
+    <div class="sc mw">
+        <div class="sec reveal">WHAT'S NEXT</div>
+        <h2 class="reveal" style="margin-bottom:var(--gap)">Roadmap</h2>
+        <div class="reveal" style="display:flex;flex-direction:column;gap:clamp(.3rem,.6vw,.5rem)">
+            <div class="card" style="display:flex;align-items:flex-start;gap:clamp(.5rem,1vw,.8rem)">
+                <span class="tag tag-g">NOW</span>
+                <div><p style="margin:0;font-weight:600">Expand test coverage</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg2)">More aspirational tests become real. Target: 50+ tool quality tests covering all 193 operations.</p></div>
+            </div>
+            <div class="card" style="display:flex;align-items:flex-start;gap:clamp(.5rem,1vw,.8rem)">
+                <span class="tag tag-b">NEXT</span>
+                <div><p style="margin:0;font-weight:600">CI integration</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg2)">Run tool quality on every PR. Block merges that regress accuracy. Cached runs take &lt;2s.</p></div>
+            </div>
+            <div class="card" style="display:flex;align-items:flex-start;gap:clamp(.5rem,1vw,.8rem)">
+                <span class="tag tag-p">LATER</span>
+                <div><p style="margin:0;font-weight:600">Model selection dashboard</p><p style="margin:.1em 0 0;font-size:var(--sm);color:var(--fg2)">Per-model scorecards. Which model is best for tables? For tracked changes? Data-driven model routing.</p></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========== 11: CLOSING ========== -->
+<section class="slide title glow grid-bg">
+    <div class="sc">
+        <img class="reveal logo" src="https://www.superdoc.dev/logo.jpg" alt="SuperDoc" style="margin-bottom:clamp(.3rem,.6vw,.5rem)">
+        <h1 class="reveal" style="max-width:16ch">Test the <span class="accent">tools</span>,<br>not the agent</h1>
+        <p class="reveal" style="margin-top:var(--gap);max-width:44ch;color:var(--fg3);font-size:var(--body);line-height:1.6">232/310 tool quality assertions pass across 5 models and 2 prompts. The full prompt lifts every model by 10-30%. Now we can measure it.</p>
+        <div class="reveal" style="margin-top:clamp(.6rem,1.2vw,1rem);display:flex;gap:.5em">
+            <span class="tag tag-b">SuperDoc/evals</span>
+            <span class="tag tag-p">promptfoo</span>
+            <span class="tag tag-o">vercel ai gateway</span>
+        </div>
+    </div>
+</section>
+
+<script>
+    class SlidePresentation {
+        constructor() {
+            this.slides = document.querySelectorAll('.slide');
+            this.currentSlide = 0;
+            this.setupObserver();
+            this.setupKeyboard();
+            this.setupTouch();
+            this.setupProgress();
+            this.setupDots();
+            this.updateUI();
+        }
+        setupObserver() {
+            const obs = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        const idx = Array.from(this.slides).indexOf(entry.target);
+                        if (idx >= 0) { this.currentSlide = idx; this.updateUI(); }
+                    }
+                });
+            }, { threshold: 0.5 });
+            this.slides.forEach(s => obs.observe(s));
+        }
+        setupKeyboard() {
+            document.addEventListener('keydown', (e) => {
+                if (['ArrowDown','ArrowRight',' ','PageDown'].includes(e.key)) { e.preventDefault(); this.go(this.currentSlide + 1); }
+                else if (['ArrowUp','ArrowLeft','PageUp'].includes(e.key)) { e.preventDefault(); this.go(this.currentSlide - 1); }
+                else if (e.key === 'Home') { e.preventDefault(); this.go(0); }
+                else if (e.key === 'End') { e.preventDefault(); this.go(this.slides.length - 1); }
+            });
+        }
+        setupTouch() {
+            let startY = 0;
+            document.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+            document.addEventListener('touchend', (e) => {
+                const diff = startY - e.changedTouches[0].clientY;
+                if (Math.abs(diff) > 50) this.go(diff > 0 ? this.currentSlide + 1 : this.currentSlide - 1);
+            }, { passive: true });
+        }
+        setupProgress() { this.progressBar = document.getElementById('prog'); }
+        setupDots() {
+            const nav = document.getElementById('dots');
+            this.slides.forEach((_, i) => {
+                const dot = document.createElement('button');
+                dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+                dot.onclick = () => this.go(i);
+                nav.appendChild(dot);
+            });
+            this.dots = nav.querySelectorAll('.nav-dot');
+        }
+        go(i) {
+            const idx = Math.max(0, Math.min(i, this.slides.length - 1));
+            this.slides[idx].scrollIntoView({ behavior: 'smooth' });
+        }
+        updateUI() {
+            if (this.progressBar) this.progressBar.style.width = ((this.currentSlide + 1) / this.slides.length * 100) + '%';
+            if (this.dots) this.dots.forEach((d, i) => d.classList.toggle('active', i === this.currentSlide));
+            const ctr = document.getElementById('ctr');
+            if (ctr) ctr.textContent = `${this.currentSlide + 1} / ${this.slides.length}`;
+        }
+    }
+    new SlidePresentation();
+</script>
+</body>
+</html>

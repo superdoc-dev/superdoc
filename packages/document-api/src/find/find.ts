@@ -1,5 +1,6 @@
-import type { NodeAddress, NodeSelector, Query, FindOutput, Selector, TextSelector } from '../types/index.js';
+import type { BlockNodeAddress, NodeSelector, Query, FindOutput, Selector, TextSelector } from '../types/index.js';
 import type { SDFindInput, SDFindResult } from '../types/sd-envelope.js';
+import { DocumentApiValidationError } from '../errors.js';
 
 /**
  * Options for the `find` method when using a selector shorthand.
@@ -9,8 +10,8 @@ export interface FindOptions {
   limit?: number;
   /** Number of results to skip before returning matches. */
   offset?: number;
-  /** Constrain the search to descendants of the specified node. */
-  within?: NodeAddress;
+  /** Constrain the search to descendants of the specified block node. */
+  within?: BlockNodeAddress;
   /** Cardinality requirement for the result set. */
   require?: Query['require'];
   /** Whether to hydrate `result.nodes` for matched addresses. */
@@ -43,7 +44,8 @@ export interface FindAdapter {
 
 /** Normalizes a selector shorthand into its canonical discriminated-union form.
  *  Strips any non-selector properties so callers that pass an object with extra
- *  fields (e.g. SDK-shaped flat params) don't pollute the select object. */
+ *  fields (e.g. SDK-shaped flat params) don't pollute the select object.
+ *  Rejects legacy `nodeKind` and `kind: 'content'` vocabulary with actionable errors. */
 function normalizeSelector(selector: Selector): NodeSelector | TextSelector {
   if ('type' in selector) {
     if (selector.type === 'text') {
@@ -56,6 +58,22 @@ function normalizeSelector(selector: Selector): NodeSelector | TextSelector {
       };
     }
     if (selector.type === 'node') {
+      const raw = selector as unknown as Record<string, unknown>;
+      if ('nodeKind' in raw && raw.nodeKind != null) {
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `"nodeKind" is no longer supported on node selectors. Use "nodeType" instead: ` +
+            `{ type: 'node', nodeType: '${String(raw.nodeKind)}' }.`,
+          { field: 'select.nodeKind', value: raw.nodeKind },
+        );
+      }
+      if (raw.kind === 'content') {
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `kind: 'content' is no longer supported on node selectors. Use kind: 'block' instead.`,
+          { field: 'select.kind', value: raw.kind },
+        );
+      }
       const node = selector as NodeSelector;
       return {
         type: 'node',

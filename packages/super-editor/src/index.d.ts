@@ -3,9 +3,11 @@
  * This file provides TypeScript types for the JavaScript exports in index.js
  */
 
-export type { EditorView } from 'prosemirror-view';
-export type { EditorState, Transaction } from 'prosemirror-state';
-export type { Schema } from 'prosemirror-model';
+// Re-export prosemirror types for consumers AND import for local use
+import type { EditorView } from 'prosemirror-view';
+import type { EditorState, Transaction } from 'prosemirror-state';
+import type { Schema } from 'prosemirror-model';
+export type { EditorView, EditorState, Transaction, Schema };
 
 // ============================================
 // COMMAND TYPES (inlined from ChainedCommands.ts)
@@ -153,6 +155,13 @@ export interface OpenOptions {
   isCommentsEnabled?: boolean;
   suppressDefaultDocxStyles?: boolean;
   documentMode?: 'editing' | 'viewing' | 'suggesting';
+  /**
+   * Allow text selection in viewing mode.
+   * When true, users can select and copy text while in viewing mode,
+   * but editing (typing, paste, delete) remains blocked.
+   * @default false
+   */
+  allowSelectionInViewMode?: boolean;
   content?: unknown;
   mediaFiles?: Record<string, unknown>;
   fonts?: Record<string, unknown>;
@@ -425,6 +434,7 @@ export declare class Editor {
     content?: string | object;
     extensions?: any[];
     editable?: boolean;
+    allowSelectionInViewMode?: boolean;
     autofocus?: boolean | 'start' | 'end' | 'all' | number;
     [key: string]: any;
   });
@@ -820,6 +830,15 @@ export declare class PresentationEditor {
    * Scroll to a document position.
    */
   scrollToPosition(pos: number, options?: { behavior?: ScrollBehavior; block?: ScrollLogicalPosition }): boolean;
+
+  /**
+   * Scroll a comment or tracked-change anchor to a viewport Y coordinate.
+   */
+  scrollThreadAnchorToClientY(
+    threadId: string,
+    targetClientY: number,
+    options?: { behavior?: ScrollBehavior },
+  ): boolean;
 
   /**
    * Scroll to a document position (async version).

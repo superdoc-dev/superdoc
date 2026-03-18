@@ -294,18 +294,18 @@ describe('CLI host mode', () => {
       }>;
     };
     const firstItem = findResult.items?.[0];
-    const sdAddress = firstItem?.address;
+    const address = firstItem?.address;
     const nodeKind = firstItem?.node?.kind ?? 'paragraph';
-    expect(sdAddress?.nodeId).toBeDefined();
+    expect(address?.nodeId).toBeDefined();
 
-    // Build a legacy NodeAddress for getNode which expects { kind: 'block', nodeType, nodeId }
-    const legacyAddress = { kind: 'block', nodeType: nodeKind, nodeId: sdAddress!.nodeId };
-    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(legacyAddress)]);
+    // Build a NodeAddress for getNode which expects { kind: 'block', nodeType, nodeId }
+    const blockAddress = { kind: 'block', nodeType: nodeKind, nodeId: address!.nodeId };
+    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(blockAddress)]);
 
-    // Build a collapsed text target from the SDM/1 address
+    // Build a collapsed text target from the block address
     const collapsedTarget = {
       kind: 'text',
-      blockId: sdAddress!.nodeId,
+      blockId: address!.nodeId,
       range: { start: 0, end: 0 },
     };
     await invokeAndValidate('doc.insert', [

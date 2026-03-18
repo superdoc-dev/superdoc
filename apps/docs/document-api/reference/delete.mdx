@@ -1,7 +1,7 @@
 ---
 title: delete
 sidebarTitle: delete
-description: Delete content at a target position.
+description: Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Delete content at a target position.
 
 ## Summary
 
-Delete content at a target position.
+Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode.
 
 - Operation ID: `delete`
 - API member path: `editor.doc.delete(...)`
@@ -22,29 +22,43 @@ Delete content at a target position.
 
 ## Expected result
 
-Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is already empty.
+Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is collapsed or empty.
 
 ## Input fields
 
+### Variant 1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `target` | TextAddress | yes | TextAddress |
-| `target.blockId` | string | yes |  |
-| `target.kind` | `"text"` | yes | Constant: `"text"` |
-| `target.range` | Range | yes | Range |
-| `target.range.end` | integer | yes |  |
-| `target.range.start` | integer | yes |  |
+| `behavior` | DeleteBehavior | no | DeleteBehavior |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+
+### Variant 2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `behavior` | DeleteBehavior | no | DeleteBehavior |
+| `ref` | string | yes |  |
 
 ### Example request
 
 ```json
 {
+  "behavior": "selection",
   "target": {
-    "blockId": "block-abc123",
-    "kind": "text",
-    "range": {
-      "end": 10,
-      "start": 0
+    "end": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
+    },
+    "kind": "selection",
+    "start": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
     }
   }
 }
@@ -52,7 +66,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -68,6 +82,10 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
@@ -78,7 +96,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -96,6 +114,10 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
@@ -129,6 +151,19 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
         "start": 0
       }
     },
+    "selectionTarget": {
+      "end": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      },
+      "kind": "selection",
+      "start": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      }
+    },
     "target": {
       "blockId": "block-abc123",
       "kind": "text",
@@ -155,6 +190,7 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
@@ -165,16 +201,38 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "target": {
-      "$ref": "#/$defs/TextAddress"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "$ref": "#/$defs/DeleteBehavior"
+        },
+        "target": {
+          "$ref": "#/$defs/SelectionTarget"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "$ref": "#/$defs/DeleteBehavior"
+        },
+        "ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "target"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

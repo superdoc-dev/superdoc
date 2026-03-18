@@ -61,7 +61,8 @@ export type ReferenceGroupKey =
   | 'captions'
   | 'fields'
   | 'citations'
-  | 'authorities';
+  | 'authorities'
+  | 'ranges';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -76,9 +77,33 @@ export interface OperationDefinitionEntry {
   referenceDocPath: string;
   referenceGroup: ReferenceGroupKey;
   skipAsATool?: boolean;
-  /** When true, this tool is included in the default "essential" tool set. */
-  essential?: boolean;
+  /** Which intent tool this operation belongs to (e.g. 'edit' → superdoc_edit). */
+  intentGroup?: string;
+  /** Action enum value within the intent group (e.g. 'insert', 'replace'). */
+  intentAction?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Intent group metadata — tool-level names and descriptions
+// ---------------------------------------------------------------------------
+
+export type IntentGroupMeta = { toolName: string; description: string };
+
+export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
+  search: { toolName: 'superdoc_search', description: 'Find text or nodes in the document' },
+  get_content: { toolName: 'superdoc_get_content', description: 'Read document content in various formats' },
+  edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
+  create: { toolName: 'superdoc_create', description: 'Create structural block elements' },
+  format: { toolName: 'superdoc_format', description: 'Change text and paragraph formatting' },
+  table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
+  list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },
+  comment: { toolName: 'superdoc_comment', description: 'Comment threads — create, edit, delete' },
+  track_changes: { toolName: 'superdoc_track_changes', description: 'Review and resolve tracked changes' },
+  link: { toolName: 'superdoc_link', description: 'Manage hyperlinks' },
+  image: { toolName: 'superdoc_image', description: 'Image placement and properties' },
+  section: { toolName: 'superdoc_section', description: 'Page layout, margins, columns' },
+  mutations: { toolName: 'superdoc_mutations', description: 'Atomic multi-step batch edits (escape hatch)' },
+};
 
 // ---------------------------------------------------------------------------
 // Metadata helpers (moved from command-catalog.ts)
@@ -307,7 +332,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'get-node-by-id.mdx',
     referenceGroup: 'core',
-    essential: true,
   },
   getText: {
     memberPath: 'getText',
@@ -317,7 +341,9 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
-    essential: true,
+
+    intentGroup: 'get_content',
+    intentAction: 'text',
   },
   getMarkdown: {
     memberPath: 'getMarkdown',
@@ -327,6 +353,8 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-markdown.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'markdown',
   },
   getHtml: {
     memberPath: 'getHtml',
@@ -336,6 +364,8 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-html.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'html',
   },
   markdownToFragment: {
     memberPath: 'markdownToFragment',
@@ -354,6 +384,8 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'info',
   },
 
   clearContent: {
@@ -375,13 +407,14 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert inline content at a text position within an existing block, or at the end of the document when target is omitted. ' +
-      'This is NOT for creating sibling blocks — use create.paragraph, create.heading, or lists.insert for that. ' +
-      'Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). ' +
-      'Supports text (default), markdown, and html content types via the `type` field in legacy mode. ' +
-      'Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).',
+      'Insert content into the document. Two input shapes: ' +
+      'legacy string-based (value + type) inserts inline content at a text position within an existing block; ' +
+      'structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. ' +
+      'When target is omitted, content appends at the end of the document. ' +
+      'Legacy mode supports text (default), markdown, and html content types via the `type` field. ' +
+      'Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.',
+      'Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -416,15 +449,17 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'insert.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'insert',
   },
   replace: {
     memberPath: 'replace',
     description:
-      'Replace content at a target position with new content. ' +
-      'Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). ' +
-      'Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.).',
+      'Replace content at a contiguous document selection. ' +
+      'Text path accepts a SelectionTarget or ref plus replacement text. ' +
+      'Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
+      'Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -457,22 +492,27 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'replace.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'replace',
   },
   delete: {
     memberPath: 'delete',
-    description: 'Delete content at a target position.',
+    description:
+      'Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is already empty.',
+      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is collapsed or empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'delete',
   },
 
   'blocks.list': {
@@ -487,7 +527,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'blocks/list.mdx',
     referenceGroup: 'blocks',
-    essential: true,
   },
 
   'blocks.delete': {
@@ -553,6 +592,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
+    intentGroup: 'format',
+    intentAction: 'inline',
   },
   ...FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS,
 
@@ -588,6 +629,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'paragraph',
   },
   'create.heading': {
     memberPath: 'create.heading',
@@ -603,6 +646,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'heading',
   },
   'create.sectionBreak': {
     memberPath: 'create.sectionBreak',
@@ -927,6 +972,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'styles/paragraph/set-style.mdx',
     referenceGroup: 'styles.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_style',
   },
   'styles.paragraph.clearStyle': {
     memberPath: 'styles.paragraph.clearStyle',
@@ -976,6 +1023,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-alignment.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_alignment',
   },
   'format.paragraph.clearAlignment': {
     memberPath: 'format.paragraph.clearAlignment',
@@ -1006,6 +1055,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-indentation.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_indentation',
   },
   'format.paragraph.clearIndentation': {
     memberPath: 'format.paragraph.clearIndentation',
@@ -1036,6 +1087,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-spacing.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_spacing',
   },
   'format.paragraph.clearSpacing': {
     memberPath: 'format.paragraph.clearSpacing',
@@ -1242,6 +1295,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/insert.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'insert',
   },
   'lists.create': {
     memberPath: 'lists.create',
@@ -1257,6 +1312,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/create.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'create',
   },
   'lists.attach': {
     memberPath: 'lists.attach',
@@ -1287,6 +1344,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/detach.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'detach',
   },
   'lists.indent': {
     memberPath: 'lists.indent',
@@ -1303,6 +1362,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/indent.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'indent',
   },
   'lists.outdent': {
     memberPath: 'lists.outdent',
@@ -1318,6 +1379,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/outdent.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'outdent',
   },
   'lists.join': {
     memberPath: 'lists.join',
@@ -1380,6 +1443,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-level.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_level',
   },
   'lists.setValue': {
     memberPath: 'lists.setValue',
@@ -1502,6 +1567,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-type.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_type',
   },
   'lists.captureTemplate': {
     memberPath: 'lists.captureTemplate',
@@ -1659,6 +1726,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/create.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'create',
   },
   'comments.patch': {
     memberPath: 'comments.patch',
@@ -1674,6 +1743,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/patch.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'update',
   },
   'comments.delete': {
     memberPath: 'comments.delete',
@@ -1690,6 +1761,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/delete.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'delete',
   },
   'comments.get': {
     memberPath: 'comments.get',
@@ -1702,6 +1775,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/get.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'get',
   },
   'comments.list': {
     memberPath: 'comments.list',
@@ -1714,6 +1789,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/list.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'list',
   },
 
   'trackChanges.list': {
@@ -1727,6 +1804,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'track-changes/list.mdx',
     referenceGroup: 'trackChanges',
+    intentGroup: 'track_changes',
+    intentAction: 'list',
   },
   'trackChanges.get': {
     memberPath: 'trackChanges.get',
@@ -1755,6 +1834,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'track-changes/decide.mdx',
     referenceGroup: 'trackChanges',
+    intentGroup: 'track_changes',
+    intentAction: 'decide',
   },
 
   'query.match': {
@@ -1770,7 +1851,25 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'query/match.mdx',
     referenceGroup: 'query',
-    essential: true,
+
+    intentGroup: 'search',
+    intentAction: 'match',
+  },
+
+  'ranges.resolve': {
+    memberPath: 'ranges.resolve',
+    description:
+      'Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic.',
+    expectedResult:
+      'Returns a ResolveRangeOutput with evaluatedRevision, handle.ref, target (SelectionTarget), and preview metadata.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_TARGET', 'TARGET_NOT_FOUND', 'INVALID_CONTEXT', 'REVISION_MISMATCH'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'ranges/resolve.mdx',
+    referenceGroup: 'ranges',
   },
 
   'mutations.preview': {
@@ -1785,6 +1884,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'mutations/preview.mdx',
     referenceGroup: 'mutations',
+    intentGroup: 'mutations',
+    intentAction: 'preview',
   },
 
   'mutations.apply': {
@@ -1808,7 +1909,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'mutations/apply.mdx',
     referenceGroup: 'mutations',
-    essential: true,
+    intentGroup: 'mutations',
+    intentAction: 'apply',
   },
 
   'capabilities.get': {
@@ -2703,7 +2805,9 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/undo.mdx',
     referenceGroup: 'history',
-    essential: true,
+
+    intentGroup: 'edit',
+    intentAction: 'undo',
   },
 
   'history.redo': {
@@ -2721,6 +2825,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/redo.mdx',
     referenceGroup: 'history',
+    intentGroup: 'edit',
+    intentAction: 'redo',
   },
 
   // -------------------------------------------------------------------------

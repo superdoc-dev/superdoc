@@ -6,30 +6,22 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const BLANK_DOCX = resolve(import.meta.dir, '../../../../shared/common/data/blank.docx');
 const SERVER_ENTRY = resolve(import.meta.dir, '../index.ts');
 
+// 3 lifecycle + 9 intent tools from the generated catalog
 const EXPECTED_TOOLS = [
+  // Lifecycle
   'superdoc_open',
   'superdoc_save',
   'superdoc_close',
-  'superdoc_find',
-  'superdoc_get_node',
-  'superdoc_info',
-  'superdoc_get_text',
-  'superdoc_insert',
-  'superdoc_replace',
-  'superdoc_delete',
+  // Intent tools (from catalog.json)
+  'superdoc_get_content',
+  'superdoc_edit',
   'superdoc_format',
   'superdoc_create',
-  'superdoc_list_changes',
-  'superdoc_accept_change',
-  'superdoc_reject_change',
-  'superdoc_accept_all_changes',
-  'superdoc_reject_all_changes',
-  'superdoc_add_comment',
-  'superdoc_list_comments',
-  'superdoc_reply_comment',
-  'superdoc_resolve_comment',
-  'superdoc_insert_list',
-  'superdoc_list_create',
+  'superdoc_list',
+  'superdoc_comment',
+  'superdoc_track_changes',
+  'superdoc_search',
+  'superdoc_mutations',
 ];
 
 function textContent(result: Awaited<ReturnType<Client['callTool']>>): string {
@@ -79,7 +71,38 @@ describe('MCP protocol integration', () => {
     }
   });
 
-  it('open → info → get_text → close workflow', async () => {
+  it('intent tools have action enum in schema', async () => {
+    await ready;
+    const { tools } = await client.listTools();
+
+    // Multi-action intent tools should have an "action" property with an enum
+    const multiActionTools = tools.filter(
+      (t) => !['superdoc_open', 'superdoc_save', 'superdoc_close', 'superdoc_search'].includes(t.name),
+    );
+
+    for (const tool of multiActionTools) {
+      const schema = tool.inputSchema as { properties?: Record<string, { enum?: string[] }> };
+      expect(schema.properties?.action).toBeDefined();
+      expect(schema.properties!.action.enum).toBeArray();
+      expect(schema.properties!.action.enum!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('intent tools have session_id in schema', async () => {
+    await ready;
+    const { tools } = await client.listTools();
+
+    // All intent tools (not lifecycle open) should require session_id
+    const intentTools = tools.filter((t) => !['superdoc_open', 'superdoc_save', 'superdoc_close'].includes(t.name));
+
+    for (const tool of intentTools) {
+      const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
+      expect(schema.properties?.session_id).toBeDefined();
+      expect(schema.required).toContain('session_id');
+    }
+  });
+
+  it('open → get_content → close workflow', async () => {
     await ready;
 
     // Open
@@ -90,13 +113,19 @@ describe('MCP protocol integration', () => {
 
     const sid = opened.session_id;
 
-    // Info
-    const infoResult = await client.callTool({ name: 'superdoc_info', arguments: { session_id: sid } });
-    expect(textContent(infoResult)).toBeTruthy();
-
-    // Get text
-    const textResult = await client.callTool({ name: 'superdoc_get_text', arguments: { session_id: sid } });
+    // Get content as text
+    const textResult = await client.callTool({
+      name: 'superdoc_get_content',
+      arguments: { session_id: sid, action: 'text' },
+    });
     expect(textContent(textResult)).toBeDefined();
+
+    // Get content as info
+    const infoResult = await client.callTool({
+      name: 'superdoc_get_content',
+      arguments: { session_id: sid, action: 'info' },
+    });
+    expect(textContent(infoResult)).toBeTruthy();
 
     // Close
     const closeResult = await client.callTool({ name: 'superdoc_close', arguments: { session_id: sid } });
@@ -104,7 +133,7 @@ describe('MCP protocol integration', () => {
     expect(closed.closed).toBe(true);
   });
 
-  it('open → create → find → save → close workflow', async () => {
+  it('open → create → search → save → close workflow', async () => {
     await ready;
 
     // Open
@@ -114,16 +143,19 @@ describe('MCP protocol integration', () => {
     // Create a paragraph
     const createResult = await client.callTool({
       name: 'superdoc_create',
-      arguments: { session_id: sid, type: 'paragraph', text: 'MCP integration test' },
+      arguments: { session_id: sid, action: 'paragraph', text: 'MCP integration test' },
     });
-    expect(textContent(createResult)).toContain('success');
+    expect(textContent(createResult)).toBeTruthy();
 
-    // Find it
-    const findResult = await client.callTool({
-      name: 'superdoc_find',
-      arguments: { session_id: sid, pattern: 'MCP integration' },
+    // Search for it
+    const searchResult = await client.callTool({
+      name: 'superdoc_search',
+      arguments: {
+        session_id: sid,
+        select: { type: 'text', pattern: 'MCP integration' },
+      },
     });
-    const found = parseContent(findResult) as { matches: unknown[]; total: number };
+    const found = parseContent(searchResult) as { matches: unknown[]; total: number };
     expect(found.total).toBeGreaterThan(0);
 
     // Save to temp path
@@ -147,8 +179,11 @@ describe('MCP protocol integration', () => {
     await ready;
 
     const result = await client.callTool({
-      name: 'superdoc_find',
-      arguments: { session_id: 'nonexistent', pattern: 'test' },
+      name: 'superdoc_search',
+      arguments: {
+        session_id: 'nonexistent',
+        select: { type: 'text', pattern: 'test' },
+      },
     });
 
     expect(result).toHaveProperty('isError', true);

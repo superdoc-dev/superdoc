@@ -1,0 +1,465 @@
+# Tool quality tests — does the LLM pick the right tool with valid arguments?
+#
+# Setup: native promptfoo providers (openai:chat:*) with 7 essential tools:
+#   get_node_by_id, get_document_text, blocks_list, query_match,
+#   apply_mutations, undo, discover_tools
+#
+# Single turn. tool_choice: required. No multi-step agent loop.
+# The model cannot call tools outside essential.json.
+# For tasks needing non-essential tools, the correct answer is discover_tools
+# with the right group name.
+#
+# Assertion layers:
+#   tool-call-f1   — were the correct tools called? (set comparison)
+#   javascript     — were arguments structured correctly?
+
+# =============================================================================
+# READING — correct tool for finding/reading content
+# =============================================================================
+
+- description: 'Text search uses query_match with text selector'
+  metadata: { category: reading }
+  vars:
+    task: 'Find all paragraphs containing the word "Introduction" in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match]
+      threshold: 0.5         # may also call get_document_text
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:textSearchArgs
+      metric: argument_accuracy
+
+- description: 'Node search uses query_match or blocks_list'
+  metadata: { category: reading }
+  vars:
+    task: 'List all headings in the document.'
+    expectedNodeType: heading
+  assert:
+    - type: tool-call-f1
+      value: [query_match, blocks_list]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:nodeSearchOrBlocksList
+      metric: argument_accuracy
+
+- description: 'Get full text calls get_document_text'
+  metadata: { category: reading }
+  vars:
+    task: 'Pull the full plain text from this document so I can use it somewhere else.'
+  assert:
+    - type: tool-call-f1
+      value: [get_document_text]
+      threshold: 1.0
+      metric: tool_selection
+
+- description: 'Count occurrences uses query_match'
+  metadata: { category: reading }
+  vars:
+    task: 'How many times does "Acme Corp" appear in this document?'
+  assert:
+    - type: tool-call-f1
+      value: [query_match]
+      threshold: 0.5         # may also call get_document_text
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:textSearchArgs
+      metric: argument_accuracy
+
+# =============================================================================
+# MUTATIONS — replace, delete, multi-step
+# =============================================================================
+
+- description: 'Replace uses query_match + apply_mutations with text.rewrite'
+  metadata: { category: mutation }
+  vars:
+    task: 'Replace the text "old title" with "new title" in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5        # both tools required, allows 1 extra
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validOpNames
+      metric: argument_accuracy
+    - type: javascript
+      value: file://lib/checks.cjs:usesRewriteOp
+      metric: argument_accuracy
+    - type: javascript
+      value: file://lib/checks.cjs:stepFields
+      metric: argument_accuracy
+
+- description: 'Delete uses query_match + apply_mutations with text.delete'
+  metadata: { category: mutation }
+  vars:
+    task: 'Remove the sentence "This is a draft document." from the introduction.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validOpNames
+      metric: argument_accuracy
+    - type: javascript
+      value: file://lib/checks.cjs:stepFields
+      metric: argument_accuracy
+
+- description: 'Multi-step replace uses atomic: true with 2+ steps'
+  metadata: { category: mutation }
+  vars:
+    task: 'Replace "Q1" with "Quarter 1" and "Q2" with "Quarter 2" atomically.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:atomicMultiStep
+      metric: argument_accuracy
+
+- description: 'First-occurrence replace uses require "first" in mutation, not "any"'
+  metadata: { category: mutation }
+  vars:
+    task: 'Replace the first occurrence of "draft" with "final" in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:noRequireAny
+      metric: correctness
+
+# =============================================================================
+# FORMATTING — bold, highlight, underline via apply_mutations format.apply
+# =============================================================================
+
+- description: 'Bold uses apply_mutations with format.apply and inline args'
+  metadata: { category: format }
+  vars:
+    task: 'Make the word "Important" bold in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5         # may also call discover_tools for format group
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:correctFormatArgs
+      metric: argument_accuracy
+
+- description: 'Rewrite + format must be separate batches'
+  metadata: { category: format }
+  vars:
+    task: 'Replace "old text" with "new text" and make it bold.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:noMixedBatch
+      metric: correctness
+
+- description: 'Highlight uses apply_mutations with format.apply'
+  metadata: { category: format, source: spreadsheet }
+  vars:
+    task: 'Apply yellow highlight to every occurrence of "high risk" in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:correctFormatArgs
+      metric: argument_accuracy
+
+- description: 'Underline uses apply_mutations with format.apply'
+  metadata: { category: format, source: spreadsheet }
+  vars:
+    task: 'Underline the sentence containing "payment terms" in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:correctFormatArgs
+      metric: argument_accuracy
+
+# =============================================================================
+# STRUCTURAL CREATION — model must discover_tools("create") group
+# create_heading, create_paragraph, create_table are NOT in essential tools.
+# =============================================================================
+
+- description: 'Add heading discovers create group'
+  metadata: { category: structure }
+  vars:
+    task: 'Add a new heading "Chapter 2" at the end of the document.'
+    expectedGroup: create
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+    - type: javascript
+      value: file://lib/checks.cjs:noTextInsertForStructure
+      metric: correctness
+
+- description: 'Add paragraph discovers create group'
+  metadata: { category: structure }
+  vars:
+    task: 'Add a new paragraph at the end of the document.'
+    expectedGroup: create
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+# =============================================================================
+# TABLES — discover the right group
+# =============================================================================
+
+- description: 'Load table tools discovers tables group'
+  metadata: { category: tables }
+  vars:
+    task: 'I want to work with tables in the document. Load the table editing tools.'
+    expectedGroup: tables
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 1.0
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+- description: 'Insert table discovers create group'
+  metadata: { category: tables, source: spreadsheet }
+  vars:
+    task: 'Insert a 4-column by 3-row table under the Pricing Details heading.'
+    expectedGroup: create
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+# =============================================================================
+# COMMENTS — discover comments group
+# =============================================================================
+
+- description: 'Add comment discovers comments group'
+  metadata: { category: comments }
+  vars:
+    task: 'Add a comment on the first paragraph saying "Needs legal review".'
+    expectedGroup: comments
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+- description: 'Comment on liability clauses discovers comments group'
+  metadata: { category: comments, source: spreadsheet }
+  vars:
+    task: 'Add a review comment to each paragraph containing "limitation of liability" in the document.'
+    expectedGroup: comments
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+# =============================================================================
+# TRACKED CHANGES — changeMode argument on apply_mutations
+# =============================================================================
+
+- description: 'Tracked change sets changeMode to tracked'
+  metadata: { category: tracked_changes }
+  vars:
+    task: 'Suggest replacing "annual review" with "quarterly review" using tracked changes.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:isTrackedMode
+      metric: correctness
+    - type: javascript
+      value: file://lib/checks.cjs:validOpNames
+      metric: argument_accuracy
+
+- description: 'Direct edit does not set tracked mode'
+  metadata: { category: tracked_changes }
+  vars:
+    task: 'Replace "draft" with "final version" in the title. Apply directly.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, apply_mutations]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:isNotTrackedMode
+      metric: correctness
+
+# =============================================================================
+# LISTS — discover lists group
+# =============================================================================
+
+- description: 'List conversion discovers lists group'
+  metadata: { category: lists }
+  vars:
+    task: 'Convert the bullet points in section 2 into a numbered list.'
+    expectedGroup: lists
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+- description: 'Change list numbering discovers lists group'
+  metadata: { category: lists, source: spreadsheet }
+  vars:
+    task: 'Change the third level of this list to lowercase Roman numerals.'
+    expectedGroup: lists
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+# =============================================================================
+# HYGIENE — argument quality, efficiency
+# =============================================================================
+
+- description: 'No hallucinated doc or sessionId params'
+  metadata: { category: hygiene }
+  vars:
+    task: 'Extract all the plain text so I can paste it elsewhere.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:noHallucinatedParams
+      metric: argument_accuracy
+
+- description: 'Undo calls undo tool'
+  metadata: { category: history }
+  vars:
+    task: 'Undo that last change, it was wrong.'
+  assert:
+    - type: tool-call-f1
+      value: [undo]
+      threshold: 1.0
+      metric: tool_selection
+
+- description: 'Simple replace uses 5 or fewer tool calls'
+  metadata: { category: efficiency }
+  vars:
+    task: 'Replace the word "hello" with "goodbye" in the document.'
+  assert:
+    - type: javascript
+      metric: efficiency
+      value: 'output.length <= 5'
+    - type: javascript
+      value: file://lib/checks.cjs:validOpNames
+      metric: argument_accuracy
+    - type: javascript
+      value: file://lib/checks.cjs:stepFields
+      metric: argument_accuracy
+
+# =============================================================================
+# ASPIRATIONAL — features that require discovery + specialized tools.
+# These test whether the model identifies the right group to discover.
+# =============================================================================
+
+- description: 'Aspirational: Set page margins discovers sections'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Set the page margins to 0.7 inches on all sides.'
+    expectedGroup: sections
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+- description: 'Aspirational: Insert table of contents discovers create or toc'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Insert a table of contents immediately following the title page.'
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools, query_match]
+      threshold: 0.5           # model may query headings first (valid planning), must also discover
+      metric: tool_selection
+
+- description: 'Aspirational: Merge table cells discovers tables'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Merge the first two header cells in row 1.'
+    expectedGroup: tables
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+- description: 'Aspirational: Accept formatting tracked changes discovers trackChanges'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Accept all tracked changes that only affect formatting.'
+    expectedGroup: trackChanges
+  assert:
+    - type: tool-call-f1
+      value: [discover_tools]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:validDiscoverGroups
+      metric: argument_accuracy
+
+- description: 'Aspirational: Turn text into hyperlink discovers core or format'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Turn every instance of "SuperDoc" into a hyperlink to https://www.superdoc.dev.'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, discover_tools]
+      threshold: 0.5
+      metric: tool_selection
+
+- description: 'Aspirational: Identify liability risks reads document'
+  metadata: { category: aspirational, source: spreadsheet }
+  vars:
+    task: 'Which sections of this document pose the greatest liability to me?'
+  assert:
+    - type: tool-call-f1
+      value: [query_match, get_document_text]
+      threshold: 0.5
+      metric: tool_selection

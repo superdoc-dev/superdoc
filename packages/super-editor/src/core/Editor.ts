@@ -802,27 +802,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
         // Blank document (source is undefined or null)
         // For docx mode without pre-parsed content, load the blank.docx template
         const shouldLoadBlankDocx =
-          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown && !options?.json;
+          resolvedMode === 'docx' && !options?.content && !options?.html && !options?.markdown;
 
         if (shouldLoadBlankDocx) {
-          // Decode base64 blank.docx without fetch
-          const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
-          const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
-          const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
-          // Use Uint8Array to ensure compatibility with both Node Buffer and browser Blob
-          const uint8Array = new Uint8Array(arrayBuffer);
-          let fileSource: File | Blob | Buffer;
-          if (canUseBuffer) {
-            fileSource = Buffer.from(uint8Array);
-          } else if (typeof Blob !== 'undefined') {
-            fileSource = new Blob([uint8Array as BlobPart]);
-          } else {
-            throw new Error('Blob is not available to create blank DOCX');
-          }
-          const [docx, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
-          resolvedOptions.content = docx;
-          resolvedOptions.mediaFiles = mediaFiles;
-          resolvedOptions.fonts = fonts;
+          const { content, mediaFiles, fonts, fileSource } = await this.#loadBlankDocxTemplate();
+          resolvedOptions.content = content;
+          resolvedOptions.mediaFiles = {
+            ...mediaFiles,
+            ...(options?.mediaFiles ?? {}),
+          };
+          resolvedOptions.fonts = {
+            ...fonts,
+            ...(options?.fonts ?? {}),
+          };
           resolvedOptions.fileSource = fileSource;
           resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;
@@ -1728,6 +1720,49 @@ export class Editor extends EventEmitter<EditorEventMap> {
         isNewFile: this.options.isNewFile ?? false,
       });
     }
+  }
+
+  async #loadBlankDocxTemplate(): Promise<{
+    content: DocxFileEntry[];
+    mediaFiles: Record<string, unknown>;
+    fonts: Record<string, unknown>;
+    fileSource: File | Blob | Buffer;
+  }> {
+    const arrayBuffer = await getArrayBufferFromUrl(BLANK_DOCX_DATA_URI);
+    const isNodeRuntime = typeof process !== 'undefined' && !!process.versions?.node;
+    const canUseBuffer = isNodeRuntime && typeof Buffer !== 'undefined';
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    let fileSource: File | Blob | Buffer;
+    if (canUseBuffer) {
+      fileSource = Buffer.from(uint8Array);
+    } else if (typeof Blob !== 'undefined') {
+      fileSource = new Blob([uint8Array as BlobPart]);
+    } else {
+      throw new Error('Blob is not available to create blank DOCX');
+    }
+
+    const [content, _media, mediaFiles, fonts] = (await Editor.loadXmlData(fileSource, canUseBuffer))!;
+    return { content, mediaFiles, fonts, fileSource };
+  }
+
+  async #getBaseDocxEntriesForExport(): Promise<DocxFileEntry[]> {
+    if (Array.isArray(this.options.content)) {
+      return this.options.content as DocxFileEntry[];
+    }
+
+    const blankDocx = await this.#loadBlankDocxTemplate();
+    this.options.content = blankDocx.content;
+    this.options.mediaFiles = {
+      ...blankDocx.mediaFiles,
+      ...(this.options.mediaFiles ?? {}),
+    };
+    this.options.fonts = {
+      ...blankDocx.fonts,
+      ...(this.options.fonts ?? {}),
+    };
+
+    return blankDocx.content;
   }
 
   /**
@@ -2783,6 +2818,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           media,
           true,
           updatedDocs,
+          this.options.fonts,
         );
 
         // Reconcile package-level singleton metadata (content-type overrides
@@ -2801,8 +2837,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
         return updatedDocs;
       }
 
+      const baseDocxEntries =
+        !this.options.fileSource && !Array.isArray(this.options.content)
+          ? await this.#getBaseDocxEntriesForExport()
+          : this.options.content;
+
       const result = await zipper.updateZip({
-        docx: this.options.content,
+        docx: baseDocxEntries,
         updatedDocs: updatedDocs,
         originalDocxFile: this.options.fileSource,
         media,
@@ -3270,8 +3311,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const provider = this.options.collaborationProvider;
 
       const doReplaceFileSync = () => {
-        const mediaFiles = this.options.mediaFiles ?? {};
-
         // 1. Insert new PM doc into Y fragment (must happen first)
         this.#insertNewFileData();
 
@@ -3279,6 +3318,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         seedPartsFromEditor(this, ydoc, { replaceExisting: true });
 
         // 3. Replace media map (prune stale + upsert new)
+        const mediaFiles = this.options.mediaFiles ?? {};
         const mediaMap = ydoc.getMap('media');
         for (const key of mediaMap.keys()) {
           if (!(key in mediaFiles)) mediaMap.delete(key);

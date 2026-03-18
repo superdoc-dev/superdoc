@@ -26,6 +26,8 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 
 ## Input fields
 
+### Variant 1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `inline` | object | yes |  |
@@ -72,12 +74,60 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | `inline.vanish` | boolean \\| null | no | One of: boolean, null |
 | `inline.vertAlign` | enum \\| null | no | One of: enum, null |
 | `inline.webHidden` | boolean \\| null | no | One of: boolean, null |
-| `target` | TextAddress | yes | TextAddress |
-| `target.blockId` | string | yes |  |
-| `target.kind` | `"text"` | yes | Constant: `"text"` |
-| `target.range` | Range | yes | Range |
-| `target.range.end` | integer | yes |  |
-| `target.range.start` | integer | yes |  |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+
+### Variant 2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inline` | object | yes |  |
+| `inline.bCs` | boolean \\| null | no | One of: boolean, null |
+| `inline.bold` | boolean \\| null | no | One of: boolean, null |
+| `inline.border` | object \\| null | no | One of: object, null |
+| `inline.caps` | boolean \\| null | no | One of: boolean, null |
+| `inline.charScale` | number \\| null | no | One of: number, null |
+| `inline.color` | string \\| null | no | One of: string, null |
+| `inline.contextualAlternates` | boolean \\| null | no | One of: boolean, null |
+| `inline.cs` | boolean \\| null | no | One of: boolean, null |
+| `inline.dstrike` | boolean \\| null | no | One of: boolean, null |
+| `inline.eastAsianLayout` | object \\| null | no | One of: object, null |
+| `inline.em` | string \\| null | no | One of: string, null |
+| `inline.emboss` | boolean \\| null | no | One of: boolean, null |
+| `inline.fitText` | object \\| null | no | One of: object, null |
+| `inline.fontFamily` | string \\| null | no | One of: string, null |
+| `inline.fontSize` | number \\| null | no | One of: number, null |
+| `inline.fontSizeCs` | number \\| null | no | One of: number, null |
+| `inline.highlight` | string \\| null | no | One of: string, null |
+| `inline.iCs` | boolean \\| null | no | One of: boolean, null |
+| `inline.imprint` | boolean \\| null | no | One of: boolean, null |
+| `inline.italic` | boolean \\| null | no | One of: boolean, null |
+| `inline.kerning` | number \\| null | no | One of: number, null |
+| `inline.lang` | object \\| null | no | One of: object, null |
+| `inline.letterSpacing` | number \\| null | no | One of: number, null |
+| `inline.ligatures` | string \\| null | no | One of: string, null |
+| `inline.numForm` | string \\| null | no | One of: string, null |
+| `inline.numSpacing` | string \\| null | no | One of: string, null |
+| `inline.oMath` | boolean \\| null | no | One of: boolean, null |
+| `inline.outline` | boolean \\| null | no | One of: boolean, null |
+| `inline.position` | number \\| null | no | One of: number, null |
+| `inline.rFonts` | object \\| null | no | One of: object, null |
+| `inline.rStyle` | string \\| null | no | One of: string, null |
+| `inline.rtl` | boolean \\| null | no | One of: boolean, null |
+| `inline.shading` | object \\| null | no | One of: object, null |
+| `inline.shadow` | boolean \\| null | no | One of: boolean, null |
+| `inline.smallCaps` | boolean \\| null | no | One of: boolean, null |
+| `inline.snapToGrid` | boolean \\| null | no | One of: boolean, null |
+| `inline.specVanish` | boolean \\| null | no | One of: boolean, null |
+| `inline.strike` | boolean \\| null | no | One of: boolean, null |
+| `inline.stylisticSets` | object[] \\| null | no | One of: object[], null |
+| `inline.underline` | boolean \\| null \\| object | no | One of: boolean, null, object |
+| `inline.vanish` | boolean \\| null | no | One of: boolean, null |
+| `inline.vertAlign` | enum \\| null | no | One of: enum, null |
+| `inline.webHidden` | boolean \\| null | no | One of: boolean, null |
+| `ref` | string | yes |  |
 
 ### Example request
 
@@ -88,11 +138,16 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
     "italic": true
   },
   "target": {
-    "blockId": "block-abc123",
-    "kind": "text",
-    "range": {
-      "end": 10,
-      "start": 0
+    "end": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
+    },
+    "kind": "selection",
+    "start": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
     }
   }
 }
@@ -100,7 +155,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -116,6 +171,10 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
@@ -126,7 +185,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -144,6 +203,10 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
@@ -175,6 +238,19 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
       "range": {
         "end": 10,
         "start": 0
+      }
+    },
+    "selectionTarget": {
+      "end": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      },
+      "kind": "selection",
+      "start": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
       }
     },
     "target": {
@@ -214,826 +290,1652 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "inline": {
+  "oneOf": [
+    {
       "additionalProperties": false,
-      "minProperties": 1,
       "properties": {
-        "bCs": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "bold": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "border": {
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "minProperties": 1,
-              "properties": {
-                "color": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+        "inline": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "bCs": {
+              "oneOf": [
+                {
+                  "type": "boolean"
                 },
-                "space": {
-                  "oneOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "sz": {
-                  "oneOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "val": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                {
+                  "type": "null"
                 }
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "caps": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "charScale": {
-          "oneOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "color": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "contextualAlternates": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "cs": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "dstrike": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "eastAsianLayout": {
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "minProperties": 1,
-              "properties": {
-                "combine": {
-                  "oneOf": [
-                    {
-                      "type": "boolean"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "combineBrackets": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "id": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "vert": {
-                  "oneOf": [
-                    {
-                      "type": "boolean"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "vertCompress": {
-                  "oneOf": [
-                    {
-                      "type": "boolean"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "em": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "emboss": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "fitText": {
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "minProperties": 1,
-              "properties": {
-                "id": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "val": {
-                  "oneOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "fontFamily": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "fontSize": {
-          "oneOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "fontSizeCs": {
-          "oneOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "highlight": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "iCs": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "imprint": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "italic": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "kerning": {
-          "oneOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "lang": {
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "minProperties": 1,
-              "properties": {
-                "bidi": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "eastAsia": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "val": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "letterSpacing": {
-          "oneOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "ligatures": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "numForm": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "numSpacing": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "oMath": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "outline": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "position": {
-          "oneOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "rFonts": {
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "minProperties": 1,
-              "properties": {
-                "ascii": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "asciiTheme": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "cs": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "csTheme": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "eastAsia": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "eastAsiaTheme": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "hAnsi": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "hAnsiTheme": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "hint": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "rStyle": {
-          "oneOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "rtl": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "shading": {
-          "oneOf": [
-            {
-              "additionalProperties": false,
-              "minProperties": 1,
-              "properties": {
-                "color": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "fill": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "val": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "shadow": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "smallCaps": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "snapToGrid": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "specVanish": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "strike": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "stylisticSets": {
-          "oneOf": [
-            {
-              "items": {
-                "additionalProperties": false,
-                "properties": {
-                  "id": {
-                    "type": "number"
-                  },
-                  "val": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "id"
-                ],
-                "type": "object"
-              },
-              "minItems": 1,
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "underline": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "additionalProperties": false,
-              "minProperties": 1,
-              "properties": {
-                "color": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "style": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "themeColor": {
-                  "oneOf": [
-                    {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          ]
-        },
-        "vanish": {
-          "oneOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "vertAlign": {
-          "oneOf": [
-            {
-              "enum": [
-                "superscript",
-                "subscript",
-                "baseline"
               ]
             },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "webHidden": {
-          "oneOf": [
-            {
-              "type": "boolean"
+            "bold": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            {
-              "type": "null"
+            "border": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "space": {
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sz": {
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "caps": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "charScale": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "color": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "contextualAlternates": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cs": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dstrike": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "eastAsianLayout": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "combine": {
+                      "oneOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "combineBrackets": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "vert": {
+                      "oneOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "vertCompress": {
+                      "oneOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "em": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "emboss": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fitText": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fontFamily": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fontSize": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fontSizeCs": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "highlight": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "iCs": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "imprint": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "italic": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kerning": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lang": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "bidi": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "eastAsia": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "letterSpacing": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ligatures": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "numForm": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "numSpacing": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "oMath": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "outline": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rFonts": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "ascii": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "asciiTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "cs": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "csTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "eastAsia": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "eastAsiaTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hAnsi": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hAnsiTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hint": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rStyle": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rtl": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shading": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fill": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shadow": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "smallCaps": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "snapToGrid": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "specVanish": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strike": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stylisticSets": {
+              "oneOf": [
+                {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "number"
+                      },
+                      "val": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "underline": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                },
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "style": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "themeColor": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "vanish": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "vertAlign": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "superscript",
+                    "subscript",
+                    "baseline"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "webHidden": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
-          ]
+          },
+          "type": "object"
+        },
+        "target": {
+          "$ref": "#/$defs/SelectionTarget"
         }
       },
+      "required": [
+        "target",
+        "inline"
+      ],
       "type": "object"
     },
-    "target": {
-      "$ref": "#/$defs/TextAddress"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "bCs": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bold": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "border": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "space": {
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sz": {
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "caps": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "charScale": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "color": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "contextualAlternates": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cs": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dstrike": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "eastAsianLayout": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "combine": {
+                      "oneOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "combineBrackets": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "vert": {
+                      "oneOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "vertCompress": {
+                      "oneOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "em": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "emboss": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fitText": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fontFamily": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fontSize": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fontSizeCs": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "highlight": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "iCs": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "imprint": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "italic": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kerning": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lang": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "bidi": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "eastAsia": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "letterSpacing": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ligatures": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "numForm": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "numSpacing": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "oMath": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "outline": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rFonts": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "ascii": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "asciiTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "cs": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "csTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "eastAsia": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "eastAsiaTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hAnsi": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hAnsiTheme": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hint": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rStyle": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rtl": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shading": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fill": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "val": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shadow": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "smallCaps": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "snapToGrid": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "specVanish": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strike": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stylisticSets": {
+              "oneOf": [
+                {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "number"
+                      },
+                      "val": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "underline": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                },
+                {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "style": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "themeColor": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "vanish": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "vertAlign": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "superscript",
+                    "subscript",
+                    "baseline"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "webHidden": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "inline"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "target",
-    "inline"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

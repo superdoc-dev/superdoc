@@ -135,68 +135,162 @@ const registerBodySectPrSync = (editor, ydoc, provider, cleanupState) => {
 };
 
 /**
- * Initialize collaboration update logging for debugging.
- * Logs local and remote Y.js document changes to console.
+ * Initialize collaboration update observer.
+ * Calls the provided callback with local and remote Y.js document changes.
+ * @param {Object} editor - The editor instance
+ * @param {Object} ydoc - The Y.js document
+ * @param {Function} callback - Callback to invoke with update events
+ * @param {Object} cleanupState - State object to track cleanup references
  */
-const initCollaborationUpdateLogging = (editor, ydoc, cleanupState) => {
+const initCollaborationUpdateObserver = (editor, ydoc, callback, cleanupState) => {
   const yFragment = ydoc.getXmlFragment('supereditor');
   const internalAttrs = new Set(['sdBlockRev', 'listRendering', 'ychange']);
 
-  const fragmentObserver = (events, transaction) => {
-    const isLocal = transaction.local;
+  /**
+   * Find the user who made a remote change by looking up awareness states.
+   */
+  const findRemoteUser = () => {
+    const provider = editor.options.collaborationProvider;
+    if (!provider?.awareness) {
+      return null;
+    }
+    for (const [id, state] of provider.awareness.getStates()) {
+      if (id !== ydoc.clientID && state?.user) {
+        return state.user;
+      }
+    }
+    return null;
+  };
 
-    // Get user - for remote, find first non-local user in awareness
-    let user = isLocal
-      ? editor.options.user
-      : (() => {
-          const provider = editor.options.collaborationProvider;
-          if (!provider?.awareness) return null;
-          for (const [id, state] of provider.awareness.getStates()) {
-            if (id !== ydoc.clientID && state?.user) return state.user;
+  /**
+   * Get the user who made this change (local or remote).
+   */
+  const getUser = (isLocal) => {
+    if (isLocal) {
+      return editor.options.user || { name: 'Local user' };
+    }
+    return findRemoteUser() || { name: 'Remote user' };
+  };
+
+  /**
+   * Parse a single delta operation and extract actions/text.
+   */
+  const parseDelta = (delta, actions, textParts) => {
+    if (delta.insert) {
+      if (typeof delta.insert === 'string') {
+        textParts.push(delta.insert);
+        const actionType = delta.insert.length === 1 ? 'type' : 'insert';
+        actions.push(actionType);
+      } else if (Array.isArray(delta.insert)) {
+        for (const el of delta.insert) {
+          const nodeName = el?.nodeName || 'element';
+          actions.push(`insert:${nodeName}`);
+          // Try to extract text content from element
+          const str = el?.toString?.() || '';
+          const match = str.match(/>([^<]+)</);
+          if (match?.[1]) {
+            textParts.push(match[1]);
           }
-          return null;
-        })();
-    user = user || { name: 'Remote user' };
-
-    // Parse events
-    const actions = [];
-    let text = '';
-    let deleted = 0;
-
-    for (const event of events) {
-      for (const d of event.changes?.delta || []) {
-        if (d.insert) {
-          if (typeof d.insert === 'string') {
-            text += d.insert;
-            actions.push(d.insert.length === 1 ? 'type' : 'insert');
-          } else if (Array.isArray(d.insert)) {
-            for (const el of d.insert) {
-              actions.push(`insert:${el?.nodeName || 'element'}`);
-              const str = el?.toString?.() || '';
-              const match = str.match(/>([^<]+)</);
-              if (match?.[1]) text += match[1];
-            }
-          }
-        }
-        if (d.delete) {
-          deleted += d.delete;
-          actions.push('delete');
         }
       }
-      for (const [key, change] of event.changes?.keys || []) {
-        if (internalAttrs.has(key)) continue;
-        actions.push(change.action === 'delete' ? `unformat:${key}` : `format:${key}`);
+    }
+    if (delta.delete) {
+      actions.push('delete');
+      return delta.delete;
+    }
+    return 0;
+  };
+
+  /**
+   * Extract specific formatting changes from runProperties diff.
+   */
+  const diffRunProperties = (oldProps, newProps, actions) => {
+    const oldKeys = new Set(Object.keys(oldProps || {}));
+    const newKeys = new Set(Object.keys(newProps || {}));
+
+    // Find added/changed properties
+    for (const key of newKeys) {
+      if (!oldKeys.has(key)) {
+        actions.push(`format:${key}`);
+      } else if (JSON.stringify(oldProps[key]) !== JSON.stringify(newProps[key])) {
+        actions.push(`format:${key}`);
       }
     }
 
-    if (!actions.length && !text && !deleted) return;
+    // Find removed properties
+    for (const key of oldKeys) {
+      if (!newKeys.has(key)) {
+        actions.push(`unformat:${key}`);
+      }
+    }
+  };
 
-    console.log(`[Collaboration] ${isLocal ? 'Local' : 'Remote'} edit`, {
-      user: user.name || user.email || 'unknown',
-      action: [...new Set(actions)].join(', ') || 'edit',
-      ...(text && { text }),
-      ...(deleted && !text && { deletedChars: deleted }),
-    });
+  /**
+   * Parse attribute/formatting changes from an event.
+   */
+  const parseAttributeChanges = (event, actions) => {
+    const keys = event.changes?.keys;
+    if (!keys) {
+      return;
+    }
+    for (const [key, change] of keys) {
+      if (internalAttrs.has(key)) {
+        continue;
+      }
+
+      // For runProperties, diff the old and new values to get specific formatting
+      if (key === 'runProperties') {
+        const oldProps = change.oldValue;
+        const newProps = change.action === 'delete' ? {} : event.target?.getAttribute?.(key);
+        diffRunProperties(oldProps, newProps, actions);
+        continue;
+      }
+
+      if (change.action === 'delete') {
+        actions.push(`unformat:${key}`);
+      } else {
+        actions.push(`format:${key}`);
+      }
+    }
+  };
+
+  const fragmentObserver = (events, transaction) => {
+    const isLocal = transaction.local;
+    const user = getUser(isLocal);
+
+    const actions = [];
+    const textParts = [];
+    let deletedCount = 0;
+
+    for (const event of events) {
+      const deltas = event.changes?.delta || [];
+      for (const delta of deltas) {
+        deletedCount += parseDelta(delta, actions, textParts);
+      }
+      parseAttributeChanges(event, actions);
+    }
+
+    // Skip if nothing meaningful happened
+    if (actions.length === 0 && textParts.length === 0 && deletedCount === 0) {
+      return;
+    }
+
+    const uniqueActions = [...new Set(actions)];
+    const userName = user.name || user.email || 'unknown';
+
+    const event = {
+      user: userName,
+      action: uniqueActions.join(', ') || 'edit',
+      isLocal,
+    };
+
+    if (textParts.length > 0) {
+      event.text = textParts.join('');
+    } else if (deletedCount > 0) {
+      event.deletedChars = deletedCount;
+    }
+
+    callback(event);
   };
 
   yFragment.observeDeep(fragmentObserver);
@@ -214,14 +308,14 @@ export const Collaboration = Extension.create({
       field: 'supereditor',
       fragment: null,
       isReady: false,
-      logCollaborationUpdates: false,
+      onCollaborationUpdate: null,
     };
   },
 
   addPmPlugins() {
     if (!this.editor.options.ydoc) return [];
     this.options.ydoc = this.editor.options.ydoc;
-    this.options.logCollaborationUpdates = this.editor.options.logCollaborationUpdates ?? false;
+    this.options.onCollaborationUpdate = this.editor.options.onCollaborationUpdate ?? null;
 
     initSyncListener(this.options.ydoc, this.editor, this);
 
@@ -253,8 +347,8 @@ export const Collaboration = Extension.create({
       collaborationLogFragmentObserver: null,
     };
 
-    if (this.options.logCollaborationUpdates) {
-      initCollaborationUpdateLogging(this.editor, this.options.ydoc, cleanupState);
+    if (this.options.onCollaborationUpdate) {
+      initCollaborationUpdateObserver(this.editor, this.options.ydoc, this.options.onCollaborationUpdate, cleanupState);
     }
 
     collaborationCleanupByEditor.set(this.editor, cleanupState);
@@ -276,7 +370,7 @@ export const Collaboration = Extension.create({
       };
 
       const provider = editor.options.collaborationProvider;
-      if (!provider) {
+      if (!provider || isCollaborationProviderSynced(provider)) {
         doBootstrap();
       } else {
         cleanupState.partSyncPendingCleanup = onCollaborationProviderSynced(provider, doBootstrap);
@@ -384,7 +478,8 @@ const initSyncListener = (ydoc, editor, extension) => {
   const provider = editor.options.collaborationProvider;
   if (!provider) return;
 
-  const emit = () => {
+  const emit = (synced) => {
+    if (synced === false) return;
     extension.options.isReady = true;
     editor.emit('collaborationReady', { editor, ydoc });
   };

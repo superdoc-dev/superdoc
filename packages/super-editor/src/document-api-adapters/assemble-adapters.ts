@@ -14,7 +14,7 @@ import {
   writeWrapper,
   insertStructuredWrapper,
   replaceStructuredWrapper,
-  styleApplyWrapper,
+  selectionMutationWrapper,
 } from './plan-engine/plan-wrappers.js';
 import { clearContentWrapper } from './plan-engine/clear-content-wrapper.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
@@ -85,6 +85,7 @@ import {
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
+import { resolveRange } from './helpers/range-resolver.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 import { registerPartDescriptor } from '../core/parts/registry/part-registry.js';
@@ -364,8 +365,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       insertStructured: (input, options) => insertStructuredWrapper(editor, input, options),
       replaceStructured: (input, options) => replaceStructuredWrapper(editor, input, options),
     },
-    format: {
-      apply: (input, options) => styleApplyWrapper(editor, input, options),
+    selectionMutation: {
+      execute: (request, options) => selectionMutationWrapper(editor, request, options),
     },
     styles: {
       apply: (input, options) => stylesApplyAdapter(editor, input, options),
@@ -665,6 +666,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
         update: (input, options) => authorityEntriesUpdateWrapper(editor, input, options),
         remove: (input, options) => authorityEntriesRemoveWrapper(editor, input, options),
       },
+    },
+    ranges: {
+      resolve: (input) => resolveRange(editor, input),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

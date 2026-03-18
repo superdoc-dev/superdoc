@@ -1,17 +1,15 @@
 /**
  * Purpose: Verify all contract-derived outputs are up to date.
  * Caller: Main CI/local gate for generated Document API artifacts.
- * Reads: Contract snapshot + generated schemas/manifests/agent artifacts/reference docs + overview.
+ * Reads: Contract snapshot + generated schemas/agent artifacts/reference docs + overview.
  * Writes: None (exit code + console output only).
  * Fails when: Any generated output is missing/extra/stale or overview block is out of sync.
  */
 import {
   buildStableSchemaArtifacts,
-  buildToolManifestArtifacts,
   buildAgentArtifacts,
   getAgentArtifactRoot,
   getStableSchemaRoot,
-  getToolManifestRoot,
 } from './lib/contract-output-artifacts.js';
 import { checkGeneratedFiles, formatGeneratedCheckIssues, runScript } from './lib/generation-utils.js';
 import {
@@ -21,15 +19,10 @@ import {
 } from './lib/reference-docs-artifacts.js';
 
 runScript('contract output artifacts check', async () => {
-  const files = [
-    ...buildStableSchemaArtifacts(),
-    ...buildToolManifestArtifacts(),
-    ...buildAgentArtifacts(),
-    ...buildReferenceDocsArtifacts(),
-  ];
+  const files = [...buildStableSchemaArtifacts(), ...buildAgentArtifacts(), ...buildReferenceDocsArtifacts()];
 
   const issues = await checkGeneratedFiles(files, {
-    roots: [getStableSchemaRoot(), getToolManifestRoot(), getAgentArtifactRoot(), getReferenceDocsOutputRoot()],
+    roots: [getStableSchemaRoot(), getAgentArtifactRoot(), getReferenceDocsOutputRoot()],
   });
 
   await checkReferenceDocsExtras(files, issues);

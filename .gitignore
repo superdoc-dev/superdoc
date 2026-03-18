@@ -71,6 +71,7 @@ perf-baseline-results.json
 .claude
 plans/
 
+tests/layout-snapshots
 tests/layout/candidate/
 tests/layout/reference/
 tests/layout/reports/

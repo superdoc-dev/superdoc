@@ -484,6 +484,110 @@ describe('collaboration extension', () => {
     });
   });
 
+  describe('collaboration update callback', () => {
+    const createCallbackEditor = (overrides = {}) => {
+      const fragmentObservers = new Set();
+      const fragment = {
+        observeDeep: vi.fn((fn) => fragmentObservers.add(fn)),
+        unobserveDeep: vi.fn((fn) => fragmentObservers.delete(fn)),
+        _observers: fragmentObservers,
+        _triggerChange: (events, transaction) => {
+          fragmentObservers.forEach((observer) => observer(events, transaction));
+        },
+      };
+
+      const ydoc = createYDocStub();
+      ydoc.getXmlFragment = vi.fn(() => fragment);
+      ydoc._fragment = fragment;
+
+      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const onCollaborationUpdate = vi.fn();
+      const editor = {
+        options: {
+          isHeadless: false,
+          ydoc,
+          collaborationProvider: provider,
+          onCollaborationUpdate,
+          user: { name: 'Test User' },
+          ...overrides.options,
+        },
+        storage: { image: { media: {} } },
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        view: { state: { doc: {} }, dispatch: vi.fn() },
+      };
+      return { ydoc, context: { editor, options: {} }, onCollaborationUpdate };
+    };
+
+    it('registers fragment observer when onCollaborationUpdate callback is provided', () => {
+      const { ydoc, context } = createCallbackEditor();
+      Collaboration.config.addPmPlugins.call(context);
+
+      expect(ydoc._fragment.observeDeep).toHaveBeenCalledTimes(1);
+      expect(ydoc._fragment._observers.size).toBe(1);
+    });
+
+    it('does not register fragment observer when onCollaborationUpdate is not provided', () => {
+      const { ydoc, context } = createCallbackEditor({ options: { onCollaborationUpdate: null } });
+      Collaboration.config.addPmPlugins.call(context);
+
+      expect(ydoc._fragment.observeDeep).not.toHaveBeenCalled();
+    });
+
+    it('calls callback with local edit event', () => {
+      const { ydoc, context, onCollaborationUpdate } = createCallbackEditor({
+        options: { user: { name: 'Alice' } },
+      });
+      Collaboration.config.addPmPlugins.call(context);
+
+      // Simulate a local text insertion
+      const events = [{ changes: { delta: [{ insert: 'Hello' }] } }];
+      const transaction = { local: true };
+      ydoc._fragment._triggerChange(events, transaction);
+
+      expect(onCollaborationUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: 'Alice',
+          action: 'insert',
+          text: 'Hello',
+          isLocal: true,
+        }),
+      );
+    });
+
+    it('calls callback with remote edit event', () => {
+      const { ydoc, context, onCollaborationUpdate } = createCallbackEditor({
+        options: { user: { name: 'Alice' } },
+      });
+      Collaboration.config.addPmPlugins.call(context);
+
+      // Simulate a remote text insertion
+      const events = [{ changes: { delta: [{ insert: 'World' }] } }];
+      const transaction = { local: false };
+      ydoc._fragment._triggerChange(events, transaction);
+
+      expect(onCollaborationUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'insert',
+          text: 'World',
+          isLocal: false,
+        }),
+      );
+    });
+
+    it('cleans up fragment observer on destroy', () => {
+      const { ydoc, context } = createCallbackEditor();
+      Collaboration.config.addPmPlugins.call(context);
+
+      expect(ydoc._fragment._observers.size).toBe(1);
+
+      Collaboration.config.onDestroy.call(context);
+
+      expect(ydoc._fragment.unobserveDeep).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('headless mode Y.js sync', () => {
     const createHeadlessEditor = (overrides = {}) => {
       const ydoc = overrides.ydoc ?? createYDocStub();

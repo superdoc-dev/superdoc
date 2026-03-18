@@ -168,6 +168,26 @@ describe('wrapTextInRunsPlugin', () => {
     expect(markNames).toContain('italic');
   });
 
+  it('does not copy previous paragraph run properties when the current paragraph has an explicit style override', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [prevRun]),
+      schema.node('paragraph', { paragraphProperties: { styleId: 'Heading2' } }),
+    ]);
+    const view = createView(schema, doc);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos)).insertText('Next');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    expect(run.type.name).toBe('run');
+    expect(run.attrs.runProperties).toEqual({});
+    expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+  });
+
   describe('resolveRunPropertiesFromParagraphStyle', () => {
     it('resolves run properties from paragraph styleId', () => {
       const schema = makeSchema();
@@ -511,6 +531,33 @@ describe('wrapTextInRunsPlugin', () => {
       const markNames = italicRun.firstChild.marks.map((mark) => mark.type.name);
       // The italic sdStyleMarks should be applied to this text
       expect(markNames).toContain('italic');
+    });
+
+    it('clears sticky sdStyleMarks when a transaction explicitly resets them', () => {
+      const schema = makeSchema();
+      const view = createView(schema, paragraphDoc(schema));
+
+      const tr1 = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1));
+      tr1.setMeta('sdStyleMarks', [{ type: 'bold', attrs: {} }]);
+      tr1.insertText('A');
+      view.dispatch(tr1);
+
+      const trInsertParagraph = view.state.tr.insert(
+        view.state.doc.content.size,
+        schema.node('paragraph', { paragraphProperties: { styleId: null } }),
+      );
+      view.dispatch(trInsertParagraph);
+
+      const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+      const tr2 = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos));
+      tr2.setMeta('sdStyleMarks', []);
+      tr2.insertText('B');
+      view.dispatch(tr2);
+
+      const secondParagraph = view.state.doc.child(1);
+      const run = secondParagraph.firstChild;
+      expect(run.type.name).toBe('run');
+      expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
     });
 
     it('ignores invalid mark types in sdStyleMarks gracefully', () => {

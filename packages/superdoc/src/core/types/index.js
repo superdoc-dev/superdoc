@@ -30,6 +30,15 @@
  */
 
 /**
+ * @typedef {Object} CollaborationUpdateEvent
+ * @property {string} user - Name or email of the user who made the change
+ * @property {string} action - Action(s) performed (e.g., 'type', 'insert', 'format:bold')
+ * @property {boolean} isLocal - Whether the change was made locally or received from a remote user
+ * @property {string} [text] - Text content inserted (if applicable)
+ * @property {number} [deletedChars] - Number of characters deleted (if applicable)
+ */
+
+/**
  * @typedef {Object} CollaborationConfig Collaboration module configuration
  * @property {Object} [ydoc] External Yjs document (provider-agnostic mode)
  * @property {CollaborationProvider} [provider] External collaboration provider (provider-agnostic mode)
@@ -37,7 +46,7 @@
  * @property {string} [url] WebSocket URL for internal provider (deprecated)
  * @property {string} [token] Authentication token for internal provider (deprecated)
  * @property {Object} [params] Additional params for internal provider (deprecated)
- * @property {boolean} [logUpdates] When true, logs collaboration updates to console (for debugging)
+ * @property {(event: CollaborationUpdateEvent) => void} [onUpdate] Callback invoked on collaboration updates (local and remote edits)
  */
 
 /** @typedef {import('@superdoc/super-editor').Editor} Editor */
@@ -175,6 +184,31 @@
  */
 
 /**
+ * @typedef {'body' | 'header' | 'footer'} EditorSurface
+ * Surface where the edit originated.
+ */
+
+/**
+ * @typedef {Object} EditorUpdateEvent
+ * @property {Editor} editor The primary editor associated with the update. For header/footer edits, this is the main body editor.
+ * @property {Editor} sourceEditor The editor instance that emitted the update. For body edits, this matches `editor`.
+ * @property {EditorSurface} surface The surface where the edit originated.
+ * @property {string | null} [headerId] Relationship ID for header/footer edits.
+ * @property {string | null} [sectionType] Header/footer variant (`default`, `first`, `even`, `odd`) when available.
+ */
+
+/**
+ * @typedef {Object} EditorTransactionEvent
+ * @property {Editor} editor The primary editor associated with the transaction. For header/footer edits, this is the main body editor.
+ * @property {Editor} sourceEditor The editor instance that emitted the transaction. For body edits, this matches `editor`.
+ * @property {any} transaction The ProseMirror transaction or transaction-like payload emitted by the source editor.
+ * @property {number} [duration] Time spent applying the transaction, in milliseconds.
+ * @property {EditorSurface} surface The surface where the transaction originated.
+ * @property {string | null} [headerId] Relationship ID for header/footer edits.
+ * @property {string | null} [sectionType] Header/footer variant (`default`, `first`, `even`, `odd`) when available.
+ */
+
+/**
  * @typedef {Object} Config
  * @property {string} [superdocId] The ID of the SuperDoc
  * @property {string | HTMLElement} selector The selector or element to mount the SuperDoc into
@@ -217,7 +251,7 @@
  * @property {Object} [layoutEngineOptions.trackedChanges] Optional override for paginated track-changes rendering (e.g., `{ mode: 'final' }` to force final view or `{ enabled: false }` to strip metadata entirely)
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
  * @property {(editor: Editor) => void} [onEditorCreate] Callback after an editor is created
- * @property {(params: { editor: Editor, transaction: any, duration: number }) => void} [onTransaction] Callback when a transaction is made
+ * @property {(params: EditorTransactionEvent) => void} [onTransaction] Callback when a transaction is made
  * @property {() => void} [onEditorDestroy] Callback after an editor is destroyed
  * @property {(params: { error: object, editor: Editor, documentId: string, file: File }) => void} [onContentError] Callback when there is an error in the content
  * @property {(editor: { superdoc: SuperDoc }) => void} [onReady] Callback when the SuperDoc is ready
@@ -227,7 +261,7 @@
  * @property {() => void} [onPdfDocumentReady] Callback when the PDF document is ready
  * @property {(isOpened: boolean) => void} [onSidebarToggle] Callback when the sidebar is toggled
  * @property {(params: { editor: Editor }) => void} [onCollaborationReady] Callback when collaboration is ready
- * @property {(params: { editor: Editor }) => void} [onEditorUpdate] Callback when document is updated
+ * @property {(params: EditorUpdateEvent) => void} [onEditorUpdate] Callback when document is updated
  * @property {(params: { error: Error }) => void} [onException] Callback when an exception is thrown
  * @property {(params: { isRendered: boolean }) => void} [onCommentsListChange] Callback when the comments list is rendered
  * @property {(params: { totalPages: number, superdoc: SuperDoc }) => void} [onPaginationUpdate] Callback when pagination layout updates (fires after each layout pass with the current page count)

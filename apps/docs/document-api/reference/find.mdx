@@ -1,7 +1,7 @@
 ---
 title: find
 sidebarTitle: find
-description: Search the document for text or node matches using SDM/1 selectors.
+description: Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Search the document for text or node matches using SDM/1 selectors.
 
 ## Summary
 
-Search the document for text or node matches using SDM/1 selectors.
+Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.
 
 - Operation ID: `find`
 - API member path: `editor.doc.find(...)`
@@ -35,19 +35,10 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
 | `options.includeProvenance` | boolean | no |  |
 | `options.includeResolved` | boolean | no |  |
 | `select` | object(type="text") \\| object(type="node") | yes | One of: object(type="text"), object(type="node") |
-| `within` | object | no |  |
-| `within.anchor` | object | no |  |
-| `within.anchor.end` | object | no |  |
-| `within.anchor.end.blockId` | string | no |  |
-| `within.anchor.end.offset` | integer | no |  |
-| `within.anchor.start` | object | no |  |
-| `within.anchor.start.blockId` | string | no |  |
-| `within.anchor.start.offset` | integer | no |  |
-| `within.evaluatedRevision` | string | no |  |
-| `within.kind` | enum | no | `"content"`, `"inline"`, `"annotation"`, `"section"` |
+| `within` | BlockNodeAddress | no | BlockNodeAddress |
+| `within.kind` | `"block"` | no | Constant: `"block"` |
 | `within.nodeId` | string | no |  |
-| `within.path` | string \\| integer[] | no |  |
-| `within.stability` | enum | no | `"stable"`, `"ephemeral"` |
+| `within.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 
 ### Example request
 
@@ -61,19 +52,9 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
     "type": "text"
   },
   "within": {
-    "anchor": {
-      "end": {
-        "blockId": "block-abc123",
-        "offset": 0
-      },
-      "start": {
-        "blockId": "block-abc123",
-        "offset": 0
-      }
-    },
-    "kind": "content",
+    "kind": "block",
     "nodeId": "node-def456",
-    "stability": "stable"
+    "nodeType": "paragraph"
   }
 }
 ```
@@ -94,19 +75,9 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
   "items": [
     {
       "address": {
-        "anchor": {
-          "end": {
-            "blockId": "block-abc123",
-            "offset": 0
-          },
-          "start": {
-            "blockId": "block-abc123",
-            "offset": 0
-          }
-        },
-        "kind": "content",
+        "kind": "block",
         "nodeId": "node-def456",
-        "stability": "stable"
+        "nodeType": "paragraph"
       },
       "context": {},
       "node": {}
@@ -188,11 +159,11 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
           "properties": {
             "kind": {
               "enum": [
-                "content",
+                "block",
                 "inline"
               ]
             },
-            "nodeKind": {
+            "nodeType": {
               "type": "string"
             },
             "type": {
@@ -207,85 +178,7 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
       ]
     },
     "within": {
-      "additionalProperties": false,
-      "properties": {
-        "anchor": {
-          "additionalProperties": false,
-          "properties": {
-            "end": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            },
-            "start": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            }
-          },
-          "type": "object"
-        },
-        "evaluatedRevision": {
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "content",
-            "inline",
-            "annotation",
-            "section"
-          ]
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "path": {
-          "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ]
-          },
-          "type": "array"
-        },
-        "stability": {
-          "enum": [
-            "stable",
-            "ephemeral"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "stability"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
   "required": [
@@ -306,85 +199,7 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
         "additionalProperties": false,
         "properties": {
           "address": {
-            "additionalProperties": false,
-            "properties": {
-              "anchor": {
-                "additionalProperties": false,
-                "properties": {
-                  "end": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "blockId": {
-                        "type": "string"
-                      },
-                      "offset": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "blockId",
-                      "offset"
-                    ],
-                    "type": "object"
-                  },
-                  "start": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "blockId": {
-                        "type": "string"
-                      },
-                      "offset": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "blockId",
-                      "offset"
-                    ],
-                    "type": "object"
-                  }
-                },
-                "type": "object"
-              },
-              "evaluatedRevision": {
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "content",
-                  "inline",
-                  "annotation",
-                  "section"
-                ]
-              },
-              "nodeId": {
-                "type": "string"
-              },
-              "path": {
-                "items": {
-                  "oneOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "integer"
-                    }
-                  ]
-                },
-                "type": "array"
-              },
-              "stability": {
-                "enum": [
-                  "stable",
-                  "ephemeral"
-                ]
-              }
-            },
-            "required": [
-              "kind",
-              "stability"
-            ],
-            "type": "object"
+            "$ref": "#/$defs/NodeAddress"
           },
           "context": {
             "type": "object"

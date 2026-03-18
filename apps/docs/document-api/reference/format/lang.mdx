@@ -26,14 +26,21 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 
 ## Input fields
 
+### Variant 1 (target.kind="selection")
+
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `target` | TextAddress | yes | TextAddress |
-| `target.blockId` | string | yes |  |
-| `target.kind` | `"text"` | yes | Constant: `"text"` |
-| `target.range` | Range | yes | Range |
-| `target.range.end` | integer | yes |  |
-| `target.range.start` | integer | yes |  |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+| `value` | object \\| null | yes | One of: object, null |
+
+### Variant 2
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ref` | string | yes |  |
 | `value` | object \\| null | yes | One of: object, null |
 
 ### Example request
@@ -41,11 +48,16 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 ```json
 {
   "target": {
-    "blockId": "block-abc123",
-    "kind": "text",
-    "range": {
-      "end": 10,
-      "start": 0
+    "end": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
+    },
+    "kind": "selection",
+    "start": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "offset": 0
     }
   },
   "value": {
@@ -57,7 +69,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 
 ## Output fields
 
-### Variant 1 (resolution.requestedTarget.kind="text")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -73,6 +85,10 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
@@ -83,7 +99,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 | `success` | `true` | yes | Constant: `true` |
 | `updated` | EntityAddress[] | no |  |
 
-### Variant 2 (resolution.requestedTarget.kind="text")
+### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -101,6 +117,10 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 | `resolution.requestedTarget.range` | Range | no | Range |
 | `resolution.requestedTarget.range.end` | integer | no |  |
 | `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.selectionTarget` | SelectionTarget | no | SelectionTarget |
+| `resolution.selectionTarget.end` | SelectionPoint | no | SelectionPoint |
+| `resolution.selectionTarget.kind` | `"selection"` | no | Constant: `"selection"` |
+| `resolution.selectionTarget.start` | SelectionPoint | no | SelectionPoint |
 | `resolution.target` | TextAddress | yes | TextAddress |
 | `resolution.target.blockId` | string | yes |  |
 | `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
@@ -132,6 +152,19 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
       "range": {
         "end": 10,
         "start": 0
+      }
+    },
+    "selectionTarget": {
+      "end": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
+      },
+      "kind": "selection",
+      "start": {
+        "blockId": "block-abc123",
+        "kind": "text",
+        "offset": 0
       }
     },
     "target": {
@@ -171,64 +204,128 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "target": {
-      "$ref": "#/$defs/TextAddress"
-    },
-    "value": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "minProperties": 1,
-          "properties": {
-            "bidi": {
-              "oneOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "eastAsia": {
-              "oneOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "val": {
-              "oneOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "type": "object"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/SelectionTarget"
         },
-        {
-          "type": "null"
+        "value": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "bidi": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "eastAsia": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "val": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
-      ]
+      },
+      "required": [
+        "target",
+        "value"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "bidi": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "eastAsia": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "val": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ref",
+        "value"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "target",
-    "value"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

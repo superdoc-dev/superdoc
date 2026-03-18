@@ -71,7 +71,12 @@ const isSeparator = (item) => item.type === 'separator';
 const isOverflow = (item) => item.type === 'overflow';
 
 const getExpanded = (item) => {
-  return Boolean(item?.expand?.value);
+  if (!item) return false;
+  const expand = item.expand;
+  if (typeof expand === 'object' && expand !== null && 'value' in expand) {
+    return Boolean(expand.value);
+  }
+  return Boolean(expand);
 };
 
 const setExpanded = (item, open) => {

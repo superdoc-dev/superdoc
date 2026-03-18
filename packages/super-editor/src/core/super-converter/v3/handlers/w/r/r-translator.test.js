@@ -343,4 +343,54 @@ describe('w:r r-translator (node)', () => {
     const vertAlign = runProperties?.elements?.find((el) => el?.name === 'w:vertAlign');
     expect(vertAlign?.attributes?.['w:val']).toBe('superscript');
   });
+
+  it('preserves child w:rPrChange nodes when replacing base run properties during export', () => {
+    const result = translator.decode({
+      node: {
+        type: 'run',
+        attrs: {
+          runProperties: {
+            bold: true,
+          },
+        },
+        content: [
+          {
+            type: 'text',
+            text: 'styles',
+            marks: [
+              { type: 'bold', attrs: { value: true } },
+              {
+                type: 'trackFormat',
+                attrs: {
+                  id: 'format-1',
+                  author: 'Missy Fox',
+                  authorEmail: '',
+                  date: '2026-01-07T20:24:39Z',
+                  before: [],
+                  after: [{ type: 'bold', attrs: { value: true } }],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      editor: { extensionService: { extensions: [] } },
+    });
+
+    expect(result?.name).toBe('w:r');
+
+    const runProperties = result?.elements?.find((element) => element?.name === 'w:rPr');
+    expect(runProperties).toBeDefined();
+    expect(runProperties.elements.find((element) => element?.name === 'w:b')).toBeDefined();
+
+    const runPropertiesChange = runProperties.elements.find((element) => element?.name === 'w:rPrChange');
+    expect(runPropertiesChange).toEqual(
+      expect.objectContaining({
+        attributes: expect.objectContaining({
+          'w:id': 'format-1',
+          'w:author': 'Missy Fox',
+        }),
+      }),
+    );
+  });
 });

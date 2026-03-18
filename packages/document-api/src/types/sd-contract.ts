@@ -2,7 +2,9 @@
  * SDM/1 contract types — mutation receipts, error model, and diagnostics.
  */
 
-import type { SDAddress } from './sd-envelope.js';
+import type { BlockNodeAddress } from './base.js';
+import type { SelectionTarget, TextAddress } from './address.js';
+import type { TextMutationRange } from './receipt.js';
 
 // ---------------------------------------------------------------------------
 // Error model (normative)
@@ -29,7 +31,8 @@ export interface SDError {
   code: SDErrorCode;
   message: string;
   path?: Array<string | number>;
-  address?: SDAddress;
+  /** The target that caused the error, when available. */
+  target?: BlockNodeAddress | TextAddress | SelectionTarget;
   details?: Record<string, unknown>;
 }
 
@@ -37,11 +40,25 @@ export interface SDError {
 // Mutation receipt
 // ---------------------------------------------------------------------------
 
+/**
+ * Discriminated target in a mutation resolution.
+ *
+ * - `TextAddress` (`kind: 'text'`) — text-level insert/replace with block-relative offsets.
+ * - `BlockNodeAddress` (`kind: 'block'`) — structural insert/replace targeting a whole block.
+ */
+export type MutationResolutionTarget = TextAddress | BlockNodeAddress;
+
 export interface SDMutationReceipt {
   success: boolean;
   failure?: SDError;
   evaluatedRevision?: { before: string; after: string };
-  resolution?: { requestedTarget?: SDAddress; target: SDAddress };
+  resolution?: {
+    target: MutationResolutionTarget;
+    /** Engine-resolved absolute document range for the effective target. */
+    range: TextMutationRange;
+    /** Full selection target for cross-block mutations. */
+    selectionTarget?: SelectionTarget;
+  };
 }
 
 // ---------------------------------------------------------------------------

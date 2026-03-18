@@ -815,7 +815,9 @@ export class SuperDoc extends EventEmitter {
     if (!commentsConfig || commentsConfig === false) return false;
     if (!commentId || typeof commentId !== 'string') return false;
 
-    const element = document.querySelector(`[data-thread-id="${commentId}"]`);
+    const root = this.element || document;
+    const escaped = globalThis.CSS?.escape ? globalThis.CSS.escape(commentId) : commentId.replace(/"/g, '\\"');
+    const element = root.querySelector(`[data-thread-id="${escaped}"]`);
     if (!element) return false;
 
     const { behavior = 'smooth', block = 'start' } = options;

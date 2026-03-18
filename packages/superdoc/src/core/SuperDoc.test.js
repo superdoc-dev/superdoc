@@ -296,12 +296,26 @@ describe('SuperDoc core', () => {
     const target = document.createElement('div');
     target.setAttribute('data-thread-id', 'comment-1');
     target.scrollIntoView = vi.fn();
-    document.body.appendChild(target);
+    document.querySelector('#host').appendChild(target);
 
     const result = instance.scrollToComment('comment-1');
     expect(result).toBe(true);
     expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
     expect(commentsStore.setActiveComment).toHaveBeenCalledWith(instance, 'comment-1');
+  });
+
+  it('returns false when comment element is not found', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.scrollToComment('nonexistent-id')).toBe(false);
   });
 
   it('warns when both document object and documents list provided', async () => {

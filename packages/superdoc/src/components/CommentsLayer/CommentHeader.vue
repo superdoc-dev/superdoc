@@ -259,7 +259,7 @@ const getCurrentUser = computed(() => {
   transition: all 250ms ease;
 }
 .overflow-menu__icon:hover {
-  background-color: #dbdbdb;
+  background-color: var(--sd-ui-comments-panel-separator, #dbdbdb);
 }
 .overflow-menu__icon :deep(svg) {
   width: 100%;

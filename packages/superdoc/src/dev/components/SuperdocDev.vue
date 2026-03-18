@@ -81,10 +81,7 @@ const DEV_THEME_CLASSES = ['sd-theme-docs', 'sd-theme-word', 'sd-theme-blueprint
 const applyDevTheme = (theme) => {
   const html = document.documentElement;
   DEV_THEME_CLASSES.forEach((cls) => html.classList.remove(cls));
-  if (theme === 'docs') html.classList.add('sd-theme-docs');
-  if (theme === 'word') html.classList.add('sd-theme-word');
-  if (theme === 'blueprint') html.classList.add('sd-theme-blueprint');
-  if (theme === 'neon-night') html.classList.add('sd-theme-neon-night');
+  if (theme !== 'default') html.classList.add(`sd-theme-${theme}`);
 };
 
 // URL loading

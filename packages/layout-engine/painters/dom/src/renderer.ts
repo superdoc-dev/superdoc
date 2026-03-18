@@ -596,38 +596,25 @@ type CommentHighlightToken = {
   fallback: string;
 };
 
-const COMMENT_HIGHLIGHT_EXTERNAL: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-external, #B1124B40)',
-  fallback: '#B1124B40',
-};
-const COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-external-active, #B1124B66)',
-  fallback: '#B1124B66',
-};
-const COMMENT_HIGHLIGHT_EXTERNAL_FADED: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-external-faded, #B1124B20)',
-  fallback: '#B1124B20',
-};
-const COMMENT_HIGHLIGHT_INTERNAL: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-internal, #07838340)',
-  fallback: '#07838340',
-};
-const COMMENT_HIGHLIGHT_INTERNAL_ACTIVE: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-internal-active, #07838366)',
-  fallback: '#07838366',
-};
-const COMMENT_HIGHLIGHT_INTERNAL_FADED: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-internal-faded, #07838320)',
-  fallback: '#07838320',
-};
-const COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-external-nested-border, #B1124B99)',
-  fallback: '#B1124B99',
-};
-const COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER: CommentHighlightToken = {
-  css: 'var(--sd-comments-highlight-internal-nested-border, #07838399)',
-  fallback: '#07838399',
-};
+const cssToken = (varName: string, fallback: string): CommentHighlightToken => ({
+  css: `var(${varName}, ${fallback})`,
+  fallback,
+});
+
+const COMMENT_HIGHLIGHT_EXTERNAL = cssToken('--sd-comments-highlight-external', '#B1124B40');
+const COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE = cssToken('--sd-comments-highlight-external-active', '#B1124B66');
+const COMMENT_HIGHLIGHT_EXTERNAL_FADED = cssToken('--sd-comments-highlight-external-faded', '#B1124B20');
+const COMMENT_HIGHLIGHT_INTERNAL = cssToken('--sd-comments-highlight-internal', '#07838340');
+const COMMENT_HIGHLIGHT_INTERNAL_ACTIVE = cssToken('--sd-comments-highlight-internal-active', '#07838366');
+const COMMENT_HIGHLIGHT_INTERNAL_FADED = cssToken('--sd-comments-highlight-internal-faded', '#07838320');
+const COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER = cssToken(
+  '--sd-comments-highlight-external-nested-border',
+  '#B1124B99',
+);
+const COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER = cssToken(
+  '--sd-comments-highlight-internal-nested-border',
+  '#07838399',
+);
 
 type LinkRenderData = {
   href?: string;

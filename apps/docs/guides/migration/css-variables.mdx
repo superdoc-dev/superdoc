@@ -1,0 +1,178 @@
+---
+title: CSS variable migration
+sidebarTitle: CSS variables
+keywords: "migration, css variables, renamed variables, breaking changes, backward compatibility, tokens"
+---
+
+SuperDoc's CSS variables were restructured into a three-tier token system (primitives, UI semantic, component-specific). If you're upgrading from a version that used the old flat variable names, this page maps every old name to its new equivalent.
+
+<Info>
+**Backward compatibility is included.** The old variable names still work via aliases in `compat.css`, which is loaded automatically. You don't need to change your code immediately — but new code should use the new names.
+</Info>
+
+## What changed
+
+The old system used flat, inconsistent names (`--sd-comment-bg`, `--sd-track-insert-border`, `--sd-surface-card`). The new system uses a structured hierarchy:
+
+```
+Old:  --sd-comment-bg
+New:  --sd-ui-comments-panel-card-background
+      ───── ──────────── ────────────────────
+      tier   component     property
+```
+
+The JavaScript config API (`trackChangesConfig`, `commentsConfig`) is unchanged. Only CSS variable names were restructured.
+
+## Full mapping
+
+### Semantic surfaces
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-surface-page` | `--sd-ui-surface` |
+| `--sd-surface-canvas` | `--sd-color-gray-50` |
+| `--sd-surface-card` | `--sd-ui-surface` |
+| `--sd-surface-muted` | `--sd-ui-surface-disabled` |
+| `--sd-surface-hover` | `--sd-ui-surface-hover` |
+| `--sd-surface-selected` | `--sd-color-blue-100` |
+
+### Semantic text
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-text-primary` | `--sd-ui-text` |
+| `--sd-text-secondary` | `--sd-color-gray-700` |
+| `--sd-text-muted` | `--sd-ui-text-muted` |
+| `--sd-text-placeholder` | `--sd-ui-text-disabled` |
+
+### Semantic borders
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-border-default` | `--sd-ui-border` |
+| `--sd-border-subtle` | `--sd-ui-comments-panel-separator` |
+| `--sd-border-focus` | `--sd-ui-action` |
+
+### Semantic actions
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-action-primary` | `--sd-ui-action` |
+| `--sd-action-primary-hover` | `--sd-ui-action-hover` |
+
+### Typography
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-font-family` | `--sd-ui-font-family` |
+
+### Radius
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-radius-sm` | `--sd-radius-50` |
+| `--sd-radius-md` | `--sd-radius-200` |
+| `--sd-radius-lg` | `--sd-radius-300` |
+
+### Comment dialog
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-comment-bg` | `--sd-ui-comments-panel-card-background` |
+| `--sd-comment-bg-hover` | `--sd-ui-comments-panel-card-hover-background` |
+| `--sd-comment-bg-active` | `--sd-ui-comments-panel-card-active-background` |
+| `--sd-comment-bg-resolved` | `--sd-ui-comments-panel-card-resolved-background` |
+| `--sd-comment-border-active` | `--sd-ui-comments-panel-card-active-border` |
+| `--sd-comment-radius` | `--sd-ui-comments-panel-card-radius` |
+| `--sd-comment-padding` | `--sd-ui-comments-panel-card-padding` |
+| `--sd-comment-shadow` | `--sd-ui-comments-panel-card-shadow` |
+| `--sd-comment-separator` | `--sd-ui-comments-panel-separator` |
+| `--sd-comment-transition` | `--sd-ui-comments-panel-transition` |
+
+### Comment typography
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-comment-author-color` | `--sd-ui-comments-panel-author-text` |
+| `--sd-comment-author-size` | `--sd-ui-comments-panel-author-size` |
+| `--sd-comment-author-weight` | `--sd-ui-comments-panel-author-weight` |
+| `--sd-comment-time-color` | `--sd-ui-comments-panel-timestamp-text` |
+| `--sd-comment-time-size` | `--sd-ui-comments-panel-timestamp-size` |
+| `--sd-comment-body-size` | `--sd-ui-comments-panel-body-text-size` |
+
+### Comment tracked change colors
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-comment-tc-insert-color` | `--sd-ui-comments-panel-tc-insert-text` |
+| `--sd-comment-tc-delete-color` | `--sd-ui-comments-panel-tc-delete-text` |
+
+### Comment highlights
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-comment-highlight-internal` | `--sd-comments-highlight-internal` |
+| `--sd-comment-highlight-external` | `--sd-comments-highlight-external` |
+
+<Warning>
+`--sd-comment-highlight-opacity` and `--sd-comment-highlight-opacity-active` were removed. The new system uses pre-computed RGBA colors (e.g., `--sd-comments-highlight-external: #b1124b40`) instead of separate base color + opacity. Override the full RGBA value directly.
+</Warning>
+
+### Comment visibility toggle
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-comment-internal-bg` | `--sd-ui-comments-panel-visibility-internal-background` |
+| `--sd-comment-external-bg` | `--sd-ui-comments-panel-visibility-external-background` |
+
+### Tracked changes
+
+| Old variable | New variable |
+|-------------|-------------|
+| `--sd-track-insert-border` | `--sd-tracked-changes-insert-border` |
+| `--sd-track-insert-bg` | `--sd-tracked-changes-insert-background` |
+| `--sd-track-delete-border` | `--sd-tracked-changes-delete-border` |
+| `--sd-track-delete-bg` | `--sd-tracked-changes-delete-background` |
+| `--sd-track-format-border` | `--sd-tracked-changes-format-border` |
+
+### Removed variables
+
+These variables were removed with no direct replacement:
+
+| Removed variable | Reason |
+|-----------------|--------|
+| `--sd-comment-highlight-opacity` | Replaced by pre-computed RGBA values |
+| `--sd-comment-highlight-opacity-active` | Replaced by pre-computed RGBA values |
+| `--sd-comment-max-width` | Sizing is now managed internally |
+| `--sd-comment-min-width` | Sizing is now managed internally |
+| `--sd-comment-group-bg` | Group bubble styling removed |
+| `--sd-comment-group-color` | Group bubble styling removed |
+| `--sd-comment-group-size` | Group bubble styling removed |
+| `--sd-comment-group-expanded-size` | Group bubble styling removed |
+| `--sd-font-mono` | No longer exposed as a token |
+
+## How backward compatibility works
+
+The `compat.css` file defines aliases that point old names to new ones:
+
+```css
+/* Loaded automatically — you don't need to import this */
+:root {
+  --sd-comment-bg: var(--sd-ui-comments-panel-card-background);
+  --sd-track-insert-border: var(--sd-tracked-changes-insert-border);
+  /* ... etc */
+}
+```
+
+If you have existing CSS like:
+```css
+.my-overrides {
+  --sd-comment-bg: #f0f0f0;
+}
+```
+
+It will continue to work. The alias in `:root` is overridden by your more-specific selector.
+
+<Warning>
+The compat aliases will be removed in the next major version. Plan to migrate your CSS to the new variable names when convenient.
+</Warning>

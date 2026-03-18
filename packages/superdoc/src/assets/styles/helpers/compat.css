@@ -1,0 +1,81 @@
+/*
+ * Backward-compatible aliases for renamed CSS variables.
+ *
+ * SuperDoc's theming system was restructured to use a three-tier token
+ * hierarchy (primitive → UI → component). The old flat variable names
+ * still work via these aliases, but new code should use the new names.
+ *
+ * These aliases will be removed in the next major version.
+ */
+
+:root {
+  /* ─── Semantic surfaces → UI tokens ─── */
+  --sd-surface-page: var(--sd-ui-surface);
+  --sd-surface-canvas: var(--sd-color-gray-50);
+  --sd-surface-card: var(--sd-ui-surface);
+  --sd-surface-muted: var(--sd-ui-surface-disabled);
+  --sd-surface-hover: var(--sd-ui-surface-hover);
+  --sd-surface-selected: var(--sd-color-blue-100);
+
+  /* ─── Semantic text → UI tokens ─── */
+  --sd-text-primary: var(--sd-ui-text);
+  --sd-text-secondary: var(--sd-color-gray-700);
+  --sd-text-muted: var(--sd-ui-text-muted);
+  --sd-text-placeholder: var(--sd-ui-text-disabled);
+
+  /* ─── Semantic borders → UI tokens ─── */
+  --sd-border-default: var(--sd-ui-border);
+  --sd-border-subtle: var(--sd-ui-comments-panel-separator);
+  --sd-border-focus: var(--sd-ui-action);
+
+  /* ─── Semantic actions → UI tokens ─── */
+  --sd-action-primary: var(--sd-ui-action);
+  --sd-action-primary-hover: var(--sd-ui-action-hover);
+
+  /* ─── Typography ─── */
+  --sd-font-family: var(--sd-ui-font-family);
+
+  /* ─── Radius ─── */
+  --sd-radius-sm: var(--sd-radius-50);
+  --sd-radius-md: var(--sd-radius-200);
+  --sd-radius-lg: var(--sd-radius-300);
+
+  /* ─── Comment dialog ─── */
+  --sd-comment-bg: var(--sd-ui-comments-panel-card-background);
+  --sd-comment-bg-hover: var(--sd-ui-comments-panel-card-hover-background);
+  --sd-comment-bg-active: var(--sd-ui-comments-panel-card-active-background);
+  --sd-comment-bg-resolved: var(--sd-ui-comments-panel-card-resolved-background);
+  --sd-comment-border-active: var(--sd-ui-comments-panel-card-active-border);
+  --sd-comment-radius: var(--sd-ui-comments-panel-card-radius);
+  --sd-comment-padding: var(--sd-ui-comments-panel-card-padding);
+  --sd-comment-shadow: var(--sd-ui-comments-panel-card-shadow);
+  --sd-comment-separator: var(--sd-ui-comments-panel-separator);
+  --sd-comment-transition: var(--sd-ui-comments-panel-transition);
+
+  /* Comment: author & timestamp */
+  --sd-comment-author-color: var(--sd-ui-comments-panel-author-text);
+  --sd-comment-author-size: var(--sd-ui-comments-panel-author-size);
+  --sd-comment-author-weight: var(--sd-ui-comments-panel-author-weight);
+  --sd-comment-time-color: var(--sd-ui-comments-panel-timestamp-text);
+  --sd-comment-time-size: var(--sd-ui-comments-panel-timestamp-size);
+  --sd-comment-body-size: var(--sd-ui-comments-panel-body-text-size);
+
+  /* Comment: tracked change text colors */
+  --sd-comment-tc-insert-color: var(--sd-ui-comments-panel-tc-insert-text);
+  --sd-comment-tc-delete-color: var(--sd-ui-comments-panel-tc-delete-text);
+
+  /* Comment: document highlights */
+  --sd-comment-highlight-internal: var(--sd-comments-highlight-internal);
+  --sd-comment-highlight-external: var(--sd-comments-highlight-external);
+
+  /* Comment: internal/external toggle */
+  --sd-comment-internal-bg: var(--sd-ui-comments-panel-visibility-internal-background);
+  --sd-comment-external-bg: var(--sd-ui-comments-panel-visibility-external-background);
+
+  /* ─── Tracked changes (old short names) ─── */
+  --sd-track-insert-border: var(--sd-tracked-changes-insert-border);
+  --sd-track-insert-bg: var(--sd-tracked-changes-insert-background);
+  --sd-track-delete-border: var(--sd-tracked-changes-delete-border);
+  --sd-track-delete-bg: var(--sd-tracked-changes-delete-background);
+  --sd-track-format-border: var(--sd-tracked-changes-format-border);
+}

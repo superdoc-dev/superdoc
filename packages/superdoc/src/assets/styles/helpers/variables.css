@@ -145,6 +145,7 @@
   --sd-ui-comments-panel-dropdown-option-hover-text: var(--sd-ui-comments-panel-dropdown-option-text);
   --sd-ui-comments-panel-dropdown-option-selected-text: var(--sd-ui-comments-panel-dropdown-option-text);
   --sd-ui-comments-panel-dropdown-option-hover-background: #f3f3f5;
+  --sd-ui-comments-panel-input-background: #ffffff;
   --sd-ui-comments-panel-input-border: var(--sd-color-gray-400);
   --sd-ui-comments-panel-visibility-internal-background: #cde6e6;
   --sd-ui-comments-panel-visibility-external-background: #f5cfda;

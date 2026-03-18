@@ -894,7 +894,7 @@ watch(editingCommentId, (commentId) => {
   border: 1.5px solid var(--sd-ui-comments-panel-input-border, #dbdbdb);
   border-radius: 12px;
   padding: 8.5px 10.5px;
-  background: #ffffff;
+  background: var(--sd-ui-comments-panel-input-background, #ffffff);
   margin-top: 4px;
   max-height: 150px;
   overflow-y: auto;
@@ -941,7 +941,7 @@ watch(editingCommentId, (commentId) => {
   border: 1.5px solid var(--sd-ui-comments-panel-input-border, #dbdbdb);
   border-radius: 12px;
   padding: 8.5px 10.5px;
-  background: #ffffff;
+  background: var(--sd-ui-comments-panel-input-background, #ffffff);
   max-height: 150px;
   overflow-y: auto;
 }

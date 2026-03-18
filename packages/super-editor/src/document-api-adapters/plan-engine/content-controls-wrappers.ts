@@ -812,6 +812,9 @@ function replaceContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'replaceContent');
+  if ((input.format ?? 'text') === 'text' && sdt.node.textContent === input.content) {
+    return buildMutationFailure('NO_OP', 'Content control already contains the requested text.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
@@ -826,6 +829,9 @@ function clearContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'clearContent');
+  if (sdt.node.textContent.length === 0) {
+    return buildMutationFailure('NO_OP', 'Content control is already empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
@@ -840,6 +846,9 @@ function appendContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'appendContent');
+  if (input.content.length === 0) {
+    return buildMutationFailure('NO_OP', 'Appended content is empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
@@ -856,6 +865,9 @@ function prependContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'prependContent');
+  if (input.content.length === 0) {
+    return buildMutationFailure('NO_OP', 'Prepended content is empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
@@ -1143,6 +1155,9 @@ function textSetValueWrapper(
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.setValue');
   assertNotContentLocked(sdt, 'text.setValue');
+  if (sdt.node.textContent === input.value) {
+    return buildMutationFailure('NO_OP', 'Content control text already matches the requested value.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
@@ -1158,6 +1173,9 @@ function textClearValueWrapper(
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.clearValue');
   assertNotContentLocked(sdt, 'text.clearValue');
+  if (sdt.node.textContent.length === 0) {
+    return buildMutationFailure('NO_OP', 'Content control text is already empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {

@@ -267,6 +267,25 @@ describe('getMarksFromSelection', () => {
       expect(result.inlineMarks.some((mark) => mark.type.name === 'bold')).toBe(false);
     });
 
+    it('prefers nodeBefore run at the inter-run boundary', () => {
+      // doc(paragraph(run{bold}("AB"), run{italic}("CD")))
+      // Positions: 0=doc, 1=para, 2=run1, 3=A, 4=B, 5=boundary, 6=run2, 7=C, 8=D ...
+      // At pos 5: between the two runs at paragraph depth, nodeBefore=run1, nodeAfter=run2
+      const testDoc = runSchema.node('doc', null, [
+        runSchema.node('paragraph', null, [
+          runSchema.node('run', { runProperties: { bold: true } }, [runSchema.text('AB')]),
+          runSchema.node('run', { runProperties: { italic: true } }, [runSchema.text('CD')]),
+        ]),
+      ]);
+      const state = EditorState.create({ schema: runSchema, doc: testDoc });
+      const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 5)));
+
+      const result = getSelectionFormattingState(cursorState);
+
+      // Should inherit from the preceding run (bold), not the following run (italic)
+      expect(result.inlineRunProperties).toEqual({ bold: true });
+    });
+
     it('normalizes empty nodeAfter runProperties to null and falls back to cursor marks', () => {
       const testDoc = runSchema.node('doc', null, [
         runSchema.node('paragraph', null, [runSchema.node('run', { runProperties: {} }, [runSchema.text('Hello')])]),

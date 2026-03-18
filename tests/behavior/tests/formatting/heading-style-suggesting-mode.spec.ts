@@ -1,4 +1,20 @@
 import { test, expect } from '../../fixtures/superdoc.js';
+import type { Page } from '@playwright/test';
+
+async function getFirstParagraphStyleId(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const editor = (window as any).editor;
+    let result: string | null = null;
+    editor.state.doc.descendants((node: any) => {
+      if (node.type.name === 'paragraph') {
+        result = node.attrs?.paragraphProperties?.styleId ?? null;
+        return false;
+      }
+      return true;
+    });
+    return result;
+  });
+}
 
 test.use({ config: { toolbar: 'full', comments: 'on', trackChanges: true } });
 
@@ -19,20 +35,7 @@ test.describe('SD-2182 heading style changes in suggesting mode', () => {
     });
     await superdoc.waitForStable();
 
-    // Verify the paragraph now has styleId 'Heading1'
-    const styleId = await superdoc.page.evaluate(() => {
-      const editor = (window as any).editor;
-      let result: string | null = null;
-      editor.state.doc.descendants((node: any) => {
-        if (node.type.name === 'paragraph' && node.attrs?.paragraphProperties?.styleId) {
-          result = node.attrs.paragraphProperties.styleId;
-          return false;
-        }
-        return true;
-      });
-      return result;
-    });
-
+    const styleId = await getFirstParagraphStyleId(superdoc.page);
     expect(styleId).toBe('Heading1');
   });
 
@@ -55,20 +58,7 @@ test.describe('SD-2182 heading style changes in suggesting mode', () => {
 
     expect(result).toBe(true);
 
-    // Verify the paragraph now has styleId 'Heading1'
-    const styleId = await superdoc.page.evaluate(() => {
-      const editor = (window as any).editor;
-      let result: string | null = null;
-      editor.state.doc.descendants((node: any) => {
-        if (node.type.name === 'paragraph' && node.attrs?.paragraphProperties?.styleId) {
-          result = node.attrs.paragraphProperties.styleId;
-          return false;
-        }
-        return true;
-      });
-      return result;
-    });
-
+    const styleId = await getFirstParagraphStyleId(superdoc.page);
     expect(styleId).toBe('Heading1');
   });
 
@@ -96,20 +86,7 @@ test.describe('SD-2182 heading style changes in suggesting mode', () => {
 
     expect(result).toBe(true);
 
-    // Verify the paragraph no longer has Heading1 styleId
-    const styleId = await superdoc.page.evaluate(() => {
-      const editor = (window as any).editor;
-      let result: string | null = null;
-      editor.state.doc.descendants((node: any) => {
-        if (node.type.name === 'paragraph') {
-          result = node.attrs?.paragraphProperties?.styleId ?? null;
-          return false;
-        }
-        return true;
-      });
-      return result;
-    });
-
+    const styleId = await getFirstParagraphStyleId(superdoc.page);
     expect(styleId).toBeNull();
   });
 });

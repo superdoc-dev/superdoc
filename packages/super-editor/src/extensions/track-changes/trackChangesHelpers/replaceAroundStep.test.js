@@ -7,7 +7,7 @@ import { replaceAroundStep } from './replaceAroundStep.js';
 import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
-import { findTextPos } from './testUtils.js';
+import { findTextPos, findFirstParagraphRange } from './testUtils.js';
 
 describe('replaceAroundStep handler', () => {
   let editor;
@@ -53,16 +53,7 @@ describe('replaceAroundStep handler', () => {
     // We find the first paragraph and create a step that would "unwrap" it
     // by replacing the paragraph's opening and closing tokens while preserving
     // the content between them.
-    let paraStart = null;
-    let paraEnd = null;
-    doc.forEach((node, offset) => {
-      if (paraStart === null && node.type.name === 'paragraph') {
-        paraStart = offset;
-        paraEnd = offset + node.nodeSize;
-      }
-    });
-
-    if (paraStart === null) throw new Error('No paragraph found');
+    const { paraStart, paraEnd } = findFirstParagraphRange(doc);
 
     // Build a transaction with a ReplaceAroundStep.
     // The step unwraps the paragraph: replaces the paragraph node but keeps its inline content.
@@ -159,16 +150,7 @@ describe('replaceAroundStep handler', () => {
       );
       const state = createState(doc);
 
-      // Build a ReplaceAroundStep that matches setNodeMarkup: structure=true, insert=1,
-      // gapFrom=from+1, gapTo=to-1 (wraps the same content in a new node with different attrs)
-      let paraStart = null;
-      let paraEnd = null;
-      state.doc.forEach((node, offset) => {
-        if (paraStart === null && node.type.name === 'paragraph') {
-          paraStart = offset;
-          paraEnd = offset + node.nodeSize;
-        }
-      });
+      const { paraStart, paraEnd } = findFirstParagraphRange(state.doc);
 
       const newParagraph = schema.nodes.paragraph.create({ paragraphProperties: { styleId: 'Heading1' } });
       const step = new ReplaceAroundStep(
@@ -211,14 +193,7 @@ describe('replaceAroundStep handler', () => {
       );
       const state = createState(doc);
 
-      let paraStart = null;
-      let paraEnd = null;
-      state.doc.forEach((node, offset) => {
-        if (paraStart === null && node.type.name === 'paragraph') {
-          paraStart = offset;
-          paraEnd = offset + node.nodeSize;
-        }
-      });
+      const { paraStart, paraEnd } = findFirstParagraphRange(state.doc);
 
       // lift-style step: insert=0, structure=true, gap=±1
       const step = new ReplaceAroundStep(paraStart, paraEnd, paraStart + 1, paraEnd - 1, Slice.empty, 0, true);
@@ -255,14 +230,7 @@ describe('replaceAroundStep handler', () => {
       );
       const state = createState(doc);
 
-      let paraStart = null;
-      let paraEnd = null;
-      state.doc.forEach((node, offset) => {
-        if (paraStart === null && node.type.name === 'paragraph') {
-          paraStart = offset;
-          paraEnd = offset + node.nodeSize;
-        }
-      });
+      const { paraStart, paraEnd } = findFirstParagraphRange(state.doc);
 
       const newParagraph = schema.nodes.paragraph.create({ paragraphProperties: { styleId: 'Heading1' } });
       const step = new ReplaceAroundStep(

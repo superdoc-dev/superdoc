@@ -94,10 +94,14 @@ export const replaceAroundStep = ({
     return;
   }
 
-  // Detect setNodeMarkup steps: they preserve the node type and content,
-  // only changing attributes (e.g. paragraph styleId for heading changes).
-  // These are safe to apply — they don't alter document structure.
-  // We also check step.insert === 1 to exclude lift() operations (insert === 0).
+  // Detect node-markup-change steps (setNodeMarkup and setBlockType both
+  // produce this same ReplaceAroundStep shape — they can't be distinguished
+  // at the step level). Used here to let paragraph style changes through in
+  // suggesting mode (e.g. Normal → Heading1 via setNodeMarkup).
+  // step.insert === 1 excludes lift() operations (insert === 0).
+  // Note: setBlockType is not triggered via UI in suggesting mode, but if
+  // it were, it would also bypass tracking. SD-2191 will add proper tracked
+  // change marks for these operations.
   const isNodeMarkupChange =
     step.structure && step.insert === 1 && step.gapFrom === step.from + 1 && step.gapTo === step.to - 1;
 

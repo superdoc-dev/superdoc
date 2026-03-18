@@ -443,6 +443,7 @@ function noOpFailure(resolution: TextMutationResolution, operation: string): Tex
 function ensureInlinePropertyCapabilities(editor: Editor, keys: readonly InlineRunPatchKey[]): void {
   let requiresTextStyle = false;
   let requiresRunNode = false;
+  const requiredTextStyleAttrs: string[] = [];
 
   for (const key of keys) {
     const entry = INLINE_PROPERTY_BY_KEY[key];
@@ -453,6 +454,7 @@ function ensureInlinePropertyCapabilities(editor: Editor, keys: readonly InlineR
       if (carrier.storage !== 'mark') continue;
       if (carrier.markName === 'textStyle') {
         requiresTextStyle = true;
+        if (carrier.textStyleAttr) requiredTextStyleAttrs.push(carrier.textStyleAttr);
         continue;
       }
       requireSchemaMark(editor, carrier.markName, 'format.apply');
@@ -463,7 +465,17 @@ function ensureInlinePropertyCapabilities(editor: Editor, keys: readonly InlineR
   }
 
   if (requiresTextStyle) {
-    requireSchemaMark(editor, 'textStyle', 'format.apply');
+    const markType = requireSchemaMark(editor, 'textStyle', 'format.apply');
+    const markAttrs = markType.attrs;
+    for (const attr of requiredTextStyleAttrs) {
+      if (!markAttrs || !Object.prototype.hasOwnProperty.call(markAttrs, attr)) {
+        throw new DocumentApiAdapterError(
+          'CAPABILITY_UNAVAILABLE',
+          `format.apply requires the "${attr}" attribute on the textStyle mark.`,
+          { reason: 'missing_mark_attribute', markName: 'textStyle', attribute: attr },
+        );
+      }
+    }
   }
 
   if (requiresRunNode && !editor.state.schema.nodes.run) {

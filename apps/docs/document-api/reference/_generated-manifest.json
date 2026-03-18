@@ -962,5 +962,9 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
+<<<<<<< HEAD
   "sourceHash": "278f3d13c4cb49be6d084639559a5de63cd623606bc046c4abea69815fcbbe1c"
+=======
+  "sourceHash": "217e6b953a60af0e733ac2cb39920bce22ed85fd7759336ba4275807e1adeb85"
+>>>>>>> c4fabd0d6 (fix: register DOCX numbering metadata for lists.create)
 }

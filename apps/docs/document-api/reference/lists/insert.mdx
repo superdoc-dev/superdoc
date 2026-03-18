@@ -124,6 +124,7 @@ Returns a ListsInsertResult with the new list item address and block ID.
   "additionalProperties": false,
   "properties": {
     "position": {
+      "description": "Insert position relative to target: 'before' or 'after'.",
       "enum": [
         "before",
         "after"
@@ -133,6 +134,7 @@ Returns a ListsInsertResult with the new list item address and block ID.
       "$ref": "#/$defs/ListItemAddress"
     },
     "text": {
+      "description": "Text content for the new list item.",
       "type": "string"
     }
   },

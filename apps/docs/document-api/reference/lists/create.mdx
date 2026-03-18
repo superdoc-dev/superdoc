@@ -126,7 +126,8 @@ Returns a ListsCreateResult with the new listId and the first item address.
   },
   "properties": {
     "at": {
-      "$ref": "#/$defs/BlockAddress"
+      "$ref": "#/$defs/BlockAddress",
+      "description": "Block position where to create the list. Required when mode is 'empty'."
     },
     "kind": {
       "enum": [
@@ -135,11 +136,13 @@ Returns a ListsCreateResult with the new listId and the first item address.
       ]
     },
     "level": {
+      "description": "List nesting level (0-8). 0 is the top level.",
       "maximum": 8,
       "minimum": 0,
       "type": "integer"
     },
     "mode": {
+      "description": "Creation mode: 'empty' creates a new list; 'fromParagraphs' converts existing paragraphs.",
       "enum": [
         "empty",
         "fromParagraphs"

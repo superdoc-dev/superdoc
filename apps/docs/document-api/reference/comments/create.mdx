@@ -116,12 +116,15 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
   "additionalProperties": false,
   "properties": {
     "parentCommentId": {
+      "description": "Parent comment ID for creating a threaded reply.",
       "type": "string"
     },
     "target": {
-      "$ref": "#/$defs/TextAddress"
+      "$ref": "#/$defs/TextAddress",
+      "description": "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}."
     },
     "text": {
+      "description": "Comment text content.",
       "type": "string"
     }
   },

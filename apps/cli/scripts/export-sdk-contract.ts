@@ -98,6 +98,7 @@ function buildSdkContract() {
         if (p.flag && p.flag !== p.name) spec.flag = p.flag;
         if (p.required) spec.required = true;
         if (p.schema) spec.schema = p.schema;
+        if (p.description) spec.description = p.description;
         if (p.agentVisible === false) spec.agentVisible = false;
         return spec;
       }),

@@ -76,8 +76,24 @@ function targetLocatorWithPayload(
 ): JsonSchema {
   return {
     oneOf: [
-      objectSchema({ target: ref('SelectionTarget'), ...payloadProperties }, ['target', ...payloadRequired]),
-      objectSchema({ ref: { type: 'string' }, ...payloadProperties }, ['ref', ...payloadRequired]),
+      objectSchema(
+        {
+          target: {
+            ...ref('SelectionTarget'),
+            description:
+              "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}.",
+          },
+          ...payloadProperties,
+        },
+        ['target', ...payloadRequired],
+      ),
+      objectSchema(
+        {
+          ref: { type: 'string', description: 'Reference handle from a previous search result.' },
+          ...payloadProperties,
+        },
+        ['ref', ...payloadRequired],
+      ),
     ],
   };
 }
@@ -764,19 +780,22 @@ const unknownNodeDiagnosticSchema = objectSchema(
 
 const textSelectorSchema = objectSchema(
   {
-    type: { const: 'text' },
-    pattern: { type: 'string' },
-    mode: { enum: ['contains', 'regex'] },
-    caseSensitive: { type: 'boolean' },
+    type: { const: 'text', description: "Must be 'text' for text pattern search." },
+    pattern: { type: 'string', description: 'Text or regex pattern to match.' },
+    mode: { enum: ['contains', 'regex'], description: "Match mode: 'contains' (substring) or 'regex'." },
+    caseSensitive: { type: 'boolean', description: 'Case-sensitive matching. Default: false.' },
   },
   ['type', 'pattern'],
 );
 
 const nodeSelectorSchema = objectSchema(
   {
-    type: { const: 'node' },
-    nodeType: { enum: [...nodeTypeValues] },
-    kind: { enum: ['block', 'inline'] },
+    type: { const: 'node', description: "Must be 'node' for node type search." },
+    nodeType: {
+      enum: [...nodeTypeValues],
+      description: 'Block type to match (paragraph, heading, table, listItem, etc.).',
+    },
+    kind: { enum: ['block', 'inline'], description: "Filter: 'block' or 'inline'." },
   },
   ['type'],
 );
@@ -1425,17 +1444,30 @@ const insertInputSchema: JsonSchema = {
   oneOf: [
     objectSchema(
       {
-        target: textAddressSchema,
-        value: { type: 'string' },
-        type: { type: 'string', enum: ['text', 'markdown', 'html'] },
+        target: {
+          ...textAddressSchema,
+          description: "Insertion point: {kind:'text', blockId:'...', range:{start, end}}.",
+        },
+        value: { type: 'string', description: 'Text content to insert.' },
+        type: {
+          type: 'string',
+          enum: ['text', 'markdown', 'html'],
+          description: "Content format: 'text' (default), 'markdown', or 'html'.",
+        },
       },
       ['value'],
     ),
     objectSchema(
       {
-        target: blockNodeAddressSchema,
-        content: sdFragmentSchema,
-        placement: placementSchema,
+        target: {
+          ...blockNodeAddressSchema,
+          description: "Block address for structural insertion: {kind:'block', nodeType:'...', nodeId:'...'}.",
+        },
+        content: { ...sdFragmentSchema, description: 'Document fragment to insert (structured content).' },
+        placement: {
+          ...placementSchema,
+          description: "Where to place content relative to target: 'before', 'after', 'insideStart', or 'insideEnd'.",
+        },
         nestingPolicy: nestingPolicySchema,
       },
       ['content'],
@@ -2623,7 +2655,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   getHtml: {
     input: objectSchema({
-      unflattenLists: { type: 'boolean' },
+      unflattenLists: {
+        type: 'boolean',
+        description: 'When true, flattens nested list structures in output. Default: false.',
+      },
     }),
     output: { type: 'string' },
   },
@@ -2669,23 +2704,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       oneOf: [
         // Text replacement: TargetLocator + text
         {
-          ...targetLocatorWithPayload({ text: { type: 'string' } }, ['text']),
+          ...targetLocatorWithPayload({ text: { type: 'string', description: 'Replacement text content.' } }, ['text']),
         },
         // Structural replacement: exactly one of (target | ref) + content
         {
           oneOf: [
             objectSchema(
               {
-                target: { oneOf: [blockNodeAddressSchema, selectionTargetSchema] },
-                content: sdFragmentSchema,
+                target: {
+                  oneOf: [blockNodeAddressSchema, selectionTargetSchema],
+                  description: 'Target block or selection to replace.',
+                },
+                content: {
+                  ...sdFragmentSchema,
+                  description: 'Document fragment to replace with (structured content).',
+                },
                 nestingPolicy: nestingPolicySchema,
               },
               ['target', 'content'],
             ),
             objectSchema(
               {
-                ref: { type: 'string' },
-                content: sdFragmentSchema,
+                ref: { type: 'string', description: 'Reference handle from a previous search result.' },
+                content: {
+                  ...sdFragmentSchema,
+                  description: 'Document fragment to replace with (structured content).',
+                },
                 nestingPolicy: nestingPolicySchema,
               },
               ['ref', 'content'],
@@ -2700,7 +2744,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   delete: {
     input: {
-      ...targetLocatorWithPayload({ behavior: deleteBehaviorSchema }),
+      ...targetLocatorWithPayload({
+        behavior: { ...deleteBehaviorSchema, description: "Delete behavior: 'selection' (default) or 'exact'." },
+      }),
     },
     output: textMutationResultSchemaFor('delete'),
     success: textMutationSuccessSchema,
@@ -3111,6 +3157,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.paragraph': {
     input: objectSchema({
       at: {
+        description:
+          "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
         oneOf: [
           objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
           objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
@@ -3130,7 +3178,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ),
         ],
       },
-      text: { type: 'string' },
+      text: { type: 'string', description: 'Paragraph text content.' },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
     success: createParagraphSuccessSchema,
@@ -3139,8 +3187,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.heading': {
     input: objectSchema(
       {
-        level: headingLevelSchema,
+        level: { ...headingLevelSchema, description: 'Heading level (1-9).' },
         at: {
+          description:
+            "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
           oneOf: [
             objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
             objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
@@ -3160,7 +3210,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             ),
           ],
         },
-        text: { type: 'string' },
+        text: { type: 'string', description: 'Heading text content.' },
       },
       ['level'],
     ),
@@ -3458,8 +3508,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         target: listItemAddressSchema,
-        position: listInsertPositionSchema,
-        text: { type: 'string' },
+        position: {
+          ...listInsertPositionSchema,
+          description: "Insert position relative to target: 'before' or 'after'.",
+        },
+        text: { type: 'string', description: 'Text content for the new list item.' },
       },
       ['target', 'position'],
     ),
@@ -3471,11 +3524,22 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       type: 'object',
       properties: {
-        mode: { enum: ['empty', 'fromParagraphs'] },
-        at: ref('BlockAddress'),
+        mode: {
+          enum: ['empty', 'fromParagraphs'],
+          description: "Creation mode: 'empty' creates a new list; 'fromParagraphs' converts existing paragraphs.",
+        },
+        at: {
+          ...ref('BlockAddress'),
+          description: "Block position where to create the list. Required when mode is 'empty'.",
+        },
         target: ref('BlockAddressOrRange'),
         kind: listKindSchema,
-        level: { type: 'integer', minimum: 0, maximum: 8 },
+        level: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 8,
+          description: 'List nesting level (0-8). 0 is the top level.',
+        },
       },
       required: ['mode', 'kind'],
       additionalProperties: false,
@@ -3763,7 +3827,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         target: listItemAddressSchema,
         kind: { enum: ['ordered', 'bullet'] },
-        continuity: { enum: ['preserve', 'none'] },
+        continuity: {
+          enum: ['preserve', 'none'],
+          description: "Numbering continuity: 'preserve' keeps numbering; 'none' restarts.",
+        },
       },
       ['target', 'kind'],
     ),
@@ -3932,9 +3999,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'comments.create': {
     input: objectSchema(
       {
-        text: { type: 'string' },
-        target: textAddressSchema,
-        parentCommentId: { type: 'string' },
+        text: { type: 'string', description: 'Comment text content.' },
+        target: {
+          ...textAddressSchema,
+          description: "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}.",
+        },
+        parentCommentId: { type: 'string', description: 'Parent comment ID for creating a threaded reply.' },
       },
       ['text'],
     ),
@@ -3946,10 +4016,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         commentId: { type: 'string' },
-        text: { type: 'string' },
+        text: { type: 'string', description: 'Updated comment text.' },
         target: textAddressSchema,
-        status: { enum: ['resolved'] },
-        isInternal: { type: 'boolean' },
+        status: { enum: ['resolved'], description: "Set comment status. Use 'resolved' to mark as resolved." },
+        isInternal: {
+          type: 'boolean',
+          description: 'When true, marks the comment as internal (hidden from external collaborators).',
+        },
       },
       ['commentId'],
     ),
@@ -3969,17 +4042,23 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'comments.list': {
     input: objectSchema({
-      includeResolved: { type: 'boolean' },
-      limit: { type: 'integer' },
-      offset: { type: 'integer' },
+      includeResolved: {
+        type: 'boolean',
+        description: 'When true, includes resolved comments in results. Default: false.',
+      },
+      limit: { type: 'integer', description: 'Maximum number of comments to return.' },
+      offset: { type: 'integer', description: 'Number of comments to skip for pagination.' },
     }),
     output: commentsListResultSchema,
   },
   'trackChanges.list': {
     input: objectSchema({
-      limit: { type: 'integer' },
-      offset: { type: 'integer' },
-      type: { enum: ['insert', 'delete', 'format'] },
+      limit: { type: 'integer', description: 'Maximum number of tracked changes to return.' },
+      offset: { type: 'integer', description: 'Number of tracked changes to skip for pagination.' },
+      type: {
+        enum: ['insert', 'delete', 'format'],
+        description: "Filter by change type: 'insert', 'delete', or 'format'.",
+      },
     }),
     output: trackChangesListResultSchema,
   },
@@ -4009,13 +4088,31 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'query.match': {
     input: objectSchema(
       {
-        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
-        within: blockNodeAddressSchema,
-        require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
-        mode: { enum: ['strict', 'candidates'] },
-        includeNodes: { type: 'boolean' },
-        limit: { type: 'integer', minimum: 1 },
-        offset: { type: 'integer', minimum: 0 },
+        select: {
+          description:
+            "Search selector. Use {type:'text', pattern:'...'} for text search or {type:'node', nodeType:'paragraph'|'heading'|...} for node search.",
+          oneOf: [textSelectorSchema, nodeSelectorSchema],
+        },
+        within: {
+          ...blockNodeAddressSchema,
+          description: "Limit search scope to within a specific block: {kind:'block', nodeType:'...', nodeId:'...'}.",
+        },
+        require: {
+          enum: ['any', 'first', 'exactlyOne', 'all'],
+          description:
+            "Match cardinality: 'any' (all matches), 'first' (only first), 'exactlyOne' (fail if != 1), 'all' (fail if 0).",
+        },
+        mode: {
+          enum: ['strict', 'candidates'],
+          description:
+            "Search mode: 'strict' (default, exact matching) or 'candidates' (returns scored potential matches).",
+        },
+        includeNodes: {
+          type: 'boolean',
+          description: 'When true, includes full node data in results. Default: false.',
+        },
+        limit: { type: 'integer', minimum: 1, description: 'Maximum number of matches to return.' },
+        offset: { type: 'integer', minimum: 0, description: 'Number of matches to skip for pagination.' },
       },
       ['select'],
     ),
@@ -4247,10 +4344,26 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
     const mutationsInputSchema = objectSchema(
       {
-        expectedRevision: { type: 'string' },
-        atomic: { const: true, type: 'boolean' },
-        changeMode: { enum: ['direct', 'tracked'] },
-        steps: arraySchema(mutationStepSchema),
+        expectedRevision: {
+          type: 'string',
+          description:
+            'Document revision for optimistic concurrency. Mutation fails if document was modified since this revision.',
+        },
+        atomic: {
+          const: true,
+          type: 'boolean',
+          description: 'Must be true. All steps execute as one atomic transaction.',
+        },
+        changeMode: {
+          enum: ['direct', 'tracked'],
+          description:
+            "Required. Use 'direct' for immediate edits or 'tracked' for suggestions. Must always be provided.",
+        },
+        steps: {
+          ...arraySchema(mutationStepSchema),
+          description:
+            "Ordered array of mutation steps. Each step needs 'op' (text.rewrite, text.insert, text.delete, format.apply, or assert) and a 'where' targeting clause.",
+        },
       },
       ['atomic', 'changeMode', 'steps'],
     );

@@ -208,11 +208,9 @@ function buildIntentTools(contract) {
       };
 
       // Collect all properties across all operations (excluding action).
-      // A property is marked required only if every operation that defines it
-      // also marks it required — otherwise it's conditionally required per-action
-      // and must stay optional in the merged schema.
+      // Track which actions require each param so we can annotate descriptions.
       const allProperties = { action: actionProperty };
-      /** @type {Map<string, { total: number, requiredCount: number }>} */
+      /** @type {Map<string, { total: number, requiredCount: number, requiredBy: string[] }>} */
       const propPresence = new Map();
 
       for (const { operation } of ops) {
@@ -226,22 +224,52 @@ function buildIntentTools(contract) {
             allProperties[propName] = { ...propSchema };
           }
 
-          const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0 };
+          const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0, requiredBy: [] };
           entry.total++;
-          if (opRequired.has(propName)) entry.requiredCount++;
+          if (opRequired.has(propName)) {
+            entry.requiredCount++;
+            entry.requiredBy.push(operation.intentAction);
+          }
           propPresence.set(propName, entry);
         }
       }
 
       // 'action' is always required; other props are required only if they
       // appear in every operation AND every operation marks them required.
-      // If a param only exists in some actions, it's conditionally required
-      // and must stay optional in the merged schema.
       const opCount = ops.length;
       const allRequired = ['action'];
       for (const [propName, { total, requiredCount }] of propPresence) {
         if (total === opCount && requiredCount === opCount) {
           allRequired.push(propName);
+        }
+      }
+
+      // Annotate descriptions: for params required by some (not all) actions,
+      // add "Required for action X, Y." so the LLM knows when to include them.
+      for (const [propName, { requiredCount, requiredBy }] of propPresence) {
+        if (requiredCount > 0 && requiredCount < opCount && allProperties[propName]) {
+          const actions = requiredBy.map((a) => `'${a}'`).join(', ');
+          const existing = allProperties[propName].description || '';
+          const suffix = `Required for ${requiredBy.length === 1 ? 'action' : 'actions'} ${actions}.`;
+          allProperties[propName] = {
+            ...allProperties[propName],
+            description: existing ? `${existing} ${suffix}` : suffix,
+          };
+        }
+      }
+
+      // Add fallback descriptions for complex undescribed params.
+      // oneOf schemas without descriptions are opaque to LLMs.
+      for (const [propName, propSchema] of Object.entries(allProperties)) {
+        if (propSchema.description) continue;
+        if (propSchema.oneOf && !propSchema.description) {
+          if (propName === 'target') {
+            allProperties[propName] = { ...propSchema, description: "Target location. Use a ref string from search results, or a selection/block address object." };
+          } else if (propName === 'content') {
+            allProperties[propName] = { ...propSchema, description: "Document fragment content (structured JSON)." };
+          } else if (propName === 'inline') {
+            allProperties[propName] = { ...propSchema, description: "Inline formatting to apply: {bold: true, italic: true, underline: true, ...}." };
+          }
         }
       }
 

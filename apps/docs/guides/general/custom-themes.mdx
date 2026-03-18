@@ -4,64 +4,84 @@ sidebarTitle: Custom themes
 keywords: "custom theme, css variables reference, design tokens, theming guide, component styling, dark theme"
 ---
 
-Every CSS variable you can override, organized by component. If you haven't set up theming yet, start with the [theming overview](/getting-started/theming).
+Full `createTheme()` API reference and CSS variable catalog. Start with the [theming overview](/getting-started/theming) if you're new to theming.
 
-## Creating a theme
+## `createTheme()` options
 
-Define a CSS class with your overrides. Apply it to the `<html>` element.
+```javascript
+import { createTheme } from 'superdoc';
 
-```css
-.my-company-theme {
-  /* These cascade to every component */
-  --sd-ui-action: #8b5cf6;
-  --sd-ui-action-hover: #7c3aed;
-  --sd-ui-text: #1e293b;
-  --sd-ui-bg: #f8fafc;
-  --sd-ui-border: #e2e8f0;
+const theme = createTheme({
+  name: 'my-brand',        // optional, used in generated class name
+  font: 'Inter, sans-serif',
+  radius: '8px',
+  shadow: '0 2px 8px rgba(0,0,0,0.1)',
 
-  /* Fine-tune where needed */
-  --sd-ui-toolbar-bg: #f1f5f9;
-  --sd-ui-comments-card-bg: #f0f0ff;
-}
+  colors: {
+    action: '#6366f1',      // buttons, links, active states
+    actionHover: '#4f46e5',
+    bg: '#ffffff',           // panels, cards, dropdowns
+    hoverBg: '#f1f5f9',
+    activeBg: '#e2e8f0',
+    text: '#1e293b',
+    textMuted: '#64748b',
+    border: '#e2e8f0',
+  },
+
+  toolbar:       { bg, buttonText, buttonHoverBg, buttonActiveBg, itemPadding },
+  dropdown:      { bg, border, text, hoverBg, activeBg, shadow },
+  menu:          { bg, text, border, itemHoverBg, itemActiveBg, itemActiveText, shadow },
+  comments:      { cardBg, cardHoverBg, cardActiveBg, cardResolvedBg, cardActiveBorder,
+                   cardRadius, cardShadow, separator, authorText, timestampText,
+                   bodyText, inputBg, inputBorder },
+  highlights:    { external, externalActive, externalFaded,
+                   internal, internalActive, internalFaded },
+  trackedChanges: { insertBg, insertBorder, deleteBg, deleteBorder, formatBorder },
+  layout:        { pageBg, pageShadow },
+});
+
+document.documentElement.classList.add(theme);
 ```
 
 <Tip>
-Start with the 5-10 semantic variables. Add component-specific ones only where the defaults don't look right.
+Start with `colors` only. Add component overrides when a specific component needs to look different from the rest.
 </Tip>
 
-## Dark theme starter
+## Dark theme example
 
-Override the core surface and text variables. Component backgrounds cascade from `--sd-ui-bg` automatically.
+```javascript
+import { createTheme } from 'superdoc';
+
+const dark = createTheme({
+  name: 'dark',
+  colors: {
+    bg: '#1a1a2e',
+    hoverBg: '#2a2a3e',
+    activeBg: '#3a3a4e',
+    text: '#e2e8f0',
+    textMuted: '#94a3b8',
+    border: '#334155',
+    action: '#60a5fa',
+    actionHover: '#93c5fd',
+  },
+  toolbar: { bg: '#0f172a', buttonText: '#e2e8f0' },
+  comments: { cardBg: '#1e293b', bodyText: '#cbd5e1' },
+});
+
+document.documentElement.classList.add(dark);
+```
+
+## Raw CSS alternative
+
+If you prefer writing CSS directly, set `--sd-*` variables on `<html>`:
 
 ```css
-.dark-theme {
-  --sd-ui-bg: #1a1a2e;
-  --sd-ui-hover-bg: #2a2a3e;
-  --sd-ui-active-bg: #3a3a4e;
-  --sd-ui-text: #e2e8f0;
-  --sd-ui-text-muted: #94a3b8;
-  --sd-ui-border: #334155;
-  --sd-ui-action: #60a5fa;
-  --sd-ui-action-hover: #93c5fd;
-
-  /* Toolbar */
-  --sd-ui-toolbar-bg: #0f172a;
-  --sd-ui-toolbar-button-text: #e2e8f0;
-  --sd-ui-toolbar-button-hover-bg: #1e293b;
-  --sd-ui-toolbar-button-active-bg: #334155;
-
-  /* Dropdowns */
-  --sd-ui-dropdown-bg: #1e293b;
-  --sd-ui-dropdown-border: #334155;
-  --sd-ui-dropdown-hover-bg: #2d3a4e;
-
-  /* Comments */
-  --sd-ui-comments-card-bg: #1e293b;
-  --sd-ui-comments-card-active-bg: #0f172a;
-  --sd-ui-comments-input-bg: #1e293b;
-  --sd-ui-comments-author-text: #e2e8f0;
-  --sd-ui-comments-body-text: #cbd5e1;
-  --sd-ui-comments-timestamp-text: #64748b;
+:root {
+  --sd-ui-action: #6366f1;
+  --sd-ui-bg: #ffffff;
+  --sd-ui-text: #1e293b;
+  --sd-ui-border: #e2e8f0;
+  --sd-ui-font-family: Inter, sans-serif;
 }
 ```
 

@@ -11,28 +11,17 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session-manager.js';
 import type { DocumentApi, DynamicInvokeRequest } from '@superdoc/document-api';
 import { dispatchIntentTool, getToolCatalog } from '@superdoc-dev/sdk';
+import type { ToolCatalog, ToolCatalogEntry } from '@superdoc-dev/sdk';
 
-// ---------------------------------------------------------------------------
-// Types for the generated catalog
-// ---------------------------------------------------------------------------
-
-interface CatalogTool {
-  toolName: string;
-  description: string;
+/** Narrowed input schema shape needed by buildZodSchema. */
+type CatalogToolWithSchema = ToolCatalogEntry & {
   inputSchema: {
     type: string;
     properties?: Record<string, Record<string, unknown>>;
     required?: string[];
     additionalProperties?: boolean;
   };
-  mutates: boolean;
-  operations: Array<{ operationId: string; intentAction: string }>;
-}
-
-interface Catalog {
-  toolCount: number;
-  tools: CatalogTool[];
-}
+};
 
 // ---------------------------------------------------------------------------
 // JSON Schema → Zod conversion (minimal, for MCP tool registration)
@@ -80,7 +69,7 @@ function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
  * Build a Zod schema from a catalog tool's inputSchema.
  * Adds session_id and strips doc/sessionId (managed by MCP server).
  */
-function buildZodSchema(tool: CatalogTool): Record<string, z.ZodTypeAny> {
+function buildZodSchema(tool: CatalogToolWithSchema): Record<string, z.ZodTypeAny> {
   const shape: Record<string, z.ZodTypeAny> = {
     session_id: z.string().describe('Session ID from superdoc_open.'),
   };
@@ -117,9 +106,10 @@ function executeOperation(api: DocumentApi, operationId: string, input: Record<s
 // ---------------------------------------------------------------------------
 
 export async function registerIntentTools(server: McpServer, sessions: SessionManager): Promise<void> {
-  const catalog = (await getToolCatalog()) as unknown as Catalog;
+  const catalog = (await getToolCatalog()) as ToolCatalog;
 
-  for (const tool of catalog.tools) {
+  for (const entry of catalog.tools) {
+    const tool = entry as CatalogToolWithSchema;
     const zodSchema = buildZodSchema(tool);
     const isMutation = tool.mutates;
 

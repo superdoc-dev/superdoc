@@ -96,13 +96,9 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
   create: { toolName: 'superdoc_create', description: 'Create structural block elements' },
   format: { toolName: 'superdoc_format', description: 'Change text and paragraph formatting' },
-  table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
   list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },
   comment: { toolName: 'superdoc_comment', description: 'Comment threads — create, edit, delete' },
   track_changes: { toolName: 'superdoc_track_changes', description: 'Review and resolve tracked changes' },
-  link: { toolName: 'superdoc_link', description: 'Manage hyperlinks' },
-  image: { toolName: 'superdoc_image', description: 'Image placement and properties' },
-  section: { toolName: 'superdoc_section', description: 'Page layout, margins, columns' },
   mutations: { toolName: 'superdoc_mutations', description: 'Atomic multi-step batch edits (escape hatch)' },
 };
 

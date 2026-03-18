@@ -35,4 +35,4 @@ export { chooseTools, dispatchSuperDocTool, getSystemPrompt, getToolCatalog, lis
 export { dispatchIntentTool } from './generated/intent-dispatch.generated.js';
 export { SuperDocCliError } from './runtime/errors.js';
 export type { InvokeOptions, OperationSpec, OperationParamSpec, SuperDocClientOptions } from './runtime/process.js';
-export type { ToolChooserInput, ToolProvider } from './tools.js';
+export type { ToolCatalog, ToolCatalogEntry, ToolChooserInput, ToolProvider } from './tools.js';

@@ -30,7 +30,7 @@ type OperationEntry = {
   requiredOneOf?: string[][];
 };
 
-type ToolCatalogEntry = {
+export type ToolCatalogEntry = {
   toolName: string;
   description: string;
   inputSchema: Record<string, unknown>;

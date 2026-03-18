@@ -1,3 +1,4 @@
+import type { Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import { v4 as uuidv4 } from 'uuid';
 import type {
@@ -541,6 +542,33 @@ function addColSpan(attrs: Record<string, unknown>, pos: number, n = 1): Record<
   return result;
 }
 
+function isHeaderColumn(tableNode: ProseMirrorNode, map: ReturnType<(typeof TableMap)['get']>, col: number): boolean {
+  for (let row = 0; row < map.height; row++) {
+    const cell = tableNode.nodeAt(map.map[col + row * map.width]);
+    if (!cell || cell.type.name !== 'tableHeader') return false;
+  }
+  return true;
+}
+
+function resolveInsertedColumnCellType(
+  tableNode: ProseMirrorNode,
+  map: ReturnType<(typeof TableMap)['get']>,
+  index: number,
+  col: number,
+): NodeType | null {
+  let refColumn: number | null = col > 0 ? -1 : 0;
+  if (isHeaderColumn(tableNode, map, col + refColumn)) {
+    refColumn = col === 0 || col === map.width ? null : 0;
+  }
+
+  if (refColumn == null) {
+    return tableNode.type.schema.nodes.tableCell ?? null;
+  }
+
+  const refPos = map.map[index + refColumn];
+  return refPos != null ? (tableNode.nodeAt(refPos)?.type ?? null) : null;
+}
+
 /** Inserts a column at `col` in the table (before that column index). Follows prosemirror-tables addColumn pattern. */
 function addColumnToTable(tr: Transaction, tablePos: number, col: number): void {
   const tableNode = tr.doc.nodeAt(tablePos);
@@ -564,8 +592,7 @@ function addColumnToTable(tr: Transaction, tablePos: number, col: number): void 
       row += (((cell.attrs as Record<string, unknown>).rowspan as number) || 1) - 1;
     } else {
       // Insert a new empty cell
-      const refPos = col > 0 ? map.map[index - 1] : map.map[index];
-      const refType = refPos != null ? tableNode.nodeAt(refPos)?.type : null;
+      const refType = resolveInsertedColumnCellType(tableNode, map, index, col);
       if (!refType) continue;
       const cellPos = map.positionAt(row, col, tableNode);
       tr.insert(tr.mapping.slice(mapStart).map(tableStart + cellPos), refType.createAndFill()!);

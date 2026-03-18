@@ -591,15 +591,10 @@ const LIST_MARKER_GAP = 8;
 const DEFAULT_PAGE_HEIGHT_PX = 1056;
 /** Default gap used when virtualization is enabled (kept in sync with PresentationEditor layout defaults). */
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-type CommentHighlightToken = {
-  css: string;
-  fallback: string;
-};
+import { cssToken } from './css-token.js';
+import type { CssToken } from './css-token.js';
 
-const cssToken = (varName: string, fallback: string): CommentHighlightToken => ({
-  css: `var(${varName}, ${fallback})`,
-  fallback,
-});
+type CommentHighlightToken = CssToken;
 
 const COMMENT_HIGHLIGHT_EXTERNAL = cssToken('--sd-comments-highlight-external', '#B1124B40');
 const COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE = cssToken('--sd-comments-highlight-external-active', '#B1124B66');

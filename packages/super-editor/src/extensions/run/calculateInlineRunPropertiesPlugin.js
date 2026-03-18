@@ -328,13 +328,9 @@ function getInlineRunProperties(
     if (preservedDerivedKeys.has(key)) {
       // When a key is explicitly preserved (e.g. fontFamily set via document API),
       // bypass the style comparison that can incorrectly drop it due to theme
-      // font normalization. Prefer the run node's existing value (written directly
-      // by applyRunAttributePatch for rFonts), falling back to the mark-decoded
-      // value (for the textStyle mark path where the run node may not have it yet).
-      const preserved = existingRunProperties?.[key] ?? runPropertiesFromMarks[key];
-      if (preserved !== undefined) {
-        inlineRunProperties[key] = preserved;
-      }
+      // font normalization. Use the mark-decoded value directly — it reflects
+      // the current textStyle mark which was just updated by the transaction.
+      inlineRunProperties[key] = runPropertiesFromMarks[key];
       continue;
     }
     const valueFromMarks = runPropertiesFromMarks[key];

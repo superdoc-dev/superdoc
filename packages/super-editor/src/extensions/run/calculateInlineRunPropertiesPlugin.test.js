@@ -524,17 +524,16 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     });
   });
 
-  it('prefers existingRunProperties over marks for preserved fontFamily (rFonts path)', () => {
-    // Simulates the rFonts path: run node already has the new fontFamily from
-    // applyRunAttributePatch, but marks still have the old value.
-    decodeRPrFromMarksMock.mockImplementation(() => ({
-      fontFamily: { ascii: 'OldFont', eastAsia: 'OldFont', hAnsi: 'OldFont', cs: 'OldFont' },
-    }));
+  it('uses mark-decoded fontFamily even when existingRunProperties has a different value', () => {
+    // When preserve is set, the mark-decoded value always wins — it reflects the
+    // current textStyle mark which was just updated by the transaction.
+    const markFont = { ascii: 'Georgia', eastAsia: 'Georgia', hAnsi: 'Georgia', cs: 'Georgia' };
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: markFont }));
     resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
 
     const schema = makeSchema();
-    const newFontFamily = { ascii: 'NewFont', hAnsi: 'NewFont', eastAsia: 'NewFont', cs: 'NewFont' };
-    const doc = paragraphDoc(schema, { runProperties: { fontFamily: newFontFamily, rsidR: 'r1' } });
+    const existingFont = { ascii: 'TimesNewRoman', hAnsi: 'TimesNewRoman' };
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: existingFont, rsidR: 'r1' } });
     const state = createState(schema, doc);
     const { from, to } = runTextRange(state.doc, 0, 1);
 
@@ -543,9 +542,8 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     const { state: nextState } = state.applyTransaction(tr);
 
     const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
-    // Should use existingRunProperties.fontFamily (the fresh rFonts value),
-    // not the stale mark-decoded value.
-    expect(runNode?.attrs.runProperties?.fontFamily).toEqual(newFontFamily);
+    // Mark-decoded value wins over existingRunProperties
+    expect(runNode?.attrs.runProperties?.fontFamily).toEqual(markFont);
   });
 
   it('does not preserve fontFamily when sdPreserveRunPropertiesKeys is not set', () => {

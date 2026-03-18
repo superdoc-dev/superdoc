@@ -18,7 +18,7 @@ export type PageStyles = {
 };
 
 export const DEFAULT_PAGE_STYLES: Required<PageStyles> = {
-  background: 'var(--sd-layout-page-background, #fff)',
+  background: 'var(--sd-layout-page-bg, #fff)',
   boxShadow: 'var(--sd-layout-page-shadow, 0 4px 20px rgba(15, 23, 42, 0.08))',
   border: '1px solid rgba(15, 23, 42, 0.08)',
   margin: '0 auto',
@@ -380,14 +380,14 @@ const SDT_CONTAINER_STYLES = `
 }
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
-  background-color: var(--sd-content-controls-block-hover-background, #f2f2f2);
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
   border-color: transparent;
 }
 
 /* Group hover (JavaScript-coordinated) */
 .superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode),
 .superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) {
-  background-color: var(--sd-content-controls-block-hover-background, #f2f2f2);
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
   border-color: transparent;
 }
 
@@ -412,7 +412,7 @@ const SDT_CONTAINER_STYLES = `
   border: 1px solid var(--sd-content-controls-label-border, #629be7);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background-color: var(--sd-content-controls-label-background, #629be7ee);
+  background-color: var(--sd-content-controls-label-bg, #629be7ee);
   color: var(--sd-content-controls-label-text, #ffffff);
   box-sizing: border-box;
   z-index: 10;
@@ -479,7 +479,7 @@ const SDT_CONTAINER_STYLES = `
 
 /* Hover effect for inline structured content */
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
-  background-color: var(--sd-content-controls-inline-hover-background, #f2f2f2);
+  background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
   border-color: transparent;
 }
 
@@ -497,7 +497,7 @@ const SDT_CONTAINER_STYLES = `
   font-size: 11px;
   padding: 0 4px;
   border: 1px solid var(--sd-content-controls-label-border, #629be7);
-  background-color: var(--sd-content-controls-label-background, #629be7ee);
+  background-color: var(--sd-content-controls-label-bg, #629be7ee);
   color: var(--sd-content-controls-label-text, #ffffff);
   border-radius: 4px;
   white-space: nowrap;
@@ -523,7 +523,7 @@ const SDT_CONTAINER_STYLES = `
  * Hover is suppressed when the node is selected (SD-1584). */
 .superdoc-structured-content-block[data-lock-mode].sdt-hover:not(.ProseMirror-selectednode),
 .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
-  background-color: var(--sd-content-controls-lock-hover-background, rgba(98, 155, 231, 0.08));
+  background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
 }
 

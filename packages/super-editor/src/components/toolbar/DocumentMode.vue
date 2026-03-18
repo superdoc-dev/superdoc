@@ -103,14 +103,14 @@ onMounted(() => {
   .option-item {
     display: flex;
     flex-direction: row;
-    background-color: var(--sd-ui-dropdown-surface, #ffffff);
+    background-color: var(--sd-ui-dropdown-bg, #ffffff);
     padding: 10px;
     border-radius: var(--sd-ui-dropdown-option-radius, 3px);
     cursor: pointer;
     box-sizing: border-box;
 
     &:hover {
-      background-color: var(--sd-ui-dropdown-surface-hover, #d8dee5);
+      background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
     }
   }
 

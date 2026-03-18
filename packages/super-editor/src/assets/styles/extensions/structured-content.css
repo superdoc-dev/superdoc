@@ -14,11 +14,11 @@
 
 /* Hover (not selected): light grey background, no handle */
 .super-editor .sd-structured-content:not(.ProseMirror-selectednode):hover {
-  background-color: var(--sd-content-controls-inline-hover-background, #f2f2f2);
+  background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
 }
 
 .super-editor .sd-structured-content-block:not(.ProseMirror-selectednode):hover {
-  background-color: var(--sd-content-controls-block-hover-background, #f2f2f2);
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }
 
 /* Selected: border + handle visible */
@@ -45,7 +45,7 @@
   border: 1px solid var(--sd-content-controls-label-border, #629be7);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background-color: var(--sd-content-controls-label-background, #629be7ee);
+  background-color: var(--sd-content-controls-label-bg, #629be7ee);
   color: var(--sd-content-controls-label-text, #ffffff);
   box-sizing: border-box;
   z-index: 10;

@@ -89,7 +89,7 @@ onMounted(() => {
 }
 
 .style-name:hover {
-  background-color: var(--sd-ui-dropdown-surface-hover, #d8dee5);
+  background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
   color: var(--sd-ui-dropdown-hover-text, #47484a);
 }
 

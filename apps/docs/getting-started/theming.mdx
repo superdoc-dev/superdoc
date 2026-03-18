@@ -1,0 +1,119 @@
+---
+title: Theming
+sidebarTitle: Theming
+keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, css customization, styling"
+---
+
+Change five CSS variables and your brand colors flow through every SuperDoc component — toolbar, comments, dropdowns, everything. No JavaScript needed.
+
+```css
+.my-theme {
+  --sd-ui-action: #6366f1;
+  --sd-ui-action-hover: #4f46e5;
+  --sd-ui-toolbar-bg: #f8fafc;
+  --sd-ui-bg: #ffffff;
+  --sd-ui-text: #1e293b;
+}
+```
+
+```html
+<html class="my-theme">
+  <div id="editor"></div>
+</html>
+```
+
+Override any `--sd-*` CSS custom property on the `<html>` element and the changes cascade to all components.
+
+## Preset themes
+
+Three preset themes ship out of the box. Add the class to `<html>` — some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>` to pick up the theme.
+
+<CardGroup cols={3}>
+  <Card title="Docs" icon="google">
+    Google Docs aesthetic. Clean blues, compact toolbar, subtle shadows.
+    ```html
+    <html class="sd-theme-docs">
+    ```
+  </Card>
+  <Card title="Word" icon="microsoft">
+    Microsoft Word aesthetic. Fluent-style borders and surfaces.
+    ```html
+    <html class="sd-theme-word">
+    ```
+  </Card>
+  <Card title="Blueprint" icon="compass-drafting">
+    High-contrast technical preset. Teal accents, structured layout.
+    ```html
+    <html class="sd-theme-blueprint">
+    ```
+  </Card>
+</CardGroup>
+
+You can layer your own overrides on top of a preset:
+
+```css
+.sd-theme-docs {
+  --sd-ui-action: #your-brand-color;
+  --sd-ui-comments-card-bg: #f0f0f0;
+}
+```
+
+## How the token system works
+
+Variables are organized in three tiers. Higher tiers reference lower tiers, so changing a primitive cascades everywhere.
+
+```
+Primitives          UI semantic         Component-specific
+--sd-color-*        --sd-ui-text        --sd-ui-toolbar-*
+--sd-font-size-*    --sd-ui-bg          --sd-ui-comments-*
+--sd-radius-*       --sd-ui-action      --sd-ui-dropdown-*
+```
+
+**Tier 1 — Primitives.** Raw color scales, font sizes, and radii. You rarely need to touch these directly.
+
+**Tier 2 — UI semantic.** The "5-variable theme." Change these and every component updates:
+
+| Variable | Default | What it controls |
+|----------|---------|-----------------|
+| `--sd-ui-font-family` | `Arial, Helvetica, sans-serif` | Font for all UI chrome |
+| `--sd-ui-text` | `#47484a` | Primary text color |
+| `--sd-ui-bg` | `#ffffff` | Panels, cards, dropdowns |
+| `--sd-ui-border` | `#dbdbdb` | All borders |
+| `--sd-ui-action` | `#1355ff` | Buttons, links, active states |
+
+**Tier 3 — Component-specific.** Fine-grained overrides for individual components. These default to the semantic tier, so you only set them when a component needs to look different from the rest. See the [full reference](/guides/general/custom-themes).
+
+## JavaScript config
+
+The `trackChangesConfig` and `commentsConfig` JavaScript options still work. They take priority over CSS variables when set. Use the JS API for runtime changes, CSS variables for static theming.
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  commentsConfig: {
+    highlightHoverColor: '#ff000055',
+    trackChangeHighlightColors: {
+      insertBorder: '#00ff00',
+    },
+  },
+});
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Custom themes guide"
+    icon="palette"
+    href="/guides/general/custom-themes"
+  >
+    Full variable reference by component. Dark theme starter. How to build your own preset.
+  </Card>
+  <Card
+    title="Migration guide"
+    icon="arrow-right-arrow-left"
+    href="/guides/migration/css-variables"
+  >
+    Old-to-new variable name mapping. Backward compatibility details.
+  </Card>
+</CardGroup>

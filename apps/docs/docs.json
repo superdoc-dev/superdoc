@@ -65,7 +65,8 @@
                 ]
               },
               "getting-started/import-export",
-              "getting-started/fonts"
+              "getting-started/fonts",
+              "getting-started/theming"
             ]
           },
           {
@@ -238,6 +239,7 @@
             "pages": [
               "guides/general/storage",
               "guides/general/stable-navigation",
+              "guides/general/custom-themes",
               {
                 "group": "Collaboration",
                 "pages": [
@@ -251,7 +253,8 @@
                 "pages": [
                   "guides/migration/prosemirror",
                   "guides/migration/breaking-changes-v1",
-                  "guides/migration/typescript-migration"
+                  "guides/migration/typescript-migration",
+                  "guides/migration/css-variables"
                 ]
               }
             ]

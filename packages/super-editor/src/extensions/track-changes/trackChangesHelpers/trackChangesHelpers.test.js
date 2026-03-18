@@ -641,6 +641,26 @@ describe('trackChangesHelpers', () => {
     expect(result).toBe(tr);
   });
 
+  it('trackedTransaction keeps composition-tagged insertions tracked for diacritical characters', () => {
+    const samples = ['é', 'ñ', 'ü', 'ç', 'e\u0301'];
+
+    samples.forEach((text) => {
+      const state = createState(createDocWithText('abc'));
+      const tr = state.tr.insertText(text, 2);
+      tr.setMeta('inputType', 'insertText');
+      tr.setMeta('composition', 1);
+
+      const tracked = trackedTransaction({ tr, state, user });
+      const nextState = state.apply(tracked);
+
+      const hasTrackedInsert = documentHelpers
+        .findInlineNodes(nextState.doc)
+        .some(({ node }) => node.text === text && node.marks.some((mark) => mark.type.name === TrackInsertMarkName));
+
+      expect(hasTrackedInsert).toBe(true);
+    });
+  });
+
   it('trackedTransaction preserves addToHistory meta when inputType is programmatic', () => {
     // Create initial state with history plugin (editor already has it from basePlugins)
     let state = createState(createDocWithText('initial'));

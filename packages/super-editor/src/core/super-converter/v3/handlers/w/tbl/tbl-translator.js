@@ -4,14 +4,19 @@ import { preProcessVerticalMergeCells } from '@core/super-converter/export-helpe
 import { eighthPointsToPixels, halfPointToPoints, twipsToPixels } from '@core/super-converter/helpers.js';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
 import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
-import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
+import { createAttributeHandler, stripUnsupportedTableIdentityAttributes } from '@converter/v3/handlers/utils.js';
 import { NodeTranslator } from '@translator';
 import { translator as tblGridTranslator } from '../tblGrid';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as trTranslator } from '../tr';
 
 /**
- * Attributes preserved across DOCX roundtrip for table identity.
+ * Legacy table identity attributes imported from older SuperDoc exports.
+ *
+ * WordprocessingML does not define `w14:paraId` / `w14:textId` on `<w:tbl>`,
+ * so decode intentionally strips them before export. We still read them on
+ * import so previously exported documents remain addressable in-session.
+ *
  * @type {import('@translator').AttrConfig[]}
  */
 const validXmlAttributes = ['w14:paraId', 'w14:textId'].map((xmlName) => createAttributeHandler(xmlName));
@@ -321,7 +326,7 @@ const decode = (params, decodedAttrs) => {
 
   return {
     name: 'w:tbl',
-    attributes: decodedAttrs || {},
+    attributes: stripUnsupportedTableIdentityAttributes(decodedAttrs),
     elements,
   };
 };

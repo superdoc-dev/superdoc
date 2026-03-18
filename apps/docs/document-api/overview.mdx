@@ -73,7 +73,7 @@ For nodes created at runtime (not imported from DOCX), `nodeId` falls back to `s
 
 | ID source | Stable across loads? | When used |
 |-----------|---------------------|-----------|
-| `paraId` (from DOCX) | Best effort (usually stable for unchanged DOCX blocks) | Paragraphs, tables, rows, cells imported from DOCX |
+| `paraId` (from DOCX) | Best effort (usually stable for unchanged DOCX blocks) | Paragraphs and table rows imported from DOCX |
 | `sdBlockId` (runtime) | No (session-scoped) | Nodes created programmatically before first export |
 
 <Tip>

@@ -126,10 +126,16 @@ export function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType:
   const attrs = (node.attrs ?? {}) as BlockIdAttrs;
   const typeName = node.type.name;
 
-  // Table nodes prefer paraId (preserved across DOCX roundtrips) over
-  // sdBlockId (regenerated on every document open). sdBlockId is still the
-  // fallback for programmatically created tables before their first export.
-  if (typeName === 'table' || typeName === 'tableRow' || typeName === 'tableCell' || typeName === 'tableHeader') {
+  // Table rows legitimately carry w14:paraId in DOCX, so prefer it when
+  // present and fall back to sdBlockId for newly created rows.
+  if (typeName === 'tableRow') {
+    return toId(attrs.paraId) ?? toId(attrs.sdBlockId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
+  }
+
+  // Older SuperDoc exports also stored paraId on tables/cells. Keep honoring
+  // those legacy IDs when we encounter them, but new tables/cells should
+  // resolve via sdBlockId or other non-OOXML IDs.
+  if (typeName === 'table' || typeName === 'tableCell' || typeName === 'tableHeader') {
     return toId(attrs.paraId) ?? toId(attrs.sdBlockId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
   }
 

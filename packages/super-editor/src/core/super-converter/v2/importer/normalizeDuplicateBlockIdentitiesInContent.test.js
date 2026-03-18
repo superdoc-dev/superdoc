@@ -61,6 +61,17 @@ describe('normalizeDuplicateBlockIdentitiesInContent', () => {
     expect(content[1].attrs.paraId).toBe('00000001');
   });
 
+  it('reserves explicit paraIds even when sdBlockId is the primary paragraph identity', () => {
+    const content = [paragraph({}, 'Missing ID'), paragraph({ sdBlockId: 'X', paraId: '00000001' }, 'Explicit ParaId')];
+
+    normalizeDuplicateBlockIdentitiesInContent(content);
+
+    expect(content[0].attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+    expect(content[0].attrs.paraId).not.toBe('00000001');
+    expect(content[1].attrs.sdBlockId).toBe('X');
+    expect(content[1].attrs.paraId).toBe('00000001');
+  });
+
   it('prioritizes sdBlockId over paraId when both are present on paragraphs', () => {
     const content = [
       paragraph({ paraId: 'P1', sdBlockId: 'SAME' }, 'A'),
@@ -74,6 +85,21 @@ describe('normalizeDuplicateBlockIdentitiesInContent', () => {
     expect(content[1].attrs.sdBlockId).toMatch(/^[0-9A-F]{8}$/);
     expect(content[0].attrs.paraId).toBe('P1');
     expect(content[1].attrs.paraId).toBe('P2');
+  });
+
+  it('deduplicates explicit paraIds even when sdBlockIds are distinct', () => {
+    const content = [
+      paragraph({ sdBlockId: 'A', paraId: 'DUPLICATE' }, 'A'),
+      paragraph({ sdBlockId: 'B', paraId: 'DUPLICATE' }, 'B'),
+    ];
+
+    normalizeDuplicateBlockIdentitiesInContent(content);
+
+    expect(content[0].attrs.sdBlockId).toBe('A');
+    expect(content[1].attrs.sdBlockId).toBe('B');
+    expect(content[0].attrs.paraId).toBe('DUPLICATE');
+    expect(content[1].attrs.paraId).not.toBe('DUPLICATE');
+    expect(content[1].attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
   });
 
   it('deduplicates table blockId when paraId/sdBlockId are not present', () => {
@@ -119,13 +145,12 @@ describe('normalizeDuplicateBlockIdentitiesInContent', () => {
     const collect = (node) => {
       if (!node || typeof node !== 'object') return;
       const attrs = node.attrs ?? {};
-      const id =
-        (typeof attrs.paraId === 'string' && attrs.paraId) ||
-        (typeof attrs.sdBlockId === 'string' && attrs.sdBlockId) ||
-        (typeof attrs.blockId === 'string' && attrs.blockId) ||
-        (typeof attrs.id === 'string' && attrs.id) ||
-        (typeof attrs.uuid === 'string' && attrs.uuid);
-      if (id) {
+      const nodeIds = new Set(
+        [attrs.paraId, attrs.sdBlockId, attrs.blockId, attrs.id, attrs.uuid].filter(
+          (value) => typeof value === 'string' && value.length > 0,
+        ),
+      );
+      for (const id of nodeIds) {
         if (identities.has(id)) duplicates.add(id);
         identities.add(id);
       }
@@ -136,7 +161,7 @@ describe('normalizeDuplicateBlockIdentitiesInContent', () => {
     expect(duplicates.size).toBe(0);
   });
 
-  it('synthesizes paraIds for table-family blocks that arrive without stable identities', () => {
+  it('synthesizes paraIds only for schema-valid paragraph and row nodes', () => {
     const content = [table([row([cell([paragraph({}, 'R1C1')], {}), cell([paragraph({}, 'R1C2')], {})])], {})];
 
     normalizeDuplicateBlockIdentitiesInContent(content);
@@ -145,18 +170,16 @@ describe('normalizeDuplicateBlockIdentitiesInContent', () => {
     const rowNode = tableNode.content[0];
     const firstCell = rowNode.content[0];
     const secondCell = rowNode.content[1];
-    const ids = [
-      tableNode.attrs.paraId,
-      rowNode.attrs.paraId,
-      firstCell.attrs.paraId,
-      secondCell.attrs.paraId,
-      firstCell.content[0].attrs.paraId,
-      secondCell.content[0].attrs.paraId,
-    ];
 
-    for (const id of ids) {
-      expect(id).toMatch(/^[0-9A-F]{8}$/);
-    }
-    expect(new Set(ids).size).toBe(ids.length);
+    expect(tableNode.attrs.paraId).toBeUndefined();
+    expect(firstCell.attrs.paraId).toBeUndefined();
+    expect(secondCell.attrs.paraId).toBeUndefined();
+
+    expect(rowNode.attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+    expect(firstCell.content[0].attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+    expect(secondCell.content[0].attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+    expect(
+      new Set([rowNode.attrs.paraId, firstCell.content[0].attrs.paraId, secondCell.content[0].attrs.paraId]).size,
+    ).toBe(3);
   });
 });

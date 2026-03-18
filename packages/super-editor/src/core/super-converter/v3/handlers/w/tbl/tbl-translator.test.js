@@ -43,6 +43,11 @@ describe('w:tbl translator', () => {
       expect(translator.sdNodeOrKeyName).toBe('table');
       expect(translator).toBeInstanceOf(NodeTranslator);
     });
+
+    it('keeps legacy paraId handlers for import compatibility', () => {
+      const paraIdHandler = translator.attributes.find((attr) => attr.sdName === 'paraId');
+      expect(paraIdHandler?.xmlName).toBe('w14:paraId');
+    });
   });
 
   describe('encode', () => {
@@ -230,6 +235,22 @@ describe('w:tbl translator', () => {
   });
 
   describe('decode', () => {
+    it('drops legacy w14 table identity attributes on export', () => {
+      const result = translator.decode(
+        {
+          node: {
+            type: 'table',
+            attrs: {},
+            content: [],
+          },
+          extraParams: {},
+        },
+        { 'w14:paraId': 'ABCDEF01', 'w14:textId': 'ABCDEF02' },
+      );
+
+      expect(result.attributes).toEqual({});
+    });
+
     it('should decode a table node with properties and grid', () => {
       const mockNode = {
         type: 'table',

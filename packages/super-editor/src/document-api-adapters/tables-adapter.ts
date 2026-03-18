@@ -75,6 +75,7 @@ import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { twipsToPixels } from '../core/super-converter/helpers.js';
 import { resolvePreferredNewTableStyleId, isKnownTableStyleId } from '@superdoc/style-engine/ooxml';
+import { generateDocxHexId } from '../utils/generateDocxHexId.js';
 import {
   readSettingsRoot,
   ensureSettingsRoot,
@@ -97,12 +98,6 @@ const PIXELS_TO_TWIPS = 1440 / 96;
 const DEFAULT_TABLE_GRID_WIDTH_TWIPS = 1500;
 const SETTINGS_PART: PartId = 'word/settings.xml';
 
-function generateParaId(): string {
-  return Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
-    .join('')
-    .toUpperCase();
-}
-
 function createSeparatorParagraph(schema: Editor['state']['schema']): import('prosemirror-model').Node | null {
   const paragraphType = schema.nodes.paragraph;
   if (!paragraphType) return null;
@@ -110,7 +105,7 @@ function createSeparatorParagraph(schema: Editor['state']['schema']): import('pr
   // Keep separator paragraphs addressable/stable for downstream DOCX roundtrip.
   const separatorAttrs = {
     sdBlockId: uuidv4(),
-    paraId: generateParaId(),
+    paraId: generateDocxHexId(),
   };
 
   return paragraphType.createAndFill(separatorAttrs) ?? paragraphType.createAndFill();
@@ -1750,7 +1745,6 @@ export function tablesConvertFromTextAdapter(
           schema.nodes.tableCell.createAndFill(
             {
               sdBlockId: uuidv4(),
-              paraId: generateParaId(),
             },
             para,
           )!,
@@ -1760,7 +1754,7 @@ export function tablesConvertFromTextAdapter(
         schema.nodes.tableRow.createAndFill(
           {
             sdBlockId: uuidv4(),
-            paraId: generateParaId(),
+            paraId: generateDocxHexId(),
           },
           tableCells,
         )!,
@@ -1768,8 +1762,7 @@ export function tablesConvertFromTextAdapter(
     }
 
     const tableId = uuidv4();
-    const tableParaId = generateParaId();
-    const tableNode = schema.nodes.table.create({ sdBlockId: tableId, paraId: tableParaId }, tableRows);
+    const tableNode = schema.nodes.table.create({ sdBlockId: tableId }, tableRows);
 
     // Replace the source paragraphs with the new table.
     const startPos = paragraphs[0].pos;
@@ -1845,7 +1838,7 @@ export function tablesSplitAdapter(
     // Build the new table with the same attributes.
     const newTableAttrs = { ...(tableNode.attrs as Record<string, unknown>) };
     delete newTableAttrs.sdBlockId; // Each table needs a unique ID — let PM assign one.
-    delete newTableAttrs.paraId; // Avoid duplicate w14:paraId after split.
+    delete newTableAttrs.paraId; // Never duplicate legacy/imported table paraIds across split tables.
     delete newTableAttrs.textId; // Avoid duplicate w14:textId after split.
     const newTable = schema.nodes.table.create(newTableAttrs, secondTableRows);
     const separatorParagraph = createSeparatorParagraph(schema);
@@ -1990,7 +1983,6 @@ export function tablesInsertCellAdapter(
         return (
           candidateType.createAndFill({
             sdBlockId: uuidv4(),
-            paraId: generateParaId(),
           }) ?? candidateType.createAndFill()!
         );
       };
@@ -2008,7 +2000,7 @@ export function tablesInsertCellAdapter(
       const overflowRowAttrs = {
         ...templateRowAttrs,
         sdBlockId: uuidv4(),
-        paraId: generateParaId(),
+        paraId: generateDocxHexId(),
       };
       const overflowRow =
         schema.nodes.tableRow.createAndFill(overflowRowAttrs, overflowRowCells) ??
@@ -3418,15 +3410,11 @@ export function createTableAdapter(
   }
 
   const tableId = uuidv4();
-  // Generate a w14:paraId-compatible 8-char uppercase hex string for DOCX roundtrip stability.
-  const paraId = generateParaId();
-
   const didApply = insertTableAt({
     pos: insertAt,
     rows: input.rows,
     columns: input.columns,
     sdBlockId: tableId,
-    paraId,
     tracked: mode === 'tracked',
   });
 

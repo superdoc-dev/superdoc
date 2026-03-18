@@ -1,7 +1,7 @@
 const PARAGRAPH_IDENTITY_ATTRS = ['sdBlockId', 'paraId'];
 const TABLE_IDENTITY_ATTRS = ['sdBlockId', 'paraId', 'blockId'];
 const DEFAULT_BLOCK_IDENTITY_ATTRS = ['sdBlockId', 'blockId', 'paraId'];
-const SYNTHETIC_PARA_ID_TYPES = new Set(['paragraph', 'table', 'tableRow', 'tableCell', 'tableHeader']);
+const SYNTHETIC_PARA_ID_TYPES = new Set(['paragraph', 'tableRow']);
 const DOCX_ID_LENGTH = 8;
 const MAX_DOCX_ID = 0xffffffff;
 
@@ -24,18 +24,45 @@ function toIdentityValue(value) {
   return undefined;
 }
 
-function resolvePrimaryBlockIdentity(node) {
-  if (!node || typeof node !== 'object') return undefined;
+function getBlockIdentityAttrs(node) {
+  if (!node || typeof node !== 'object') return [];
+  return BLOCK_IDENTITY_ATTRS[node.type] ?? [];
+}
 
-  const attrPriority = BLOCK_IDENTITY_ATTRS[node.type];
-  if (!attrPriority) return undefined;
+function getExplicitIdentityEntries(node) {
+  const attrPriority = getBlockIdentityAttrs(node);
+  if (attrPriority.length === 0) return [];
 
   const attrs = typeof node.attrs === 'object' && node.attrs ? node.attrs : {};
+  const identityEntries = [];
+
   for (const attr of attrPriority) {
     const value = toIdentityValue(attrs[attr]);
-    if (value) return { id: value, source: attr };
+    if (value) {
+      identityEntries.push({ attr, value });
+    }
   }
-  return undefined;
+
+  return identityEntries;
+}
+
+function groupIdentityEntriesByValue(identityEntries) {
+  const groupsByValue = new Map();
+
+  for (const entry of identityEntries) {
+    const existingGroup = groupsByValue.get(entry.value);
+    if (existingGroup) {
+      existingGroup.attrs.push(entry.attr);
+      continue;
+    }
+
+    groupsByValue.set(entry.value, {
+      value: entry.value,
+      attrs: [entry.attr],
+    });
+  }
+
+  return [...groupsByValue.values()];
 }
 
 function shouldSynthesizeParaId(node) {
@@ -45,9 +72,9 @@ function shouldSynthesizeParaId(node) {
 function collectExplicitBlockIdentities(node, reservedIds) {
   if (!node || typeof node !== 'object') return;
 
-  const identity = resolvePrimaryBlockIdentity(node);
-  if (identity) {
-    reservedIds.add(identity.id);
+  const identityEntries = getExplicitIdentityEntries(node);
+  for (const { value } of groupIdentityEntriesByValue(identityEntries)) {
+    reservedIds.add(value);
   }
 
   if (Array.isArray(node.content)) {
@@ -80,14 +107,20 @@ function setBlockIdentity(node, attrName, value) {
 function normalizeBlockIdentitiesInNode(node, seenIds, allocateDocxId) {
   if (!node || typeof node !== 'object') return;
 
-  const identity = resolvePrimaryBlockIdentity(node);
-  if (identity) {
-    if (seenIds.has(identity.id)) {
-      const replacementId = allocateDocxId();
-      setBlockIdentity(node, identity.source, replacementId);
-      seenIds.add(replacementId);
-    } else {
-      seenIds.add(identity.id);
+  const identityEntries = getExplicitIdentityEntries(node);
+  const groupedIdentities = groupIdentityEntriesByValue(identityEntries);
+
+  if (groupedIdentities.length > 0) {
+    for (const identityGroup of groupedIdentities) {
+      if (seenIds.has(identityGroup.value)) {
+        const replacementId = allocateDocxId();
+        for (const attr of identityGroup.attrs) {
+          setBlockIdentity(node, attr, replacementId);
+        }
+        seenIds.add(replacementId);
+      } else {
+        seenIds.add(identityGroup.value);
+      }
     }
   } else if (shouldSynthesizeParaId(node)) {
     const syntheticParaId = allocateDocxId();
@@ -109,11 +142,15 @@ function normalizeBlockIdentitiesInNode(node, seenIds, allocateDocxId) {
  * volatile `sdBlockId` assigned at editor startup.
  *
  * This pass fixes both cases:
- * - rewrites duplicate stable IDs while preserving the first explicit occurrence
- * - synthesizes deterministic `paraId` values for paragraph/table-family nodes
+ * - rewrites duplicate explicit identity values while preserving the first
+ *   explicit occurrence of each value
+ * - reserves every explicit identity value up front so synthesized IDs never
+ *   collide with a non-primary but still-public identifier such as paragraph
+ *   `paraId`
+ * - synthesizes deterministic `paraId` values for schema-valid block types
  *   that arrive with no stable identity at all
  *
- * Only safe block identity attributes are rewritten or synthesized: sdBlockId,
+ * Only block identity attributes are rewritten or synthesized: sdBlockId,
  * paraId, and blockId.
  *
  * @param {Array<{type?: string, attrs?: Record<string, unknown>, content?: unknown[]}>} content

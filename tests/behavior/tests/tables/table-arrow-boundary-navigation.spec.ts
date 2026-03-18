@@ -26,3 +26,25 @@ test('ArrowRight from the end of the bottom-right table cell exits to the paragr
 
   await superdoc.assertSelection(afterTablePos);
 });
+
+test('ArrowLeft from the paragraph after the table re-enters the bottom-right table cell', async ({ superdoc }) => {
+  await superdoc.loadDocument(TEST_FILE);
+
+  const testingPos = await superdoc.findTextPos('Testing');
+  const afterTablePos = await superdoc.findTextPos('This is more text after the table');
+
+  await superdoc.setTextSelection(testingPos + 'Testing'.length);
+  await superdoc.waitForStable();
+  await superdoc.assertSelection(testingPos + 'Testing'.length);
+
+  const hiddenEditor = superdoc.page.locator('[contenteditable="true"]').first();
+  await hiddenEditor.focus();
+
+  await superdoc.press('ArrowRight');
+  await superdoc.waitForStable();
+  await superdoc.assertSelection(afterTablePos);
+
+  await superdoc.press('ArrowLeft');
+  await superdoc.waitForStable();
+  await superdoc.assertSelection(testingPos + 'Testing'.length);
+});

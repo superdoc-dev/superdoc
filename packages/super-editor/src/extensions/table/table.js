@@ -215,6 +215,7 @@ import {
 } from 'prosemirror-tables';
 import { cellAround } from './tableHelpers/cellAround.js';
 import { cellWrapping } from './tableHelpers/cellWrapping.js';
+import { createTableBoundaryNavigationPlugin } from './tableHelpers/tableBoundaryNavigation.js';
 import { toggleHeaderRow as toggleHeaderRowCommand } from './tableHelpers/toggleHeaderRow.js';
 import {
   resolveTable,
@@ -1362,6 +1363,8 @@ export const Table = Node.create({
         // @ts-expect-error - Options types will be fixed in TS migration
         allowTableNodeSelection: this.options.allowTableNodeSelection,
       }),
+
+      createTableBoundaryNavigationPlugin(),
 
       // Normalize table style on paste / setContent / insertContent.
       // Only tables explicitly marked with needsTableStyleNormalization

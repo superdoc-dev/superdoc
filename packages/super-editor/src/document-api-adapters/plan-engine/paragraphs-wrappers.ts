@@ -100,7 +100,7 @@ function clearFormattingMarksInBlock(
         from: number,
         to: number,
         callback: (
-          node: { isText?: boolean; marks?: Array<{ type?: { name?: string } }>; nodeSize?: number },
+          node: { isText?: boolean; marks?: ReadonlyArray<{ type?: { name?: string } }>; nodeSize?: number },
           pos: number,
         ) => boolean | void,
       ) => void;

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 
 import { initTestEditor } from '@tests/helpers/helpers.js';
@@ -6,8 +6,10 @@ import { initTestEditor } from '@tests/helpers/helpers.js';
 import {
   getAdjacentTableEntrySelection,
   getTableBoundaryExitSelection,
+  isInProtectedTrailingTableParagraph,
   isAtEffectiveParagraphEnd,
   isAtEffectiveParagraphStart,
+  createTableBoundaryNavigationPlugin,
 } from './tableBoundaryNavigation.js';
 
 const DOC = {
@@ -78,6 +80,34 @@ const DOC = {
   ],
 };
 
+const DOC_WITH_PROTECTED_TRAILING_PARAGRAPH = {
+  type: 'doc',
+  content: [
+    {
+      type: 'table',
+      attrs: {
+        tableProperties: {},
+        grid: [{ col: 1500 }],
+      },
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [{ type: 'paragraph', content: [{ type: 'run', content: [{ type: 'text', text: 'Cell' }] }] }],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'paragraph',
+    },
+  ],
+};
+
 function findTextPos(doc, search) {
   let found = null;
   doc.descendants((node, pos) => {
@@ -104,7 +134,6 @@ describe('tableBoundaryNavigation', () => {
   let isPos;
   let testingPos;
   let afterPos;
-
   beforeEach(() => {
     ({ editor } = initTestEditor({ loadFromSchema: true, content: DOC }));
     doc = editor.state.doc;
@@ -172,5 +201,84 @@ describe('tableBoundaryNavigation', () => {
     expect(nextSelection).not.toBeNull();
     expect(nextSelection.from).toBe(herePos);
     expect(nextSelection.to).toBe(herePos);
+  });
+
+  it('detects the protected trailing empty paragraph after a final table', () => {
+    const setup = initTestEditor({ loadFromSchema: true, content: DOC_WITH_PROTECTED_TRAILING_PARAGRAPH });
+    const protectedDoc = setup.editor.state.doc;
+    let trailingParagraphPos = null;
+    protectedDoc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && node.textContent === '') {
+        trailingParagraphPos = pos;
+        return false;
+      }
+      return true;
+    });
+
+    const state = setup.editor.state.apply(
+      setup.editor.state.tr.setSelection(TextSelection.create(protectedDoc, trailingParagraphPos + 1)),
+    );
+
+    expect(isInProtectedTrailingTableParagraph(state)).toBe(true);
+  });
+
+  it('blocks Backspace inside the protected trailing paragraph', () => {
+    const setup = initTestEditor({ loadFromSchema: true, content: DOC_WITH_PROTECTED_TRAILING_PARAGRAPH });
+    const protectedDoc = setup.editor.state.doc;
+    let protectedPos = null;
+    protectedDoc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && node.textContent === '') {
+        protectedPos = pos;
+        return false;
+      }
+      return true;
+    });
+
+    setup.editor.view.dispatch(
+      setup.editor.state.tr.setSelection(TextSelection.create(protectedDoc, protectedPos + 1)),
+    );
+
+    const plugin = createTableBoundaryNavigationPlugin();
+    const handled = plugin.props.handleKeyDown(setup.editor.view, {
+      key: 'Backspace',
+      defaultPrevented: false,
+      shiftKey: false,
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      preventDefault: vi.fn(),
+    });
+
+    expect(handled).toBe(true);
+  });
+
+  it('blocks Delete inside the protected trailing paragraph', () => {
+    const setup = initTestEditor({ loadFromSchema: true, content: DOC_WITH_PROTECTED_TRAILING_PARAGRAPH });
+    const protectedDoc = setup.editor.state.doc;
+    let protectedPos = null;
+    protectedDoc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && node.textContent === '') {
+        protectedPos = pos;
+        return false;
+      }
+      return true;
+    });
+
+    setup.editor.view.dispatch(
+      setup.editor.state.tr.setSelection(TextSelection.create(protectedDoc, protectedPos + 1)),
+    );
+
+    const plugin = createTableBoundaryNavigationPlugin();
+    const handled = plugin.props.handleKeyDown(setup.editor.view, {
+      key: 'Delete',
+      defaultPrevented: false,
+      shiftKey: false,
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      preventDefault: vi.fn(),
+    });
+
+    expect(handled).toBe(true);
   });
 });

@@ -264,6 +264,30 @@ function getDirectionHelpers(dir) {
 }
 
 /**
+ * Returns true when the position is inside the protected trailing empty
+ * paragraph that follows the last table in the document.
+ *
+ * @param {import('prosemirror-state').EditorState} state
+ * @returns {boolean}
+ */
+export function isInProtectedTrailingTableParagraph(state) {
+  const selection = state.selection;
+  if (!selection.empty) return false;
+
+  const $head = selection.$head;
+  const paragraphDepth = findParagraphDepth($head);
+  if (paragraphDepth !== 1) return false;
+
+  const paragraph = $head.node(paragraphDepth);
+  if (paragraph.type.name !== 'paragraph' || paragraph.textContent !== '') return false;
+
+  const paragraphIndex = $head.index(0);
+  if (paragraphIndex !== state.doc.childCount - 1 || paragraphIndex === 0) return false;
+
+  return state.doc.child(paragraphIndex - 1)?.type.name === 'table';
+}
+
+/**
  * Computes the selection to apply when a horizontal arrow key should exit a
  * table from the first or last cell. Returns null when no custom handling is
  * required and native/ProseMirror behavior should continue.
@@ -355,6 +379,11 @@ export function createTableBoundaryNavigationPlugin() {
       handleKeyDown(view, event) {
         if (event.defaultPrevented) return false;
         if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+
+        if ((event.key === 'Backspace' || event.key === 'Delete') && isInProtectedTrailingTableParagraph(view.state)) {
+          event.preventDefault();
+          return true;
+        }
 
         const dir = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
         if (!dir) return false;

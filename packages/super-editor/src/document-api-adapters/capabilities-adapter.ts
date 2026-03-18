@@ -343,7 +343,11 @@ function isInlinePropertyAvailable(editor: Editor, property: InlinePropertyRegis
     const markName = property.carrier.markName;
     if (!hasMarkCapability(editor, markName)) return false;
     if (markName === 'textStyle' && property.carrier.textStyleAttr) {
-      const markAttrs = editor.schema.marks.textStyle?.spec.attrs;
+      const textStyleMark = editor.schema.marks.textStyle as {
+        spec?: { attrs?: Record<string, unknown> };
+        attrs?: Record<string, unknown>;
+      };
+      const markAttrs = textStyleMark?.spec?.attrs ?? textStyleMark?.attrs;
       if (!markAttrs || !Object.prototype.hasOwnProperty.call(markAttrs, property.carrier.textStyleAttr)) return false;
     }
     return true;

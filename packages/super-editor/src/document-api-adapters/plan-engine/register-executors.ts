@@ -28,6 +28,7 @@ import type {
   TableStepData,
   TableMutationResult,
   MutationOptions,
+  InlineRunPatchKey,
 } from '@superdoc/document-api';
 import type {
   CompiledTarget,
@@ -38,6 +39,7 @@ import type {
 } from './executor-registry.types.js';
 import { registerStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
+import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue } from './inline-property-guards.js';
 
 /** Safely extract blockId from a target (only present on range targets). */
 function targetBlockId(t: CompiledTarget | undefined): string {
@@ -260,6 +262,21 @@ function executeTextStep(
   return { stepId: step.id, op: step.op, effect, matchCount: targets.length, data };
 }
 
+function ensureFormatStepCapabilities(ctx: ExecuteContext, step: StyleApplyStep): void {
+  const inlineKeys = Object.keys(step.args.inline) as InlineRunPatchKey[];
+  const capabilityIssue = getInlinePropertyCapabilityIssue(ctx.editor, inlineKeys, step.op);
+  if (capabilityIssue) {
+    throw planError(capabilityIssue.code, capabilityIssue.message, step.id, capabilityIssue.details);
+  }
+
+  if (ctx.changeMode !== 'tracked') return;
+
+  const trackedIssue = getTrackedInlinePropertySupportIssue(inlineKeys, step.op);
+  if (trackedIssue) {
+    throw planError(trackedIssue.code, trackedIssue.message, step.id, trackedIssue.details);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Table adapter dispatch — enables mutations.apply with raw step args
 // ---------------------------------------------------------------------------
@@ -388,14 +405,16 @@ export function registerBuiltInExecutors(): void {
   });
 
   registerStepExecutor('format.apply', {
-    execute: (ctx, targets, step) =>
-      executeTextStep(
+    execute: (ctx, targets, step) => {
+      ensureFormatStepCapabilities(ctx, step as StyleApplyStep);
+      return executeTextStep(
         ctx,
         targets,
         step,
         (e, tr, t, s, m) => executeStyleApply(e, tr, t, s as StyleApplyStep, m),
         (e, tr, t, s, m) => executeSpanStyleApply(e, tr, t, s as StyleApplyStep, m),
-      ),
+      );
+    },
   });
 
   registerStepExecutor('create.paragraph', {

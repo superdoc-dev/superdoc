@@ -294,7 +294,7 @@ describe('SuperDoc core', () => {
     await flushMicrotasks();
 
     const target = document.createElement('div');
-    target.setAttribute('data-thread-id', 'comment-1');
+    target.setAttribute('data-comment-ids', 'comment-1');
     target.scrollIntoView = vi.fn();
     document.querySelector('#host').appendChild(target);
 

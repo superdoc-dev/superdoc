@@ -804,9 +804,9 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
-   * Scroll the document to a given comment or tracked change by thread id.
+   * Scroll the document to a given comment by id.
    *
-   * @param {string} commentId The comment or tracked change id
+   * @param {string} commentId The comment id
    * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
    * @returns {boolean} Whether a matching element was found
    */
@@ -817,7 +817,7 @@ export class SuperDoc extends EventEmitter {
 
     const root = this.element || document;
     const escaped = globalThis.CSS?.escape ? globalThis.CSS.escape(commentId) : commentId.replace(/"/g, '\\"');
-    const element = root.querySelector(`[data-thread-id="${escaped}"]`);
+    const element = root.querySelector(`[data-comment-ids*="${escaped}"]`);
     if (!element) return false;
 
     const { behavior = 'smooth', block = 'start' } = options ?? {};

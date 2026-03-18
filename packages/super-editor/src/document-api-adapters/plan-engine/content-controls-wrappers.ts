@@ -262,6 +262,87 @@ function buildEmptyBlockContent(editor: Editor, sdtNode: ProseMirrorNode): Prose
   return paragraphType.createAndFill?.() ?? paragraphType.create();
 }
 
+function getOnlyChild(node: ProseMirrorNode): ProseMirrorNode | null {
+  return node.childCount === 1 ? node.child(0) : null;
+}
+
+function hasMeaningfulAttributeValue(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(hasMeaningfulAttributeValue);
+  }
+
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some(hasMeaningfulAttributeValue);
+  }
+
+  return value !== '';
+}
+
+function hasSubstantiveNodeAttrs(node: ProseMirrorNode): boolean {
+  return hasMeaningfulAttributeValue(node.attrs ?? null);
+}
+
+function isPlainTextNode(node: ProseMirrorNode | null, expectedText: string): boolean {
+  return node?.type.name === 'text' && node.text === expectedText && (node.marks?.length ?? 0) === 0;
+}
+
+function isPlainRunNode(node: ProseMirrorNode | null, expectedText: string): boolean {
+  if (node?.type.name !== 'run') {
+    return false;
+  }
+
+  if (hasSubstantiveNodeAttrs(node)) {
+    return false;
+  }
+
+  return isPlainTextNode(getOnlyChild(node), expectedText);
+}
+
+function isCanonicalPlainTextInlineContent(node: ProseMirrorNode, expectedText: string): boolean {
+  const onlyChild = getOnlyChild(node);
+
+  if (expectedText.length === 0) {
+    return node.childCount === 0 || isPlainTextNode(onlyChild, '') || isPlainRunNode(onlyChild, '');
+  }
+
+  return isPlainTextNode(onlyChild, expectedText) || isPlainRunNode(onlyChild, expectedText);
+}
+
+function isCanonicalPlainTextParagraph(node: ProseMirrorNode | null, expectedText: string): boolean {
+  if (node?.type.name !== 'paragraph') {
+    return false;
+  }
+
+  const onlyChild = getOnlyChild(node);
+
+  if (expectedText.length === 0) {
+    return node.childCount === 0 || isPlainTextNode(onlyChild, '') || isPlainRunNode(onlyChild, '');
+  }
+
+  return isPlainTextNode(onlyChild, expectedText) || isPlainRunNode(onlyChild, expectedText);
+}
+
+/**
+ * Plain-text replacement normalizes SDT content to a narrow canonical shape:
+ * inline controls become a single plain-text node (optionally run-wrapped by
+ * normalization plugins), and block controls become a single paragraph holding
+ * that plain text. Only that shape qualifies as a no-op.
+ */
+function alreadyMatchesPlainTextReplacement(
+  sdt: { kind: 'block' | 'inline'; node: ProseMirrorNode },
+  expectedText: string,
+): boolean {
+  if (sdt.kind === 'inline') {
+    return isCanonicalPlainTextInlineContent(sdt.node, expectedText);
+  }
+
+  return isCanonicalPlainTextParagraph(getOnlyChild(sdt.node), expectedText);
+}
+
 function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, text: string): boolean {
   const resolved = resolveSdtByTarget(editor.state.doc, target);
 
@@ -812,7 +893,7 @@ function replaceContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'replaceContent');
-  if ((input.format ?? 'text') === 'text' && sdt.node.textContent === input.content) {
+  if ((input.format ?? 'text') === 'text' && alreadyMatchesPlainTextReplacement(sdt, input.content)) {
     return buildMutationFailure('NO_OP', 'Content control already contains the requested text.');
   }
   const target = buildTarget(sdt);
@@ -829,7 +910,7 @@ function clearContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'clearContent');
-  if (sdt.node.textContent.length === 0) {
+  if (alreadyMatchesPlainTextReplacement(sdt, '')) {
     return buildMutationFailure('NO_OP', 'Content control is already empty.');
   }
   const target = buildTarget(sdt);
@@ -1155,7 +1236,7 @@ function textSetValueWrapper(
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.setValue');
   assertNotContentLocked(sdt, 'text.setValue');
-  if (sdt.node.textContent === input.value) {
+  if (alreadyMatchesPlainTextReplacement(sdt, input.value)) {
     return buildMutationFailure('NO_OP', 'Content control text already matches the requested value.');
   }
   const target = buildTarget(sdt);
@@ -1173,7 +1254,7 @@ function textClearValueWrapper(
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.clearValue');
   assertNotContentLocked(sdt, 'text.clearValue');
-  if (sdt.node.textContent.length === 0) {
+  if (alreadyMatchesPlainTextReplacement(sdt, '')) {
     return buildMutationFailure('NO_OP', 'Content control text is already empty.');
   }
   const target = buildTarget(sdt);

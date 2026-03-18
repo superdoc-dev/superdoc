@@ -229,9 +229,13 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
   const wrapperClassName = ['superdoc-wrapper', className].filter(Boolean).join(' ');
   const hideWhenLoading: CSSProperties | undefined = isLoading ? { display: 'none' } : undefined;
 
+  // contained is a SuperDoc config option passed through restProps.
+  // It's defined via JSDoc in superdoc's types and may not appear in the generated .d.ts.
+  const isContained = Boolean((restProps as Record<string, unknown>).contained);
+
   const wrapperStyle: CSSProperties = {
     ...style,
-    ...(restProps.contained && { display: 'flex', flexDirection: 'column' as const }),
+    ...(isContained && { display: 'flex', flexDirection: 'column' as const }),
   };
 
   return (
@@ -242,7 +246,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
       <div
         id={containerId}
         className='superdoc-editor-container'
-        style={{ ...hideWhenLoading, ...(restProps.contained && { flex: 1, minHeight: 0 }) }}
+        style={{ ...hideWhenLoading, ...(isContained && { flex: 1, minHeight: 0 }) }}
       />
       {isLoading && !hasError && renderLoading && <div className='superdoc-loading-container'>{renderLoading()}</div>}
       {hasError && <div className='superdoc-error-container'>Failed to load editor. Check console for details.</div>}

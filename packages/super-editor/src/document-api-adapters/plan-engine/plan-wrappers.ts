@@ -466,7 +466,7 @@ function ensureInlinePropertyCapabilities(editor: Editor, keys: readonly InlineR
 
   if (requiresTextStyle) {
     const markType = requireSchemaMark(editor, 'textStyle', 'format.apply');
-    const markAttrs = markType.attrs;
+    const markAttrs = markType.spec.attrs;
     for (const attr of requiredTextStyleAttrs) {
       if (!markAttrs || !Object.prototype.hasOwnProperty.call(markAttrs, attr)) {
         throw new DocumentApiAdapterError(

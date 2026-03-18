@@ -369,5 +369,4 @@ for (const entry of requiredEntryPoints) {
 }
 
 console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace + 8 external modules`);
-
 console.log('[ensure-types] ✓ Verified type entry points');

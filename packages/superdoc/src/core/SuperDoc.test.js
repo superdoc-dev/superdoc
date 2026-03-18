@@ -280,6 +280,44 @@ describe('SuperDoc core', () => {
     expect(instance.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
   });
 
+  it('scrolls to a comment and sets it active', async () => {
+    const { commentsStore } = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const target = document.createElement('div');
+    target.setAttribute('data-comment-ids', 'comment-1');
+    target.scrollIntoView = vi.fn();
+    document.querySelector('#host').appendChild(target);
+
+    const result = instance.scrollToComment('comment-1');
+    expect(result).toBe(true);
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(commentsStore.setActiveComment).toHaveBeenCalledWith(instance, 'comment-1');
+  });
+
+  it('returns false when comment element is not found', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.scrollToComment('nonexistent-id')).toBe(false);
+  });
+
   it('warns when both document object and documents list provided', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     createAppHarness();

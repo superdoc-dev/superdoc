@@ -1028,14 +1028,7 @@ watch(showCommentsSidebar, (value) => {
  * @param {String} commentId The commentId to scroll to
  */
 const scrollToComment = (commentId) => {
-  const commentsConfig = proxy.$superdoc.config?.modules?.comments;
-  if (!commentsConfig || commentsConfig === false) return;
-
-  const element = document.querySelector(`[data-thread-id=${commentId}]`);
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    commentsStore.setActiveComment(proxy.$superdoc, commentId);
-  }
+  proxy.$superdoc.scrollToComment(commentId);
 };
 
 onMounted(() => {

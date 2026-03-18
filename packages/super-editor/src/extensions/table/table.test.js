@@ -1173,6 +1173,59 @@ describe('Table commands', async () => {
     });
   });
 
+  describe('insertTable trailing separator paragraph', () => {
+    it('inserts table followed by a trailing paragraph when inserted at document end', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      const doc = editor.state.doc;
+      let foundTable = false;
+      let nodeAfterTable = null;
+      for (let i = 0; i < doc.childCount; i++) {
+        if (doc.child(i).type.name === 'table' && !foundTable) {
+          foundTable = true;
+          if (i + 1 < doc.childCount) {
+            nodeAfterTable = doc.child(i + 1);
+          }
+        }
+      }
+
+      expect(foundTable).toBe(true);
+      expect(nodeAfterTable).not.toBeNull();
+      expect(nodeAfterTable.type.name).toBe('paragraph');
+    });
+
+    it('places the selection in the first table cell after insertion', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(table);
+      const firstCellTextPos = tablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(firstCellTextPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
+    });
+
+    it('replaces the initial empty paragraph instead of keeping it before the table', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      expect(editor.state.doc.child(0).type.name).toBe('table');
+      expect(editor.state.doc.child(1).type.name).toBe('paragraph');
+      expect(editor.state.doc.childCount).toBe(2);
+    });
+  });
+
   describe('normalizeNewTableAttrs tblLook (SD-2086)', async () => {
     it('includes DEFAULT_TBL_LOOK in tableProperties when a style is resolved', async () => {
       const { docx, media, mediaFiles, fonts } = cachedBlankDoc;

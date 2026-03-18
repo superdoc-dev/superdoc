@@ -551,12 +551,11 @@ function addColumnToTable(tr: Transaction, tablePos: number, col: number): void 
 
   for (let row = 0; row < map.height; row++) {
     const index = row * map.width + col;
-    const pos = map.map[index];
-    const cell = tableNode.nodeAt(pos);
-    if (!cell) continue;
-
-    if (col > 0 && map.map[index - 1] === pos) {
+    if (col > 0 && col < map.width && map.map[index - 1] === map.map[index]) {
       // Cell spans from the left — expand colspan
+      const pos = map.map[index];
+      const cell = tableNode.nodeAt(pos);
+      if (!cell) continue;
       tr.setNodeMarkup(
         tr.mapping.slice(mapStart).map(tableStart + pos),
         null,
@@ -565,10 +564,11 @@ function addColumnToTable(tr: Transaction, tablePos: number, col: number): void 
       row += (((cell.attrs as Record<string, unknown>).rowspan as number) || 1) - 1;
     } else {
       // Insert a new empty cell
-      const refType = col > 0 ? (tableNode.nodeAt(map.map[index - 1])?.type ?? cell.type) : cell.type;
+      const refPos = col > 0 ? map.map[index - 1] : map.map[index];
+      const refType = refPos != null ? tableNode.nodeAt(refPos)?.type : null;
+      if (!refType) continue;
       const cellPos = map.positionAt(row, col, tableNode);
       tr.insert(tr.mapping.slice(mapStart).map(tableStart + cellPos), refType.createAndFill()!);
-      row += ((cell.attrs?.rowspan as number) || 1) - 1;
     }
   }
 }

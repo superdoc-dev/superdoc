@@ -7,6 +7,7 @@ import {
   tablesClearShadingAdapter,
   tablesDeleteCellAdapter,
   tablesDistributeColumnsAdapter,
+  tablesInsertColumnAdapter,
   tablesInsertCellAdapter,
   tablesSetBorderAdapter,
   tablesSetShadingAdapter,
@@ -381,6 +382,20 @@ describe('tables-adapter regressions', () => {
     expect(insertedSeparator.type.name).toBe('paragraph');
     expect(secondInsertCall[0]).toBe(expectedInsertPos + insertedSeparator.nodeSize);
     expect(insertedTable.type.name).toBe('table');
+  });
+
+  it('SD-2127: inserts a new cell in every row when appending a column to the right of the last column', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+
+    const result = tablesInsertColumnAdapter(
+      editor,
+      { tableNodeId: 'table-1', columnIndex: 1, position: 'right' },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(tr.insert).toHaveBeenCalledTimes(2);
   });
 
   it('deletes shiftLeft cells without appending a trailing replacement cell', () => {

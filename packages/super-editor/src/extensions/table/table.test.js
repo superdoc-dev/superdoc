@@ -1214,6 +1214,49 @@ describe('Table commands', async () => {
       expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
     });
 
+    it('places the selection in the first table cell when sep.before is true', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Insert a first table — produces [table, paragraph]
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      // The cursor is now inside the first table cell. Move it to the
+      // trailing empty paragraph so the next insertTable triggers sep.before.
+      const doc = editor.state.doc;
+      const lastChild = doc.child(doc.childCount - 1);
+      expect(lastChild.type.name).toBe('paragraph');
+      const trailingParaPos = doc.content.size - lastChild.nodeSize + 1;
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(doc.resolve(trailingParaPos))));
+
+      // Insert a second table from the trailing paragraph (previous sibling is a table → sep.before = true)
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      // Find the SECOND table
+      let tableCount = 0;
+      let secondTablePos = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'table') {
+          tableCount++;
+          if (tableCount === 2) {
+            secondTablePos = pos;
+            return false;
+          }
+        }
+        return true;
+      });
+      expect(secondTablePos).not.toBeNull();
+
+      const secondTable = editor.state.doc.nodeAt(secondTablePos);
+      const map = TableMap.get(secondTable);
+      const expectedPos = secondTablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(expectedPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
+    });
+
     it('replaces the initial empty paragraph instead of keeping it before the table', async () => {
       const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
       ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));

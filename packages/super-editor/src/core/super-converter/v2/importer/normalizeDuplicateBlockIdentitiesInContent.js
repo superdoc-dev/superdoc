@@ -1,8 +1,9 @@
-import { generateDocxRandomId } from '@core/helpers/generateDocxRandomId.js';
-
 const PARAGRAPH_IDENTITY_ATTRS = ['sdBlockId', 'paraId'];
 const TABLE_IDENTITY_ATTRS = ['sdBlockId', 'paraId', 'blockId'];
 const DEFAULT_BLOCK_IDENTITY_ATTRS = ['sdBlockId', 'blockId', 'paraId'];
+const SYNTHETIC_PARA_ID_TYPES = new Set(['paragraph', 'table', 'tableRow', 'tableCell', 'tableHeader']);
+const DOCX_ID_LENGTH = 8;
+const MAX_DOCX_ID = 0xffffffff;
 
 /** Maps block node types to safe block-identity attribute lookup order. */
 const BLOCK_IDENTITY_ATTRS = {
@@ -37,41 +38,83 @@ function resolvePrimaryBlockIdentity(node) {
   return undefined;
 }
 
-function nextUniqueDocxId(usedIds) {
-  let id = generateDocxRandomId();
-  while (usedIds.has(id)) {
-    id = generateDocxRandomId();
-  }
-  return id;
+function shouldSynthesizeParaId(node) {
+  return Boolean(node && typeof node === 'object' && SYNTHETIC_PARA_ID_TYPES.has(node.type));
 }
 
-function dedupeBlockIdentitiesInNode(node, usedIds) {
+function collectExplicitBlockIdentities(node, reservedIds) {
   if (!node || typeof node !== 'object') return;
 
   const identity = resolvePrimaryBlockIdentity(node);
   if (identity) {
-    if (usedIds.has(identity.id)) {
-      const replacementId = nextUniqueDocxId(usedIds);
-      node.attrs = { ...node.attrs, [identity.source]: replacementId };
-      usedIds.add(replacementId);
-    } else {
-      usedIds.add(identity.id);
-    }
+    reservedIds.add(identity.id);
   }
 
   if (Array.isArray(node.content)) {
-    node.content.forEach((child) => dedupeBlockIdentitiesInNode(child, usedIds));
+    node.content.forEach((child) => collectExplicitBlockIdentities(child, reservedIds));
+  }
+}
+
+function createDeterministicDocxIdAllocator(reservedIds) {
+  let nextValue = 1;
+
+  return () => {
+    while (nextValue <= MAX_DOCX_ID) {
+      const id = nextValue.toString(16).toUpperCase().padStart(DOCX_ID_LENGTH, '0');
+      nextValue += 1;
+
+      if (reservedIds.has(id)) continue;
+
+      reservedIds.add(id);
+      return id;
+    }
+
+    throw new Error('Unable to allocate a unique synthetic DOCX block id.');
+  };
+}
+
+function setBlockIdentity(node, attrName, value) {
+  node.attrs = { ...(node.attrs ?? {}), [attrName]: value };
+}
+
+function normalizeBlockIdentitiesInNode(node, seenIds, allocateDocxId) {
+  if (!node || typeof node !== 'object') return;
+
+  const identity = resolvePrimaryBlockIdentity(node);
+  if (identity) {
+    if (seenIds.has(identity.id)) {
+      const replacementId = allocateDocxId();
+      setBlockIdentity(node, identity.source, replacementId);
+      seenIds.add(replacementId);
+    } else {
+      seenIds.add(identity.id);
+    }
+  } else if (shouldSynthesizeParaId(node)) {
+    const syntheticParaId = allocateDocxId();
+    setBlockIdentity(node, 'paraId', syntheticParaId);
+    seenIds.add(syntheticParaId);
+  }
+
+  if (Array.isArray(node.content)) {
+    node.content.forEach((child) => normalizeBlockIdentitiesInNode(child, seenIds, allocateDocxId));
   }
 }
 
 /**
- * Deduplicate block identities during import so document-api targeting remains stable.
+ * Normalize imported block identities so document-api targeting remains stable.
  *
  * Word files can occasionally contain duplicate stable block IDs across blocks.
- * Since stable IDs are used for deterministic targeting in the adapters,
- * duplicates break deterministic targeting and mutations.
+ * Some exporters also omit `w14:paraId` entirely, leaving imported blocks with
+ * no stable public identity and forcing the adapter layer to fall back to the
+ * volatile `sdBlockId` assigned at editor startup.
  *
- * Only safe block identity attributes are rewritten: sdBlockId, paraId, and blockId.
+ * This pass fixes both cases:
+ * - rewrites duplicate stable IDs while preserving the first explicit occurrence
+ * - synthesizes deterministic `paraId` values for paragraph/table-family nodes
+ *   that arrive with no stable identity at all
+ *
+ * Only safe block identity attributes are rewritten or synthesized: sdBlockId,
+ * paraId, and blockId.
  *
  * @param {Array<{type?: string, attrs?: Record<string, unknown>, content?: unknown[]}>} content
  * @returns {Array<{type?: string, attrs?: Record<string, unknown>, content?: unknown[]}>}
@@ -79,8 +122,12 @@ function dedupeBlockIdentitiesInNode(node, usedIds) {
 export function normalizeDuplicateBlockIdentitiesInContent(content = []) {
   if (!Array.isArray(content) || content.length === 0) return content;
 
-  const usedIds = new Set();
-  content.forEach((node) => dedupeBlockIdentitiesInNode(node, usedIds));
+  const reservedIds = new Set();
+  content.forEach((node) => collectExplicitBlockIdentities(node, reservedIds));
+
+  const allocateDocxId = createDeterministicDocxIdAllocator(reservedIds);
+  const seenIds = new Set();
+  content.forEach((node) => normalizeBlockIdentitiesInNode(node, seenIds, allocateDocxId));
 
   return content;
 }

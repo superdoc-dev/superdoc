@@ -35,6 +35,32 @@ describe('normalizeDuplicateBlockIdentitiesInContent', () => {
     expect(content[1].attrs.paraId).toBeUndefined();
   });
 
+  it('synthesizes deterministic paraId values for paragraphs missing stable identities', () => {
+    const firstImport = [paragraph({}, 'A'), paragraph({}, 'B')];
+    const secondImport = [paragraph({}, 'A'), paragraph({}, 'B')];
+
+    normalizeDuplicateBlockIdentitiesInContent(firstImport);
+    normalizeDuplicateBlockIdentitiesInContent(secondImport);
+
+    const firstIds = firstImport.map((node) => node.attrs.paraId);
+    const secondIds = secondImport.map((node) => node.attrs.paraId);
+
+    expect(firstIds).toEqual(secondIds);
+    expect(firstIds[0]).toMatch(/^[0-9A-F]{8}$/);
+    expect(firstIds[1]).toMatch(/^[0-9A-F]{8}$/);
+    expect(firstIds[0]).not.toBe(firstIds[1]);
+  });
+
+  it('reserves explicit ids before synthesizing paraIds for earlier missing blocks', () => {
+    const content = [paragraph({}, 'Missing ID'), paragraph({ paraId: '00000001' }, 'Explicit ID')];
+
+    normalizeDuplicateBlockIdentitiesInContent(content);
+
+    expect(content[0].attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+    expect(content[0].attrs.paraId).not.toBe('00000001');
+    expect(content[1].attrs.paraId).toBe('00000001');
+  });
+
   it('prioritizes sdBlockId over paraId when both are present on paragraphs', () => {
     const content = [
       paragraph({ paraId: 'P1', sdBlockId: 'SAME' }, 'A'),
@@ -108,5 +134,29 @@ describe('normalizeDuplicateBlockIdentitiesInContent', () => {
 
     content.forEach(collect);
     expect(duplicates.size).toBe(0);
+  });
+
+  it('synthesizes paraIds for table-family blocks that arrive without stable identities', () => {
+    const content = [table([row([cell([paragraph({}, 'R1C1')], {}), cell([paragraph({}, 'R1C2')], {})])], {})];
+
+    normalizeDuplicateBlockIdentitiesInContent(content);
+
+    const tableNode = content[0];
+    const rowNode = tableNode.content[0];
+    const firstCell = rowNode.content[0];
+    const secondCell = rowNode.content[1];
+    const ids = [
+      tableNode.attrs.paraId,
+      rowNode.attrs.paraId,
+      firstCell.attrs.paraId,
+      secondCell.attrs.paraId,
+      firstCell.content[0].attrs.paraId,
+      secondCell.content[0].attrs.paraId,
+    ];
+
+    for (const id of ids) {
+      expect(id).toMatch(/^[0-9A-F]{8}$/);
+    }
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

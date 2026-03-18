@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session-manager.js';
@@ -47,6 +49,9 @@ export function registerLifecycleTools(server: McpServer, sessions: SessionManag
     },
     async ({ session_id, out }) => {
       try {
+        // Ensure parent directory exists for the save path
+        const savePath = out ?? sessions.get(session_id).filePath;
+        await mkdir(dirname(savePath), { recursive: true });
         const result = await sessions.save(session_id, out);
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result) }],

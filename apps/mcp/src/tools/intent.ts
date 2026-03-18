@@ -103,6 +103,75 @@ function buildZodSchema(tool: CatalogTool): Record<string, z.ZodTypeAny> {
 }
 
 // ---------------------------------------------------------------------------
+// Arg normalization — fix common agent mistakes before dispatch
+// ---------------------------------------------------------------------------
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Normalize tool args to fix common agent mistakes:
+ * - Accept `ref` as a top-level param and resolve it to `target` for operations that need it
+ * - Accept `text` as alias for `value` on insert
+ * - Accept `value` as alias for `text` on replace
+ * - Accept `text` as alias for `pattern` in search select
+ * - Accept handle objects as `ref` (extract the ref string)
+ */
+function normalizeArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...args };
+  const action = normalized.action as string | undefined;
+
+  // If agent passed a handle object as `ref`, extract the ref string
+  if (isRecord(normalized.ref)) {
+    const handleObj = normalized.ref as Record<string, unknown>;
+    if (typeof handleObj.ref === 'string') {
+      normalized.ref = handleObj.ref;
+    }
+  }
+
+  // If agent passed a handle object as `target`, try to extract ref
+  if (isRecord(normalized.target)) {
+    const targetObj = normalized.target as Record<string, unknown>;
+    if (typeof targetObj.ref === 'string' && typeof targetObj.targetKind === 'string') {
+      // This is a handle object, not a target — move to ref
+      normalized.ref = targetObj.ref;
+      delete normalized.target;
+    }
+  }
+
+  // superdoc_edit: normalize param names per action
+  if (toolName === 'superdoc_edit') {
+    if (action === 'insert') {
+      // Accept `text` as alias for `value`
+      if (normalized.text !== undefined && normalized.value === undefined) {
+        normalized.value = normalized.text;
+        delete normalized.text;
+      }
+    }
+    if (action === 'replace') {
+      // Accept `value` as alias for `text`
+      if (normalized.value !== undefined && normalized.text === undefined) {
+        normalized.text = normalized.value;
+        delete normalized.value;
+      }
+    }
+  }
+
+  // superdoc_search: accept `text` as alias for `pattern` in select
+  if (toolName === 'superdoc_search' && isRecord(normalized.select)) {
+    const select = { ...(normalized.select as Record<string, unknown>) };
+    if (select.type === 'text' && select.text !== undefined && select.pattern === undefined) {
+      select.pattern = select.text;
+      delete select.text;
+    }
+    normalized.select = select;
+  }
+
+  return normalized;
+}
+
+// ---------------------------------------------------------------------------
 // Execute an operation via DocumentApi.invoke()
 // ---------------------------------------------------------------------------
 
@@ -136,8 +205,10 @@ export async function registerIntentTools(server: McpServer, sessions: SessionMa
       },
       async (args) => {
         try {
-          const { session_id, ...toolArgs } = args as Record<string, unknown>;
+          const { session_id, ...rawArgs } = args as Record<string, unknown>;
           const { api } = sessions.get(session_id as string);
+
+          const toolArgs = normalizeArgs(tool.toolName, rawArgs);
 
           const result = await dispatchIntentTool(tool.toolName, toolArgs, (opId, input) =>
             executeOperation(api, opId, input),

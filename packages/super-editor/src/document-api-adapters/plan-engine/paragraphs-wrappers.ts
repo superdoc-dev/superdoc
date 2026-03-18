@@ -48,6 +48,16 @@ import { executeDomainCommand } from './plan-wrappers.js';
 // ---------------------------------------------------------------------------
 
 const PARAGRAPH_NODE_TYPES = new Set(['paragraph', 'heading', 'listItem']);
+const LINKED_STYLE_FORMATTING_MARK_NAMES = new Set([
+  'textStyle',
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  'subscript',
+  'superscript',
+  'highlight',
+]);
 
 // ---------------------------------------------------------------------------
 // Target resolution
@@ -83,6 +93,44 @@ function noOpResult(operation: string): ParagraphMutationResult {
   };
 }
 
+function clearFormattingMarksInBlock(
+  tr: {
+    doc?: {
+      nodesBetween?: (
+        from: number,
+        to: number,
+        callback: (
+          node: { isText?: boolean; marks?: Array<{ type?: { name?: string } }>; nodeSize?: number },
+          pos: number,
+        ) => boolean | void,
+      ) => void;
+    };
+    removeMark?: (from: number, to: number, mark: unknown) => unknown;
+  },
+  pos: number,
+  nodeSize: number,
+): boolean {
+  if (!tr.doc?.nodesBetween || !tr.removeMark || nodeSize <= 2) return false;
+
+  let changed = false;
+  tr.doc.nodesBetween(pos + 1, pos + nodeSize - 1, (node, nodePos) => {
+    if (!node.isText || !Array.isArray(node.marks) || node.marks.length === 0 || typeof node.nodeSize !== 'number') {
+      return true;
+    }
+
+    node.marks.forEach((mark) => {
+      const markName = mark?.type?.name;
+      if (!markName || !LINKED_STYLE_FORMATTING_MARK_NAMES.has(markName)) return;
+      tr.removeMark?.(nodePos, nodePos + node.nodeSize!, mark);
+      changed = true;
+    });
+
+    return true;
+  });
+
+  return changed;
+}
+
 // ---------------------------------------------------------------------------
 // Core mutation helper — transforms paragraphProperties on a resolved block
 // ---------------------------------------------------------------------------
@@ -101,6 +149,9 @@ function mutateParagraphProperties(
   target: ParagraphTarget,
   transform: (pPr: PPr) => PPr,
   options?: MutationOptions,
+  extras?: {
+    clearFormattingMarks?: boolean;
+  },
 ): ParagraphMutationResult {
   if (options?.dryRun) return successResult(target);
 
@@ -113,10 +164,20 @@ function mutateParagraphProperties(
       const existing = (node.attrs as { paragraphProperties?: PPr }).paragraphProperties ?? {};
       const updated = transform({ ...existing });
 
-      if (JSON.stringify(existing) === JSON.stringify(updated)) return false;
-
       const tr = editor.state.tr;
-      tr.setNodeMarkup(candidate.pos, undefined, { ...node.attrs, paragraphProperties: updated });
+      let changed = false;
+
+      if (extras?.clearFormattingMarks) {
+        changed = clearFormattingMarksInBlock(tr, candidate.pos, node.nodeSize) || changed;
+      }
+
+      if (JSON.stringify(existing) !== JSON.stringify(updated)) {
+        tr.setNodeMarkup(candidate.pos, undefined, { ...node.attrs, paragraphProperties: updated });
+        changed = true;
+      }
+
+      if (!changed) return false;
+
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -220,6 +281,7 @@ export function paragraphsSetStyleWrapper(
       styleId: input.styleId,
     }),
     options,
+    { clearFormattingMarks: true },
   );
 }
 

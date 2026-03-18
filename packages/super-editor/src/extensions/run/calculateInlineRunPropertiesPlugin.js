@@ -294,6 +294,7 @@ function computeInlineRunProps(
     false,
     Boolean(paragraphNode.attrs.paragraphProperties?.numberingProperties),
   );
+
   const inlineRunProperties = getInlineRunProperties(
     runPropertiesFromMarks,
     runPropertiesFromStyles,
@@ -324,7 +325,18 @@ function getInlineRunProperties(
 ) {
   const inlineRunProperties = {};
   for (const key in runPropertiesFromMarks) {
-    if (preservedDerivedKeys.has(key)) continue;
+    if (preservedDerivedKeys.has(key)) {
+      // When a key is explicitly preserved (e.g. fontFamily set via document API),
+      // bypass the style comparison that can incorrectly drop it due to theme
+      // font normalization. Prefer the run node's existing value (written directly
+      // by applyRunAttributePatch for rFonts), falling back to the mark-decoded
+      // value (for the textStyle mark path where the run node may not have it yet).
+      const preserved = existingRunProperties?.[key] ?? runPropertiesFromMarks[key];
+      if (preserved !== undefined) {
+        inlineRunProperties[key] = preserved;
+      }
+      continue;
+    }
     const valueFromMarks = runPropertiesFromMarks[key];
     const valueFromStyles = runPropertiesFromStyles[key];
     if (JSON.stringify(valueFromMarks) !== JSON.stringify(valueFromStyles)) {

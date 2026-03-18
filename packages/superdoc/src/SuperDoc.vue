@@ -1557,7 +1557,7 @@ const getPDFViewer = () => {
   justify-content: center;
   width: var(--sd-ui-tools-item-size, 50px);
   height: var(--sd-ui-tools-item-size, 50px);
-  background-color: var(--sd-ui-tools-item-surface, rgba(219, 219, 219, 0.6));
+  background-color: var(--sd-ui-tools-item-bg, rgba(219, 219, 219, 0.6));
   border-radius: var(--sd-ui-tools-item-radius, 12px);
   cursor: pointer;
   position: relative;

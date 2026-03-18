@@ -289,7 +289,7 @@ const handleRemove = () => {
   flex-direction: column;
   padding: 1em;
   border-radius: var(--sd-ui-radius, 6px);
-  background-color: var(--sd-ui-dropdown-surface, #ffffff);
+  background-color: var(--sd-ui-dropdown-bg, #ffffff);
   box-sizing: border-box;
 
   :deep(svg) {
@@ -323,7 +323,7 @@ const handleRemove = () => {
       }
 
       &[readonly] {
-        background-color: var(--sd-ui-surface-disabled, #f5f5f5);
+        background-color: var(--sd-ui-disabled-bg, #f5f5f5);
         cursor: default;
         color: var(--sd-ui-text-disabled, #888);
         border-color: var(--sd-ui-border, #e0e0e0);
@@ -340,7 +340,7 @@ const handleRemove = () => {
     position: absolute;
     left: 25px;
     width: auto;
-    color: #999;
+    color: var(--sd-ui-text-disabled, #ababab);
     pointer-events: none;
   }
 
@@ -351,12 +351,12 @@ const handleRemove = () => {
 
   &.high-contrast {
     .input-icon {
-      color: #000;
+      color: var(--sd-ui-text, #47484a);
     }
 
     .input-row input {
-      color: #000;
-      border-color: #000;
+      color: var(--sd-ui-text, #47484a);
+      border-color: var(--sd-ui-text, #47484a);
     }
   }
 }
@@ -376,7 +376,7 @@ const handleRemove = () => {
 
 .open-link-icon:hover {
   color: var(--sd-ui-action, #1355ff);
-  background-color: var(--sd-ui-surface, #ffffff);
+  background-color: var(--sd-ui-bg, #ffffff);
   border: 1px solid var(--sd-ui-border, #dbdbdb);
 }
 
@@ -427,6 +427,7 @@ const handleRemove = () => {
 .link-title {
   font-size: var(--sd-ui-font-size-400, 14px);
   font-weight: 600;
+  color: var(--sd-ui-text, #47484a);
   margin-bottom: 10px;
 }
 
@@ -441,7 +442,7 @@ const handleRemove = () => {
   padding: 10px 16px;
   border-radius: var(--sd-ui-radius, 6px);
   outline: none;
-  background-color: var(--sd-ui-surface, #ffffff);
+  background-color: var(--sd-ui-bg, #ffffff);
   color: var(--sd-ui-text, #47484a);
   font-weight: 400;
   font-size: var(--sd-ui-font-size-300, 13px);
@@ -452,7 +453,7 @@ const handleRemove = () => {
 }
 
 .remove-btn:hover {
-  background-color: var(--sd-ui-surface-hover, #dbdbdb);
+  background-color: var(--sd-ui-hover-bg, #dbdbdb);
 }
 
 .submit-btn {
@@ -464,7 +465,7 @@ const handleRemove = () => {
   outline: none;
   border: none;
   background-color: var(--sd-ui-action, #1355ff);
-  color: white;
+  color: var(--sd-ui-bg, #ffffff);
   font-weight: 400;
   font-size: var(--sd-ui-font-size-300, 13px);
   cursor: pointer;

@@ -210,7 +210,7 @@ onBeforeUnmount(() => {
 }
 
 .sd-tooltip-content {
-  background-color: var(--sd-ui-tooltip-surface, #262626);
+  background-color: var(--sd-ui-tooltip-bg, #262626);
   color: var(--sd-ui-tooltip-text, #fff);
   font-size: var(--sd-ui-font-size-400, 14px);
   line-height: 1.3;
@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
   bottom: -5px;
   width: 10px;
   height: 10px;
-  background-color: var(--sd-ui-tooltip-surface, #262626);
+  background-color: var(--sd-ui-tooltip-bg, #262626);
   transform: translateX(-50%) rotate(45deg);
 }
 

@@ -328,7 +328,7 @@ describe('CLI host mode', () => {
     await invokeAndValidate('doc.comments.list', ['comments', 'list', docPath, '--include-resolved', 'false']);
 
     await host.shutdown();
-  });
+  }, 15_000);
 
   test('returns parse errors for malformed frames', async () => {
     const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));

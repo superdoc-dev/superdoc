@@ -7,7 +7,7 @@ keywords: "migration, css variables, renamed variables, breaking changes, backwa
 SuperDoc's CSS variables were restructured into a three-tier token system. This page maps every old name to its new equivalent.
 
 <Info>
-**Old names still work.** Aliases in `compat.css` (loaded automatically) point old names to new ones. You don't need to change your code immediately.
+**Old names still work.** New tokens fall back to old names automatically. You don't need to change your code immediately.
 </Info>
 
 ## What changed
@@ -138,25 +138,26 @@ These have no replacement:
 
 ## How backward compatibility works
 
-`compat.css` defines aliases from old names to new:
+New tokens in `variables.css` fall back to old names via `var()`:
 
 ```css
-/* Loaded automatically */
+/* Inside variables.css */
 :root {
-  --sd-comment-bg: var(--sd-ui-comments-card-bg);
-  --sd-track-insert-border: var(--sd-tracked-changes-insert-border);
-  /* ... */
+  --sd-ui-comments-card-bg: var(--sd-comment-bg, #f3f6fd);
+  --sd-tracked-changes-insert-border: var(--sd-track-insert-border, #00853d);
 }
 ```
 
-Your existing overrides keep working because your selector is more specific than `:root`:
+CSS resolves `var()` at computed-value time. If you set `--sd-comment-bg` on any element, the new token picks it up in that scope:
 
 ```css
 .my-overrides {
-  --sd-comment-bg: #f0f0f0; /* still works */
+  --sd-comment-bg: #f0f0f0; /* works — --sd-ui-comments-card-bg resolves to #f0f0f0 */
 }
 ```
 
+Setting the new name directly works too — it overrides the whole fallback expression.
+
 <Warning>
-Compat aliases will be removed in the next major version. Migrate to the new names when convenient.
+Old-name fallbacks will be removed in the next major version. Migrate to the new names when convenient.
 </Warning>

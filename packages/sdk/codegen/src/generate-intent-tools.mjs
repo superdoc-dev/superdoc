@@ -217,6 +217,14 @@ function buildIntentTools(contract) {
         const opSchema = buildInputSchemaFromParams(operation);
         const opRequired = new Set(opSchema.required ?? []);
 
+        // Also check the contract inputSchema's required array — CLI params may
+        // strip required flags (e.g. when EXTRA_CLI_PARAMS exist), but the
+        // contract schema is authoritative for which fields the operation needs.
+        const contractRequired = operation.inputSchema?.required;
+        if (Array.isArray(contractRequired)) {
+          for (const key of contractRequired) opRequired.add(key);
+        }
+
         for (const [propName, propSchema] of Object.entries(opSchema.properties ?? {})) {
           if (propName === 'action') continue;
 

@@ -3507,10 +3507,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'lists.insert': {
     input: objectSchema(
       {
-        target: listItemAddressSchema,
+        target: {
+          ...listItemAddressSchema,
+          description:
+            "The target list item. For 'insert': the item to insert relative to. For 'create' with mode 'fromParagraphs': use nodeType 'paragraph' instead. Format: {kind:'block', nodeType:'listItem', nodeId:'<id>'}.",
+        },
         position: {
           ...listInsertPositionSchema,
-          description: "Insert position relative to target: 'before' or 'after'.",
+          description: "Required. Insert position relative to target: 'before' or 'after'.",
         },
         text: { type: 'string', description: 'Text content for the new list item.' },
       },
@@ -3526,14 +3530,23 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       properties: {
         mode: {
           enum: ['empty', 'fromParagraphs'],
-          description: "Creation mode: 'empty' creates a new list; 'fromParagraphs' converts existing paragraphs.",
+          description:
+            "Required. Creation mode: 'empty' creates a new empty list at the paragraph specified by 'at'; 'fromParagraphs' converts existing paragraph(s) specified by 'target' into list items.",
         },
         at: {
           ...ref('BlockAddress'),
-          description: "Block position where to create the list. Required when mode is 'empty'.",
+          description:
+            "Required when mode is 'empty'. The paragraph to create the list at. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
         },
-        target: ref('BlockAddressOrRange'),
-        kind: listKindSchema,
+        target: {
+          ...ref('BlockAddressOrRange'),
+          description:
+            "Required when mode is 'fromParagraphs'. The paragraph(s) to convert into list items. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
+        },
+        kind: {
+          ...listKindSchema,
+          description: "Required. List type: 'bullet' for bullet points, 'ordered' for numbered lists.",
+        },
         level: {
           type: 'integer',
           minimum: 0,

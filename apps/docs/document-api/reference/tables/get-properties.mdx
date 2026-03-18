@@ -38,7 +38,6 @@ _No fields._
 
 ```json
 {
-  "nodeId": "node-def456",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -51,6 +50,10 @@ _No fields._
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `address` | BlockNodeAddress | yes | BlockNodeAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 | `alignment` | enum | no | `"left"`, `"center"`, `"right"` |
 | `autoFitMode` | enum | no | `"fixedWidth"`, `"fitContents"`, `"fitWindow"` |
 | `direction` | enum | no | `"ltr"`, `"rtl"` |
@@ -69,6 +72,11 @@ _No fields._
 
 ```json
 {
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
   "alignment": "left",
   "nodeId": "node-def456",
   "styleId": "style-001"
@@ -119,6 +127,9 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "address": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
     "alignment": {
       "enum": [
         "left",
@@ -174,7 +185,8 @@ _No fields._
     }
   },
   "required": [
-    "nodeId"
+    "nodeId",
+    "address"
   ],
   "type": "object"
 }

@@ -28,38 +28,38 @@ export type CellLocator = TableLocator;
 
 /**
  * Locates a row by its index within a specific table.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus a positional `rowIndex` to select the row within it.
  */
-export interface TableScopedRowLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TableScopedRowLocator extends TableLocator {
   rowIndex: number;
 }
 
 /**
  * Locates a column by its index within a specific table.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus a positional `columnIndex` to select the column within it.
  */
-export interface TableScopedColumnLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TableScopedColumnLocator extends TableLocator {
   columnIndex: number;
 }
 
 /**
  * Locates a cell by row and column index within a specific table.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus positional indices to select the cell within it.
  */
-export interface TableScopedCellLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TableScopedCellLocator extends TableLocator {
   rowIndex: number;
   columnIndex: number;
 }
 
 /**
  * Defines a rectangular range of cells for merge/unmerge operations.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus start/end coordinates defining the range.
  */
-export interface MergeRangeLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface MergeRangeLocator extends TableLocator {
   start: { rowIndex: number; columnIndex: number };
   end: { rowIndex: number; columnIndex: number };
 }
@@ -190,11 +190,7 @@ export interface TablesSetLayoutInput extends TableLocator {
 
 export type RowInsertPosition = 'above' | 'below';
 
-export interface TablesInsertRowInput {
-  target?: BlockNodeAddress;
-  nodeId?: string;
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TablesInsertRowInput extends TableLocator {
   rowIndex?: number;
   position: RowInsertPosition;
   count?: number;
@@ -202,11 +198,7 @@ export interface TablesInsertRowInput {
 
 export type TablesDeleteRowInput = RowLocator | TableScopedRowLocator;
 
-export interface TablesSetRowHeightInput {
-  target?: BlockNodeAddress;
-  nodeId?: string;
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TablesSetRowHeightInput extends TableLocator {
   rowIndex?: number;
   heightPt: number;
   rule: 'atLeast' | 'exact' | 'auto';
@@ -215,11 +207,7 @@ export interface TablesSetRowHeightInput {
 /** Uses {@link TableLocator} directly as input. */
 export type TablesDistributeRowsInput = TableLocator;
 
-export interface TablesSetRowOptionsInput {
-  target?: BlockNodeAddress;
-  nodeId?: string;
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TablesSetRowOptionsInput extends TableLocator {
   rowIndex?: number;
   allowBreakAcrossPages?: boolean;
   repeatHeader?: boolean;
@@ -458,7 +446,8 @@ export interface TableCellInfo {
 
 /** Output for `tables.getCells`. */
 export interface TablesGetCellsOutput {
-  tableNodeId: string;
+  nodeId: string;
+  address: BlockNodeAddress;
   cells: TableCellInfo[];
 }
 
@@ -468,6 +457,7 @@ export type TablesGetPropertiesInput = TableLocator;
 /** Output for `tables.getProperties` — table layout/style metadata. */
 export interface TablesGetPropertiesOutput {
   nodeId: string;
+  address: BlockNodeAddress;
   styleId?: string;
   alignment?: TableAlignment;
   direction?: TableDirection;

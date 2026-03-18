@@ -38,7 +38,7 @@ _No fields._
 
 ```json
 {
-  "nodeId": "node-def456",
+  "columnIndex": 1,
   "rowIndex": 1,
   "target": {
     "kind": "block",
@@ -52,13 +52,22 @@ _No fields._
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `address` | BlockNodeAddress | yes | BlockNodeAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 | `cells` | object[] | yes |  |
-| `tableNodeId` | string | yes |  |
+| `nodeId` | string | yes |  |
 
 ### Example response
 
 ```json
 {
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
   "cells": [
     {
       "colspan": 1,
@@ -68,7 +77,7 @@ _No fields._
       "rowspan": 1
     }
   ],
-  "tableNodeId": "example"
+  "nodeId": "node-def456"
 }
 ```
 
@@ -124,6 +133,9 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "address": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
     "cells": {
       "items": {
         "additionalProperties": false,
@@ -159,12 +171,13 @@ _No fields._
       },
       "type": "array"
     },
-    "tableNodeId": {
+    "nodeId": {
       "type": "string"
     }
   },
   "required": [
-    "tableNodeId",
+    "nodeId",
+    "address",
     "cells"
   ],
   "type": "object"

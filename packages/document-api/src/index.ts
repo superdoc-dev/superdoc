@@ -296,13 +296,7 @@ import type {
   DiffApplyInput,
   DiffApplyOptions,
 } from './diff/diff.types.js';
-import {
-  executeTableLocatorOp,
-  executeRowLocatorOp,
-  executeColumnLocatorOp,
-  executeMergeRangeLocatorOp,
-  executeDocumentLevelTableOp,
-} from './tables/tables.js';
+import { executeTableLocatorOp, executeDocumentLevelTableOp } from './tables/tables.js';
 import type {
   ParagraphsAdapter,
   ParagraphFormatApi,
@@ -2191,13 +2185,23 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertRow(input, options?) {
-        return executeRowLocatorOp('tables.insertRow', adapters.tables.insertRow.bind(adapters.tables), input, options);
+        return executeTableLocatorOp(
+          'tables.insertRow',
+          adapters.tables.insertRow.bind(adapters.tables),
+          input,
+          options,
+        );
       },
       deleteRow(input, options?) {
-        return executeRowLocatorOp('tables.deleteRow', adapters.tables.deleteRow.bind(adapters.tables), input, options);
+        return executeTableLocatorOp(
+          'tables.deleteRow',
+          adapters.tables.deleteRow.bind(adapters.tables),
+          input,
+          options,
+        );
       },
       setRowHeight(input, options?) {
-        return executeRowLocatorOp(
+        return executeTableLocatorOp(
           'tables.setRowHeight',
           adapters.tables.setRowHeight.bind(adapters.tables),
           input,
@@ -2213,7 +2217,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setRowOptions(input, options?) {
-        return executeRowLocatorOp(
+        return executeTableLocatorOp(
           'tables.setRowOptions',
           adapters.tables.setRowOptions.bind(adapters.tables),
           input,
@@ -2221,7 +2225,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertColumn(input, options?) {
-        return executeColumnLocatorOp(
+        return executeTableLocatorOp(
           'tables.insertColumn',
           adapters.tables.insertColumn.bind(adapters.tables),
           input,
@@ -2229,7 +2233,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       deleteColumn(input, options?) {
-        return executeColumnLocatorOp(
+        return executeTableLocatorOp(
           'tables.deleteColumn',
           adapters.tables.deleteColumn.bind(adapters.tables),
           input,
@@ -2237,7 +2241,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setColumnWidth(input, options?) {
-        return executeColumnLocatorOp(
+        return executeTableLocatorOp(
           'tables.setColumnWidth',
           adapters.tables.setColumnWidth.bind(adapters.tables),
           input,
@@ -2269,7 +2273,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       mergeCells(input, options?) {
-        return executeMergeRangeLocatorOp(
+        return executeTableLocatorOp(
           'tables.mergeCells',
           adapters.tables.mergeCells.bind(adapters.tables),
           input,

@@ -4,11 +4,6 @@ import { corpusDoc, unwrap, useStoryHarness } from '../harness';
 
 type TableFixture = {
   tableNodeId: string;
-  tableTarget: {
-    kind: 'block';
-    nodeType: 'table';
-    nodeId: string;
-  };
   cellNodeId: string;
 };
 
@@ -143,7 +138,7 @@ describe('document-api story: all table commands', () => {
     }
 
     if (operationId === 'tables.getCells') {
-      expect(typeof result?.tableNodeId).toBe('string');
+      expect(typeof result?.nodeId).toBe('string');
       expect(Array.isArray(result?.cells)).toBe(true);
       expect(result.cells.length).toBeGreaterThan(0);
       expect(typeof result.cells[0]?.nodeId).toBe('string');
@@ -187,17 +182,9 @@ describe('document-api story: all table commands', () => {
     assertMutationSuccess('create.table', createResult);
 
     const tableNodeId = createResult?.table?.nodeId ?? (await firstNodeId(sessionId, 'table'));
-    const tableTarget =
-      createResult?.table ??
-      ({
-        kind: 'block',
-        nodeType: 'table',
-        nodeId: tableNodeId,
-      } as const);
-
     const cellNodeId = await firstNodeId(sessionId, 'tableCell');
 
-    return { tableNodeId, tableTarget, cellNodeId };
+    return { tableNodeId, cellNodeId };
   }
 
   const scenarios: Scenario[] = [
@@ -461,7 +448,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.insertRow({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             rowIndex: 0,
             position: 'below',
           }),
@@ -473,7 +460,7 @@ describe('document-api story: all table commands', () => {
       setup: 'table',
       run: async (sessionId, fixture) => {
         const f = requireFixture('tables.deleteRow', fixture);
-        return unwrap<any>(await api.doc.tables.deleteRow({ sessionId, tableNodeId: f.tableNodeId, rowIndex: 0 }));
+        return unwrap<any>(await api.doc.tables.deleteRow({ sessionId, nodeId: f.tableNodeId, rowIndex: 0 }));
       },
     },
     {
@@ -484,7 +471,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.setRowHeight({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             rowIndex: 0,
             heightPt: 36,
             rule: 'atLeast',
@@ -507,7 +494,7 @@ describe('document-api story: all table commands', () => {
           const setHeightResult = unwrap<any>(
             await api.doc.tables.setRowHeight({
               sessionId,
-              tableNodeId: f.tableNodeId,
+              nodeId: f.tableNodeId,
               rowIndex: preset.rowIndex,
               heightPt: preset.heightPt,
               rule: 'exact',
@@ -529,7 +516,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.setRowOptions({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             rowIndex: 0,
             allowBreakAcrossPages: false,
             repeatHeader: true,
@@ -545,7 +532,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.insertColumn({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             columnIndex: 0,
             position: 'right',
           }),
@@ -560,7 +547,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.deleteColumn({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             columnIndex: 0,
           }),
         );
@@ -574,7 +561,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.setColumnWidth({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             columnIndex: 0,
             widthPt: 72,
           }),
@@ -596,7 +583,7 @@ describe('document-api story: all table commands', () => {
           const setWidthResult = unwrap<any>(
             await api.doc.tables.setColumnWidth({
               sessionId,
-              tableNodeId: f.tableNodeId,
+              nodeId: f.tableNodeId,
               columnIndex: preset.columnIndex,
               widthPt: preset.widthPt,
             }),
@@ -799,7 +786,7 @@ describe('document-api story: all table commands', () => {
         return unwrap<any>(
           await api.doc.tables.mergeCells({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             start: { rowIndex: 0, columnIndex: 0 },
             end: { rowIndex: 0, columnIndex: 1 },
           }),
@@ -814,7 +801,7 @@ describe('document-api story: all table commands', () => {
         const mergeResult = unwrap<any>(
           await api.doc.tables.mergeCells({
             sessionId,
-            tableNodeId: f.tableNodeId,
+            nodeId: f.tableNodeId,
             start: { rowIndex: 0, columnIndex: 0 },
             end: { rowIndex: 0, columnIndex: 1 },
           }),

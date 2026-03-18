@@ -39,8 +39,7 @@ _No fields._
 ```json
 {
   "columnIndex": 1,
-  "tableNodeId": "example",
-  "tableTarget": {
+  "target": {
     "kind": "block",
     "nodeId": "node-def456",
     "nodeType": "paragraph"
@@ -112,12 +111,12 @@ _No fields._
   "oneOf": [
     {
       "required": [
-        "tableTarget"
+        "target"
       ]
     },
     {
       "required": [
-        "tableNodeId"
+        "nodeId"
       ]
     }
   ],
@@ -126,10 +125,10 @@ _No fields._
       "minimum": 0,
       "type": "integer"
     },
-    "tableNodeId": {
+    "nodeId": {
       "type": "string"
     },
-    "tableTarget": {
+    "target": {
       "$ref": "#/$defs/BlockNodeAddress"
     },
     "widthPt": {

@@ -610,13 +610,41 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   if (schema.type === 'object' && schema.properties) {
     const properties = schema.properties as Record<string, JsonSchema>;
     const requiredSet = new Set<string>(Array.isArray(schema.required) ? (schema.required as string[]) : []);
+
+    // When oneOf/anyOf is present, pick ONE variant and exclude properties
+    // that are exclusive to other variants. This prevents generating examples
+    // that violate the oneOf constraint (e.g., showing both target AND nodeId).
+    const excludedByVariant = new Set<string>();
     for (const keyword of ['oneOf', 'anyOf'] as const) {
       const variants = schema[keyword];
       if (!Array.isArray(variants) || variants.length === 0) continue;
-      const firstVariant = variants[0] as JsonSchema;
-      if (Array.isArray(firstVariant.required)) {
-        for (const requiredField of firstVariant.required as string[]) {
-          requiredSet.add(requiredField);
+
+      // Collect required fields from all variants
+      const allVariantRequired: string[][] = (variants as JsonSchema[]).map((v) =>
+        Array.isArray(v.required) ? (v.required as string[]) : [],
+      );
+
+      // Pick the simplest variant (fewest required fields).
+      // e.g., { required: ['nodeId'] } over { required: ['target'] }
+      let chosenIdx = -1;
+      for (let i = 0; i < allVariantRequired.length; i++) {
+        const reqs = allVariantRequired[i];
+        if (reqs.length === 0) continue;
+        if (chosenIdx === -1 || reqs.length < allVariantRequired[chosenIdx].length) {
+          chosenIdx = i;
+        }
+      }
+
+      if (chosenIdx >= 0) {
+        const chosenRequired = new Set(allVariantRequired[chosenIdx]);
+        for (const req of chosenRequired) requiredSet.add(req);
+
+        // Exclude properties required by OTHER variants but not the chosen one
+        for (let i = 0; i < allVariantRequired.length; i++) {
+          if (i === chosenIdx) continue;
+          for (const req of allVariantRequired[i]) {
+            if (!chosenRequired.has(req)) excludedByVariant.add(req);
+          }
         }
       }
       break;
@@ -624,9 +652,10 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
 
     const result: Record<string, unknown> = {};
     const keys = Object.keys(properties);
-    // Include required properties + up to 2 optional
+    // Include required properties + up to 2 optional (skip variant-excluded)
     let optionalCount = 0;
     for (const key of keys) {
+      if (excludedByVariant.has(key)) continue;
       if (requiredSet.has(key)) {
         result[key] = generateExample(properties[key], $defs, key, depth + 1);
       } else if (optionalCount < 2) {

@@ -5658,19 +5658,19 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.insertRow': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesInsertRowWrapper(editor, { tableNodeId: 'missing', rowIndex: 0, position: 'below' } as any, {
+      return tablesInsertRowWrapper(editor, { nodeId: 'missing', rowIndex: 0, position: 'below' } as any, {
         changeMode: 'direct',
       });
     },
     failureCase: () => {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
-      return tablesInsertRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
+      return tablesInsertRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
         changeMode: 'direct',
       });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesInsertRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
+      return tablesInsertRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
         changeMode: 'direct',
       });
     },
@@ -5678,15 +5678,15 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.deleteRow': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteRowWrapper(editor, { tableNodeId: 'missing', rowIndex: 0 } as any, { changeMode: 'direct' });
+      return tablesDeleteRowWrapper(editor, { nodeId: 'missing', rowIndex: 0 } as any, { changeMode: 'direct' });
     },
     failureCase: () => {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
-      return tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
+      return tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
+      return tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, { changeMode: 'direct' });
     },
   },
   'tables.setRowHeight': {
@@ -5694,7 +5694,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowHeightWrapper(
         editor,
-        { tableNodeId: 'missing', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+        { nodeId: 'missing', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5702,7 +5702,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesSetRowHeightWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+        { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5710,7 +5710,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowHeightWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+        { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5736,7 +5736,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowOptionsWrapper(
         editor,
-        { tableNodeId: 'missing', rowIndex: 0, allowBreakAcrossPages: true } as any,
+        { nodeId: 'missing', rowIndex: 0, allowBreakAcrossPages: true } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5744,7 +5744,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesSetRowOptionsWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
+        { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5752,7 +5752,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetRowOptionsWrapper(
         editor,
-        { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
+        { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
         { changeMode: 'direct' },
       );
     },
@@ -5766,7 +5766,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesInsertColumnWrapper(
         editor,
-        { tableNodeId: 'missing', columnIndex: 0, position: 'right' },
+        { nodeId: 'missing', columnIndex: 0, position: 'right' },
         { changeMode: 'direct' },
       );
     },
@@ -5774,7 +5774,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesInsertColumnWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+        { nodeId: 'table-1', columnIndex: 0, position: 'right' },
         { changeMode: 'direct' },
       );
     },
@@ -5782,7 +5782,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesInsertColumnWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+        { nodeId: 'table-1', columnIndex: 0, position: 'right' },
         { changeMode: 'direct' },
       );
     },
@@ -5790,15 +5790,15 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.deleteColumn': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteColumnWrapper(editor, { tableNodeId: 'missing', columnIndex: 0 }, { changeMode: 'direct' });
+      return tablesDeleteColumnWrapper(editor, { nodeId: 'missing', columnIndex: 0 }, { changeMode: 'direct' });
     },
     failureCase: () => {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
-      return tablesDeleteColumnWrapper(editor, { tableNodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
+      return tablesDeleteColumnWrapper(editor, { nodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesDeleteColumnWrapper(editor, { tableNodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
+      return tablesDeleteColumnWrapper(editor, { nodeId: 'table-1', columnIndex: 0 }, { changeMode: 'direct' });
     },
   },
   'tables.setColumnWidth': {
@@ -5806,7 +5806,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetColumnWidthWrapper(
         editor,
-        { tableNodeId: 'missing', columnIndex: 0, widthPt: 100 },
+        { nodeId: 'missing', columnIndex: 0, widthPt: 100 },
         { changeMode: 'direct' },
       );
     },
@@ -5814,7 +5814,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesSetColumnWidthWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 },
+        { nodeId: 'table-1', columnIndex: 0, widthPt: 100 },
         { changeMode: 'direct' },
       );
     },
@@ -5822,7 +5822,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesSetColumnWidthWrapper(
         editor,
-        { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 },
+        { nodeId: 'table-1', columnIndex: 0, widthPt: 100 },
         { changeMode: 'direct' },
       );
     },
@@ -5874,7 +5874,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesMergeCellsWrapper(
         editor,
-        { tableNodeId: 'missing', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+        { nodeId: 'missing', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
         { changeMode: 'direct' },
       );
     },
@@ -5882,7 +5882,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor({}, { throwOnDispatch: true });
       return tablesMergeCellsWrapper(
         editor,
-        { tableNodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+        { nodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
         { changeMode: 'direct' },
       );
     },
@@ -5890,7 +5890,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeTableEditor();
       return tablesMergeCellsWrapper(
         editor,
-        { tableNodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+        { nodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
         { changeMode: 'direct' },
       );
     },
@@ -8858,7 +8858,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'tables.insertRow': () => {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
-    const result = tablesInsertRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
+    const result = tablesInsertRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
       changeMode: 'direct',
       dryRun: true,
     });
@@ -8868,7 +8868,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'tables.deleteRow': () => {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
-    const result = tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, {
+    const result = tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, {
       changeMode: 'direct',
       dryRun: true,
     });
@@ -8880,7 +8880,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSetRowHeightWrapper(
       editor,
-      { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
+      { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8898,7 +8898,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSetRowOptionsWrapper(
       editor,
-      { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
+      { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8909,7 +8909,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesInsertColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+      { nodeId: 'table-1', columnIndex: 0, position: 'right' },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8920,7 +8920,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesDeleteColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0 },
+      { nodeId: 'table-1', columnIndex: 0 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8931,7 +8931,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSetColumnWidthWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 },
+      { nodeId: 'table-1', columnIndex: 0, widthPt: 100 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -8974,7 +8974,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesMergeCellsWrapper(
       editor,
-      { tableNodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
+      { nodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -10150,11 +10150,20 @@ describe('document-api adapter conformance', () => {
     }
   });
 
+  it('rejects row nodeId combined with rowIndex as over-specified input', () => {
+    const editor = makeTableEditor();
+    expect(() =>
+      tablesInsertRowWrapper(editor, { nodeId: 'row-1', rowIndex: 0, position: 'below' } as any, {
+        changeMode: 'direct',
+      }),
+    ).toThrow(/rowIndex must not be provided when target is a row node/);
+  });
+
   it('returns stable cell ids from tables.getCells using table-map resolved absolute positions', () => {
     const editor = makeTableEditor();
     const result = tablesGetCellsAdapter(editor, { nodeId: 'table-1' });
 
-    expect(result.tableNodeId).toBe('table-1');
+    expect(result.nodeId).toBe('table-1');
     expect(result.cells.map((cell) => cell.nodeId)).toEqual(
       expect.arrayContaining(['cell-1', 'cell-2', 'cell-3', 'cell-4']),
     );
@@ -10293,13 +10302,13 @@ describe('document-api adapter conformance', () => {
     // tables.insertRow with tracked mode
     const insertRowResult = tablesInsertRowWrapper(
       editor,
-      { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any,
+      { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any,
       { changeMode: 'tracked' },
     );
     expect(insertRowResult.success).toBe(true);
 
     // tables.deleteRow with tracked mode
-    const deleteRowResult = tablesDeleteRowWrapper(editor, { tableNodeId: 'table-1', rowIndex: 0 } as any, {
+    const deleteRowResult = tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, {
       changeMode: 'tracked',
     });
     expect(deleteRowResult.success).toBe(true);
@@ -10307,7 +10316,7 @@ describe('document-api adapter conformance', () => {
     // tables.insertColumn with tracked mode
     const insertColResult = tablesInsertColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0, position: 'right' },
+      { nodeId: 'table-1', columnIndex: 0, position: 'right' },
       { changeMode: 'tracked' },
     );
     expect(insertColResult.success).toBe(true);
@@ -10315,7 +10324,7 @@ describe('document-api adapter conformance', () => {
     // tables.deleteColumn with tracked mode
     const deleteColResult = tablesDeleteColumnWrapper(
       editor,
-      { tableNodeId: 'table-1', columnIndex: 0 },
+      { nodeId: 'table-1', columnIndex: 0 },
       { changeMode: 'tracked' },
     );
     expect(deleteColResult.success).toBe(true);
@@ -10400,20 +10409,20 @@ describe('document-api adapter conformance', () => {
       op: 'tables.insertRow',
       ref: 'table-1',
       args: { rowIndex: 0, position: 'below' },
-      wrapperFn: (e) => tablesInsertRowWrapper(e, { tableNodeId: 'table-1', rowIndex: 0, position: 'below' } as any),
+      wrapperFn: (e) => tablesInsertRowWrapper(e, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any),
     },
     {
       op: 'tables.deleteRow',
       ref: 'table-1',
       args: { rowIndex: 0 },
-      wrapperFn: (e) => tablesDeleteRowWrapper(e, { tableNodeId: 'table-1', rowIndex: 0 } as any),
+      wrapperFn: (e) => tablesDeleteRowWrapper(e, { nodeId: 'table-1', rowIndex: 0 } as any),
     },
     {
       op: 'tables.setRowHeight',
       ref: 'table-1',
       args: { rowIndex: 0, heightPt: 20, rule: 'atLeast' },
       wrapperFn: (e) =>
-        tablesSetRowHeightWrapper(e, { tableNodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any),
+        tablesSetRowHeightWrapper(e, { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any),
     },
     {
       op: 'tables.distributeRows',
@@ -10426,27 +10435,26 @@ describe('document-api adapter conformance', () => {
       ref: 'table-1',
       args: { rowIndex: 0, allowBreakAcrossPages: true },
       wrapperFn: (e) =>
-        tablesSetRowOptionsWrapper(e, { tableNodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any),
+        tablesSetRowOptionsWrapper(e, { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any),
     },
     // Column ops
     {
       op: 'tables.insertColumn',
       ref: 'table-1',
       args: { columnIndex: 0, position: 'right' },
-      wrapperFn: (e) =>
-        tablesInsertColumnWrapper(e, { tableNodeId: 'table-1', columnIndex: 0, position: 'right' } as any),
+      wrapperFn: (e) => tablesInsertColumnWrapper(e, { nodeId: 'table-1', columnIndex: 0, position: 'right' } as any),
     },
     {
       op: 'tables.deleteColumn',
       ref: 'table-1',
       args: { columnIndex: 0 },
-      wrapperFn: (e) => tablesDeleteColumnWrapper(e, { tableNodeId: 'table-1', columnIndex: 0 } as any),
+      wrapperFn: (e) => tablesDeleteColumnWrapper(e, { nodeId: 'table-1', columnIndex: 0 } as any),
     },
     {
       op: 'tables.setColumnWidth',
       ref: 'table-1',
       args: { columnIndex: 0, widthPt: 100 },
-      wrapperFn: (e) => tablesSetColumnWidthWrapper(e, { tableNodeId: 'table-1', columnIndex: 0, widthPt: 100 } as any),
+      wrapperFn: (e) => tablesSetColumnWidthWrapper(e, { nodeId: 'table-1', columnIndex: 0, widthPt: 100 } as any),
     },
     {
       op: 'tables.distributeColumns',
@@ -10473,7 +10481,7 @@ describe('document-api adapter conformance', () => {
       args: { start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
       wrapperFn: (e) =>
         tablesMergeCellsWrapper(e, {
-          tableNodeId: 'table-1',
+          nodeId: 'table-1',
           start: { rowIndex: 0, columnIndex: 0 },
           end: { rowIndex: 1, columnIndex: 1 },
         } as any),

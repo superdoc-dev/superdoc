@@ -34,24 +34,11 @@ _No fields._
 
 _No fields._
 
-### Variant 3
-
-_No fields._
-
-### Variant 4
-
-_No fields._
-
 ### Example request
 
 ```json
 {
-  "nodeId": "node-def456",
-  "tableTarget": {
-    "kind": "block",
-    "nodeId": "node-def456",
-    "nodeType": "paragraph"
-  },
+  "rowIndex": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -131,18 +118,6 @@ _No fields._
       "required": [
         "nodeId"
       ]
-    },
-    {
-      "required": [
-        "tableTarget",
-        "rowIndex"
-      ]
-    },
-    {
-      "required": [
-        "tableNodeId",
-        "rowIndex"
-      ]
     }
   ],
   "properties": {
@@ -152,12 +127,6 @@ _No fields._
     "rowIndex": {
       "minimum": 0,
       "type": "integer"
-    },
-    "tableNodeId": {
-      "type": "string"
-    },
-    "tableTarget": {
-      "$ref": "#/$defs/BlockNodeAddress"
     },
     "target": {
       "$ref": "#/$defs/BlockNodeAddress"

@@ -41,8 +41,7 @@ _No fields._
   "columnIndex": 1,
   "count": 1,
   "position": "left",
-  "tableNodeId": "example",
-  "tableTarget": {
+  "target": {
     "kind": "block",
     "nodeId": "node-def456",
     "nodeType": "paragraph"
@@ -113,12 +112,12 @@ _No fields._
   "oneOf": [
     {
       "required": [
-        "tableTarget"
+        "target"
       ]
     },
     {
       "required": [
-        "tableNodeId"
+        "nodeId"
       ]
     }
   ],
@@ -131,16 +130,16 @@ _No fields._
       "minimum": 1,
       "type": "integer"
     },
+    "nodeId": {
+      "type": "string"
+    },
     "position": {
       "enum": [
         "left",
         "right"
       ]
     },
-    "tableNodeId": {
-      "type": "string"
-    },
-    "tableTarget": {
+    "target": {
       "$ref": "#/$defs/BlockNodeAddress"
     }
   },

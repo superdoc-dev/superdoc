@@ -590,31 +590,6 @@ function cellMutationScenario(
   };
 }
 
-/** Table-scoped mutation in a session: uses --table-node-id instead of --node-id. */
-function tableScopedMutationScenario(
-  op: string,
-  extraArgs: string[],
-): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
-  return async (harness) => {
-    const label = `table-${op.replace(/\./g, '-')}`;
-    const stateDir = await harness.createStateDir(`${label}-success`);
-    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
-    return {
-      stateDir,
-      args: [
-        ...commandTokens(`doc.${op}` as CliOperationId),
-        '--session',
-        sessionId,
-        '--table-node-id',
-        tableNodeId,
-        ...extraArgs,
-        '--out',
-        harness.createOutputPath(`${label}-out`),
-      ],
-    };
-  };
-}
-
 function tocMutationScenario(
   op: string,
   extraArgs: string[],
@@ -2983,9 +2958,9 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.split': tableMutationScenario('tables.split', ['--at-row-index', '1']),
   'doc.tables.convertToText': tableMutationScenario('tables.convertToText', ['--delimiter', 'tab']),
   'doc.tables.setLayout': tableMutationScenario('tables.setLayout', ['--alignment', 'center']),
-  'doc.tables.insertRow': tableScopedMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),
-  'doc.tables.deleteRow': tableScopedMutationScenario('tables.deleteRow', ['--row-index', '0']),
-  'doc.tables.setRowHeight': tableScopedMutationScenario('tables.setRowHeight', [
+  'doc.tables.insertRow': tableMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),
+  'doc.tables.deleteRow': tableMutationScenario('tables.deleteRow', ['--row-index', '0']),
+  'doc.tables.setRowHeight': tableMutationScenario('tables.setRowHeight', [
     '--row-index',
     '0',
     '--height-pt',
@@ -2994,19 +2969,19 @@ export const SUCCESS_SCENARIOS = {
     'atLeast',
   ]),
   'doc.tables.distributeRows': tableMutationScenario('tables.distributeRows', []),
-  'doc.tables.setRowOptions': tableScopedMutationScenario('tables.setRowOptions', [
+  'doc.tables.setRowOptions': tableMutationScenario('tables.setRowOptions', [
     '--row-index',
     '0',
     '--allow-break-across-pages',
   ]),
-  'doc.tables.insertColumn': tableScopedMutationScenario('tables.insertColumn', [
+  'doc.tables.insertColumn': tableMutationScenario('tables.insertColumn', [
     '--column-index',
     '0',
     '--position',
     'right',
   ]),
-  'doc.tables.deleteColumn': tableScopedMutationScenario('tables.deleteColumn', ['--column-index', '0']),
-  'doc.tables.setColumnWidth': tableScopedMutationScenario('tables.setColumnWidth', [
+  'doc.tables.deleteColumn': tableMutationScenario('tables.deleteColumn', ['--column-index', '0']),
+  'doc.tables.setColumnWidth': tableMutationScenario('tables.setColumnWidth', [
     '--column-index',
     '0',
     '--width-pt',
@@ -3015,7 +2990,7 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.distributeColumns': tableMutationScenario('tables.distributeColumns', []),
   'doc.tables.insertCell': cellMutationScenario('tables.insertCell', ['--mode', 'shiftRight']),
   'doc.tables.deleteCell': cellMutationScenario('tables.deleteCell', ['--mode', 'shiftLeft']),
-  'doc.tables.mergeCells': tableScopedMutationScenario('tables.mergeCells', [
+  'doc.tables.mergeCells': tableMutationScenario('tables.mergeCells', [
     '--start-json',
     JSON.stringify({ rowIndex: 0, columnIndex: 0 }),
     '--end-json',

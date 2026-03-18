@@ -515,8 +515,6 @@ function applyTableBorderPresetToCellBorders(
 type RowLocatorFields = {
   target?: BlockNodeAddress;
   nodeId?: string;
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
   rowIndex?: number;
 };
 
@@ -3577,7 +3575,8 @@ export function tablesGetCellsAdapter(editor: Editor, input: TablesGetCellsInput
   cells.sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex);
 
   return {
-    tableNodeId: resolved.candidate.nodeId,
+    nodeId: resolved.candidate.nodeId,
+    address: toBlockAddress(resolved.candidate),
     cells,
   };
 }
@@ -3588,6 +3587,7 @@ export function tablesGetPropertiesAdapter(editor: Editor, input: TablesGetPrope
 
   const result: TablesGetPropertiesOutput = {
     nodeId: resolved.candidate.nodeId,
+    address: toBlockAddress(resolved.candidate),
   };
 
   if (tp.tableStyleId != null) result.styleId = String(tp.tableStyleId);

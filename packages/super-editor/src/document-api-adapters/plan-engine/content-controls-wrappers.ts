@@ -245,6 +245,49 @@ function dispatchTransaction(editor: Editor, tr: Editor['state']['tr']): void {
   );
 }
 
+function buildEmptyBlockContent(editor: Editor, sdtNode: ProseMirrorNode): ProseMirrorNode | null {
+  const firstChild = sdtNode.childCount > 0 ? sdtNode.child(0) : null;
+  if (firstChild?.type?.name === 'paragraph') {
+    return firstChild.type.create(firstChild.attrs ?? null, null, firstChild.marks);
+  }
+
+  const paragraphType = editor.schema.nodes.paragraph;
+  if (!paragraphType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'Content-control text mutation requires the paragraph node type in the schema.',
+    );
+  }
+
+  return paragraphType.createAndFill?.() ?? paragraphType.create();
+}
+
+function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, text: string): boolean {
+  const resolved = resolveSdtByTarget(editor.state.doc, target);
+
+  if (resolved.kind === 'inline') {
+    const updateCmd = editor.commands?.updateStructuredContentById;
+    if (text.length > 0) {
+      return Boolean(updateCmd?.(target.nodeId, { text }));
+    }
+
+    const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, null, resolved.node.marks);
+    const { tr } = editor.state;
+    tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
+    dispatchTransaction(editor, tr);
+    return true;
+  }
+
+  const paragraph = buildEmptyBlockContent(editor, resolved.node);
+  const paragraphText = text.length > 0 ? editor.schema.text(text) : null;
+  const updatedParagraph = paragraph?.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks) ?? null;
+  const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, updatedParagraph, resolved.node.marks);
+  const { tr } = editor.state;
+  tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
+  dispatchTransaction(editor, tr);
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // A. Core CRUD + Discovery — Read operations
 // ---------------------------------------------------------------------------
@@ -772,7 +815,7 @@ function replaceContentWrapper(
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: input.content }));
+    return replaceSdtTextContent(editor, input.target, input.content);
   });
 }
 
@@ -786,7 +829,7 @@ function clearContentWrapper(
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: '' }));
+    return replaceSdtTextContent(editor, input.target, '');
   });
 }
 
@@ -802,9 +845,7 @@ function appendContentWrapper(
   return executeSdtMutation(editor, target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const currentText = resolved.node.textContent;
-    return Boolean(
-      editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: currentText + input.content }),
-    );
+    return replaceSdtTextContent(editor, input.target, currentText + input.content);
   });
 }
 
@@ -820,9 +861,7 @@ function prependContentWrapper(
   return executeSdtMutation(editor, target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const currentText = resolved.node.textContent;
-    return Boolean(
-      editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: input.content + currentText }),
-    );
+    return replaceSdtTextContent(editor, input.target, input.content + currentText);
   });
 }
 
@@ -1107,7 +1146,7 @@ function textSetValueWrapper(
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: input.value }));
+    return replaceSdtTextContent(editor, input.target, input.value);
   });
 }
 
@@ -1122,7 +1161,7 @@ function textClearValueWrapper(
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: '' }));
+    return replaceSdtTextContent(editor, input.target, '');
   });
 }
 

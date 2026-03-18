@@ -329,7 +329,10 @@ export function indexEntriesUpdateWrapper(
     () => {
       const { tr } = editor.state;
       const newAttrs = { ...resolved.node.attrs };
-      if (input.patch?.text !== undefined) newAttrs.instructionTokens = null;
+      if (input.patch?.text !== undefined) {
+        newAttrs.text = input.patch.text;
+        newAttrs.instructionTokens = null;
+      }
       if (input.patch?.subEntry !== undefined) newAttrs.subEntry = input.patch.subEntry;
       if (input.patch?.bold !== undefined) newAttrs.bold = input.patch.bold;
       if (input.patch?.italic !== undefined) newAttrs.italic = input.patch.italic;
@@ -463,7 +466,7 @@ function buildXeInstruction(entry: import('@superdoc/document-api').IndexEntryDa
 }
 
 function buildXeInstructionFromAttrs(attrs: Record<string, unknown>): string {
-  let text = extractPrimaryEntryText(attrs);
+  let text = typeof attrs.text === 'string' ? attrs.text : extractPrimaryEntryText(attrs);
   const subEntry = (attrs.subEntry as string) ?? '';
   if (subEntry && text.endsWith(`:${subEntry}`)) {
     text = text.slice(0, -(subEntry.length + 1));

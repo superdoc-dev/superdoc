@@ -202,6 +202,113 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
   return editor;
 }
 
+function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}): Editor {
+  const sdtAttrs = {
+    id: 'sdt-inline-1',
+    tag: 'inline-test-tag',
+    alias: 'Inline Test Alias',
+    lockMode: 'unlocked',
+    controlType: 'text',
+    type: 'text',
+    sdtPr: { name: 'w:sdtPr', elements: [] },
+    ...overrideAttrs,
+  };
+
+  const textNode = createNode('text', [], { text: 'Inline SDT content' });
+  const sdtNode = createNode('structuredContent', [textNode], {
+    attrs: sdtAttrs,
+    isInline: true,
+    isBlock: false,
+    inlineContent: true,
+  });
+  const paragraph = createNode('paragraph', [sdtNode], {
+    attrs: { sdBlockId: 'inline-host-p' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [paragraph], { isBlock: false });
+
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    addMark: vi.fn().mockReturnThis(),
+    removeMark: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    doc,
+    steps: [{ type: 'replaceStep' }],
+  };
+
+  const dispatch = vi.fn();
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        marks: {},
+        text: (t: string) => createNode('text', [], { text: t }),
+        nodes: {
+          paragraph: {
+            create: vi.fn(() => paragraph),
+            createAndFill: vi.fn(() => paragraph),
+          },
+          structuredContent: {
+            create: vi.fn((attrs: unknown, content: unknown) =>
+              createNode(
+                'structuredContent',
+                Array.isArray(content) ? content : content ? [content as ProseMirrorNode] : [],
+                {
+                  attrs: attrs as Record<string, unknown>,
+                  isInline: true,
+                  isBlock: false,
+                  inlineContent: true,
+                },
+              ),
+            ),
+          },
+        },
+      },
+      selection: { from: 0, to: doc.nodeSize },
+    },
+    schema: {
+      marks: {},
+      text: (t: string) => createNode('text', [], { text: t }),
+      nodes: {
+        paragraph: {
+          create: vi.fn(() => paragraph),
+          createAndFill: vi.fn(() => paragraph),
+        },
+        structuredContent: {
+          create: vi.fn((attrs: unknown, content: unknown) =>
+            createNode(
+              'structuredContent',
+              Array.isArray(content) ? content : content ? [content as ProseMirrorNode] : [],
+              {
+                attrs: attrs as Record<string, unknown>,
+                isInline: true,
+                isBlock: false,
+                inlineContent: true,
+              },
+            ),
+          ),
+        },
+      },
+    },
+    dispatch,
+    view: { dispatch },
+    commands: {
+      updateStructuredContentById: vi.fn(() => true),
+      deleteStructuredContentById: vi.fn(() => true),
+      insertStructuredContentBlock: vi.fn(() => true),
+      insertStructuredContentInline: vi.fn(() => true),
+    },
+  } as unknown as Editor;
+}
+
 /**
  * Build a doc with two block-level nodes: a paragraph (block ID = paraId) then an SDT.
  * Used for listInRange block-ID resolution tests.
@@ -362,6 +469,35 @@ describe('contentControls.listInRange', () => {
         endBlockId: 'block-p2',
       }),
     ).toThrow(/not found/i);
+  });
+});
+
+describe('contentControls text clearing', () => {
+  it('clearContent clears block SDTs without delegating an empty string through updateStructuredContentById', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
+  });
+
+  it('text.clearValue clears inline SDTs without routing through updateStructuredContentById', () => {
+    const editor = makeInlineSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.text.clearValue(
+      {
+        target: { kind: 'inline', nodeType: 'sdt', nodeId: 'sdt-inline-1' },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+    expect((editor.state.tr as any).replaceWith).toHaveBeenCalledTimes(1);
   });
 });
 

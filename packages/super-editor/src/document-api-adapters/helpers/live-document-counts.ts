@@ -25,9 +25,11 @@ export interface LiveDocumentCounts {
   pages?: number;
 }
 
+type CachedLiveDocumentCounts = Omit<LiveDocumentCounts, 'pages'>;
+
 type LiveDocumentCountsCacheEntry = {
   doc: Editor['state']['doc'];
-  counts: LiveDocumentCounts;
+  counts: CachedLiveDocumentCounts;
 };
 
 const FIELD_LIKE_SDT_TYPES = new Set(['text', 'date', 'checkbox', 'comboBox', 'dropDownList']);
@@ -36,10 +38,11 @@ const liveDocumentCountsCache = new WeakMap<Editor, LiveDocumentCountsCacheEntry
 /**
  * Computes live document counts from the current editor snapshot.
  *
- * The helper caches the fully-derived counts by immutable ProseMirror
+ * The helper caches document-derived counts by immutable ProseMirror
  * document snapshot. Repeated `doc.info()` reads against the same snapshot
  * reuse the cached result instead of rescanning text, tracked changes, or
- * content controls.
+ * content controls. Page count is merged in fresh on every call because
+ * layout can change without a ProseMirror doc mutation.
  *
  * Count semantics:
  * - `words`: whitespace-delimited tokens from the Document API text projection
@@ -59,25 +62,25 @@ const liveDocumentCountsCache = new WeakMap<Editor, LiveDocumentCountsCacheEntry
 export function getLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
   const currentDoc = editor.state.doc;
   const cached = liveDocumentCountsCache.get(editor);
+  const pages = countPages(editor);
 
   if (cached && cached.doc === currentDoc) {
-    return cloneLiveDocumentCounts(cached.counts);
+    return cloneLiveDocumentCounts(cached.counts, pages);
   }
 
   const counts = computeLiveDocumentCounts(editor);
   liveDocumentCountsCache.set(editor, { doc: currentDoc, counts });
 
-  return cloneLiveDocumentCounts(counts);
+  return cloneLiveDocumentCounts(counts, pages);
 }
 
-function computeLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
+function computeLiveDocumentCounts(editor: Editor): CachedLiveDocumentCounts {
   const text = getTextAdapter(editor, {});
   const blockIndex = getBlockIndex(editor);
   const inlineIndex = getInlineIndex(editor);
 
   const blockCounts = countBlockNodeTypes(blockIndex);
   const inlineImages = countInlineImages(inlineIndex);
-  const pages = countPages(editor);
 
   return {
     words: countWordsFromText(text),
@@ -90,12 +93,11 @@ function computeLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
     trackedChanges: countTrackedChanges(editor),
     sdtFields: countSdtFields(editor),
     lists: countLists(editor, blockIndex),
-    ...(pages != null ? { pages } : {}),
   };
 }
 
-function cloneLiveDocumentCounts(counts: LiveDocumentCounts): LiveDocumentCounts {
-  return { ...counts };
+function cloneLiveDocumentCounts(counts: CachedLiveDocumentCounts, pages: number | undefined): LiveDocumentCounts {
+  return pages != null ? { ...counts, pages } : { ...counts };
 }
 
 /**

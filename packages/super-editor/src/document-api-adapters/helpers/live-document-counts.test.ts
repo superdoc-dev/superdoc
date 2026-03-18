@@ -487,6 +487,36 @@ describe('getLiveDocumentCounts', () => {
     expect(findAllSdtNodesMock).toHaveBeenCalledOnce();
   });
 
+  it('re-reads pages on every call even when the document snapshot cache is reused', () => {
+    const editor = {
+      ...makeEditor({ docId: 'snapshot-1' }),
+      currentTotalPages: undefined,
+    } as Editor & { currentTotalPages?: number };
+
+    getTextAdapterMock.mockReturnValue('one two');
+    getBlockIndexMock.mockReturnValue(makeBlockIndex([makeBlockCandidate('paragraph')]));
+    getInlineIndexMock.mockReturnValue(makeInlineIndex([]));
+    groupTrackedChangesMock.mockReturnValue([{ id: 'tc-1' }] as ReturnType<typeof groupTrackedChanges>);
+    findAllSdtNodesMock.mockReturnValue([
+      { kind: 'block', pos: 0, node: { attrs: { controlType: 'text' } } },
+    ] as ReturnType<typeof findAllSdtNodes>);
+
+    const beforeLayout = getLiveDocumentCounts(editor);
+    editor.currentTotalPages = 4;
+    const afterInitialLayout = getLiveDocumentCounts(editor);
+    editor.currentTotalPages = 6;
+    const afterRepagination = getLiveDocumentCounts(editor);
+
+    expect('pages' in beforeLayout).toBe(false);
+    expect(afterInitialLayout.pages).toBe(4);
+    expect(afterRepagination.pages).toBe(6);
+    expect(getTextAdapterMock).toHaveBeenCalledOnce();
+    expect(getBlockIndexMock).toHaveBeenCalledOnce();
+    expect(getInlineIndexMock).toHaveBeenCalledOnce();
+    expect(groupTrackedChangesMock).toHaveBeenCalledOnce();
+    expect(findAllSdtNodesMock).toHaveBeenCalledOnce();
+  });
+
   it('invalidates the cache when the editor doc snapshot changes', () => {
     const editor = makeEditor({ docId: 'snapshot-1' }) as Editor & { state: { doc: Record<string, unknown> } };
 

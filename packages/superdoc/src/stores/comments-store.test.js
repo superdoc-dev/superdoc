@@ -862,6 +862,49 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('keeps imported resolved tracked-change comments resolved during initial tracked-change rebuild', async () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      converter: { commentThreadingProfile: 'range-based' },
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-import-resolved' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'tc-import-resolved' } } } }]);
+
+    store.processLoadedDocxComments({
+      superdoc: __mockSuperdoc,
+      editor,
+      comments: [
+        {
+          commentId: 'tc-import-resolved',
+          creatorName: 'Imported Author',
+          creatorEmail: 'imported@example.com',
+          createdTime: 123,
+          elements: [],
+          trackedChange: true,
+          trackedChangeText: 'Imported text',
+          trackedChangeType: 'insert',
+          isDone: true,
+        },
+      ],
+      documentId: 'doc-1',
+    });
+
+    vi.runAllTimers();
+    await nextTick();
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(store.commentsList[0].commentId).toBe('tc-import-resolved');
+    expect(store.commentsList[0].resolvedTime).not.toBeNull();
+    expect(createOrUpdateTrackedChangeCommentMock).not.toHaveBeenCalled();
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
   it('reopens resolved tracked-change comments when synced marks reappear', () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };

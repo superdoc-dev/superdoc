@@ -968,7 +968,8 @@ export const useCommentsStore = defineStore('comments', () => {
     }, 0);
   };
 
-  const createCommentForTrackChanges = (editor, superdoc, trackedChangesOverride = null) => {
+  const createCommentForTrackChanges = (editor, superdoc, trackedChangesOverride = null, options = {}) => {
+    const { reopenResolved = false } = options;
     const trackedChanges = trackedChangesOverride ?? trackChangesHelpers.getTrackChanges(editor.state);
     const groupedChanges = groupChanges(trackedChanges);
     const activeDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
@@ -977,12 +978,18 @@ export const useCommentsStore = defineStore('comments', () => {
     // Build a Set of existing unresolved tracked-change IDs for O(1) lookup.
     // Include both runtime and imported IDs to avoid duplicate threads when
     // replay/import flows remap commentId but marks still reference importedId.
-    // Resolved tracked-change threads are intentionally excluded so undo can
-    // reopen them when the tracked marks reappear.
+    // History replay can opt in to excluding resolved tracked-change threads so
+    // undo/redo reopens them when their marks reappear. Initial import rebuilds
+    // keep resolved IDs in the set so resolved DOCX threads do not reopen on load.
     const existingUnresolvedIds = new Set();
     commentsList.value.forEach((comment) => {
       if (!comment?.trackedChange) return;
       if (!belongsToDocument(comment, activeDocumentId)) return;
+      if (comment.resolvedTime && !reopenResolved) {
+        if (comment.commentId != null) existingUnresolvedIds.add(String(comment.commentId));
+        if (comment.importedId != null) existingUnresolvedIds.add(String(comment.importedId));
+        return;
+      }
       if (comment.resolvedTime) return;
       if (comment.commentId != null) existingUnresolvedIds.add(String(comment.commentId));
       if (comment.importedId != null) existingUnresolvedIds.add(String(comment.importedId));
@@ -1178,7 +1185,7 @@ export const useCommentsStore = defineStore('comments', () => {
     });
 
     pruneStaleTrackedChangeComments(liveTrackedChangeIds, activeDocumentId, superdoc);
-    createCommentForTrackChanges(editor, superdoc, trackedChanges);
+    createCommentForTrackChanges(editor, superdoc, trackedChanges, { reopenResolved: true });
   };
 
   const normalizeDocxSchemaForExport = (value) => {

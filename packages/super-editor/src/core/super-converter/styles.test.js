@@ -51,6 +51,15 @@ describe('encodeMarksFromRPr', () => {
     });
   });
 
+  it('should encode highlight from a hash-prefixed w:val', () => {
+    const rPr = { highlight: { 'w:val': '#ECCF35' } };
+    const marks = encodeMarksFromRPr(rPr, {});
+    expect(marks).toContainEqual({
+      type: 'highlight',
+      attrs: { color: '#ECCF35' },
+    });
+  });
+
   it('should encode highlight from w:shd', () => {
     const rPr = { shading: { fill: 'FFA500' } };
     const marks = encodeMarksFromRPr(rPr, {});

@@ -62,7 +62,7 @@ export function getFormattingStateAtPos(state, pos, editor, options = {}) {
   const resolvedRunProperties = resolvedFromSelection?.resolvedRunProperties ?? inlineRunProperties;
   const styleRunProperties = resolvedFromSelection?.styleRunProperties ?? null;
   const resolvedMarksFromProperties = createMarksFromRunProperties(state, resolvedRunProperties, editor);
-  resolvedMarks.push(...(resolvedMarksFromProperties.length ? resolvedMarksFromProperties : inlineMarks));
+  resolvedMarks.push(...mergeResolvedMarksWithInlineFallback(resolvedMarksFromProperties, inlineMarks));
   if (storedMarks && includeCursorMarksWithStoredMarks) {
     resolvedMarks.push(...cursorMarks);
   }
@@ -99,14 +99,26 @@ function aggregateFormattingSegments(state, editor, segments) {
   const resolvedRunProperties = intersectRunProperties(segments.map((segment) => segment.resolvedRunProperties));
   const inlineRunProperties = intersectRunProperties(segments.map((segment) => segment.inlineRunProperties));
   const styleRunProperties = intersectRunProperties(segments.map((segment) => segment.styleRunProperties));
+  const resolvedMarks = createMarksFromRunProperties(state, resolvedRunProperties, editor);
+  const inlineMarks = createMarksFromRunProperties(state, inlineRunProperties, editor);
 
   return {
-    resolvedMarks: createMarksFromRunProperties(state, resolvedRunProperties, editor),
-    inlineMarks: createMarksFromRunProperties(state, inlineRunProperties, editor),
+    resolvedMarks: mergeResolvedMarksWithInlineFallback(resolvedMarks, inlineMarks),
+    inlineMarks,
     resolvedRunProperties,
     inlineRunProperties,
     styleRunProperties,
   };
+}
+
+function mergeResolvedMarksWithInlineFallback(resolvedMarks, inlineMarks) {
+  if (!resolvedMarks.length) return inlineMarks;
+  if (!inlineMarks.length) return resolvedMarks;
+
+  const resolvedMarkNames = new Set(resolvedMarks.map((mark) => mark.type.name));
+  const missingInlineMarks = inlineMarks.filter((mark) => !resolvedMarkNames.has(mark.type.name));
+
+  return [...resolvedMarks, ...missingInlineMarks];
 }
 
 function intersectRunProperties(runPropertiesList) {

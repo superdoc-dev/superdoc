@@ -202,6 +202,52 @@ describe('getMarksFromSelection', () => {
     expect(result.inlineRunProperties).toEqual({ styleId: 'Heading1Char' });
   });
 
+  it('reconstructs highlight marks from hash-prefixed runProperties values', () => {
+    const runSchema = new Schema({
+      nodes: {
+        doc: { content: 'paragraph+' },
+        paragraph: {
+          content: 'inline*',
+          group: 'block',
+          toDOM() {
+            return ['p', 0];
+          },
+        },
+        run: {
+          content: 'text*',
+          group: 'inline',
+          inline: true,
+          attrs: { runProperties: { default: null } },
+          toDOM() {
+            return ['span', 0];
+          },
+        },
+        text: { group: 'inline' },
+      },
+      marks: {
+        highlight: {
+          attrs: { color: { default: null } },
+          toDOM() {
+            return ['mark', 0];
+          },
+        },
+      },
+    });
+    const testDoc = runSchema.node('doc', null, [
+      runSchema.node('paragraph', null, [
+        runSchema.node('run', { runProperties: { highlight: { 'w:val': '#ECCF35' } } }, [runSchema.text('Hello')]),
+      ]),
+    ]);
+    const state = EditorState.create({ schema: runSchema, doc: testDoc });
+    const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 3)));
+
+    const result = getSelectionFormattingState(cursorState);
+
+    expect(result.inlineRunProperties).toEqual({ highlight: { 'w:val': '#ECCF35' } });
+    expect(result.inlineMarks).toContainEqual(expect.objectContaining({ attrs: { color: '#ECCF35' } }));
+    expect(result.resolvedMarks).toContainEqual(expect.objectContaining({ attrs: { color: '#ECCF35' } }));
+  });
+
   it('falls back to cursor marks when the surrounding run has no explicit runProperties', () => {
     const runSchema = new Schema({
       nodes: {

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { createTheme, buildTheme } from './create-theme.js';
+import { createTheme, buildTheme } from './create-theme.ts';
 
 describe('createTheme', () => {
   beforeEach(() => {

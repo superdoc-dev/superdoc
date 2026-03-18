@@ -16,9 +16,8 @@ test('example loads without errors', async ({ page }) => {
   // Block telemetry requests during tests
   await page.route('**/ingest.superdoc.dev/**', (route) => route.abort());
 
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  // Frameworks like Nuxt may briefly hide the body during hydration
-  await expect(page.locator('body')).toBeVisible({ timeout: 10_000 });
+  await page.goto('/');
+  await expect(page.locator('body')).toBeVisible();
 
   // Give the app a moment to initialize (SuperDoc is async)
   await page.waitForTimeout(2000);

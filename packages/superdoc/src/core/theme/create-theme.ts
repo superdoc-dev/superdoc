@@ -1,34 +1,52 @@
-/**
- * @typedef {Object} ThemeColors
- * @property {string} [action] Action/accent color (buttons, links, active states). Default: #1355ff
- * @property {string} [actionHover] Action hover state. Default: #0f44cc
- * @property {string} [bg] Default background for panels, cards, dropdowns. Default: #ffffff
- * @property {string} [hoverBg] Hover background. Default: #dbdbdb
- * @property {string} [activeBg] Active/pressed background. Default: #c8d0d8
- * @property {string} [disabledBg] Disabled background. Default: #f5f5f5
- * @property {string} [text] Primary text color. Default: #47484a
- * @property {string} [textMuted] Secondary/muted text. Default: #666666
- * @property {string} [textDisabled] Disabled text. Default: #ababab
- * @property {string} [border] Default border color. Default: #dbdbdb
- */
+export interface ThemeColors {
+  /** Action/accent color (buttons, links, active states). Default: #1355ff */
+  action?: string;
+  /** Action hover state. Default: #0f44cc */
+  actionHover?: string;
+  /** Default background for panels, cards, dropdowns. Default: #ffffff */
+  bg?: string;
+  /** Hover background. Default: #dbdbdb */
+  hoverBg?: string;
+  /** Active/pressed background. Default: #c8d0d8 */
+  activeBg?: string;
+  /** Disabled background. Default: #f5f5f5 */
+  disabledBg?: string;
+  /** Primary text color. Default: #47484a */
+  text?: string;
+  /** Secondary/muted text. Default: #666666 */
+  textMuted?: string;
+  /** Disabled text. Default: #ababab */
+  textDisabled?: string;
+  /** Default border color. Default: #dbdbdb */
+  border?: string;
+}
 
-/**
- * @typedef {Object} ThemeConfig
- * @property {string} [name] Theme name — used in the generated class name (e.g., "dark" → "sd-theme-dark")
- * @property {string} [font] UI font family
- * @property {string} [radius] Default border radius (e.g., "8px")
- * @property {string} [shadow] Default box shadow
- * @property {ThemeColors} [colors] Core color palette — cascades to every component
- * @property {Record<string, string>} [vars] Escape hatch — raw CSS variable overrides (e.g., { '--sd-ui-toolbar-bg': '#f8fafc' })
- */
+export interface ThemeConfig {
+  /** Theme name — used in the generated class name (e.g., "dark" → "sd-theme-dark") */
+  name?: string;
+  /** UI font family */
+  font?: string;
+  /** Default border radius (e.g., "8px") */
+  radius?: string;
+  /** Default box shadow */
+  shadow?: string;
+  /** Core color palette — cascades to every component */
+  colors?: ThemeColors;
+  /** Escape hatch — raw CSS variable overrides (e.g., { '--sd-ui-toolbar-bg': '#f8fafc' }) */
+  vars?: Record<string, string | null | undefined>;
+}
+
+export interface ThemeResult {
+  className: string;
+  css: string;
+}
 
 /*
  * These map to the --sd-ui-* variable names introduced in the SD-2083
  * theming system. Components consume them once that PR lands. Until then,
  * createTheme() generates the correct variables ahead of time.
  */
-/** @type {Record<string, string>} */
-const COLORS_TO_VARS = {
+const COLORS_TO_VARS: Record<string, string> = {
   action: '--sd-ui-action',
   actionHover: '--sd-ui-action-hover',
   bg: '--sd-ui-bg',
@@ -46,18 +64,13 @@ let themeCounter = 0;
 /**
  * Generate the className and CSS string from a theme config.
  * Shared core used by both createTheme and buildTheme.
- *
- * @param {ThemeConfig} config
- * @returns {{ className: string, css: string }}
  */
-function generateTheme(config) {
+function generateTheme(config: ThemeConfig): ThemeResult {
   const { name, font, radius, shadow, colors, vars } = config;
   const className = `sd-theme-${name || `custom-${++themeCounter}`}`;
 
-  /** @type {string[]} */
-  const declarations = [];
+  const declarations: string[] = [];
 
-  // Map semantic colors
   if (colors) {
     for (const [key, value] of Object.entries(colors)) {
       if (value == null) continue;
@@ -68,12 +81,10 @@ function generateTheme(config) {
     }
   }
 
-  // Map top-level shortcuts
   if (font != null) declarations.push(`  --sd-ui-font-family: ${font};`);
   if (radius != null) declarations.push(`  --sd-ui-radius: ${radius};`);
   if (shadow != null) declarations.push(`  --sd-ui-shadow: ${shadow};`);
 
-  // Spread raw CSS variable overrides
   if (vars) {
     for (const [varName, value] of Object.entries(vars)) {
       if (value == null) continue;
@@ -90,11 +101,8 @@ function generateTheme(config) {
  * Inject a theme's CSS into the document as a `<style>` element.
  * Idempotent — re-calling with the same className updates the existing element.
  * No-op when `document` is not available (SSR).
- *
- * @param {string} className
- * @param {string} css
  */
-function injectThemeStyle(className, css) {
+function injectThemeStyle(className: string, css: string): void {
   if (typeof document === 'undefined' || !css) return;
   let style = document.querySelector(`[data-sd-theme="${className}"]`);
   if (!style) {
@@ -111,14 +119,11 @@ function injectThemeStyle(className, css) {
  * Returns a CSS class name. Apply it to `<html>` to activate the theme.
  * The style element is injected into the document automatically.
  *
- * For strict CSP environments that require a nonce, use `buildTheme()` instead
+ * For strict CSP environments that require a nonce, use {@link buildTheme} instead
  * and inject the CSS yourself with the appropriate nonce attribute.
  *
- * @param {ThemeConfig} config
- * @returns {string} The generated CSS class name
- *
  * @example
- * ```js
+ * ```ts
  * import { createTheme } from 'superdoc';
  *
  * const theme = createTheme({
@@ -130,7 +135,7 @@ function injectThemeStyle(className, css) {
  * document.documentElement.classList.add(theme);
  * ```
  */
-export function createTheme(config) {
+export function createTheme(config: ThemeConfig): string {
   const { className, css } = generateTheme(config);
   injectThemeStyle(className, css);
   return className;
@@ -141,11 +146,8 @@ export function createTheme(config) {
  * Pure function — does NOT inject styles into the DOM. Use this for SSR
  * or when you need to control style injection yourself (e.g., CSP nonce).
  *
- * @param {ThemeConfig} config
- * @returns {{ className: string, css: string }}
- *
  * @example
- * ```js
+ * ```ts
  * import { buildTheme } from 'superdoc';
  *
  * const { className, css } = buildTheme({
@@ -155,6 +157,6 @@ export function createTheme(config) {
  * const html = `<html class="${className}"><head><style>${css}</style></head>...</html>`;
  * ```
  */
-export function buildTheme(config) {
+export function buildTheme(config: ThemeConfig): ThemeResult {
   return generateTheme(config);
 }

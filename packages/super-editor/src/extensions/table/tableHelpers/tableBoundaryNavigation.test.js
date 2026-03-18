@@ -128,7 +128,7 @@ describe('tableBoundaryNavigation', () => {
     expect(isAtEffectiveParagraphStart(state.selection.$head)).toBe(true);
   });
 
-  it('does not treat an interior run boundary as the effective paragraph end', () => {
+  it('does not exit the table from a non-edge cell even when the caret is at paragraph end', () => {
     const endOfIs = isPos + 'Is'.length;
     const state = editor.state.apply(editor.state.tr.setSelection(TextSelection.create(doc, endOfIs)));
 

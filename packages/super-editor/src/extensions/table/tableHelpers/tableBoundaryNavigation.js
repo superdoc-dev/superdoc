@@ -31,6 +31,15 @@ function findRunDepthWithinParagraph($pos, paragraphDepth) {
 }
 
 /**
+ * Returns the paragraph depth for a position, or -1 when outside a paragraph.
+ * @param {import('prosemirror-model').ResolvedPos} $pos
+ * @returns {number}
+ */
+function findParagraphDepth($pos) {
+  return findAncestorDepth($pos, (node) => node.type.name === 'paragraph');
+}
+
+/**
  * Returns true when the caret should be treated as being at the effective end
  * of the paragraph for horizontal navigation purposes.
  *
@@ -42,7 +51,7 @@ function findRunDepthWithinParagraph($pos, paragraphDepth) {
  * @returns {boolean}
  */
 export function isAtEffectiveParagraphEnd($head) {
-  const paragraphDepth = findAncestorDepth($head, (node) => node.type.name === 'paragraph');
+  const paragraphDepth = findParagraphDepth($head);
   if (paragraphDepth < 0) return false;
 
   const paragraph = $head.node(paragraphDepth);
@@ -65,7 +74,7 @@ export function isAtEffectiveParagraphEnd($head) {
  * @returns {boolean}
  */
 export function isAtEffectiveParagraphStart($head) {
-  const paragraphDepth = findAncestorDepth($head, (node) => node.type.name === 'paragraph');
+  const paragraphDepth = findParagraphDepth($head);
   if (paragraphDepth < 0) return false;
 
   const paragraph = $head.node(paragraphDepth);
@@ -104,7 +113,7 @@ function isInFirstParagraphOfCell($head, cellDepth) {
  * Returns the table/cell context for a resolved position, or null when the
  * position is outside a table cell.
  * @param {import('prosemirror-model').ResolvedPos} $head
- * @returns {{ cellDepth: number, cellStart: number, tableDepth: number, tableStart: number, tablePos: number, table: import('prosemirror-model').Node } | null}
+ * @returns {{ cellDepth: number, cellStart: number, tableStart: number, tablePos: number, table: import('prosemirror-model').Node } | null}
  */
 function getTableContext($head) {
   const cellDepth = findAncestorDepth($head, (node) => TABLE_CELL_ROLES.has(node.type.spec.tableRole));
@@ -117,11 +126,20 @@ function getTableContext($head) {
   return {
     cellDepth,
     cellStart: $head.before(cellDepth),
-    tableDepth,
     tableStart: $head.start(tableDepth),
     tablePos: $head.before(tableDepth),
     table,
   };
+}
+
+/**
+ * Returns the current cell rectangle within the table map.
+ * @param {NonNullable<ReturnType<typeof getTableContext>>} context
+ * @returns {{ map: TableMap, rect: ReturnType<TableMap['findCell']> }}
+ */
+function getCellRect(context) {
+  const map = TableMap.get(context.table);
+  return { map, rect: map.findCell(context.cellStart - context.tableStart) };
 }
 
 /**
@@ -131,8 +149,7 @@ function getTableContext($head) {
  */
 function isLastCellInTable(context) {
   if (!context) return false;
-  const map = TableMap.get(context.table);
-  const rect = map.findCell(context.cellStart - context.tableStart);
+  const { map, rect } = getCellRect(context);
   return rect.right === map.width && rect.bottom === map.height;
 }
 
@@ -143,8 +160,7 @@ function isLastCellInTable(context) {
  */
 function isFirstCellInTable(context) {
   if (!context) return false;
-  const map = TableMap.get(context.table);
-  const rect = map.findCell(context.cellStart - context.tableStart);
+  const { rect } = getCellRect(context);
   return rect.left === 0 && rect.top === 0;
 }
 
@@ -211,6 +227,43 @@ function findLastTextPosBeforeBoundary(state, boundaryPos) {
 }
 
 /**
+ * Returns a nearby selection fallback around a boundary position.
+ * @param {import('prosemirror-state').EditorState} state
+ * @param {number} boundaryPos
+ * @param {-1 | 1} dir
+ * @returns {import('prosemirror-state').Selection}
+ */
+function findSelectionNearBoundary(state, boundaryPos, dir) {
+  return (
+    Selection.findFrom(state.doc.resolve(boundaryPos), dir, true) ?? Selection.near(state.doc.resolve(boundaryPos), dir)
+  );
+}
+
+/**
+ * Returns direction-specific helpers for horizontal boundary navigation.
+ * @param {-1 | 1} dir
+ */
+function getDirectionHelpers(dir) {
+  if (dir > 0) {
+    return {
+      isAtParagraphBoundary: isAtEffectiveParagraphEnd,
+      isEdgeParagraphInCell: isInLastParagraphOfCell,
+      isEdgeCellInTable: isLastCellInTable,
+      findTextPosAcrossBoundary: findFirstTextPosAfterBoundary,
+      getTableBoundaryPos: (context) => context.tablePos + context.table.nodeSize,
+    };
+  }
+
+  return {
+    isAtParagraphBoundary: isAtEffectiveParagraphStart,
+    isEdgeParagraphInCell: isInFirstParagraphOfCell,
+    isEdgeCellInTable: isFirstCellInTable,
+    findTextPosAcrossBoundary: findLastTextPosBeforeBoundary,
+    getTableBoundaryPos: (context) => context.tablePos,
+  };
+}
+
+/**
  * Computes the selection to apply when a horizontal arrow key should exit a
  * table from the first or last cell. Returns null when no custom handling is
  * required and native/ProseMirror behavior should continue.
@@ -225,34 +278,17 @@ export function getTableBoundaryExitSelection(state, dir) {
 
   const context = getTableContext(selection.$head);
   if (!context) return null;
+  const helpers = getDirectionHelpers(dir);
+  if (!helpers.isEdgeParagraphInCell(selection.$head, context.cellDepth)) return null;
+  if (!helpers.isAtParagraphBoundary(selection.$head)) return null;
+  if (!helpers.isEdgeCellInTable(context)) return null;
 
-  if (dir > 0) {
-    if (!isInLastParagraphOfCell(selection.$head, context.cellDepth)) return null;
-    if (!isAtEffectiveParagraphEnd(selection.$head)) return null;
-    if (!isLastCellInTable(context)) return null;
-
-    const targetPos = findFirstTextPosAfterBoundary(state, context.tablePos + context.table.nodeSize);
-    if (targetPos != null) {
-      return TextSelection.create(state.doc, targetPos);
-    }
-    return (
-      Selection.findFrom(state.doc.resolve(context.tablePos + context.table.nodeSize), 1, true) ??
-      Selection.near(state.doc.resolve(context.tablePos + context.table.nodeSize), 1)
-    );
-  }
-
-  if (!isInFirstParagraphOfCell(selection.$head, context.cellDepth)) return null;
-  if (!isAtEffectiveParagraphStart(selection.$head)) return null;
-  if (!isFirstCellInTable(context)) return null;
-
-  const targetPos = findLastTextPosBeforeBoundary(state, context.tablePos);
+  const boundaryPos = helpers.getTableBoundaryPos(context);
+  const targetPos = helpers.findTextPosAcrossBoundary(state, boundaryPos);
   if (targetPos != null) {
     return TextSelection.create(state.doc, targetPos);
   }
-  return (
-    Selection.findFrom(state.doc.resolve(context.tablePos), -1, true) ??
-    Selection.near(state.doc.resolve(context.tablePos), -1)
-  );
+  return findSelectionNearBoundary(state, boundaryPos, dir);
 }
 
 /**
@@ -269,35 +305,31 @@ export function getAdjacentTableEntrySelection(state, dir) {
   if (!selection.empty) return null;
 
   const $head = selection.$head;
-  const paragraphDepth = findAncestorDepth($head, (node) => node.type.name === 'paragraph');
+  const paragraphDepth = findParagraphDepth($head);
   if (paragraphDepth < 0) return null;
+  const helpers = getDirectionHelpers(dir);
+  if (!helpers.isAtParagraphBoundary($head)) return null;
 
   const boundaryPos = dir > 0 ? $head.end(paragraphDepth) + 1 : $head.start(paragraphDepth) - 1;
-  const adjacentNode = dir > 0 ? state.doc.resolve(boundaryPos).nodeAfter : state.doc.resolve(boundaryPos).nodeBefore;
+  const $boundary = state.doc.resolve(boundaryPos);
+  const adjacentNode = dir > 0 ? $boundary.nodeAfter : $boundary.nodeBefore;
 
   if (!adjacentNode || adjacentNode.type.spec.tableRole !== 'table') return null;
 
   if (dir > 0) {
-    if (!isAtEffectiveParagraphEnd($head)) return null;
     const targetPos = findFirstTextPosInNode(adjacentNode, boundaryPos);
     if (targetPos != null) {
       return TextSelection.create(state.doc, targetPos);
     }
-    return (
-      Selection.findFrom(state.doc.resolve(boundaryPos), 1, true) ?? Selection.near(state.doc.resolve(boundaryPos), 1)
-    );
+    return findSelectionNearBoundary(state, boundaryPos, 1);
   }
 
-  if (!isAtEffectiveParagraphStart($head)) return null;
   const tablePos = boundaryPos - adjacentNode.nodeSize;
   const targetPos = findLastTextPosInNode(adjacentNode, tablePos);
   if (targetPos != null) {
     return TextSelection.create(state.doc, targetPos);
   }
-  return (
-    Selection.findFrom(state.doc.resolve(tablePos + adjacentNode.nodeSize), -1, true) ??
-    Selection.near(state.doc.resolve(tablePos + adjacentNode.nodeSize), -1)
-  );
+  return findSelectionNearBoundary(state, tablePos + adjacentNode.nodeSize, -1);
 }
 
 /**

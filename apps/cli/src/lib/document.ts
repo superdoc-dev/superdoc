@@ -2,9 +2,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { Editor } from 'superdoc/super-editor';
 import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
+import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
 import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
 
-import type { DocumentApi } from '@superdoc/document-api';
+import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import { createCliDomEnvironment } from './dom-environment';
 import type { CollaborationProfile } from './collaboration';
 import { createCollaborationRuntime } from './collaboration';
@@ -63,6 +64,21 @@ interface OpenDocumentOptions {
 export interface FileOutputMeta {
   path: string;
   byteLength: number;
+}
+
+function bindCurrentDocumentApi(editor: Editor): EditorWithDoc {
+  const editorWithDoc = editor as EditorWithDoc;
+
+  // `superdoc/super-editor` resolves to the published dist bundle, which can
+  // lag the source-backed document-api contract used by the CLI tests. Shadow
+  // the bundled getter with a source-backed DocumentApi so runtime behavior and
+  // response validation stay on the same contract version.
+  Object.defineProperty(editorWithDoc, 'doc', {
+    configurable: true,
+    value: createDocumentApi(getDocumentApiAdapters(editor)),
+  });
+
+  return editorWithDoc;
 }
 
 function toUint8Array(data: unknown): Uint8Array {
@@ -217,7 +233,7 @@ export async function openDocument(
     }
   }
 
-  const editorWithDoc = editor as EditorWithDoc;
+  const editorWithDoc = bindCurrentDocumentApi(editor);
 
   return {
     editor: editorWithDoc,

@@ -651,10 +651,10 @@ const PROPERTY_VALIDATOR_MAP: Record<InlineRunPatchKey, (value: unknown, key: st
 };
 
 function validateInlineProperty(key: string, value: unknown): void {
-  const validator = PROPERTY_VALIDATOR_MAP[key as InlineRunPatchKey];
-  if (!validator) {
+  if (!Object.prototype.hasOwnProperty.call(PROPERTY_VALIDATOR_MAP, key)) {
     throw new DocumentApiValidationError('INVALID_INPUT', `Unknown inline property: "${key}".`, { field: key });
   }
+  const validator = PROPERTY_VALIDATOR_MAP[key as InlineRunPatchKey];
   validator(value, `inline.${key}`);
 }
 

@@ -1,51 +1,22 @@
-# Tool quality tests — does the LLM pick the right tool with valid arguments?
+# Tool quality tests — measures how well LLMs understand our tool definitions.
 #
-# Setup: native promptfoo providers with the full public SDK tool bundle:
-#   superdoc_search, superdoc_get_content, superdoc_edit, superdoc_format,
-#   superdoc_create, superdoc_list, superdoc_comment, superdoc_track_changes,
-#   superdoc_mutations
+# Constraint: single turn, tool_choice: required.
 #
-# Single turn. tool_choice: required. No multi-step agent loop.
-#
-# Assertion layers:
-#   tool-call-f1   — were the correct tools called? (set comparison)
-#   javascript     — were arguments structured correctly?
+# Tests are grouped by ASSERTION CONFIDENCE, not by document operation:
+#   Group 1: DEFINITIVE — one correct answer, strict tool + args validation
+#   Group 2: FIRST-INSTINCT — which tool does the model reach for?
+#            Scored: 1.0 = ideal tool, 0.7 = reads first, 0.0 = wrong category
+#   Group 3: ARGUMENT QUALITY — validates args regardless of which tool
 
 # =============================================================================
-# READING — correct tool for finding/reading content
+# GROUP 1: DEFINITIVE — single-step tasks with ONE correct answer
+# These are the strongest tests. The first call IS the complete action.
 # =============================================================================
 
-- description: 'Text search uses superdoc_search with text selector'
-  metadata: { category: reading }
+- description: 'Get full document text'
+  metadata: { category: definitive, group: 1 }
   vars:
-    task: 'Find all paragraphs containing the word "Introduction" in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search]
-      threshold: 0.5         # may also call superdoc_get_content
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:textSearchArgs
-      metric: argument_accuracy
-
-- description: 'Node search uses superdoc_search with node selector'
-  metadata: { category: reading }
-  vars:
-    task: 'List all headings in the document.'
-    expectedNodeType: heading
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:nodeSearchArgs
-      metric: argument_accuracy
-
-- description: 'Get full text calls superdoc_get_content with action text'
-  metadata: { category: reading }
-  vars:
-    task: 'Pull the full plain text from this document so I can use it somewhere else.'
+    task: 'Get the full plain text of this document.'
   assert:
     - type: tool-call-f1
       value: [superdoc_get_content]
@@ -55,133 +26,18 @@
       value: file://lib/checks.cjs:usesGetContentText
       metric: argument_accuracy
 
-- description: 'Count occurrences uses superdoc_search'
-  metadata: { category: reading }
+- description: 'Get document as markdown'
+  metadata: { category: definitive, group: 1 }
   vars:
-    task: 'How many times does "Acme Corp" appear in this document?'
+    task: 'Export this document as markdown.'
   assert:
     - type: tool-call-f1
-      value: [superdoc_search]
-      threshold: 0.5         # may also call superdoc_get_content
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:textSearchArgs
-      metric: argument_accuracy
-
-# =============================================================================
-# MUTATIONS — replace, delete, multi-step
-# =============================================================================
-
-- description: 'Replace uses superdoc_search + superdoc_edit or superdoc_mutations'
-  metadata: { category: mutation }
-  vars:
-    task: 'Replace the text "old title" with "new title" in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_edit]
-      threshold: 0.5        # allows superdoc_mutations instead of superdoc_edit
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:usesRewriteOp
-      metric: argument_accuracy
-
-- description: 'Delete uses superdoc_search + superdoc_edit or superdoc_mutations'
-  metadata: { category: mutation }
-  vars:
-    task: 'Remove the sentence "This is a draft document." from the introduction.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_edit]
+      value: [superdoc_get_content]
       threshold: 0.5
       metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:usesDeleteOp
-      metric: argument_accuracy
 
-- description: 'Multi-step replace uses atomic: true with 2+ steps'
-  metadata: { category: mutation }
-  vars:
-    task: 'Replace "Q1" with "Quarter 1" and "Q2" with "Quarter 2" atomically.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_mutations]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:atomicMultiStep
-      metric: argument_accuracy
-
-- description: 'First-occurrence replace uses require "first" in mutation, not "any"'
-  metadata: { category: mutation }
-  vars:
-    task: 'Replace the first occurrence of "draft" with "final" in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_edit]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:noRequireAny
-      metric: correctness
-
-# =============================================================================
-# FORMATTING — bold, highlight, underline via superdoc_format or superdoc_mutations
-# =============================================================================
-
-- description: 'Bold uses superdoc_format or superdoc_mutations with correct format args'
-  metadata: { category: format }
-  vars:
-    task: 'Make the word "Important" bold in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_format]
-      threshold: 0.5         # may use superdoc_mutations instead
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:correctFormatArgs
-      metric: argument_accuracy
-
-- description: 'Rewrite + format must be separate batches in superdoc_mutations'
-  metadata: { category: format }
-  vars:
-    task: 'Replace "old text" with "new text" and make it bold.'
-  assert:
-    - type: javascript
-      value: file://lib/checks.cjs:noMixedBatch
-      metric: correctness
-
-- description: 'Highlight uses superdoc_format or superdoc_mutations with format.apply'
-  metadata: { category: format, source: spreadsheet }
-  vars:
-    task: 'Apply yellow highlight to every occurrence of "high risk" in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_format]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:correctFormatArgs
-      metric: argument_accuracy
-
-- description: 'Underline uses superdoc_format or superdoc_mutations with format.apply'
-  metadata: { category: format, source: spreadsheet }
-  vars:
-    task: 'Underline the sentence containing "payment terms" in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_format]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:correctFormatArgs
-      metric: argument_accuracy
-
-# =============================================================================
-# STRUCTURAL CREATION — superdoc_create for headings and paragraphs
-# =============================================================================
-
-- description: 'Add heading uses superdoc_create with action heading'
-  metadata: { category: structure }
+- description: 'Add heading at end'
+  metadata: { category: definitive, group: 1 }
   vars:
     task: 'Add a new heading "Chapter 2" at the end of the document.'
     expectedCreateAction: heading
@@ -197,8 +53,8 @@
       value: file://lib/checks.cjs:noTextInsertForStructure
       metric: correctness
 
-- description: 'Add paragraph uses superdoc_create with action paragraph'
-  metadata: { category: structure }
+- description: 'Add paragraph at end'
+  metadata: { category: definitive, group: 1 }
   vars:
     task: 'Add a new paragraph at the end of the document.'
     expectedCreateAction: paragraph
@@ -211,123 +67,10 @@
       value: file://lib/checks.cjs:usesCreateAction
       metric: argument_accuracy
 
-# =============================================================================
-# TABLES — no table creation tool in public surface, model should search first
-# =============================================================================
-
-- description: 'Aspirational: Insert table searches for target position'
-  metadata: { category: tables, source: spreadsheet }
+- description: 'Undo last change'
+  metadata: { category: definitive, group: 1 }
   vars:
-    task: 'Insert a 4-column by 3-row table under the Pricing Details heading.'
-  assert:
-    # Table creation is not in the public surface (superdoc_create only supports
-    # heading/paragraph). This tests that the model at least searches for context.
-    - type: tool-call-f1
-      value: [superdoc_search]
-      threshold: 0.5
-      metric: tool_selection
-
-# =============================================================================
-# COMMENTS — superdoc_comment
-# =============================================================================
-
-- description: 'Add comment uses superdoc_comment with action create'
-  metadata: { category: comments }
-  vars:
-    task: 'Add a comment on the first paragraph saying "Needs legal review".'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_comment]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:usesCommentCreate
-      metric: argument_accuracy
-
-- description: 'Comment on liability clauses uses superdoc_comment'
-  metadata: { category: comments, source: spreadsheet }
-  vars:
-    task: 'Add a review comment to each paragraph containing "limitation of liability" in the document.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_comment]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:usesCommentCreate
-      metric: argument_accuracy
-
-# =============================================================================
-# TRACKED CHANGES — changeMode argument on editing tools
-# =============================================================================
-
-- description: 'Tracked change sets changeMode to tracked'
-  metadata: { category: tracked_changes }
-  vars:
-    task: 'Suggest replacing "annual review" with "quarterly review" using tracked changes.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_edit]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:isTrackedMode
-      metric: correctness
-
-- description: 'Direct edit does not set tracked mode'
-  metadata: { category: tracked_changes }
-  vars:
-    task: 'Replace "draft" with "final version" in the title. Apply directly.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_edit]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:isNotTrackedMode
-      metric: correctness
-
-# =============================================================================
-# LISTS — superdoc_list
-# =============================================================================
-
-- description: 'List conversion uses superdoc_list'
-  metadata: { category: lists }
-  vars:
-    task: 'Convert the bullet points in section 2 into a numbered list.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_list]
-      threshold: 0.5
-      metric: tool_selection
-
-- description: 'Change list numbering uses superdoc_list'
-  metadata: { category: lists, source: spreadsheet }
-  vars:
-    task: 'Change the third level of this list to lowercase Roman numerals.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_list]
-      threshold: 0.5
-      metric: tool_selection
-
-# =============================================================================
-# HYGIENE — argument quality, efficiency
-# =============================================================================
-
-- description: 'No hallucinated doc or sessionId params'
-  metadata: { category: hygiene }
-  vars:
-    task: 'Extract all the plain text so I can paste it elsewhere.'
-  assert:
-    - type: javascript
-      value: file://lib/checks.cjs:noHallucinatedParams
-      metric: argument_accuracy
-
-- description: 'Undo calls superdoc_edit with action undo'
-  metadata: { category: history }
-  vars:
-    task: 'Undo that last change, it was wrong.'
+    task: 'Undo the last change.'
   assert:
     - type: tool-call-f1
       value: [superdoc_edit]
@@ -337,61 +80,206 @@
       value: file://lib/checks.cjs:usesEditUndo
       metric: argument_accuracy
 
+- description: 'Text search with pattern'
+  metadata: { category: definitive, group: 1 }
+  vars:
+    task: 'Find all paragraphs containing the word "Introduction" in the document.'
+  assert:
+    - type: tool-call-f1
+      value: [superdoc_search]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:textSearchArgs
+      metric: argument_accuracy
+
+- description: 'Node search for headings'
+  metadata: { category: definitive, group: 1 }
+  vars:
+    task: 'Find all headings in the document.'
+    expectedNodeType: heading
+  assert:
+    - type: tool-call-f1
+      value: [superdoc_search]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:nodeSearchArgs
+      metric: argument_accuracy
+
+- description: 'Count text occurrences'
+  metadata: { category: definitive, group: 1 }
+  vars:
+    task: 'How many times does "Acme Corp" appear in this document?'
+  assert:
+    - type: tool-call-f1
+      value: [superdoc_search]
+      threshold: 0.5
+      metric: tool_selection
+    - type: javascript
+      value: file://lib/checks.cjs:textSearchArgs
+      metric: argument_accuracy
+
+# =============================================================================
+# GROUP 2: FIRST-INSTINCT — multi-step tasks, scored by tool choice quality
+# 1.0 = ideal tool (model knows the right tool), 0.7 = reads first, 0.0 = wrong
+# The prompt comparison (full vs minimal) reveals tool description quality.
+# =============================================================================
+
+# --- Edit tasks ---
+
+- description: 'Replace text (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Replace the text "old title" with "new title" in the document.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctEdit
+      metric: tool_instinct
+
+- description: 'Delete sentence (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Remove the sentence "This is a draft document." from the introduction.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctEdit
+      metric: tool_instinct
+
+- description: 'Atomic multi-step replace (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Replace "Q1" with "Quarter 1" and "Q2" with "Quarter 2" atomically.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctEdit
+      metric: tool_instinct
+
+- description: 'First-occurrence replace (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Replace the first occurrence of "draft" with "final" in the document.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctEdit
+      metric: tool_instinct
+
+# --- Format tasks ---
+
+- description: 'Bold text (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Make the word "Important" bold in the document.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctFormat
+      metric: tool_instinct
+
+- description: 'Highlight text (instinct)'
+  metadata: { category: instinct, group: 2, source: spreadsheet }
+  vars:
+    task: 'Apply yellow highlight to every occurrence of "high risk" in the document.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctFormat
+      metric: tool_instinct
+
+- description: 'Underline text (instinct)'
+  metadata: { category: instinct, group: 2, source: spreadsheet }
+  vars:
+    task: 'Underline the sentence containing "payment terms" in the document.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctFormat
+      metric: tool_instinct
+
+# --- Comment tasks ---
+
+- description: 'Add comment (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Add a comment on the first paragraph saying "Needs legal review".'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctComment
+      metric: tool_instinct
+
+- description: 'Comment on liability clauses (instinct)'
+  metadata: { category: instinct, group: 2, source: spreadsheet }
+  vars:
+    task: 'Add a review comment to each paragraph containing "limitation of liability".'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctComment
+      metric: tool_instinct
+
+# --- List tasks ---
+
+- description: 'Convert bullets to numbered list (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Convert the bullet points in section 2 into a numbered list.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctList
+      metric: tool_instinct
+
+- description: 'Change list numbering style (instinct)'
+  metadata: { category: instinct, group: 2, source: spreadsheet }
+  vars:
+    task: 'Change the third level of this list to lowercase Roman numerals.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctList
+      metric: tool_instinct
+
+# --- Tracked changes tasks ---
+
+- description: 'Tracked change edit (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Suggest replacing "annual review" with "quarterly review" using tracked changes.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctTrackChanges
+      metric: tool_instinct
+
+- description: 'Direct edit (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Replace "draft" with "final version" in the title. Apply directly.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:instinctEdit
+      metric: tool_instinct
+
+# =============================================================================
+# GROUP 3: ARGUMENT QUALITY — validates args regardless of which tool
+# =============================================================================
+
+- description: 'No hallucinated doc or sessionId params'
+  metadata: { category: quality, group: 3 }
+  vars:
+    task: 'Extract all the plain text so I can paste it elsewhere.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:noHallucinatedParams
+      metric: argument_accuracy
+
+- description: 'Rewrite + format must not be mixed in one batch'
+  metadata: { category: quality, group: 3 }
+  vars:
+    task: 'Replace "old text" with "new text" and make it bold.'
+  assert:
+    - type: javascript
+      value: file://lib/checks.cjs:noMixedBatch
+      metric: correctness
+
 - description: 'Simple replace uses 5 or fewer tool calls'
-  metadata: { category: efficiency }
+  metadata: { category: quality, group: 3 }
   vars:
     task: 'Replace the word "hello" with "goodbye" in the document.'
   assert:
     - type: javascript
       metric: efficiency
       value: 'output.length <= 5'
-
-# =============================================================================
-# ASPIRATIONAL — features that may require specialized tools.
-# =============================================================================
-
-- description: 'Aspirational: Insert table of contents'
-  metadata: { category: aspirational, source: spreadsheet }
-  vars:
-    task: 'Insert a table of contents immediately following the title page.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search]
-      threshold: 0.5           # model should at least search for the insertion point
-      metric: tool_selection
-
-- description: 'Aspirational: Accept formatting tracked changes uses decide action'
-  metadata: { category: aspirational, source: spreadsheet }
-  vars:
-    task: 'Accept all tracked changes that only affect formatting.'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_track_changes]
-      threshold: 0.5
-      metric: tool_selection
-    - type: javascript
-      value: file://lib/checks.cjs:usesTrackChangesDecide
-      metric: argument_accuracy
-
-- description: 'Aspirational: Turn text into hyperlink (not in public surface)'
-  metadata: { category: aspirational, source: spreadsheet }
-  vars:
-    task: 'Turn every instance of "SuperDoc" into a hyperlink to https://www.superdoc.dev.'
-  assert:
-    # Hyperlinks are not exposed in the public tool surface (superdoc_format only
-    # supports inline, set_alignment, set_indentation, set_spacing, set_style).
-    # The model should at least search for the text to attempt the task.
-    - type: tool-call-f1
-      value: [superdoc_search]
-      threshold: 0.5
-      metric: tool_selection
-
-- description: 'Aspirational: Identify liability risks reads document'
-  metadata: { category: aspirational, source: spreadsheet }
-  vars:
-    task: 'Which sections of this document pose the greatest liability to me?'
-  assert:
-    - type: tool-call-f1
-      value: [superdoc_search, superdoc_get_content]
-      threshold: 0.5
-      metric: tool_selection

@@ -787,6 +787,7 @@ const init = async () => {
             collaboration: {
               ydoc: ydocRef.value,
               provider: providerRef.value,
+              // logUpdates: true, // Log collaboration updates to console for debugging
             },
           }
         : {}),

@@ -134,6 +134,75 @@ const registerBodySectPrSync = (editor, ydoc, provider, cleanupState) => {
   }
 };
 
+/**
+ * Initialize collaboration update logging for debugging.
+ * Logs local and remote Y.js document changes to console.
+ */
+const initCollaborationUpdateLogging = (editor, ydoc, cleanupState) => {
+  const yFragment = ydoc.getXmlFragment('supereditor');
+  const internalAttrs = new Set(['sdBlockRev', 'listRendering', 'ychange']);
+
+  const fragmentObserver = (events, transaction) => {
+    const isLocal = transaction.local;
+
+    // Get user - for remote, find first non-local user in awareness
+    let user = isLocal
+      ? editor.options.user
+      : (() => {
+          const provider = editor.options.collaborationProvider;
+          if (!provider?.awareness) return null;
+          for (const [id, state] of provider.awareness.getStates()) {
+            if (id !== ydoc.clientID && state?.user) return state.user;
+          }
+          return null;
+        })();
+    user = user || { name: 'Remote user' };
+
+    // Parse events
+    const actions = [];
+    let text = '';
+    let deleted = 0;
+
+    for (const event of events) {
+      for (const d of event.changes?.delta || []) {
+        if (d.insert) {
+          if (typeof d.insert === 'string') {
+            text += d.insert;
+            actions.push(d.insert.length === 1 ? 'type' : 'insert');
+          } else if (Array.isArray(d.insert)) {
+            for (const el of d.insert) {
+              actions.push(`insert:${el?.nodeName || 'element'}`);
+              const str = el?.toString?.() || '';
+              const match = str.match(/>([^<]+)</);
+              if (match?.[1]) text += match[1];
+            }
+          }
+        }
+        if (d.delete) {
+          deleted += d.delete;
+          actions.push('delete');
+        }
+      }
+      for (const [key, change] of event.changes?.keys || []) {
+        if (internalAttrs.has(key)) continue;
+        actions.push(change.action === 'delete' ? `unformat:${key}` : `format:${key}`);
+      }
+    }
+
+    if (!actions.length && !text && !deleted) return;
+
+    console.log(`[Collaboration] ${isLocal ? 'Local' : 'Remote'} edit`, {
+      user: user.name || user.email || 'unknown',
+      action: [...new Set(actions)].join(', ') || 'edit',
+      ...(text && { text }),
+      ...(deleted && !text && { deletedChars: deleted }),
+    });
+  };
+
+  yFragment.observeDeep(fragmentObserver);
+  cleanupState.collaborationLogFragmentObserver = { fragment: yFragment, observer: fragmentObserver };
+};
+
 export const Collaboration = Extension.create({
   name: 'collaboration',
 
@@ -145,12 +214,14 @@ export const Collaboration = Extension.create({
       field: 'supereditor',
       fragment: null,
       isReady: false,
+      logCollaborationUpdates: false,
     };
   },
 
   addPmPlugins() {
     if (!this.editor.options.ydoc) return [];
     this.options.ydoc = this.editor.options.ydoc;
+    this.options.logCollaborationUpdates = this.editor.options.logCollaborationUpdates ?? false;
 
     initSyncListener(this.options.ydoc, this.editor, this);
 
@@ -179,7 +250,13 @@ export const Collaboration = Extension.create({
       partSyncPendingCleanup: null,
       bodySectPrPendingCleanup: null,
       bodySectPrTransactionHandler: null,
+      collaborationLogFragmentObserver: null,
     };
+
+    if (this.options.logCollaborationUpdates) {
+      initCollaborationUpdateLogging(this.editor, this.options.ydoc, cleanupState);
+    }
+
     collaborationCleanupByEditor.set(this.editor, cleanupState);
 
     registerBodySectPrSync(this.editor, this.options.ydoc, this.editor.options.collaborationProvider, cleanupState);
@@ -231,6 +308,12 @@ export const Collaboration = Extension.create({
     // Clean up Y.js media map observer
     cleanup.mediaMap.unobserve(cleanup.mediaMapObserver);
     cleanup.metaMap?.unobserve?.(cleanup.metaMapObserver);
+
+    // Clean up collaboration update logging
+    if (cleanup.collaborationLogFragmentObserver) {
+      const { fragment, observer } = cleanup.collaborationLogFragmentObserver;
+      fragment.unobserveDeep(observer);
+    }
 
     // Clean up part-sync publisher/consumer (or pending sync listener)
     cleanup.partSyncHandle?.destroy();

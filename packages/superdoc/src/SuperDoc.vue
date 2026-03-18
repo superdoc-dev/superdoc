@@ -560,6 +560,7 @@ const editorOptions = (doc) => {
     onTransaction: onEditorTransaction,
     ydoc: doc.ydoc,
     collaborationProvider: doc.provider || null,
+    logCollaborationUpdates: proxy.$superdoc.config.modules?.collaboration?.logUpdates ?? false,
     isNewFile,
     handleImageUpload: proxy.$superdoc.config.handleImageUpload,
     externalExtensions: proxy.$superdoc.config.editorExtensions || [],

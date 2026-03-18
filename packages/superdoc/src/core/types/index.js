@@ -37,6 +37,7 @@
  * @property {string} [url] WebSocket URL for internal provider (deprecated)
  * @property {string} [token] Authentication token for internal provider (deprecated)
  * @property {Object} [params] Additional params for internal provider (deprecated)
+ * @property {boolean} [logUpdates] When true, logs collaboration updates to console (for debugging)
  */
 
 /** @typedef {import('@superdoc/super-editor').Editor} Editor */

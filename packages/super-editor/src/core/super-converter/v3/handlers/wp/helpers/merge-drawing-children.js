@@ -15,8 +15,13 @@ import { carbonCopy } from '@core/utilities/carbonCopy.js';
 export function mergeDrawingChildren({ order, generated, original }) {
   const genQueues = groupByName(generated);
   const originalsByIndex = groupByIndex(original);
+  const merged = mergeWithOrder(order, genQueues, originalsByIndex);
 
-  return mergeWithOrder(order, genQueues, originalsByIndex);
+  // Originals may carry invalid IDs (e.g. id="0") that Word rejects.
+  // Patch them using the valid ID from the generated wp:docPr.
+  fixZeroDrawingIds(merged, generated);
+
+  return merged;
 }
 
 function groupByIndex(entries = []) {
@@ -70,6 +75,7 @@ function mergeWithOrder(order = [], genQueues, originalsByIndex) {
 
   return out;
 }
+
 function groupByName(nodes = []) {
   const map = new Map();
   nodes.forEach((el) => {
@@ -79,4 +85,29 @@ function groupByName(nodes = []) {
     map.set(el.name, list);
   });
   return map;
+}
+
+/**
+ * Patch zero/missing IDs on wp:docPr and pic:cNvPr in merged output.
+ * When the merge prefers an original element, it may carry an invalid id="0"
+ * that Word rejects. We fix it using the valid ID from the generated wp:docPr.
+ */
+function fixZeroDrawingIds(merged, generated) {
+  const genDocPr = generated?.find((el) => el?.name === 'wp:docPr');
+  const validId = genDocPr?.attributes?.id;
+  if (!validId || !(Number(validId) > 0)) return;
+
+  const docPr = merged.find((el) => el?.name === 'wp:docPr');
+  if (docPr?.attributes && !(Number(docPr.attributes.id) > 0)) {
+    docPr.attributes.id = validId;
+  }
+
+  const graphic = merged.find((el) => el?.name === 'a:graphic');
+  const graphicData = graphic?.elements?.find((el) => el?.name === 'a:graphicData');
+  const pic = graphicData?.elements?.find((el) => el?.name === 'pic:pic');
+  const nvPicPr = pic?.elements?.find((el) => el?.name === 'pic:nvPicPr');
+  const cNvPr = nvPicPr?.elements?.find((el) => el?.name === 'pic:cNvPr');
+  if (cNvPr?.attributes && !(Number(cNvPr.attributes.id) > 0)) {
+    cNvPr.attributes.id = validId;
+  }
 }

@@ -211,6 +211,13 @@ function getParagraphRunContext($pos, editor) {
     }
   }
 
+  if (runProperties == null) {
+    const nodeAfter = $pos.nodeAfter;
+    if (nodeAfter?.type.name === 'run') {
+      runProperties = normalizeRunProperties(nodeAfter.attrs?.runProperties);
+    }
+  }
+
   if (!paragraphNode) {
     return null;
   }

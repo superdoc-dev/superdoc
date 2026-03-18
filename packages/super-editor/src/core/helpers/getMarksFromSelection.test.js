@@ -157,6 +157,132 @@ describe('getMarksFromSelection', () => {
     });
   });
 
+  describe('nodeAfter fallback — cursor before a run node', () => {
+    const runSchema = new Schema({
+      nodes: {
+        doc: { content: 'paragraph+' },
+        paragraph: {
+          content: 'inline*',
+          group: 'block',
+          attrs: { paragraphProperties: { default: null } },
+          toDOM() {
+            return ['p', 0];
+          },
+        },
+        run: {
+          content: 'text*',
+          group: 'inline',
+          inline: true,
+          attrs: { runProperties: { default: null } },
+          toDOM() {
+            return ['span', 0];
+          },
+        },
+        text: { group: 'inline' },
+      },
+      marks: {
+        bold: {
+          attrs: { value: { default: true } },
+          toDOM() {
+            return ['strong', 0];
+          },
+        },
+        italic: {
+          attrs: { value: { default: true } },
+          toDOM() {
+            return ['em', 0];
+          },
+        },
+      },
+    });
+
+    it('picks up runProperties from nodeAfter when cursor is before the first run', () => {
+      // doc(paragraph(run{bold:true}("Hello")))
+      // pos 1 = inside paragraph, before run — nodeAfter is the run node
+      const testDoc = runSchema.node('doc', null, [
+        runSchema.node('paragraph', null, [
+          runSchema.node('run', { runProperties: { bold: true } }, [runSchema.text('Hello')]),
+        ]),
+      ]);
+      const state = EditorState.create({ schema: runSchema, doc: testDoc });
+      const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
+
+      const result = getSelectionFormattingState(cursorState);
+
+      expect(result.inlineRunProperties).toEqual({ bold: true });
+      expect(result.inlineMarks.some((mark) => mark.type.name === 'bold')).toBe(true);
+    });
+
+    it('does not use nodeAfter fallback when cursor is already inside a run', () => {
+      // Two adjacent runs: cursor inside the first run should use that run's properties,
+      // not the second run's (which would be nodeAfter at the boundary).
+      const testDoc = runSchema.node('doc', null, [
+        runSchema.node('paragraph', null, [
+          runSchema.node('run', { runProperties: { bold: true } }, [runSchema.text('AB')]),
+          runSchema.node('run', { runProperties: { italic: true } }, [runSchema.text('CD')]),
+        ]),
+      ]);
+      const state = EditorState.create({ schema: runSchema, doc: testDoc });
+      // pos 3 = inside the first run ("AB"), specifically after "A"
+      const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 3)));
+
+      const result = getSelectionFormattingState(cursorState);
+
+      expect(result.inlineRunProperties).toEqual({ bold: true });
+    });
+
+    it('does not pick up run properties when nodeAfter is a text node, not a run', () => {
+      // Paragraph with only a text node (no run wrapper) — nodeAfter is a text node
+      const textOnlySchema = new Schema({
+        nodes: {
+          doc: { content: 'paragraph+' },
+          paragraph: {
+            content: 'text*',
+            group: 'block',
+            attrs: { paragraphProperties: { default: null } },
+            toDOM() {
+              return ['p', 0];
+            },
+          },
+          text: { group: 'inline' },
+        },
+        marks: {
+          bold: {
+            attrs: { value: { default: true } },
+            toDOM() {
+              return ['strong', 0];
+            },
+          },
+        },
+      });
+      const testDoc = textOnlySchema.node('doc', null, [
+        textOnlySchema.node('paragraph', null, [textOnlySchema.text('Hello')]),
+      ]);
+      const state = EditorState.create({ schema: textOnlySchema, doc: testDoc });
+      const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
+
+      const result = getSelectionFormattingState(cursorState);
+
+      // No run node found via ancestor walk or nodeAfter, so no bold marks
+      expect(result.inlineMarks.some((mark) => mark.type.name === 'bold')).toBe(false);
+    });
+
+    it('normalizes empty nodeAfter runProperties to null and falls back to cursor marks', () => {
+      const testDoc = runSchema.node('doc', null, [
+        runSchema.node('paragraph', null, [runSchema.node('run', { runProperties: {} }, [runSchema.text('Hello')])]),
+      ]);
+      const state = EditorState.create({ schema: runSchema, doc: testDoc });
+      const cursorState = state.apply(state.tr.setSelection(TextSelection.create(testDoc, 1)));
+
+      const result = getSelectionFormattingState(cursorState);
+
+      // Empty runProperties normalize to null, so the code falls back to cursor marks
+      // which produces no bold/italic marks
+      expect(result.inlineMarks.some((mark) => mark.type.name === 'bold')).toBe(false);
+      expect(result.inlineMarks.some((mark) => mark.type.name === 'italic')).toBe(false);
+    });
+  });
+
   it('reads inline run properties from the surrounding run node instead of decoding visible marks', () => {
     const runSchema = new Schema({
       nodes: {

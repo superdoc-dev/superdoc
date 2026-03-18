@@ -81,6 +81,13 @@ export type TableCreateLocation =
 
 /**
  * Generic success result for table mutation operations.
+ *
+ * For non-destructive table-targeted mutations, `table` is the canonical
+ * post-mutation table reference. Use `table.nodeId` to target the same table
+ * in subsequent operations — no intermediate `find()` needed.
+ *
+ * `table` is `undefined` for destructive operations (delete, convertToText)
+ * and in rare cases where post-mutation re-resolution fails.
  */
 export interface TableMutationSuccess {
   success: true;

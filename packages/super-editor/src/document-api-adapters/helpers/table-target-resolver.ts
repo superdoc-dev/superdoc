@@ -451,6 +451,43 @@ export function getTableColumnCount(tableNode: ProseMirrorNode): number {
 }
 
 // ---------------------------------------------------------------------------
+// Post-mutation re-resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-resolves a table's address after a mutation has been dispatched.
+ *
+ * Uses transaction position mapping as the primary strategy, with
+ * nodeId-based fallback for DOCX tables with stable primary IDs.
+ *
+ * Returns `undefined` if the table cannot be re-resolved — callers
+ * should NOT fall back to the pre-mutation address.
+ */
+export function resolvePostMutationTableAddress(
+  editor: Editor,
+  preMutationPos: number,
+  preMutationNodeId: string,
+  tr: { mapping: { map(pos: number, assoc?: number): number } },
+): BlockNodeAddress | undefined {
+  const index = getBlockIndex(editor);
+
+  // Strategy 1: Map pre-mutation position through the transaction.
+  const mappedPos = tr.mapping.map(preMutationPos);
+  const candidate = index.candidates.find((c) => c.pos === mappedPos && c.nodeType === 'table');
+  if (candidate) return toBlockAddress(candidate);
+
+  // Strategy 2: Look up by pre-mutation nodeId (works for DOCX tables with stable paraId).
+  try {
+    const found = findBlockByNodeIdOnly(index, preMutationNodeId);
+    if (found.nodeType === 'table') return toBlockAddress(found);
+  } catch {
+    // Not found or ambiguous — fall through.
+  }
+
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Failure helper
 // ---------------------------------------------------------------------------
 

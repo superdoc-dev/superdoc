@@ -22,6 +22,11 @@
  * @property {Record<string, string>} [vars] Escape hatch — raw CSS variable overrides (e.g., { '--sd-ui-toolbar-bg': '#f8fafc' })
  */
 
+/*
+ * These map to the --sd-ui-* variable names introduced in the SD-2083
+ * theming system. Components consume them once that PR lands. Until then,
+ * createTheme() generates the correct variables ahead of time.
+ */
 /** @type {Record<string, string>} */
 const COLORS_TO_VARS = {
   action: '--sd-ui-action',
@@ -39,28 +44,13 @@ const COLORS_TO_VARS = {
 let themeCounter = 0;
 
 /**
- * Create a SuperDoc theme from a config object.
- *
- * Returns a CSS class name. Apply it to `<html>` to activate the theme.
- * The style element is injected into the document automatically.
+ * Generate the className and CSS string from a theme config.
+ * Shared core used by both createTheme and buildTheme.
  *
  * @param {ThemeConfig} config
- * @returns {string} The generated CSS class name
- *
- * @example
- * ```js
- * import { createTheme } from 'superdoc';
- *
- * const theme = createTheme({
- *   colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b' },
- *   font: 'Inter, sans-serif',
- *   vars: { '--sd-ui-toolbar-bg': '#f8fafc' },
- * });
- *
- * document.documentElement.classList.add(theme);
- * ```
+ * @returns {{ className: string, css: string }}
  */
-export function createTheme(config) {
+function generateTheme(config) {
   const { name, font, radius, shadow, colors, vars } = config;
   const className = `sd-theme-${name || `custom-${++themeCounter}`}`;
 
@@ -91,24 +81,55 @@ export function createTheme(config) {
     }
   }
 
-  if (declarations.length === 0) return className;
+  const css = declarations.length > 0 ? `.${className} {\n${declarations.join('\n')}\n}` : '';
 
-  const css = `.${className} {\n${declarations.join('\n')}\n}`;
+  return { className, css };
+}
 
-  // Inject into document (SSR-safe — skips if no document)
-  if (typeof document !== 'undefined') {
-    let style = document.querySelector(`[data-sd-theme="${className}"]`);
-    if (!style) {
-      style = document.createElement('style');
-      style.setAttribute('data-sd-theme', className);
-      document.head.appendChild(style);
-    }
-    style.textContent = css;
+/**
+ * Inject a theme's CSS into the document as a `<style>` element.
+ * Idempotent — re-calling with the same className updates the existing element.
+ * No-op when `document` is not available (SSR).
+ *
+ * @param {string} className
+ * @param {string} css
+ */
+function injectThemeStyle(className, css) {
+  if (typeof document === 'undefined' || !css) return;
+  let style = document.querySelector(`[data-sd-theme="${className}"]`);
+  if (!style) {
+    style = document.createElement('style');
+    style.setAttribute('data-sd-theme', className);
+    document.head.appendChild(style);
   }
+  style.textContent = css;
+}
 
-  // Store CSS for buildTheme() access
-  createTheme._lastCss = css;
-
+/**
+ * Create a SuperDoc theme from a config object.
+ *
+ * Returns a CSS class name. Apply it to `<html>` to activate the theme.
+ * The style element is injected into the document automatically.
+ *
+ * @param {ThemeConfig} config
+ * @returns {string} The generated CSS class name
+ *
+ * @example
+ * ```js
+ * import { createTheme } from 'superdoc';
+ *
+ * const theme = createTheme({
+ *   colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b' },
+ *   font: 'Inter, sans-serif',
+ *   vars: { '--sd-ui-toolbar-bg': '#f8fafc' },
+ * });
+ *
+ * document.documentElement.classList.add(theme);
+ * ```
+ */
+export function createTheme(config) {
+  const { className, css } = generateTheme(config);
+  injectThemeStyle(className, css);
   return className;
 }
 
@@ -131,6 +152,7 @@ export function createTheme(config) {
  * ```
  */
 export function buildTheme(config) {
-  const className = createTheme(config);
-  return { className, css: createTheme._lastCss || '' };
+  const { className, css } = generateTheme(config);
+  injectThemeStyle(className, css);
+  return { className, css };
 }

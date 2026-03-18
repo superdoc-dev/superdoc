@@ -661,6 +661,16 @@ describe('trackChangesHelpers', () => {
     });
   });
 
+  it('trackedTransaction preserves composition meta for IME history grouping', () => {
+    const state = createState(createDocWithText('abc'));
+    const tr = state.tr.insertText('é', 2);
+    tr.setMeta('inputType', 'insertText');
+    tr.setMeta('composition', 42);
+
+    const tracked = trackedTransaction({ tr, state, user });
+    expect(tracked.getMeta('composition')).toBe(42);
+  });
+
   it('trackedTransaction preserves addToHistory meta when inputType is programmatic', () => {
     // Create initial state with history plugin (editor already has it from basePlugins)
     let state = createState(createDocWithText('initial'));

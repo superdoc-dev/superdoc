@@ -110,6 +110,10 @@ export const trackedTransaction = ({ tr, state, user }) => {
     newTr.setMeta('uiEvent', tr.getMeta('uiEvent'));
   }
 
+  if (tr.getMeta('composition') !== undefined) {
+    newTr.setMeta('composition', tr.getMeta('composition'));
+  }
+
   if (tr.getMeta('addToHistory') !== undefined) {
     newTr.setMeta('addToHistory', tr.getMeta('addToHistory'));
   }

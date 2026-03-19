@@ -178,6 +178,23 @@ async function preflightCallContext(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Legacy input normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps legacy parameter names to their canonical replacements before schema
+ * validation. Keeps backward compat for both wrapper flags and `call --input-json`.
+ */
+function normalizeLegacyInput(operationId: string, input: Record<string, unknown>): Record<string, unknown> {
+  // SD-2132: tables.split renamed atRowIndex → rowIndex.
+  if (operationId === 'doc.tables.split' && input.atRowIndex !== undefined && input.rowIndex === undefined) {
+    const { atRowIndex, ...rest } = input;
+    return { ...rest, rowIndex: atRowIndex };
+  }
+  return input;
+}
+
 export async function executeOperation(request: ExecuteOperationRequest): Promise<CommandExecution> {
   let input: Record<string, unknown>;
   const baseContext = request.context;
@@ -209,6 +226,7 @@ export async function executeOperation(request: ExecuteOperationRequest): Promis
     input = (pruneUndefinedDeep(request.input) ?? {}) as Record<string, unknown>;
   }
 
+  input = normalizeLegacyInput(request.operationId, input);
   validateOperationInputData(request.operationId, input, commandName);
   await preflightCallContext(request.operationId, input, baseContext);
   const effectiveContext = applySessionInputToContext(baseContext, input);

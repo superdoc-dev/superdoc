@@ -379,7 +379,7 @@ describe('tables-adapter regressions', () => {
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     const expectedInsertPos = tableNode.nodeSize;
 
-    const result = tablesSplitAdapter(editor, { nodeId: 'table-1', atRowIndex: 1 });
+    const result = tablesSplitAdapter(editor, { nodeId: 'table-1', rowIndex: 1 });
     expect(result.success).toBe(true);
     expect(tr.insert).toHaveBeenCalledTimes(2);
 

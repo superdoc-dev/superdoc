@@ -785,7 +785,15 @@ export const CLI_OPERATION_METADATA: Record<CliOperationId, CliOperationMetadata
 // Option specs (derived mechanically from params)
 // ---------------------------------------------------------------------------
 
-function deriveOptionSpecs(params: readonly CliOperationParamSpec[]): CliOperationOptionSpec[] {
+// Legacy flag aliases — accepted by the parser but not in the canonical schema.
+// The pre-validation normalizer in operation-executor.ts maps aliased values
+// to their canonical names before schema validation.
+const OPTION_FLAG_ALIASES: Partial<Record<string, Record<string, string[]>>> = {
+  // SD-2132: tables.split renamed atRowIndex → rowIndex.
+  'doc.tables.split': { 'row-index': ['at-row-index'] },
+};
+
+function deriveOptionSpecs(operationId: string, params: readonly CliOperationParamSpec[]): CliOperationOptionSpec[] {
   const specs: CliOperationOptionSpec[] = [];
 
   for (const param of params) {
@@ -802,11 +810,23 @@ function deriveOptionSpecs(params: readonly CliOperationParamSpec[]): CliOperati
     });
   }
 
+  const aliases = OPTION_FLAG_ALIASES[operationId];
+  if (aliases) {
+    for (const spec of specs) {
+      if (aliases[spec.name]) {
+        spec.aliases = aliases[spec.name];
+      }
+    }
+  }
+
   return specs;
 }
 
 export const CLI_OPERATION_OPTION_SPECS: Record<CliOperationId, CliOperationOptionSpec[]> = Object.fromEntries(
-  CLI_OPERATION_IDS.map((operationId) => [operationId, deriveOptionSpecs(CLI_OPERATION_METADATA[operationId].params)]),
+  CLI_OPERATION_IDS.map((operationId) => [
+    operationId,
+    deriveOptionSpecs(operationId, CLI_OPERATION_METADATA[operationId].params),
+  ]),
 ) as Record<CliOperationId, CliOperationOptionSpec[]>;
 
 // Exposed for unit testing $ref resolution only

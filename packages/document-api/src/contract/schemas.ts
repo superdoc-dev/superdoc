@@ -4752,9 +4752,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         {
           target: tableAddressSchema,
           nodeId: { type: 'string' },
-          atRowIndex: { type: 'integer', minimum: 1 },
+          rowIndex: { type: 'integer', minimum: 1 },
         },
-        ['atRowIndex'],
+        ['rowIndex'],
       ),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },

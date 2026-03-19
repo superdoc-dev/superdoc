@@ -112,7 +112,7 @@ describe('tables adapter DOCX integration', () => {
     );
     const tableNodeId = resolveTableNodeId(createResult);
 
-    const splitResult = tablesSplitAdapter(editor, { nodeId: tableNodeId, atRowIndex: 1 }, DIRECT_MUTATION_OPTIONS);
+    const splitResult = tablesSplitAdapter(editor, { nodeId: tableNodeId, rowIndex: 1 }, DIRECT_MUTATION_OPTIONS);
     expect(splitResult.success).toBe(true);
 
     const exportedFiles = await exportDocxFiles(editor);

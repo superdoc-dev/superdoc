@@ -316,6 +316,7 @@ import {
   executeRowLocatorOp,
   executeCellOrTableScopedCellLocatorOp,
   executeDocumentLevelTableOp,
+  normalizeTablesSplitInput,
 } from './tables/tables.js';
 import type {
   ParagraphsAdapter,
@@ -2221,7 +2222,8 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTableLocatorOp('tables.move', adapters.tables.move.bind(adapters.tables), input, options);
       },
       split(input, options?) {
-        return executeTableLocatorOp('tables.split', adapters.tables.split.bind(adapters.tables), input, options);
+        const normalized = normalizeTablesSplitInput(input);
+        return executeRowLocatorOp('tables.split', adapters.tables.split.bind(adapters.tables), normalized, options);
       },
       convertToText(input, options?) {
         return executeTableLocatorOp(

@@ -80,6 +80,8 @@ import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue 
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { resolveStoryFromInput } from '../story-runtime/resolve-story-context.js';
 import type { StoryRuntime } from '../story-runtime/story-types.js';
+import { decodeRef } from '../story-runtime/story-ref-codec.js';
+import { parseStoryKey } from '../story-runtime/story-key.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -123,6 +125,33 @@ function disposeEphemeralWriteRuntime(runtime: StoryRuntime): void {
   if (runtime.cacheable === false) {
     runtime.dispose?.();
   }
+}
+
+function resolveStoryFromMutationRef(ref: string | undefined): StoryLocator | undefined {
+  if (!ref) return undefined;
+
+  const decodedRef = decodeRef(ref);
+  if (!decodedRef || decodedRef.v !== 4) {
+    return undefined;
+  }
+
+  try {
+    return parseStoryKey(decodedRef.storyKey);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DocumentApiAdapterError('INVALID_TARGET', `Mutation ref carries an invalid story key: ${message}`, {
+      ref,
+      storyKey: decodedRef.storyKey,
+    });
+  }
+}
+
+function resolveSelectionMutationStory(request: SelectionMutationRequest): StoryLocator | undefined {
+  const targetWithStory = request.target as { story?: StoryLocator } | undefined;
+  const storyFromRef = resolveStoryFromMutationRef(request.ref);
+  const effectiveTargetStory = targetWithStory?.story ?? storyFromRef;
+
+  return resolveStoryFromInput({ in: request.in }, effectiveTargetStory ? { story: effectiveTargetStory } : undefined);
 }
 
 /**
@@ -603,10 +632,11 @@ export function selectionMutationWrapper(
   request: SelectionMutationRequest,
   options?: MutationOptions,
 ): TextMutationReceipt {
-  // Resolve story runtime — combine explicit `request.in` with the story
-  // attached to the target by discovery operations (find, query.match).
-  const targetWithStory = request.target as { story?: StoryLocator } | undefined;
-  const effectiveLocator = resolveStoryFromInput({ in: request.in }, targetWithStory);
+  // Resolve story runtime from the full mutation context:
+  // - explicit input.in
+  // - target.story threaded by discovery APIs
+  // - V4 ref storyKey when the mutation is ref-only
+  const effectiveLocator = resolveSelectionMutationStory(request);
   const runtime = resolveWriteStoryRuntime(editor, effectiveLocator);
 
   try {

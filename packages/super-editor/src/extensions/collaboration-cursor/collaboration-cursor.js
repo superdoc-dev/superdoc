@@ -1,4 +1,4 @@
-import { Extension } from '@core/index.js';
+import { Extension } from '@core/Extension.js';
 import { yCursorPlugin } from 'y-prosemirror';
 
 export const CollaborationCursor = Extension.create({

@@ -1,7 +1,8 @@
-import { Node, Attribute } from '@core/index';
-import { StructuredContentInlineView } from './StructuredContentInlineView';
-import { createStructuredContentLockPlugin } from './structured-content-lock-plugin';
-import { createStructuredContentSelectPlugin } from './structured-content-select-plugin';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
+import { StructuredContentInlineView } from './StructuredContentInlineView.js';
+import { createStructuredContentLockPlugin } from './structured-content-lock-plugin.js';
+import { createStructuredContentSelectPlugin } from './structured-content-select-plugin.js';
 
 export const structuredContentClass = 'sd-structured-content';
 export const structuredContentInnerClass = 'sd-structured-content__content';

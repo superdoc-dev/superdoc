@@ -74,6 +74,42 @@ describe('isStoryLocator', () => {
     expect(isStoryLocator({ kind: 'story', storyType: 'unknown' })).toBe(false);
   });
 
+  it('returns false for an incomplete headerFooterSlot locator', () => {
+    expect(isStoryLocator({ kind: 'story', storyType: 'headerFooterSlot' })).toBe(false);
+  });
+
+  it('returns false for a headerFooterSlot locator missing its section', () => {
+    expect(
+      isStoryLocator({
+        kind: 'story',
+        storyType: 'headerFooterSlot',
+        headerFooterKind: 'header',
+        variant: 'default',
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false for a headerFooterSlot locator with an invalid resolution', () => {
+    expect(
+      isStoryLocator({
+        kind: 'story',
+        storyType: 'headerFooterSlot',
+        section: { kind: 'section', sectionId: 'sec1' },
+        headerFooterKind: 'header',
+        variant: 'default',
+        resolution: 'sideways',
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false for a headerFooterPart locator missing refId', () => {
+    expect(isStoryLocator({ kind: 'story', storyType: 'headerFooterPart' })).toBe(false);
+  });
+
+  it('returns false for a footnote locator missing noteId', () => {
+    expect(isStoryLocator({ kind: 'story', storyType: 'footnote' })).toBe(false);
+  });
+
   it('returns false for primitives', () => {
     expect(isStoryLocator('body')).toBe(false);
     expect(isStoryLocator(42)).toBe(false);
@@ -112,7 +148,9 @@ describe('storyLocatorToKey', () => {
   });
 
   it('produces correct key for headerFooterSlot', () => {
-    expect(storyLocatorToKey(hfSlotLocator)).toBe('story:headerFooterSlot:sec1:header:default');
+    expect(storyLocatorToKey(hfSlotLocator)).toBe(
+      'story:headerFooterSlot:sec1:header:default:effective:materializeIfInherited',
+    );
   });
 
   it('produces correct key for headerFooterSlot with different variants', () => {
@@ -123,7 +161,23 @@ describe('storyLocatorToKey', () => {
       headerFooterKind: 'footer',
       variant: 'even',
     };
-    expect(storyLocatorToKey(evenFooter)).toBe('story:headerFooterSlot:sec2:footer:even');
+    expect(storyLocatorToKey(evenFooter)).toBe(
+      'story:headerFooterSlot:sec2:footer:even:effective:materializeIfInherited',
+    );
+  });
+
+  it('includes explicit headerFooterSlot resolution and onWrite values in the key', () => {
+    const explicitSlot: HeaderFooterSlotStoryLocator = {
+      kind: 'story',
+      storyType: 'headerFooterSlot',
+      section: { kind: 'section', sectionId: 'sec2' },
+      headerFooterKind: 'footer',
+      variant: 'even',
+      resolution: 'explicit',
+      onWrite: 'error',
+    };
+
+    expect(storyLocatorToKey(explicitSlot)).toBe('story:headerFooterSlot:sec2:footer:even:explicit:error');
   });
 
   it('produces correct key for headerFooterPart', () => {

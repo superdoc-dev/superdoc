@@ -1,5 +1,5 @@
 // @ts-check
-import { Extension } from '@core/index.js';
+import { Extension } from '@core/Extension.js';
 import { dropCursor } from 'prosemirror-dropcursor';
 
 /**

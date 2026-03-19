@@ -1,4 +1,5 @@
-import { OxmlNode, Attribute } from '@core/index.js';
+import { OxmlNode } from '@core/OxmlNode.js';
+import { Attribute } from '@core/Attribute.js';
 import { Plugin, TextSelection } from 'prosemirror-state';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { splitBlock } from '@core/commands/splitBlock.js';

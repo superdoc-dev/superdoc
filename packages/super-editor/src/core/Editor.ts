@@ -12,7 +12,7 @@ import type { SchemaSummaryJSON } from './types/EditorSchema.js';
 import { EditorState as PmEditorState } from 'prosemirror-state';
 import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
-import { helpers } from '@core/index.js';
+import * as helpers from './helpers/index.js';
 import { EventEmitter } from './EventEmitter.js';
 import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';

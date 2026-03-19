@@ -172,7 +172,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { generateDocxHexId } from '../../utils/generateDocxHexId.js';
 import { Fragment } from 'prosemirror-model';
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { callOrGet } from '@core/utilities/callOrGet.js';
 import { getExtensionConfigField } from '@core/helpers/getExtensionConfigField.js';
 import { /* TableView */ createTableView } from './TableView.js';

@@ -1,4 +1,5 @@
-import { Node, Attribute } from '@core/index';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { createChartImmutabilityPlugin } from './chart-immutability-plugin.js';
 
 /**

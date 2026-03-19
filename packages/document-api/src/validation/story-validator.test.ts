@@ -74,6 +74,27 @@ describe('validateStoryLocator', () => {
     );
   });
 
+  it('throws INVALID_INPUT for an incomplete headerFooterSlot locator', () => {
+    expect(() => validateStoryLocator({ kind: 'story', storyType: 'headerFooterSlot' }, 'input.in')).toThrow(
+      DocumentApiValidationError,
+    );
+  });
+
+  it('throws INVALID_INPUT for a headerFooterSlot locator with an invalid section shape', () => {
+    expect(() =>
+      validateStoryLocator(
+        {
+          kind: 'story',
+          storyType: 'headerFooterSlot',
+          section: { kind: 'other', sectionId: 'sec1' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+        'input.in',
+      ),
+    ).toThrow(DocumentApiValidationError);
+  });
+
   it('throws INVALID_INPUT for a string', () => {
     expect(() => validateStoryLocator('body', 'input.in')).toThrow(DocumentApiValidationError);
   });
@@ -130,6 +151,32 @@ describe('validateStoryConsistency', () => {
 
   it('throws STORY_MISMATCH for body vs footnote', () => {
     expect(() => validateStoryConsistency(bodyLocator, footnoteLocator, undefined)).toThrow(DocumentApiValidationError);
+  });
+
+  it('throws STORY_MISMATCH when header/footer slot locators differ only by resolution mode', () => {
+    expect(() =>
+      validateStoryConsistency(
+        hfSlotLocator,
+        {
+          ...hfSlotLocator,
+          resolution: 'explicit',
+        },
+        undefined,
+      ),
+    ).toThrow(DocumentApiValidationError);
+  });
+
+  it('throws STORY_MISMATCH when header/footer slot locators differ only by onWrite mode', () => {
+    expect(() =>
+      validateStoryConsistency(
+        hfSlotLocator,
+        {
+          ...hfSlotLocator,
+          onWrite: 'error',
+        },
+        undefined,
+      ),
+    ).toThrow(DocumentApiValidationError);
   });
 
   it('throws INVALID_INPUT when withinStory is set', () => {

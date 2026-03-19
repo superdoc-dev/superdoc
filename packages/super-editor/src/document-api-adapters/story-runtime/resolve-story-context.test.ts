@@ -21,6 +21,14 @@ const endnoteLocator: StoryLocator = {
   noteId: 'en1',
 };
 
+const headerStoryLocator: StoryLocator = {
+  kind: 'story',
+  storyType: 'headerFooterSlot',
+  section: { kind: 'section', sectionId: 'sec1' },
+  headerFooterKind: 'header',
+  variant: 'default',
+};
+
 // ---------------------------------------------------------------------------
 // Default to body (undefined)
 // ---------------------------------------------------------------------------
@@ -108,6 +116,34 @@ describe('resolveStoryFromInput — STORY_MISMATCH', () => {
     expect(() => resolveStoryFromInput({ in: bodyLocator }, { story: footnoteLocator })).toThrow(
       DocumentApiAdapterError,
     );
+  });
+
+  it('throws when header/footer stories differ only by resolution mode', () => {
+    expect(() =>
+      resolveStoryFromInput(
+        { in: headerStoryLocator },
+        {
+          story: {
+            ...headerStoryLocator,
+            resolution: 'explicit',
+          },
+        },
+      ),
+    ).toThrow(DocumentApiAdapterError);
+  });
+
+  it('throws when header/footer stories differ only by onWrite mode', () => {
+    expect(() =>
+      resolveStoryFromInput(
+        { in: headerStoryLocator },
+        {
+          story: {
+            ...headerStoryLocator,
+            onWrite: 'error',
+          },
+        },
+      ),
+    ).toThrow(DocumentApiAdapterError);
   });
 });
 

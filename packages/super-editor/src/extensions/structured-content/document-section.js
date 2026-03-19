@@ -1,6 +1,7 @@
 // @ts-nocheck
 
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { DocumentSectionView } from './document-section/DocumentSectionView.js';
 import { htmlHandler } from '@core/InputRule.js';
 import { Selection } from 'prosemirror-state';

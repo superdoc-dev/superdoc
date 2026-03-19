@@ -36,7 +36,7 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
     });
     newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
-    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight'];
+    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight', 'link'];
 
     if (allowedMarks.includes(step.mark.type.name) && hasMatchingMark(liveMarksBeforeRemove, step.mark)) {
       const formatChangeMark = liveMarksBeforeRemove.find((mark) => mark.type.name === TrackFormatMarkName);

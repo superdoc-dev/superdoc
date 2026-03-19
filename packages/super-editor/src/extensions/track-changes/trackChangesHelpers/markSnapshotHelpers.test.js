@@ -225,4 +225,55 @@ describe('markSnapshotHelpers', () => {
     expect(match.type.name).toBe('textStyle');
     expect(match.attrs).toEqual(richTextStyle.attrs);
   });
+
+  it('findMarkInRangeBySnapshot matches rich textStyle snapshots against sparse live marks', () => {
+    const sparseTextStyle = schema.marks.textStyle.create({
+      color: '#FF0000',
+    });
+    const doc = createDocWithRuns([{ text: 'A', marks: [sparseTextStyle] }]);
+    const state = createState(doc);
+
+    const match = findMarkInRangeBySnapshot({
+      doc: state.doc,
+      from: 2,
+      to: 3,
+      snapshot: {
+        type: 'textStyle',
+        attrs: {
+          color: '#FF0000',
+          styleId: 'Hyperlink',
+          fontFamily: 'Calibri, sans-serif',
+          fontSize: '11pt',
+        },
+      },
+    });
+
+    expect(match).toBeTruthy();
+    expect(match.type.name).toBe('textStyle');
+    expect(match.attrs).toEqual(sparseTextStyle.attrs);
+  });
+
+  it('findMarkInRangeBySnapshot does not match rich textStyle snapshots without overlapping attrs', () => {
+    const sparseTextStyle = schema.marks.textStyle.create({
+      color: '#FF0000',
+    });
+    const doc = createDocWithRuns([{ text: 'A', marks: [sparseTextStyle] }]);
+    const state = createState(doc);
+
+    const match = findMarkInRangeBySnapshot({
+      doc: state.doc,
+      from: 2,
+      to: 3,
+      snapshot: {
+        type: 'textStyle',
+        attrs: {
+          styleId: 'Hyperlink',
+          fontFamily: 'Calibri, sans-serif',
+          fontSize: '11pt',
+        },
+      },
+    });
+
+    expect(match).toBeNull();
+  });
 });

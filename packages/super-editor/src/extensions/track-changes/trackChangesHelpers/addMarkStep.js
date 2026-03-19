@@ -49,7 +49,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
     const wid = existingChangeMark ? existingChangeMark.attrs.id : (sharedWid ?? (sharedWid = uuidv4()));
     newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
-    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight'];
+    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight', 'link'];
 
     // ![TrackDeleteMarkName].includes(step.mark.type.name)
     if (allowedMarks.includes(step.mark.type.name) && !hasMatchingMark(liveMarks, step.mark)) {

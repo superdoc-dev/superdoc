@@ -152,22 +152,28 @@ const hashRuns = (block: FlowBlock): string => {
             // (Fix for PR #1551: previously /\s+/g normalization caused cache collisions)
             const text = 'text' in run && typeof run.text === 'string' ? run.text : '';
 
-            // Include formatting marks that affect measurement (mirroring paragraph approach)
+            // Include formatting marks that affect visual output (mirroring paragraph approach).
             const bold = 'bold' in run ? run.bold : false;
             const italic = 'italic' in run ? run.italic : false;
+            const underline = 'underline' in run ? run.underline : undefined;
+            const strike = 'strike' in run ? run.strike : false;
             const color = 'color' in run ? run.color : undefined;
             const fontSize = 'fontSize' in run ? run.fontSize : undefined;
             const fontFamily = 'fontFamily' in run ? run.fontFamily : undefined;
             const highlight = 'highlight' in run ? run.highlight : undefined;
+            const link = 'link' in run ? run.link : undefined;
 
             // Build marks string including all formatting properties
             const marks = [
               bold ? 'b' : '',
               italic ? 'i' : '',
+              underline ? `u:${JSON.stringify(underline)}` : '',
+              strike ? 's' : '',
               color ?? '',
               fontSize !== undefined ? `fs:${fontSize}` : '',
               fontFamily ? `ff:${fontFamily}` : '',
               highlight ? `hl:${highlight}` : '',
+              link ? `ln:${JSON.stringify(link)}` : '',
             ].join('');
 
             // Use type guard to safely access comment metadata
@@ -293,17 +299,23 @@ const hashRuns = (block: FlowBlock): string => {
       const text = 'src' in run || run.kind === 'lineBreak' || run.kind === 'break' ? '' : (run.text ?? '');
       const bold = 'bold' in run ? run.bold : false;
       const italic = 'italic' in run ? run.italic : false;
+      const underline = 'underline' in run ? run.underline : undefined;
+      const strike = 'strike' in run ? run.strike : false;
       const color = 'color' in run ? run.color : undefined;
       const fontSize = 'fontSize' in run ? run.fontSize : undefined;
       const fontFamily = 'fontFamily' in run ? run.fontFamily : undefined;
       const highlight = 'highlight' in run ? run.highlight : undefined;
+      const link = 'link' in run ? run.link : undefined;
       const marks = [
         bold ? 'b' : '',
         italic ? 'i' : '',
+        underline ? `u:${JSON.stringify(underline)}` : '',
+        strike ? 's' : '',
         color ?? '',
         fontSize !== undefined ? `fs:${fontSize}` : '',
         fontFamily ? `ff:${fontFamily}` : '',
         highlight ? `hl:${highlight}` : '',
+        link ? `ln:${JSON.stringify(link)}` : '',
       ].join('');
 
       // Include tracked change metadata in hash

@@ -60,3 +60,17 @@ export const findChildren = (node, predicate, descend) => {
 export const findInlineNodes = (node, descend) => {
   return findChildren(node, (child) => child.isInline, descend);
 };
+
+export const hasAnyMark = (doc, markName) => {
+  let found = false;
+  doc.descendants((node) => {
+    if (found || !node.isText) return false;
+
+    const hasMark = node.marks.some((mark) => mark.type.name === markName);
+    if (!hasMark) return;
+
+    found = true;
+    return false; // Stop traversing once we know there's at least one.
+  });
+  return found;
+};

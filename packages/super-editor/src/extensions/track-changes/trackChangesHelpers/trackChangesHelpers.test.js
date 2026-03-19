@@ -87,6 +87,17 @@ describe('trackChangesHelpers', () => {
 
     const inlineNodes = documentHelpers.findInlineNodes(doc, true);
     expect(inlineNodes.every(({ node }) => node.isInline)).toBe(true);
+
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ins-any',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    const markedDoc = createDocWithText('abc', [insertMark]);
+
+    expect(documentHelpers.hasAnyMark(markedDoc, TrackInsertMarkName)).toBe(true);
+    expect(documentHelpers.hasAnyMark(markedDoc, TrackDeleteMarkName)).toBe(false);
   });
 
   it('parseFormatList gracefully handles malformed input', () => {

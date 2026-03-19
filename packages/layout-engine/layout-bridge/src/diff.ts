@@ -404,25 +404,35 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
   for (let i = 0; i < a.runs.length; i += 1) {
     const runA = a.runs[i];
     const runB = b.runs[i];
-    if (
-      ('src' in runA || runA.kind === 'lineBreak' || runA.kind === 'break' || runA.kind === 'fieldAnnotation'
+    const leftText =
+      'src' in runA || runA.kind === 'lineBreak' || runA.kind === 'break' || runA.kind === 'fieldAnnotation'
         ? ''
-        : runA.text) !==
-        ('src' in runB || runB.kind === 'lineBreak' || runB.kind === 'break' || runB.kind === 'fieldAnnotation'
-          ? ''
-          : runB.text) ||
+        : runA.text;
+    const rightText =
+      'src' in runB || runB.kind === 'lineBreak' || runB.kind === 'break' || runB.kind === 'fieldAnnotation'
+        ? ''
+        : runB.text;
+    const leftUnderline = JSON.stringify('underline' in runA ? runA.underline : undefined);
+    const rightUnderline = JSON.stringify('underline' in runB ? runB.underline : undefined);
+    const leftLink = JSON.stringify('link' in runA ? runA.link : undefined);
+    const rightLink = JSON.stringify('link' in runB ? runB.link : undefined);
+
+    const mismatch =
+      leftText !== rightText ||
       fieldAnnotationKey(runA) !== fieldAnnotationKey(runB) ||
       ('bold' in runA ? runA.bold : false) !== ('bold' in runB ? runB.bold : false) ||
       ('italic' in runA ? runA.italic : false) !== ('italic' in runB ? runB.italic : false) ||
+      leftUnderline !== rightUnderline ||
+      ('strike' in runA ? runA.strike : false) !== ('strike' in runB ? runB.strike : false) ||
       ('color' in runA ? runA.color : undefined) !== ('color' in runB ? runB.color : undefined) ||
       ('fontSize' in runA ? runA.fontSize : undefined) !== ('fontSize' in runB ? runB.fontSize : undefined) ||
       ('fontFamily' in runA ? runA.fontFamily : undefined) !== ('fontFamily' in runB ? runB.fontFamily : undefined) ||
       ('highlight' in runA ? runA.highlight : undefined) !== ('highlight' in runB ? runB.highlight : undefined) ||
+      leftLink !== rightLink ||
       getTrackedChangeKey(runA) !== getTrackedChangeKey(runB) ||
-      getCommentKey(runA) !== getCommentKey(runB)
-    ) {
-      return false;
-    }
+      getCommentKey(runA) !== getCommentKey(runB);
+
+    if (mismatch) return false;
   }
   return true;
 };

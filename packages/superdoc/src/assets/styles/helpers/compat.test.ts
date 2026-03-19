@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const variablesCss = readFileSync(resolve(__dirname, 'variables.css'), 'utf-8');
 const compatCss = readFileSync(resolve(__dirname, 'compat.css'), 'utf-8');
+const themesCss = readFileSync(resolve(__dirname, 'themes.css'), 'utf-8');
 
 /** Extract all --sd-* variable declarations from a CSS string. */
 const extractDeclaredVars = (css: string): Set<string> => {
@@ -128,6 +129,41 @@ describe('backward compatibility', () => {
         );
         expect(variablesCss, `Expected ${newName} to fall back to ${oldName}`).toMatch(pattern);
       }
+    });
+  });
+
+  describe('preset themes', () => {
+    /** Extract variables declared inside each .sd-theme-* block. */
+    const extractThemeBlocks = (css: string): Map<string, Set<string>> => {
+      const themes = new Map<string, Set<string>>();
+      const blockRegex = /\.(sd-theme-[\w-]+)\s*\{([^}]+)\}/g;
+      for (const match of css.matchAll(blockRegex)) {
+        const vars = new Set<string>();
+        for (const decl of match[2].matchAll(/(--sd-[\w-]+)\s*:/g)) {
+          vars.add(decl[1]);
+        }
+        themes.set(match[1], vars);
+      }
+      return themes;
+    };
+
+    const themeBlocks = extractThemeBlocks(themesCss);
+
+    it('contains all expected preset themes', () => {
+      expect([...themeBlocks.keys()].sort()).toEqual(['sd-theme-blueprint', 'sd-theme-docs', 'sd-theme-word']);
+    });
+
+    it('every theme variable is declared in variables.css', () => {
+      const declaredInVariables = extractDeclaredVars(variablesCss);
+      const broken: string[] = [];
+      for (const [theme, vars] of themeBlocks) {
+        for (const v of vars) {
+          if (!declaredInVariables.has(v)) {
+            broken.push(`${theme}: ${v}`);
+          }
+        }
+      }
+      expect(broken, `Theme variables not in variables.css: ${broken.join(', ')}`).toEqual([]);
     });
   });
 });

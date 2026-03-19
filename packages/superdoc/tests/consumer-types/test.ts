@@ -10,6 +10,7 @@
 
 // Main entry point
 import type { SuperDoc } from 'superdoc';
+import { createTheme, buildTheme } from 'superdoc';
 
 // Super-editor entry point
 import type { EditorView, EditorState, Transaction, Schema } from 'superdoc/super-editor';
@@ -21,3 +22,7 @@ import type { ProseMirrorJSON, NodeConfig, MarkConfig } from 'superdoc/types';
 type _AssertSuperDoc = SuperDoc extends object ? true : never;
 type _AssertEditorView = EditorView extends object ? true : never;
 type _AssertJSON = ProseMirrorJSON extends object ? true : never;
+type _AssertCreateTheme = typeof createTheme extends (...args: any[]) => string ? true : never;
+type _AssertBuildTheme = typeof buildTheme extends (...args: any[]) => { className: string; css: string }
+  ? true
+  : never;

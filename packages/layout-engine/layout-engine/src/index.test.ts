@@ -4134,8 +4134,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[1], 'body')).toBe(true);
     });
 
-    it('suppresses inter-paragraph spacing when current paragraph has contextualSpacing', () => {
-      // Test that current paragraph's spacingAfter is suppressed when it has contextualSpacing
+    it('suppresses inter-paragraph spacing when both paragraphs have contextualSpacing (bilateral)', () => {
       const current: FlowBlock = {
         kind: 'paragraph',
         id: 'current',
@@ -4143,8 +4142,8 @@ describe('requirePageBoundary edge cases', () => {
         attrs: {
           keepNext: true,
           styleId: 'TestStyle',
-          contextualSpacing: true, // Current has it
-          spacing: { after: 50 }, // Large spacing after
+          contextualSpacing: true,
+          spacing: { after: 50 },
         },
       };
       const next: FlowBlock = {
@@ -4152,8 +4151,8 @@ describe('requirePageBoundary edge cases', () => {
         id: 'next',
         runs: [{ text: 'Next', fontFamily: 'Arial', fontSize: 12 }],
         attrs: {
-          styleId: 'TestStyle', // Same style
-          // Note: next does NOT have contextualSpacing
+          styleId: 'TestStyle',
+          contextualSpacing: true,
           spacing: { before: 10 },
         },
       };
@@ -4169,10 +4168,7 @@ describe('requirePageBoundary edge cases', () => {
         totalHeight: 20,
       };
 
-      // If contextual spacing works: gap = max(0, 10) = 10px (current's after suppressed)
-      // Total = 30 + 10 + 20 = 60px
-      // If broken: gap = max(50, 10) = 50px
-      // Total = 30 + 50 + 20 = 100px
+      // Both opt in → gap = max(0, 0) = 0px. Total = 30 + 0 + 20 = 50px
       const options: LayoutOptions = {
         pageSize: { w: 400, h: 130 },
         margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 70px content
@@ -4180,10 +4176,55 @@ describe('requirePageBoundary edge cases', () => {
 
       const layout = layoutDocument([current, next], [currentMeasure, nextMeasure], options);
 
-      // Should fit on one page (60px < 70px)
       expect(layout.pages).toHaveLength(1);
       expect(pageContainsBlock(layout.pages[0], 'current')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'next')).toBe(true);
+    });
+
+    it('does not suppress spacing when only current paragraph has contextualSpacing (SD-2110)', () => {
+      const current: FlowBlock = {
+        kind: 'paragraph',
+        id: 'current',
+        runs: [{ text: 'Current', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          keepNext: true,
+          styleId: 'TestStyle',
+          contextualSpacing: true,
+          spacing: { after: 50 },
+        },
+      };
+      const next: FlowBlock = {
+        kind: 'paragraph',
+        id: 'next',
+        runs: [{ text: 'Next', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          styleId: 'TestStyle',
+          // next does NOT have contextualSpacing — bilateral rule prevents suppression
+          spacing: { before: 10 },
+        },
+      };
+
+      const currentMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(30)],
+        totalHeight: 30,
+      };
+      const nextMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // Only one side opts in → no suppression. gap = max(50, 10) = 50px
+      // Total = 30 + 50 + 20 = 100px > 70px content → two pages
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 130 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 70px content
+      };
+
+      const layout = layoutDocument([current, next], [currentMeasure, nextMeasure], options);
+
+      expect(layout.pages).toHaveLength(2);
     });
   });
 
@@ -4578,14 +4619,14 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'body')).toBe(true);
     });
 
-    it('reclaims trailing spacing when chain starter has contextualSpacing', () => {
-      // Previous paragraph has spacingAfter, chain starter has contextualSpacing + same style.
+    it('reclaims trailing spacing when both filler and chain starter have contextualSpacing', () => {
+      // Both filler and chain starter have contextualSpacing + same style (bilateral rule).
       // The trailing spacing should be reclaimed, making room for the chain.
       const filler: FlowBlock = {
         kind: 'paragraph',
         id: 'filler',
         runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
-        attrs: { styleId: 'Normal', spacingAfter: 10 },
+        attrs: { styleId: 'Normal', contextualSpacing: true, spacing: { after: 10 } },
       };
       const chainStarter: FlowBlock = {
         kind: 'paragraph',
@@ -4600,7 +4641,7 @@ describe('requirePageBoundary edge cases', () => {
         attrs: {},
       };
 
-      // Filler is 40px, chain starter and anchor are each 25px
+      // Filler is 40px, chain starter and anchor are each 26px
       const fillerMeasure: ParagraphMeasure = {
         kind: 'paragraph',
         lines: [makeLine(40)],
@@ -4608,15 +4649,15 @@ describe('requirePageBoundary edge cases', () => {
       };
       const chainMeasure: ParagraphMeasure = {
         kind: 'paragraph',
-        lines: [makeLine(25)],
-        totalHeight: 25,
+        lines: [makeLine(26)],
+        totalHeight: 26,
       };
 
       // Page has 100px content area
-      // After filler (40px) + spacingAfter (10px), cursor is at 50px from top
+      // After filler (40px) + spacingAfter (10px), cursor is at 80px (top=30 + 40 + 10)
       // Available without reclaim: 100 - 50 = 50px
-      // Chain needs: 25 + 25 = 50px (exactly fits with reclaim, doesn't fit without)
-      // With contextualSpacing, the 10px spacingAfter is reclaimed → 60px available
+      // Chain needs: 26 + 26 = 52px > 50px (does NOT fit without reclaim)
+      // With reclaim the 10px spacingAfter is recovered → 60px available, 52px fits.
       const options: LayoutOptions = {
         pageSize: { w: 400, h: 160 },
         margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 100px content
@@ -4633,6 +4674,58 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'chainStarter')).toBe(true);
       expect(pageContainsBlock(layout.pages[0], 'anchor')).toBe(true);
+    });
+
+    it('does not reclaim trailing spacing when only chain starter has contextualSpacing (SD-2110)', () => {
+      // Filler does NOT have contextualSpacing — bilateral rule prevents reclaim.
+      // Same dimensions as the positive case: chain = 52px, available without reclaim = 50px.
+      // Without reclaim 52 > 50, so the chain moves to page 2.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler content', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', spacing: { after: 10 } },
+      };
+      const chainStarter: FlowBlock = {
+        kind: 'paragraph',
+        id: 'chainStarter',
+        runs: [{ text: 'Chain starter', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, contextualSpacing: true, styleId: 'Normal' },
+      };
+      const anchor: FlowBlock = {
+        kind: 'paragraph',
+        id: 'anchor',
+        runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {},
+      };
+
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(40)],
+        totalHeight: 40,
+      };
+      const chainMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(26)],
+        totalHeight: 26,
+      };
+
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 160 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 100px content
+      };
+
+      const layout = layoutDocument(
+        [filler, chainStarter, anchor],
+        [fillerMeasure, chainMeasure, chainMeasure],
+        options,
+      );
+
+      // No reclaim → 50px available, 52px chain → page 2
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'chainStarter')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
     });
 
     it('does not reclaim trailing spacing when styles differ', () => {
@@ -4689,6 +4782,68 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
       expect(pageContainsBlock(layout.pages[1], 'chainStarter')).toBe(true);
       expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
+    });
+
+    it('does not suppress chain-internal spacing for mixed contextualSpacing (SD-2110)', () => {
+      // Three same-style paragraphs in a keepNext chain: true / false / true.
+      // The middle one opts out, so spacing around it should NOT be suppressed.
+      const filler: FlowBlock = {
+        kind: 'paragraph',
+        id: 'filler',
+        runs: [{ text: 'Filler', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Other' },
+      };
+      const para1: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para1',
+        runs: [{ text: 'Para 1', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, styleId: 'Normal', contextualSpacing: true, spacing: { after: 20 } },
+      };
+      const para2: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para2',
+        runs: [{ text: 'Para 2', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { keepNext: true, styleId: 'Normal', contextualSpacing: false, spacing: { before: 20, after: 20 } },
+      };
+      const para3: FlowBlock = {
+        kind: 'paragraph',
+        id: 'para3',
+        runs: [{ text: 'Para 3', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: { styleId: 'Normal', contextualSpacing: true, spacing: { before: 20 } },
+      };
+
+      const fillerMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(10)],
+        totalHeight: 10,
+      };
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [makeLine(20)],
+        totalHeight: 20,
+      };
+
+      // Chain (para1+para2+para3) with bilateral rule — no suppression between any pair:
+      //   para1 (20) + max(20,20) gap + para2 (20) + max(20,20) gap + para3 (20) = 100px
+      // With unilateral bug, chain would be smaller (para1.after and para3.before suppressed):
+      //   para1 (20) + max(0,20) gap + para2 (20) + max(20,0) gap + para3 (20) = 80px
+      //
+      // Filler takes 10px. Content area = 105px.
+      // After filler, 95px remain — 100px chain doesn't fit current page but fits blank page → page 2.
+      // If chain were 80px (unilateral bug), it would fit on page 1.
+      const options: LayoutOptions = {
+        pageSize: { w: 400, h: 165 },
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 105px content
+      };
+
+      const layout = layoutDocument([filler, para1, para2, para3], [fillerMeasure, measure, measure, measure], options);
+
+      // Chain must move to page 2 because it's 100px and only 95px remain after filler.
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[0], 'filler')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'para1')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'para2')).toBe(true);
+      expect(pageContainsBlock(layout.pages[1], 'para3')).toBe(true);
     });
   });
 });

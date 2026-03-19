@@ -19,6 +19,7 @@ import {
   sliceLines,
   extractBlockPmRange,
   isEmptyTextParagraph,
+  shouldSuppressContextualSpacing,
 } from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
 import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
@@ -529,6 +530,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     state.page.fragments.push(fragment);
     state.trailingSpacing = 0;
     state.lastParagraphStyleId = styleId;
+    state.lastParagraphContextualSpacing = contextualSpacing;
     return;
   }
 
@@ -613,7 +615,14 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
      * - Invalid values (NaN, Infinity, negative, null, undefined) are treated as 0
      * - This prevents layout corruption from malformed input data
      */
-    if (contextualSpacing && state.lastParagraphStyleId && styleId && state.lastParagraphStyleId === styleId) {
+    if (
+      shouldSuppressContextualSpacing(
+        state.lastParagraphStyleId,
+        state.lastParagraphContextualSpacing,
+        styleId,
+        contextualSpacing,
+      )
+    ) {
       spacingBefore = 0;
       const prevTrailing = asSafeNumber(state.trailingSpacing);
       if (prevTrailing > 0) {
@@ -876,5 +885,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       lastState.trailingSpacing = 0;
     }
     lastState.lastParagraphStyleId = styleId;
+    lastState.lastParagraphContextualSpacing = contextualSpacing;
   }
 }

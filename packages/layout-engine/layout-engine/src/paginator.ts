@@ -17,6 +17,7 @@ export type PageState = {
   activeConstraintIndex: number;
   trailingSpacing: number;
   lastParagraphStyleId?: string;
+  lastParagraphContextualSpacing: boolean;
 };
 
 export type PaginatorOptions = {
@@ -96,6 +97,7 @@ export function createPaginator(opts: PaginatorOptions) {
       activeConstraintIndex: -1,
       trailingSpacing: 0,
       lastParagraphStyleId: undefined,
+      lastParagraphContextualSpacing: false,
     };
     states.push(state);
     pages.push(state.page);
@@ -120,6 +122,7 @@ export function createPaginator(opts: PaginatorOptions) {
       }
       state.trailingSpacing = 0;
       state.lastParagraphStyleId = undefined;
+      state.lastParagraphContextualSpacing = false;
       return state;
     }
     return startNewPage();

@@ -157,6 +157,29 @@ export const computeFragmentPmRange = (
 export const computeLinePmRange = (block: ParagraphBlock, line: Line): LinePmRange =>
   computeLinePmRangeUnified(block, line);
 
+/**
+ * OOXML bilateral contextual-spacing rule.
+ *
+ * Word only suppresses inter-paragraph spacing when BOTH adjacent paragraphs
+ * have contextualSpacing enabled and share the same styleId.
+ * A single side opting out (e.g. via inline override `w:val="0"`) is enough
+ * to preserve normal spacing.
+ */
+export function shouldSuppressContextualSpacing(
+  prevStyleId: string | undefined,
+  prevContextualSpacing: boolean,
+  nextStyleId: string | undefined,
+  nextContextualSpacing: boolean,
+): boolean {
+  return !!(
+    prevContextualSpacing &&
+    nextContextualSpacing &&
+    prevStyleId &&
+    nextStyleId &&
+    prevStyleId === nextStyleId
+  );
+}
+
 export const extractBlockPmRange = (block: { attrs?: Record<string, unknown> } | null | undefined): LinePmRange => {
   if (!block || !block.attrs) {
     return {};

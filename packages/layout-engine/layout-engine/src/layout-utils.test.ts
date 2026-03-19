@@ -5,7 +5,11 @@
 
 import { describe, it, expect } from 'vitest';
 import type { ParagraphBlock, TextRun, ImageRun } from '@superdoc/contracts';
-import { isEmptyTextParagraph, shouldSuppressSpacingForEmpty } from './layout-utils.js';
+import {
+  isEmptyTextParagraph,
+  shouldSuppressSpacingForEmpty,
+  shouldSuppressContextualSpacing,
+} from './layout-utils.js';
 
 // ============================================================================
 // Empty Paragraph Detection Tests
@@ -149,5 +153,43 @@ describe('shouldSuppressSpacingForEmpty', () => {
     };
     expect(shouldSuppressSpacingForEmpty(block, 'before')).toBe(true);
     expect(shouldSuppressSpacingForEmpty(block, 'after')).toBe(true);
+  });
+});
+
+// ============================================================================
+// Bilateral Contextual Spacing Tests
+// ============================================================================
+
+describe('shouldSuppressContextualSpacing', () => {
+  it('returns true when both sides have contextualSpacing and same styleId', () => {
+    expect(shouldSuppressContextualSpacing('Normal', true, 'Normal', true)).toBe(true);
+  });
+
+  it('returns false when only the previous side has contextualSpacing', () => {
+    expect(shouldSuppressContextualSpacing('Normal', true, 'Normal', false)).toBe(false);
+  });
+
+  it('returns false when only the next side has contextualSpacing', () => {
+    expect(shouldSuppressContextualSpacing('Normal', false, 'Normal', true)).toBe(false);
+  });
+
+  it('returns false when neither side has contextualSpacing', () => {
+    expect(shouldSuppressContextualSpacing('Normal', false, 'Normal', false)).toBe(false);
+  });
+
+  it('returns false when both have contextualSpacing but different styleIds', () => {
+    expect(shouldSuppressContextualSpacing('Heading1', true, 'Normal', true)).toBe(false);
+  });
+
+  it('returns false when prevStyleId is undefined', () => {
+    expect(shouldSuppressContextualSpacing(undefined, true, 'Normal', true)).toBe(false);
+  });
+
+  it('returns false when nextStyleId is undefined', () => {
+    expect(shouldSuppressContextualSpacing('Normal', true, undefined, true)).toBe(false);
+  });
+
+  it('returns false when both styleIds are undefined', () => {
+    expect(shouldSuppressContextualSpacing(undefined, true, undefined, true)).toBe(false);
   });
 });

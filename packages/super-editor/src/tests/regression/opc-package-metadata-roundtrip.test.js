@@ -17,6 +17,12 @@ const TEST_DOC = 'blank-doc.docx';
 
 const CT_CUSTOM = 'application/vnd.openxmlformats-officedocument.custom-properties+xml';
 const REL_CUSTOM = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties';
+const WORD_STAT_TEXT = 'Alpha beta gamma';
+
+function readXmlTagValue(xml, tagName) {
+  const match = xml.match(new RegExp(`<${tagName}>([^<]*)</${tagName}>`));
+  return match?.[1] ?? null;
+}
 
 describe('OPC package metadata: custom-properties registration', () => {
   it('getUpdatedDocs includes correct [Content_Types].xml and _rels/.rels for new custom.xml', async () => {
@@ -118,6 +124,25 @@ describe('OPC package metadata: custom-properties registration', () => {
       expect(officeDocRels).toHaveLength(1);
       expect(coreRels).toHaveLength(1);
       expect(appRels).toHaveLength(1);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('getUpdatedDocs includes refreshed docProps/app.xml statistics', async () => {
+    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests(TEST_DOC);
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
+
+    try {
+      editor.commands.insertContent(WORD_STAT_TEXT);
+
+      const updatedDocs = await editor.exportDocx({ getUpdatedDocs: true });
+      const appXml = updatedDocs['docProps/app.xml'];
+
+      expect(appXml).toBeTruthy();
+      expect(readXmlTagValue(appXml, 'Words')).toBe('3');
+      expect(readXmlTagValue(appXml, 'Characters')).toBe('14');
+      expect(readXmlTagValue(appXml, 'CharactersWithSpaces')).toBe('16');
     } finally {
       editor.destroy();
     }

@@ -13,6 +13,19 @@ const FIXTURE_DOC = path.resolve(import.meta.dirname, 'fixtures', 'numwords.docx
 // OOXML inspection helpers (local to this story)
 // ---------------------------------------------------------------------------
 
+type ExportedComplexField = {
+  fieldType: string;
+  instruction: string;
+  cachedText: string;
+  dirty: boolean;
+};
+
+type StoryField = {
+  address?: unknown;
+  fieldType?: string;
+  resolvedText?: string;
+};
+
 async function readDocxPart(docPath: string, partPath: string): Promise<string> {
   const { stdout } = await execFileAsync('unzip', ['-p', docPath, partPath], {
     maxBuffer: ZIP_MAX_BUFFER_BYTES,
@@ -20,42 +33,35 @@ async function readDocxPart(docPath: string, partPath: string): Promise<string> 
   return stdout;
 }
 
-/** Extracts all field instruction texts from a document.xml string. */
-function extractFieldInstructions(documentXml: string): string[] {
-  const matches = [...documentXml.matchAll(/<w:instrText[^>]*>([^<]*)<\/w:instrText>/g)];
-  return matches.map((m) => m[1].trim());
-}
+function extractExportedComplexFields(documentXml: string): ExportedComplexField[] {
+  const complexFieldPattern =
+    /<w:fldChar[^>]*w:fldCharType="begin"([^>]*)\/?>[\s\S]*?<w:instrText[^>]*>([^<]*)<\/w:instrText>[\s\S]*?<w:fldChar[^>]*w:fldCharType="separate"[^>]*\/?>([\s\S]*?)<w:fldChar[^>]*w:fldCharType="end"/g;
+  const exportedFields: ExportedComplexField[] = [];
 
-/** Extracts text elements (w:t) from field cached result runs. */
-function extractCachedFieldResults(documentXml: string): string[] {
-  // Find all w:t elements that appear between w:fldChar separate and end
-  const results: string[] = [];
-  const fieldRegex = /<w:fldChar[^>]*w:fldCharType="separate"[^>]*\/?>[\s\S]*?<w:fldChar[^>]*w:fldCharType="end"/g;
+  for (const match of documentXml.matchAll(complexFieldPattern)) {
+    const beginAttributes = match[1] ?? '';
+    const instruction = (match[2] ?? '').trim();
+    const cachedSegment = match[3] ?? '';
+    const cachedText = [...cachedSegment.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)]
+      .map((textMatch) => textMatch[1])
+      .join('');
+    const fieldType = instruction.split(/\s+/)[0]?.toUpperCase() ?? '';
 
-  for (const match of documentXml.matchAll(fieldRegex)) {
-    const segment = match[0];
-    const textMatches = [...segment.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)];
-    for (const tm of textMatches) {
-      results.push(tm[1]);
-    }
+    exportedFields.push({
+      fieldType,
+      instruction,
+      cachedText,
+      dirty: beginAttributes.includes('w:dirty="true"'),
+    });
   }
-  return results;
-}
 
-/** Checks whether w:updateFields is present in settings.xml. */
-function hasUpdateFields(settingsXml: string): boolean {
-  return /<w:updateFields\b[^>]*w:val="true"/.test(settingsXml);
+  return exportedFields;
 }
 
 /** Extracts a simple element's text value from app.xml. */
 function extractAppStat(appXml: string, tagName: string): string | null {
   const match = appXml.match(new RegExp(`<${tagName}>([^<]*)</${tagName}>`));
   return match?.[1] ?? null;
-}
-
-/** Checks for w:dirty attribute on fldChar begin elements. */
-function hasDirtyField(documentXml: string): boolean {
-  return /w:dirty="true"/.test(documentXml);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,11 +84,28 @@ describe('word-stat-fields roundtrip', () => {
   const api = client as any;
 
   async function openSession(docPath: string, sessionId: string) {
-    await api.doc.open({ filePath: docPath, sessionId });
+    await api.doc.open({ doc: docPath, sessionId });
   }
 
   async function saveSession(sessionId: string, savePath: string) {
-    await api.doc.save({ sessionId, filePath: savePath });
+    await api.doc.save({ sessionId, out: savePath, force: true });
+  }
+
+  function toStoryField(item: any): StoryField {
+    return (item?.domain ?? item ?? {}) as StoryField;
+  }
+
+  async function listFields(sessionId: string): Promise<StoryField[]> {
+    const listResult = unwrap<any>(await api.doc.fields.list({ sessionId }));
+    return Array.isArray(listResult?.items) ? listResult.items.map(toStoryField) : [];
+  }
+
+  function listFieldTypes(items: StoryField[]): string[] {
+    return items.map((item) => item.fieldType ?? '');
+  }
+
+  function findFieldByType(items: StoryField[], fieldType: string): StoryField | undefined {
+    return items.find((item) => item.fieldType === fieldType);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -94,14 +117,7 @@ describe('word-stat-fields roundtrip', () => {
     const sessionId = sid('phase-a');
     await openSession(docPath, sessionId);
 
-    const listResult = await api.doc.fields.list({ sessionId });
-    const items = unwrap<any[]>(listResult)?.items ?? listResult?.items ?? [];
-
-    // The fixture has NUMWORDS, NUMCHARS, and NUMPAGES fields
-    const fieldTypes = items.map((item: any) => {
-      const domain = item?.domain ?? item;
-      return domain?.fieldType;
-    });
+    const fieldTypes = listFieldTypes(await listFields(sessionId));
 
     expect(fieldTypes).toContain('NUMWORDS');
     expect(fieldTypes).toContain('NUMCHARS');
@@ -124,25 +140,19 @@ describe('word-stat-fields roundtrip', () => {
 
     // Inspect exported document.xml
     const documentXml = await readDocxPart(savedPath, 'word/document.xml');
+    const exportedFields = extractExportedComplexFields(documentXml);
+    const exportedFieldByType = new Map(exportedFields.map((field) => [field.fieldType, field]));
 
-    // Should contain field instructions for our stat fields
-    const instructions = extractFieldInstructions(documentXml);
-    const hasNumwords = instructions.some((instr) => instr.includes('NUMWORDS'));
-    const hasNumchars = instructions.some((instr) => instr.includes('NUMCHARS'));
-    const hasNumpages = instructions.some((instr) => instr.includes('NUMPAGES'));
-
-    expect(hasNumwords).toBe(true);
-    expect(hasNumchars).toBe(true);
-    expect(hasNumpages).toBe(true);
+    expect(exportedFieldByType.has('NUMWORDS')).toBe(true);
+    expect(exportedFieldByType.has('NUMCHARS')).toBe(true);
+    expect(exportedFieldByType.has('NUMPAGES')).toBe(true);
 
     // Should have fldChar structure (complex fields, not fldSimple)
     expect(documentXml).toContain('w:fldCharType="begin"');
     expect(documentXml).toContain('w:fldCharType="separate"');
     expect(documentXml).toContain('w:fldCharType="end"');
 
-    // Should have cached result runs between separate and end
-    const cachedResults = extractCachedFieldResults(documentXml);
-    expect(cachedResults.length).toBeGreaterThanOrEqual(3);
+    expect(exportedFields).toHaveLength(3);
 
     // Inspect docProps/app.xml — stat values should be present and consistent
     const appXml = await readDocxPart(savedPath, 'docProps/app.xml');
@@ -161,17 +171,16 @@ describe('word-stat-fields roundtrip', () => {
     // Characters (no spaces) must be ≤ CharactersWithSpaces (internal consistency)
     expect(Number(charsValue)).toBeLessThanOrEqual(Number(charsWithSpaces));
 
-    // The NUMWORDS cached result in the field should match the app.xml Words value
-    // (both are computed from the same helper during export)
-    const numwordsCachedResult = cachedResults.find((r) => r && /^\d+$/.test(r.trim()));
-    if (numwordsCachedResult) {
-      expect(wordsValue).toBe(numwordsCachedResult.trim());
-    }
+    expect(exportedFieldByType.get('NUMWORDS')?.cachedText).toBe(wordsValue);
+    expect(exportedFieldByType.get('NUMCHARS')?.cachedText).toBe(charsValue);
+    expect(exportedFieldByType.get('NUMPAGES')?.cachedText).toBe(extractAppStat(appXml, 'Pages'));
 
     // Dirty-flag policy: NUMWORDS and NUMCHARS should NOT be dirty (no
     // uninterpreted switches). NUMPAGES may or may not be dirty depending
     // on whether pagination was available in the test environment.
     // We verify the structural invariant rather than a blanket dirty check.
+    expect(exportedFieldByType.get('NUMWORDS')?.dirty).toBe(false);
+    expect(exportedFieldByType.get('NUMCHARS')?.dirty).toBe(false);
     const settingsXml = await readDocxPart(savedPath, 'word/settings.xml').catch(() => '');
     if (settingsXml) {
       expect(settingsXml).toContain('w:settings');
@@ -190,17 +199,12 @@ describe('word-stat-fields roundtrip', () => {
 
     await openSession(docPath, sessionId);
 
-    // Get initial field list
-    const initialList = await api.doc.fields.list({ sessionId });
-    const initialItems = unwrap<any[]>(initialList)?.items ?? initialList?.items ?? [];
-    const numwordsField = initialItems.find((item: any) => {
-      const domain = item?.domain ?? item;
-      return domain?.fieldType === 'NUMWORDS';
-    });
+    const initialItems = await listFields(sessionId);
+    const numwordsField = findFieldByType(initialItems, 'NUMWORDS');
 
     expect(numwordsField).toBeTruthy();
 
-    const initialResolvedText = numwordsField?.domain?.resolvedText ?? numwordsField?.resolvedText ?? '';
+    const initialResolvedText = numwordsField?.resolvedText ?? '';
 
     // Append text to change the word count
     await api.doc.create.paragraph({
@@ -209,32 +213,25 @@ describe('word-stat-fields roundtrip', () => {
       text: 'These extra words change the count significantly',
     });
 
-    // Rebuild the NUMWORDS field
-    const address = numwordsField?.domain?.address ?? numwordsField?.address;
-    if (address) {
-      await api.doc.fields.rebuild({ sessionId, target: address });
+    const address = numwordsField?.address;
+    expect(address).toBeTruthy();
 
-      // Check the value changed
-      const updatedList = await api.doc.fields.list({ sessionId });
-      const updatedItems = unwrap<any[]>(updatedList)?.items ?? updatedList?.items ?? [];
-      const updatedNumwords = updatedItems.find((item: any) => {
-        const domain = item?.domain ?? item;
-        return domain?.fieldType === 'NUMWORDS';
-      });
+    await api.doc.fields.rebuild({ sessionId, target: address });
 
-      const updatedResolvedText = updatedNumwords?.domain?.resolvedText ?? updatedNumwords?.resolvedText ?? '';
+    const updatedItems = await listFields(sessionId);
+    const updatedNumwords = findFieldByType(updatedItems, 'NUMWORDS');
+    const updatedResolvedText = updatedNumwords?.resolvedText ?? '';
 
-      // After adding words, the count should be different from the original
-      expect(updatedResolvedText).not.toBe(initialResolvedText);
-    }
+    // After adding words, the count should be different from the original
+    expect(updatedResolvedText).not.toBe(initialResolvedText);
 
     // Save and re-inspect OOXML
     const savedPath = outPath('phase-d-exported.docx');
     await saveSession(sessionId, savedPath);
 
     const documentXml = await readDocxPart(savedPath, 'word/document.xml');
-    const instructions = extractFieldInstructions(documentXml);
-    expect(instructions.some((instr) => instr.includes('NUMWORDS'))).toBe(true);
+    const exportedFields = extractExportedComplexFields(documentXml);
+    expect(exportedFields.some((field) => field.fieldType === 'NUMWORDS')).toBe(true);
 
     await api.doc.close({ sessionId, discard: true });
   });
@@ -255,14 +252,7 @@ describe('word-stat-fields roundtrip', () => {
     // Reopen the exported file
     const secondSessionId = sid('phase-e-second');
     await openSession(firstSavedPath, secondSessionId);
-
-    const listResult = await api.doc.fields.list({ sessionId: secondSessionId });
-    const items = unwrap<any[]>(listResult)?.items ?? listResult?.items ?? [];
-
-    const fieldTypes = items.map((item: any) => {
-      const domain = item?.domain ?? item;
-      return domain?.fieldType;
-    });
+    const fieldTypes = listFieldTypes(await listFields(secondSessionId));
 
     // Fields should still be discoverable after roundtrip
     expect(fieldTypes).toContain('NUMWORDS');

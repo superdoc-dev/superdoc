@@ -6,6 +6,40 @@
 export type { EditorView } from 'prosemirror-view';
 export type { EditorState, Transaction } from 'prosemirror-state';
 export type { Schema } from 'prosemirror-model';
+export type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
+
+/**
+ * An opaque, session-local handle representing a captured editor selection.
+ *
+ * The handle's bookmark is automatically mapped through every transaction.
+ * Resolve it via `editor.resolveSelectionHandle(handle)` to get a fresh
+ * `ResolveRangeOutput` reflecting the current document state.
+ *
+ * For deferred UI flows (AI, confirmation dialogs, async chains).
+ * For immediate mutations, use the snapshot convenience methods instead.
+ */
+export type SelectionHandle = {
+  readonly id: number;
+  readonly surface: 'body' | 'header' | 'footer';
+  readonly wasNonEmpty: boolean;
+  /** @internal Opaque owner reference — do not use directly. */
+  readonly _owner: unknown;
+};
+
+/**
+ * Bundles the active editing surface's editor, document API, surface label,
+ * and resolved selection range into a single coherent object.
+ *
+ * Returned by `PresentationEditor.getEffectiveSelectionContext()`,
+ * `PresentationEditor.getCurrentSelectionContext()`, and
+ * `PresentationEditor.resolveSelectionHandle()`.
+ */
+export type SelectionCommandContext = {
+  editor: Editor;
+  doc: DocumentApi;
+  surface: 'body' | 'header' | 'footer';
+  range: ResolveRangeOutput;
+};
 
 // ============================================
 // COMMAND TYPES (inlined from ChainedCommands.ts)
@@ -552,6 +586,31 @@ export declare class Editor {
    */
   isEmpty: boolean;
 
+  // --- Tracked selection handle API ---
+
+  /** Capture the live PM selection as a tracked handle. Local-only. */
+  captureCurrentSelectionHandle(surface?: 'body' | 'header' | 'footer'): SelectionHandle;
+
+  /** Capture the "effective" selection as a tracked handle. Local-only. */
+  captureEffectiveSelectionHandle(surface?: 'body' | 'header' | 'footer'): SelectionHandle;
+
+  /**
+   * Resolve a previously captured handle into a fresh `ResolveRangeOutput`.
+   * Returns `null` if the handle was released or the selection collapsed.
+   */
+  resolveSelectionHandle(handle: SelectionHandle): ResolveRangeOutput | null;
+
+  /** Release a tracked selection handle. */
+  releaseSelectionHandle(handle: SelectionHandle): void;
+
+  // --- Snapshot convenience API ---
+
+  /** Snapshot convenience: resolve the live PM selection immediately. Local-only. */
+  getCurrentSelectionRange(): ResolveRangeOutput;
+
+  /** Snapshot convenience: resolve the "effective" selection immediately. Local-only. */
+  getEffectiveSelectionRange(): ResolveRangeOutput;
+
   /** Allow additional properties */
   [key: string]: any;
 }
@@ -642,6 +701,37 @@ export declare class PresentationEditor {
    * Returns the currently active editor (body or header/footer session).
    */
   getActiveEditor(): Editor;
+
+  // --- Tracked selection handle API ---
+
+  /** Capture the live PM selection on the active editor as a tracked handle. */
+  captureCurrentSelectionHandle(): SelectionHandle;
+
+  /** Capture the "effective" selection on the active editor as a tracked handle. */
+  captureEffectiveSelectionHandle(): SelectionHandle;
+
+  /**
+   * Resolve a captured handle into a `SelectionCommandContext`.
+   * Returns `null` if the handle was released or the selection collapsed.
+   */
+  resolveSelectionHandle(handle: SelectionHandle): SelectionCommandContext | null;
+
+  /** Release a tracked selection handle. */
+  releaseSelectionHandle(handle: SelectionHandle): void;
+
+  // --- Snapshot convenience API ---
+
+  /** Snapshot convenience: resolve the live PM selection immediately. Routes through active editor. */
+  getCurrentSelectionRange(): ResolveRangeOutput;
+
+  /** Snapshot convenience: resolve the "effective" selection immediately. Routes through active editor. */
+  getEffectiveSelectionRange(): ResolveRangeOutput;
+
+  /** Snapshot convenience: current selection + active editing context. */
+  getCurrentSelectionContext(): SelectionCommandContext;
+
+  /** Snapshot convenience: effective selection + active editing context. The canonical layout-mode API. */
+  getEffectiveSelectionContext(): SelectionCommandContext;
 
   /**
    * Undo the last action in the active editor.

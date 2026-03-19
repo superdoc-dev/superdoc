@@ -26,19 +26,28 @@ Returns a SectionMutationResult receipt; reports NO_OP if header/footer margins 
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `header` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 2
+### Variant 2 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `footer` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
-  "footer": 12.5,
   "header": 12.5,
   "target": {
     "kind": "section",

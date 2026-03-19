@@ -26,28 +26,46 @@ Returns a SectionMutationResult receipt; reports NO_OP if page size and orientat
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
+| `width` | number | yes |  |
 
-### Variant 2
+### Variant 2 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `height` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 3
+### Variant 3 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `orientation` | enum | yes | `"portrait"`, `"landscape"` |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 4
+### Variant 4 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `paperSize` | string | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
-  "height": 12.5,
-  "orientation": "portrait",
   "target": {
     "kind": "section",
     "sectionId": "example"

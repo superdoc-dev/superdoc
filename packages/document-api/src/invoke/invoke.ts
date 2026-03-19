@@ -147,6 +147,15 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.setLevelMarkerFont': (input, options) => api.lists.setLevelMarkerFont(input, options),
     'lists.clearLevelOverrides': (input, options) => api.lists.clearLevelOverrides(input, options),
 
+    // --- lists.* (SD-2025 user-facing) ---
+    'lists.getStyle': (input) => api.lists.getStyle(input),
+    'lists.applyStyle': (input, options) => api.lists.applyStyle(input, options),
+    'lists.restartAt': (input, options) => api.lists.restartAt(input, options),
+    'lists.setLevelNumberStyle': (input, options) => api.lists.setLevelNumberStyle(input, options),
+    'lists.setLevelText': (input, options) => api.lists.setLevelText(input, options),
+    'lists.setLevelStart': (input, options) => api.lists.setLevelStart(input, options),
+    'lists.setLevelLayout': (input, options) => api.lists.setLevelLayout(input, options),
+
     // --- sections.* ---
     'sections.list': (input) => api.sections.list(input),
     'sections.get': (input) => api.sections.get(input),

@@ -26,30 +26,37 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target, keepNext)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `keepNext` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (target, keepLines)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `keepLines` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (target, widowControl)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `widowControl` | boolean | yes |  |
 
 ### Example request
 
 ```json
 {
-  "keepLines": true,
   "keepNext": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
     "nodeType": "paragraph"
-  },
-  "widowControl": true
+  }
 }
 ```
 

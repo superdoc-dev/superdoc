@@ -766,7 +766,7 @@ const findSectPr = (obj, result = []) => {
   if (obj && obj.name === 'w:sectPr') {
     result.push(obj);
   }
-  if (obj.elements) {
+  if (obj && obj.elements) {
     obj.elements.forEach((el) => findSectPr(el, result));
   }
   return result;

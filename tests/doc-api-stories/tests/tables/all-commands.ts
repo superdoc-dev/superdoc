@@ -295,7 +295,8 @@ describe('document-api story: all table commands', () => {
           }),
         );
         assertMutationSuccess('tables.move', moveResult);
-        clearContentsTableBySession.set(sessionId, firstTableNodeId);
+        const movedTableNodeId = moveResult?.table?.nodeId ?? firstTableNodeId;
+        clearContentsTableBySession.set(sessionId, movedTableNodeId);
       },
       run: async (sessionId) => {
         const firstTableNodeId = clearContentsTableBySession.get(sessionId);

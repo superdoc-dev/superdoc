@@ -333,7 +333,8 @@ export type TablesClearStyleInput = TableLocator;
 
 export type TableStyleOptionFlag =
   | 'headerRow'
-  | 'totalRow'
+  | 'lastRow'
+  | 'totalRow' // deprecated alias for 'lastRow' — will be removed in a future release
   | 'firstColumn'
   | 'lastColumn'
   | 'bandedRows'
@@ -506,7 +507,7 @@ export interface TablesGetPropertiesOutput {
   autoFitMode?: TableAutoFitMode;
   styleOptions?: {
     headerRow?: boolean;
-    totalRow?: boolean;
+    lastRow?: boolean;
     firstColumn?: boolean;
     lastColumn?: boolean;
     bandedRows?: boolean;

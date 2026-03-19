@@ -103,6 +103,36 @@ describe('computeParagraphAttrs', () => {
     expect(hasExplicitParagraphRunProperties({ runProperties: {} } as never)).toBe(false);
   });
 
+  it('ignores tracked change metadata in runProperties', () => {
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: { trackInsert: { id: '1', author: 'Author', date: '2026-01-01' } },
+      } as never),
+    ).toBe(false);
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: { trackDelete: { id: '2', author: 'Author', date: '2026-01-01' } },
+      } as never),
+    ).toBe(false);
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: {
+          trackInsert: { id: '1', author: 'Author', date: '2026-01-01' },
+          trackDelete: { id: '2', author: 'Author', date: '2026-01-01' },
+        },
+      } as never),
+    ).toBe(false);
+    // Real formatting alongside tracked changes should still count as explicit
+    expect(
+      hasExplicitParagraphRunProperties({
+        runProperties: {
+          trackInsert: { id: '1', author: 'Author', date: '2026-01-01' },
+          fontSize: 24,
+        },
+      } as never),
+    ).toBe(true);
+  });
+
   it('normalizes spacing, indent, alignment, and tabs from paragraphProperties', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },

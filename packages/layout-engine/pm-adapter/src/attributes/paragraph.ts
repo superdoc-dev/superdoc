@@ -120,9 +120,14 @@ export const normalizeNumberingProperties = (
   return value;
 };
 
+const TRACKED_CHANGE_KEYS = new Set(['trackInsert', 'trackDelete']);
+
 export const hasExplicitParagraphRunProperties = (
   paragraphProperties?: Pick<ParagraphProperties, 'runProperties'> | null,
-): boolean => paragraphProperties?.runProperties != null && Object.keys(paragraphProperties.runProperties).length > 0;
+): boolean => {
+  if (paragraphProperties?.runProperties == null) return false;
+  return Object.keys(paragraphProperties.runProperties).some((key) => !TRACKED_CHANGE_KEYS.has(key));
+};
 
 const applyParagraphFontFallback = (
   runAttrs: ResolvedRunProperties,

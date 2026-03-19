@@ -108,6 +108,22 @@ describe('captureSelectionHandle + resolveHandleToSelection', () => {
     expect(resolved!.to).toBe(11);
   });
 
+  it('keeps text selections inclusive when content is inserted exactly at the left edge', () => {
+    const owner = createOwner(createState('Hello world'));
+    // Select "world" (positions 7..12)
+    const sel = TextSelection.create(owner.state.doc, 7, 12);
+    const handle = captureSelectionHandle(owner, sel, 'body');
+
+    owner.dispatch(owner.state.tr.insertText('big ', 7));
+
+    const resolved = resolveHandleToSelection(handle);
+    expect(resolved).not.toBeNull();
+    // The inserted text should remain inside the tracked selection.
+    expect(resolved!.from).toBe(7);
+    expect(resolved!.to).toBe(16);
+    expect(owner.state.doc.textBetween(resolved!.from, resolved!.to)).toBe('big world');
+  });
+
   it('tracks through multiple successive transactions', () => {
     const owner = createOwner(createState('ABCDE'));
     const sel = TextSelection.create(owner.state.doc, 2, 5);
@@ -189,7 +205,9 @@ describe('multiple concurrent handles', () => {
     const resolved2 = resolveHandleToSelection(handle2);
     expect(resolved1).not.toBeNull();
     expect(resolved2).not.toBeNull();
-    expect(resolved1!.from).toBe(3);
+    // Handle 1 starts exactly at the insertion point, so the inserted text
+    // stays inside the tracked selection.
+    expect(resolved1!.from).toBe(1);
     expect(resolved1!.to).toBe(8);
     expect(resolved2!.from).toBe(10);
     expect(resolved2!.to).toBe(15);
@@ -243,7 +261,9 @@ describe('handle is bound to its owning editor', () => {
     // reads from header editor A because the handle is bound to it.
     const resolved = resolveHandleToSelection(handle);
     expect(resolved).not.toBeNull();
-    expect(resolved!.from).toBe(3);
+    // The selection started at the insertion point, so the inserted text
+    // remains part of the tracked selection.
+    expect(resolved!.from).toBe(1);
     expect(resolved!.to).toBe(10);
   });
 });

@@ -1301,6 +1301,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
   // -------------------------------------------------------------------
 
   /**
+   * Infers the default capture surface for this editor instance.
+   *
+   * Body editors report `body`. Header/footer child editors created by the
+   * pagination helpers persist their concrete surface kind in
+   * `options.headerFooterType`, allowing direct calls on
+   * `presentationEditor.getActiveEditor()` to produce handles with the
+   * correct surface label without requiring every caller to pass it manually.
+   */
+  #getDefaultSelectionHandleSurface(): 'body' | 'header' | 'footer' {
+    const explicitType = this.options.headerFooterType;
+    return explicitType === 'header' || explicitType === 'footer' ? explicitType : 'body';
+  }
+
+  /**
    * Capture the live PM selection as a tracked handle.
    *
    * The handle's bookmark is automatically mapped through every subsequent
@@ -1312,10 +1326,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *
    * Local-only — captures from **this** editor's `state.selection`.
    */
-  captureCurrentSelectionHandle(surface: 'body' | 'header' | 'footer' = 'body'): SelectionHandle {
+  captureCurrentSelectionHandle(surface?: 'body' | 'header' | 'footer'): SelectionHandle {
     this.#assertState('ready', 'saving');
     const selection = selectCurrentPmSelection(this);
-    return captureSelectionHandle(this, selection, surface);
+    return captureSelectionHandle(this, selection, surface ?? this.#getDefaultSelectionHandleSurface());
   }
 
   /**
@@ -1327,10 +1341,10 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *
    * Local-only — captures from **this** editor.
    */
-  captureEffectiveSelectionHandle(surface: 'body' | 'header' | 'footer' = 'body'): SelectionHandle {
+  captureEffectiveSelectionHandle(surface?: 'body' | 'header' | 'footer'): SelectionHandle {
     this.#assertState('ready', 'saving');
     const selection = selectEffectivePmSelection(this);
-    return captureSelectionHandle(this, selection, surface);
+    return captureSelectionHandle(this, selection, surface ?? this.#getDefaultSelectionHandleSurface());
   }
 
   /**

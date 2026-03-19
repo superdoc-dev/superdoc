@@ -361,6 +361,9 @@ export interface EditorOptions {
   /** Whether this is a header or footer editor */
   isHeaderOrFooter?: boolean;
 
+  /** Concrete header/footer surface kind for child editors */
+  headerFooterType?: 'header' | 'footer';
+
   /** Optional pagination metadata */
   lastSelection?: unknown | null;
 

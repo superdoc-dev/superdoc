@@ -15,7 +15,7 @@
  *   shared state module ← other extensions
  */
 
-import { Plugin, PluginKey } from 'prosemirror-state';
+import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import type { EditorState, Selection, SelectionBookmark, Transaction } from 'prosemirror-state';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +61,50 @@ export function getPreservedSelection(state: EditorState): Selection | null {
 export interface SelectionHandleOwner {
   readonly state: EditorState;
   dispatch(tr: Transaction): void;
+}
+
+/**
+ * Custom bookmark for non-empty TextSelections that keeps both range edges
+ * inclusive when content is inserted exactly at the boundary.
+ *
+ * ProseMirror's built-in TextBookmark maps both ends with default assoc=1,
+ * which shifts the left edge rightward on exact-boundary inserts. For this
+ * feature we want the preserved/tracked text range to continue covering the
+ * inserted content on both sides, matching the pre-bookmark behavior.
+ */
+class InclusiveTextSelectionBookmark implements SelectionBookmark {
+  constructor(
+    readonly anchor: number,
+    readonly head: number,
+  ) {}
+
+  map(mapping: Transaction['mapping']): SelectionBookmark {
+    const isForward = this.anchor <= this.head;
+    return new InclusiveTextSelectionBookmark(
+      mapping.map(this.anchor, isForward ? -1 : 1),
+      mapping.map(this.head, isForward ? 1 : -1),
+    );
+  }
+
+  resolve(doc: EditorState['doc']): Selection {
+    return TextSelection.between(doc.resolve(this.anchor), doc.resolve(this.head));
+  }
+}
+
+/**
+ * Returns the bookmark representation used by tracked selection handles and
+ * preserved selection remapping.
+ *
+ * Non-empty TextSelections use an inclusive bookmark so inserts at either
+ * edge remain inside the tracked range. Other selection kinds use ProseMirror's
+ * built-in bookmark implementation to preserve their native semantics.
+ */
+export function createSelectionTrackingBookmark(selection: Selection): SelectionBookmark {
+  if (selection instanceof TextSelection && !selection.empty) {
+    return new InclusiveTextSelectionBookmark(selection.anchor, selection.head);
+  }
+
+  return selection.getBookmark();
 }
 
 /**
@@ -177,7 +221,7 @@ export function captureSelectionHandle(
   surface: 'body' | 'header' | 'footer',
 ): SelectionHandle {
   const id = nextHandleId++;
-  const bookmark = selection.getBookmark();
+  const bookmark = createSelectionTrackingBookmark(selection);
   const wasNonEmpty = !selection.empty;
 
   const entry: HandleEntry = { id, bookmark, wasNonEmpty };

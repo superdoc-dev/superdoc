@@ -4,7 +4,7 @@ import { Extension } from '@core/Extension.js';
 import { Plugin, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { shouldAllowNativeContextMenu } from '../../utils/contextmenu-helpers.js';
-import { CustomSelectionPluginKey } from '@core/selection-state.js';
+import { CustomSelectionPluginKey, createSelectionTrackingBookmark } from '@core/selection-state.js';
 
 export const DEFAULT_SELECTION_STATE = Object.freeze({
   focused: false,
@@ -116,7 +116,7 @@ function mapPreservedSelection(selection, tr) {
   if (typeof selection.getBookmark !== 'function') return null;
 
   try {
-    const bookmark = selection.getBookmark();
+    const bookmark = createSelectionTrackingBookmark(selection);
     const mapped = bookmark.map(tr.mapping);
     const resolved = mapped.resolve(tr.doc);
     // If the selection was non-empty but collapsed, treat as invalid

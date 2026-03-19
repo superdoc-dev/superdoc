@@ -210,6 +210,7 @@ export const createHeaderFooterEditor = ({
     mediaFiles: editor.storage.image.media,
     fonts: editor.options.fonts,
     isHeaderOrFooter: true, // This flag prevents pagination from being enabled
+    headerFooterType: type,
     isHeadless: editor.options.isHeadless,
     pagination: false, // Explicitly disable pagination
     annotations: true,

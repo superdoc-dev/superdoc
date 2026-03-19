@@ -139,6 +139,46 @@ Use `query.match` (not `find`) for this workflow. `query.match` returns `BlockNo
 
 For direct single-operation calls, prefer `item.target`. For plans or multi-step edits, prefer `item.handle.ref` so every step reuses the same resolved match.
 
+## Chain table mutations with returned refs
+
+For non-destructive table-targeted mutations, reuse `result.table.nodeId` from the previous success result. You do not need an intermediate `find()` between calls.
+
+```ts
+const created = editor.doc.create.table({
+  rows: 2,
+  columns: 2,
+});
+
+if (!created.success || !created.table) return;
+
+const bordered = editor.doc.tables.setBorder({
+  nodeId: created.table.nodeId,
+  edge: 'top',
+  lineStyle: 'single',
+  lineWeightPt: 1,
+  color: '000000',
+});
+
+if (!bordered.success || !bordered.table) return;
+
+const inserted = editor.doc.tables.insertColumn({
+  tableNodeId: bordered.table.nodeId,
+  columnIndex: 0,
+  position: 'right',
+});
+
+if (!inserted.success || !inserted.table) return;
+
+editor.doc.tables.setCellSpacing({
+  nodeId: inserted.table.nodeId,
+  spacingPt: 2,
+});
+```
+
+<Info>
+This handoff contract applies to table-targeted calls. Cell-targeted `tables.setBorder`, `tables.clearBorder`, `tables.setShading`, and `tables.clearShading` still return the targeted `tableCell` address today.
+</Info>
+
 ## Build a selection explicitly with ranges.resolve
 
 Use `ranges.resolve` when you already know the anchor points and want a transparent `SelectionTarget` plus a reusable mutation-ready ref:
@@ -240,7 +280,7 @@ editor2.destroy();
 ```
 
 <Info>
-`nodeId` stability depends on the ID source. For DOCX-imported content, `nodeId` comes from `paraId` when available and is best-effort stable across loads. For nodes created at runtime, it falls back to `sdBlockId`, which is volatile.
+`nodeId` stability depends on the ID source. For DOCX-imported content, `nodeId` comes from `paraId` when available and is best-effort stable across loads. Runtime-created content is still not guaranteed stable across loads; many nodes use session-scoped editor identity, while some structures such as tables or table cells may expose deterministic fallback IDs instead of raw `sdBlockId`.
 </Info>
 
 <Warning>

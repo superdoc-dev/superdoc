@@ -79,6 +79,10 @@ Returns a TableMutationResult receipt; reports NO_OP if no borders are set.
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
 ### Example response
 
 ```json

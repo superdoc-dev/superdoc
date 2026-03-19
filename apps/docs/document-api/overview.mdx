@@ -69,15 +69,15 @@ Use `item.handle.ref` when you want multiple operations or a mutation plan to re
 
 For DOCX documents, `nodeId` is derived from the file's native `w14:paraId` attribute. In practice, this is usually stable when you reopen the same unchanged DOCX across separate editor sessions, machines, or headless CLI pipelines.
 
-For nodes created at runtime (not imported from DOCX), `nodeId` falls back to `sdBlockId`, a UUID generated when the editor opens. This fallback is volatile and changes on every load.
+For nodes created at runtime (not imported from DOCX), `nodeId` is still best-effort only. Many runtime nodes use session-scoped editor identity, and some structures such as tables or table cells may expose deterministic fallback IDs instead of a raw UUID-like `sdBlockId`. Either way, cross-session stability is not guaranteed.
 
 | ID source | Stable across loads? | When used |
 |-----------|---------------------|-----------|
 | `paraId` (from DOCX) | Best effort (usually stable for unchanged DOCX blocks) | Paragraphs and table rows imported from DOCX |
-| `sdBlockId` (runtime) | No (session-scoped) | Nodes created programmatically before first export |
+| Runtime-derived ID | No guarantee (often session-scoped; some table addresses use deterministic fallbacks) | Nodes created programmatically before first export |
 
 <Tip>
-If you need to reference blocks across separate editor sessions, use `editor.doc.query.match()` (or persist `nodeId` and reconstruct a `NodeAddress`) — don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content.
+If you need to reference blocks across separate editor sessions, use `editor.doc.query.match()` (or persist `nodeId` and reconstruct a `NodeAddress`) — don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content and may derive safer public IDs for some runtime structures such as tables.
 </Tip>
 
 <Warning>

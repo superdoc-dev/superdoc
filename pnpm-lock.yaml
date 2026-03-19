@@ -984,7 +984,7 @@ importers:
         version: 19.2.4(react@19.2.4)
       styled-jsx:
         specifier: ^5.1.7
-        version: 5.1.7(react@19.2.4)
+        version: 5.1.7(@babel/core@7.29.0)(react@19.2.4)
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc
@@ -1053,7 +1053,7 @@ importers:
         version: 19.2.4(react@19.2.4)
       styled-jsx:
         specifier: ^5.1.7
-        version: 5.1.7(react@19.2.4)
+        version: 5.1.7(@babel/core@7.29.0)(react@19.2.4)
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc
@@ -1088,7 +1088,7 @@ importers:
         version: 19.2.4(react@19.2.4)
       styled-jsx:
         specifier: ^5.1.7
-        version: 5.1.7(react@19.2.4)
+        version: 5.1.7(@babel/core@7.29.0)(react@19.2.4)
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc
@@ -36079,7 +36079,7 @@ snapshots:
 
   hosted-git-info@9.0.2:
     dependencies:
-      lru-cache: 11.2.5
+      lru-cache: 11.2.7
 
   hpack.js@2.1.6:
     dependencies:
@@ -43389,10 +43389,12 @@ snapshots:
       client-only: 0.0.1
       react: 19.2.4
 
-  styled-jsx@5.1.7(react@19.2.4):
+  styled-jsx@5.1.7(@babel/core@7.29.0)(react@19.2.4):
     dependencies:
       client-only: 0.0.1
       react: 19.2.4
+    optionalDependencies:
+      '@babel/core': 7.29.0
 
   stylehacks@7.0.8(postcss@8.5.8):
     dependencies:

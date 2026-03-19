@@ -419,11 +419,19 @@ function rangeContainsOnlyTextBlocks(index: BlockIndex, absFrom: number, absTo: 
 // ---------------------------------------------------------------------------
 
 /**
- * Resolves two explicit anchors into a contiguous document range.
+ * Builds a complete `ResolveRangeOutput` from absolute PM positions.
  *
- * Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata.
+ * This is the shared core that both `resolveRange` (anchor-based) and the
+ * UI-selection bridge (`selection-range-resolver.ts`) use.
+ *
+ * When `expectedRevision` is provided, it is checked against the current
+ * document revision. When omitted (typical for UI-selection bridge calls),
+ * the current revision is read and returned as `evaluatedRevision`.
  */
-export function resolveRange(editor: Editor, input: ResolveRangeInput): ResolveRangeOutput {
+export function resolveAbsoluteRange(
+  editor: Editor,
+  input: { absFrom: number; absTo: number; expectedRevision?: string },
+): ResolveRangeOutput {
   const revision = getRevision(editor);
 
   if (input.expectedRevision !== undefined) {
@@ -432,13 +440,9 @@ export function resolveRange(editor: Editor, input: ResolveRangeInput): ResolveR
 
   const index = getBlockIndex(editor);
 
-  // Resolve both anchors to absolute PM positions
-  const rawFrom = resolveAnchor(editor, input.start, revision, index);
-  const rawTo = resolveAnchor(editor, input.end, revision, index);
-
   // Normalize to document order
-  const absFrom = Math.min(rawFrom, rawTo);
-  const absTo = Math.max(rawFrom, rawTo);
+  const absFrom = Math.min(input.absFrom, input.absTo);
+  const absTo = Math.max(input.absFrom, input.absTo);
 
   const target = buildSelectionTarget(editor, index, absFrom, absTo);
 
@@ -459,4 +463,25 @@ export function resolveRange(editor: Editor, input: ResolveRangeInput): ResolveR
     target,
     preview: buildPreview(editor, index, absFrom, absTo),
   };
+}
+
+/**
+ * Resolves two explicit anchors into a contiguous document range.
+ *
+ * Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata.
+ */
+export function resolveRange(editor: Editor, input: ResolveRangeInput): ResolveRangeOutput {
+  const revision = getRevision(editor);
+
+  if (input.expectedRevision !== undefined) {
+    checkRevision(editor, input.expectedRevision);
+  }
+
+  const index = getBlockIndex(editor);
+
+  // Resolve both anchors to absolute PM positions
+  const rawFrom = resolveAnchor(editor, input.start, revision, index);
+  const rawTo = resolveAnchor(editor, input.end, revision, index);
+
+  return resolveAbsoluteRange(editor, { absFrom: rawFrom, absTo: rawTo });
 }

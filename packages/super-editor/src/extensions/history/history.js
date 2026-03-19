@@ -3,7 +3,8 @@ import { TextSelection } from 'prosemirror-state';
 import { history, redo as originalRedo, undo as originalUndo } from 'prosemirror-history';
 import { undo as yUndo, redo as yRedo, yUndoPlugin } from 'y-prosemirror';
 import { Extension } from '@core/Extension.js';
-import { CustomSelectionPluginKey, DEFAULT_SELECTION_STATE } from '../custom-selection/custom-selection.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
+import { DEFAULT_SELECTION_STATE } from '../custom-selection/custom-selection.js';
 
 function applySelectionCleanup(editor, tr) {
   let cleaned = tr.setMeta(CustomSelectionPluginKey, DEFAULT_SELECTION_STATE);

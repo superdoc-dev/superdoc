@@ -616,7 +616,15 @@ watch(editingCommentId, (commentId) => {
             :class="{ 'is-truncated': shouldTruncate && index === 0 }"
             :ref="index === 0 ? (el) => (parentBodyRef = el) : undefined"
           >
-            <div v-if="comment.trackedChangeType === 'trackFormat'">
+            <div v-if="comment.trackedChangeDisplayType === 'hyperlinkAdded'">
+              <span class="change-type">Added hyperlink </span>
+              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkModified'">
+              <span class="change-type">Changed hyperlink to </span>
+              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeType === 'trackFormat'">
               <span class="change-type">Format: </span>
               <span class="tracked-change-text">{{ comment.trackedChangeText }}</span>
             </div>

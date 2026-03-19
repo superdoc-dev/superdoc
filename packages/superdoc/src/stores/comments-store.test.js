@@ -346,6 +346,45 @@ describe('comments-store', () => {
     expect(existingComment.resolvedByName).toBeNull();
   });
 
+  it('preserves hyperlink-specific tracked-change display metadata on updates', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-link-1',
+      trackedChangeText: 'underline',
+      trackedChangeType: 'trackFormat',
+      trackedChangeDisplayType: null,
+      deletedText: null,
+      getValues: vi.fn(() => ({ commentId: 'change-link-1' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'change-link-1',
+        trackedChangeText: 'https://example.com',
+        trackedChangeType: 'trackFormat',
+        trackedChangeDisplayType: 'hyperlinkAdded',
+        deletedText: null,
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.trackedChangeText).toBe('https://example.com');
+    expect(existingComment.trackedChangeType).toBe('trackFormat');
+    expect(existingComment.trackedChangeDisplayType).toBe('hyperlinkAdded');
+  });
+
   it('clears stale tracked-change metadata when an update removes one side of a replacement', () => {
     const superdoc = {
       emit: vi.fn(),
@@ -536,6 +575,7 @@ describe('comments-store', () => {
         changeId: 'change-add-1',
         trackedChangeText: 'Inserted text',
         trackedChangeType: 'trackInsert',
+        trackedChangeDisplayType: 'hyperlinkAdded',
         authorEmail: 'user@example.com',
         author: 'User',
         date: Date.now(),
@@ -547,6 +587,7 @@ describe('comments-store', () => {
 
     expect(store.commentsList).toHaveLength(1);
     expect(store.commentsList[0].selection.source).toBe('super-editor');
+    expect(store.commentsList[0].trackedChangeDisplayType).toBe('hyperlinkAdded');
   });
 
   it('clears stale tracked-change positions when editor sends empty positions', async () => {

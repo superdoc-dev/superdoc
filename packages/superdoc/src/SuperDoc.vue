@@ -731,6 +731,7 @@ const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
   'trackedChange',
   'trackedChangeType',
   'trackedChangeText',
+  'trackedChangeDisplayType',
   'deletedText',
   'resolvedTime',
   'resolvedByEmail',

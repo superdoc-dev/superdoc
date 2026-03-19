@@ -691,6 +691,45 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.threadingParentCommentId).toBe('thread-parent-new');
   });
 
+  it('updates replayed tracked-change display metadata for existing comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'tracked-change-1',
+      importedId: 'imp-tracked-change-1',
+      fileId: 'doc-1',
+      trackedChange: true,
+      trackedChangeType: 'trackFormat',
+      trackedChangeText: 'underline',
+      trackedChangeDisplayType: null,
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'tracked-change-1',
+        importedId: 'imp-tracked-change-1',
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeText: 'https://example.com',
+        trackedChangeDisplayType: 'hyperlinkAdded',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.trackedChangeText).toBe('https://example.com');
+    expect(existingComment.trackedChangeDisplayType).toBe('hyperlinkAdded');
+  });
+
   it('maps replayed isDone updates to resolved fields when explicit resolved metadata is missing', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

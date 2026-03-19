@@ -474,6 +474,7 @@ export const useCommentsStore = defineStore('comments', () => {
       changeId,
       trackedChangeText,
       trackedChangeType,
+      trackedChangeDisplayType,
       deletedText,
       authorEmail,
       authorImage,
@@ -491,6 +492,7 @@ export const useCommentsStore = defineStore('comments', () => {
       trackedChange: true,
       trackedChangeText,
       trackedChangeType,
+      trackedChangeDisplayType,
       deletedText,
       createdTime: date,
       creatorName: authorName,
@@ -536,6 +538,7 @@ export const useCommentsStore = defineStore('comments', () => {
         // clear fields explicitly when the updated payload no longer includes them.
         existing.trackedChangeText = trackedChangeText ?? null;
         existing.trackedChangeType = trackedChangeType ?? null;
+        existing.trackedChangeDisplayType = trackedChangeDisplayType ?? null;
         existing.deletedText = deletedText ?? null;
 
         const emitData = {
@@ -558,6 +561,7 @@ export const useCommentsStore = defineStore('comments', () => {
       // clear fields explicitly when the updated payload no longer includes them.
       existingTrackedChange.trackedChangeText = trackedChangeText ?? null;
       existingTrackedChange.trackedChangeType = trackedChangeType ?? null;
+      existingTrackedChange.trackedChangeDisplayType = trackedChangeDisplayType ?? null;
       existingTrackedChange.deletedText = deletedText ?? null;
 
       const emitData = {
@@ -961,6 +965,7 @@ export const useCommentsStore = defineStore('comments', () => {
         trackedChange: comment.trackedChange || false,
         trackedChangeText: comment.trackedChangeText,
         trackedChangeType: comment.trackedChangeType,
+        trackedChangeDisplayType: comment.trackedChangeDisplayType,
         deletedText: comment.trackedDeletedText,
         // Preserve origin metadata for export
         origin: comment.origin || 'word', // Default to 'word' for backward compatibility

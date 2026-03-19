@@ -110,7 +110,14 @@ export const replaceAroundStep = ({
   const deleteFrom = findPreviousLiveCharPos(doc, state.selection.from, trackDeleteMarkType);
 
   if (deleteFrom === null) {
-    // No live character found — nothing to delete. Skip the structural change.
+    // No live character to delete — the list item / block is effectively empty
+    // (all content already tracked-deleted). Allow the structural change
+    // (e.g. lifting out of list) to apply directly. Structural changes aren't
+    // tracked yet, but blocking them leaves the user stuck on an empty bullet
+    // they can't remove (SD-2187).
+    if (!newTr.maybeStep(step).failed) {
+      map.appendMap(step.getMap());
+    }
     return;
   }
 

@@ -1548,6 +1548,39 @@ importers:
 
   packages/super-editor:
     dependencies:
+      '@superdoc/common':
+        specifier: workspace:*
+        version: link:../../shared/common
+      '@superdoc/contracts':
+        specifier: workspace:*
+        version: link:../layout-engine/contracts
+      '@superdoc/document-api':
+        specifier: workspace:*
+        version: link:../document-api
+      '@superdoc/layout-bridge':
+        specifier: workspace:*
+        version: link:../layout-engine/layout-bridge
+      '@superdoc/measuring-dom':
+        specifier: workspace:*
+        version: link:../layout-engine/measuring/dom
+      '@superdoc/painter-dom':
+        specifier: workspace:*
+        version: link:../layout-engine/painters/dom
+      '@superdoc/pm-adapter':
+        specifier: workspace:*
+        version: link:../layout-engine/pm-adapter
+      '@superdoc/preset-geometry':
+        specifier: workspace:*
+        version: link:../preset-geometry
+      '@superdoc/style-engine':
+        specifier: workspace:*
+        version: link:../layout-engine/style-engine
+      '@superdoc/url-validation':
+        specifier: workspace:*
+        version: link:../../shared/url-validation
+      '@superdoc/word-layout':
+        specifier: workspace:*
+        version: link:../word-layout
       buffer-crc32:
         specifier: 'catalog:'
         version: 1.0.0
@@ -1645,39 +1678,6 @@ importers:
       '@floating-ui/dom':
         specifier: 'catalog:'
         version: 1.7.6
-      '@superdoc/common':
-        specifier: workspace:*
-        version: link:../../shared/common
-      '@superdoc/contracts':
-        specifier: workspace:*
-        version: link:../layout-engine/contracts
-      '@superdoc/document-api':
-        specifier: workspace:*
-        version: link:../document-api
-      '@superdoc/layout-bridge':
-        specifier: workspace:*
-        version: link:../layout-engine/layout-bridge
-      '@superdoc/measuring-dom':
-        specifier: workspace:*
-        version: link:../layout-engine/measuring/dom
-      '@superdoc/painter-dom':
-        specifier: workspace:*
-        version: link:../layout-engine/painters/dom
-      '@superdoc/pm-adapter':
-        specifier: workspace:*
-        version: link:../layout-engine/pm-adapter
-      '@superdoc/preset-geometry':
-        specifier: workspace:*
-        version: link:../preset-geometry
-      '@superdoc/style-engine':
-        specifier: workspace:*
-        version: link:../layout-engine/style-engine
-      '@superdoc/url-validation':
-        specifier: workspace:*
-        version: link:../../shared/url-validation
-      '@superdoc/word-layout':
-        specifier: workspace:*
-        version: link:../word-layout
       '@types/mdast':
         specifier: 'catalog:'
         version: 4.0.4

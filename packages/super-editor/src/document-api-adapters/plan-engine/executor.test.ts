@@ -199,6 +199,92 @@ function createTestMark(name: string, attrs: Record<string, unknown> = {}) {
   };
 }
 
+function makeTextStylePlanEditor(textStyleAttrNames: string[]): {
+  editor: Editor;
+  tr: {
+    addMark: ReturnType<typeof vi.fn>;
+    removeMark: ReturnType<typeof vi.fn>;
+    setMeta: ReturnType<typeof vi.fn>;
+    replaceWith: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    insert: ReturnType<typeof vi.fn>;
+    mapping: { map: (pos: number) => number };
+    docChanged: boolean;
+    doc: {
+      nodesBetween: ReturnType<typeof vi.fn>;
+      nodeAt: ReturnType<typeof vi.fn>;
+      textBetween: ReturnType<typeof vi.fn>;
+      textContent: string;
+      resolve: ReturnType<typeof vi.fn>;
+    };
+  };
+  dispatch: ReturnType<typeof vi.fn>;
+} {
+  const textStyleAttrs = Object.fromEntries(textStyleAttrNames.map((name) => [name, { default: null }]));
+  const textStyleCreate = vi.fn((input: Record<string, unknown> = {}) =>
+    createTestMark(
+      'textStyle',
+      Object.fromEntries(
+        Object.entries(input).filter(([key]) => Object.prototype.hasOwnProperty.call(textStyleAttrs, key)),
+      ),
+    ),
+  );
+
+  const textNode = { isText: true, nodeSize: 5, marks: [] as unknown[] };
+  const doc = {
+    nodesBetween: vi.fn((_from: number, _to: number, callback: (node: typeof textNode, pos: number) => void) => {
+      callback(textNode, 1);
+    }),
+    nodeAt: vi.fn(() => null),
+    textBetween: vi.fn(() => 'Hello'),
+    textContent: 'Hello',
+    resolve: vi.fn(() => ({ marks: () => [] })),
+  };
+
+  const tr = {
+    replaceWith: vi.fn(),
+    delete: vi.fn(),
+    insert: vi.fn(),
+    addMark: vi.fn(),
+    removeMark: vi.fn(),
+    setMeta: vi.fn(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    doc,
+  };
+  tr.replaceWith.mockReturnValue(tr);
+  tr.delete.mockReturnValue(tr);
+  tr.insert.mockReturnValue(tr);
+  tr.addMark.mockReturnValue(tr);
+  tr.removeMark.mockReturnValue(tr);
+  tr.setMeta.mockReturnValue(tr);
+
+  const dispatch = vi.fn();
+  const textStyle = {
+    spec: { attrs: textStyleAttrs },
+    attrs: textStyleAttrs,
+    create: textStyleCreate,
+  };
+
+  const editor = {
+    state: {
+      doc,
+      tr,
+      schema: {
+        marks: { textStyle },
+        nodes: {},
+      },
+    },
+    schema: {
+      marks: { textStyle },
+      nodes: {},
+    },
+    dispatch,
+  } as unknown as Editor;
+
+  return { editor, tr, dispatch };
+}
+
 describe('executeTextInsert: setMarks tri-state directives', () => {
   it('maps on/off/clear to canonical mark emission', () => {
     const boldCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
@@ -1996,5 +2082,43 @@ describe('executeSpanStyleApply: collapsed-range no-op guard', () => {
     expect(result).toEqual({ changed: false });
     expect(tr.addMark).not.toHaveBeenCalled();
     expect(tr.removeMark).not.toHaveBeenCalled();
+  });
+});
+
+describe('executeCompiledPlan: format.apply textStyle attr gating', () => {
+  it('throws CAPABILITY_UNAVAILABLE for caps when textStyle lacks textTransform', () => {
+    const { editor, tr, dispatch } = makeTextStylePlanEditor([
+      'color',
+      'fontSize',
+      'fontFamily',
+      'letterSpacing',
+      'vertAlign',
+      'position',
+    ]);
+
+    const step: StyleApplyStep = {
+      id: 'step-format-caps',
+      op: 'format.apply',
+      where: { by: 'target', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } } as any,
+      args: { inline: { caps: true } },
+    };
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [makeTarget({ stepId: step.id, op: step.op })] }],
+      assertSteps: [],
+      compiledRevision: '0',
+    };
+
+    expect(() => executeCompiledPlan(editor, compiled)).toThrow(PlanError);
+    try {
+      executeCompiledPlan(editor, compiled);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      const planErr = error as PlanError;
+      expect(planErr.code).toBe('CAPABILITY_UNAVAILABLE');
+      expect(planErr.message).toContain('textTransform');
+    }
+
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

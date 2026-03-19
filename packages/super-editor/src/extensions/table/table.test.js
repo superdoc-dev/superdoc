@@ -1150,6 +1150,27 @@ describe('Table commands', async () => {
 
       expect(editor.state.doc.toJSON()).toEqual(docBefore.toJSON());
     });
+
+    it('creates row paraIds without assigning legacy table or cell paraIds', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const pos = editor.state.doc.content.size;
+      editor.commands.insertTableAt({ pos, rows: 2, columns: 2 });
+
+      const tablePos = findTablePos(editor.state.doc);
+      expect(tablePos).not.toBeNull();
+
+      const table = editor.state.doc.nodeAt(tablePos);
+      expect(table?.attrs.paraId).toBeNull();
+
+      table?.forEach((row) => {
+        expect(row.attrs.paraId).toMatch(/^[0-9A-F]{8}$/);
+        row.forEach((cell) => {
+          expect(cell.attrs.paraId).toBeNull();
+        });
+      });
+    });
   });
 
   describe('normalizeNewTableAttrs tblLook (SD-2086)', async () => {

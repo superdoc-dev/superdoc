@@ -1,5 +1,5 @@
 // @ts-check
-import { CustomSelectionPluginKey } from '../custom-selection/custom-selection.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { getLineHeightValueString } from '@core/super-converter/helpers.js';
 import { findParentNode } from '../../core/helpers/findParentNode.js';
 import { kebabCase } from '@superdoc/common';

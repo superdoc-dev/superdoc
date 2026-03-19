@@ -6,8 +6,17 @@ import { DocumentApiValidationError } from '../errors.js';
 // Locator validation
 // ---------------------------------------------------------------------------
 
+type RowLocatorInput = { target?: unknown; nodeId?: unknown; rowIndex?: unknown };
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Validates that a table locator has exactly one of `target` or `nodeId`.
+ *
+ * This is the single validation function for all table operations.
+ * Every table operation uses the same `target`/`nodeId` locator vocabulary.
  */
 function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, operationName: string): void {
   const hasTarget = input.target !== undefined;
@@ -36,76 +45,44 @@ function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, ope
   }
 }
 
-/**
- * Validates a table-scoped locator has exactly one of `tableTarget` or `tableNodeId`.
- */
-function validateTableScopedLocator(
-  input: { tableTarget?: unknown; tableNodeId?: unknown },
-  operationName: string,
-): void {
-  const hasTarget = input.tableTarget !== undefined;
-  const hasNodeId = input.tableNodeId !== undefined;
+function validateRowLocator(input: RowLocatorInput, operationName: string): void {
+  validateTableLocator(input, operationName);
 
-  if (hasTarget && hasNodeId) {
+  if (input.nodeId != null) {
+    if (input.rowIndex == null) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        `${operationName}: rowIndex is required when using nodeId for row operations. ` +
+          `Use target to address a row directly, or pass nodeId + rowIndex to address a row within a table.`,
+      );
+    }
+    return;
+  }
+
+  if (!isObjectRecord(input.target) || input.target.kind !== 'block') return;
+
+  if (input.target.nodeType === 'table' && input.rowIndex == null) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      `Cannot combine tableTarget with tableNodeId on ${operationName} request. Use exactly one locator mode.`,
-      { fields: ['tableTarget', 'tableNodeId'] },
+      `${operationName}: rowIndex is required when target is a table.`,
     );
   }
 
-  if (!hasTarget && !hasNodeId) {
+  if (input.target.nodeType === 'tableRow' && input.rowIndex != null) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      `${operationName} requires a table target. Provide either tableTarget or tableNodeId.`,
-    );
-  }
-
-  if (hasNodeId && typeof input.tableNodeId !== 'string') {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `tableNodeId must be a string, got ${typeof input.tableNodeId}.`,
-      { field: 'tableNodeId', value: input.tableNodeId },
-    );
-  }
-}
-
-/**
- * Validates a mixed row locator: exactly one of direct (target/nodeId) OR
- * table-scoped (tableTarget/tableNodeId + rowIndex) modes.
- */
-function validateRowLocator(
-  input: { target?: unknown; nodeId?: unknown; tableTarget?: unknown; tableNodeId?: unknown; rowIndex?: unknown },
-  operationName: string,
-): void {
-  const hasDirect = input.target !== undefined || input.nodeId !== undefined;
-  const hasTableScoped = input.tableTarget !== undefined || input.tableNodeId !== undefined;
-
-  if (hasDirect && hasTableScoped) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `Cannot combine direct row locator (target/nodeId) with table-scoped locator (tableTarget/tableNodeId) on ${operationName} request.`,
-    );
-  }
-
-  if (hasDirect) {
-    validateTableLocator(input, operationName);
-  } else if (hasTableScoped) {
-    validateTableScopedLocator(input, operationName);
-  } else {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `${operationName} requires a row target. Provide target, nodeId, or tableTarget/tableNodeId + rowIndex.`,
+      `${operationName}: rowIndex must not be provided when target is a row node. ` +
+        `Either pass a table target with rowIndex, or pass a row target without rowIndex.`,
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Typed execute helpers — one per locator category
+// Typed execute helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Execute a table operation that uses the simple table locator (target/nodeId).
+ * Execute a table operation that uses the standard locator (target/nodeId).
  * Validates the locator and normalizes MutationOptions.
  */
 export function executeTableLocatorOp<TInput extends { target?: unknown; nodeId?: unknown }, TResult>(
@@ -118,55 +95,13 @@ export function executeTableLocatorOp<TInput extends { target?: unknown; nodeId?
   return adapter(input, normalizeMutationOptions(options));
 }
 
-/**
- * Execute a table operation that uses the mixed row locator
- * (direct target/nodeId OR table-scoped tableTarget/tableNodeId + rowIndex).
- * Validates the locator and normalizes MutationOptions.
- */
-export function executeRowLocatorOp<
-  TInput extends {
-    target?: unknown;
-    nodeId?: unknown;
-    tableTarget?: unknown;
-    tableNodeId?: unknown;
-    rowIndex?: unknown;
-  },
-  TResult,
->(
+export function executeRowLocatorOp<TInput extends RowLocatorInput, TResult>(
   operationName: string,
   adapter: (input: TInput, options?: MutationOptions) => TResult,
   input: TInput,
   options?: MutationOptions,
 ): TResult {
   validateRowLocator(input, operationName);
-  return adapter(input, normalizeMutationOptions(options));
-}
-
-/**
- * Execute a table operation that uses a table-scoped column locator
- * (tableTarget/tableNodeId). Validates the locator and normalizes MutationOptions.
- */
-export function executeColumnLocatorOp<TInput extends { tableTarget?: unknown; tableNodeId?: unknown }, TResult>(
-  operationName: string,
-  adapter: (input: TInput, options?: MutationOptions) => TResult,
-  input: TInput,
-  options?: MutationOptions,
-): TResult {
-  validateTableScopedLocator(input, operationName);
-  return adapter(input, normalizeMutationOptions(options));
-}
-
-/**
- * Execute a table operation that uses a merge-range locator
- * (tableTarget/tableNodeId). Validates the locator and normalizes MutationOptions.
- */
-export function executeMergeRangeLocatorOp<TInput extends { tableTarget?: unknown; tableNodeId?: unknown }, TResult>(
-  operationName: string,
-  adapter: (input: TInput, options?: MutationOptions) => TResult,
-  input: TInput,
-  options?: MutationOptions,
-): TResult {
-  validateTableScopedLocator(input, operationName);
   return adapter(input, normalizeMutationOptions(options));
 }
 

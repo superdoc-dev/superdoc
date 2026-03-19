@@ -30,13 +30,29 @@ function createNode(
   children: ProseMirrorNode[],
   opts: { attrs?: Record<string, unknown>; text?: string; isBlock?: boolean; inlineContent?: boolean } = {},
 ): ProseMirrorNode {
+  const tableRole =
+    type === 'table'
+      ? 'table'
+      : type === 'tableRow'
+        ? 'row'
+        : type === 'tableCell'
+          ? 'cell'
+          : type === 'tableHeader'
+            ? 'header_cell'
+            : undefined;
+  const nodeSize =
+    opts.text != null
+      ? Math.max(1, opts.text.length)
+      : children.length === 0
+        ? 2
+        : 2 + children.reduce((sum, child) => sum + child.nodeSize, 0);
   const node: Record<string, unknown> = {
-    type: { name: type },
+    type: { name: type, spec: tableRole ? { tableRole } : {} },
     attrs: opts.attrs ?? {},
     content: children,
     childCount: children.length,
     child: (i: number) => children[i],
-    nodeSize: 10,
+    nodeSize,
     textContent: opts.text ?? '',
     isBlock: opts.isBlock ?? false,
     inlineContent: opts.inlineContent ?? false,
@@ -47,17 +63,21 @@ function createNode(
         offset += (child as any).nodeSize;
       });
     },
-    descendants: (fn: (node: ProseMirrorNode, pos: number) => boolean | void) => {
-      const walk = (n: ProseMirrorNode, pos: number) => {
-        if (fn(n, pos) === false) return;
+    descendants: (
+      fn: (node: ProseMirrorNode, pos: number, parent?: ProseMirrorNode, index?: number) => boolean | void,
+    ) => {
+      const walk = (n: ProseMirrorNode, pos: number, parent?: ProseMirrorNode, index?: number) => {
+        if (fn(n, pos, parent, index) === false) return;
         let offset = pos + 1;
-        (n as any).content.forEach?.((child: ProseMirrorNode) => {
-          walk(child, offset);
+        (n as any).content.forEach?.((child: ProseMirrorNode, childIndex: number) => {
+          walk(child, offset, n, childIndex);
           offset += (child as any).nodeSize;
         });
       };
-      children.forEach((child, _idx) => {
-        walk(child, 1);
+      let offset = 1;
+      children.forEach((child, childIndex) => {
+        walk(child, offset, node as unknown as ProseMirrorNode, childIndex);
+        offset += (child as any).nodeSize;
       });
     },
     nodeAt: (pos: number) => {

@@ -26,23 +26,29 @@ Returns a TablesGetPropertiesOutput with the table layout, style, border, and sh
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.nodeType="table")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 2
+### Variant 2 (nodeId)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
-  "nodeId": "node-def456",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   }
 }
 ```
@@ -51,6 +57,10 @@ _No fields._
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `address` | TableAddress | yes | TableAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | `"table"` | yes | Constant: `"table"` |
 | `alignment` | enum | no | `"left"`, `"center"`, `"right"` |
 | `autoFitMode` | enum | no | `"fixedWidth"`, `"fitContents"`, `"fitWindow"` |
 | `direction` | enum | no | `"ltr"`, `"rtl"` |
@@ -69,6 +79,11 @@ _No fields._
 
 ```json
 {
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "table"
+  },
   "alignment": "left",
   "nodeId": "node-def456",
   "styleId": "style-001"
@@ -106,7 +121,7 @@ _No fields._
       "type": "string"
     },
     "target": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     }
   },
   "type": "object"
@@ -119,6 +134,9 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "address": {
+      "$ref": "#/$defs/TableAddress"
+    },
     "alignment": {
       "enum": [
         "left",
@@ -174,7 +192,8 @@ _No fields._
     }
   },
   "required": [
-    "nodeId"
+    "nodeId",
+    "address"
   ],
   "type": "object"
 }

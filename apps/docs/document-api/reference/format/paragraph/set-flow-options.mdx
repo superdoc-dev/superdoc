@@ -26,25 +26,32 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target, contextualSpacing)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `contextualSpacing` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (target, pageBreakBefore)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pageBreakBefore` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (target, suppressAutoHyphens)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `suppressAutoHyphens` | boolean | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
 ```json
 {
   "contextualSpacing": true,
-  "pageBreakBefore": true,
-  "suppressAutoHyphens": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",

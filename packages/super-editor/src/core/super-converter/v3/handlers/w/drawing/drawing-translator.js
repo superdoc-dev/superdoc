@@ -70,6 +70,11 @@ function decode(params) {
   const childTranslator = node.attrs.isAnchor ? wpAnchorTranslator : wpInlineTranslator;
   const resultNode = childTranslator.decode(params);
 
+  // Guard: only wrap when we have valid drawing content.
+  if (!resultNode || (resultNode.name !== 'wp:inline' && resultNode.name !== 'wp:anchor')) {
+    return resultNode;
+  }
+
   return wrapTextInRun(
     {
       name: 'w:drawing',

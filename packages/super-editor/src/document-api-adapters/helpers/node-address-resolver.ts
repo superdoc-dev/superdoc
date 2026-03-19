@@ -5,6 +5,7 @@ import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@su
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
 import { toId } from './value-utils.js';
 import { resolvePublicTocNodeId } from './toc-node-id.js';
+import { buildFallbackTableNodeId, isVolatileRuntimeBlockId } from './table-node-id.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
 /** Superset of all possible ID attributes across block node types. */
@@ -35,6 +36,8 @@ export type BlockIndex = {
   byId: Map<string, BlockCandidate>;
   ambiguous: ReadonlySet<string>;
 };
+
+type TraversalPath = readonly number[];
 
 // Keep in sync with BlockNodeType in document-api/types/node.ts
 const SUPPORTED_BLOCK_NODE_TYPES: ReadonlySet<BlockNodeType> = new Set<BlockNodeType>([
@@ -110,7 +113,29 @@ export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefin
   }
 }
 
-export function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType: BlockNodeType): string | undefined {
+function resolveLegacyTableIdentity(attrs: BlockIdAttrs): string | undefined {
+  return toId(attrs.paraId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
+}
+
+function resolveRuntimeTableIdentity(
+  nodeType: BlockNodeType,
+  attrs: BlockIdAttrs,
+  pos: number,
+  path?: TraversalPath,
+): string | undefined {
+  const sdBlockId = toId(attrs.sdBlockId);
+  if (sdBlockId && !isVolatileRuntimeBlockId(sdBlockId)) {
+    return sdBlockId;
+  }
+  return buildFallbackTableNodeId(nodeType, pos, path);
+}
+
+export function resolveBlockNodeId(
+  node: ProseMirrorNode,
+  pos: number,
+  nodeType: BlockNodeType,
+  path?: TraversalPath,
+): string | undefined {
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
     // paraId (imported from DOCX) is the primary identity for paragraphs. This
@@ -126,11 +151,18 @@ export function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType:
   const attrs = (node.attrs ?? {}) as BlockIdAttrs;
   const typeName = node.type.name;
 
-  // Table nodes prefer paraId (preserved across DOCX roundtrips) over
-  // sdBlockId (regenerated on every document open). sdBlockId is still the
-  // fallback for programmatically created tables before their first export.
-  if (typeName === 'table' || typeName === 'tableRow' || typeName === 'tableCell' || typeName === 'tableHeader') {
+  // Table rows legitimately carry w14:paraId in DOCX, so prefer it when
+  // present and fall back to sdBlockId for newly created rows.
+  if (typeName === 'tableRow') {
     return toId(attrs.paraId) ?? toId(attrs.sdBlockId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
+  }
+
+  // Older SuperDoc exports also stored paraId on tables/cells. Keep honoring
+  // those legacy IDs when we encounter them. When only a runtime-generated
+  // UUID sdBlockId exists, expose a deterministic fallback instead so session
+  // addresses remain reusable across fresh document opens.
+  if (typeName === 'table' || typeName === 'tableCell' || typeName === 'tableHeader') {
+    return resolveLegacyTableIdentity(attrs) ?? resolveRuntimeTableIdentity(nodeType, attrs, pos, path);
   }
 
   // NOTE: Migration surface for the stable-addresses plan.
@@ -193,6 +225,9 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
   const candidates: BlockCandidate[] = [];
   const byId = new Map<string, BlockCandidate>();
   const ambiguous = new Set<string>();
+  const pathByNode = new WeakMap<ProseMirrorNode, TraversalPath>();
+
+  pathByNode.set(editor.state.doc, []);
 
   function registerKey(key: string, candidate: BlockCandidate): void {
     if (byId.has(key)) {
@@ -206,10 +241,18 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
   // This traversal is a hot path for adapter workflows (for example find ->
   // getNode). Keep this pure snapshot builder so a transaction-invalidated
   // cache can be layered on later without API changes.
-  editor.state.doc.descendants((node, pos) => {
+  editor.state.doc.descendants((node, pos, parent, index) => {
+    const parentPath = parent ? (pathByNode.get(parent) ?? []) : [];
+    const path =
+      typeof index === 'number' && Number.isInteger(index) && index >= 0 ? [...parentPath, index] : undefined;
+
+    if (path) {
+      pathByNode.set(node, path);
+    }
+
     const nodeType = mapBlockNodeType(node);
     if (!nodeType) return;
-    const nodeId = resolveBlockNodeId(node, pos, nodeType);
+    const nodeId = resolveBlockNodeId(node, pos, nodeType, path);
     if (!nodeId) return;
 
     const candidate: BlockCandidate = {

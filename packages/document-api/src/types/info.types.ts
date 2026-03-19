@@ -21,6 +21,8 @@ export interface DocumentInfoCounts {
   sdtFields: number;
   /** Count of unique list sequences, not individual list items. */
   lists: number;
+  /** Number of layout pages. Absent when pagination is inactive or layout hasn't completed. */
+  pages?: number;
 }
 
 export interface DocumentInfoOutlineItem {

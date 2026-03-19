@@ -380,7 +380,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -641,7 +641,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
-| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -655,11 +655,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.canContinuePrevious` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
 | `doc.lists.setLevelRestart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
 | `doc.lists.convertToText` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
-| `doc.lists.applyTemplate` | `lists apply-template` | Apply a captured ListTemplate to the target list, optionally filtered to specific levels. |
+| `doc.lists.applyTemplate` | `lists apply-template` | Advanced alias for lists.applyStyle. Apply a captured ListTemplate to the target list (abstract-scoped, no clone-on-write). |
 | `doc.lists.applyPreset` | `lists apply-preset` | Apply a built-in list formatting preset to the target list. |
 | `doc.lists.setType` | `lists set-type` | Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering. |
-| `doc.lists.captureTemplate` | `lists capture-template` | Capture the formatting of a list as a reusable ListTemplate. |
-| `doc.lists.setLevelNumbering` | `lists set-level-numbering` | Set the numbering format, pattern, and optional start value for a specific list level. |
+| `doc.lists.captureTemplate` | `lists capture-template` | Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting). |
+| `doc.lists.setLevelNumbering` | `lists set-level-numbering` | Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write). |
 | `doc.lists.setLevelBullet` | `lists set-level-bullet` | Set the bullet marker text for a specific list level. |
 | `doc.lists.setLevelPictureBullet` | `lists set-level-picture-bullet` | Set a picture bullet for a specific list level by its OOXML lvlPicBulletId. |
 | `doc.lists.setLevelAlignment` | `lists set-level-alignment` | Set the marker alignment (left, center, right) for a specific list level. |
@@ -667,6 +667,13 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.setLevelTrailingCharacter` | `lists set-level-trailing-character` | Set the trailing character (tab, space, nothing) after the marker for a specific list level. |
 | `doc.lists.setLevelMarkerFont` | `lists set-level-marker-font` | Set the font family used for the marker character at a specific list level. |
 | `doc.lists.clearLevelOverrides` | `lists clear-level-overrides` | Remove instance-level overrides for a specific list level, restoring abstract definition values. |
+| `doc.lists.getStyle` | `lists get-style` | Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle. |
+| `doc.lists.applyStyle` | `lists apply-style` | Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them. |
+| `doc.lists.restartAt` | `lists restart-at` | Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first. |
+| `doc.lists.setLevelNumberStyle` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelText` | `lists set-level-text` | Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelStart` | `lists set-level-start` | Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelLayout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions. |
 
 #### Tables
 
@@ -818,7 +825,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -1079,7 +1086,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
-| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -1093,11 +1100,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.can_continue_previous` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
 | `doc.lists.set_level_restart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
 | `doc.lists.convert_to_text` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
-| `doc.lists.apply_template` | `lists apply-template` | Apply a captured ListTemplate to the target list, optionally filtered to specific levels. |
+| `doc.lists.apply_template` | `lists apply-template` | Advanced alias for lists.applyStyle. Apply a captured ListTemplate to the target list (abstract-scoped, no clone-on-write). |
 | `doc.lists.apply_preset` | `lists apply-preset` | Apply a built-in list formatting preset to the target list. |
 | `doc.lists.set_type` | `lists set-type` | Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering. |
-| `doc.lists.capture_template` | `lists capture-template` | Capture the formatting of a list as a reusable ListTemplate. |
-| `doc.lists.set_level_numbering` | `lists set-level-numbering` | Set the numbering format, pattern, and optional start value for a specific list level. |
+| `doc.lists.capture_template` | `lists capture-template` | Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting). |
+| `doc.lists.set_level_numbering` | `lists set-level-numbering` | Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write). |
 | `doc.lists.set_level_bullet` | `lists set-level-bullet` | Set the bullet marker text for a specific list level. |
 | `doc.lists.set_level_picture_bullet` | `lists set-level-picture-bullet` | Set a picture bullet for a specific list level by its OOXML lvlPicBulletId. |
 | `doc.lists.set_level_alignment` | `lists set-level-alignment` | Set the marker alignment (left, center, right) for a specific list level. |
@@ -1105,6 +1112,13 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.set_level_trailing_character` | `lists set-level-trailing-character` | Set the trailing character (tab, space, nothing) after the marker for a specific list level. |
 | `doc.lists.set_level_marker_font` | `lists set-level-marker-font` | Set the font family used for the marker character at a specific list level. |
 | `doc.lists.clear_level_overrides` | `lists clear-level-overrides` | Remove instance-level overrides for a specific list level, restoring abstract definition values. |
+| `doc.lists.get_style` | `lists get-style` | Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle. |
+| `doc.lists.apply_style` | `lists apply-style` | Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them. |
+| `doc.lists.restart_at` | `lists restart-at` | Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first. |
+| `doc.lists.set_level_number_style` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_text` | `lists set-level-text` | Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_start` | `lists set-level-start` | Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_layout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions. |
 
 #### Tables
 

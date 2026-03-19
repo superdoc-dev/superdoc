@@ -22,7 +22,7 @@ Enable or disable odd/even header-footer mode in document settings.
 
 ## Expected result
 
-Returns a DocumentMutationResult receipt; reports NO_OP if the odd/even setting already matches.
+Returns a DocumentMutationResult (not SectionMutationResult) because odd/even headers-footers is a document-level setting, not per-section. Reports NO_OP if the setting already matches.
 
 ## Input fields
 

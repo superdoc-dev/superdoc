@@ -143,7 +143,7 @@ function collectTopLevelBlocks(editor: Editor): BlockCandidate[] {
       // Delegate to the canonical ID resolver so IDs match the block index.
       // This ensures blocks.list output is directly usable in blocks.delete
       // and blocks.deleteRange without ID mismatches.
-      const nodeId = resolveBlockNodeId(child, pos, nodeType);
+      const nodeId = resolveBlockNodeId(child, pos, nodeType, [i]);
 
       if (nodeId) {
         results.push({ node: child, pos, end: pos + child.nodeSize, nodeType, nodeId });

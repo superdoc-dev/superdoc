@@ -1,7 +1,7 @@
 ---
 title: info
 sidebarTitle: info
-description: Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities.
+description: Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Return document summary info including word, character, paragraph, 
 
 ## Summary
 
-Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, and list counts, plus outline and capabilities.
+Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities.
 
 - Operation ID: `info`
 - API member path: `editor.doc.info(...)`
@@ -22,7 +22,7 @@ Return document summary info including word, character, paragraph, heading, tabl
 
 ## Expected result
 
-Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists), document outline, capability flags, and revision.
+Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists, and optionally pages when pagination is active), document outline, capability flags, and revision.
 
 ## Input fields
 
@@ -49,6 +49,7 @@ _No fields._
 | `counts.headings` | integer | yes |  |
 | `counts.images` | integer | yes |  |
 | `counts.lists` | integer | yes |  |
+| `counts.pages` | integer | no |  |
 | `counts.paragraphs` | integer | yes |  |
 | `counts.sdtFields` | integer | yes |  |
 | `counts.tables` | integer | yes |  |
@@ -73,6 +74,7 @@ _No fields._
     "headings": 3,
     "images": 2,
     "lists": 1,
+    "pages": 1,
     "paragraphs": 12,
     "sdtFields": 1,
     "tables": 1,
@@ -155,6 +157,9 @@ _No fields._
           "type": "integer"
         },
         "lists": {
+          "type": "integer"
+        },
+        "pages": {
           "type": "integer"
         },
         "paragraphs": {

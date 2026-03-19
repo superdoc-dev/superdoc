@@ -170,6 +170,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { generateDocxHexId } from '../../utils/generateDocxHexId.js';
 import { Fragment } from 'prosemirror-model';
 import { Node, Attribute } from '@core/index.js';
 import { callOrGet } from '@core/utilities/callOrGet.js';
@@ -377,7 +378,7 @@ export const Table = Node.create({
       /**
        * @private
        * @category Attribute
-       * @param {string} [paraId] - OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips
+       * @param {string} [paraId] - Legacy imported identity preserved for backwards compatibility
        */
       paraId: {
         default: null,
@@ -389,7 +390,7 @@ export const Table = Node.create({
       /**
        * @private
        * @category Attribute
-       * @param {string} [textId] - OOXML text identifier (w14:textId), preserved across DOCX roundtrips
+       * @param {string} [textId] - Legacy imported text identifier preserved for backwards compatibility
        */
       textId: {
         default: null,
@@ -685,11 +686,10 @@ export const Table = Node.create({
        * @param {number} options.rows - Number of rows
        * @param {number} options.columns - Number of columns
        * @param {string} [options.sdBlockId] - Stable block ID for the created table
-       * @param {string} [options.paraId] - OOXML-compatible identifier (w14:paraId) that survives DOCX roundtrips
        * @param {boolean} [options.tracked] - When true, sets forceTrackChanges meta; when false, sets skipTrackChanges meta
        */
       insertTableAt:
-        ({ pos, rows, columns, sdBlockId, paraId, tracked } = {}) =>
+        ({ pos, rows, columns, sdBlockId, tracked } = {}) =>
         ({ tr, state, dispatch, editor }) => {
           const tableType = state.schema.nodes.table;
           const tableRowType = state.schema.nodes.tableRow;
@@ -700,21 +700,17 @@ export const Table = Node.create({
           if (!Number.isInteger(columns) || columns < 1) return false;
 
           try {
-            const genParaId = () =>
-              Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
-                .join('')
-                .toUpperCase();
             const widths = computeColumnWidths(editor, columns);
             const rowNodes = [];
             for (let r = 0; r < rows; r++) {
               const cellNodes = [];
               for (let c = 0; c < columns; c++) {
-                const cellAttrs = { paraId: genParaId(), ...(widths ? { colwidth: [widths[c]] } : {}) };
+                const cellAttrs = widths ? { colwidth: [widths[c]] } : {};
                 const cell = tableCellType.createAndFill(cellAttrs);
                 if (!cell) return false;
                 cellNodes.push(cell);
               }
-              const row = tableRowType.createChecked(null, cellNodes);
+              const row = tableRowType.createChecked({ paraId: generateDocxHexId() }, cellNodes);
               rowNodes.push(row);
             }
             const resolved = normalizeNewTableAttrs(editor);
@@ -723,14 +719,13 @@ export const Table = Node.create({
               ...(resolved.borders ? { borders: resolved.borders } : {}),
               ...(resolved.tableProperties ? { tableProperties: resolved.tableProperties } : {}),
               ...(sdBlockId ? { sdBlockId } : {}),
-              ...(paraId ? { paraId } : {}),
             };
             const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
             if (dispatch) {
               const sep = tableSeparatorNeeds(state.doc, pos);
               const makeSep = () => {
-                const attrs = { sdBlockId: uuidv4(), paraId: genParaId() };
+                const attrs = { sdBlockId: uuidv4(), paraId: generateDocxHexId() };
                 return state.schema.nodes.paragraph.createAndFill(attrs);
               };
               if (sep.before || sep.after) {

@@ -46,6 +46,15 @@ async function openBlankDocxWithText(text: string): Promise<Editor> {
   return editor;
 }
 
+async function reopenExportedDocument(exported: Blob | Buffer): Promise<Editor> {
+  const buffer = Buffer.isBuffer(exported) ? exported : Buffer.from(await exported.arrayBuffer());
+  return Editor.open(buffer, {
+    isHeadless: true,
+    extensions: getStarterExtensions(),
+    user: TEST_USER,
+  });
+}
+
 describe('diff-service tracked apply', () => {
   it('applies appended text as tracked changes', async () => {
     const baseEditor = await openBlankDocxWithText('Section 1. Payment is due within thirty days.');
@@ -63,6 +72,55 @@ describe('diff-service tracked apply', () => {
       expect(baseEditor.state.doc.textContent).toBe(targetEditor.state.doc.textContent);
       expect(getTrackChanges(baseEditor.state).length).toBeGreaterThan(0);
     } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('applies added paragraph content as tracked changes', async () => {
+    const baseEditor = await openBlankDocxWithText('Section 1. Payment is due within thirty days.');
+    const targetEditor = await openBlankDocxWithText(
+      'Section 1. Payment is due within thirty days.\nRenewal requires written approval.',
+    );
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+      const { tr } = applyDiffPayload(baseEditor, diff, { changeMode: 'tracked' });
+
+      baseEditor.dispatch(tr);
+
+      expect(baseEditor.state.doc.textContent).toBe(targetEditor.state.doc.textContent);
+      expect(getTrackChanges(baseEditor.state).length).toBeGreaterThan(0);
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('preserves tracked diff changes through export and reopen', async () => {
+    const baseEditor = await openBlankDocxWithText('Section 1. Payment is due within thirty days.');
+    const targetEditor = await openBlankDocxWithText(
+      'Section 1. Payment is due within thirty days.\nRenewal requires written approval.',
+    );
+
+    let reopenedEditor: Editor | undefined;
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+      const { tr } = applyDiffPayload(baseEditor, diff, { changeMode: 'tracked' });
+
+      baseEditor.dispatch(tr);
+
+      expect(getTrackChanges(baseEditor.state).length).toBeGreaterThan(0);
+
+      const exported = await baseEditor.exportDocument();
+      reopenedEditor = await reopenExportedDocument(exported);
+
+      expect(getTrackChanges(reopenedEditor.state).length).toBeGreaterThan(0);
+    } finally {
+      reopenedEditor?.destroy?.();
       baseEditor.destroy?.();
       targetEditor.destroy?.();
     }

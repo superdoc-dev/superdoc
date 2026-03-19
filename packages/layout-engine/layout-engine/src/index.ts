@@ -2790,4 +2790,12 @@ export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
 
 // Export table utilities for reuse by painter-dom
-export { rescaleColumnWidths, getCellLines } from './layout-table.js';
+export { rescaleColumnWidths, getCellLines, getEmbeddedRowLines } from './layout-table.js';
+export {
+  describeCellRenderBlocks,
+  computeCellSliceContentHeight,
+  computeFullCellContentHeight,
+  createCellSliceCursor,
+  type CellRenderBlock,
+  type CellSliceCursor,
+} from './table-cell-slice.js';

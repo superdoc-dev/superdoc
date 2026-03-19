@@ -178,9 +178,11 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
       "additionalProperties": false,
       "properties": {
         "target": {
-          "$ref": "#/$defs/TextAddress"
+          "$ref": "#/$defs/TextAddress",
+          "description": "Insertion point: {kind:'text', blockId:'...', range:{start, end}}."
         },
         "type": {
+          "description": "Content format: 'text' (default), 'markdown', or 'html'.",
           "enum": [
             "text",
             "markdown",
@@ -189,6 +191,7 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
           "type": "string"
         },
         "value": {
+          "description": "Text content to insert.",
           "type": "string"
         }
       },
@@ -201,6 +204,7 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
       "additionalProperties": false,
       "properties": {
         "content": {
+          "description": "Document fragment to insert (structured content).",
           "oneOf": [
             {
               "type": "object"
@@ -215,6 +219,7 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
         },
         "nestingPolicy": {
           "additionalProperties": false,
+          "description": "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
           "properties": {
             "tables": {
               "enum": [
@@ -226,6 +231,7 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
           "type": "object"
         },
         "placement": {
+          "description": "Where to place content relative to target: 'before', 'after', 'insideStart', or 'insideEnd'.",
           "enum": [
             "before",
             "after",
@@ -234,7 +240,8 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
           ]
         },
         "target": {
-          "$ref": "#/$defs/BlockNodeAddress"
+          "$ref": "#/$defs/BlockNodeAddress",
+          "description": "Block address for structural insertion: {kind:'block', nodeType:'...', nodeId:'...'}."
         }
       },
       "required": [

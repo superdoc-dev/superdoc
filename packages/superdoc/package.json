@@ -14,7 +14,8 @@
   },
   "readme": "../../README.md",
   "files": [
-    "dist"
+    "dist",
+    "AGENTS.md"
   ],
   "exports": {
     ".": {

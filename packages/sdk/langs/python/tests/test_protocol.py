@@ -368,6 +368,59 @@ class TestApplyDefaultUser:
 
 
 # ---------------------------------------------------------------------------
+# Legacy atRowIndex normalization for tables.split
+# ---------------------------------------------------------------------------
+
+class TestTablesSplitLegacyNormalization:
+    def _make_split_op(self):
+        return {
+            'operationId': 'doc.tables.split',
+            'commandTokens': ['doc', 'tables', 'split'],
+            'params': [
+                {'name': 'nodeId', 'kind': 'flag', 'flag': 'node-id', 'type': 'string'},
+                {'name': 'rowIndex', 'kind': 'flag', 'flag': 'row-index', 'type': 'number'},
+            ],
+        }
+
+    def test_maps_legacy_at_row_index_to_row_index(self):
+        op = self._make_split_op()
+        argv = build_operation_argv(op, {'nodeId': 'table-1', 'atRowIndex': 2})
+        assert '--row-index' in argv
+        idx = argv.index('--row-index')
+        assert argv[idx + 1] == '2'
+
+    def test_does_not_overwrite_explicit_row_index(self):
+        op = self._make_split_op()
+        argv = build_operation_argv(op, {'nodeId': 'table-1', 'rowIndex': 1})
+        assert '--row-index' in argv
+        idx = argv.index('--row-index')
+        assert argv[idx + 1] == '1'
+
+    def test_accepts_both_when_values_match(self):
+        op = self._make_split_op()
+        argv = build_operation_argv(op, {'nodeId': 'table-1', 'rowIndex': 1, 'atRowIndex': 1})
+        assert '--row-index' in argv
+        idx = argv.index('--row-index')
+        assert argv[idx + 1] == '1'
+
+    def test_rejects_conflicting_row_index_and_at_row_index(self):
+        import pytest
+        from superdoc.errors import SuperDocError
+        op = self._make_split_op()
+        with pytest.raises(SuperDocError, match='cannot provide both rowIndex and atRowIndex'):
+            build_operation_argv(op, {'nodeId': 'table-1', 'rowIndex': 1, 'atRowIndex': 2})
+
+    def test_does_not_apply_to_other_operations(self):
+        op = {
+            'operationId': 'doc.tables.delete',
+            'commandTokens': ['doc', 'tables', 'delete'],
+            'params': [{'name': 'nodeId', 'kind': 'flag', 'flag': 'node-id', 'type': 'string'}],
+        }
+        argv = build_operation_argv(op, {'nodeId': 'table-1', 'atRowIndex': 2})
+        assert '--row-index' not in argv
+
+
+# ---------------------------------------------------------------------------
 # Integration tests with real generated contract
 # ---------------------------------------------------------------------------
 

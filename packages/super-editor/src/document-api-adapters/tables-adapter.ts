@@ -1841,7 +1841,7 @@ export function tablesConvertFromTextAdapter(
 /**
  * tables.split — split a table into two tables at a given row index.
  *
- * All rows from `atRowIndex` onward are moved into a new table that is
+ * All rows from `rowIndex` onward are moved into a new table that is
  * inserted immediately after the original.
  */
 export function tablesSplitAdapter(
@@ -1854,7 +1854,7 @@ export function tablesSplitAdapter(
   const { candidate, address } = resolveTableLocator(editor, input, 'tables.split');
   const tableNode = candidate.node;
 
-  if (input.atRowIndex <= 0 || input.atRowIndex >= tableNode.childCount) {
+  if (input.rowIndex <= 0 || input.rowIndex >= tableNode.childCount) {
     return toTableFailure('INVALID_TARGET', 'Split row index must be between 1 and rowCount-1.');
   }
 
@@ -1869,7 +1869,7 @@ export function tablesSplitAdapter(
 
     // Collect rows for the new (second) table.
     const secondTableRows: import('prosemirror-model').Node[] = [];
-    for (let i = input.atRowIndex; i < tableNode.childCount; i++) {
+    for (let i = input.rowIndex; i < tableNode.childCount; i++) {
       secondTableRows.push(tableNode.child(i));
     }
 
@@ -1883,7 +1883,7 @@ export function tablesSplitAdapter(
     }
 
     const mapFrom = tr.mapping.maps.length;
-    for (let i = tableNode.childCount - 1; i >= input.atRowIndex; i--) {
+    for (let i = tableNode.childCount - 1; i >= input.rowIndex; i--) {
       const rp = tr.mapping.slice(mapFrom).map(rowPositions[i]);
       const rEnd = tr.mapping.slice(mapFrom).map(rowPositions[i] + tableNode.child(i).nodeSize);
       tr.delete(rp, rEnd);

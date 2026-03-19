@@ -1,295 +1,395 @@
-# Execution tests -- real document editing via SuperDoc CLI.
+# Execution tests — real document editing via SuperDoc CLI + AI Gateway.
 #
-# Assertion rules:
-#   1. Every edit asserts new content exists AND old content is gone.
-#   2. Every test verifies unrelated content is intact (no collateral damage).
-#   3. Position tests use indexOf() for ordering.
+# Focus: tool execution MECHANICS, not just content outcomes.
+# The provider returns JSON: { documentText, trace[], toolCalls[], stepCount }
+#
+# Each test validates:
+#   1. TRACE: correct tool sequence, all calls succeeded, reasonable step count
+#   2. CONTENT: minimal check that the edit actually worked (one assertion)
 
 # =============================================================================
-# DOCUMENT.DOCX -- simple document with bullet lists
-# Known content: "A list of list features", "We support bullets, symbols and more",
-#   "All sorts of bullets.", "Nested lists", "Numbers", "Or letters",
-#   "All sorts of lists are supported"
+# DOCUMENT.DOCX — bullet lists
 # =============================================================================
 
-- description: 'Read: lists document content'
+- description: 'Read: extracts document text'
   vars:
     fixture: document.docx
+    keepFile: true
     task: 'Get the full text of this document.'
   assert:
-    - type: contains
-      value: 'A list of list features'
-    - type: contains
-      value: 'We support bullets, symbols and more'
-    - type: contains
-      value: 'All sorts of lists are supported'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('A list of list features')) return { pass: false, score: 0, reason: 'Content missing' };
+        return { pass: true, score: 1, reason: 'Content extracted' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
 
-- description: 'Replace: bullets to bullet points, all occurrences'
+- description: 'Replace: bullets → bullet points'
   vars:
     fixture: document.docx
+    keepFile: true
     task: 'Replace "bullets" with "bullet points" everywhere in the document.'
   assert:
-    - type: contains
-      value: 'bullet points'
-    - type: not-contains
-      value: 'support bullets'
-    - type: not-contains
-      value: 'sorts of bullets'
-    - type: contains
-      value: 'Nested lists'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('bullet points') || t.includes('support bullets'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        return { pass: true, score: 1, reason: 'Content correct' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace data' };
+        const count = d.stepCount || d.trace.length;
+        if (count > 6) return { pass: false, score: 0, reason: `${count} steps — too many for a simple replace` };
+        return { pass: true, score: 1, reason: `${count} steps` };
+      metric: efficiency
 
-- description: 'Insert: paragraph appended at end'
+- description: 'Insert: paragraph at end'
   vars:
     fixture: document.docx
+    keepFile: true
     task: 'Add a new paragraph at the end of the document that says exactly "EVAL TEST PASSED".'
   assert:
-    - type: contains
-      value: 'EVAL TEST PASSED'
-    - type: contains
-      value: 'A list of list features'
     - type: javascript
-      value: "output.indexOf('EVAL TEST PASSED') > output.indexOf('All sorts of lists are supported')"
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('EVAL TEST PASSED')) return { pass: false, score: 0, reason: 'Missing' };
+        return { pass: true, score: 1, reason: 'Paragraph added' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
 
-- description: 'Insert: heading appended at end'
+- description: 'Insert: heading at end'
   vars:
     fixture: document.docx
+    keepFile: true
     task: 'Add a heading "Summary" at the end of the document.'
   assert:
-    - type: contains
-      value: 'Summary'
     - type: javascript
-      value: "output.indexOf('Summary') > output.indexOf('All sorts of lists are supported')"
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Summary')) return { pass: false, score: 0, reason: 'Missing' };
+        return { pass: true, score: 1, reason: 'Heading added' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
 
 # =============================================================================
-# MEMORANDUM.DOCX -- legal memo
-# Known: "MEMORANDUM", "TO: General Counsel", "DATE: December 30, 2024",
-#   "$25,000,000", "$150,000,000", "March 1-31, 2025", "Acquiror",
-#   "reasonable best efforts", "[lawyer]", "Best regards,"
+# MEMORANDUM.DOCX — legal memo
 # =============================================================================
 
-- description: 'Read: memo with all key sections'
+- description: 'Read: legal memo'
   vars:
     fixture: memorandum.docx
+    keepFile: true
     task: 'Get the full text of this document.'
   assert:
-    - type: contains
-      value: 'MEMORANDUM'
-    - type: contains
-      value: 'OPERATIONAL COVENANTS'
-    - type: contains
-      value: '$25,000,000'
-    - type: contains
-      value: 'Best regards,'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('MEMORANDUM') || !t.includes('$25,000,000'))
+          return { pass: false, score: 0, reason: 'Key content missing' };
+        return { pass: true, score: 1, reason: 'All sections present' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
 
-- description: 'Replace: party name, all occurrences, amounts untouched'
+- description: 'Replace: party name globally'
   vars:
     fixture: memorandum.docx
+    keepFile: true
     task: 'Replace "General Counsel" with "Chief Legal Officer" everywhere in the document.'
   assert:
-    - type: contains
-      value: 'TO: Chief Legal Officer'
-    - type: contains
-      value: 'Dear Chief Legal Officer'
-    - type: not-contains
-      value: 'General Counsel'
-    - type: contains
-      value: '$25,000,000'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Chief Legal Officer') || t.includes('General Counsel'))
+          return { pass: false, score: 0, reason: 'Replace incomplete' };
+        return { pass: true, score: 1, reason: 'All replaced' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
 
-- description: 'Replace: date changed, other dates untouched'
+- description: 'Replace: date precision ($25M/$150M untouched)'
   vars:
     fixture: memorandum.docx
-    task: 'Replace the date "December 30, 2024" with "January 15, 2025".'
-  assert:
-    - type: contains
-      value: 'DATE: January 15, 2025'
-    - type: not-contains
-      value: 'December 30, 2024'
-    - type: contains
-      value: 'March 1-31, 2025'
-
-- description: 'Replace: $25M to $50M, $150M untouched'
-  vars:
-    fixture: memorandum.docx
+    keepFile: true
     task: 'Replace the acquisition limit of "$25,000,000" with "$50,000,000".'
   assert:
-    - type: contains
-      value: '$50,000,000'
-    - type: not-contains
-      value: '$25,000,000'
-    - type: contains
-      value: '$150,000,000'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('$50,000,000')) return { pass: false, score: 0, reason: 'Missing $50M' };
+        if (t.includes('$25,000,000')) return { pass: false, score: 0, reason: '$25M still there' };
+        if (!t.includes('$150,000,000')) return { pass: false, score: 0, reason: 'Collateral: $150M gone' };
+        return { pass: true, score: 1, reason: 'Precise replace' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasSearch = tools.some(t => t.includes('search'));
+        const hasEdit = tools.some(t => t.includes('edit') || t.includes('mutations'));
+        if (!hasSearch) return { pass: false, score: 0, reason: `No search step. Tools: ${tools.join('→')}` };
+        if (!hasEdit) return { pass: false, score: 0, reason: `No edit step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Sequence: ${tools.join(' → ')}` };
+      metric: sequence
 
-- description: 'Replace: [lawyer] placeholder, signature intact'
+- description: 'Replace: placeholder → name'
   vars:
     fixture: memorandum.docx
+    keepFile: true
     task: 'Replace "[lawyer]" with "Sarah Chen, Partner" at the end of the document.'
   assert:
-    - type: contains
-      value: 'Sarah Chen, Partner'
-    - type: not-contains
-      value: '[lawyer]'
-    - type: contains
-      value: 'Best regards,'
     - type: javascript
-      value: "output.indexOf('Sarah Chen') > output.indexOf('Best regards')"
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Sarah Chen') || t.includes('[lawyer]'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        return { pass: true, score: 1, reason: 'Replaced' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
 
-- description: 'Insert: heading + paragraph after signature'
+- description: 'Insert: heading + paragraph at end'
   vars:
     fixture: memorandum.docx
-    task: 'Add a new heading "CONFIDENTIALITY NOTICE" at the end of the document, followed by a paragraph that says "This memorandum is privileged and confidential."'
+    keepFile: true
+    task: 'Add a heading "CONFIDENTIALITY NOTICE" at the end, followed by "This memorandum is privileged and confidential."'
   assert:
-    - type: contains
-      value: 'CONFIDENTIALITY NOTICE'
-    - type: contains
-      value: 'privileged and confidential'
     - type: javascript
-      value: "output.indexOf('CONFIDENTIALITY NOTICE') > output.indexOf('Best regards')"
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('CONFIDENTIALITY NOTICE') || !t.includes('privileged and confidential'))
+          return { pass: false, score: 0, reason: 'Missing content' };
+        return { pass: true, score: 1, reason: 'Added at end' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
 
-- description: 'Replace: Acquiror to Buyer, amounts untouched'
+- description: 'Replace: Acquiror → Buyer globally'
   vars:
     fixture: memorandum.docx
+    keepFile: true
     task: 'Replace every instance of "Acquiror" with "Buyer" in this document.'
   assert:
-    - type: contains
-      value: 'Buyer'
-    - type: not-contains
-      value: 'Acquiror'
-    - type: contains
-      value: '$25,000,000'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Buyer') || t.includes('Acquiror'))
+          return { pass: false, score: 0, reason: 'Replace incomplete' };
+        return { pass: true, score: 1, reason: 'All replaced' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
 
-- description: 'Replace: go-shop date, Dec date untouched'
+- description: 'Replace: go-shop date, Dec date intact'
   vars:
     fixture: memorandum.docx
-    task: 'Replace the go-shop period date "March 1-31, 2025" with "April 1-30, 2025" in the document.'
+    keepFile: true
+    task: 'Replace "March 1-31, 2025" with "April 1-30, 2025" in the document.'
   assert:
-    - type: contains
-      value: 'April 1-30, 2025'
-    - type: not-contains
-      value: 'March 1-31, 2025'
-    - type: contains
-      value: 'December 30, 2024'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('April 1-30, 2025') || t.includes('March 1-31, 2025'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        if (!t.includes('December 30, 2024'))
+          return { pass: false, score: 0, reason: 'Collateral: Dec date gone' };
+        return { pass: true, score: 1, reason: 'Date replaced precisely' };
 
-- description: 'Replace: legal terms, covenants section intact'
+- description: 'Replace: legal terms'
   vars:
     fixture: memorandum.docx
-    task: 'Replace "reasonable best efforts" with "commercially reasonable efforts" everywhere in the document.'
+    keepFile: true
+    task: 'Replace "reasonable best efforts" with "commercially reasonable efforts" everywhere.'
   assert:
-    - type: contains
-      value: 'commercially reasonable efforts'
-    - type: not-contains
-      value: 'reasonable best efforts'
-    - type: contains
-      value: 'Maintain the company in good standing'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('commercially reasonable efforts') || t.includes('reasonable best efforts'))
+          return { pass: false, score: 0, reason: 'Replace failed' };
+        return { pass: true, score: 1, reason: 'Terms replaced' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
 
 # =============================================================================
-# TABLE DOC -- document with tables
+# TABLE DOC
 # =============================================================================
 
-- description: 'Table: reads headers and cell content'
+- description: 'Table: read content'
   vars:
     fixture: table-doc.docx
+    keepFile: true
     task: 'Get the full text of this document.'
   assert:
-    - type: contains
-      value: 'Component'
-    - type: contains
-      value: 'Version'
-    - type: contains
-      value: 'January 22, 2026'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Component') || !t.includes('Version'))
+          return { pass: false, score: 0, reason: 'Table content missing' };
+        return { pass: true, score: 1, reason: 'Table read' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
 
-- description: 'Table: replace cell content, headers untouched'
+- description: 'Table: replace cell content'
   vars:
     fixture: table-doc.docx
+    keepFile: true
     task: 'Replace every cell that says "Test" with "Production" in the table.'
   assert:
-    - type: contains
-      value: 'Production'
-    - type: contains
-      value: 'Component'
-    - type: contains
-      value: 'January 22, 2026'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('Production'))
+          return { pass: false, score: 0, reason: 'Missing "Production"' };
+        return { pass: true, score: 1, reason: 'Cells replaced' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
 
 # =============================================================================
-# MULTI-STEP -- compound operations
+# MULTI-STEP — compound operations, trace sequence matters most
 # =============================================================================
 
-- description: 'Multi-step: find section, insert paragraph after it'
+- description: 'Multi-step: find section + insert after'
   vars:
     fixture: memorandum.docx
+    keepFile: true
     task: 'Find the section about "Alternative Transaction Proposals" and add a paragraph right after it that says "NOTE: Legal review required for this section."'
   assert:
-    - type: contains
-      value: 'NOTE: Legal review required for this section'
     - type: javascript
-      value: "output.indexOf('NOTE: Legal review required') > output.indexOf('Alternative Transaction Proposals')"
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('NOTE: Legal review required'))
+          return { pass: false, score: 0, reason: 'Note not added' };
+        return { pass: true, score: 1, reason: 'Note inserted' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        if (tools.length < 2) return { pass: false, score: 0, reason: `Only ${tools.length} tool call — expected search + insert` };
+        return { pass: true, score: 1, reason: `${tools.length} steps: ${tools.join(' → ')}` };
+      metric: multi_step
 
-- description: 'Multi-step: replace placeholder AND add disclaimer at end'
+- description: 'Multi-step: replace + disclaimer'
   vars:
     fixture: memorandum.docx
-    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" and then add a new heading "DISCLAIMER" at the very end of the document followed by a paragraph "This document does not constitute legal advice."'
+    keepFile: true
+    task: 'Replace "[lawyer]" with "Sarah Chen, Partner" and add a heading "DISCLAIMER" at the end followed by "This document does not constitute legal advice."'
   assert:
-    - type: contains
-      value: 'Sarah Chen, Partner'
-    - type: not-contains
-      value: '[lawyer]'
-    - type: contains
-      value: 'DISCLAIMER'
-    - type: contains
-      value: 'does not constitute legal advice'
     - type: javascript
-      value: "output.indexOf('DISCLAIMER') > output.indexOf('Sarah Chen')"
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Sarah Chen') || t.includes('[lawyer]') || !t.includes('DISCLAIMER'))
+          return { pass: false, score: 0, reason: 'Incomplete' };
+        return { pass: true, score: 1, reason: 'Both operations done' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        if (tools.length < 3) return { pass: false, score: 0, reason: `Only ${tools.length} calls — expected search + replace + create` };
+        return { pass: true, score: 1, reason: `${tools.length} steps: ${tools.join(' → ')}` };
+      metric: multi_step
 
 # =============================================================================
-# EXPORT -- save edited DOCX to results/output/
+# EXPORT — save edited DOCX
 # =============================================================================
 
 - description: 'Export: replace + heading + save'
   vars:
     fixture: memorandum.docx
     keepFile: true
-    task: 'Replace "$25,000,000" with "$75,000,000" and add a heading "APPENDIX A" at the end of the document.'
+    task: 'Replace "$25,000,000" with "$75,000,000" and add a heading "APPENDIX A" at the end.'
   assert:
-    - type: contains
-      value: '$75,000,000'
-    - type: not-contains
-      value: '$25,000,000'
-    - type: contains
-      value: '$150,000,000'
-    - type: contains
-      value: 'APPENDIX A'
     - type: javascript
-      value: "output.indexOf('APPENDIX A') > output.indexOf('Best regards')"
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('$75,000,000') || !t.includes('APPENDIX A'))
+          return { pass: false, score: 0, reason: 'Edit incomplete' };
+        return { pass: true, score: 1, reason: 'Saved correctly' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
 
 # =============================================================================
-# ASPIRATIONAL -- may not fully work yet. Failures are expected.
+# ASPIRATIONAL
 # =============================================================================
 
-- description: 'Aspirational: glossary of defined terms at end'
+- description: 'Aspirational: glossary at end'
   vars:
     fixture: memorandum.docx
-    task: 'Generate a glossary of defined terms at the end of the document. Include at least: "Acquiror", "go-shop period", "GAAP". Format as a heading "GLOSSARY" followed by the terms.'
+    keepFile: true
+    task: 'Generate a glossary of defined terms at the end. Include "Acquiror", "go-shop period", "GAAP". Heading "GLOSSARY" followed by the terms.'
   assert:
-    - type: contains
-      value: 'GLOSSARY'
     - type: javascript
-      value: "output.indexOf('GLOSSARY') > output.indexOf('Best regards')"
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('GLOSSARY')) return { pass: false, score: 0, reason: 'Missing' };
+        return { pass: true, score: 1, reason: 'Glossary created' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
 
-- description: 'Aspirational: create table from bullet list'
+- description: 'Aspirational: bullet list to table'
   vars:
     fixture: document.docx
-    task: 'Turn this bulleted list into a two-column table. First column has the list items, second column is empty. The table should have a header row with "Feature" and "Notes".'
+    keepFile: true
+    task: 'Turn this bulleted list into a two-column table with headers "Feature" and "Notes".'
   assert:
-    - type: contains
-      value: 'Feature'
-    - type: contains
-      value: 'Notes'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (t.includes('Feature') && t.includes('Notes')) return { pass: true, score: 1, reason: 'Table created' };
+        return { pass: false, score: 0, reason: 'Table headers missing' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog
 
-- description: 'Aspirational: redline with tracked changes'
+- description: 'Aspirational: tracked change redline'
   vars:
     fixture: memorandum.docx
-    task: 'In the "Restrictive Covenants" section, replace "No liquidation" with "Company may not pursue liquidation" using tracked changes so it can be reviewed.'
+    keepFile: true
+    task: 'In the "Restrictive Covenants" section, replace "No liquidation" with "Company may not pursue liquidation" using tracked changes.'
   assert:
-    - type: contains
-      value: 'Restrictive Covenants'
-    - type: contains
-      value: 'MEMORANDUM'
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.documentText?.includes('MEMORANDUM')) return { pass: false, score: 0, reason: 'Document damaged' };
+        return { pass: true, score: 1, reason: 'Document intact' };
+    - type: javascript
+      value: file://lib/checks.cjs:traceLog

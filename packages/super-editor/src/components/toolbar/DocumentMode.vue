@@ -103,14 +103,14 @@ onMounted(() => {
   .option-item {
     display: flex;
     flex-direction: row;
-    background-color: white;
+    background-color: var(--sd-ui-dropdown-bg, #ffffff);
     padding: 10px;
-    border-radius: 4px;
+    border-radius: var(--sd-ui-dropdown-option-radius, 3px);
     cursor: pointer;
     box-sizing: border-box;
 
     &:hover {
-      background-color: #c8d0d8;
+      background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
     }
   }
 
@@ -147,8 +147,8 @@ onMounted(() => {
 
 .document-mode-type {
   font-weight: 400;
-  font-size: 15px;
-  color: #222;
+  font-size: var(--sd-ui-font-size-500, 15px);
+  color: var(--sd-ui-text, #47484a);
 }
 
 .icon-column {
@@ -156,7 +156,7 @@ onMounted(() => {
   justify-content: flex-start;
   align-items: center;
   padding: 0 5px;
-  color: black;
+  color: var(--sd-ui-text, #47484a);
   height: 100%;
   box-sizing: border-box;
 
@@ -166,7 +166,7 @@ onMounted(() => {
     align-items: center;
     flex-shrink: 0;
     height: 18px;
-    color: #47484a;
+    color: var(--sd-ui-text, #47484a);
   }
 }
 
@@ -177,7 +177,7 @@ onMounted(() => {
 }
 
 .document-mode-description {
-  font-size: 12px;
-  color: #666;
+  font-size: var(--sd-ui-font-size-200, 12px);
+  color: var(--sd-ui-text-muted, #666666);
 }
 </style>

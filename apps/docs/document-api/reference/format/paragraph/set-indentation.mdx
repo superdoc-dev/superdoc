@@ -156,18 +156,22 @@ Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.
   },
   "properties": {
     "firstLine": {
+      "description": "First line indent in twips. Cannot be combined with hanging.",
       "minimum": 0,
       "type": "integer"
     },
     "hanging": {
+      "description": "Hanging indent in twips. Cannot be combined with firstLine.",
       "minimum": 0,
       "type": "integer"
     },
     "left": {
+      "description": "Left indentation in twips (1440 = 1 inch).",
       "minimum": 0,
       "type": "integer"
     },
     "right": {
+      "description": "Right indentation in twips (1440 = 1 inch).",
       "minimum": 0,
       "type": "integer"
     },

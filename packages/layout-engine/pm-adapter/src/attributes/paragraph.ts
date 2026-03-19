@@ -285,6 +285,7 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
+    direction: resolvedParagraphProperties.rightToLeft ? 'rtl' : undefined,
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {

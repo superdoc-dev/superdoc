@@ -12,7 +12,7 @@
 - **Don't place blue text on blue backgrounds** — maintain contrast
 
 ### Color scale
-See `packages/superdoc/src/assets/styles/tokens.css` for the full blue scale (`--sd-color-blue-50` through `--sd-color-blue-900`). The scale moves from near-white (#EBF0FF) to near-black (#041133), with 500 being the canonical brand color.
+See `packages/superdoc/src/assets/styles/helpers/variables.css` for the full blue scale (`--sd-color-blue-50` through `--sd-color-blue-900`). The scale moves from near-white (#EBF0FF) to near-black (#041133), with 500 being the canonical brand color.
 
 ## Logo
 
@@ -82,7 +82,7 @@ No heavy shadows, no gradients on UI elements (gradients are reserved for market
 
 Dark mode is currently used on the homepage/marketing site. The product UI is light-only.
 
-Dark mode token overrides are documented in `packages/superdoc/src/assets/styles/tokens.css`.
+Theme overrides are defined in `packages/superdoc/src/assets/styles/helpers/themes.css`, while base token defaults are in `packages/superdoc/src/assets/styles/helpers/variables.css`.
 
 Key principle: dark backgrounds (#0B0C10) with reduced-brightness text (#E8E8E8), not pure white on pure black.
 

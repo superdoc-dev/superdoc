@@ -209,7 +209,8 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
       "additionalProperties": false,
       "properties": {
         "target": {
-          "$ref": "#/$defs/SelectionTarget"
+          "$ref": "#/$defs/SelectionTarget",
+          "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
         },
         "value": {
           "oneOf": [
@@ -257,6 +258,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
       "additionalProperties": false,
       "properties": {
         "ref": {
+          "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
           "type": "string"
         },
         "value": {

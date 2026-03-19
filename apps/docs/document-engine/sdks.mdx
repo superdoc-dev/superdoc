@@ -561,7 +561,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.vanish` | `format vanish` | Set or clear the `vanish` inline run property on the target text range. |
 | `doc.format.webHidden` | `format web-hidden` | Set or clear the `webHidden` inline run property on the target text range. |
 | `doc.format.specVanish` | `format spec-vanish` | Set or clear the `specVanish` inline run property on the target text range. |
-| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. |
+| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL. |
 | `doc.format.cs` | `format cs` | Set or clear the `cs` inline run property on the target text range. |
 | `doc.format.bCs` | `format b-cs` | Set or clear the `bCs` inline run property on the target text range. |
 | `doc.format.iCs` | `format i-cs` | Set or clear the `iCs` inline run property on the target text range. |
@@ -599,6 +599,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clearBorder` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
 | `doc.format.paragraph.setShading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
 | `doc.format.paragraph.clearShading` | `format paragraph clear-shading` | Remove all paragraph shading. |
+| `doc.format.paragraph.setDirection` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
+| `doc.format.paragraph.clearDirection` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
 
 #### Create
 
@@ -1009,7 +1011,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.vanish` | `format vanish` | Set or clear the `vanish` inline run property on the target text range. |
 | `doc.format.web_hidden` | `format web-hidden` | Set or clear the `webHidden` inline run property on the target text range. |
 | `doc.format.spec_vanish` | `format spec-vanish` | Set or clear the `specVanish` inline run property on the target text range. |
-| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. |
+| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL. |
 | `doc.format.cs` | `format cs` | Set or clear the `cs` inline run property on the target text range. |
 | `doc.format.b_cs` | `format b-cs` | Set or clear the `bCs` inline run property on the target text range. |
 | `doc.format.i_cs` | `format i-cs` | Set or clear the `iCs` inline run property on the target text range. |
@@ -1047,6 +1049,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clear_border` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
 | `doc.format.paragraph.set_shading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
 | `doc.format.paragraph.clear_shading` | `format paragraph clear-shading` | Remove all paragraph shading. |
+| `doc.format.paragraph.set_direction` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
+| `doc.format.paragraph.clear_direction` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
 
 #### Create
 

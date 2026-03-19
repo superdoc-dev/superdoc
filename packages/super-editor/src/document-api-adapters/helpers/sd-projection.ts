@@ -1190,8 +1190,8 @@ function extractParagraphProps(attrs: ParagraphAttrs | undefined): SDParagraphPr
     props.shading = ppAny.shading;
     hasProps = true;
   }
-  if (ppAny.bidi !== undefined) {
-    props.bidi = ppAny.bidi;
+  if (ppAny.rightToLeft !== undefined) {
+    props.bidi = ppAny.rightToLeft;
     hasProps = true;
   }
   if (ppAny.markRunProps) {

@@ -296,6 +296,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
       "properties": {
         "inline": {
           "additionalProperties": false,
+          "description": "Inline formatting properties to apply. Set a property to apply it, use null to clear it. Example: {bold: true, italic: true} or {bold: null} to remove bold.",
           "minProperties": 1,
           "properties": {
             "bCs": {
@@ -1104,7 +1105,8 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
           "type": "object"
         },
         "target": {
-          "$ref": "#/$defs/SelectionTarget"
+          "$ref": "#/$defs/SelectionTarget",
+          "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
         }
       },
       "required": [
@@ -1118,6 +1120,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
       "properties": {
         "inline": {
           "additionalProperties": false,
+          "description": "Inline formatting properties to apply. Set a property to apply it, use null to clear it. Example: {bold: true, italic: true} or {bold: null} to remove bold.",
           "minProperties": 1,
           "properties": {
             "bCs": {
@@ -1926,6 +1929,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
           "type": "object"
         },
         "ref": {
+          "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
           "type": "string"
         }
       },

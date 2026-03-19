@@ -30,7 +30,7 @@ Returns a TableMutationResult receipt confirming the table was split at the targ
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `atRowIndex` | integer | yes |  |
+| `rowIndex` | integer | yes |  |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -40,14 +40,14 @@ Returns a TableMutationResult receipt confirming the table was split at the targ
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `atRowIndex` | integer | yes |  |
 | `nodeId` | string | yes |  |
+| `rowIndex` | integer | yes |  |
 
 ### Example request
 
 ```json
 {
-  "atRowIndex": 1,
+  "rowIndex": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -132,19 +132,19 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     }
   ],
   "properties": {
-    "atRowIndex": {
-      "minimum": 1,
-      "type": "integer"
-    },
     "nodeId": {
       "type": "string"
+    },
+    "rowIndex": {
+      "minimum": 1,
+      "type": "integer"
     },
     "target": {
       "$ref": "#/$defs/TableAddress"
     }
   },
   "required": [
-    "atRowIndex"
+    "rowIndex"
   ],
   "type": "object"
 }

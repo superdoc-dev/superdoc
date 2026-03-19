@@ -42,6 +42,8 @@ import {
   paragraphsClearBorderWrapper,
   paragraphsSetShadingWrapper,
   paragraphsClearShadingWrapper,
+  paragraphsSetDirectionWrapper,
+  paragraphsClearDirectionWrapper,
 } from '../plan-engine/paragraphs-wrappers.js';
 import { stylesApplyAdapter } from '../styles-adapter.js';
 import { createTableWrapper } from '../plan-engine/create-table-wrapper.js';
@@ -2058,6 +2060,34 @@ const paragraphMutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return paragraphsClearShadingWrapper(editor, { target: PARAGRAPH_TARGET });
     },
   },
+  'format.paragraph.setDirection': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetDirectionWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ rightToLeft: true });
+      return paragraphsSetDirectionWrapper(editor, { target: PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetDirectionWrapper(editor, { target: PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+  },
+  'format.paragraph.clearDirection': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearDirectionWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearDirectionWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ rightToLeft: true });
+      return paragraphsClearDirectionWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
 };
 
 const paragraphDryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -2244,6 +2274,26 @@ const paragraphDryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'format.paragraph.clearShading': () => {
     const { editor, dispatch } = makeParagraphEditor({ shading: { fill: 'FFFF00' } });
     const result = paragraphsClearShadingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setDirection': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetDirectionWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, direction: 'rtl' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearDirection': () => {
+    const { editor, dispatch } = makeParagraphEditor({ rightToLeft: true });
+    const result = paragraphsClearDirectionWrapper(
       editor,
       { target: PARAGRAPH_TARGET },
       { changeMode: 'direct', dryRun: true },
@@ -6199,16 +6249,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.split': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'missing', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'missing', rowIndex: 1 }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      // atRowIndex: 0 is invalid (must be >= 1).
+      // rowIndex: 0 is invalid (must be >= 1).
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 0 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 0 }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 1 }, { changeMode: 'direct' });
     },
   },
   'tables.convertToText': {
@@ -9419,7 +9469,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSplitWrapper(
       editor,
-      { nodeId: 'table-1', atRowIndex: 1 },
+      { nodeId: 'table-1', rowIndex: 1 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -10968,8 +11018,8 @@ describe('document-api adapter conformance', () => {
     {
       op: 'tables.split',
       ref: 'table-1',
-      args: { atRowIndex: 1 },
-      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', atRowIndex: 1 } as any),
+      args: { rowIndex: 1 },
+      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', rowIndex: 1 } as any),
     },
     {
       op: 'tables.convertToText',

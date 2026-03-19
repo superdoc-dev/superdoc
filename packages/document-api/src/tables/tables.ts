@@ -153,6 +153,33 @@ function validateCellOrTableScopedCellLocator(input: CellOrTableScopedCellLocato
 }
 
 // ---------------------------------------------------------------------------
+// tables.split input normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalizes legacy `atRowIndex` to canonical `rowIndex` for tables.split.
+ *
+ * Accepts either name, prefers `rowIndex` when both match, and rejects
+ * conflicting dual-name input. Returns the input unchanged when only
+ * `rowIndex` is present.
+ */
+export function normalizeTablesSplitInput<T extends { rowIndex?: number }>(input: T): T {
+  const legacy = (input as Record<string, unknown>).atRowIndex;
+  if (legacy === undefined) return input;
+
+  if (input.rowIndex !== undefined && input.rowIndex !== legacy) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      'tables.split: cannot provide both rowIndex and atRowIndex with different values.',
+      { fields: ['rowIndex', 'atRowIndex'] },
+    );
+  }
+
+  const { atRowIndex: _legacy, ...rest } = input as Record<string, unknown>;
+  return { ...rest, rowIndex: legacy } as T;
+}
+
+// ---------------------------------------------------------------------------
 // Typed execute helpers
 // ---------------------------------------------------------------------------
 

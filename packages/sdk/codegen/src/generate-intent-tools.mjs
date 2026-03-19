@@ -44,6 +44,39 @@ function sanitizeSchema(schema) {
       result.enum = values;
     } else {
       result.oneOf = result.oneOf.map(sanitizeSchema);
+
+      // Remove empty-object branches ({}) from oneOf — they represent null/clear
+      // but are opaque to LLMs. The parent description handles the "use null to clear" guidance.
+      result.oneOf = result.oneOf.filter(
+        (branch) => !(typeof branch === 'object' && Object.keys(branch).length === 0),
+      );
+
+      // Deduplicate oneOf branches with identical simple types (string, number, boolean).
+      // Keep the one with the longer description. Don't deduplicate objects (they may have different properties).
+      const simpleSeen = new Map();
+      const deduped = [];
+      for (const branch of result.oneOf) {
+        const isSimple = branch.type && branch.type !== 'object' && branch.type !== 'array';
+        const key = isSimple ? branch.type : null;
+        if (key && simpleSeen.has(key)) {
+          const existing = simpleSeen.get(key);
+          if ((branch.description || '').length > (existing.description || '').length) {
+            deduped[deduped.indexOf(existing)] = branch;
+            simpleSeen.set(key, branch);
+          }
+        } else {
+          if (key) simpleSeen.set(key, branch);
+          deduped.push(branch);
+        }
+      }
+      result.oneOf = deduped;
+
+      // Collapse oneOf with a single branch
+      if (result.oneOf.length === 1) {
+        const only = result.oneOf[0];
+        delete result.oneOf;
+        Object.assign(result, only);
+      }
     }
   }
   if (Array.isArray(result.anyOf)) {
@@ -208,16 +241,22 @@ function buildIntentTools(contract) {
       };
 
       // Collect all properties across all operations (excluding action).
-      // A property is marked required only if every operation that defines it
-      // also marks it required — otherwise it's conditionally required per-action
-      // and must stay optional in the merged schema.
+      // Track which actions require each param so we can annotate descriptions.
       const allProperties = { action: actionProperty };
-      /** @type {Map<string, { total: number, requiredCount: number }>} */
+      /** @type {Map<string, { total: number, requiredCount: number, requiredBy: string[] }>} */
       const propPresence = new Map();
 
       for (const { operation } of ops) {
         const opSchema = buildInputSchemaFromParams(operation);
         const opRequired = new Set(opSchema.required ?? []);
+
+        // Also check the contract inputSchema's required array — CLI params may
+        // strip required flags (e.g. when EXTRA_CLI_PARAMS exist), but the
+        // contract schema is authoritative for which fields the operation needs.
+        const contractRequired = operation.inputSchema?.required;
+        if (Array.isArray(contractRequired)) {
+          for (const key of contractRequired) opRequired.add(key);
+        }
 
         for (const [propName, propSchema] of Object.entries(opSchema.properties ?? {})) {
           if (propName === 'action') continue;
@@ -226,22 +265,51 @@ function buildIntentTools(contract) {
             allProperties[propName] = { ...propSchema };
           }
 
-          const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0 };
+          const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0, requiredBy: [] };
           entry.total++;
-          if (opRequired.has(propName)) entry.requiredCount++;
+          if (opRequired.has(propName)) {
+            entry.requiredCount++;
+            entry.requiredBy.push(operation.intentAction);
+          }
           propPresence.set(propName, entry);
         }
       }
 
       // 'action' is always required; other props are required only if they
       // appear in every operation AND every operation marks them required.
-      // If a param only exists in some actions, it's conditionally required
-      // and must stay optional in the merged schema.
       const opCount = ops.length;
       const allRequired = ['action'];
       for (const [propName, { total, requiredCount }] of propPresence) {
         if (total === opCount && requiredCount === opCount) {
           allRequired.push(propName);
+        }
+      }
+
+      // Annotate descriptions: for params required by some (not all) actions,
+      // add "Required for action X, Y." so the LLM knows when to include them.
+      for (const [propName, { requiredCount, requiredBy }] of propPresence) {
+        if (requiredCount > 0 && requiredCount < opCount && allProperties[propName]) {
+          const actions = requiredBy.map((a) => `'${a}'`).join(', ');
+          const existing = allProperties[propName].description || '';
+          const suffix = `Required for ${requiredBy.length === 1 ? 'action' : 'actions'} ${actions}.`;
+          allProperties[propName] = {
+            ...allProperties[propName],
+            description: existing ? `${existing} ${suffix}` : suffix,
+          };
+        }
+      }
+
+      // Add fallback descriptions for complex undescribed params.
+      for (const [propName, propSchema] of Object.entries(allProperties)) {
+        if (propSchema.description) continue;
+        if (propName === 'target') {
+          allProperties[propName] = { ...propSchema, description: "Target address object. Use 'ref' instead if you have a search handle. Format: {kind:'text', blockId, range:{start,end}} or {kind:'block', nodeType, nodeId}." };
+        } else if (propName === 'ref') {
+          allProperties[propName] = { ...propSchema, description: "Handle ref string from superdoc_search. Pass handle.ref value directly (e.g. 'text:eyJ...'). Preferred for text-level operations." };
+        } else if (propName === 'content') {
+          allProperties[propName] = { ...propSchema, description: "Document fragment content (structured JSON)." };
+        } else if (propName === 'inline') {
+          allProperties[propName] = { ...propSchema, description: "Inline formatting to apply: {bold: true, italic: true, underline: true, ...}." };
         }
       }
 

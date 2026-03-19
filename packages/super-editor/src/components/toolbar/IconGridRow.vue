@@ -147,7 +147,7 @@ const handleKeyDown = (event, rowIndex, optionIndex, option) => {
 }
 
 .option:hover {
-  background-color: #dbdbdb;
+  background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
 }
 
 .option__icon {

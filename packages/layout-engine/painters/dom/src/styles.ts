@@ -18,8 +18,8 @@ export type PageStyles = {
 };
 
 export const DEFAULT_PAGE_STYLES: Required<PageStyles> = {
-  background: '#fff',
-  boxShadow: '0 4px 20px rgba(15, 23, 42, 0.08)',
+  background: 'var(--sd-layout-page-bg, #fff)',
+  boxShadow: 'var(--sd-layout-page-shadow, 0 4px 20px rgba(15, 23, 42, 0.08))',
   border: '1px solid rgba(15, 23, 42, 0.08)',
   margin: '0 auto',
 };
@@ -233,38 +233,38 @@ const TRACK_CHANGE_STYLES = `
 }
 
 .superdoc-layout .track-insert-dec.highlighted {
-  border-top: 1px dashed #00853d;
-  border-bottom: 1px dashed #00853d;
-  background-color: #399c7222;
+  border-top: 1px dashed var(--sd-tracked-changes-insert-border, #00853d);
+  border-bottom: 1px dashed var(--sd-tracked-changes-insert-border, #00853d);
+  background-color: var(--sd-tracked-changes-insert-background, #399c7222);
 }
 
 .superdoc-layout .track-delete-dec.highlighted {
-  border-top: 1px dashed #cb0e47;
-  border-bottom: 1px dashed #cb0e47;
-  background-color: #cb0e4722;
+  border-top: 1px dashed var(--sd-tracked-changes-delete-border, #cb0e47);
+  border-bottom: 1px dashed var(--sd-tracked-changes-delete-border, #cb0e47);
+  background-color: var(--sd-tracked-changes-delete-background, #cb0e4722);
   text-decoration: line-through !important;
   text-decoration-thickness: 2px !important;
 }
 
 .superdoc-layout .track-format-dec.highlighted {
-  border-bottom: 2px solid gold;
+  border-bottom: 2px solid var(--sd-tracked-changes-format-border, gold);
 }
 
 .superdoc-layout .track-insert-dec.highlighted.track-change-focused {
   border-style: solid;
   border-width: 2px;
-  background-color: #399c7244;
+  background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);
 }
 
 .superdoc-layout .track-delete-dec.highlighted.track-change-focused {
   border-style: solid;
   border-width: 2px;
-  background-color: #cb0e4744;
+  background-color: var(--sd-tracked-changes-delete-background-focused, #cb0e4744);
 }
 
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
   border-bottom-width: 3px;
-  background-color: #ffd70033;
+  background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
 }
 `;
 
@@ -380,19 +380,19 @@ const SDT_CONTAINER_STYLES = `
 }
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
-  background-color: #f2f2f2;
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
   border-color: transparent;
 }
 
 /* Group hover (JavaScript-coordinated) */
 .superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode),
 .superdoc-structured-content-block.sdt-hover:not(.ProseMirror-selectednode) {
-  background-color: #f2f2f2;
+  background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
   border-color: transparent;
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
-  border-color: #629be7;
+  border-color: var(--sd-content-controls-block-border, #629be7);
   outline: none;
 }
 
@@ -409,10 +409,11 @@ const SDT_CONTAINER_STYLES = `
   min-width: 0;
   height: 18px;
   padding: 0 4px;
-  border: 1px solid #629be7;
+  border: 1px solid var(--sd-content-controls-label-border, #629be7);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background-color: #629be7ee;
+  background-color: var(--sd-content-controls-label-bg, #629be7ee);
+  color: var(--sd-content-controls-label-text, #ffffff);
   box-sizing: border-box;
   z-index: 10;
   display: none;
@@ -478,12 +479,12 @@ const SDT_CONTAINER_STYLES = `
 
 /* Hover effect for inline structured content */
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
-  background-color: #f2f2f2;
+  background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
   border-color: transparent;
 }
 
 .superdoc-structured-content-inline.ProseMirror-selectednode {
-  border-color: #629be7;
+  border-color: var(--sd-content-controls-inline-border, #629be7);
   outline: none;
   background-color: transparent;
 }
@@ -495,8 +496,9 @@ const SDT_CONTAINER_STYLES = `
   transform: translateX(-50%);
   font-size: 11px;
   padding: 0 4px;
-  background-color: #629be7ee;
-  color: white;
+  border: 1px solid var(--sd-content-controls-label-border, #629be7);
+  background-color: var(--sd-content-controls-label-bg, #629be7ee);
+  color: var(--sd-content-controls-label-text, #ffffff);
   border-radius: 4px;
   white-space: nowrap;
   z-index: 100;
@@ -521,7 +523,7 @@ const SDT_CONTAINER_STYLES = `
  * Hover is suppressed when the node is selected (SD-1584). */
 .superdoc-structured-content-block[data-lock-mode].sdt-hover:not(.ProseMirror-selectednode),
 .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
-  background-color: rgba(98, 155, 231, 0.08);
+  background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
 }
 

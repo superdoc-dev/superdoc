@@ -206,10 +206,12 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "additionalProperties": false,
       "properties": {
         "behavior": {
-          "$ref": "#/$defs/DeleteBehavior"
+          "$ref": "#/$defs/DeleteBehavior",
+          "description": "Delete behavior: 'selection' (default) or 'exact'."
         },
         "target": {
-          "$ref": "#/$defs/SelectionTarget"
+          "$ref": "#/$defs/SelectionTarget",
+          "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
         }
       },
       "required": [
@@ -221,9 +223,11 @@ Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the 
       "additionalProperties": false,
       "properties": {
         "behavior": {
-          "$ref": "#/$defs/DeleteBehavior"
+          "$ref": "#/$defs/DeleteBehavior",
+          "description": "Delete behavior: 'selection' (default) or 'exact'."
         },
         "ref": {
+          "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
           "type": "string"
         }
       },

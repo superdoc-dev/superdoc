@@ -527,7 +527,7 @@ onUnmounted(() => {
   position: absolute;
   top: -16px;
   left: -2px;
-  font-size: 10px;
+  font-size: var(--sd-ui-font-size-50, 10px);
   pointer-events: none;
   user-select: none;
 }

@@ -133,6 +133,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
 } from '../paragraphs/paragraphs.js';
 import type {
   CreateSectionBreakInput,
@@ -616,6 +618,16 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   };
   'format.paragraph.clearShading': {
     input: ParagraphsClearShadingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setDirection': {
+    input: ParagraphsSetDirectionInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearDirection': {
+    input: ParagraphsClearDirectionInput;
     options: MutationOptions;
     output: ParagraphMutationResult;
   };

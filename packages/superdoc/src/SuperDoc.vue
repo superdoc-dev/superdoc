@@ -130,7 +130,7 @@ const superdocStyleVars = computed(() => {
   if (!commentsConfig || commentsConfig === false) return vars;
 
   if (commentsConfig.highlightHoverColor) {
-    vars['--sd-comment-highlight-hover'] = commentsConfig.highlightHoverColor;
+    vars['--sd-comments-highlight-hover'] = commentsConfig.highlightHoverColor;
   }
 
   const trackChangeColors = commentsConfig.trackChangeHighlightColors || {};
@@ -138,11 +138,16 @@ const superdocStyleVars = computed(() => {
     ...trackChangeColors,
     ...(commentsConfig.trackChangeActiveHighlightColors || {}),
   };
-  if (activeTrackChangeColors.insertBorder) vars['--sd-track-insert-border'] = activeTrackChangeColors.insertBorder;
-  if (activeTrackChangeColors.insertBackground) vars['--sd-track-insert-bg'] = activeTrackChangeColors.insertBackground;
-  if (activeTrackChangeColors.deleteBorder) vars['--sd-track-delete-border'] = activeTrackChangeColors.deleteBorder;
-  if (activeTrackChangeColors.deleteBackground) vars['--sd-track-delete-bg'] = activeTrackChangeColors.deleteBackground;
-  if (activeTrackChangeColors.formatBorder) vars['--sd-track-format-border'] = activeTrackChangeColors.formatBorder;
+  if (activeTrackChangeColors.insertBorder)
+    vars['--sd-tracked-changes-insert-border'] = activeTrackChangeColors.insertBorder;
+  if (activeTrackChangeColors.insertBackground)
+    vars['--sd-tracked-changes-insert-background'] = activeTrackChangeColors.insertBackground;
+  if (activeTrackChangeColors.deleteBorder)
+    vars['--sd-tracked-changes-delete-border'] = activeTrackChangeColors.deleteBorder;
+  if (activeTrackChangeColors.deleteBackground)
+    vars['--sd-tracked-changes-delete-background'] = activeTrackChangeColors.deleteBackground;
+  if (activeTrackChangeColors.formatBorder)
+    vars['--sd-tracked-changes-format-border'] = activeTrackChangeColors.formatBorder;
 
   return vars;
 });
@@ -1536,26 +1541,17 @@ const getPDFViewer = () => {
   z-index: 3;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.tools .tool-icon {
-  font-size: 20px;
-  border-radius: 12px;
-  border: none;
-  outline: none;
-  background-color: #dbdbdb;
-  cursor: pointer;
+  gap: var(--sd-ui-tools-gap, 6px);
 }
 
 .tools-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 50px;
-  height: 50px;
-  background-color: rgba(219, 219, 219, 0.6);
-  border-radius: 12px;
+  width: var(--sd-ui-tools-item-size, 50px);
+  height: var(--sd-ui-tools-item-size, 50px);
+  background-color: var(--sd-ui-tools-item-bg, rgba(219, 219, 219, 0.6));
+  border-radius: var(--sd-ui-tools-item-radius, 12px);
   cursor: pointer;
   position: relative;
 }
@@ -1565,8 +1561,8 @@ const getPDFViewer = () => {
 }
 
 .superdoc__tools-icon {
-  width: 20px;
-  height: 20px;
+  width: var(--sd-ui-tools-icon-size, 20px);
+  height: var(--sd-ui-tools-icon-size, 20px);
   flex-shrink: 0;
 }
 
@@ -1613,45 +1609,6 @@ const getPDFViewer = () => {
   transform: translateY(-50%);
   z-index: 50;
 } */
-
-/* Tools styles */
-.tools {
-  position: absolute;
-  z-index: 3;
-  display: flex;
-  gap: 6px;
-}
-
-.tools .tool-icon {
-  font-size: 20px;
-  border-radius: 12px;
-  border: none;
-  outline: none;
-  background-color: #dbdbdb;
-  cursor: pointer;
-}
-
-.tools-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  width: 50px;
-  height: 50px;
-  background-color: rgba(219, 219, 219, 0.6);
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.tools-item i {
-  cursor: pointer;
-}
-
-.superdoc__tools-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
 
 .ai-tool > svg {
   fill: transparent;

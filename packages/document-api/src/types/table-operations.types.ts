@@ -190,9 +190,7 @@ export interface TablesMoveInput extends TableLocator {
 // tables.split
 // ---------------------------------------------------------------------------
 
-export interface TablesSplitInput extends TableLocator {
-  atRowIndex: number;
-}
+export type TablesSplitInput = TableScopedRowLocator;
 
 // ---------------------------------------------------------------------------
 // tables.convertToText

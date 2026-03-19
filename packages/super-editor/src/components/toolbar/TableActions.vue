@@ -52,16 +52,16 @@ const handleClick = (item) => {
 .toolbar-table-actions__item {
   display: flex;
   gap: 5px;
-  background-color: #fff;
+  background-color: var(--sd-ui-dropdown-bg, #ffffff);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--sd-ui-dropdown-option-radius, 3px);
   cursor: pointer;
   box-sizing: border-box;
   position: relative;
 }
 
 .toolbar-table-actions__item:hover {
-  background-color: #c8d0d8;
+  background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
 }
 
 .toolbar-table-actions__item--border:after {
@@ -73,7 +73,7 @@ const handleClick = (item) => {
   right: 0;
   height: 1px;
   width: calc(100% + 20px);
-  background: #c8d0d8;
+  background: var(--sd-ui-border, #dbdbdb);
 }
 
 .toolbar-table-actions__icon {
@@ -81,7 +81,7 @@ const handleClick = (item) => {
   justify-content: center;
   align-items: center;
   width: 20px;
-  color: black;
+  color: var(--sd-ui-text, #47484a);
   box-sizing: border-box;
 }
 
@@ -91,7 +91,7 @@ const handleClick = (item) => {
   align-items: center;
   flex-shrink: 0;
   height: 14px;
-  color: #47484a;
+  color: var(--sd-ui-text, #47484a);
 }
 
 .toolbar-table-actions__icon-wrapper :deep(svg) {
@@ -100,9 +100,9 @@ const handleClick = (item) => {
 }
 
 .toolbar-table-actions__label {
-  font-size: 15px;
+  font-size: var(--sd-ui-font-size-500, 15px);
   font-weight: 400;
-  color: #222;
+  color: var(--sd-ui-text, #47484a);
   white-space: nowrap;
 }
 </style>

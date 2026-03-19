@@ -1,6 +1,7 @@
 <script setup>
 import '@superdoc/common/styles/common-styles.css';
 import '../dev-styles.css';
+import '../themes/neon-night.css';
 import { nextTick, onMounted, onBeforeUnmount, provide, ref, shallowRef, computed, watch } from 'vue';
 
 import { SuperDoc } from '@superdoc/index.js';
@@ -49,6 +50,7 @@ const collabUrl = 'ws://localhost:8081/v1/collaboration';
 const useWordOverlay = ref(urlParams.get('wordOverlay') !== '0');
 const wordOverlayOpacity = ref(Number.isFinite(overlayOpacityFromUrl) ? clampOpacity(overlayOpacityFromUrl) : 0.45);
 const wordOverlayBlendMode = ref(urlParams.get('wordOverlayBlend') || 'difference');
+const selectedTheme = ref('default');
 const generatedWordScreenshots = ref([]);
 const isGeneratingWordBaseline = ref(false);
 const wordBaselineStatus = ref('');
@@ -73,6 +75,14 @@ let closeActivityStream = null;
 const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
+
+const DEV_THEME_CLASSES = ['sd-theme-docs', 'sd-theme-word', 'sd-theme-blueprint', 'sd-theme-neon-night'];
+
+const applyDevTheme = (theme) => {
+  const html = document.documentElement;
+  DEV_THEME_CLASSES.forEach((cls) => html.classList.remove(cls));
+  if (theme !== 'default') html.classList.add(`sd-theme-${theme}`);
+};
 
 // URL loading
 const documentUrl = ref('');
@@ -1100,6 +1110,10 @@ watch(
   },
 );
 
+watch(selectedTheme, (theme) => {
+  applyDevTheme(theme);
+});
+
 const handleTitleChange = (e) => {
   title.value = e.target.innerText;
 
@@ -1119,6 +1133,8 @@ const toggleCommentsPanel = () => {
 };
 
 onMounted(async () => {
+  applyDevTheme(selectedTheme.value);
+
   // Initialize collaboration if enabled via ?collab=1
   if (useCollaboration) {
     clearYjsChanges();
@@ -1158,6 +1174,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  applyDevTheme('default');
   detachWordOverlayListener();
   removeWordOverlay();
 
@@ -1356,6 +1373,16 @@ if (scrollTestMode.value) {
         </div>
         <div class="dev-app__header-actions">
           <div class="dev-app__header-buttons">
+            <label class="dev-app__theme-control">
+              <span>Theme</span>
+              <select v-model="selectedTheme" class="dev-app__theme-select">
+                <option value="default">Default</option>
+                <option value="docs">Docs</option>
+                <option value="word">Word</option>
+                <option value="blueprint">Blueprint</option>
+                <option value="neon-night">Neon Night</option>
+              </select>
+            </label>
             <div class="dev-app__dropdown" @mouseleave="closeSidebarMenu">
               <button
                 class="dev-app__header-export-btn dev-app__dropdown-trigger"
@@ -1884,6 +1911,35 @@ if (scrollTestMode.value) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.dev-app__theme-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.dev-app__theme-select {
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dev-app__theme-select:focus {
+  outline: none;
+  border-color: rgba(147, 197, 253, 0.75);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.dev-app__theme-select option {
+  color: #111827;
 }
 
 .dev-app__zoom-controls .dev-app__header-export-btn {

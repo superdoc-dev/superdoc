@@ -45,6 +45,7 @@ import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
 import { crossReferenceNodeToRun } from './inline-converters/cross-reference.js';
 import { sequenceFieldNodeToRun } from './inline-converters/sequence-field.js';
+import { documentStatFieldNodeToRun } from './inline-converters/document-stat-field.js';
 import { citationNodeToRun } from './inline-converters/citation.js';
 import { authorityEntryNodeToRun } from './inline-converters/authority-entry.js';
 import { lineBreakNodeToRun } from './inline-converters/line-break.js';
@@ -858,6 +859,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   sequenceField: {
     inlineConverter: sequenceFieldNodeToRun,
+  },
+  documentStatField: {
+    inlineConverter: documentStatFieldNodeToRun,
   },
   citation: {
     inlineConverter: citationNodeToRun,

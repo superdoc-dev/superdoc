@@ -11,7 +11,15 @@ export function preProcessNumPagesInstruction(nodesToCombine, _instrText, fieldR
   const totalPageNumNode = {
     name: 'sd:totalPageNumber',
     type: 'element',
+    attributes: {},
   };
+
+  // Extract the cached display text from content nodes so the encoder can
+  // preserve it for the NUMPAGES fallback path (headless / no-pagination).
+  const cachedText = extractCachedText(nodesToCombine);
+  if (cachedText) {
+    totalPageNumNode.attributes.importedCachedText = cachedText;
+  }
 
   // First, try to get rPr from content nodes (between separate and end)
   // This is the original behavior and takes priority if content exists with styling
@@ -32,4 +40,21 @@ export function preProcessNumPagesInstruction(nodesToCombine, _instrText, fieldR
   }
 
   return [totalPageNumNode];
+}
+
+/**
+ * Extracts cached display text from content runs (between separate and end).
+ * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodes
+ * @returns {string}
+ */
+function extractCachedText(nodes) {
+  const texts = [];
+  for (const node of nodes) {
+    const textEl = node.elements?.find((el) => el.name === 'w:t');
+    if (textEl) {
+      const text = textEl.elements?.[0]?.text ?? '';
+      if (text) texts.push(text);
+    }
+  }
+  return texts.join('');
 }

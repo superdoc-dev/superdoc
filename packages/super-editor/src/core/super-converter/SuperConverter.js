@@ -20,6 +20,10 @@ import {
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
+import { writeAppStatistics } from '../../document-api-adapters/helpers/app-properties.js';
+import { getWordStatistics } from '../../document-api-adapters/helpers/word-statistics.js';
+import { refreshAllStatFields } from '../../document-api-adapters/helpers/refresh-stat-fields.js';
+import { ensureSettingsRoot, hasUpdateFields, setUpdateFields } from '../../document-api-adapters/document-settings.js';
 import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
@@ -1138,6 +1142,19 @@ class SuperConverter {
       getCommentDefinition(c, index, commentsWithParaIds, editor),
     );
 
+    // Compute the stat-field cache map once from the main body editor.
+    // This same map is reused for header/footer exports so all parts
+    // see document-level counts, not sub-editor-local counts.
+    let statFieldCacheMap;
+    try {
+      if (editor) {
+        statFieldCacheMap = refreshAllStatFields(editor);
+      }
+    } catch {
+      // Non-critical — translators will fall back to node attrs
+    }
+    this._currentStatFieldCacheMap = statFieldCacheMap;
+
     const { result, params } = this.exportToXmlJson({
       data: jsonData,
       editorSchema,
@@ -1148,6 +1165,7 @@ class SuperConverter {
       editor,
       fieldsHighlightColor,
       preserveSdtWrappers,
+      statFieldCacheMap,
     });
 
     // Keep convertedXml's document part in sync with the current export tree
@@ -1214,6 +1232,7 @@ class SuperConverter {
     }
 
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
+    this._currentStatFieldCacheMap = undefined; // cleanup after export cycle
 
     // Update the rels table
     this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...footnotesRels, ...headFootRels]);
@@ -1239,6 +1258,9 @@ class SuperConverter {
       SuperConverter.setStoredCustomProperty(this.convertedXml, 'DocumentGuid', this.documentGuid, true);
     }
 
+    // Flush document statistics into app.xml and settings.xml.
+    this.#exportStatFieldMetadata(editor);
+
     // Update the numbering.xml
     this.#exportNumberingFile(params);
 
@@ -1256,8 +1278,24 @@ class SuperConverter {
     isHeaderFooter = false,
     fieldsHighlightColor = null,
     preserveSdtWrappers = false,
+    statFieldCacheMap = undefined,
   }) {
     const bodyNode = this.savedTagsToRestore.find((el) => el.name === 'w:body');
+
+    // Use the pre-computed cache map (from exportToDocx) when available.
+    // This ensures header/footer exports use main-body statistics, not
+    // sub-editor-local counts. Falls back to computing from the current
+    // editor for standalone calls.
+    let resolvedCacheMap = statFieldCacheMap ?? this._currentStatFieldCacheMap;
+    if (!resolvedCacheMap) {
+      try {
+        if (editor) {
+          resolvedCacheMap = refreshAllStatFields(editor);
+        }
+      } catch {
+        // Non-critical — translators will fall back to node attrs
+      }
+    }
 
     const [result, params] = exportSchemaToJson({
       node: data,
@@ -1276,6 +1314,7 @@ class SuperConverter {
       isHeaderFooter,
       fieldsHighlightColor,
       preserveSdtWrappers,
+      statFieldCacheMap: resolvedCacheMap,
     });
 
     return { result, params };
@@ -1283,6 +1322,77 @@ class SuperConverter {
 
   getBibliographyPartExportPaths() {
     return getBibliographyPartExportPaths(this.bibliographyPart);
+  }
+
+  /**
+   * Writes document-statistic metadata into docProps/app.xml and
+   * word/settings.xml as part of the export pipeline.
+   *
+   * Only upserts targeted elements — all unrelated metadata is preserved.
+   */
+  #exportStatFieldMetadata(editor) {
+    if (!editor) return;
+
+    try {
+      const stats = getWordStatistics(editor);
+      writeAppStatistics(this.convertedXml, stats);
+
+      // Only set w:updateFields when the document actually contains a
+      // total-page-number node AND pagination is unavailable. This is the
+      // only scenario where the cached NUMPAGES result is definitively stale.
+      // Setting w:updateFields unconditionally would cause Word to recalculate
+      // ALL fields on open (TOC, cross-references, etc.) — a side effect the
+      // plan explicitly warns against.
+      const settingsPart = this.convertedXml['word/settings.xml'];
+      if (settingsPart && stats.pages == null) {
+        const hasNumPagesNode = this.#anyPartContainsNodeType('total-page-number', editor);
+        if (hasNumPagesNode) {
+          const settingsRoot = ensureSettingsRoot(settingsPart);
+          if (!hasUpdateFields(settingsRoot)) {
+            setUpdateFields(settingsRoot, true);
+          }
+        }
+      }
+    } catch {
+      // Non-critical — export should not fail if stats cannot be computed
+    }
+  }
+
+  /**
+   * Checks whether any document part (body + all header/footer editors)
+   * contains at least one node of the given type.
+   */
+  #anyPartContainsNodeType(typeName, mainEditor) {
+    // Check main body
+    if (mainEditor && this.#docContainsNodeType(mainEditor.state.doc, typeName)) {
+      return true;
+    }
+    // Check all header editors
+    for (const entry of this.headerEditors ?? []) {
+      if (entry?.editor && this.#docContainsNodeType(entry.editor.state.doc, typeName)) {
+        return true;
+      }
+    }
+    // Check all footer editors
+    for (const entry of this.footerEditors ?? []) {
+      if (entry?.editor && this.#docContainsNodeType(entry.editor.state.doc, typeName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #docContainsNodeType(doc, typeName) {
+    let found = false;
+    doc.descendants((node) => {
+      if (found) return false;
+      if (node.type.name === typeName) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
   }
 
   #exportNumberingFile() {

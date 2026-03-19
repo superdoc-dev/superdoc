@@ -186,6 +186,51 @@ describe('w:tr translator', () => {
       expect(trPrTranslator.encode).not.toHaveBeenCalled();
       expect(tcTranslator.encode).not.toHaveBeenCalled();
     });
+
+    it('skips vMerge-consumed cells without advancing the next encoded cell column', () => {
+      const rowWithConsumedCell = {
+        name: 'w:tr',
+        elements: [
+          { name: 'w:tc', elements: [], _vMergeConsumed: true },
+          { name: 'w:tc', elements: [] },
+          { name: 'w:tc', elements: [] },
+        ],
+      };
+      const params = {
+        nodes: [rowWithConsumedCell],
+        extraParams: {
+          row: rowWithConsumedCell,
+          columnWidths: [100, 150, 200],
+          activeRowSpans: [1, 0, 0],
+        },
+      };
+
+      const result = translator.encode(params, {});
+
+      expect(tcTranslator.encode).toHaveBeenCalledTimes(2);
+      expect(tcTranslator.encode).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          extraParams: expect.objectContaining({
+            node: rowWithConsumedCell.elements[1],
+            columnIndex: 1,
+            columnWidth: 150,
+          }),
+        }),
+      );
+      expect(tcTranslator.encode).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          extraParams: expect.objectContaining({
+            node: rowWithConsumedCell.elements[2],
+            columnIndex: 2,
+            columnWidth: 200,
+          }),
+        }),
+      );
+      expect(result.content).toHaveLength(2);
+      expect(result.content.map((cell) => cell.attrs.columnIndex)).toEqual([1, 2]);
+    });
   });
 
   describe('decode', () => {

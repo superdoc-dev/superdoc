@@ -103,3 +103,5 @@ packages/sdk/langs/python/superdoc/generated/
 packages/sdk/tools/*.json
 # Note: apps/docs/document-api/reference/ stays committed because Mintlify
 # deploys directly from git with no pre-build hook support.
+
+.playwright-cli/

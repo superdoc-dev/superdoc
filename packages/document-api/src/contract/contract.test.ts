@@ -184,6 +184,74 @@ describe('document-api contract catalog', () => {
     expect(capabilitiesOutput.properties?.global?.required).toContain('history');
   });
 
+  it('narrows table operation address schemas to table-specific refs', () => {
+    const schemas = buildInternalContractSchemas();
+
+    const tablesGetInput = schemas.operations['tables.get'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const tablesGetOutput = schemas.operations['tables.get'].output as {
+      properties?: { address?: { $ref?: string } };
+    };
+    const unmergeInput = schemas.operations['tables.unmergeCells'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const setBorderInput = schemas.operations['tables.setBorder'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const insertRowSuccess = schemas.operations['tables.insertRow'].success as {
+      properties?: { table?: { $ref?: string } };
+    };
+
+    expect(tablesGetInput.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(tablesGetOutput.properties?.address?.$ref).toBe('#/$defs/TableAddress');
+    expect(unmergeInput.properties?.target?.$ref).toBe('#/$defs/TableCellAddress');
+    expect(setBorderInput.properties?.target?.$ref).toBe('#/$defs/TableOrCellAddress');
+    expect(insertRowSuccess.properties?.table?.$ref).toBe('#/$defs/TableAddress');
+  });
+
+  it('preserves row-locator constraints in row operation schemas', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertRowInput = schemas.operations['tables.insertRow'].input as {
+      oneOf?: Array<{
+        properties?: {
+          target?: { $ref?: string };
+          nodeId?: { type?: string };
+          rowIndex?: { type?: string; minimum?: number };
+          position?: { enum?: string[] };
+        };
+        required?: string[];
+      }>;
+    };
+    const deleteRowInput = schemas.operations['tables.deleteRow'].input as {
+      oneOf?: Array<{
+        properties?: {
+          target?: { $ref?: string };
+          nodeId?: { type?: string };
+          rowIndex?: { type?: string; minimum?: number };
+        };
+        required?: string[];
+      }>;
+    };
+
+    expect(insertRowInput.oneOf).toHaveLength(3);
+    expect(insertRowInput.oneOf?.[0]?.properties?.target?.$ref).toBe('#/$defs/TableRowAddress');
+    expect(insertRowInput.oneOf?.[0]?.required).toEqual(['target', 'position']);
+    expect(insertRowInput.oneOf?.[1]?.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(insertRowInput.oneOf?.[1]?.required).toEqual(['target', 'rowIndex', 'position']);
+    expect(insertRowInput.oneOf?.[2]?.properties?.rowIndex).toEqual({ type: 'integer', minimum: 0 });
+    expect(insertRowInput.oneOf?.[2]?.required).toEqual(['nodeId', 'rowIndex', 'position']);
+
+    expect(deleteRowInput.oneOf).toHaveLength(3);
+    expect(deleteRowInput.oneOf?.[0]?.properties?.target?.$ref).toBe('#/$defs/TableRowAddress');
+    expect(deleteRowInput.oneOf?.[0]?.required).toEqual(['target']);
+    expect(deleteRowInput.oneOf?.[1]?.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(deleteRowInput.oneOf?.[1]?.required).toEqual(['target', 'rowIndex']);
+    expect(deleteRowInput.oneOf?.[2]?.properties?.nodeId?.type).toBe('string');
+    expect(deleteRowInput.oneOf?.[2]?.properties?.rowIndex).toEqual({ type: 'integer', minimum: 0 });
+    expect(deleteRowInput.oneOf?.[2]?.required).toEqual(['nodeId', 'rowIndex']);
+  });
+
   it('declares images.setZOrder.relativeHeight as unsigned 32-bit integer', () => {
     const schemas = buildInternalContractSchemas();
     const inputSchema = schemas.operations['images.setZOrder'].input as {

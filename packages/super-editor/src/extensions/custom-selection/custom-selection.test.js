@@ -288,6 +288,28 @@ describe('CustomSelection plugin', () => {
     expect(view.state.doc.textBetween(firstDeco.from, firstDeco.to)).toBe('planet');
   });
 
+  it('keeps preserved text selections inclusive when inserting exactly at the left edge', () => {
+    const { plugin, view } = createEnvironment();
+
+    view.dispatch(
+      view.state.tr.setMeta(CustomSelectionPluginKey, {
+        focused: true,
+        preservedSelection: view.state.selection,
+        showVisualSelection: true,
+      }),
+    );
+
+    const { from } = view.state.selection;
+    view.dispatch(view.state.tr.insertText('big ', from));
+
+    const decorations = plugin.props.decorations(view.state);
+    expect(decorations).toBeInstanceOf(DecorationSet);
+    const [firstDeco] = decorations.find();
+    expect(firstDeco).toBeDefined();
+    expect(firstDeco.from).toBe(from);
+    expect(view.state.doc.textBetween(firstDeco.from, firstDeco.to)).toBe('big Hello');
+  });
+
   it('clears preserved visual selection when mapped range collapses', () => {
     const { plugin, view } = createEnvironment();
 

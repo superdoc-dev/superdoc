@@ -81,6 +81,14 @@ import {
   listsSetLevelTrailingCharacterWrapper,
   listsSetLevelMarkerFontWrapper,
   listsClearLevelOverridesWrapper,
+  listsGetStyleWrapper,
+  listsApplyStyleWrapper,
+  listsRestartAtWrapper,
+  listsSetLevelNumberStyleWrapper,
+  listsSetLevelTextWrapper,
+  listsSetLevelStartWrapper,
+  listsSetLevelLayoutWrapper,
+  registerSetValueDelegate,
 } from './plan-engine/lists-formatting-wrappers.js';
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
@@ -327,6 +335,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
 
   const ccAdapter = createContentControlsAdapter(editor);
 
+  // Register the setValue delegate for the restartAt wrapper
+  registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
+
   return {
     get: {
       get: (input) => getAdapter(editor, input),
@@ -444,6 +455,15 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
       clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
       setType: (input, options) => listsSetTypeWrapper(editor, input, options),
+
+      // SD-2025 user-facing operations
+      getStyle: (input) => listsGetStyleWrapper(editor, input),
+      applyStyle: (input, options) => listsApplyStyleWrapper(editor, input, options),
+      restartAt: (input, options) => listsRestartAtWrapper(editor, input, options),
+      setLevelNumberStyle: (input, options) => listsSetLevelNumberStyleWrapper(editor, input, options),
+      setLevelText: (input, options) => listsSetLevelTextWrapper(editor, input, options),
+      setLevelStart: (input, options) => listsSetLevelStartWrapper(editor, input, options),
+      setLevelLayout: (input, options) => listsSetLevelLayoutWrapper(editor, input, options),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),

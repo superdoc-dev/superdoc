@@ -185,6 +185,52 @@ describe('document-api story: inline formatting', () => {
     await saveResult(sid, 'fontFamily.docx');
   });
 
+  it('fontFamily: persists in doc.get after applying via format.fontFamily (SD-2249)', async () => {
+    const sid = `fontFamily-persist-${Date.now()}`;
+    const target = await setupFormattableText(sid, 'This text should be Georgia');
+
+    const result = unwrap<any>(
+      await client.doc.format.apply({
+        sessionId: sid,
+        target,
+        inline: { fontFamily: 'Georgia' },
+      }),
+    );
+    expect(result.receipt?.success).toBe(true);
+
+    // Verify fontFamily survives in the in-memory model via doc.get
+    const doc = unwrap<any>(await client.doc.get({ sessionId: sid }));
+    const block = doc.body?.[0];
+    const runs = block?.paragraph?.inlines?.filter((i: any) => i.kind === 'run') ?? [];
+    const propsWithFont = runs.find((r: any) => r.run?.props?.fontFamily);
+    expect(propsWithFont).toBeDefined();
+    expect(propsWithFont.run.props.fontFamily).toBe('Georgia');
+  });
+
+  it('fontFamily: clearing with null removes fontFamily from doc.get (SD-2249)', async () => {
+    const sid = `fontFamily-clear-${Date.now()}`;
+    const target = await setupFormattableText(sid, 'This text should reset font');
+
+    // Set fontFamily first
+    const setResult = unwrap<any>(
+      await client.doc.format.apply({ sessionId: sid, target, inline: { fontFamily: 'Georgia' } }),
+    );
+    expect(setResult.receipt?.success).toBe(true);
+
+    // Clear fontFamily
+    const clearResult = unwrap<any>(
+      await client.doc.format.apply({ sessionId: sid, target, inline: { fontFamily: null } }),
+    );
+    expect(clearResult.receipt?.success).toBe(true);
+
+    // Verify fontFamily is absent after clearing
+    const doc = unwrap<any>(await client.doc.get({ sessionId: sid }));
+    const block = doc.body?.[0];
+    const runs = block?.paragraph?.inlines?.filter((i: any) => i.kind === 'run') ?? [];
+    const propsWithFont = runs.find((r: any) => r.run?.props?.fontFamily);
+    expect(propsWithFont).toBeUndefined();
+  });
+
   it('color: sets a hex color', async () => {
     const sid = `color-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be red');

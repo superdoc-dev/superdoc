@@ -8,6 +8,9 @@
 // Main class
 export { PresentationEditor } from './PresentationEditor.js';
 
+// Selection bridge types
+export type { SelectionCommandContext } from './PresentationEditor.js';
+
 // Public types
 export type {
   PageSize,

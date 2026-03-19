@@ -329,41 +329,31 @@ const TABLE_ADAPTER_DISPATCH: Record<
 };
 
 /**
- * Ops that use table-scoped locators (tableNodeId) instead of simple
- * table locators (nodeId). When the ref target is a table, the
- * executor sets `tableNodeId` for these ops.
+ * Constructs adapter input from a compiled target's blockId + step args.
+ *
+ * All table operations use the unified `nodeId` locator field. The resolver
+ * layer detects whether the node is a table, row, or cell by node type.
+ *
+ * @internal Exported for testing only.
  */
-/** Row operations that support both table-scoped and direct row locator modes. */
-const ROW_OPS = new Set(['tables.insertRow', 'tables.deleteRow', 'tables.setRowHeight', 'tables.setRowOptions']);
-
-const TABLE_SCOPED_OPS = new Set([
+const ROW_TARGETED_TABLE_OPS = new Set([
   'tables.insertRow',
   'tables.deleteRow',
   'tables.setRowHeight',
   'tables.setRowOptions',
-  'tables.insertColumn',
-  'tables.deleteColumn',
-  'tables.setColumnWidth',
-  'tables.mergeCells',
 ]);
 
-/**
- * Constructs adapter input from a compiled target's blockId + step args.
- * Maps the ref-resolved blockId to the appropriate locator field.
- */
-/** @internal Exported for testing only. */
 export function buildTableInput(op: string, blockId: string, args: Record<string, unknown>): Record<string, unknown> {
   // Strip locator fields from args to prevent override of compiler-resolved target
-  const { target: _target, nodeId: _n, tableTarget: _tableTarget, tableNodeId: _t, ...safeArgs } = args;
-  if (TABLE_SCOPED_OPS.has(op)) {
-    // Row ops support two addressing modes: table-scoped (tableNodeId + rowIndex)
-    // or direct row locator (nodeId pointing at the row). When rowIndex is absent
-    // the blockId refers to the row itself, not the parent table.
-    if (ROW_OPS.has(op) && safeArgs.rowIndex == null) {
-      return { ...safeArgs, nodeId: blockId };
-    }
-    return { ...safeArgs, tableNodeId: blockId };
+  const { target: _target, nodeId: _n, ...safeArgs } = args;
+
+  if (ROW_TARGETED_TABLE_OPS.has(op) && safeArgs.rowIndex == null) {
+    return {
+      ...safeArgs,
+      target: { kind: 'block', nodeType: 'tableRow', nodeId: blockId },
+    };
   }
+
   return { ...safeArgs, nodeId: blockId };
 }
 

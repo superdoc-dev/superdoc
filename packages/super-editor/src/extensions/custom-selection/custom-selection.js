@@ -1,9 +1,10 @@
 // @ts-nocheck
 /* global Element */
 import { Extension } from '@core/Extension.js';
-import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
+import { Plugin, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { shouldAllowNativeContextMenu } from '../../utils/contextmenu-helpers.js';
+import { CustomSelectionPluginKey, createSelectionTrackingBookmark } from '@core/selection-state.js';
 
 export const DEFAULT_SELECTION_STATE = Object.freeze({
   focused: false,
@@ -39,11 +40,9 @@ const normalizeSelectionState = (state = {}) => ({
  * });
  */
 
-/**
- * Plugin key for custom selection management
- * @private
- */
-export const CustomSelectionPluginKey = new PluginKey('CustomSelection');
+// CustomSelectionPluginKey is imported from @core/selection-state.js and re-exported
+// for backward compatibility with existing consumers of this module.
+export { CustomSelectionPluginKey } from '@core/selection-state.js';
 
 /**
  * Handle clicks outside the editor
@@ -101,23 +100,28 @@ function getFocusState(state) {
 
 /**
  * Map a preserved selection through a document-changing transaction.
- * Uses inclusive mapping so inserted text at either boundary stays highlighted.
+ *
+ * Uses SelectionBookmark to preserve the original selection kind
+ * (TextSelection, NodeSelection, AllSelection) through document changes.
+ * Previously this always rebuilt a TextSelection, silently degrading
+ * preserved NodeSelection/AllSelection after any edit.
  *
  * @private
- * @param {Object|null} selection - Previous preserved selection-like object
+ * @param {Object|null} selection - Previous preserved PM Selection
  * @param {Object} tr - Transaction
- * @returns {Object|null} Remapped TextSelection or null if range collapsed/invalid
+ * @returns {Object|null} Remapped selection (same kind) or null if invalid
  */
 function mapPreservedSelection(selection, tr) {
   if (!selection || !tr.docChanged) return selection;
-  if (typeof selection.from !== 'number' || typeof selection.to !== 'number') return null;
-
-  const from = tr.mapping.map(selection.from, -1);
-  const to = tr.mapping.map(selection.to, 1);
-  if (from >= to) return null;
+  if (typeof selection.getBookmark !== 'function') return null;
 
   try {
-    return TextSelection.create(tr.doc, from, to);
+    const bookmark = createSelectionTrackingBookmark(selection);
+    const mapped = bookmark.map(tr.mapping);
+    const resolved = mapped.resolve(tr.doc);
+    // If the selection was non-empty but collapsed, treat as invalid
+    if (!selection.empty && resolved.empty) return null;
+    return resolved;
   } catch {
     return null;
   }

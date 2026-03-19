@@ -354,3 +354,200 @@ describe('sections adapter DOCX integration', () => {
     }
   });
 });
+
+/**
+ * SD-2137 regression suite: clearing header/footer refs must survive export.
+ *
+ * The h_f-normal.docx fixture has section-0 with:
+ *   headerRefs: { even: rId7, default: rId8 }
+ *   footerRefs: { even: rId9, default: rId10 }
+ *
+ * The exporter has a fallback (exporter.js ~L267) that re-injects a default
+ * header/footer reference when the sectPr has *no* headerReference elements
+ * and converter.headerIds.default is still truthy.  That fallback must NOT
+ * fire after an explicit clearHeaderFooterRef mutation.
+ */
+describe('SD-2137: clearHeaderFooterRef must remove refs from exported DOCX', () => {
+  let hfDocData: LoadedDocData;
+  let editor: Editor | undefined;
+
+  beforeAll(async () => {
+    hfDocData = await loadTestDataForEditorTests('h_f-normal.docx');
+  });
+
+  beforeEach(() => {
+    registerPartDescriptor(settingsPartDescriptor);
+  });
+
+  afterEach(() => {
+    editor?.destroy();
+    editor = undefined;
+    clearPartDescriptors();
+    clearInvalidationHandlers();
+  });
+
+  function createEditor(): Editor {
+    const result = initTestEditor({
+      content: hfDocData.docx,
+      media: hfDocData.media,
+      mediaFiles: hfDocData.mediaFiles,
+      fonts: hfDocData.fonts,
+      useImmediateSetTimeout: false,
+    });
+    editor = result.editor;
+    return editor;
+  }
+
+  it('clearing the only remaining header/default ref removes it from exported document.xml', async () => {
+    const ed = createEditor();
+    const section0 = getSectionAddressByIndex(ed, 0);
+
+    // Verify initial state: section-0 has both even + default header refs.
+    const beforeDomain = resolveSectionProjections(ed).find((s) => s.range.sectionIndex === 0)!.domain;
+    expect(beforeDomain.headerRefs?.default).toBeTruthy();
+    expect(beforeDomain.headerRefs?.even).toBeTruthy();
+
+    // Remove the even header first, leaving header/default as the sole ref.
+    const clearEven = sectionsClearHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'header', variant: 'even' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(clearEven.success).toBe(true);
+
+    // Now clear header/default — this is the SD-2137 operation.
+    const clearDefault = sectionsClearHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'header', variant: 'default' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(clearDefault.success).toBe(true);
+
+    // Verify the domain reports no header refs.
+    const afterDomain = resolveSectionProjections(ed).find((s) => s.range.sectionIndex === 0)!.domain;
+    expect(afterDomain.headerRefs?.default).toBeUndefined();
+
+    // Export and verify no w:headerReference of any type in the body sectPr.
+    const exported = await exportDocxFiles(ed);
+    const documentXml = exported['word/document.xml'];
+    expect(documentXml).not.toContain('w:headerReference');
+  });
+
+  it('clearing footer/default preserves footer/even in exported document.xml', async () => {
+    const ed = createEditor();
+    const section0 = getSectionAddressByIndex(ed, 0);
+
+    // Verify initial state: section-0 has both even + default footer refs.
+    const beforeDomain = resolveSectionProjections(ed).find((s) => s.range.sectionIndex === 0)!.domain;
+    expect(beforeDomain.footerRefs?.default).toBeTruthy();
+    expect(beforeDomain.footerRefs?.even).toBeTruthy();
+    const evenFooterRefId = beforeDomain.footerRefs!.even!;
+
+    // Clear footer/default — even should survive.
+    const clearResult = sectionsClearHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'footer', variant: 'default' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(clearResult.success).toBe(true);
+
+    // Export and verify footer/default is gone but footer/even remains.
+    const exported = await exportDocxFiles(ed);
+    const documentXml = exported['word/document.xml'];
+    expect(documentXml).not.toMatch(/w:footerReference[^>]*w:type="default"/);
+    expect(documentXml).toContain(`r:id="${evenFooterRefId}"`);
+  });
+
+  it('exact SD-2137 repro: clear header/default + footer/default with only footer/even surviving', async () => {
+    const ed = createEditor();
+    const section0 = getSectionAddressByIndex(ed, 0);
+
+    // Shape the fixture to match the bug report: headerRefs={default}, footerRefs={default, even}.
+    // h_f-normal.docx starts with headerRefs={even, default} — remove even header first.
+    const clearEvenHeader = sectionsClearHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'header', variant: 'even' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(clearEvenHeader.success).toBe(true);
+
+    const beforeDomain = resolveSectionProjections(ed).find((s) => s.range.sectionIndex === 0)!.domain;
+    expect(beforeDomain.headerRefs?.default).toBeTruthy();
+    expect(beforeDomain.headerRefs?.even).toBeUndefined();
+    expect(beforeDomain.footerRefs?.default).toBeTruthy();
+    expect(beforeDomain.footerRefs?.even).toBeTruthy();
+    const evenFooterRefId = beforeDomain.footerRefs!.even!;
+
+    // Run the exact SD-2137 operations: clear header/default, then footer/default.
+    const clearHeaderDefault = sectionsClearHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'header', variant: 'default' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(clearHeaderDefault.success).toBe(true);
+
+    const clearFooterDefault = sectionsClearHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'footer', variant: 'default' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(clearFooterDefault.success).toBe(true);
+
+    // Export and verify:
+    //   - No header references of any type.
+    //   - No footer/default, but footer/even survives.
+    const exported = await exportDocxFiles(ed);
+    const documentXml = exported['word/document.xml'];
+    expect(documentXml).not.toContain('w:headerReference');
+    expect(documentXml).not.toMatch(/w:footerReference[^>]*w:type="default"/);
+    expect(documentXml).toMatch(/w:footerReference[^>]*w:type="even"/);
+    expect(documentXml).toContain(`r:id="${evenFooterRefId}"`);
+  });
+
+  it('clearing header/default on a paragraph-owned sectPr (non-final section) removes it from export', async () => {
+    const ed = createEditor();
+
+    // Create a section break so section-0 gets a paragraph-owned sectPr.
+    const breakResult = createSectionBreakAdapter(
+      ed,
+      { at: { kind: 'documentEnd' }, breakType: 'nextPage' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(breakResult.success).toBe(true);
+
+    // Section breaks don't propagate header/footer refs. The body section
+    // (now section-1) retains the original refs — borrow one for section-0.
+    const headerRefId = resolveSectionProjections(ed).find((s) => s.range.sectionIndex === 1)?.domain.headerRefs
+      ?.default;
+    expect(headerRefId).toBeTruthy();
+
+    const section0 = getSectionAddressByIndex(ed, 0);
+    const setResult = sectionsSetHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'header', variant: 'default', refId: headerRefId! },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(setResult.success).toBe(true);
+
+    // Now clear header/default on the paragraph-owned section.
+    const clearResult = sectionsClearHeaderFooterRefAdapter(
+      ed,
+      { target: section0, kind: 'header', variant: 'default' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(clearResult.success).toBe(true);
+
+    // The paragraph-owned sectPr export path has no fallback injection,
+    // so clearing should always work. Verify via export.
+    const exported = await exportDocxFiles(ed);
+    const documentXml = exported['word/document.xml'];
+
+    // Extract all sectPr blocks from the XML.
+    const sectPrBlocks = documentXml.match(/<w:sectPr[^>]*>[\s\S]*?<\/w:sectPr>/g) ?? [];
+    expect(sectPrBlocks.length).toBeGreaterThanOrEqual(2);
+
+    // The first sectPr (paragraph-owned, section-0) should have no header/default.
+    const paragraphSectPr = sectPrBlocks[0]!;
+    expect(paragraphSectPr).not.toMatch(/w:headerReference[^>]*w:type="default"/);
+  });
+});

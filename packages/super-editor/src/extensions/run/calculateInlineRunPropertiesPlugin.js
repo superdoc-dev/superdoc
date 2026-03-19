@@ -50,12 +50,16 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
       if (!runType) return null;
 
       const preservedDerivedKeys = new Set();
+      const preferExistingKeys = new Set();
       transactions.forEach((transaction) => {
-        const keys = transaction.getMeta(RUN_PROPERTY_PRESERVE_META_KEY);
-        if (!Array.isArray(keys)) return;
-        keys.forEach((key) => {
-          if (typeof key === 'string' && key.length > 0) {
-            preservedDerivedKeys.add(key);
+        const entries = transaction.getMeta(RUN_PROPERTY_PRESERVE_META_KEY);
+        if (!Array.isArray(entries)) return;
+        entries.forEach((entry) => {
+          if (typeof entry === 'string' && entry.length > 0) {
+            preservedDerivedKeys.add(entry);
+          } else if (entry && typeof entry === 'object' && typeof entry.key === 'string') {
+            preservedDerivedKeys.add(entry.key);
+            if (entry.preferExisting) preferExistingKeys.add(entry.key);
           }
         });
       });
@@ -91,6 +95,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           $pos,
           editor,
           preservedDerivedKeys,
+          preferExistingKeys,
         );
         const runProperties = firstInlineProps ?? null;
 
@@ -218,7 +223,15 @@ export function extractTableInfo($pos, depth) {
  * @param {object} editor
  * @returns {{ segments: Array<{ inlineProps: Record<string, any>|null, inlineKey: string, content: import('prosemirror-model').Node[] }>, firstInlineProps: Record<string, any>|null }}
  */
-function segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor, preservedDerivedKeys) {
+function segmentRunByInlineProps(
+  runNode,
+  paragraphNode,
+  tableInfo,
+  $pos,
+  editor,
+  preservedDerivedKeys,
+  preferExistingKeys,
+) {
   const segments = [];
   let lastKey = null;
   let boundaryCounter = 0;
@@ -233,6 +246,7 @@ function segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor
         $pos,
         editor,
         preservedDerivedKeys,
+        preferExistingKeys,
       );
       const last = segments[segments.length - 1];
       if (last && inlineKey === lastKey) {
@@ -279,6 +293,7 @@ function computeInlineRunProps(
   $pos,
   editor,
   preservedDerivedKeys,
+  preferExistingKeys,
 ) {
   const runPropertiesFromMarks = decodeRPrFromMarks(marks);
   const paragraphProperties =
@@ -294,12 +309,14 @@ function computeInlineRunProps(
     false,
     Boolean(paragraphNode.attrs.paragraphProperties?.numberingProperties),
   );
+
   const inlineRunProperties = getInlineRunProperties(
     runPropertiesFromMarks,
     runPropertiesFromStyles,
     existingRunProperties,
     editor,
     preservedDerivedKeys,
+    preferExistingKeys,
   );
   const inlineProps = Object.keys(inlineRunProperties).length ? inlineRunProperties : null;
   const inlineKey = stableStringifyInlineProps(inlineProps);
@@ -321,10 +338,34 @@ function getInlineRunProperties(
   existingRunProperties,
   editor,
   preservedDerivedKeys = new Set(),
+  preferExistingKeys = new Set(),
 ) {
   const inlineRunProperties = {};
   for (const key in runPropertiesFromMarks) {
-    if (preservedDerivedKeys.has(key)) continue;
+    if (preservedDerivedKeys.has(key)) {
+      const fromMarks = runPropertiesFromMarks[key];
+      const existing = existingRunProperties?.[key];
+      if (preferExistingKeys.has(key) && existing != null) {
+        // rFonts / runAttribute path: the run node was directly updated with
+        // per-script data — existing is authoritative and already fresh.
+        inlineRunProperties[key] = existing;
+      } else if (
+        fromMarks != null &&
+        existing != null &&
+        typeof fromMarks === 'object' &&
+        typeof existing === 'object'
+      ) {
+        // textStyle mark path: use mark-decoded font names (fresh from the
+        // current mark), merged with OOXML-only metadata from existing run
+        // properties that the mark round-trip cannot represent (e.g. theme
+        // refs, hint). The spread order ensures mark font names win over
+        // stale existing names while preserving fields the mark cannot encode.
+        inlineRunProperties[key] = { ...existing, ...fromMarks };
+      } else if (fromMarks !== undefined) {
+        inlineRunProperties[key] = fromMarks;
+      }
+      continue;
+    }
     const valueFromMarks = runPropertiesFromMarks[key];
     const valueFromStyles = runPropertiesFromStyles[key];
     if (JSON.stringify(valueFromMarks) !== JSON.stringify(valueFromStyles)) {

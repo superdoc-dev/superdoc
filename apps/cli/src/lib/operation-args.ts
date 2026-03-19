@@ -100,6 +100,19 @@ function acceptsLegacyTextAddressTarget(
   return docApiId === 'replace' || docApiId === 'delete' || docApiId?.startsWith('format.') === true;
 }
 
+/**
+ * If every variant in a `oneOf` is a `{ const: X }`, return the values as strings.
+ * Returns an empty array when the pattern doesn't hold (mixed / nested schemas).
+ */
+function extractConstValues(variants: CliTypeSpec[]): string[] {
+  const values: string[] = [];
+  for (const variant of variants) {
+    if (!('const' in variant)) return [];
+    values.push(String(variant.const));
+  }
+  return values;
+}
+
 export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec, path: string): void {
   if ('const' in schema) {
     if (value !== schema.const) {
@@ -119,7 +132,13 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
         errors.push(error instanceof Error ? error.message : String(error));
       }
     }
-    throw new CliError('VALIDATION_ERROR', `${path} must match one of the allowed schema variants.`, { errors });
+
+    const allowedValues = extractConstValues(variants);
+    const message =
+      allowedValues.length > 0
+        ? `${path} must be one of: ${allowedValues.join(', ')}.`
+        : `${path} must match one of the allowed schema variants.`;
+    throw new CliError('VALIDATION_ERROR', message, { errors });
   }
 
   if (schema.type === 'json') return;

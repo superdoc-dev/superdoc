@@ -26,19 +26,28 @@ Returns a SectionMutationResult receipt; reports NO_OP if page numbering format 
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `start` | integer | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 2
+### Variant 2 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `format` | enum | yes | `"decimal"`, `"lowerLetter"`, `"upperLetter"`, `"lowerRoman"`, `"upperRoman"`, `"numberInDash"` |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
-  "format": "decimal",
   "start": 1,
   "target": {
     "kind": "section",

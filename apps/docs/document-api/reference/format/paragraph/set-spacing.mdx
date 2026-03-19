@@ -26,29 +26,39 @@ Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (before)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `before` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (after)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `after` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (line)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `line` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 4
+### Variant 4 (lineRule)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `lineRule` | enum | yes | `"auto"`, `"exact"`, `"atLeast"` |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
 ```json
 {
-  "after": 1,
   "before": 1,
-  "line": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",

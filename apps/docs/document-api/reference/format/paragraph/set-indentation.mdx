@@ -26,29 +26,39 @@ Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (left)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `left` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (right)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `right` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (firstLine)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `firstLine` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 4
+### Variant 4 (hanging)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `hanging` | integer | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
 ```json
 {
-  "firstLine": 1,
   "left": 1,
-  "right": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",

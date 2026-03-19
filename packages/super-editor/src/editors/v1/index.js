@@ -13,6 +13,11 @@ import { SuperConverter } from './core/super-converter/SuperConverter';
 import { getMarksFromSelection } from './core/helpers/getMarksFromSelection.js';
 import { getActiveFormatting } from './core/helpers/getActiveFormatting.js';
 import { getStarterExtensions, getRichTextExtensions } from './extensions/index.js';
+import {
+  createHeadlessToolbar,
+  headlessToolbarConstants,
+  headlessToolbarHelpers,
+} from '../../headless-toolbar/index.js';
 import { SuperToolbar } from './components/toolbar/super-toolbar.js';
 import { DocxEncryptionError, DocxEncryptionErrorCode, DocxZipper, helpers } from './core/index.js';
 import { Editor } from './core/Editor.js';
@@ -101,6 +106,9 @@ export {
   getMarksFromSelection,
   /** @internal */
   getActiveFormatting,
+  createHeadlessToolbar,
+  headlessToolbarConstants,
+  headlessToolbarHelpers,
   getStarterExtensions,
   /** @internal */
   getRichTextExtensions,

@@ -97,3 +97,16 @@ export type { PositionHit } from '@superdoc/layout-bridge';
 export type { PaintSnapshot, LayoutMode } from '@superdoc/painter-dom';
 export type { FlowBlock, Layout, Measure, SectionMetadata, TrackedChangesMode } from '@superdoc/contracts';
 export type { Page as LayoutPage, Fragment as LayoutFragment } from '@superdoc/contracts';
+
+// Headless toolbar public types
+export type {
+  CreateHeadlessToolbarOptions,
+  HeadlessToolbarController,
+  HeadlessToolbarSurface,
+  HeadlessToolbarSuperdocHost,
+  PublicToolbarItemId,
+  ToolbarCommandState,
+  ToolbarContext,
+  ToolbarSnapshot,
+  ToolbarTarget,
+} from './headless-toolbar/types.js';

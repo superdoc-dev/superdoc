@@ -3632,8 +3632,10 @@ export function tablesGetCellsAdapter(editor: Editor, input: TablesGetCellsInput
     if (input.columnIndex != null && col !== input.columnIndex) continue;
 
     const attrs = candidate.node.attrs as Record<string, unknown>;
+    const cellNodeId = candidate.nodeId || resolveCellNodeId(attrs);
     cells.push({
-      nodeId: candidate.nodeId || resolveCellNodeId(attrs),
+      nodeId: cellNodeId,
+      address: { kind: 'block', nodeType: 'tableCell', nodeId: cellNodeId },
       rowIndex: row,
       columnIndex: col,
       colspan: typeof attrs.colspan === 'number' ? attrs.colspan : 1,

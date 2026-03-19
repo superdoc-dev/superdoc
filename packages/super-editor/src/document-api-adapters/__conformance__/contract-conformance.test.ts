@@ -10467,7 +10467,7 @@ describe('document-api adapter conformance', () => {
     ).toThrow(/rowIndex must not be provided when target is a row node/);
   });
 
-  it('returns stable cell ids from tables.getCells using table-map resolved absolute positions', () => {
+  it('returns stable cell ids and mutation-ready addresses from tables.getCells', () => {
     const editor = makeTableEditor();
     const result = tablesGetCellsAdapter(editor, { nodeId: 'table-1' });
 
@@ -10478,6 +10478,14 @@ describe('document-api adapter conformance', () => {
 
     const topLeft = result.cells.find((cell) => cell.rowIndex === 0 && cell.columnIndex === 0);
     expect(topLeft?.nodeId).toBe('cell-1');
+
+    // Each cell address mirrors nodeId and is ready for mutation handoff.
+    expect(topLeft?.address).toEqual({ kind: 'block', nodeType: 'tableCell', nodeId: 'cell-1' });
+
+    // All cells carry a well-formed address.
+    for (const cell of result.cells) {
+      expect(cell.address).toEqual({ kind: 'block', nodeType: 'tableCell', nodeId: cell.nodeId });
+    }
   });
 
   it('reads tables.getProperties from nested tableProperties', () => {

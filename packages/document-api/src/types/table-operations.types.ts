@@ -6,6 +6,9 @@ import type {
   TableOrRowAddress,
   TableRowAddress,
 } from './base.js';
+
+// Re-export for downstream callers that reference cell addresses via this module.
+export type { TableCellAddress } from './base.js';
 import type { ReceiptFailure, ReceiptInsert } from './receipt.js';
 
 // ---------------------------------------------------------------------------
@@ -471,7 +474,10 @@ export interface TablesGetCellsInput extends TableLocator {
 
 /** Per-cell info with stable ref for write handoff. */
 export interface TableCellInfo {
+  /** Shorthand cell identifier — convenient for logging, Map keys, and display. */
   nodeId: string;
+  /** Mutation-ready address — pass directly as `target` in follow-up cell operations. */
+  address: TableCellAddress;
   rowIndex: number;
   columnIndex: number;
   colspan: number;

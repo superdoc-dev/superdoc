@@ -142,6 +142,8 @@ describe('document-api story: all table commands', () => {
       expect(Array.isArray(result?.cells)).toBe(true);
       expect(result.cells.length).toBeGreaterThan(0);
       expect(typeof result.cells[0]?.nodeId).toBe('string');
+      expect(result.cells[0]?.address?.nodeId).toBe(result.cells[0]?.nodeId);
+      expect(result.cells[0]?.address?.nodeType).toBe('tableCell');
       return;
     }
 

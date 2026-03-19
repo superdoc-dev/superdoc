@@ -5212,12 +5212,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           items: objectSchema(
             {
               nodeId: { type: 'string' },
+              address: tableCellAddressSchema,
               rowIndex: { type: 'integer', minimum: 0 },
               columnIndex: { type: 'integer', minimum: 0 },
               colspan: { type: 'integer', minimum: 1 },
               rowspan: { type: 'integer', minimum: 1 },
             },
-            ['nodeId', 'rowIndex', 'columnIndex', 'colspan', 'rowspan'],
+            ['nodeId', 'address', 'rowIndex', 'columnIndex', 'colspan', 'rowspan'],
           ),
         },
       },

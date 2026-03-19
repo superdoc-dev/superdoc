@@ -310,7 +310,16 @@ function makeTablesAdapter(): TablesAdapter {
     getCells: vi.fn(() => ({
       nodeId: 't1',
       address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
-      cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
+      cells: [
+        {
+          nodeId: 'c1',
+          address: { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' },
+          rowIndex: 0,
+          columnIndex: 0,
+          colspan: 1,
+          rowspan: 1,
+        },
+      ],
     })),
     getProperties: vi.fn(() => ({
       nodeId: 't1',

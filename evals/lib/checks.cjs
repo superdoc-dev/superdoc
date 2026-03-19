@@ -483,12 +483,13 @@ module.exports.traceToolOrder = (output, context) => {
 module.exports.traceAllOk = (output) => {
   const d = parseExecOutput(output);
   if (!d?.trace) return { pass: false, score: 0, reason: 'No trace data' };
-  const failedTools = d.toolCalls?.filter((tc) => !tc.ok) || [];
+  if (!d.toolCalls?.length) return { pass: false, score: 0, reason: 'No tool calls were made' };
+  const failedTools = d.toolCalls.filter((tc) => !tc.ok);
   if (failedTools.length > 0) {
     const names = failedTools.map((tc) => `${tc.tool}: ${tc.error || 'failed'}`).join(', ');
     return { pass: false, score: 0, reason: `Tool failures: ${names}` };
   }
-  return { pass: true, score: 1, reason: `All ${d.toolCalls?.length || 0} tool calls succeeded` };
+  return { pass: true, score: 1, reason: `All ${d.toolCalls.length} tool calls succeeded` };
 };
 
 /** Assert the total number of steps is within a range. */

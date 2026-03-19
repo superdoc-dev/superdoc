@@ -3301,7 +3301,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.heading': {
     input: objectSchema(
       {
-        level: { ...headingLevelSchema, description: 'Heading level (1-9).' },
+        level: { ...headingLevelSchema, description: 'Heading level (1-6).' },
         at: {
           description:
             "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",

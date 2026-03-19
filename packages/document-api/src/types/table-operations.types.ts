@@ -6,9 +6,6 @@ import type {
   TableOrRowAddress,
   TableRowAddress,
 } from './base.js';
-
-// Re-export for downstream callers that reference cell addresses via this module.
-export type { TableCellAddress } from './base.js';
 import type { ReceiptFailure, ReceiptInsert } from './receipt.js';
 
 // ---------------------------------------------------------------------------

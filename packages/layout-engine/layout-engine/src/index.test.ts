@@ -4134,7 +4134,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[1], 'body')).toBe(true);
     });
 
-    it('suppresses inter-paragraph spacing when both paragraphs have contextualSpacing (bilateral)', () => {
+    it('suppresses inter-paragraph spacing when both paragraphs have contextualSpacing', () => {
       const current: FlowBlock = {
         kind: 'paragraph',
         id: 'current',
@@ -4181,7 +4181,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'next')).toBe(true);
     });
 
-    it('does not suppress spacing when only current paragraph has contextualSpacing (SD-2110)', () => {
+    it('suppresses current after-spacing even when next does not have contextualSpacing (per-paragraph)', () => {
       const current: FlowBlock = {
         kind: 'paragraph',
         id: 'current',
@@ -4199,7 +4199,8 @@ describe('requirePageBoundary edge cases', () => {
         runs: [{ text: 'Next', fontFamily: 'Arial', fontSize: 12 }],
         attrs: {
           styleId: 'TestStyle',
-          // next does NOT have contextualSpacing — bilateral rule prevents suppression
+          // next does NOT have contextualSpacing — per-paragraph rule: current still
+          // suppresses its own after-spacing independently
           spacing: { before: 10 },
         },
       };
@@ -4215,8 +4216,8 @@ describe('requirePageBoundary edge cases', () => {
         totalHeight: 20,
       };
 
-      // Only one side opts in → no suppression. gap = max(50, 10) = 50px
-      // Total = 30 + 50 + 20 = 100px > 70px content → two pages
+      // Current suppresses its own after → 0. Next does not suppress before → 10.
+      // gap = max(0, 10) = 10px. Total = 30 + 10 + 20 = 60px < 70px → one page
       const options: LayoutOptions = {
         pageSize: { w: 400, h: 130 },
         margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 70px content
@@ -4224,7 +4225,7 @@ describe('requirePageBoundary edge cases', () => {
 
       const layout = layoutDocument([current, next], [currentMeasure, nextMeasure], options);
 
-      expect(layout.pages).toHaveLength(2);
+      expect(layout.pages).toHaveLength(1);
     });
   });
 
@@ -4620,7 +4621,7 @@ describe('requirePageBoundary edge cases', () => {
     });
 
     it('reclaims trailing spacing when both filler and chain starter have contextualSpacing', () => {
-      // Both filler and chain starter have contextualSpacing + same style (bilateral rule).
+      // Both filler and chain starter have contextualSpacing + same style.
       // The trailing spacing should be reclaimed, making room for the chain.
       const filler: FlowBlock = {
         kind: 'paragraph',
@@ -4676,8 +4677,8 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[0], 'anchor')).toBe(true);
     });
 
-    it('does not reclaim trailing spacing when only chain starter has contextualSpacing (SD-2110)', () => {
-      // Filler does NOT have contextualSpacing — bilateral rule prevents reclaim.
+    it('does not reclaim trailing spacing when only chain starter has contextualSpacing', () => {
+      // Filler does NOT have contextualSpacing — per-paragraph rule: filler does not suppress its own after.
       // Same dimensions as the positive case: chain = 52px, available without reclaim = 50px.
       // Without reclaim 52 > 50, so the chain moves to page 2.
       const filler: FlowBlock = {
@@ -4784,7 +4785,7 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[1], 'anchor')).toBe(true);
     });
 
-    it('does not suppress chain-internal spacing for mixed contextualSpacing (SD-2110)', () => {
+    it('does not suppress chain-internal spacing for mixed contextualSpacing', () => {
       // Three same-style paragraphs in a keepNext chain: true / false / true.
       // The middle one opts out, so spacing around it should NOT be suppressed.
       const filler: FlowBlock = {
@@ -4823,14 +4824,13 @@ describe('requirePageBoundary edge cases', () => {
         totalHeight: 20,
       };
 
-      // Chain (para1+para2+para3) with bilateral rule — no suppression between any pair:
-      //   para1 (20) + max(20,20) gap + para2 (20) + max(20,20) gap + para3 (20) = 100px
-      // With unilateral bug, chain would be smaller (para1.after and para3.before suppressed):
-      //   para1 (20) + max(0,20) gap + para2 (20) + max(20,0) gap + para3 (20) = 80px
+      // Chain (para1+para2+para3) with per-paragraph rule:
+      //   para1→para2: para1 suppresses after (cs=true) → 0, para2 keeps before (cs=false) → 20. gap = max(0,20) = 20
+      //   para2→para3: para2 keeps after (cs=false) → 20, para3 suppresses before (cs=true) → 0. gap = max(20,0) = 20
+      //   Total: 20 + 20 + 20 + 20 + 20 = 100px
       //
       // Filler takes 10px. Content area = 105px.
       // After filler, 95px remain — 100px chain doesn't fit current page but fits blank page → page 2.
-      // If chain were 80px (unilateral bug), it would fit on page 1.
       const options: LayoutOptions = {
         pageSize: { w: 400, h: 165 },
         margins: { top: 30, right: 30, bottom: 30, left: 30 }, // 105px content

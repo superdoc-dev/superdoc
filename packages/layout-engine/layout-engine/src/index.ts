@@ -43,7 +43,7 @@ import { layoutTableBlock, createAnchoredTableFragment, ANCHORED_TABLE_FULL_WIDT
 import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnchors } from './anchors.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
-import { shouldSuppressSpacingForEmpty, shouldSuppressContextualSpacing } from './layout-utils.js';
+import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 import { balancePageColumns } from './column-balancing.js';
 import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
 import { cloneColumnLayout, widthsEqual } from './column-utils.js';
@@ -356,21 +356,31 @@ function calculateChainHeight(
       // (which is tracked in PageState from the previous layout operation)
       const prevTrailing =
         Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
-      // Apply contextual spacing suppression only when both sides opt in (bilateral rule)
-      const suppress = shouldSuppressContextualSpacing(
+      // Per-paragraph contextual spacing: each side independently suppresses its own spacing
+      const prevSuppressAfter = shouldSuppressOwnSpacing(
         state.lastParagraphStyleId,
         state.lastParagraphContextualSpacing,
         styleId,
-        contextualSpacing,
       );
-      const effectiveSpacingBefore = suppress ? 0 : Math.max(spacingBefore - prevTrailing, 0);
+      const currSuppressBefore = shouldSuppressOwnSpacing(styleId, contextualSpacing, state.lastParagraphStyleId);
+      let effectiveSpacingBefore: number;
+      if (prevSuppressAfter && currSuppressBefore) {
+        effectiveSpacingBefore = 0;
+      } else if (prevSuppressAfter) {
+        effectiveSpacingBefore = spacingBefore;
+      } else if (currSuppressBefore) {
+        effectiveSpacingBefore = 0;
+      } else {
+        effectiveSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
+      }
       totalHeight += effectiveSpacingBefore;
       isFirstMember = false;
     } else {
-      // Subsequent chain members: bilateral contextual spacing rule
-      const suppress = shouldSuppressContextualSpacing(prevStyleId, prevContextualSpacing, styleId, contextualSpacing);
-      const effectiveSpacingAfterPrev = suppress ? 0 : prevSpacingAfter;
-      const effectiveSpacingBefore = suppress ? 0 : spacingBefore;
+      // Subsequent chain members: per-paragraph contextual spacing
+      const prevSuppressAfter = shouldSuppressOwnSpacing(prevStyleId, prevContextualSpacing, styleId);
+      const currSuppressBefore = shouldSuppressOwnSpacing(styleId, contextualSpacing, prevStyleId);
+      const effectiveSpacingAfterPrev = prevSuppressAfter ? 0 : prevSpacingAfter;
+      const effectiveSpacingBefore = currSuppressBefore ? 0 : spacingBefore;
       const interParagraphSpacing = Math.max(effectiveSpacingAfterPrev, effectiveSpacingBefore);
       totalHeight += interParagraphSpacing;
     }
@@ -401,14 +411,10 @@ function calculateChainHeight(
             : undefined;
         const anchorContextualSpacing = (anchorBlock as ParagraphBlock).attrs?.contextualSpacing === true;
 
-        const suppress = shouldSuppressContextualSpacing(
-          prevStyleId,
-          prevContextualSpacing,
-          anchorStyleId,
-          anchorContextualSpacing,
-        );
-        const effectiveSpacingAfterPrev = suppress ? 0 : prevSpacingAfter;
-        const effectiveAnchorSpacingBefore = suppress ? 0 : anchorSpacingBefore;
+        const prevSuppressAfter = shouldSuppressOwnSpacing(prevStyleId, prevContextualSpacing, anchorStyleId);
+        const anchorSuppressBefore = shouldSuppressOwnSpacing(anchorStyleId, anchorContextualSpacing, prevStyleId);
+        const effectiveSpacingAfterPrev = prevSuppressAfter ? 0 : prevSpacingAfter;
+        const effectiveAnchorSpacingBefore = anchorSuppressBefore ? 0 : anchorSpacingBefore;
         const interParagraphSpacing = Math.max(effectiveSpacingAfterPrev, effectiveAnchorSpacingBefore);
 
         // Optimization (SD-1282): Only require space for anchor's first line, not full height.
@@ -1813,16 +1819,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const firstMemberBlock = blocks[chain.startIndex] as ParagraphBlock;
         const firstMemberStyleId =
           typeof firstMemberBlock.attrs?.styleId === 'string' ? firstMemberBlock.attrs?.styleId : undefined;
-        const firstMemberContextualSpacing = firstMemberBlock.attrs?.contextualSpacing === true;
-        const contextualSpacingApplies = shouldSuppressContextualSpacing(
+        // Reclaim depends on whether the previous paragraph suppresses its own after-spacing
+        const prevSuppressAfter = shouldSuppressOwnSpacing(
           state.lastParagraphStyleId,
           state.lastParagraphContextualSpacing,
           firstMemberStyleId,
-          firstMemberContextualSpacing,
         );
         const prevTrailing =
           Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
-        const effectiveAvailableHeight = contextualSpacingApplies ? availableHeight + prevTrailing : availableHeight;
+        const effectiveAvailableHeight = prevSuppressAfter ? availableHeight + prevTrailing : availableHeight;
 
         const chainHeight = calculateChainHeight(chain, blocks, measures, state);
 
@@ -1859,13 +1864,27 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               Number.isFinite(state.trailingSpacing) && state.trailingSpacing > 0 ? state.trailingSpacing : 0;
             const currentStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs?.styleId : undefined;
             const currentContextualSpacing = asBoolean(paraBlock.attrs?.contextualSpacing);
-            const contextualSpacingApplies = shouldSuppressContextualSpacing(
+            // Per-paragraph: each side independently suppresses its own spacing
+            const prevSuppressAfter = shouldSuppressOwnSpacing(
               state.lastParagraphStyleId,
               state.lastParagraphContextualSpacing,
               currentStyleId,
-              currentContextualSpacing,
             );
-            const effectiveSpacingBefore = contextualSpacingApplies ? 0 : Math.max(spacingBefore - prevTrailing, 0);
+            const currSuppressBefore = shouldSuppressOwnSpacing(
+              currentStyleId,
+              currentContextualSpacing,
+              state.lastParagraphStyleId,
+            );
+            let effectiveSpacingBefore: number;
+            if (prevSuppressAfter && currSuppressBefore) {
+              effectiveSpacingBefore = 0;
+            } else if (prevSuppressAfter) {
+              effectiveSpacingBefore = spacingBefore;
+            } else if (currSuppressBefore) {
+              effectiveSpacingBefore = 0;
+            } else {
+              effectiveSpacingBefore = Math.max(spacingBefore - prevTrailing, 0);
+            }
             const currentHeight = getMeasureHeight(paraBlock, measure);
             const nextHeight = getMeasureHeight(nextBlock, nextMeasure);
 
@@ -1875,14 +1894,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               nextIsParagraph && typeof nextBlock.attrs?.styleId === 'string' ? nextBlock.attrs?.styleId : undefined;
             const nextContextualSpacing = nextIsParagraph && asBoolean(nextBlock.attrs?.contextualSpacing);
 
-            const suppressNext = shouldSuppressContextualSpacing(
-              currentStyleId,
-              currentContextualSpacing,
-              nextStyleId,
-              nextContextualSpacing,
-            );
-            const effectiveSpacingAfter = suppressNext ? 0 : spacingAfter;
-            const effectiveNextSpacingBefore = suppressNext ? 0 : nextSpacingBefore;
+            const currSuppressAfter = shouldSuppressOwnSpacing(currentStyleId, currentContextualSpacing, nextStyleId);
+            const nextSuppressBefore =
+              nextIsParagraph && shouldSuppressOwnSpacing(nextStyleId, nextContextualSpacing, currentStyleId);
+            const effectiveSpacingAfter = currSuppressAfter ? 0 : spacingAfter;
+            const effectiveNextSpacingBefore = nextSuppressBefore ? 0 : nextSpacingBefore;
             const interParagraphSpacing = nextIsParagraph
               ? Math.max(effectiveSpacingAfter, effectiveNextSpacingBefore)
               : effectiveSpacingAfter;
@@ -1902,9 +1918,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
               ? effectiveSpacingBefore + currentHeight + interParagraphSpacing + nextFirstLineHeight
               : effectiveSpacingBefore + currentHeight + spacingAfter + nextHeight;
 
-            const effectiveAvailableHeight = contextualSpacingApplies
-              ? availableHeight + prevTrailing
-              : availableHeight;
+            const effectiveAvailableHeight = prevSuppressAfter ? availableHeight + prevTrailing : availableHeight;
             if (combinedHeight > effectiveAvailableHeight && state.page.fragments.length > 0) {
               state = paginator.advanceColumn(state);
             }
@@ -1914,8 +1928,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       /**
        * Contextual spacing suppression for spacingAfter.
-       * Both the current and next paragraph must have contextualSpacing=true
-       * and share the same styleId (bilateral rule).
+       * Per-paragraph: current paragraph suppresses its own after-spacing when
+       * it has contextualSpacing and the next paragraph shares the same styleId.
        */
       let overrideSpacingAfter: number | undefined;
       const curStyleId = typeof paraBlock.attrs?.styleId === 'string' ? paraBlock.attrs.styleId : undefined;
@@ -1925,8 +1939,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         if (nextBlock?.kind === 'paragraph') {
           const nextPara = nextBlock as ParagraphBlock;
           const nextStyleId = typeof nextPara.attrs?.styleId === 'string' ? nextPara.attrs?.styleId : undefined;
-          const nextContextualSpacing = asBoolean(nextPara.attrs?.contextualSpacing);
-          if (shouldSuppressContextualSpacing(curStyleId, curContextualSpacing, nextStyleId, nextContextualSpacing)) {
+          if (shouldSuppressOwnSpacing(curStyleId, curContextualSpacing, nextStyleId)) {
             overrideSpacingAfter = 0;
           }
         }

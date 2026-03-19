@@ -1124,8 +1124,8 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
     });
   });
 
-  describe('bilateral rule (SD-2110)', () => {
-    it('does not suppress spacing when previous paragraph has contextualSpacing but current does not', () => {
+  describe('per-paragraph contextual spacing', () => {
+    it('suppresses only previous after when previous has contextualSpacing but current does not', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
       pageState.lastParagraphContextualSpacing = true;
@@ -1159,13 +1159,13 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
 
       layoutParagraphBlock(ctx);
 
-      // contextualSpacing is NOT suppressed (current opts out).
-      // Normal spacing collapse: spacingBefore (30) > trailingSpacing (20) → gap = 10
-      // Result: 100 + 10 + 20 + 10 = 140
+      // Previous suppresses its own after → rewind trailing (100 - 20 = 80), trailingSpacing = 0.
+      // Current does NOT suppress its own before → spacingBefore (30) stays.
+      // Collapse: max(30 - 0, 0) = 30. cursorY = 80 + 30 + 20 + 10 = 140
       expect(pageState.cursorY).toBe(140);
     });
 
-    it('does not suppress spacing when current paragraph has contextualSpacing but previous does not', () => {
+    it('suppresses only current before when current has contextualSpacing but previous does not', () => {
       const pageState = makePageState();
       pageState.lastParagraphStyleId = 'Normal';
       pageState.lastParagraphContextualSpacing = false;
@@ -1199,10 +1199,10 @@ describe('layoutParagraphBlock - contextualSpacing', () => {
 
       layoutParagraphBlock(ctx);
 
-      // contextualSpacing is NOT suppressed (previous opts out).
-      // Normal spacing collapse: spacingBefore (30) > trailingSpacing (20) → gap = 10
-      // Result: 100 + 10 + 20 + 10 = 140
-      expect(pageState.cursorY).toBe(140);
+      // Previous does NOT suppress its own after → no rewind (trailingSpacing stays 20).
+      // Current suppresses its own before → spacingBefore = 0.
+      // Collapse: max(0 - 20, 0) = 0. cursorY = 100 + 0 + 20 + 10 = 130
+      expect(pageState.cursorY).toBe(130);
     });
 
     it('persists contextualSpacing from positioned-frame early return', () => {

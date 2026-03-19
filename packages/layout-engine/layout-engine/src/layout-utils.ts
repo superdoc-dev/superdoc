@@ -158,26 +158,21 @@ export const computeLinePmRange = (block: ParagraphBlock, line: Line): LinePmRan
   computeLinePmRangeUnified(block, line);
 
 /**
- * OOXML bilateral contextual-spacing rule.
+ * Per-paragraph contextual spacing (OOXML w:contextualSpacing).
  *
- * Word only suppresses inter-paragraph spacing when BOTH adjacent paragraphs
- * have contextualSpacing enabled and share the same styleId.
- * A single side opting out (e.g. via inline override `w:val="0"`) is enough
- * to preserve normal spacing.
+ * A paragraph suppresses its own before/after spacing when it has
+ * contextualSpacing enabled and the adjacent paragraph shares the same styleId.
+ * The adjacent paragraph's contextualSpacing flag is NOT consulted — each
+ * paragraph independently decides whether to suppress its own spacing.
+ *
+ * @see https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.contextualspacing
  */
-export function shouldSuppressContextualSpacing(
-  prevStyleId: string | undefined,
-  prevContextualSpacing: boolean,
-  nextStyleId: string | undefined,
-  nextContextualSpacing: boolean,
+export function shouldSuppressOwnSpacing(
+  ownStyleId: string | undefined,
+  ownContextualSpacing: boolean,
+  adjacentStyleId: string | undefined,
 ): boolean {
-  return !!(
-    prevContextualSpacing &&
-    nextContextualSpacing &&
-    prevStyleId &&
-    nextStyleId &&
-    prevStyleId === nextStyleId
-  );
+  return ownContextualSpacing && !!ownStyleId && !!adjacentStyleId && ownStyleId === adjacentStyleId;
 }
 
 export const extractBlockPmRange = (block: { attrs?: Record<string, unknown> } | null | undefined): LinePmRange => {

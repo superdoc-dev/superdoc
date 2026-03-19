@@ -11,18 +11,13 @@ import type { StoryRuntime } from './story-types.js';
 import { buildStoryKey } from './story-key.js';
 import { createStoryEditor } from '../../core/story-editor-factory.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { resolveSectionProjections, type SectionProjection } from '../helpers/sections-resolver.js';
+import { resolveSectionProjections } from '../helpers/sections-resolver.js';
 import { readTargetSectPr } from '../helpers/section-projection-access.js';
-import {
-  ensureSectPrElement,
-  readSectPrHeaderFooterRefs,
-  setSectPrHeaderFooterRef,
-  type XmlElement,
-} from '../helpers/sections-xml.js';
+import { readSectPrHeaderFooterRefs, type XmlElement } from '../helpers/sections-xml.js';
 import { resolveEffectiveRef } from '../helpers/header-footer-refs-mutation.js';
-import { createHeaderFooterPart } from '../helpers/header-footer-parts.js';
-import { applySectPrToProjection } from '../helpers/section-mutation-wrapper.js';
 import { exportSubEditorToPart } from '../../core/parts/adapters/header-footer-sync.js';
+import { ensureExplicitHeaderFooterSlot } from '../helpers/header-footer-slot-materialization.js';
+import { createEmptyHeaderFooterJsonPart } from '../helpers/header-footer-parts.js';
 
 // ---------------------------------------------------------------------------
 // Converter shape (minimal interface for type safety)
@@ -33,6 +28,10 @@ interface ConverterForStoryRuntime {
   footers?: Record<string, unknown>;
   headerEditors?: Array<{ id: string; editor: Editor }>;
   footerEditors?: Array<{ id: string; editor: Editor }>;
+}
+
+interface HeaderFooterSlotResolutionOptions {
+  intent?: 'read' | 'write';
 }
 
 function getConverter(editor: Editor): ConverterForStoryRuntime | undefined {
@@ -50,7 +49,8 @@ function getConverter(editor: Editor): ConverterForStoryRuntime | undefined {
  * 1. Find the target section's sectPr and read its header/footer references
  * 2. For 'effective' resolution, walk backward through sections if no explicit ref
  * 3. Check for a live sub-editor in the converter's headerEditors/footerEditors
- * 4. Fall back to creating a headless story editor from the converter's PM JSON cache
+ * 4. For write intent with a missing slot, create a temporary empty story editor
+ * 5. Otherwise fall back to creating a headless story editor from cached PM JSON
  *
  * The `resolution` field controls whether to follow inheritance:
  * - 'effective' (default): follow section chain to find the effective content
@@ -59,6 +59,7 @@ function getConverter(editor: Editor): ConverterForStoryRuntime | undefined {
 export function resolveHeaderFooterSlotRuntime(
   hostEditor: Editor,
   locator: HeaderFooterSlotStoryLocator,
+  options: HeaderFooterSlotResolutionOptions = {},
 ): StoryRuntime {
   const storyKey = buildStoryKey(locator);
   const converter = getConverter(hostEditor);
@@ -72,6 +73,7 @@ export function resolveHeaderFooterSlotRuntime(
   }
 
   const resolution = locator.resolution ?? 'effective';
+  const intent = options.intent ?? 'read';
   const { headerFooterKind, variant } = locator;
 
   // Resolve section projections and find the target section
@@ -111,18 +113,22 @@ export function resolveHeaderFooterSlotRuntime(
     effectiveRefId = resolved?.refId ?? null;
   }
 
+  // Track whether the slot is inherited — used by the commit callback
+  // to decide whether materialization is needed on write.
+  const isInherited = explicitRefId === null;
+  const onWrite = locator.onWrite ?? 'materializeIfInherited';
+
   if (!effectiveRefId) {
+    if (intent === 'write' && resolution !== 'explicit' && onWrite === 'materializeIfInherited') {
+      return createMissingSlotWriteRuntime(hostEditor, locator, storyKey);
+    }
+
     throw new DocumentApiAdapterError(
       'STORY_NOT_FOUND',
       `No ${headerFooterKind} (${variant}) found for section "${locator.section.sectionId}".`,
       { storyKey },
     );
   }
-
-  // Track whether the slot is inherited — used by the commit callback
-  // to decide whether materialization is needed on write.
-  const isInherited = explicitRefId === null;
-  const onWrite = locator.onWrite ?? 'materializeIfInherited';
 
   // For 'error' mode, reject inherited slots immediately (even on reads)
   // since the caller explicitly requires an explicit slot.
@@ -142,29 +148,16 @@ export function resolveHeaderFooterSlotRuntime(
   // Instead, always create an isolated headless editor from the PM JSON
   // snapshot so mutations stay local to this runtime.
   if (isInherited && onWrite === 'materializeIfInherited') {
-    const pmJson = converter[collection]?.[effectiveRefId];
-    if (!pmJson || typeof pmJson !== 'object') {
-      throw new DocumentApiAdapterError(
-        'STORY_NOT_FOUND',
-        `No cached content for ${headerFooterKind} "${effectiveRefId}".`,
-        { storyKey, refId: effectiveRefId },
-      );
-    }
+    const pmJson = readCachedHeaderFooterContent(converter, collection, effectiveRefId, storyKey, headerFooterKind);
+    const isolatedEditor = createHeadlessHeaderFooterEditor(
+      hostEditor,
+      pmJson,
+      `${effectiveRefId}:materialization-pending`,
+    );
 
-    const isolatedEditor = createStoryEditor(hostEditor, pmJson as Record<string, unknown>, {
-      documentId: `${effectiveRefId}:materialization-pending`,
-      isHeaderOrFooter: true,
-      headless: true,
+    return createOwnedHeaderFooterRuntime(locator, storyKey, isolatedEditor, {
+      commit: buildSlotCommit(locator, isolatedEditor, effectiveRefId, true),
     });
-
-    return {
-      locator,
-      storyKey,
-      editor: isolatedEditor,
-      kind: 'headerFooter',
-      dispose: () => isolatedEditor.destroy(),
-      commit: buildSlotCommit(hostEditor, locator, isolatedEditor, effectiveRefId, isInherited, onWrite),
-    };
   }
 
   // Non-inherited slot or editResolvedPart — safe to reuse the live editor
@@ -176,34 +169,17 @@ export function resolveHeaderFooterSlotRuntime(
       storyKey,
       editor: liveEditor,
       kind: 'headerFooter',
-      commit: buildSlotCommit(hostEditor, locator, liveEditor, effectiveRefId, isInherited, onWrite),
+      commit: buildSlotCommit(locator, liveEditor, effectiveRefId, false),
     };
   }
 
   // Fall back to cached PM JSON (keyed by refId)
-  const pmJson = converter[collection]?.[effectiveRefId];
-  if (!pmJson || typeof pmJson !== 'object') {
-    throw new DocumentApiAdapterError(
-      'STORY_NOT_FOUND',
-      `No cached content for ${headerFooterKind} "${effectiveRefId}".`,
-      { storyKey, refId: effectiveRefId },
-    );
-  }
+  const cachedPmJson = readCachedHeaderFooterContent(converter, collection, effectiveRefId, storyKey, headerFooterKind);
+  const storyEditor = createHeadlessHeaderFooterEditor(hostEditor, cachedPmJson, effectiveRefId);
 
-  const storyEditor = createStoryEditor(hostEditor, pmJson as Record<string, unknown>, {
-    documentId: effectiveRefId,
-    isHeaderOrFooter: true,
-    headless: true,
+  return createOwnedHeaderFooterRuntime(locator, storyKey, storyEditor, {
+    commit: buildSlotCommit(locator, storyEditor, effectiveRefId, false),
   });
-
-  return {
-    locator,
-    storyKey,
-    editor: storyEditor,
-    kind: 'headerFooter',
-    dispose: () => storyEditor.destroy(),
-    commit: buildSlotCommit(hostEditor, locator, storyEditor, effectiveRefId, isInherited, onWrite),
-  };
 }
 
 /**
@@ -223,45 +199,44 @@ export function resolveHeaderFooterSlotRuntime(
  * coordinates stale.
  */
 function buildSlotCommit(
-  _hostEditor: Editor,
   locator: HeaderFooterSlotStoryLocator,
   storyEditor: Editor,
-  inheritedRefId: string,
-  isInherited: boolean,
-  onWrite: 'materializeIfInherited' | 'editResolvedPart' | 'error',
+  sourceRefId: string | null,
+  requiresLocalMaterialization: boolean,
 ): (hostEditor: Editor) => void {
   const { headerFooterKind, variant, section } = locator;
 
   return (hostEditor: Editor) => {
-    let targetRefId = inheritedRefId;
+    let targetRefId = sourceRefId;
 
-    if (isInherited && onWrite === 'materializeIfInherited') {
-      // Re-resolve section state at commit time so we write to the
-      // correct position even if body edits shifted paragraphs.
-      const freshSections = resolveSectionProjections(hostEditor);
-      const freshProjection = freshSections.find((s) => s.sectionId === section.sectionId);
-      if (!freshProjection) {
+    if (requiresLocalMaterialization) {
+      // Use the shared materialization helper — identical behavior to
+      // PresentationEditor's blank-slot bootstrap, ensuring one
+      // implementation for section-local slot creation.
+      const result = ensureExplicitHeaderFooterSlot(hostEditor, {
+        sectionId: section.sectionId,
+        kind: headerFooterKind,
+        variant,
+        sourceRefId: sourceRefId ?? undefined,
+      });
+
+      if (!result) {
         throw new DocumentApiAdapterError(
           'MATERIALIZATION_FAILED',
-          `Section "${section.sectionId}" no longer found at commit time.`,
+          `Failed to materialize ${headerFooterKind} slot for section "${section.sectionId}".`,
           { sectionId: section.sectionId },
         );
       }
-      const freshSectPr = readTargetSectPr(hostEditor, freshProjection) ?? undefined;
 
-      // Clone inherited part into a new local part
-      const materialized = createHeaderFooterPart(hostEditor, {
-        kind: headerFooterKind,
-        variant,
-        sourceRefId: inheritedRefId,
-      });
+      targetRefId = result.refId;
+    }
 
-      // Update the section's sectPr to reference the new part
-      const nextSectPr = ensureSectPrElement(freshSectPr);
-      setSectPrHeaderFooterRef(nextSectPr, headerFooterKind, variant, materialized.refId);
-      applySectPrToProjection(hostEditor, freshProjection, nextSectPr);
-
-      targetRefId = materialized.refId;
+    if (!targetRefId) {
+      throw new DocumentApiAdapterError(
+        'MATERIALIZATION_FAILED',
+        `No target ${headerFooterKind} part available for section "${section.sectionId}".`,
+        { sectionId: section.sectionId },
+      );
     }
 
     exportAndSyncCache(hostEditor, storyEditor, targetRefId, headerFooterKind);
@@ -321,22 +296,13 @@ export function resolveHeaderFooterPartRuntime(
     };
   }
 
-  const storyEditor = createStoryEditor(hostEditor, pmJson, {
-    documentId: locator.refId,
-    isHeaderOrFooter: true,
-    headless: true,
-  });
+  const storyEditor = createHeadlessHeaderFooterEditor(hostEditor, pmJson, locator.refId);
 
-  return {
-    locator,
-    storyKey,
-    editor: storyEditor,
-    kind: 'headerFooter',
-    dispose: () => storyEditor.destroy(),
+  return createOwnedHeaderFooterRuntime(locator, storyKey, storyEditor, {
     commit: (hostEditor: Editor) => {
       exportAndSyncCache(hostEditor, storyEditor, locator.refId, hfType);
     },
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +335,73 @@ function exportAndSyncCache(hostEditor: Editor, subEditor: Editor, refId: string
   if (conv[cacheKey]) {
     (conv[cacheKey] as Record<string, unknown>)[refId] = pmJson;
   }
+}
+
+function createHeadlessHeaderFooterEditor(
+  hostEditor: Editor,
+  pmJson: Record<string, unknown>,
+  documentId: string,
+): Editor {
+  return createStoryEditor(hostEditor, pmJson, {
+    documentId,
+    isHeaderOrFooter: true,
+    headless: true,
+  });
+}
+
+function createOwnedHeaderFooterRuntime(
+  locator: HeaderFooterSlotStoryLocator | HeaderFooterPartStoryLocator,
+  storyKey: string,
+  editor: Editor,
+  options: {
+    commit: (hostEditor: Editor) => void;
+    cacheable?: boolean;
+  },
+): StoryRuntime {
+  return {
+    locator,
+    storyKey,
+    editor,
+    kind: 'headerFooter',
+    cacheable: options.cacheable,
+    dispose: () => editor.destroy(),
+    commit: options.commit,
+  };
+}
+
+function readCachedHeaderFooterContent(
+  converter: ConverterForStoryRuntime,
+  collection: 'headers' | 'footers',
+  refId: string,
+  storyKey: string,
+  headerFooterKind: 'header' | 'footer',
+): Record<string, unknown> {
+  const pmJson = converter[collection]?.[refId];
+  if (pmJson && typeof pmJson === 'object') {
+    return pmJson as Record<string, unknown>;
+  }
+
+  throw new DocumentApiAdapterError('STORY_NOT_FOUND', `No cached content for ${headerFooterKind} "${refId}".`, {
+    storyKey,
+    refId,
+  });
+}
+
+function createMissingSlotWriteRuntime(
+  hostEditor: Editor,
+  locator: HeaderFooterSlotStoryLocator,
+  storyKey: string,
+): StoryRuntime {
+  const pendingEditor = createHeadlessHeaderFooterEditor(
+    hostEditor,
+    createEmptyHeaderFooterJsonPart(),
+    `${storyKey}:materialization-pending`,
+  );
+
+  return createOwnedHeaderFooterRuntime(locator, storyKey, pendingEditor, {
+    cacheable: false,
+    commit: buildSlotCommit(locator, pendingEditor, null, true),
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `in` | StoryLocator | no | StoryLocator |
 | `text` | string | no |  |
 
 ### Example request
@@ -38,7 +39,10 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
   "at": {
     "kind": "documentStart"
   },
-  "text": "Hello, world."
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  }
 }
 ```
 
@@ -105,6 +109,11 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `AMBIGUOUS_TARGET`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -177,6 +186,9 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
           "type": "object"
         }
       ]
+    },
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
     },
     "text": {
       "description": "Paragraph text content.",

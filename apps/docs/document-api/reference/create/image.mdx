@@ -30,6 +30,7 @@ Returns a CreateImageResult with the new image address.
 | --- | --- | --- | --- |
 | `alt` | string | no |  |
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") \\| object(kind="inParagraph") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after"), object(kind="inParagraph") |
+| `in` | StoryLocator | no | StoryLocator |
 | `size` | object | no |  |
 | `size.height` | number | no |  |
 | `size.width` | number | no |  |
@@ -41,8 +42,11 @@ Returns a CreateImageResult with the new image address.
 ```json
 {
   "alt": "example",
-  "src": "example",
-  "title": "example"
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
+  "src": "example"
 }
 ```
 
@@ -69,6 +73,11 @@ Returns a CreateImageResult with the new image address.
 - `INVALID_TARGET`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -163,6 +172,9 @@ Returns a CreateImageResult with the new image address.
           "type": "object"
         }
       ]
+    },
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
     },
     "size": {
       "additionalProperties": false,

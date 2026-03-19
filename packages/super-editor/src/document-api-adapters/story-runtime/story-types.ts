@@ -44,6 +44,15 @@ export interface StoryRuntime {
   /** Broad category of the story. */
   kind: StoryKind;
 
+  /**
+   * Whether this runtime may be stored in the shared runtime cache.
+   *
+   * Defaults to `true` when omitted. Runtimes that represent a temporary
+   * write-only view of a story that does not yet exist should set this to
+   * `false` so dry-runs and failed writes do not pollute later reads.
+   */
+  cacheable?: boolean;
+
   /** Called when the runtime is being disposed (evicted or invalidated). */
   dispose?: () => void;
 

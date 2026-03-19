@@ -83,7 +83,7 @@ describe('createHeaderFooterEditor', () => {
       data: { type: 'doc', content: [{ type: 'paragraph' }] },
       editorContainer,
       editorHost,
-      sectionId: 'rId-footer-default',
+      headerFooterRefId: 'rId-footer-default',
       type: 'footer',
     });
 

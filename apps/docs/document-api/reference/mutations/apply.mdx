@@ -106,6 +106,7 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
 | `atomic` | `true` | yes | Constant: `true` |
 | `changeMode` | enum | yes | `"direct"`, `"tracked"` |
 | `expectedRevision` | string | no |  |
+| `in` | StoryLocator | no | StoryLocator |
 | `steps` | object(op="text.rewrite") \\| object(op="text.insert") \\| object(op="text.delete") \\| object(op="format.apply") \\| object(op="assert")[] | yes |  |
 
 ### Example request
@@ -115,6 +116,10 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
   "atomic": true,
   "changeMode": "direct",
   "expectedRevision": "rev-001",
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "steps": [
     {
       "args": {
@@ -209,6 +214,11 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
 - `RAW_MODE_REQUIRED`
 - `PRESERVE_ONLY_VIOLATION`
 - `CAPABILITY_UNSUPPORTED`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -236,6 +246,9 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
     "expectedRevision": {
       "description": "Document revision for optimistic concurrency. Mutation fails if document was modified since this revision.",
       "type": "string"
+    },
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
     },
     "steps": {
       "description": "Ordered array of mutation steps. Each step needs 'op' (text.rewrite, text.insert, text.delete, format.apply, or assert) and a 'where' targeting clause.",
@@ -2197,7 +2210,12 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
             "DUPLICATE_ID",
             "RAW_MODE_REQUIRED",
             "PRESERVE_ONLY_VIOLATION",
-            "CAPABILITY_UNSUPPORTED"
+            "CAPABILITY_UNSUPPORTED",
+            "STORY_NOT_FOUND",
+            "STORY_MISMATCH",
+            "STORY_NOT_SUPPORTED",
+            "CROSS_STORY_PLAN",
+            "MATERIALIZATION_FAILED"
           ]
         },
         "details": {},

@@ -28,12 +28,17 @@ Returns the full document content as an HTML-formatted string.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `unflattenLists` | boolean | no |  |
 
 ### Example request
 
 ```json
 {
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "unflattenLists": true
 }
 ```
@@ -50,7 +55,11 @@ _No fields._
 
 ## Pre-apply throws
 
-- None
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -63,6 +72,9 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "unflattenLists": {
       "description": "When true, flattens nested list structures in output. Default: false.",
       "type": "boolean"

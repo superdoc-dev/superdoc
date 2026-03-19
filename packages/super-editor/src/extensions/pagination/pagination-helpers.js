@@ -91,7 +91,7 @@ const getSectionHeight = async (editor, data) => {
  * @param {Object} params.data - The ProseMirror document data for the header/footer. Required.
  * @param {HTMLElement} params.editorContainer - The container element to mount the editor. Required.
  * @param {HTMLElement} [params.editorHost] - The host element for the editor (optional, for sibling architecture).
- * @param {string} [params.sectionId] - The section relationship ID for tracking.
+ * @param {string} [params.headerFooterRefId] - The header/footer relationship ID for tracking.
  * @param {('header'|'footer')} [params.type] - The type of section being edited.
  * @param {number} [params.availableWidth] - The width of the editing region in pixels. Must be positive.
  * @param {number} [params.availableHeight] - The height of the editing region in pixels. Must be positive.
@@ -107,7 +107,7 @@ export const createHeaderFooterEditor = ({
   data,
   editorContainer,
   editorHost,
-  sectionId,
+  headerFooterRefId,
   type,
   availableWidth,
   availableHeight,
@@ -202,7 +202,7 @@ export const createHeaderFooterEditor = ({
   // --- Core editor construction via reusable factory ---
 
   const headerFooterEditor = createStoryEditor(editor, data, {
-    documentId: sectionId || 'sectionId',
+    documentId: headerFooterRefId || 'headerFooterRefId',
     isHeaderOrFooter: true,
     currentPageNumber,
     totalPageCount,
@@ -210,7 +210,7 @@ export const createHeaderFooterEditor = ({
     editorOptions: {
       headerFooterType: type,
       onCreate: (evt) => setEditorToolbar(evt, editor),
-      onBlur: (evt) => onHeaderFooterDataUpdate(evt, editor, sectionId, type),
+      onBlur: (evt) => onHeaderFooterDataUpdate(evt, editor, headerFooterRefId, type),
     },
   });
 
@@ -285,8 +285,8 @@ export const toggleHeaderFooterEditMode = ({ editor, focusedSectionEditor, isEdi
  * Handle header/footer data updates.
  * Updates converter storage and syncs to Yjs via the parts publisher.
  */
-export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, sectionId, type) => {
-  if (!type || !sectionId) return;
+export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, headerFooterRefId, type) => {
+  if (!type || !headerFooterRefId) return;
 
   // Skip if we're currently applying remote changes to prevent ping-pong loop
   if (isApplyingRemotePartChanges()) {
@@ -297,7 +297,7 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, se
   const editorsList = mainEditor.converter[`${type}Editors`];
   if (Array.isArray(editorsList)) {
     editorsList.forEach((item) => {
-      if (item.id === sectionId) {
+      if (item.id === headerFooterRefId) {
         item.editor.setOptions({
           media: editor.options.media,
           mediaFiles: editor.options.mediaFiles,
@@ -313,7 +313,7 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, se
       });
     });
   }
-  mainEditor.converter[`${type}s`][sectionId] = updatedData;
+  mainEditor.converter[`${type}s`][headerFooterRefId] = updatedData;
   mainEditor.setOptions({ isHeaderFooterChanged: editor.docChanged });
   if (editor.docChanged && mainEditor.converter) {
     mainEditor.converter.headerFooterModified = true;
@@ -321,7 +321,7 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, se
 
   // Export sub-editor to OOXML JSON and commit via mutatePart. The publisher
   // picks up the partChanged event and writes to Yjs automatically.
-  exportSubEditorToPart(mainEditor, editor, sectionId, type);
+  exportSubEditorToPart(mainEditor, editor, headerFooterRefId, type);
 };
 
 const setEditorToolbar = ({ editor }, mainEditor) => {

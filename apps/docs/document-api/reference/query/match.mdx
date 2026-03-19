@@ -28,6 +28,7 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `includeNodes` | boolean | no |  |
 | `limit` | integer | no |  |
 | `mode` | enum | no | `"strict"`, `"candidates"` |
@@ -43,7 +44,10 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 
 ```json
 {
-  "require": "any",
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "select": {
     "caseSensitive": true,
     "mode": "contains",
@@ -172,6 +176,11 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 - `AMBIGUOUS_MATCH`
 - `INVALID_INPUT`
 - `INTERNAL_ERROR`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -184,6 +193,9 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 {
   "additionalProperties": false,
   "properties": {
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "includeNodes": {
       "description": "When true, includes full node data in results. Default: false.",
       "type": "boolean"

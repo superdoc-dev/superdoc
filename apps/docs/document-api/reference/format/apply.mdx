@@ -30,6 +30,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `inline` | object | yes |  |
 | `inline.bCs` | boolean \\| null | no | One of: boolean, null |
 | `inline.bold` | boolean \\| null | no | One of: boolean, null |
@@ -83,6 +84,7 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `inline` | object | yes |  |
 | `inline.bCs` | boolean \\| null | no | One of: boolean, null |
 | `inline.bold` | boolean \\| null | no | One of: boolean, null |
@@ -133,6 +135,10 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 
 ```json
 {
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "inline": {
     "bold": true,
     "italic": true
@@ -280,6 +286,11 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -294,6 +305,9 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
     {
       "additionalProperties": false,
       "properties": {
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
+        },
         "inline": {
           "additionalProperties": false,
           "description": "Inline formatting properties to apply. Set a property to apply it, use null to clear it. Example: {bold: true, italic: true} or {bold: null} to remove bold.",
@@ -1118,6 +1132,9 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
     {
       "additionalProperties": false,
       "properties": {
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
+        },
         "inline": {
           "additionalProperties": false,
           "description": "Inline formatting properties to apply. Set a property to apply it, use null to clear it. Example: {bold: true, italic: true} or {bold: null} to remove bold.",

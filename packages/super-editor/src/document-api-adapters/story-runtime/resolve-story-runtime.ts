@@ -54,6 +54,17 @@ function getOrCreateCache(hostEditor: Editor): StoryRuntimeCache {
 /** Canonical body locator — avoids allocating a new object on every call. */
 const BODY_LOCATOR: BodyStoryLocator = { kind: 'story', storyType: 'body' };
 
+/**
+ * Runtime resolution options.
+ *
+ * Read operations use the default `'read'` intent. Write operations opt into
+ * `'write'` so story-specific resolvers may prepare temporary write-only
+ * runtimes for stories that do not exist yet.
+ */
+export interface ResolveStoryRuntimeOptions {
+  intent?: 'read' | 'write';
+}
+
 // ---------------------------------------------------------------------------
 // Body runtime — zero-cost passthrough
 // ---------------------------------------------------------------------------
@@ -102,7 +113,11 @@ function createBodyRuntime(hostEditor: Editor): StoryRuntime {
  * @throws {DocumentApiAdapterError} `INVALID_INPUT` if the locator has
  *   an unrecognized story type.
  */
-export function resolveStoryRuntime(hostEditor: Editor, locator?: StoryLocator): StoryRuntime {
+export function resolveStoryRuntime(
+  hostEditor: Editor,
+  locator?: StoryLocator,
+  options: ResolveStoryRuntimeOptions = {},
+): StoryRuntime {
   // -----------------------------------------------------------------------
   // Default: undefined / body — passthrough
   // -----------------------------------------------------------------------
@@ -125,7 +140,7 @@ export function resolveStoryRuntime(hostEditor: Editor, locator?: StoryLocator):
 
   switch (locator.storyType) {
     case 'headerFooterSlot':
-      runtime = resolveHeaderFooterSlotRuntime(hostEditor, locator);
+      runtime = resolveHeaderFooterSlotRuntime(hostEditor, locator, options);
       break;
 
     case 'headerFooterPart':
@@ -175,7 +190,10 @@ export function resolveStoryRuntime(hostEditor: Editor, locator?: StoryLocator):
     });
   }
 
-  cache.set(storyKey, runtime);
+  if (runtime.cacheable !== false) {
+    cache.set(storyKey, runtime);
+  }
+
   return runtime;
 }
 

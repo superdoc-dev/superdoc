@@ -294,7 +294,7 @@ type PageDecorationPayload = {
   marginLeft?: number;
   // Optional explicit content width (px) for the decoration container
   contentWidth?: number;
-  headerId?: string;
+  headerFooterRefId?: string;
   sectionType?: string;
   box?: { x: number; y: number; width: number; height: number };
   hitRegion?: { x: number; y: number; width: number; height: number };

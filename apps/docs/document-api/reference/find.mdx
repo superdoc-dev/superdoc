@@ -28,6 +28,7 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
 | `options` | object | no |  |
@@ -44,7 +45,10 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
 
 ```json
 {
-  "limit": 50,
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "select": {
     "caseSensitive": true,
     "mode": "contains",
@@ -94,6 +98,11 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_INPUT`
 - `ADDRESS_STALE`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -106,6 +115,9 @@ Returns an SDFindResult envelope (\{ total, limit, offset, items \}). Each item 
 {
   "additionalProperties": false,
   "properties": {
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "limit": {
       "type": "integer"
     },

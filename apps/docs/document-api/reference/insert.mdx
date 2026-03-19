@@ -30,6 +30,7 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `target` | TextAddress | no | TextAddress |
 | `target.blockId` | string | no |  |
 | `target.kind` | `"text"` | no | Constant: `"text"` |
@@ -44,6 +45,7 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `content` | object \\| object[] | yes | One of: object, object[] |
+| `in` | StoryLocator | no | StoryLocator |
 | `nestingPolicy` | object | no |  |
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
 | `placement` | enum | no | `"before"`, `"after"`, `"insideStart"`, `"insideEnd"` |
@@ -150,6 +152,11 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
 - `RAW_MODE_REQUIRED`
 - `PRESERVE_ONLY_VIOLATION`
 - `CAPABILITY_UNSUPPORTED`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -177,6 +184,9 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
     {
       "additionalProperties": false,
       "properties": {
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
+        },
         "target": {
           "$ref": "#/$defs/TextAddress",
           "description": "Insertion point: {kind:'text', blockId:'...', range:{start, end}}."
@@ -216,6 +226,9 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
               "type": "array"
             }
           ]
+        },
+        "in": {
+          "$ref": "#/$defs/StoryLocator"
         },
         "nestingPolicy": {
           "additionalProperties": false,

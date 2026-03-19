@@ -79,6 +79,7 @@ import {
 import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue } from './inline-property-guards.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { resolveStoryFromInput } from '../story-runtime/resolve-story-context.js';
+import type { StoryRuntime } from '../story-runtime/story-types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,6 +113,16 @@ function insertContentAtWithRetry(
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function resolveWriteStoryRuntime(editor: Editor, locator?: StoryLocator): StoryRuntime {
+  return resolveStoryRuntime(editor, locator, { intent: 'write' });
+}
+
+function disposeEphemeralWriteRuntime(runtime: StoryRuntime): void {
+  if (runtime.cacheable === false) {
+    runtime.dispose?.();
+  }
 }
 
 /**
@@ -344,73 +355,76 @@ function validateWriteRequest(request: WriteRequest, resolved: ResolvedWrite): R
  * that still uses `TextAddress`-based `InsertWriteRequest`.
  */
 export function writeWrapper(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
-  // Resolve story runtime from the request's `in` field.
-  const runtime = resolveStoryRuntime(editor, request.in);
-  const storyEditor = runtime.editor;
+  const runtime = resolveWriteStoryRuntime(editor, request.in);
 
-  const normalizedRequest = normalizeWriteLocator(request);
+  try {
+    const storyEditor = runtime.editor;
+    const normalizedRequest = normalizeWriteLocator(request);
 
-  const resolved = resolveWriteTarget(storyEditor, normalizedRequest);
-  if (!resolved) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {
-      target: normalizedRequest.target,
+    const resolved = resolveWriteTarget(storyEditor, normalizedRequest);
+    if (!resolved) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {
+        target: normalizedRequest.target,
+      });
+    }
+
+    const validationFailure = validateWriteRequest(normalizedRequest, resolved);
+    if (validationFailure) {
+      return { success: false, resolution: resolved.resolution, failure: validationFailure };
+    }
+
+    const mode = options?.changeMode ?? 'direct';
+    if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: 'write' });
+
+    if (options?.dryRun) {
+      return { success: true, resolution: resolved.resolution };
+    }
+
+    // Structural-end: the doc ends with non-text blocks. Create a paragraph
+    // containing the text at the structural document end via a domain command,
+    // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
+    if (resolved.structuralEnd) {
+      const insertPos = resolved.range.from;
+      const text = normalizedRequest.text ?? '';
+      const receipt = executeDomainCommand(
+        storyEditor,
+        (): boolean => {
+          const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
+          insertParagraphAtEnd(storyEditor, insertPos, text, meta);
+          return true;
+        },
+        { expectedRevision: options?.expectedRevision },
+      );
+      if (runtime.commit) runtime.commit(editor);
+      return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
+    }
+
+    // Build single-step compiled plan with pre-resolved target.
+    const stepId = uuidv4();
+    const step = {
+      id: stepId,
+      op: 'text.insert',
+      where: STUB_WHERE,
+      args: { position: 'before', content: { text: normalizedRequest.text ?? '' } },
+    } as unknown as MutationStep;
+
+    const target = toCompiledTarget(stepId, 'text.insert', resolved);
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [target] }],
+      assertSteps: [],
+      compiledRevision: getRevision(storyEditor),
+    };
+
+    const receipt = executeCompiledPlan(storyEditor, compiled, {
+      changeMode: mode,
+      expectedRevision: options?.expectedRevision,
     });
-  }
 
-  const validationFailure = validateWriteRequest(normalizedRequest, resolved);
-  if (validationFailure) {
-    return { success: false, resolution: resolved.resolution, failure: validationFailure };
-  }
-
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: 'write' });
-
-  if (options?.dryRun) {
-    return { success: true, resolution: resolved.resolution };
-  }
-
-  // Structural-end: the doc ends with non-text blocks. Create a paragraph
-  // containing the text at the structural document end via a domain command,
-  // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
-  if (resolved.structuralEnd) {
-    const insertPos = resolved.range.from;
-    const text = normalizedRequest.text ?? '';
-    const receipt = executeDomainCommand(
-      storyEditor,
-      (): boolean => {
-        const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
-        insertParagraphAtEnd(storyEditor, insertPos, text, meta);
-        return true;
-      },
-      { expectedRevision: options?.expectedRevision },
-    );
     if (runtime.commit) runtime.commit(editor);
     return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  // Build single-step compiled plan with pre-resolved target.
-  const stepId = uuidv4();
-  const step = {
-    id: stepId,
-    op: 'text.insert',
-    where: STUB_WHERE,
-    args: { position: 'before', content: { text: normalizedRequest.text ?? '' } },
-  } as unknown as MutationStep;
-
-  const target = toCompiledTarget(stepId, 'text.insert', resolved);
-  const compiled: CompiledPlan = {
-    mutationSteps: [{ step, targets: [target] }],
-    assertSteps: [],
-    compiledRevision: getRevision(storyEditor),
-  };
-
-  const receipt = executeCompiledPlan(storyEditor, compiled, {
-    changeMode: mode,
-    expectedRevision: options?.expectedRevision,
-  });
-
-  if (runtime.commit) runtime.commit(editor);
-  return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
 }
 
 // ---------------------------------------------------------------------------
@@ -593,65 +607,69 @@ export function selectionMutationWrapper(
   // attached to the target by discovery operations (find, query.match).
   const targetWithStory = request.target as { story?: StoryLocator } | undefined;
   const effectiveLocator = resolveStoryFromInput({ in: request.in }, targetWithStory);
-  const runtime = resolveStoryRuntime(editor, effectiveLocator);
-  const storyEditor = runtime.editor;
+  const runtime = resolveWriteStoryRuntime(editor, effectiveLocator);
 
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: request.kind });
+  try {
+    const storyEditor = runtime.editor;
+    const mode = options?.changeMode ?? 'direct';
+    if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: request.kind });
 
-  // Capability checks for format operations.
-  if (request.kind === 'format') {
-    const inlineKeys = Object.keys(request.inline) as InlineRunPatchKey[];
-    ensureInlinePropertyCapabilities(storyEditor, inlineKeys);
-    if (mode === 'tracked') ensureTrackedInlinePropertySupport(inlineKeys);
-  }
+    // Capability checks for format operations.
+    if (request.kind === 'format') {
+      const inlineKeys = Object.keys(request.inline) as InlineRunPatchKey[];
+      ensureInlinePropertyCapabilities(storyEditor, inlineKeys);
+      if (mode === 'tracked') ensureTrackedInlinePropertySupport(inlineKeys);
+    }
 
-  const stepId = uuidv4();
-  const where = buildSelectionWhere(request);
-  const step = buildSelectionStepDef(stepId, request, where);
+    const stepId = uuidv4();
+    const where = buildSelectionWhere(request);
+    const step = buildSelectionStepDef(stepId, request, where);
 
-  // Compile the one-step plan through the real compiler.
-  // Compilation is side-effect-free — it resolves targets against the current
-  // document state without mutating anything. The story editor is used so that
-  // the compiler resolves against the correct story's document state.
-  const compiled = compilePlan(storyEditor, [step]);
+    // Compile the one-step plan through the real compiler.
+    // Compilation is side-effect-free — it resolves targets against the current
+    // document state without mutating anything. The story editor is used so that
+    // the compiler resolves against the correct story's document state.
+    const compiled = compilePlan(storyEditor, [step]);
 
-  // Enforce expectedRevision even on dry-run — callers need to know if the
-  // document has drifted since their last query, regardless of execution.
-  checkRevision(storyEditor, options?.expectedRevision);
+    // Enforce expectedRevision even on dry-run — callers need to know if the
+    // document has drifted since their last query, regardless of execution.
+    checkRevision(storyEditor, options?.expectedRevision);
 
-  // Dry-run: compile and resolve, but do NOT execute.
-  if (options?.dryRun) {
-    const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+    // Dry-run: compile and resolve, but do NOT execute.
+    if (options?.dryRun) {
+      const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+      return { success: true, resolution };
+    }
+
+    // Execute through the shared execution engine.
+    const receipt = executeCompiledPlan(storyEditor, compiled, {
+      changeMode: mode,
+      expectedRevision: options?.expectedRevision,
+    });
+
+    // Map PlanReceipt → TextMutationReceipt.
+    const stepOutcome = receipt.steps.find((s) => s.stepId === stepId);
+    const resolution = buildSelectionResolutionFromOutcome(stepOutcome, compiled, stepId);
+
+    const success = stepOutcome?.effect === 'changed';
+    if (!success) {
+      return {
+        success: false,
+        resolution,
+        failure: { code: 'NO_OP', message: `${request.kind} produced no change.` },
+      };
+    }
+
+    // Persist non-body story changes back to the canonical OOXML parts.
+    // Body stories are handled by ProseMirror's normal persistence path.
+    if (runtime.commit) {
+      runtime.commit(editor);
+    }
+
     return { success: true, resolution };
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  // Execute through the shared execution engine.
-  const receipt = executeCompiledPlan(storyEditor, compiled, {
-    changeMode: mode,
-    expectedRevision: options?.expectedRevision,
-  });
-
-  // Map PlanReceipt → TextMutationReceipt.
-  const stepOutcome = receipt.steps.find((s) => s.stepId === stepId);
-  const resolution = buildSelectionResolutionFromOutcome(stepOutcome, compiled, stepId);
-
-  const success = stepOutcome?.effect === 'changed';
-  if (!success) {
-    return {
-      success: false,
-      resolution,
-      failure: { code: 'NO_OP', message: `${request.kind} produced no change.` },
-    };
-  }
-
-  // Persist non-body story changes back to the canonical OOXML parts.
-  // Body stories are handled by ProseMirror's normal persistence path.
-  if (runtime.commit) {
-    runtime.commit(editor);
-  }
-
-  return { success: true, resolution };
 }
 
 /**
@@ -818,25 +836,29 @@ export function insertStructuredWrapper(
   options?: MutationOptions,
 ): SDMutationReceipt {
   // Resolve story runtime from the input's `in` field.
-  const runtime = resolveStoryRuntime(editor, (input as { in?: StoryLocator }).in);
-  const storyEditor = runtime.editor;
+  const runtime = resolveWriteStoryRuntime(editor, (input as { in?: StoryLocator }).in);
 
-  let result: SDMutationReceipt;
+  try {
+    const storyEditor = runtime.editor;
+    let result: SDMutationReceipt;
 
-  // Structural (SDFragment) inserts with a BlockNodeAddress target produce
-  // a block-level receipt directly, avoiding the synthetic TextAddress bridge.
-  if (isStructuralInsertInput(input) && input.target) {
-    result = executeStructuralInsertDirect(storyEditor, input, options);
-  } else {
-    result = textReceiptToSDReceipt(insertStructuredInner(storyEditor, input, options));
+    // Structural (SDFragment) inserts with a BlockNodeAddress target produce
+    // a block-level receipt directly, avoiding the synthetic TextAddress bridge.
+    if (isStructuralInsertInput(input) && input.target) {
+      result = executeStructuralInsertDirect(storyEditor, input, options);
+    } else {
+      result = textReceiptToSDReceipt(insertStructuredInner(storyEditor, input, options));
+    }
+
+    // Persist non-body story changes
+    if (result.success !== false && runtime.commit) {
+      runtime.commit(editor);
+    }
+
+    return result;
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  // Persist non-body story changes
-  if (result.success !== false && runtime.commit) {
-    runtime.commit(editor);
-  }
-
-  return result;
 }
 
 /**
@@ -1280,26 +1302,31 @@ export function replaceStructuredWrapper(
   }
 
   // Resolve story runtime from the input's `in` field.
-  const runtime = resolveStoryRuntime(editor, (input as { in?: StoryLocator }).in);
-  const storyEditor = runtime.editor;
+  const runtime = resolveWriteStoryRuntime(editor, (input as { in?: StoryLocator }).in);
 
-  // When the target is a BlockNodeAddress, re-wrap the receipt to preserve
-  // the block-level address instead of the synthetic TextAddress.
-  const blockTarget =
-    input.target && 'kind' in input.target && input.target.kind === 'block'
-      ? (input.target as BlockNodeAddress)
-      : undefined;
+  try {
+    const storyEditor = runtime.editor;
 
-  const textReceipt = executeStructuralReplaceWrapper(storyEditor, input, options);
-  if (runtime.commit) runtime.commit(editor);
+    // When the target is a BlockNodeAddress, re-wrap the receipt to preserve
+    // the block-level address instead of the synthetic TextAddress.
+    const blockTarget =
+      input.target && 'kind' in input.target && input.target.kind === 'block'
+        ? (input.target as BlockNodeAddress)
+        : undefined;
 
-  if (!blockTarget) return textReceiptToSDReceipt(textReceipt);
+    const textReceipt = executeStructuralReplaceWrapper(storyEditor, input, options);
+    if (runtime.commit) runtime.commit(editor);
 
-  const sdReceipt = textReceiptToSDReceipt(textReceipt);
-  if (sdReceipt.resolution) {
-    sdReceipt.resolution.target = blockTarget;
+    if (!blockTarget) return textReceiptToSDReceipt(textReceipt);
+
+    const sdReceipt = textReceiptToSDReceipt(textReceipt);
+    if (sdReceipt.resolution) {
+      sdReceipt.resolution.target = blockTarget;
+    }
+    return sdReceipt;
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-  return sdReceipt;
 }
 
 /**

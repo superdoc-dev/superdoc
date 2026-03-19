@@ -1,7 +1,7 @@
 ---
-title: lists.setLevelNumbering
-sidebarTitle: lists.setLevelNumbering
-description: Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).
+title: lists.setLevelStart
+sidebarTitle: lists.setLevelStart
+description: "Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelS
 
 ## Summary
 
-Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).
+Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions.
 
-- Operation ID: `lists.setLevelNumbering`
-- API member path: `editor.doc.lists.setLevelNumbering(...)`
+- Operation ID: `lists.setLevelStart`
+- API member path: `editor.doc.lists.setLevelStart(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
 - Supports tracked mode: `no`
@@ -22,16 +22,14 @@ Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set for
 
 ## Expected result
 
-Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matches.
+Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `level` | integer | yes |  |
-| `lvlText` | string | yes |  |
-| `numFmt` | string | yes |  |
-| `start` | integer | no |  |
+| `startAt` | integer | yes |  |
 | `target` | ListItemAddress | yes | ListItemAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -42,9 +40,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 ```json
 {
   "level": 1,
-  "lvlText": "example",
-  "numFmt": "example",
-  "start": 0,
+  "startAt": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -70,7 +66,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"`, `"LEVEL_NOT_FOUND"` |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"INVALID_INPUT"`, `"LEVEL_OUT_OF_RANGE"`, `"LEVEL_NOT_FOUND"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -93,11 +89,13 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
 - `NO_OP`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 - `LEVEL_OUT_OF_RANGE`
 - `LEVEL_NOT_FOUND`
 
@@ -113,13 +111,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
       "minimum": 0,
       "type": "integer"
     },
-    "lvlText": {
-      "type": "string"
-    },
-    "numFmt": {
-      "type": "string"
-    },
-    "start": {
+    "startAt": {
+      "minimum": 1,
       "type": "integer"
     },
     "target": {
@@ -129,8 +122,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
   "required": [
     "target",
     "level",
-    "numFmt",
-    "lvlText"
+    "startAt"
   ],
   "type": "object"
 }
@@ -167,6 +159,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
               "enum": [
                 "NO_OP",
                 "INVALID_TARGET",
+                "INVALID_INPUT",
                 "LEVEL_OUT_OF_RANGE",
                 "LEVEL_NOT_FOUND"
               ]
@@ -230,6 +223,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
           "enum": [
             "NO_OP",
             "INVALID_TARGET",
+            "INVALID_INPUT",
             "LEVEL_OUT_OF_RANGE",
             "LEVEL_NOT_FOUND"
           ]

@@ -1547,6 +1547,11 @@ _No fields._
 | `operations.lists.applyPreset.dryRun` | boolean | yes |  |
 | `operations.lists.applyPreset.reasons` | enum[] | no |  |
 | `operations.lists.applyPreset.tracked` | boolean | yes |  |
+| `operations.lists.applyStyle` | object | yes |  |
+| `operations.lists.applyStyle.available` | boolean | yes |  |
+| `operations.lists.applyStyle.dryRun` | boolean | yes |  |
+| `operations.lists.applyStyle.reasons` | enum[] | no |  |
+| `operations.lists.applyStyle.tracked` | boolean | yes |  |
 | `operations.lists.applyTemplate` | object | yes |  |
 | `operations.lists.applyTemplate.available` | boolean | yes |  |
 | `operations.lists.applyTemplate.dryRun` | boolean | yes |  |
@@ -1602,6 +1607,11 @@ _No fields._
 | `operations.lists.get.dryRun` | boolean | yes |  |
 | `operations.lists.get.reasons` | enum[] | no |  |
 | `operations.lists.get.tracked` | boolean | yes |  |
+| `operations.lists.getStyle` | object | yes |  |
+| `operations.lists.getStyle.available` | boolean | yes |  |
+| `operations.lists.getStyle.dryRun` | boolean | yes |  |
+| `operations.lists.getStyle.reasons` | enum[] | no |  |
+| `operations.lists.getStyle.tracked` | boolean | yes |  |
 | `operations.lists.indent` | object | yes |  |
 | `operations.lists.indent.available` | boolean | yes |  |
 | `operations.lists.indent.dryRun` | boolean | yes |  |
@@ -1627,6 +1637,11 @@ _No fields._
 | `operations.lists.outdent.dryRun` | boolean | yes |  |
 | `operations.lists.outdent.reasons` | enum[] | no |  |
 | `operations.lists.outdent.tracked` | boolean | yes |  |
+| `operations.lists.restartAt` | object | yes |  |
+| `operations.lists.restartAt.available` | boolean | yes |  |
+| `operations.lists.restartAt.dryRun` | boolean | yes |  |
+| `operations.lists.restartAt.reasons` | enum[] | no |  |
+| `operations.lists.restartAt.tracked` | boolean | yes |  |
 | `operations.lists.separate` | object | yes |  |
 | `operations.lists.separate.available` | boolean | yes |  |
 | `operations.lists.separate.dryRun` | boolean | yes |  |
@@ -1652,11 +1667,21 @@ _No fields._
 | `operations.lists.setLevelIndents.dryRun` | boolean | yes |  |
 | `operations.lists.setLevelIndents.reasons` | enum[] | no |  |
 | `operations.lists.setLevelIndents.tracked` | boolean | yes |  |
+| `operations.lists.setLevelLayout` | object | yes |  |
+| `operations.lists.setLevelLayout.available` | boolean | yes |  |
+| `operations.lists.setLevelLayout.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelLayout.reasons` | enum[] | no |  |
+| `operations.lists.setLevelLayout.tracked` | boolean | yes |  |
 | `operations.lists.setLevelMarkerFont` | object | yes |  |
 | `operations.lists.setLevelMarkerFont.available` | boolean | yes |  |
 | `operations.lists.setLevelMarkerFont.dryRun` | boolean | yes |  |
 | `operations.lists.setLevelMarkerFont.reasons` | enum[] | no |  |
 | `operations.lists.setLevelMarkerFont.tracked` | boolean | yes |  |
+| `operations.lists.setLevelNumberStyle` | object | yes |  |
+| `operations.lists.setLevelNumberStyle.available` | boolean | yes |  |
+| `operations.lists.setLevelNumberStyle.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelNumberStyle.reasons` | enum[] | no |  |
+| `operations.lists.setLevelNumberStyle.tracked` | boolean | yes |  |
 | `operations.lists.setLevelNumbering` | object | yes |  |
 | `operations.lists.setLevelNumbering.available` | boolean | yes |  |
 | `operations.lists.setLevelNumbering.dryRun` | boolean | yes |  |
@@ -1672,6 +1697,16 @@ _No fields._
 | `operations.lists.setLevelRestart.dryRun` | boolean | yes |  |
 | `operations.lists.setLevelRestart.reasons` | enum[] | no |  |
 | `operations.lists.setLevelRestart.tracked` | boolean | yes |  |
+| `operations.lists.setLevelStart` | object | yes |  |
+| `operations.lists.setLevelStart.available` | boolean | yes |  |
+| `operations.lists.setLevelStart.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelStart.reasons` | enum[] | no |  |
+| `operations.lists.setLevelStart.tracked` | boolean | yes |  |
+| `operations.lists.setLevelText` | object | yes |  |
+| `operations.lists.setLevelText.available` | boolean | yes |  |
+| `operations.lists.setLevelText.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelText.reasons` | enum[] | no |  |
+| `operations.lists.setLevelText.tracked` | boolean | yes |  |
 | `operations.lists.setLevelTrailingCharacter` | object | yes |  |
 | `operations.lists.setLevelTrailingCharacter.available` | boolean | yes |  |
 | `operations.lists.setLevelTrailingCharacter.dryRun` | boolean | yes |  |
@@ -3663,6 +3698,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "lists.applyStyle": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "lists.applyTemplate": {
       "available": true,
       "dryRun": true,
@@ -3718,6 +3758,11 @@ _No fields._
       "dryRun": false,
       "tracked": false
     },
+    "lists.getStyle": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
     "lists.indent": {
       "available": true,
       "dryRun": true,
@@ -3739,6 +3784,11 @@ _No fields._
       "tracked": false
     },
     "lists.outdent": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "lists.restartAt": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -3768,6 +3818,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "lists.setLevelLayout": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "lists.setLevelMarkerFont": {
       "available": true,
       "dryRun": true,
@@ -3778,12 +3833,27 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "lists.setLevelNumberStyle": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "lists.setLevelPictureBullet": {
       "available": true,
       "dryRun": true,
       "tracked": false
     },
     "lists.setLevelRestart": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "lists.setLevelStart": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "lists.setLevelText": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -14811,6 +14881,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.applyStyle": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.applyTemplate": {
           "additionalProperties": false,
           "properties": {
@@ -15196,6 +15301,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.getStyle": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.indent": {
           "additionalProperties": false,
           "properties": {
@@ -15337,6 +15477,41 @@ _No fields._
           "type": "object"
         },
         "lists.outdent": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.restartAt": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -15546,6 +15721,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.setLevelLayout": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.setLevelMarkerFont": {
           "additionalProperties": false,
           "properties": {
@@ -15616,6 +15826,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.setLevelNumberStyle": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.setLevelPictureBullet": {
           "additionalProperties": false,
           "properties": {
@@ -15652,6 +15897,76 @@ _No fields._
           "type": "object"
         },
         "lists.setLevelRestart": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelStart": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelText": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -18793,6 +19108,13 @@ _No fields._
         "lists.setLevelTrailingCharacter",
         "lists.setLevelMarkerFont",
         "lists.clearLevelOverrides",
+        "lists.getStyle",
+        "lists.applyStyle",
+        "lists.restartAt",
+        "lists.setLevelNumberStyle",
+        "lists.setLevelText",
+        "lists.setLevelStart",
+        "lists.setLevelLayout",
         "comments.create",
         "comments.patch",
         "comments.delete",

@@ -1,7 +1,7 @@
 ---
-title: lists.captureTemplate
-sidebarTitle: lists.captureTemplate
-description: Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting).
+title: lists.getStyle
+sidebarTitle: lists.getStyle
+description: Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Advanced alias for lists.getStyle. Capture list formatting from the
 
 ## Summary
 
-Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting).
+Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle.
 
-- Operation ID: `lists.captureTemplate`
-- API member path: `editor.doc.lists.captureTemplate(...)`
+- Operation ID: `lists.getStyle`
+- API member path: `editor.doc.lists.getStyle(...)`
 - Mutates document: `no`
 - Idempotency: `idempotent`
 - Supports tracked mode: `no`
@@ -22,7 +22,7 @@ Advanced alias for lists.getStyle. Capture list formatting from the abstract def
 
 ## Expected result
 
-Returns a ListsCaptureTemplateResult containing the captured template.
+Returns a ListsGetStyleResult containing the captured style.
 
 ## Input fields
 
@@ -55,10 +55,10 @@ Returns a ListsCaptureTemplateResult containing the captured template.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `style` | object | yes |  |
+| `style.levels` | object[] | yes |  |
+| `style.version` | `1` | yes | Constant: `1` |
 | `success` | `true` | yes | Constant: `true` |
-| `template` | object | yes |  |
-| `template.levels` | object[] | yes |  |
-| `template.version` | `1` | yes | Constant: `1` |
 
 ### Variant 2 (success=false)
 
@@ -74,8 +74,7 @@ Returns a ListsCaptureTemplateResult containing the captured template.
 
 ```json
 {
-  "success": true,
-  "template": {
+  "style": {
     "levels": [
       {
         "level": 1,
@@ -84,7 +83,8 @@ Returns a ListsCaptureTemplateResult containing the captured template.
       }
     ],
     "version": 1
-  }
+  },
+  "success": true
 }
 ```
 
@@ -134,10 +134,7 @@ Returns a ListsCaptureTemplateResult containing the captured template.
     {
       "additionalProperties": false,
       "properties": {
-        "success": {
-          "const": true
-        },
-        "template": {
+        "style": {
           "additionalProperties": false,
           "properties": {
             "levels": {
@@ -186,6 +183,12 @@ Returns a ListsCaptureTemplateResult containing the captured template.
                   "start": {
                     "type": "integer"
                   },
+                  "tabStopAt": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "trailingCharacter": {
                     "enum": [
                       "tab",
@@ -210,11 +213,14 @@ Returns a ListsCaptureTemplateResult containing the captured template.
             "levels"
           ],
           "type": "object"
+        },
+        "success": {
+          "const": true
         }
       },
       "required": [
         "success",
-        "template"
+        "style"
       ],
       "type": "object"
     },
@@ -262,10 +268,7 @@ Returns a ListsCaptureTemplateResult containing the captured template.
 {
   "additionalProperties": false,
   "properties": {
-    "success": {
-      "const": true
-    },
-    "template": {
+    "style": {
       "additionalProperties": false,
       "properties": {
         "levels": {
@@ -314,6 +317,12 @@ Returns a ListsCaptureTemplateResult containing the captured template.
               "start": {
                 "type": "integer"
               },
+              "tabStopAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
               "trailingCharacter": {
                 "enum": [
                   "tab",
@@ -338,11 +347,14 @@ Returns a ListsCaptureTemplateResult containing the captured template.
         "levels"
       ],
       "type": "object"
+    },
+    "success": {
+      "const": true
     }
   },
   "required": [
     "success",
-    "template"
+    "style"
   ],
   "type": "object"
 }

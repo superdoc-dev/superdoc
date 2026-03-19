@@ -3476,12 +3476,74 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         target: ref('BlockAddressOrRange'),
         kind: listKindSchema,
         level: { type: 'integer', minimum: 0, maximum: 8 },
+        preset: {
+          enum: [
+            'decimal',
+            'decimalParenthesis',
+            'lowerLetter',
+            'upperLetter',
+            'lowerRoman',
+            'upperRoman',
+            'disc',
+            'circle',
+            'square',
+            'dash',
+          ],
+        },
+        style: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                  tabStopAt: { type: ['integer', 'null'] },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+        sequence: {
+          oneOf: [
+            objectSchema({ mode: { const: 'new' }, startAt: { type: 'integer', minimum: 1 } }, ['mode']),
+            objectSchema({ mode: { const: 'continuePrevious' } }, ['mode']),
+          ],
+        },
       },
-      required: ['mode', 'kind'],
+      required: ['mode'],
       additionalProperties: false,
-      if: { properties: { mode: { const: 'empty' } } },
-      then: { required: ['mode', 'kind', 'at'] },
-      else: { required: ['mode', 'kind', 'target'] },
+      allOf: [
+        // mode-conditional: 'empty' requires 'at', 'fromParagraphs' requires 'target'
+        {
+          if: { properties: { mode: { const: 'empty' } } },
+          then: { required: ['mode', 'at'] },
+          else: { required: ['mode', 'target'] },
+        },
+        // continuePrevious is incompatible with preset/style
+        {
+          if: {
+            properties: { sequence: { properties: { mode: { const: 'continuePrevious' } }, required: ['mode'] } },
+            required: ['sequence'],
+          },
+          then: {
+            not: { anyOf: [{ required: ['preset'] }, { required: ['style'] }] },
+          },
+        },
+      ],
     },
     output: {
       oneOf: [
@@ -3927,6 +3989,164 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: listsMutateItemResultSchemaFor('lists.clearLevelOverrides'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.clearLevelOverrides'),
+  },
+
+  // SD-2025 — User-facing list style operations
+  'lists.getStyle': (() => {
+    const listLevelTemplateSchema = objectSchema(
+      {
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        numFmt: { type: 'string' },
+        lvlText: { type: 'string' },
+        start: { type: 'integer' },
+        alignment: { enum: ['left', 'center', 'right'] },
+        indents: objectSchema({
+          left: { type: 'integer' },
+          hanging: { type: 'integer' },
+          firstLine: { type: 'integer' },
+        }),
+        trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+        markerFont: { type: 'string' },
+        pictureBulletId: { type: 'integer' },
+        tabStopAt: { type: ['integer', 'null'] },
+      },
+      ['level'],
+    );
+    const styleSchema = objectSchema(
+      {
+        version: { const: 1 },
+        levels: arraySchema(listLevelTemplateSchema),
+      },
+      ['version', 'levels'],
+    );
+    const successSchema = objectSchema(
+      {
+        success: { const: true },
+        style: styleSchema,
+      },
+      ['success', 'style'],
+    );
+    return {
+      input: objectSchema(
+        {
+          target: listItemAddressSchema,
+          levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+        },
+        ['target'],
+      ),
+      output: { oneOf: [successSchema, listsFailureSchemaFor('lists.getStyle')] },
+      success: successSchema,
+      failure: listsFailureSchemaFor('lists.getStyle'),
+    };
+  })(),
+  'lists.applyStyle': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        style: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                  tabStopAt: { type: ['integer', 'null'] },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+        levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+      },
+      ['target', 'style'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.applyStyle'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.applyStyle'),
+  },
+  'lists.restartAt': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        startAt: { type: 'integer', minimum: 1 },
+      },
+      ['target', 'startAt'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.restartAt'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.restartAt'),
+  },
+  'lists.setLevelNumberStyle': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        numberStyle: { type: 'string' },
+      },
+      ['target', 'level', 'numberStyle'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelNumberStyle'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelNumberStyle'),
+  },
+  'lists.setLevelText': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        text: { type: 'string' },
+      },
+      ['target', 'level', 'text'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelText'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelText'),
+  },
+  'lists.setLevelStart': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        startAt: { type: 'integer', minimum: 1 },
+      },
+      ['target', 'level', 'startAt'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelStart'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelStart'),
+  },
+  'lists.setLevelLayout': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        layout: objectSchema({
+          alignment: { enum: ['left', 'center', 'right'] },
+          alignedAt: { type: 'integer' },
+          textIndentAt: { type: 'integer' },
+          followCharacter: { enum: ['tab', 'space', 'nothing'] },
+          tabStopAt: { type: ['integer', 'null'] },
+        }),
+      },
+      ['target', 'level', 'layout'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelLayout'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelLayout'),
   },
 
   'comments.create': {

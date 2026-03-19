@@ -1,7 +1,7 @@
 ---
-title: lists.setLevelNumbering
-sidebarTitle: lists.setLevelNumbering
-description: Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).
+title: lists.applyStyle
+sidebarTitle: lists.applyStyle
+description: "Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelS
 
 ## Summary
 
-Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).
+Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them.
 
-- Operation ID: `lists.setLevelNumbering`
-- API member path: `editor.doc.lists.setLevelNumbering(...)`
+- Operation ID: `lists.applyStyle`
+- API member path: `editor.doc.lists.applyStyle(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
 - Supports tracked mode: `no`
@@ -22,16 +22,16 @@ Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set for
 
 ## Expected result
 
-Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matches.
+Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `level` | integer | yes |  |
-| `lvlText` | string | yes |  |
-| `numFmt` | string | yes |  |
-| `start` | integer | no |  |
+| `levels` | integer[] | no |  |
+| `style` | object | yes |  |
+| `style.levels` | object[] | yes |  |
+| `style.version` | `1` | yes | Constant: `1` |
 | `target` | ListItemAddress | yes | ListItemAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -41,10 +41,19 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 
 ```json
 {
-  "level": 1,
-  "lvlText": "example",
-  "numFmt": "example",
-  "start": 0,
+  "levels": [
+    1
+  ],
+  "style": {
+    "levels": [
+      {
+        "level": 1,
+        "lvlText": "example",
+        "numFmt": "example"
+      }
+    ],
+    "version": 1
+  },
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -70,7 +79,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"`, `"LEVEL_NOT_FOUND"` |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"INVALID_INPUT"`, `"LEVEL_OUT_OF_RANGE"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -93,13 +102,14 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
 - `NO_OP`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 - `LEVEL_OUT_OF_RANGE`
-- `LEVEL_NOT_FOUND`
 
 ## Raw schemas
 
@@ -108,19 +118,93 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
 {
   "additionalProperties": false,
   "properties": {
-    "level": {
-      "maximum": 8,
-      "minimum": 0,
-      "type": "integer"
+    "levels": {
+      "items": {
+        "maximum": 8,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "array"
     },
-    "lvlText": {
-      "type": "string"
-    },
-    "numFmt": {
-      "type": "string"
-    },
-    "start": {
-      "type": "integer"
+    "style": {
+      "additionalProperties": false,
+      "properties": {
+        "levels": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "alignment": {
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              },
+              "indents": {
+                "additionalProperties": false,
+                "properties": {
+                  "firstLine": {
+                    "type": "integer"
+                  },
+                  "hanging": {
+                    "type": "integer"
+                  },
+                  "left": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "level": {
+                "maximum": 8,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "lvlText": {
+                "type": "string"
+              },
+              "markerFont": {
+                "type": "string"
+              },
+              "numFmt": {
+                "type": "string"
+              },
+              "pictureBulletId": {
+                "type": "integer"
+              },
+              "start": {
+                "type": "integer"
+              },
+              "tabStopAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "trailingCharacter": {
+                "enum": [
+                  "tab",
+                  "space",
+                  "nothing"
+                ]
+              }
+            },
+            "required": [
+              "level"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "version",
+        "levels"
+      ],
+      "type": "object"
     },
     "target": {
       "$ref": "#/$defs/ListItemAddress"
@@ -128,9 +212,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
   },
   "required": [
     "target",
-    "level",
-    "numFmt",
-    "lvlText"
+    "style"
   ],
   "type": "object"
 }
@@ -167,8 +249,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
               "enum": [
                 "NO_OP",
                 "INVALID_TARGET",
-                "LEVEL_OUT_OF_RANGE",
-                "LEVEL_NOT_FOUND"
+                "INVALID_INPUT",
+                "LEVEL_OUT_OF_RANGE"
               ]
             },
             "details": {},
@@ -230,8 +312,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matc
           "enum": [
             "NO_OP",
             "INVALID_TARGET",
-            "LEVEL_OUT_OF_RANGE",
-            "LEVEL_NOT_FOUND"
+            "INVALID_INPUT",
+            "LEVEL_OUT_OF_RANGE"
           ]
         },
         "details": {},

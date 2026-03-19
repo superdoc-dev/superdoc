@@ -159,6 +159,14 @@ import type {
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
   ListsSetTypeInput,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from './lists/lists.types.js';
 import {
   executeListsGet,
@@ -190,6 +198,13 @@ import {
   executeListsSetLevelMarkerFont,
   executeListsClearLevelOverrides,
   executeListsSetType,
+  executeListsGetStyle,
+  executeListsApplyStyle,
+  executeListsRestartAt,
+  executeListsSetLevelNumberStyle,
+  executeListsSetLevelText,
+  executeListsSetLevelStart,
+  executeListsSetLevelLayout,
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
@@ -1217,6 +1232,18 @@ export type {
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
   ListsSetTypeInput,
+  ListStyle,
+  ListLevelStyle,
+  ListLevelLayout,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsGetStyleSuccessResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from './lists/lists.types.js';
 export {
   LIST_KINDS,
@@ -2084,6 +2111,29 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
 
       setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsSetType(adapters.lists, input, options);
+      },
+
+      // SD-2025 user-facing operations
+      getStyle(input: ListsGetStyleInput): ListsGetStyleResult {
+        return executeListsGetStyle(adapters.lists, input);
+      },
+      applyStyle(input: ListsApplyStyleInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsApplyStyle(adapters.lists, input, options);
+      },
+      restartAt(input: ListsRestartAtInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsRestartAt(adapters.lists, input, options);
+      },
+      setLevelNumberStyle(input: ListsSetLevelNumberStyleInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelNumberStyle(adapters.lists, input, options);
+      },
+      setLevelText(input: ListsSetLevelTextInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelText(adapters.lists, input, options);
+      },
+      setLevelStart(input: ListsSetLevelStartInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelStart(adapters.lists, input, options);
+      },
+      setLevelLayout(input: ListsSetLevelLayoutInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelLayout(adapters.lists, input, options);
       },
     },
     sections: {

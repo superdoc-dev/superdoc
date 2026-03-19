@@ -166,6 +166,14 @@ import {
   listsSetLevelTrailingCharacterWrapper,
   listsSetLevelMarkerFontWrapper,
   listsClearLevelOverridesWrapper,
+  listsGetStyleWrapper,
+  listsApplyStyleWrapper,
+  listsRestartAtWrapper,
+  listsSetLevelNumberStyleWrapper,
+  listsSetLevelTextWrapper,
+  listsSetLevelStartWrapper,
+  listsSetLevelLayoutWrapper,
+  registerSetValueDelegate,
 } from '../plan-engine/lists-formatting-wrappers.js';
 import * as listSequenceHelpers from '../helpers/list-sequence-helpers.js';
 import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
@@ -5466,6 +5474,224 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
   },
+  // SD-2025 user-centric list formatting operations
+  'lists.applyStyle': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyStyleWrapper(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          style: { version: 1, levels: [] },
+        },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        style: { version: 99 as any, levels: [] },
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockImplementation((_ed: unknown) => {
+          injectNumberingChange(_ed);
+          return { changed: true, levelsApplied: [0] };
+        });
+      const result = listsApplyStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        style: { version: 1, levels: [{ level: 0, numFmt: 'upperRoman', lvlText: '%1.' }] },
+      });
+      abstractSpy.mockRestore();
+      applySpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.restartAt': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsRestartAtWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, startAt: 5 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsRestartAtWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        startAt: 0,
+      });
+    },
+    applyCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const overrideSpy = vi.spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
+      registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsRestartAtWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        startAt: 5,
+      });
+      firstInSeqSpy.mockRestore();
+      overrideSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelNumberStyle': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelNumberStyleWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, numberStyle: 'upperRoman' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelNumberStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        numberStyle: 'bullet',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberStyle').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
+      const result = listsSetLevelNumberStyleWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        numberStyle: 'upperRoman',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelText': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelTextWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, text: '%1.' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelTextWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        text: '%1.',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelText').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
+      const result = listsSetLevelTextWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        text: '%1.',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelStart': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelStartWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, startAt: 5 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelStartWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        startAt: 0,
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const readSpy = vi
+        .spyOn(LevelFormattingHelpers, 'readLevelProperties')
+        .mockReturnValue({ numFmt: 'decimal' } as any);
+      const findSpy = vi.spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelStart').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return true;
+      });
+      const result = listsSetLevelStartWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        startAt: 5,
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      readSpy.mockRestore();
+      findSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelLayout': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelLayoutWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, layout: { alignment: 'left' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelLayoutWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        layout: { alignment: 'left' },
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelLayout').mockImplementation((_ed: unknown) => {
+        injectNumberingChange(_ed);
+        return { changed: true };
+      });
+      const result = listsSetLevelLayoutWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        layout: { alignment: 'left' },
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
   'comments.create': {
     throwCase: () => {
       const editor = makeCommentsEditor([], { addComment: undefined });
@@ -8793,6 +9019,88 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0 },
       { changeMode: 'direct', dryRun: true },
     );
+  },
+  // SD-2025 user-centric list formatting — dryRun vectors
+  'lists.applyStyle': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsApplyStyleWrapper(
+      editor,
+      {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        style: { version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    return result;
+  },
+  'lists.restartAt': () => {
+    registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsRestartAtWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, startAt: 5 },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'lists.setLevelNumberStyle': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelNumberStyleWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, numberStyle: 'upperRoman' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelText': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelTextWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, text: '%1.' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelStart': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const readSpy = vi
+      .spyOn(LevelFormattingHelpers, 'readLevelProperties')
+      .mockReturnValue({ numFmt: 'decimal' } as any);
+    const findSpy = vi.spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelStartWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, startAt: 5 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    readSpy.mockRestore();
+    findSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelLayout': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelLayoutWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, layout: { alignment: 'left' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
   },
 
   // -------------------------------------------------------------------------

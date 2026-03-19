@@ -126,7 +126,7 @@ function hasLevel(editor, abstractNumId, ilvl) {
  * Read all formatting properties from a raw `w:lvl` element.
  * @param {Object} lvlEl
  * @param {number} ilvl
- * @returns {{ level: number, numFmt?: string, lvlText?: string, start?: number, alignment?: string, indents?: { left?: number, hanging?: number, firstLine?: number }, trailingCharacter?: string, markerFont?: string, pictureBulletId?: number }}
+ * @returns {{ level: number, numFmt?: string, lvlText?: string, start?: number, alignment?: string, indents?: { left?: number, hanging?: number, firstLine?: number }, trailingCharacter?: string, markerFont?: string, pictureBulletId?: number, tabStopAt?: number }}
  */
 function readLevelProperties(lvlEl, ilvl) {
   /** @type {any} */
@@ -160,6 +160,10 @@ function readLevelProperties(lvlEl, ilvl) {
     if (Object.keys(indents).length > 0) props.indents = indents;
   }
 
+  // Read tab stop from w:pPr/w:tabs/w:tab within w:lvl
+  const tabStopVal = readLevelTabStop(pPr);
+  if (tabStopVal != null) props.tabStopAt = tabStopVal;
+
   const rPr = lvlEl.elements?.find((el) => el.name === 'w:rPr');
   const rFonts = rPr?.elements?.find((el) => el.name === 'w:rFonts');
   if (rFonts?.attributes?.['w:ascii']) {
@@ -167,6 +171,147 @@ function readLevelProperties(lvlEl, ilvl) {
   }
 
   return props;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab Stop Read/Write Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Read the first tab stop position from a `w:pPr` element.
+ * List-level tab stops are stored in `w:pPr/w:tabs/w:tab` within the `w:lvl`.
+ * @param {Object | undefined} pPr
+ * @returns {number | undefined}
+ */
+function readLevelTabStop(pPr) {
+  if (!pPr?.elements) return undefined;
+  const tabs = pPr.elements.find((el) => el.name === 'w:tabs');
+  if (!tabs?.elements) return undefined;
+  const tab = tabs.elements.find((el) => el.name === 'w:tab');
+  if (!tab?.attributes?.['w:pos']) return undefined;
+  return Number(tab.attributes['w:pos']);
+}
+
+/**
+ * Set or remove the list-level tab stop.
+ * @param {Object} lvlEl - The `w:lvl` element.
+ * @param {number | null} value - Position in twips, or null to remove.
+ * @returns {boolean} True if anything changed.
+ */
+function mutateLevelTabStop(lvlEl, value) {
+  const pPr = findOrCreateChild(lvlEl, 'w:pPr');
+
+  if (value === null) {
+    // Remove the tab stop
+    const tabsIdx = pPr.elements.findIndex((el) => el.name === 'w:tabs');
+    if (tabsIdx === -1) return false;
+    pPr.elements.splice(tabsIdx, 1);
+    return true;
+  }
+
+  const tabs = findOrCreateChild(pPr, 'w:tabs');
+  const existing = tabs.elements.find((el) => el.name === 'w:tab');
+  const posStr = String(value);
+
+  if (existing) {
+    if (existing.attributes?.['w:pos'] === posStr && existing.attributes?.['w:val'] === 'num') return false;
+    existing.attributes = { ...existing.attributes, 'w:val': 'num', 'w:pos': posStr };
+    return true;
+  }
+
+  tabs.elements.push({
+    type: 'element',
+    name: 'w:tab',
+    attributes: { 'w:val': 'num', 'w:pos': posStr },
+  });
+  return true;
+}
+
+/**
+ * Composite setter: resolve abstract + level, then mutate tab stop.
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} ilvl
+ * @param {number | null} value
+ * @returns {boolean}
+ */
+function setLevelTabStop(editor, abstractNumId, ilvl, value) {
+  const resolved = resolveAbstractLevel(editor, abstractNumId, ilvl);
+  if (!resolved) return false;
+  return mutateLevelTabStop(resolved.lvlEl, value);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Marker-Mode Normalization Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Clear the `w:lvlPicBulletId` element from a level if it exists.
+ * Used for marker-mode normalization when switching away from picture bullets.
+ * @param {Object} lvlEl
+ * @returns {boolean} True if an element was removed.
+ */
+function clearPictureBulletId(lvlEl) {
+  if (!lvlEl.elements) return false;
+  const idx = lvlEl.elements.findIndex((el) => el.name === 'w:lvlPicBulletId');
+  if (idx === -1) return false;
+  lvlEl.elements.splice(idx, 1);
+  return true;
+}
+
+/**
+ * Set numFmt only (for setLevelNumberStyle). Rejects 'bullet'.
+ * Clears lvlPicBulletId if present (marker-mode normalization).
+ * @param {Object} lvlEl
+ * @param {string} numFmt
+ * @returns {boolean}
+ */
+function mutateLevelNumberStyle(lvlEl, numFmt) {
+  let changed = setChildAttr(lvlEl, 'w:numFmt', numFmt);
+  changed = clearPictureBulletId(lvlEl) || changed;
+  return changed;
+}
+
+/**
+ * Composite setter for setLevelNumberStyle.
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} ilvl
+ * @param {string} numFmt
+ * @returns {boolean}
+ */
+function setLevelNumberStyle(editor, abstractNumId, ilvl, numFmt) {
+  const resolved = resolveAbstractLevel(editor, abstractNumId, ilvl);
+  if (!resolved) return false;
+  return mutateLevelNumberStyle(resolved.lvlEl, numFmt);
+}
+
+/**
+ * Set lvlText only (for setLevelText).
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} ilvl
+ * @param {string} text
+ * @returns {boolean}
+ */
+function setLevelText(editor, abstractNumId, ilvl, text) {
+  const resolved = resolveAbstractLevel(editor, abstractNumId, ilvl);
+  if (!resolved) return false;
+  return setChildAttr(resolved.lvlEl, 'w:lvlText', text);
+}
+
+/**
+ * Set start value only (for setLevelStart).
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} ilvl
+ * @param {number} start
+ * @returns {boolean}
+ */
+function setLevelStart(editor, abstractNumId, ilvl, start) {
+  const resolved = resolveAbstractLevel(editor, abstractNumId, ilvl);
+  if (!resolved) return false;
+  return setChildAttr(resolved.lvlEl, 'w:start', String(start));
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -524,6 +669,11 @@ function applyTemplateToAbstract(editor, abstractNumId, template, levels) {
     if (entry.markerFont != null) anyChanged = mutateLevelMarkerFont(lvlEl, entry.markerFont) || anyChanged;
     if (entry.pictureBulletId != null)
       anyChanged = mutateLevelPictureBulletId(lvlEl, entry.pictureBulletId) || anyChanged;
+
+    // Apply tabStopAt if present in template
+    if (entry.tabStopAt !== undefined) {
+      anyChanged = mutateLevelTabStop(lvlEl, entry.tabStopAt) || anyChanged;
+    }
   }
 
   return { changed: anyChanged };
@@ -595,6 +745,290 @@ function getPresetTemplate(presetId) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Layout Composite Mutation
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Apply dialog-shaped layout properties to a level element.
+ *
+ * Indent mapping:
+ *   textIndentAt  → w:ind/@w:left
+ *   alignedAt     → derives w:ind/@w:hanging = textIndentAt - alignedAt
+ *
+ * Partial-update: omitted fields are untouched.
+ * Only tabStopAt accepts explicit null (remove).
+ *
+ * @param {Object} lvlEl
+ * @param {{ alignment?: string, alignedAt?: number, textIndentAt?: number, followCharacter?: string, tabStopAt?: number | null }} layout
+ * @returns {{ changed: boolean, error?: string }}
+ */
+function mutateLevelLayout(lvlEl, layout) {
+  let changed = false;
+
+  // Alignment
+  if (layout.alignment != null) {
+    changed = mutateLevelAlignment(lvlEl, layout.alignment) || changed;
+  }
+
+  // Trailing character (followCharacter)
+  if (layout.followCharacter != null) {
+    changed = mutateLevelTrailingCharacter(lvlEl, layout.followCharacter) || changed;
+  }
+
+  // Tab stop
+  if (layout.tabStopAt !== undefined) {
+    changed = mutateLevelTabStop(lvlEl, layout.tabStopAt) || changed;
+  }
+
+  // Indents (dialog → OOXML conversion)
+  const hasAlignedAt = layout.alignedAt != null;
+  const hasTextIndentAt = layout.textIndentAt != null;
+
+  if (hasAlignedAt || hasTextIndentAt) {
+    const pPr = lvlEl.elements?.find((el) => el.name === 'w:pPr');
+    const ind = pPr?.elements?.find((el) => el.name === 'w:ind');
+    const existingLeft = ind?.attributes?.['w:left'] != null ? Number(ind.attributes['w:left']) : undefined;
+    const existingHanging = ind?.attributes?.['w:hanging'] != null ? Number(ind.attributes['w:hanging']) : undefined;
+    const existingFirstLine =
+      ind?.attributes?.['w:firstLine'] != null ? Number(ind.attributes['w:firstLine']) : undefined;
+
+    // Compute existing alignedAt from current indent state
+    let existingAlignedAt;
+    if (existingLeft != null) {
+      if (existingHanging != null) {
+        existingAlignedAt = existingLeft - existingHanging;
+      } else if (existingFirstLine != null) {
+        existingAlignedAt = existingLeft + existingFirstLine;
+      } else {
+        existingAlignedAt = existingLeft;
+      }
+    }
+
+    let newLeft, newHanging;
+
+    if (hasAlignedAt && hasTextIndentAt) {
+      newLeft = layout.textIndentAt;
+      newHanging = layout.textIndentAt - layout.alignedAt;
+    } else if (hasTextIndentAt) {
+      newLeft = layout.textIndentAt;
+      newHanging = existingAlignedAt != null ? layout.textIndentAt - existingAlignedAt : 0;
+    } else if (hasAlignedAt) {
+      if (existingLeft == null) {
+        return { changed, error: 'INVALID_INPUT' };
+      }
+      newLeft = existingLeft;
+      newHanging = existingLeft - layout.alignedAt;
+    }
+
+    if (newLeft != null) {
+      // Always normalize to hanging (remove firstLine if present)
+      const indents = { left: newLeft, hanging: newHanging ?? 0 };
+      changed = mutateLevelIndents(lvlEl, indents) || changed;
+    }
+  }
+
+  return { changed };
+}
+
+/**
+ * Composite setter for setLevelLayout.
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} ilvl
+ * @param {{ alignment?: string, alignedAt?: number, textIndentAt?: number, followCharacter?: string, tabStopAt?: number | null }} layout
+ * @returns {{ changed: boolean, error?: string }}
+ */
+function setLevelLayout(editor, abstractNumId, ilvl, layout) {
+  const resolved = resolveAbstractLevel(editor, abstractNumId, ilvl);
+  if (!resolved) return { changed: false };
+  return mutateLevelLayout(resolved.lvlEl, layout);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Effective Style Capture (abstract + lvlOverride merge)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Capture the effective style of a list: abstract definition properties merged
+ * with any instance-level lvlOverride formatting. Excludes startOverride
+ * (sequence state, not style).
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} numId
+ * @param {number[] | undefined} levels
+ * @returns {{ version: 1, levels: Array<Object> } | null}
+ */
+function captureEffectiveStyle(editor, abstractNumId, numId, levels) {
+  const abstract = editor.converter.numbering?.abstracts?.[abstractNumId];
+  if (!abstract?.elements) return null;
+
+  const numDef = editor.converter.numbering?.definitions?.[numId];
+  const overridesByLevel = buildOverrideMap(numDef);
+
+  const lvlElements = abstract.elements.filter((el) => el.name === 'w:lvl');
+  const captured = [];
+
+  for (const lvlEl of lvlElements) {
+    const ilvl = Number(lvlEl.attributes?.['w:ilvl']);
+    if (levels && !levels.includes(ilvl)) continue;
+
+    const baseProps = readLevelProperties(lvlEl, ilvl);
+
+    // Merge lvlOverride formatting (not startOverride) from the num definition
+    const overrideLvl = overridesByLevel.get(ilvl);
+    if (overrideLvl) {
+      const overrideProps = readLevelProperties(overrideLvl, ilvl);
+      mergeOverrideProps(baseProps, overrideProps);
+    }
+
+    captured.push(baseProps);
+  }
+
+  captured.sort((a, b) => a.level - b.level);
+  return { version: 1, levels: captured };
+}
+
+/**
+ * Build a map of level index → w:lvl element from lvlOverride entries.
+ * Only includes overrides that contain a w:lvl child (formatting overrides),
+ * not those that only contain w:startOverride.
+ * @param {Object | undefined} numDef
+ * @returns {Map<number, Object>}
+ */
+function buildOverrideMap(numDef) {
+  const map = new Map();
+  if (!numDef?.elements) return map;
+
+  for (const el of numDef.elements) {
+    if (el.name !== 'w:lvlOverride') continue;
+    const ilvl = Number(el.attributes?.['w:ilvl']);
+    const lvlChild = el.elements?.find((c) => c.name === 'w:lvl');
+    if (lvlChild) {
+      map.set(ilvl, lvlChild);
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Merge override properties into base properties. Override values take
+ * precedence when present (non-undefined).
+ * @param {Object} base - Mutable base properties from abstract.
+ * @param {Object} override - Properties from lvlOverride w:lvl.
+ */
+function mergeOverrideProps(base, override) {
+  if (override.numFmt != null) base.numFmt = override.numFmt;
+  if (override.lvlText != null) base.lvlText = override.lvlText;
+  if (override.start != null) base.start = override.start;
+  if (override.alignment != null) base.alignment = override.alignment;
+  if (override.indents != null) base.indents = { ...base.indents, ...override.indents };
+  if (override.trailingCharacter != null) base.trailingCharacter = override.trailingCharacter;
+  if (override.markerFont != null) base.markerFont = override.markerFont;
+  if (override.pictureBulletId != null) base.pictureBulletId = override.pictureBulletId;
+  if (override.tabStopAt != null) base.tabStopAt = override.tabStopAt;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Clone-on-Write Helper
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Check whether the given abstractNumId is referenced by any other w:num
+ * besides the given numId.
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} numId
+ * @returns {boolean}
+ */
+function isAbstractShared(editor, abstractNumId, numId) {
+  const definitions = editor.converter.numbering?.definitions;
+  if (!definitions) return false;
+
+  for (const [defNumId, numDef] of Object.entries(definitions)) {
+    if (Number(defNumId) === numId) continue;
+    if (!numDef?.elements) continue;
+    const absEl = numDef.elements.find((el) => el.name === 'w:abstractNumId');
+    if (absEl && Number(absEl.attributes?.['w:val']) === abstractNumId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Deep clone an XML element tree (preserves all children, attributes, unknown extensions).
+ * @param {Object} element
+ * @returns {Object}
+ */
+function deepCloneElement(element) {
+  const clone = { ...element };
+  if (element.attributes) {
+    clone.attributes = { ...element.attributes };
+  }
+  if (element.elements) {
+    clone.elements = element.elements.map((child) => deepCloneElement(child));
+  }
+  return clone;
+}
+
+/**
+ * Clone an abstract definition and create a new w:num pointing to it.
+ * Returns the new abstractNumId and numId.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} originalAbstractNumId
+ * @param {number} originalNumId
+ * @returns {{ newAbstractNumId: number, newNumId: number }}
+ */
+function cloneAbstractAndNum(editor, originalAbstractNumId, originalNumId) {
+  const numbering = editor.converter.numbering;
+
+  // Find next available abstractNumId
+  const existingAbstractIds = Object.keys(numbering.abstracts).map(Number);
+  const newAbstractNumId = existingAbstractIds.length > 0 ? Math.max(...existingAbstractIds) + 1 : 0;
+
+  // Clone the abstract definition
+  const original = numbering.abstracts[originalAbstractNumId];
+  const cloned = deepCloneElement(original);
+  cloned.attributes = { ...cloned.attributes, 'w:abstractNumId': String(newAbstractNumId) };
+  numbering.abstracts[newAbstractNumId] = cloned;
+
+  // Find next available numId
+  const existingNumIds = Object.keys(numbering.definitions).map(Number);
+  const newNumId = existingNumIds.length > 0 ? Math.max(...existingNumIds) + 1 : 1;
+
+  // Create new w:num pointing to cloned abstract, copying lvlOverride entries
+  const originalNumDef = numbering.definitions[originalNumId];
+  const newElements = [
+    {
+      type: 'element',
+      name: 'w:abstractNumId',
+      attributes: { 'w:val': String(newAbstractNumId) },
+    },
+  ];
+
+  // Copy any lvlOverride entries from the original w:num
+  if (originalNumDef?.elements) {
+    for (const el of originalNumDef.elements) {
+      if (el.name === 'w:lvlOverride') {
+        newElements.push(deepCloneElement(el));
+      }
+    }
+  }
+
+  numbering.definitions[newNumId] = {
+    type: 'element',
+    name: 'w:num',
+    attributes: { 'w:numId': String(newNumId) },
+    elements: newElements,
+  };
+
+  return { newAbstractNumId, newNumId };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Exports
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -612,6 +1046,13 @@ export const LevelFormattingHelpers = {
   setLevelIndents,
   setLevelTrailingCharacter,
   setLevelMarkerFont,
+  setLevelTabStop,
+
+  // SD-2025 decomposed setters
+  setLevelNumberStyle,
+  setLevelText,
+  setLevelStart,
+  setLevelLayout,
 
   // Override clearing
   hasLevelOverride,
@@ -620,6 +1061,13 @@ export const LevelFormattingHelpers = {
   // Template operations
   captureTemplate,
   applyTemplateToAbstract,
+
+  // Effective style (abstract + lvlOverride)
+  captureEffectiveStyle,
+
+  // Clone-on-write
+  isAbstractShared,
+  cloneAbstractAndNum,
 
   // Preset catalog
   getPresetTemplate,

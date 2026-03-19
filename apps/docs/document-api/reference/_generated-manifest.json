@@ -278,6 +278,7 @@
     "apps/docs/document-api/reference/info.mdx",
     "apps/docs/document-api/reference/insert.mdx",
     "apps/docs/document-api/reference/lists/apply-preset.mdx",
+    "apps/docs/document-api/reference/lists/apply-style.mdx",
     "apps/docs/document-api/reference/lists/apply-template.mdx",
     "apps/docs/document-api/reference/lists/attach.mdx",
     "apps/docs/document-api/reference/lists/can-continue-previous.mdx",
@@ -288,6 +289,7 @@
     "apps/docs/document-api/reference/lists/convert-to-text.mdx",
     "apps/docs/document-api/reference/lists/create.mdx",
     "apps/docs/document-api/reference/lists/detach.mdx",
+    "apps/docs/document-api/reference/lists/get-style.mdx",
     "apps/docs/document-api/reference/lists/get.mdx",
     "apps/docs/document-api/reference/lists/indent.mdx",
     "apps/docs/document-api/reference/lists/index.mdx",
@@ -295,14 +297,19 @@
     "apps/docs/document-api/reference/lists/join.mdx",
     "apps/docs/document-api/reference/lists/list.mdx",
     "apps/docs/document-api/reference/lists/outdent.mdx",
+    "apps/docs/document-api/reference/lists/restart-at.mdx",
     "apps/docs/document-api/reference/lists/separate.mdx",
     "apps/docs/document-api/reference/lists/set-level-alignment.mdx",
     "apps/docs/document-api/reference/lists/set-level-bullet.mdx",
     "apps/docs/document-api/reference/lists/set-level-indents.mdx",
+    "apps/docs/document-api/reference/lists/set-level-layout.mdx",
     "apps/docs/document-api/reference/lists/set-level-marker-font.mdx",
+    "apps/docs/document-api/reference/lists/set-level-number-style.mdx",
     "apps/docs/document-api/reference/lists/set-level-numbering.mdx",
     "apps/docs/document-api/reference/lists/set-level-picture-bullet.mdx",
     "apps/docs/document-api/reference/lists/set-level-restart.mdx",
+    "apps/docs/document-api/reference/lists/set-level-start.mdx",
+    "apps/docs/document-api/reference/lists/set-level-text.mdx",
     "apps/docs/document-api/reference/lists/set-level-trailing-character.mdx",
     "apps/docs/document-api/reference/lists/set-level.mdx",
     "apps/docs/document-api/reference/lists/set-type.mdx",
@@ -567,7 +574,14 @@
         "lists.setLevelIndents",
         "lists.setLevelTrailingCharacter",
         "lists.setLevelMarkerFont",
-        "lists.clearLevelOverrides"
+        "lists.clearLevelOverrides",
+        "lists.getStyle",
+        "lists.applyStyle",
+        "lists.restartAt",
+        "lists.setLevelNumberStyle",
+        "lists.setLevelText",
+        "lists.setLevelStart",
+        "lists.setLevelLayout"
       ],
       "pagePath": "apps/docs/document-api/reference/lists/index.mdx",
       "title": "Lists"
@@ -962,5 +976,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "7c98e8a222685ebb7801111b454a2e5bc6ef18b1ce4a9d7d576a5e48aa69bd5f"
+  "sourceHash": "455ce1c9b3cf75b22ae1ebc76bddb66f31f70f0ab46cea0f178063c87e476dbd"
 }

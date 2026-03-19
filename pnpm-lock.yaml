@@ -1070,6 +1070,9 @@ importers:
 
   demos/toolbar:
     dependencies:
+      prosemirror-state:
+        specifier: ^1.4.3
+        version: 1.4.4
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc

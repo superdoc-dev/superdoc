@@ -24,6 +24,7 @@ import type {
   ParagraphToFlowBlocksParams,
   BlockIdGenerator,
   PositionMap,
+  ParagraphFont,
 } from '../types.js';
 import { getStableParagraphId, shiftCachedBlocks } from '../cache.js';
 import type { ConverterContext } from '../converter-context.js';
@@ -943,7 +944,7 @@ const SHAPE_CONVERTERS_REGISTRY: Record<
  * If the latest paragraph's first run has partial or empty font info, the loop continues to the previous
  * paragraph so callers never receive a partial object and can fall back to defaults consistently.
  */
-export function getLastParagraphFont(blocks: FlowBlock[]): { fontFamily: string; fontSize: number } | undefined {
+export function getLastParagraphFont(blocks: FlowBlock[]): ParagraphFont | undefined {
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     if (block.kind === 'paragraph') {

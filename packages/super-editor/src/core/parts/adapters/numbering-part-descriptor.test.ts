@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { syncNumberingToXmlTree } from './numbering-part-descriptor.js';
+import { numberingPartDescriptor, syncNumberingToXmlTree } from './numbering-part-descriptor.js';
+
+describe('numberingPartDescriptor.ensurePart', () => {
+  it('declares xmlns:w15 so w15:* attributes in list definitions are namespace-valid (SD-2252)', () => {
+    const part = numberingPartDescriptor.ensurePart() as {
+      elements: Array<{ attributes: Record<string, string> }>;
+    };
+    const root = part.elements[0];
+
+    expect(root.attributes['xmlns:w']).toBe('http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+    expect(root.attributes['xmlns:w15']).toBe('http://schemas.microsoft.com/office/word/2012/wordml');
+    expect(root.attributes['xmlns:mc']).toBe('http://schemas.openxmlformats.org/markup-compatibility/2006');
+    expect(root.attributes['mc:Ignorable']).toContain('w15');
+  });
+});
 
 describe('syncNumberingToXmlTree', () => {
   it('preserves non-abstract/definition children like w:numPicBullet', () => {

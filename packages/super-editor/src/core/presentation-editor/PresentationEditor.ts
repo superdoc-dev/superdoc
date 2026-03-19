@@ -753,6 +753,7 @@ export class PresentationEditor extends EventEmitter {
 
       const beforeX = win.scrollX;
       const beforeY = win.scrollY;
+      const alreadyFocused = view.hasFocus();
       let focused = false;
 
       // Strategy 1: Try focus with preventScroll option (modern browsers)
@@ -789,6 +790,16 @@ export class PresentationEditor extends EventEmitter {
             strategy: 'original',
           });
         }
+      }
+
+      // When the editor was not focused before, the browser places the DOM selection
+      // at an arbitrary position inside the off-screen contenteditable. ProseMirror's
+      // DOMObserver would read this stale position via a selectionchange event and
+      // overwrite PM state, causing the cursor to jump. Suppress selection updates
+      // for the next 50ms so PM re-applies its own selection to the DOM instead.
+      if (!alreadyFocused) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (view as any).domObserver.suppressSelectionUpdates();
       }
 
       // Restore scroll position if any focus attempt changed it

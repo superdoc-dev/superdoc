@@ -22,7 +22,7 @@ Retrieve layout and style properties of a table.
 
 ## Expected result
 
-Returns a TablesGetPropertiesOutput with the table layout, style, border, and shading properties.
+Returns a TablesGetPropertiesOutput with direct table layout and style state, including style options, borders, default cell margins, and cell spacing when explicitly set.
 
 ## Input fields
 
@@ -35,7 +35,7 @@ Returns a TablesGetPropertiesOutput with the table layout, style, border, and sh
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 2 (nodeId)
+### Variant 2 (required: nodeId)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -63,6 +63,19 @@ Returns a TablesGetPropertiesOutput with the table layout, style, border, and sh
 | `address.nodeType` | `"table"` | yes | Constant: `"table"` |
 | `alignment` | enum | no | `"left"`, `"center"`, `"right"` |
 | `autoFitMode` | enum | no | `"fixedWidth"`, `"fitContents"`, `"fitWindow"` |
+| `borders` | object | no |  |
+| `borders.bottom` | object \\| null | no | One of: object, null |
+| `borders.insideH` | object \\| null | no | One of: object, null |
+| `borders.insideV` | object \\| null | no | One of: object, null |
+| `borders.left` | object \\| null | no | One of: object, null |
+| `borders.right` | object \\| null | no | One of: object, null |
+| `borders.top` | object \\| null | no | One of: object, null |
+| `cellSpacingPt` | number | no |  |
+| `defaultCellMargins` | object | no |  |
+| `defaultCellMargins.bottomPt` | number | no |  |
+| `defaultCellMargins.leftPt` | number | no |  |
+| `defaultCellMargins.rightPt` | number | no |  |
+| `defaultCellMargins.topPt` | number | no |  |
 | `direction` | enum | no | `"ltr"`, `"rtl"` |
 | `nodeId` | string | yes |  |
 | `preferredWidth` | number | no |  |
@@ -150,6 +163,207 @@ Returns a TablesGetPropertiesOutput with the table layout, style, border, and sh
         "fitContents",
         "fitWindow"
       ]
+    },
+    "borders": {
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                  "type": "string"
+                },
+                "lineStyle": {
+                  "type": "string"
+                },
+                "lineWeightPt": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "lineStyle",
+                "lineWeightPt",
+                "color"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insideH": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                  "type": "string"
+                },
+                "lineStyle": {
+                  "type": "string"
+                },
+                "lineWeightPt": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "lineStyle",
+                "lineWeightPt",
+                "color"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insideV": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                  "type": "string"
+                },
+                "lineStyle": {
+                  "type": "string"
+                },
+                "lineWeightPt": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "lineStyle",
+                "lineWeightPt",
+                "color"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                  "type": "string"
+                },
+                "lineStyle": {
+                  "type": "string"
+                },
+                "lineWeightPt": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "lineStyle",
+                "lineWeightPt",
+                "color"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                  "type": "string"
+                },
+                "lineStyle": {
+                  "type": "string"
+                },
+                "lineWeightPt": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "lineStyle",
+                "lineWeightPt",
+                "color"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "top": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                  "type": "string"
+                },
+                "lineStyle": {
+                  "type": "string"
+                },
+                "lineWeightPt": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "lineStyle",
+                "lineWeightPt",
+                "color"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "cellSpacingPt": {
+      "type": "number"
+    },
+    "defaultCellMargins": {
+      "additionalProperties": false,
+      "properties": {
+        "bottomPt": {
+          "type": "number"
+        },
+        "leftPt": {
+          "type": "number"
+        },
+        "rightPt": {
+          "type": "number"
+        },
+        "topPt": {
+          "type": "number"
+        }
+      },
+      "type": "object"
     },
     "direction": {
       "enum": [

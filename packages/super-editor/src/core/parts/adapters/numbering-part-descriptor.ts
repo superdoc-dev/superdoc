@@ -17,7 +17,19 @@ import { isPartCacheStale, clearPartCacheStale } from '../cache-staleness.js';
 
 const NUMBERING_PART_ID = 'word/numbering.xml' as const;
 
-const NUMBERING_XMLNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+/**
+ * Namespace attributes for the `<w:numbering>` root element.
+ *
+ * Includes `xmlns:w15` because base list definitions use
+ * `w15:restartNumberingAfterBreak` — without this declaration the
+ * numbering part is namespace-invalid and Word shows a repair prompt.
+ */
+const NUMBERING_ROOT_ATTRS: Record<string, string> = {
+  'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+  'xmlns:w15': 'http://schemas.microsoft.com/office/word/2012/wordml',
+  'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+  'mc:Ignorable': 'w15',
+};
 
 // ---------------------------------------------------------------------------
 // Converter shape (minimal interface to avoid importing SuperConverter)
@@ -147,7 +159,7 @@ export const numberingPartDescriptor: PartDescriptor = {
         {
           type: 'element',
           name: 'w:numbering',
-          attributes: { 'xmlns:w': NUMBERING_XMLNS },
+          attributes: { ...NUMBERING_ROOT_ATTRS },
           elements: [],
         },
       ],

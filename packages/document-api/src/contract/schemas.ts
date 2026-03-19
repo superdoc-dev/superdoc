@@ -1479,6 +1479,20 @@ const capabilitiesOutputSchema = objectSchema(
 );
 
 const strictEmptyObjectSchema = objectSchema({});
+const tableBorderColorPattern = '^([0-9A-Fa-f]{6}|auto)$';
+
+const tableBorderSpecSchema = objectSchema(
+  {
+    lineStyle: { type: 'string' },
+    lineWeightPt: { type: 'number', exclusiveMinimum: 0 },
+    color: { type: 'string', pattern: tableBorderColorPattern },
+  },
+  ['lineStyle', 'lineWeightPt', 'color'],
+);
+
+const nullableTableBorderSpecSchema: JsonSchema = {
+  oneOf: [tableBorderSpecSchema, { type: 'null' }],
+};
 
 const sdFragmentSchema: JsonSchema = {
   oneOf: [{ type: 'object' }, { type: 'array', items: { type: 'object' } }],
@@ -4912,9 +4926,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         {
           target: tableAddressSchema,
           nodeId: { type: 'string' },
-          atRowIndex: { type: 'integer', minimum: 1 },
+          rowIndex: { type: 'integer', minimum: 1 },
         },
-        ['atRowIndex'],
+        ['rowIndex'],
       ),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
@@ -5367,6 +5381,96 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
 
+  // --- tables.* convenience operations (SD-2129) ---
+
+  'tables.applyStyle': {
+    input: {
+      ...objectSchema({
+        target: blockNodeAddressSchema,
+        nodeId: { type: 'string' },
+        styleId: { type: 'string' },
+        styleOptions: objectSchema({
+          headerRow: { type: 'boolean' },
+          lastRow: { type: 'boolean' },
+          totalRow: { type: 'boolean' },
+          firstColumn: { type: 'boolean' },
+          lastColumn: { type: 'boolean' },
+          bandedRows: { type: 'boolean' },
+          bandedColumns: { type: 'boolean' },
+        }),
+      }),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+  'tables.setBorders': {
+    input: {
+      oneOf: [
+        {
+          ...objectSchema(
+            {
+              target: blockNodeAddressSchema,
+              nodeId: { type: 'string' },
+              mode: { const: 'applyTo' },
+              applyTo: {
+                enum: ['all', 'outside', 'inside', 'top', 'bottom', 'left', 'right', 'insideH', 'insideV'],
+              },
+              border: nullableTableBorderSpecSchema,
+            },
+            ['mode', 'applyTo', 'border'],
+          ),
+          oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+        },
+        {
+          ...objectSchema(
+            {
+              target: blockNodeAddressSchema,
+              nodeId: { type: 'string' },
+              mode: { const: 'edges' },
+              edges: objectSchema({
+                top: nullableTableBorderSpecSchema,
+                bottom: nullableTableBorderSpecSchema,
+                left: nullableTableBorderSpecSchema,
+                right: nullableTableBorderSpecSchema,
+                insideH: nullableTableBorderSpecSchema,
+                insideV: nullableTableBorderSpecSchema,
+              }),
+            },
+            ['mode', 'edges'],
+          ),
+          oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+        },
+      ],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+  'tables.setTableOptions': {
+    input: {
+      ...objectSchema({
+        target: blockNodeAddressSchema,
+        nodeId: { type: 'string' },
+        defaultCellMargins: objectSchema(
+          {
+            topPt: { type: 'number', minimum: 0 },
+            rightPt: { type: 'number', minimum: 0 },
+            bottomPt: { type: 'number', minimum: 0 },
+            leftPt: { type: 'number', minimum: 0 },
+          },
+          ['topPt', 'rightPt', 'bottomPt', 'leftPt'],
+        ),
+        cellSpacingPt: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
+      }),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+
   // --- tables.* reads (B4 ref handoff) ---
 
   'tables.get': {
@@ -5432,6 +5536,21 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           bandedRows: { type: 'boolean' },
           bandedColumns: { type: 'boolean' },
         }),
+        borders: objectSchema({
+          top: nullableTableBorderSpecSchema,
+          bottom: nullableTableBorderSpecSchema,
+          left: nullableTableBorderSpecSchema,
+          right: nullableTableBorderSpecSchema,
+          insideH: nullableTableBorderSpecSchema,
+          insideV: nullableTableBorderSpecSchema,
+        }),
+        defaultCellMargins: objectSchema({
+          topPt: { type: 'number' },
+          rightPt: { type: 'number' },
+          bottomPt: { type: 'number' },
+          leftPt: { type: 'number' },
+        }),
+        cellSpacingPt: { type: 'number' },
       },
       ['nodeId', 'address'],
     ),

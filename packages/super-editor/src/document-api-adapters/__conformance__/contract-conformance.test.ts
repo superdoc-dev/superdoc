@@ -82,6 +82,9 @@ import {
   tablesSetCellPaddingWrapper,
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
+  tablesApplyStyleWrapper,
+  tablesSetBordersWrapper,
+  tablesSetTableOptionsWrapper,
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
@@ -1583,6 +1586,9 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.setCellPadding',
   'tables.setCellSpacing',
   'tables.clearCellSpacing',
+  'tables.applyStyle',
+  'tables.setBorders',
+  'tables.setTableOptions',
   'tables.getStyles',
   'tables.setDefaultStyle',
   'tables.clearDefaultStyle',
@@ -6193,16 +6199,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.split': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'missing', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'missing', rowIndex: 1 }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      // atRowIndex: 0 is invalid (must be >= 1).
+      // rowIndex: 0 is invalid (must be >= 1).
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 0 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 0 }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 1 }, { changeMode: 'direct' });
     },
   },
   'tables.convertToText': {
@@ -6463,6 +6469,87 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const editor = makeTableEditor();
       return tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.applyStyle': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyStyleWrapper(editor, { nodeId: 'missing', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesApplyStyleWrapper(editor, { nodeId: 'table-1', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyStyleWrapper(editor, { nodeId: 'table-1', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.setBorders': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'missing',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'table-1',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'table-1',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'tables.setTableOptions': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'missing', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
     },
   },
   'tables.setDefaultStyle': {
@@ -9332,7 +9419,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSplitWrapper(
       editor,
-      { nodeId: 'table-1', atRowIndex: 1 },
+      { nodeId: 'table-1', rowIndex: 1 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -9476,6 +9563,44 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.applyStyle': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesApplyStyleWrapper(
+      editor,
+      { nodeId: 'table-1', styleId: 'TableGrid' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.setBorders': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetBordersWrapper(
+      editor,
+      {
+        nodeId: 'table-1',
+        mode: 'applyTo',
+        applyTo: 'all',
+        border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.setTableOptions': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetTableOptionsWrapper(
+      editor,
+      { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+      { changeMode: 'direct', dryRun: true },
+    );
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
@@ -10578,6 +10703,9 @@ describe('document-api adapter conformance', () => {
       'tables.setCellPadding',
       'tables.setCellSpacing',
       'tables.clearCellSpacing',
+      'tables.applyStyle',
+      'tables.setBorders',
+      'tables.setTableOptions',
       'tables.insertCell',
       'tables.deleteCell',
       'tables.setDefaultStyle',
@@ -10840,8 +10968,8 @@ describe('document-api adapter conformance', () => {
     {
       op: 'tables.split',
       ref: 'table-1',
-      args: { atRowIndex: 1 },
-      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', atRowIndex: 1 } as any),
+      args: { rowIndex: 1 },
+      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', rowIndex: 1 } as any),
     },
     {
       op: 'tables.convertToText',
@@ -10934,6 +11062,9 @@ describe('document-api adapter conformance', () => {
       args: {},
       wrapperFn: (e) => tablesClearCellSpacingWrapper(e, { nodeId: 'table-1' }),
     },
+    // Note: tables.applyStyle, tables.setBorders, tables.setTableOptions are
+    // intentionally excluded from parity tests — they are not yet in the
+    // step-op catalog and do not support mutations.apply (SD-2129 scope).
     // create.table (ref is a dummy target — executor ignores targets for create ops)
     {
       op: 'create.table',

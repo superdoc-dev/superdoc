@@ -9,6 +9,7 @@ on:
       - 'packages/super-editor/**'
       - 'packages/collaboration-yjs/**'
       - 'packages/sdk/**'
+      - 'packages/layout-engine/**'
       - 'shared/**'
   workflow_dispatch:
 
@@ -34,6 +35,9 @@ jobs:
 
       - name: Build React wrapper
         run: pnpm --filter @superdoc-dev/react build
+
+      - name: Build collaboration package
+        run: pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build
 
       - name: Install Playwright
         working-directory: examples/__tests__

@@ -6249,16 +6249,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.split': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'missing', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'missing', rowIndex: 1 }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      // atRowIndex: 0 is invalid (must be >= 1).
+      // rowIndex: 0 is invalid (must be >= 1).
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 0 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 0 }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 1 }, { changeMode: 'direct' });
     },
   },
   'tables.convertToText': {
@@ -9469,7 +9469,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSplitWrapper(
       editor,
-      { nodeId: 'table-1', atRowIndex: 1 },
+      { nodeId: 'table-1', rowIndex: 1 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -11018,8 +11018,8 @@ describe('document-api adapter conformance', () => {
     {
       op: 'tables.split',
       ref: 'table-1',
-      args: { atRowIndex: 1 },
-      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', atRowIndex: 1 } as any),
+      args: { rowIndex: 1 },
+      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', rowIndex: 1 } as any),
     },
     {
       op: 'tables.convertToText',

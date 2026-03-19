@@ -263,7 +263,7 @@ describe('document-api story: all table commands', () => {
           await api.doc.tables.split({
             sessionId,
             nodeId: firstTableNodeId,
-            atRowIndex: 1,
+            rowIndex: 1,
           }),
         );
         assertMutationSuccess('tables.split', splitResult);
@@ -380,7 +380,7 @@ describe('document-api story: all table commands', () => {
         }
         splitTableBySession.delete(sessionId);
 
-        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: tableNodeId, atRowIndex: 1 }));
+        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: tableNodeId, rowIndex: 1 }));
       },
     },
     {

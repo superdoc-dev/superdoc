@@ -2955,7 +2955,7 @@ export const SUCCESS_SCENARIOS = {
     '--destination-json',
     JSON.stringify({ kind: 'documentEnd' }),
   ]),
-  'doc.tables.split': tableMutationScenario('tables.split', ['--at-row-index', '1']),
+  'doc.tables.split': tableMutationScenario('tables.split', ['--row-index', '1']),
   'doc.tables.convertToText': tableMutationScenario('tables.convertToText', ['--delimiter', 'tab']),
   'doc.tables.setLayout': tableMutationScenario('tables.setLayout', ['--alignment', 'center']),
   'doc.tables.insertRow': tableMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),

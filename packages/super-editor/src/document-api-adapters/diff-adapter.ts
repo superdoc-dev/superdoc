@@ -39,7 +39,7 @@ export function createDiffAdapter(editor: Editor): DiffAdapter {
     apply(input: DiffApplyInput, options?: DiffApplyOptions): DiffApplyResult {
       const { result, tr } = wrapServiceCall(() => applyDiffPayload(editor, input.diff, options));
 
-      if (tr.docChanged) {
+      if (tr.docChanged || result.appliedOperations > 0) {
         editor.dispatch(tr);
       }
 

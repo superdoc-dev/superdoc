@@ -341,4 +341,32 @@ describe('Header/footer diffing', () => {
       afterEditor.destroy?.();
     }
   });
+
+  it('keeps body replay tracked when header/footer diffs are present', async () => {
+    const user = { name: 'Test User', email: 'test@example.com' };
+    const beforeEditor = await createEditor(user);
+    const afterEditor = await createEditor();
+
+    try {
+      setBodySection(beforeEditor, {});
+      afterEditor.dispatch(afterEditor.state.tr.insertText('Updated ', 1));
+      seedDefaultHeader(afterEditor, 'Tracked header');
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true })).toBe(true);
+      expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+      expect(getTrackChanges(beforeEditor.state).length).toBeGreaterThan(0);
+      expect(captureHeaderFooterState(beforeEditor)).toEqual(captureHeaderFooterState(afterEditor));
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
 });

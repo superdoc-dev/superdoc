@@ -21,7 +21,7 @@ import {
 } from './v2/exporter/commentsExporter.js';
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
 import { writeAppStatistics } from '../../document-api-adapters/helpers/app-properties.js';
-import { getWordStatistics } from '../../document-api-adapters/helpers/word-statistics.js';
+import { getWordStatistics, resolveMainBodyEditor } from '../../document-api-adapters/helpers/word-statistics.js';
 import { refreshAllStatFields } from '../../document-api-adapters/helpers/refresh-stat-fields.js';
 import { ensureSettingsRoot, hasUpdateFields, setUpdateFields } from '../../document-api-adapters/document-settings.js';
 import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
@@ -1334,7 +1334,12 @@ class SuperConverter {
     if (!editor) return;
 
     try {
-      const stats = getWordStatistics(editor);
+      // docProps/app.xml is document-scoped metadata. When export runs from a
+      // linked child editor (for example a header/footer editor), compute the
+      // statistics from the main body editor so package-level counts stay
+      // aligned with Word's document-level stat-field semantics.
+      const statsEditor = resolveMainBodyEditor(editor);
+      const stats = getWordStatistics(statsEditor);
       writeAppStatistics(this.convertedXml, stats);
 
       // Only set w:updateFields when the document actually contains a

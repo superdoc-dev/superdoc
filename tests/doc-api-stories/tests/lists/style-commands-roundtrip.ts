@@ -46,6 +46,7 @@ function requireLevel(style: ListStyle, level: number) {
 describe('document-api story: lists style commands roundtrip', () => {
   const { client, copyDoc, outPath, runCli } = useStoryHarness('lists/style-commands-roundtrip', {
     preserveResults: true,
+    cliBinMode: 'source',
   });
 
   const api = client as any;
@@ -301,5 +302,44 @@ describe('document-api story: lists style commands roundtrip', () => {
     expect(numberingXml).toMatch(/w:start[^>]*w:val="4"/);
     expect(numberingXml).toMatch(/w:lvlJc[^>]*w:val="center"/);
     expect(numberingXml).toMatch(/w:suff[^>]*w:val="tab"/);
+  });
+
+  it('preserves restart overrides when applying a style to the same sequence', async () => {
+    const { sessionId, resultDoc } = await openFixture('style-preserves-restart');
+    const fixture = await resolvePreSeparatedFixture(sessionId);
+
+    const presetResult = await callDocOperation<any>('lists.applyPreset', {
+      sessionId,
+      target: fixture.secondItem,
+      preset: 'upperRoman',
+    });
+    assertMutationSuccess('lists.applyPreset', presetResult);
+
+    const restartResult = await callDocOperation<any>('lists.restartAt', {
+      sessionId,
+      target: fixture.secondItem,
+      startAt: 7,
+    });
+    assertMutationSuccess('lists.restartAt', restartResult);
+
+    const styleBefore = await getStyle(sessionId, fixture.secondItem);
+    const editedStyle = cloneStyle(styleBefore);
+    requireLevel(editedStyle, 0).lvlText = '(%1)';
+
+    const applyResult = await callDocOperation<any>('lists.applyStyle', {
+      sessionId,
+      target: fixture.secondItem,
+      style: editedStyle,
+    });
+    assertMutationSuccess('lists.applyStyle', applyResult);
+
+    const styleAfter = await getStyle(sessionId, fixture.secondItem);
+    expect(requireLevel(styleAfter, 0).lvlText).toBe('(%1)');
+
+    await saveResult(sessionId, resultDoc);
+
+    const numberingXml = await requireZipEntry(resultDoc, NUMBERING_PART);
+    expect(numberingXml).toContain('(%1)');
+    expect(numberingXml).toMatch(/w:startOverride[^>]*w:val="7"/);
   });
 });

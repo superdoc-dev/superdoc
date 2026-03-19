@@ -478,6 +478,10 @@ function resolveCreateKind(input: ListsCreateInput): { kind: 'ordered' | 'bullet
   return { kind: raw.kind as 'ordered' | 'bullet' };
 }
 
+function isListKind(value: unknown): value is 'ordered' | 'bullet' {
+  return value === 'ordered' || value === 'bullet';
+}
+
 export function listsCreateWrapper(
   editor: Editor,
   input: ListsCreateInput,
@@ -501,13 +505,6 @@ export function listsCreateWrapper(
   if (level < 0 || level > 8) {
     return toListsFailure('LEVEL_OUT_OF_RANGE', 'Level must be between 0 and 8.', { level });
   }
-
-  // Resolve kind (may fail with INVALID_INPUT)
-  const kindResult = resolveCreateKind(input);
-  if ('failure' in kindResult) return kindResult.failure;
-  const { kind } = kindResult;
-
-  const listType = kind === 'ordered' ? 'orderedList' : 'bulletList';
 
   // Resolve style template to apply (if any)
   let styleTemplate: ListTemplate | undefined;
@@ -554,6 +551,22 @@ export function listsCreateWrapper(
 
   // Sequence mode resolution
   const sequenceInput = (raw.sequence as { mode: string; startAt?: number } | undefined) ?? { mode: 'new' };
+  const requestedKind = raw.kind;
+  if (requestedKind != null && !isListKind(requestedKind)) {
+    return toListsFailure('INVALID_INPUT', `Unknown list kind: ${String(requestedKind)}.`, { kind: requestedKind });
+  }
+
+  let kind: 'ordered' | 'bullet' | undefined;
+  let listType: 'orderedList' | 'bulletList' | undefined;
+
+  if (sequenceInput.mode !== 'continuePrevious') {
+    const kindResult = resolveCreateKind(input);
+    if ('failure' in kindResult) return kindResult.failure;
+    kind = kindResult.kind;
+    listType = kind === 'ordered' ? 'orderedList' : 'bulletList';
+  } else {
+    kind = requestedKind as 'ordered' | 'bullet' | undefined;
+  }
 
   // Pre-flight continuePrevious compatibility BEFORE any mutations.
   // continuePrevious binds the new paragraphs to an existing sequence's
@@ -576,10 +589,9 @@ export function listsCreateWrapper(
       const item = allItems[i]!;
       if (item.candidate.pos >= firstBlockPos) continue;
       if (item.numId == null) continue;
-      if (item.kind === kind) {
-        continuePreviousNumId = item.numId;
-        break;
-      }
+      if (kind != null && item.kind !== kind) continue;
+      continuePreviousNumId = item.numId;
+      break;
     }
     if (continuePreviousNumId == null) {
       return toListsFailure('NO_COMPATIBLE_PREVIOUS', 'No compatible previous list sequence found.', {});
@@ -607,7 +619,7 @@ export function listsCreateWrapper(
       } else {
         // mode: 'new' — allocate a fresh definition
         numId = ListHelpers.getNewListId(editor);
-        ListHelpers.generateNewListDefinition({ numId, listType, editor });
+        ListHelpers.generateNewListDefinition({ numId, listType: listType!, editor });
 
         // Apply style/preset template if provided
         if (styleTemplate) {

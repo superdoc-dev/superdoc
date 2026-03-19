@@ -44,7 +44,12 @@ import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js
 import { syncNumberingToXmlTree } from '../../core/parts/adapters/numbering-part-descriptor.js';
 import type { PartId } from '../../core/parts/types.js';
 import { resolveListItem, type ListItemProjection } from '../helpers/list-item-resolver.js';
-import { getAbstractNumId, getContiguousSequence, findAdjacentSequence } from '../helpers/list-sequence-helpers.js';
+import {
+  getAbstractNumId,
+  getAllListItemProjections,
+  getContiguousSequence,
+  findAdjacentSequence,
+} from '../helpers/list-sequence-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
 import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
@@ -825,14 +830,15 @@ export function listsSetLevelMarkerFontWrapper(
 type SequenceLocalResult = {
   abstractNumId: number;
   numId: number;
+  sourceNumId: number;
   pendingRebind: ListItemProjection[] | null;
 };
 
 /**
  * Ensure the target sequence has its own private abstract definition.
- * If the abstract is shared, clones the abstract and creates a new w:num
- * in converter data ONLY (no PM dispatch). Returns the rebinding info
- * so the caller can apply it in its own transaction.
+ * If the abstract is shared, prefer retargeting the existing w:num when
+ * the sequence already owns its numId. Only allocate a fresh w:num when
+ * that numId is reused outside the target sequence.
  */
 function ensureSequenceLocalAbstract(
   editor: Editor,
@@ -841,7 +847,19 @@ function ensureSequenceLocalAbstract(
   targetNumId: number,
 ): SequenceLocalResult {
   if (!LevelFormattingHelpers.isAbstractShared(editor, targetAbstractNumId, targetNumId)) {
-    return { abstractNumId: targetAbstractNumId, numId: targetNumId, pendingRebind: null };
+    return { abstractNumId: targetAbstractNumId, numId: targetNumId, sourceNumId: targetNumId, pendingRebind: null };
+  }
+
+  const sequence = getContiguousSequence(editor, target);
+  const sequenceNodeIds = new Set(sequence.map((item) => item.address.nodeId));
+  const allItemsWithNumId = getAllListItemProjections(editor).filter((item) => item.numId === targetNumId);
+
+  if (
+    allItemsWithNumId.length === sequence.length &&
+    allItemsWithNumId.every((item) => sequenceNodeIds.has(item.address.nodeId))
+  ) {
+    const { newAbstractNumId } = LevelFormattingHelpers.cloneAbstractIntoNum(editor, targetAbstractNumId, targetNumId);
+    return { abstractNumId: newAbstractNumId, numId: targetNumId, sourceNumId: targetNumId, pendingRebind: null };
   }
 
   const { newAbstractNumId, newNumId } = LevelFormattingHelpers.cloneAbstractAndNum(
@@ -850,8 +868,7 @@ function ensureSequenceLocalAbstract(
     targetNumId,
   );
 
-  const sequence = getContiguousSequence(editor, target);
-  return { abstractNumId: newAbstractNumId, numId: newNumId, pendingRebind: sequence };
+  return { abstractNumId: newAbstractNumId, numId: newNumId, sourceNumId: targetNumId, pendingRebind: sequence };
 }
 
 /**
@@ -922,8 +939,10 @@ function executeSequenceLocalLevelMutation(
         source: operationId,
         expectedRevision: options?.expectedRevision,
         mutate({ part }) {
+          LevelFormattingHelpers.materializeLevelFormattingOverride(editor, local.abstractNumId, local.numId, level);
           const changed = mutate(local.abstractNumId, level);
           if (!changed) return false;
+          LevelFormattingHelpers.copySequenceStateOverrides(editor, local.sourceNumId, local.numId, [level]);
           syncNumberingToXmlTree(part, getConverterNumbering(editor));
           return true;
         },
@@ -1025,6 +1044,11 @@ export function listsApplyStyleWrapper(
         source: 'lists.applyStyle',
         expectedRevision: options?.expectedRevision,
         mutate({ part }) {
+          const affectedLevels = normalized ?? input.style.levels.map((l) => l.level);
+          for (const ilvl of affectedLevels) {
+            LevelFormattingHelpers.materializeLevelFormattingOverride(editor, local.abstractNumId, local.numId, ilvl);
+          }
+
           const applyResult = LevelFormattingHelpers.applyTemplateToAbstract(
             editor,
             local.abstractNumId,
@@ -1036,15 +1060,8 @@ export function listsApplyStyleWrapper(
             return false;
           }
 
-          // Clear lvlOverride formatting on affected levels so overrides
-          // don't shadow the newly applied abstract values.
-          let overridesCleared = false;
-          const affectedLevels = normalized ?? input.style.levels.map((l) => l.level);
-          for (const ilvl of affectedLevels) {
-            overridesCleared = LevelFormattingHelpers.clearLevelOverride(editor, local.numId, ilvl) || overridesCleared;
-          }
-
-          if (!applyResult.changed && !overridesCleared) return false;
+          if (!applyResult.changed) return false;
+          LevelFormattingHelpers.copySequenceStateOverrides(editor, local.sourceNumId, local.numId, affectedLevels);
           syncNumberingToXmlTree(part, getConverterNumbering(editor));
           return true;
         },
@@ -1225,6 +1242,12 @@ export function listsSetLevelLayoutWrapper(
         source: 'lists.setLevelLayout',
         expectedRevision: options?.expectedRevision,
         mutate({ part }) {
+          LevelFormattingHelpers.materializeLevelFormattingOverride(
+            editor,
+            local.abstractNumId,
+            local.numId,
+            input.level,
+          );
           const layoutResult = LevelFormattingHelpers.setLevelLayout(
             editor,
             local.abstractNumId,

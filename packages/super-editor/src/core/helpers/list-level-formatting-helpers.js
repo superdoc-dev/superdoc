@@ -314,6 +314,45 @@ function setLevelStart(editor, abstractNumId, ilvl, start) {
   return setChildAttr(resolved.lvlEl, 'w:start', String(start));
 }
 
+/**
+ * Apply a partial level-style object to a raw `w:lvl` element.
+ * This preserves unspecified properties already present on the level.
+ *
+ * @param {Object} lvlEl
+ * @param {Object} entry
+ * @returns {boolean}
+ */
+function applyLevelPropertiesToElement(lvlEl, entry) {
+  let changed = false;
+
+  if (entry.numFmt != null || entry.lvlText != null) {
+    const fmtParams = {};
+    if (entry.numFmt != null) fmtParams.numFmt = entry.numFmt;
+    if (entry.lvlText != null) fmtParams.lvlText = entry.lvlText;
+    if (entry.start != null) fmtParams.start = entry.start;
+
+    if (fmtParams.numFmt != null && fmtParams.lvlText != null) {
+      changed = mutateLevelNumberingFormat(lvlEl, fmtParams) || changed;
+    } else {
+      if (fmtParams.numFmt != null) changed = setChildAttr(lvlEl, 'w:numFmt', fmtParams.numFmt) || changed;
+      if (fmtParams.lvlText != null) changed = setChildAttr(lvlEl, 'w:lvlText', fmtParams.lvlText) || changed;
+      if (fmtParams.start != null) changed = setChildAttr(lvlEl, 'w:start', String(fmtParams.start)) || changed;
+    }
+  } else if (entry.start != null) {
+    changed = setChildAttr(lvlEl, 'w:start', String(entry.start)) || changed;
+  }
+
+  if (entry.alignment != null) changed = mutateLevelAlignment(lvlEl, entry.alignment) || changed;
+  if (entry.indents != null) changed = mutateLevelIndents(lvlEl, entry.indents) || changed;
+  if (entry.trailingCharacter != null)
+    changed = mutateLevelTrailingCharacter(lvlEl, entry.trailingCharacter) || changed;
+  if (entry.markerFont != null) changed = mutateLevelMarkerFont(lvlEl, entry.markerFont) || changed;
+  if (entry.pictureBulletId != null) changed = mutateLevelPictureBulletId(lvlEl, entry.pictureBulletId) || changed;
+  if (entry.tabStopAt !== undefined) changed = mutateLevelTabStop(lvlEl, entry.tabStopAt) || changed;
+
+  return changed;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Raw XML Mutators (no sync, no emit)
 // ──────────────────────────────────────────────────────────────────────────────
@@ -583,6 +622,60 @@ function clearLevelOverride(editor, numId, ilvl) {
   return true;
 }
 
+/**
+ * Fold formatting from `w:lvlOverride/w:lvl` into the target abstract level,
+ * then remove only the `w:lvl` child while preserving any `w:startOverride`.
+ *
+ * This lets sequence-local style edits operate on the effective visible style
+ * without dropping restart state stored on the numbering instance.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} numId
+ * @param {number} ilvl
+ * @returns {boolean}
+ */
+function materializeLevelFormattingOverride(editor, abstractNumId, numId, ilvl) {
+  const resolved = resolveAbstractLevel(editor, abstractNumId, ilvl);
+  const numDef = editor.converter.numbering?.definitions?.[numId];
+  if (!resolved || !numDef?.elements) return false;
+
+  const ilvlStr = String(ilvl);
+  const overrideIndex = numDef.elements.findIndex(
+    (el) => el.name === 'w:lvlOverride' && el.attributes?.['w:ilvl'] === ilvlStr,
+  );
+  if (overrideIndex === -1) return false;
+
+  const overrideEl = numDef.elements[overrideIndex];
+  if (!overrideEl?.elements) return false;
+
+  const lvlIndex = overrideEl.elements.findIndex((el) => el.name === 'w:lvl');
+  if (lvlIndex === -1) return false;
+
+  const lvlEl = overrideEl.elements[lvlIndex];
+  const props = readLevelProperties(lvlEl, ilvl);
+  const abstractChanged = applyLevelPropertiesToElement(resolved.lvlEl, props);
+  const lvlRestartElements =
+    lvlEl.elements?.filter((el) => el.name === 'w:lvlRestart').map((el) => deepCloneElement(el)) ?? [];
+
+  overrideEl.elements.splice(lvlIndex, 1);
+  if (lvlRestartElements.length > 0) {
+    overrideEl.elements.push({
+      type: 'element',
+      name: 'w:lvl',
+      attributes: { 'w:ilvl': ilvlStr },
+      elements: lvlRestartElements,
+    });
+  }
+
+  let overrideChanged = true;
+  if (overrideEl.elements.length === 0) {
+    numDef.elements.splice(overrideIndex, 1);
+  }
+
+  return abstractChanged || overrideChanged;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Template Capture
 // ──────────────────────────────────────────────────────────────────────────────
@@ -644,36 +737,7 @@ function applyTemplateToAbstract(editor, abstractNumId, template, levels) {
   for (const ilvl of targetLevels) {
     const entry = templateByLevel.get(ilvl);
     const lvlEl = findLevelElement(abstract, ilvl);
-
-    if (entry.numFmt != null || entry.lvlText != null) {
-      const fmtParams = {};
-      if (entry.numFmt != null) fmtParams.numFmt = entry.numFmt;
-      if (entry.lvlText != null) fmtParams.lvlText = entry.lvlText;
-      if (entry.start != null) fmtParams.start = entry.start;
-
-      if (fmtParams.numFmt != null && fmtParams.lvlText != null) {
-        anyChanged = mutateLevelNumberingFormat(lvlEl, fmtParams) || anyChanged;
-      } else {
-        if (fmtParams.numFmt != null) anyChanged = setChildAttr(lvlEl, 'w:numFmt', fmtParams.numFmt) || anyChanged;
-        if (fmtParams.lvlText != null) anyChanged = setChildAttr(lvlEl, 'w:lvlText', fmtParams.lvlText) || anyChanged;
-        if (fmtParams.start != null) anyChanged = setChildAttr(lvlEl, 'w:start', String(fmtParams.start)) || anyChanged;
-      }
-    } else if (entry.start != null) {
-      anyChanged = setChildAttr(lvlEl, 'w:start', String(entry.start)) || anyChanged;
-    }
-
-    if (entry.alignment != null) anyChanged = mutateLevelAlignment(lvlEl, entry.alignment) || anyChanged;
-    if (entry.indents != null) anyChanged = mutateLevelIndents(lvlEl, entry.indents) || anyChanged;
-    if (entry.trailingCharacter != null)
-      anyChanged = mutateLevelTrailingCharacter(lvlEl, entry.trailingCharacter) || anyChanged;
-    if (entry.markerFont != null) anyChanged = mutateLevelMarkerFont(lvlEl, entry.markerFont) || anyChanged;
-    if (entry.pictureBulletId != null)
-      anyChanged = mutateLevelPictureBulletId(lvlEl, entry.pictureBulletId) || anyChanged;
-
-    // Apply tabStopAt if present in template
-    if (entry.tabStopAt !== undefined) {
-      anyChanged = mutateLevelTabStop(lvlEl, entry.tabStopAt) || anyChanged;
-    }
+    anyChanged = applyLevelPropertiesToElement(lvlEl, entry) || anyChanged;
   }
 
   return { changed: anyChanged };
@@ -974,6 +1038,137 @@ function deepCloneElement(element) {
 }
 
 /**
+ * Clone an abstract definition and return the new abstractNumId.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} originalAbstractNumId
+ * @returns {{ newAbstractNumId: number }}
+ */
+function cloneAbstractDefinition(editor, originalAbstractNumId) {
+  const numbering = editor.converter.numbering;
+  const existingAbstractIds = Object.keys(numbering.abstracts).map(Number);
+  const newAbstractNumId = existingAbstractIds.length > 0 ? Math.max(...existingAbstractIds) + 1 : 0;
+
+  const original = numbering.abstracts[originalAbstractNumId];
+  if (!original) {
+    throw new Error(`cloneAbstractDefinition: abstract ${originalAbstractNumId} not found.`);
+  }
+
+  const cloned = deepCloneElement(original);
+  cloned.attributes = { ...cloned.attributes, 'w:abstractNumId': String(newAbstractNumId) };
+  numbering.abstracts[newAbstractNumId] = cloned;
+
+  return { newAbstractNumId };
+}
+
+/**
+ * Clone an abstract definition and retarget an existing w:num to it.
+ * Preserves any lvlOverride/startOverride state on the num definition.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} originalAbstractNumId
+ * @param {number} numId
+ * @returns {{ newAbstractNumId: number }}
+ */
+function cloneAbstractIntoNum(editor, originalAbstractNumId, numId) {
+  const numbering = editor.converter.numbering;
+  const { newAbstractNumId } = cloneAbstractDefinition(editor, originalAbstractNumId);
+
+  const numDef = numbering.definitions[numId];
+  if (!numDef) {
+    throw new Error(`cloneAbstractIntoNum: num ${numId} not found.`);
+  }
+  if (!numDef.elements) numDef.elements = [];
+
+  const abstractNumIdEl = numDef.elements.find((el) => el.name === 'w:abstractNumId');
+  if (abstractNumIdEl) {
+    abstractNumIdEl.attributes = { ...(abstractNumIdEl.attributes || {}), 'w:val': String(newAbstractNumId) };
+  } else {
+    numDef.elements.unshift({
+      type: 'element',
+      name: 'w:abstractNumId',
+      attributes: { 'w:val': String(newAbstractNumId) },
+    });
+  }
+
+  return { newAbstractNumId };
+}
+
+/**
+ * Copy sequence-state overrides (startOverride and instance lvlRestart) from
+ * one num definition to another, intentionally excluding formatting overrides.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} fromNumId
+ * @param {number} toNumId
+ * @param {number[] | undefined} levels
+ * @returns {boolean}
+ */
+function copySequenceStateOverrides(editor, fromNumId, toNumId, levels) {
+  if (fromNumId === toNumId) return false;
+
+  const sourceNumDef = editor.converter.numbering?.definitions?.[fromNumId];
+  const targetNumDef = editor.converter.numbering?.definitions?.[toNumId];
+  if (!sourceNumDef?.elements || !targetNumDef) return false;
+  if (!targetNumDef.elements) targetNumDef.elements = [];
+
+  const levelSet = levels ? new Set(levels.map((level) => String(level))) : null;
+  let changed = false;
+
+  for (const sourceEl of sourceNumDef.elements) {
+    if (sourceEl.name !== 'w:lvlOverride') continue;
+
+    const ilvl = sourceEl.attributes?.['w:ilvl'];
+    if (ilvl == null) continue;
+    if (levelSet && !levelSet.has(ilvl)) continue;
+
+    const nextElements = [];
+    for (const child of sourceEl.elements ?? []) {
+      if (child.name === 'w:startOverride') {
+        nextElements.push(deepCloneElement(child));
+        continue;
+      }
+
+      if (child.name === 'w:lvl') {
+        const lvlRestartElements =
+          child.elements
+            ?.filter((lvlChild) => lvlChild.name === 'w:lvlRestart')
+            .map((lvlChild) => deepCloneElement(lvlChild)) ?? [];
+        if (lvlRestartElements.length > 0) {
+          nextElements.push({
+            type: 'element',
+            name: 'w:lvl',
+            attributes: { ...(child.attributes || {}), 'w:ilvl': child.attributes?.['w:ilvl'] ?? ilvl },
+            elements: lvlRestartElements,
+          });
+        }
+      }
+    }
+
+    if (nextElements.length === 0) continue;
+
+    const targetIndex = targetNumDef.elements.findIndex(
+      (el) => el.name === 'w:lvlOverride' && el.attributes?.['w:ilvl'] === ilvl,
+    );
+    const nextOverride = {
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { ...(sourceEl.attributes || {}), 'w:ilvl': ilvl },
+      elements: nextElements,
+    };
+
+    if (targetIndex === -1) {
+      targetNumDef.elements.push(nextOverride);
+    } else {
+      targetNumDef.elements[targetIndex] = nextOverride;
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
+/**
  * Clone an abstract definition and create a new w:num pointing to it.
  * Returns the new abstractNumId and numId.
  *
@@ -984,16 +1179,7 @@ function deepCloneElement(element) {
  */
 function cloneAbstractAndNum(editor, originalAbstractNumId, originalNumId) {
   const numbering = editor.converter.numbering;
-
-  // Find next available abstractNumId
-  const existingAbstractIds = Object.keys(numbering.abstracts).map(Number);
-  const newAbstractNumId = existingAbstractIds.length > 0 ? Math.max(...existingAbstractIds) + 1 : 0;
-
-  // Clone the abstract definition
-  const original = numbering.abstracts[originalAbstractNumId];
-  const cloned = deepCloneElement(original);
-  cloned.attributes = { ...cloned.attributes, 'w:abstractNumId': String(newAbstractNumId) };
-  numbering.abstracts[newAbstractNumId] = cloned;
+  const { newAbstractNumId } = cloneAbstractDefinition(editor, originalAbstractNumId);
 
   // Find next available numId
   const existingNumIds = Object.keys(numbering.definitions).map(Number);
@@ -1057,6 +1243,7 @@ export const LevelFormattingHelpers = {
   // Override clearing
   hasLevelOverride,
   clearLevelOverride,
+  materializeLevelFormattingOverride,
 
   // Template operations
   captureTemplate,
@@ -1067,7 +1254,9 @@ export const LevelFormattingHelpers = {
 
   // Clone-on-write
   isAbstractShared,
+  cloneAbstractIntoNum,
   cloneAbstractAndNum,
+  copySequenceStateOverrides,
 
   // Preset catalog
   getPresetTemplate,

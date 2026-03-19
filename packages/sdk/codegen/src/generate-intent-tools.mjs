@@ -44,6 +44,39 @@ function sanitizeSchema(schema) {
       result.enum = values;
     } else {
       result.oneOf = result.oneOf.map(sanitizeSchema);
+
+      // Remove empty-object branches ({}) from oneOf — they represent null/clear
+      // but are opaque to LLMs. The parent description handles the "use null to clear" guidance.
+      result.oneOf = result.oneOf.filter(
+        (branch) => !(typeof branch === 'object' && Object.keys(branch).length === 0),
+      );
+
+      // Deduplicate oneOf branches with identical simple types (string, number, boolean).
+      // Keep the one with the longer description. Don't deduplicate objects (they may have different properties).
+      const simpleSeen = new Map();
+      const deduped = [];
+      for (const branch of result.oneOf) {
+        const isSimple = branch.type && branch.type !== 'object' && branch.type !== 'array';
+        const key = isSimple ? branch.type : null;
+        if (key && simpleSeen.has(key)) {
+          const existing = simpleSeen.get(key);
+          if ((branch.description || '').length > (existing.description || '').length) {
+            deduped[deduped.indexOf(existing)] = branch;
+            simpleSeen.set(key, branch);
+          }
+        } else {
+          if (key) simpleSeen.set(key, branch);
+          deduped.push(branch);
+        }
+      }
+      result.oneOf = deduped;
+
+      // Collapse oneOf with a single branch
+      if (result.oneOf.length === 1) {
+        const only = result.oneOf[0];
+        delete result.oneOf;
+        Object.assign(result, only);
+      }
     }
   }
   if (Array.isArray(result.anyOf)) {
@@ -267,17 +300,16 @@ function buildIntentTools(contract) {
       }
 
       // Add fallback descriptions for complex undescribed params.
-      // oneOf schemas without descriptions are opaque to LLMs.
       for (const [propName, propSchema] of Object.entries(allProperties)) {
         if (propSchema.description) continue;
-        if (propSchema.oneOf && !propSchema.description) {
-          if (propName === 'target') {
-            allProperties[propName] = { ...propSchema, description: "Target location. Use a ref string from search results, or a selection/block address object." };
-          } else if (propName === 'content') {
-            allProperties[propName] = { ...propSchema, description: "Document fragment content (structured JSON)." };
-          } else if (propName === 'inline') {
-            allProperties[propName] = { ...propSchema, description: "Inline formatting to apply: {bold: true, italic: true, underline: true, ...}." };
-          }
+        if (propName === 'target') {
+          allProperties[propName] = { ...propSchema, description: "Target address object. Use 'ref' instead if you have a search handle. Format: {kind:'text', blockId, range:{start,end}} or {kind:'block', nodeType, nodeId}." };
+        } else if (propName === 'ref') {
+          allProperties[propName] = { ...propSchema, description: "Handle ref string from superdoc_search. Pass handle.ref value directly (e.g. 'text:eyJ...'). Preferred for text-level operations." };
+        } else if (propName === 'content') {
+          allProperties[propName] = { ...propSchema, description: "Document fragment content (structured JSON)." };
+        } else if (propName === 'inline') {
+          allProperties[propName] = { ...propSchema, description: "Inline formatting to apply: {bold: true, italic: true, underline: true, ...}." };
         }
       }
 

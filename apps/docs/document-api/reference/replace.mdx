@@ -244,6 +244,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
             },
             "nestingPolicy": {
               "additionalProperties": false,
+              "description": "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
               "properties": {
                 "tables": {
                   "enum": [
@@ -291,6 +292,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
             },
             "nestingPolicy": {
               "additionalProperties": false,
+              "description": "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
               "properties": {
                 "tables": {
                   "enum": [

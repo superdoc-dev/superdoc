@@ -208,6 +208,8 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     ['kind', 'nodeType', 'nodeId'],
   ),
   SelectionPoint: {
+    description:
+      "A point in the document. Use {kind:'text', blockId, offset} for character positions or {kind:'nodeEdge', node:{kind:'block', nodeType, nodeId}, edge:'before'|'after'} for block boundaries.",
     oneOf: [
       objectSchema({ kind: { const: 'text' }, blockId: { type: 'string' }, offset: { type: 'integer', minimum: 0 } }, [
         'kind',
@@ -1440,9 +1442,12 @@ const sdFragmentSchema: JsonSchema = {
 
 const placementSchema: JsonSchema = { enum: ['before', 'after', 'insideStart', 'insideEnd'] };
 
-const nestingPolicySchema = objectSchema({
-  tables: { enum: ['forbid', 'allow'] },
-});
+const nestingPolicySchema: JsonSchema = {
+  ...objectSchema({
+    tables: { enum: ['forbid', 'allow'] },
+  }),
+  description: "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
+};
 
 const insertInputSchema: JsonSchema = {
   oneOf: [

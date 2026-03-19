@@ -58,6 +58,16 @@ Single-action tools like `superdoc_search` do not require an `action` parameter.
 3. **Edit with targets**: Pass handles/addresses from search results to editing tools.
 4. **Batch when possible**: For multi-step edits (e.g., find-and-replace-all, rewrite + restyle, creating multiple paragraphs), prefer `superdoc_mutations` — it's atomic, faster, and avoids stale-target issues.
 
+### Placing content near specific text
+
+To add content near a heading or specific text (e.g., "add a paragraph after the Introduction section"):
+
+1. **Search for the text**: `superdoc_search({select: {type: "text", pattern: "Introduction"}, require: "first"})`
+2. **Get the blockId** from `result.items[0].blocks[0].blockId`
+3. **Create content after it**: `superdoc_create({action: "paragraph", text: "...", at: {kind: "after", target: {kind: "block", nodeType: "heading", nodeId: "<blockId>"}}})`
+
+**Do NOT search by node type and then try to match by position** — this is unreliable in large documents. Always search for the actual text content to find the exact location.
+
 ## Using superdoc_mutations
 
 The mutations tool executes a plan of steps atomically. Use `action: "apply"` to execute, or `action: "preview"` to dry-run.
@@ -95,6 +105,7 @@ To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: 
 ## Important rules
 
 - **Do NOT combine `limit`/`offset` with `require: "first"` or `require: "exactlyOne"`** in superdoc_search. Use `require: "any"` with `limit` for paginated results.
+- **superdoc_search `select.type`** must be `"text"` or `"node"`. To find headings, use `{type: "node", nodeType: "heading"}`, NOT `{type: "heading"}`.
 - For `superdoc_format` inline properties, use `null` inside the `inline` object to clear a property (e.g., `"inline": { "bold": null }` removes bold).
 - **Creating lists** requires two modes:
   - `mode: "fromParagraphs"` — converts existing paragraphs into list items. Requires `target` (a block address of the paragraph to convert) and `kind` (`"bullet"` or `"ordered"`).

@@ -90,5 +90,5 @@ To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: 
 ## Important rules
 
 - **Do NOT combine `limit`/`offset` with `require: "first"` or `require: "exactlyOne"`** in superdoc_search. Use `require: "any"` with `limit` for paginated results.
-- For `superdoc_format` inline properties, use `null` to clear a property (e.g., `"bold": null` removes bold).
+- For `superdoc_format` inline properties, use `null` inside the `inline` object to clear a property (e.g., `"inline": { "bold": null }` removes bold).
 - For `superdoc_list` create action: this converts existing paragraphs into list items. Create the paragraph first with `superdoc_create`, then convert it with `superdoc_list` action `create`.

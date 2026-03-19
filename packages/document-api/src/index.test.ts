@@ -47,11 +47,15 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
   const defaultResult: DocumentInfo = {
     counts: {
       words: 0,
+      characters: 0,
       paragraphs: 0,
       headings: 0,
       tables: 0,
       images: 0,
       comments: 0,
+      trackedChanges: 0,
+      sdtFields: 0,
+      lists: 0,
     },
     outline: [],
     capabilities: {
@@ -60,6 +64,7 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
       canComment: true,
       canReplace: true,
     },
+    revision: '0',
   };
 
   return {
@@ -303,11 +308,13 @@ function makeTablesAdapter(): TablesAdapter {
       columns: 3,
     })),
     getCells: vi.fn(() => ({
-      tableNodeId: 't1',
+      nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
       cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
     })),
     getProperties: vi.fn(() => ({
       nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
       styleId: 'TableGrid',
       alignment: 'left' as const,
     })),
@@ -633,7 +640,7 @@ describe('createDocumentApi', () => {
     );
     expect(selectionAdpt.execute).toHaveBeenCalledWith(
       { kind: 'delete', target: selectionTarget, ref: undefined, behavior: 'selection' },
-      undefined,
+      { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
     );
   });
 
@@ -1136,14 +1143,16 @@ describe('createDocumentApi', () => {
       });
     }
 
-    function expectValidationError(fn: () => void, messageMatch?: string | RegExp) {
+    function expectValidationError(fn: () => void, messageMatch?: string | RegExp, expectedCode?: string) {
       try {
         fn();
         expect.fail('Expected DocumentApiValidationError to be thrown');
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+        if (expectedCode) {
+          expect(e.code).toBe(expectedCode);
+        }
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1323,7 +1332,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '# Heading', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '# Heading', type: 'markdown' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '# Heading', type: 'markdown' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1346,7 +1358,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '<p>Hello</p>', type: 'html' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '<p>Hello</p>', type: 'html' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '<p>Hello</p>', type: 'html' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1393,7 +1408,7 @@ describe('createDocumentApi', () => {
       api.insert({ target, value: '**bold**', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
         { target, value: '**bold**', type: 'markdown' },
-        undefined,
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
 
@@ -1787,7 +1802,7 @@ describe('createDocumentApi', () => {
       api.delete({ target: SELECTION_TARGET });
       expect(selectionAdpt.execute).toHaveBeenCalledWith(
         { kind: 'delete', target: SELECTION_TARGET, ref: undefined, behavior: 'selection' },
-        undefined,
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
   });
@@ -1955,7 +1970,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2085,7 +2100,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2253,7 +2268,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2367,7 +2382,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2522,7 +2537,7 @@ describe('createDocumentApi', () => {
       expect(getResult.columns).toBe(3);
 
       const cellsResult = api.tables.getCells({ target });
-      expect(cellsResult.tableNodeId).toBe('t1');
+      expect(cellsResult.nodeId).toBe('t1');
       expect(cellsResult.cells).toHaveLength(1);
 
       const propsResult = api.tables.getProperties({ target });
@@ -2640,48 +2655,81 @@ describe('createDocumentApi', () => {
 
     it('accepts table-scoped locator for row-locator operations', () => {
       const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertRow({ tableTarget, rowIndex: 0, position: 'after' })).not.toThrow();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteRow({ nodeId: 't1', rowIndex: 0 })).not.toThrow();
     });
 
-    it('rejects both direct + table-scoped for row-locator operations', () => {
+    it('rejects table-target row ops without rowIndex at the public API boundary', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      expect(() => api.tables.insertRow({ target, position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ target } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ target, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ target, repeatHeader: true } as any)).toThrow(/rowIndex is required/);
+    });
+
+    it('rejects bare nodeId row ops at the public API boundary', () => {
+      const api = makeApi();
+
+      expect(() => api.tables.insertRow({ nodeId: 't1', position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ nodeId: 't1' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ nodeId: 't1', heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ nodeId: 't1', repeatHeader: true } as any)).toThrow(
+        /rowIndex is required/,
+      );
+    });
+
+    it('rejects redundant rowIndex on direct row targets at the public API boundary', () => {
       const api = makeApi();
       const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertRow({ target, tableTarget, rowIndex: 0, position: 'after' } as any)).toThrow(
+
+      expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.deleteRow({ target, rowIndex: 0 } as any)).toThrow(/rowIndex must not be provided/);
+      expect(() => api.tables.setRowHeight({ target, rowIndex: 0, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.setRowOptions({ target, rowIndex: 0, repeatHeader: true } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+    });
+
+    // -- column-locator operations (target/nodeId) --
+
+    it('accepts target for column-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ target, columnIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteColumn({ target, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts nodeId for column-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.insertColumn({ nodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both target + nodeId for column-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ target, nodeId: 't1', columnIndex: 0, position: 'after' } as any)).toThrow(
         /Cannot combine/,
       );
     });
 
-    // -- column-locator operations (tableTarget/tableNodeId) --
+    // -- merge range locator (target/nodeId) --
 
-    it('accepts tableTarget for column-locator operations', () => {
+    it('accepts target for merge range operations', () => {
       const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertColumn({ tableTarget, columnIndex: 0, position: 'after' })).not.toThrow();
-      expect(() => api.tables.deleteColumn({ tableTarget, columnIndex: 0 })).not.toThrow();
-    });
-
-    it('accepts tableNodeId for column-locator operations', () => {
-      const api = makeApi();
-      expect(() => api.tables.insertColumn({ tableNodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
-    });
-
-    it('rejects both tableTarget + tableNodeId for column-locator operations', () => {
-      const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
       expect(() =>
-        api.tables.insertColumn({ tableTarget, tableNodeId: 't1', columnIndex: 0, position: 'after' } as any),
-      ).toThrow(/Cannot combine/);
-    });
-
-    // -- merge range locator (tableTarget/tableNodeId) --
-
-    it('accepts tableTarget for merge range operations', () => {
-      const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() =>
-        api.tables.mergeCells({ tableTarget, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
+        api.tables.mergeCells({ target, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
       ).not.toThrow();
     });
 

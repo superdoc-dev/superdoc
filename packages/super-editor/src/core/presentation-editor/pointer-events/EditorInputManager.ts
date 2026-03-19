@@ -1283,6 +1283,20 @@ export class EditorInputManager {
       return;
     }
 
+    // When editing a header/footer, let the ProseMirror editor inside the
+    // overlay handle double-click word/paragraph selection. Do not re-run
+    // header/footer hit-testing for double-clicks that occur inside the
+    // active editor host.
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      const activeEditorHost = this.#deps.getHeaderFooterSession()?.overlayManager?.getActiveEditorHost?.();
+      const clickedInsideEditorHost =
+        activeEditorHost && (activeEditorHost.contains(target as Node) || activeEditorHost === target);
+      if (clickedInsideEditorHost) {
+        return;
+      }
+    }
+
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
 

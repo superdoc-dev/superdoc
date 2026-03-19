@@ -3,8 +3,8 @@
  * `delete`, `replace` (text path), and `format.apply` in the new
  * SelectionTarget / ref model.
  *
- * This replaces the WriteAdapter for delete/replace and the FormatAdapter
- * for format.apply. All three operations route through the plan engine.
+ * This replaces the WriteAdapter for delete/replace and the legacy format
+ * adapter for format.apply. All three operations route through the plan engine.
  */
 
 import type { SelectionTarget, DeleteBehavior } from './types/address.js';

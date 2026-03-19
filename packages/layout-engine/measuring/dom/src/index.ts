@@ -1988,7 +1988,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         // - WIDTH_FUDGE_PX is meant to give leeway for fitting text that's very close
         // - We only want to break mid-word when the word truly exceeds available width
         // - Breaking words that exactly fit would cause unnecessary fragmentation
-        if (wordOnlyWidth > effectiveMaxWidth && word.length > 1) {
+        if (wordOnlyWidth > effectiveMaxWidth + WIDTH_FUDGE_PX && word.length > 1) {
           // First, finish any existing currentLine before processing the long word
           // Only push the line if it has actual text content (segments), not just tab positioning.
           // If the line only has width from tab advances but no text, we should keep it so the
@@ -2019,7 +2019,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
           // Use remaining width for chunking if we have a tab-only line, otherwise use full line width
           const chunkWidth = hasTabOnlyLine ? Math.max(remainingWidthAfterTab, lineMaxWidth * 0.25) : lineMaxWidth;
-          const chunks = breakWordIntoChunks(word, chunkWidth - WIDTH_FUDGE_PX, font, ctx, run, wordStartChar);
+          const chunks = breakWordIntoChunks(word, chunkWidth, font, ctx, run, wordStartChar);
 
           // Process all chunks except the last one as complete lines
           let chunkCharOffset = wordStartChar;

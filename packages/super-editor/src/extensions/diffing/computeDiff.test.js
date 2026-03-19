@@ -63,11 +63,13 @@ describe('Diff', () => {
     const deletedDiffs = diffs.filter((diff) => diff.action === 'deleted');
     const attrOnlyDiffs = modifiedDiffs.filter((diff) => diff.contentDiff.length === 0);
 
-    expect(diffs).toHaveLength(19);
-    expect(modifiedDiffs).toHaveLength(9);
+    // One volatile-only paragraph diff (paraId/rsidR/textId changes) is now
+    // correctly filtered out by semantic normalization. See semantic-normalization.ts.
+    expect(diffs).toHaveLength(18);
+    expect(modifiedDiffs).toHaveLength(8);
     expect(addedDiffs).toHaveLength(5);
     expect(deletedDiffs).toHaveLength(5);
-    expect(attrOnlyDiffs).toHaveLength(4);
+    expect(attrOnlyDiffs).toHaveLength(3);
 
     // Modified paragraph with multiple text diffs
     let diff = getDiff(
@@ -166,7 +168,6 @@ describe('Diff', () => {
     expect(diff.contentDiff[0].newText).toBe(' ');
     expect(diff.contentDiff[1].text).toBe('NEW');
     expect(diff.contentDiff[2].text).toBe(' ');
-    expect(diff.attrsDiff?.modified?.textId).toBeDefined();
 
     diff = diffs.find((diff) => diff.action === 'deleted' && diff.oldText === 'I deleted this sentence.');
     expect(diff).toBeDefined();
@@ -177,7 +178,6 @@ describe('Diff', () => {
     diff = diffs.find((diff) => diff.action === 'modified' && diff.oldText === 'We are not done yet.');
     expect(diff.newText).toBe('We are done now.');
     expect(diff.contentDiff).toHaveLength(3);
-    expect(diff.attrsDiff?.modified?.textId).toBeDefined();
   });
 
   it('Compare another set of two documents with only formatting changes', async () => {

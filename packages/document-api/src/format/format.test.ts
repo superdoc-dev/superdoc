@@ -85,7 +85,7 @@ describe('executeStyleApply validation', () => {
   it('rejects unknown inline keys', () => {
     const adapter = makeAdapter();
     const input = { target: TARGET, inline: { superscript: true } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline style key "superscript"');
+    expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline property: "superscript".');
   });
 
   it('rejects invalid boolean payload type', () => {

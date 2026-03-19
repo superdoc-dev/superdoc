@@ -65,6 +65,29 @@ const buildInlineNodeToken = (attrs = {}, type = { name: 'link' }, pos = 0) => {
 };
 
 /**
+ * Builds a mock image inline-node token for diff tests.
+ *
+ * @param {Record<string, unknown>} attrs Image node attributes.
+ * @param {number} pos Position offset for the image node.
+ * @returns {import('./inline-diffing.ts').InlineNodeToken}
+ */
+const buildImageNodeToken = (attrs = {}, pos = 0) => {
+  const nodeAttrs = { ...attrs };
+  const type = { name: 'image' };
+  return {
+    kind: 'inlineNode',
+    nodeType: 'image',
+    node: {
+      type,
+      attrs: nodeAttrs,
+      toJSON: () => ({ type: 'image', attrs: nodeAttrs }),
+    },
+    nodeJSON: { type: 'image', attrs: nodeAttrs },
+    pos,
+  };
+};
+
+/**
  * Builds text tokens without offsets for tokenizer assertions.
  *
  * @param {string} text Text content to tokenize.
@@ -424,5 +447,133 @@ describe('tokenizeInlineContent', () => {
     expect(stripTokenOffsets(tokens)).toEqual(buildTextTokens('Nested', {}, []));
     expect(tokens[0]?.offset).toBe(11);
     expect(tokens[5]?.offset).toBe(16);
+  });
+});
+
+describe('image semantic normalization in inline diff', () => {
+  it('produces no diff when images differ only in volatile originalAttributes', () => {
+    const baseAttrs = {
+      src: 'image1.png',
+      size: { width: 100, height: 50 },
+      originalAttributes: {
+        'wp14:anchorId': 'AAAA1111',
+        'wp14:editId': 'BBBB2222',
+        cx: '914400',
+      },
+    };
+    const changedAttrs = {
+      src: 'image1.png',
+      size: { width: 100, height: 50 },
+      originalAttributes: {
+        'wp14:anchorId': 'CCCC3333',
+        'wp14:editId': 'DDDD4444',
+        cx: '914400',
+      },
+    };
+
+    const oldToken = buildImageNodeToken(baseAttrs, 5);
+    const newToken = buildImageNodeToken(changedAttrs, 5);
+
+    const diffs = getInlineDiff([oldToken], [newToken], 6);
+    expect(diffs).toEqual([]);
+  });
+
+  it('detects a real image change even when volatile attrs also differ', () => {
+    const oldAttrs = {
+      src: 'old-image.png',
+      originalAttributes: { 'wp14:anchorId': 'A1', cx: '100' },
+    };
+    const newAttrs = {
+      src: 'new-image.png',
+      originalAttributes: { 'wp14:anchorId': 'A2', cx: '100' },
+    };
+
+    const oldToken = buildImageNodeToken(oldAttrs, 3);
+    const newToken = buildImageNodeToken(newAttrs, 3);
+
+    const diffs = getInlineDiff([oldToken], [newToken], 4);
+
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0].action).toBe('modified');
+    expect(diffs[0].kind).toBe('inlineNode');
+    expect(diffs[0].attrsDiff?.modified).toHaveProperty('src');
+  });
+
+  it('handles multiple images in one paragraph using type-based pairing', () => {
+    const mkImage = (src, anchorId, pos) =>
+      buildImageNodeToken({ src, originalAttributes: { 'wp14:anchorId': anchorId, cx: '100' } }, pos);
+
+    const oldTokens = [mkImage('a.png', 'ID1', 1), mkImage('b.png', 'ID2', 3)];
+    const newTokens = [mkImage('a.png', 'ID3', 1), mkImage('b.png', 'ID4', 3)];
+
+    const diffs = getInlineDiff(oldTokens, newTokens, 5);
+    expect(diffs).toEqual([]);
+  });
+
+  it('emits a diff when one of multiple images genuinely changes', () => {
+    const mkImage = (src, anchorId, pos) =>
+      buildImageNodeToken({ src, originalAttributes: { 'wp14:anchorId': anchorId } }, pos);
+
+    const oldTokens = [mkImage('a.png', 'ID1', 1), mkImage('b.png', 'ID2', 3)];
+    const newTokens = [mkImage('a.png', 'ID3', 1), mkImage('c.png', 'ID4', 3)];
+
+    const diffs = getInlineDiff(oldTokens, newTokens, 5);
+
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0].action).toBe('modified');
+    expect(diffs[0].attrsDiff?.modified).toHaveProperty('src');
+  });
+
+  it('correctly detects an image insertion when a new image is prepended', () => {
+    const mkImage = (src, pos) => buildImageNodeToken({ src }, pos);
+
+    const oldTokens = [mkImage('a.png', 1), mkImage('b.png', 3)];
+    const newTokens = [mkImage('x.png', 1), mkImage('a.png', 3), mkImage('b.png', 5)];
+
+    const diffs = getInlineDiff(oldTokens, newTokens, 5);
+
+    // Should be a single insertion of x.png, not two modifications + addition
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0].action).toBe('added');
+    expect(diffs[0].kind).toBe('inlineNode');
+    expect(diffs[0].nodeJSON.attrs.src).toBe('x.png');
+  });
+
+  it('correctly detects image reordering as delete + add', () => {
+    const mkImage = (src, pos) => buildImageNodeToken({ src }, pos);
+
+    const oldTokens = [mkImage('a.png', 1), mkImage('b.png', 3)];
+    const newTokens = [mkImage('b.png', 1), mkImage('a.png', 3)];
+
+    const diffs = getInlineDiff(oldTokens, newTokens, 5);
+
+    // Reorder produces diffs — at minimum some combination of added/deleted
+    expect(diffs.length).toBeGreaterThan(0);
+  });
+
+  it('excludes volatile attrs from attrsDiff when a real image change occurs', () => {
+    const oldAttrs = {
+      src: 'v1.png',
+      size: { width: 100 },
+      originalAttributes: { 'wp14:anchorId': 'OLD', 'wp14:editId': 'OLD', cx: '100' },
+    };
+    const newAttrs = {
+      src: 'v2.png',
+      size: { width: 200 },
+      originalAttributes: { 'wp14:anchorId': 'NEW', 'wp14:editId': 'NEW', cx: '100' },
+    };
+
+    const diffs = getInlineDiff([buildImageNodeToken(oldAttrs, 1)], [buildImageNodeToken(newAttrs, 1)], 2);
+
+    expect(diffs).toHaveLength(1);
+    const attrsDiff = diffs[0].attrsDiff;
+
+    // Semantic changes are reported
+    expect(attrsDiff?.modified).toHaveProperty('src');
+    expect(attrsDiff?.modified).toHaveProperty('size.width');
+
+    // Volatile changes are NOT reported
+    expect(attrsDiff?.modified).not.toHaveProperty('originalAttributes.wp14:anchorId');
+    expect(attrsDiff?.modified).not.toHaveProperty('originalAttributes.wp14:editId');
   });
 });

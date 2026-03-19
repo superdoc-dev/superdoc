@@ -43,6 +43,7 @@ vi.mock('../helpers/index-resolver.js', () => ({
 
 import { indexEntriesInsertWrapper } from './index-wrappers.js';
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
+import { resolveIndexEntryTarget } from '../helpers/index-resolver.js';
 
 type MockPmNode = {
   type: { name: string };
@@ -155,5 +156,83 @@ describe('indexEntriesInsertWrapper', () => {
     expect(result.entry.anchor.start.blockId).toBe('p-alpha');
     expect(result.entry.anchor.start.offset).toBe(11);
     expect(result.entry.anchor.end.offset).toBe(13);
+  });
+});
+
+describe('indexEntriesUpdateWrapper', () => {
+  it('rebuilds the XE instruction when patch.text changes the primary entry text', async () => {
+    const { indexEntriesUpdateWrapper } = await import('./index-wrappers.js');
+
+    const resolvedNode = {
+      attrs: {
+        instruction: 'XE "Primary Entry:Sub Entry"',
+        instructionTokens: null,
+        subEntry: 'Sub Entry',
+        bold: false,
+        italic: false,
+      },
+      nodeSize: 2,
+    };
+
+    const tr = {
+      setNodeMarkup: vi.fn((_pos: number, _type: unknown, _attrs: Record<string, unknown>) => tr),
+    };
+
+    const editor = {
+      state: {
+        doc: {},
+        tr,
+      },
+      dispatch: vi.fn(),
+    } as unknown as Editor;
+
+    vi.mocked(resolveIndexEntryTarget).mockReturnValueOnce({
+      pos: 7,
+      node: resolvedNode as never,
+      instruction: 'XE "Primary Entry:Sub Entry"',
+      blockId: 'p-index',
+    });
+
+    const { extractIndexEntryInfo } = await import('../helpers/index-resolver.js');
+    vi.mocked(extractIndexEntryInfo).mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'indexEntry',
+        anchor: {
+          start: { blockId: 'p-index', offset: 6 },
+          end: { blockId: 'p-index', offset: 8 },
+        },
+      },
+      instruction: 'XE "Primary Entry:Sub Entry"',
+      text: 'Primary Entry',
+      subEntry: 'Sub Entry',
+      bold: false,
+      italic: false,
+    });
+
+    const result = indexEntriesUpdateWrapper(editor, {
+      target: {
+        kind: 'inline',
+        nodeType: 'indexEntry',
+        anchor: {
+          start: { blockId: 'p-index', offset: 6 },
+          end: { blockId: 'p-index', offset: 8 },
+        },
+      },
+      patch: {
+        text: 'Updated Entry',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      7,
+      undefined,
+      expect.objectContaining({
+        text: 'Updated Entry',
+        instruction: 'XE "Updated Entry:Sub Entry"',
+        instructionTokens: null,
+      }),
+    );
   });
 });

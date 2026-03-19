@@ -31,6 +31,11 @@ describe('w:tc translator', () => {
     expect(translator.sdNodeOrKeyName).toBe('tableCell');
   });
 
+  it('keeps legacy paraId handlers for import compatibility', () => {
+    const paraIdHandler = translator.attributes.find((attr) => attr.sdName === 'paraId');
+    expect(paraIdHandler?.xmlName).toBe('w14:paraId');
+  });
+
   it('encode calls legacy handler and merges encodedAttrs into result attrs', () => {
     const params = { extraParams: { node: {}, table: {}, row: {} } };
     const res = config.encode(params, { extra: 'ok' });
@@ -47,5 +52,14 @@ describe('w:tc translator', () => {
     expect(translateTableCell).toHaveBeenCalledTimes(1);
     expect(out.name).toBe('w:tc');
     expect(out.attributes).toMatchObject({ 'w:foo': 'bar' });
+  });
+
+  it('drops legacy w14 cell identity attributes on export', () => {
+    const params = { node: { type: 'tableCell', attrs: {} } };
+    const out = config.decode(params, { 'w14:paraId': 'ABCDEF01', 'w14:textId': 'ABCDEF02' });
+
+    expect(translateTableCell).toHaveBeenCalledTimes(1);
+    expect(out.name).toBe('w:tc');
+    expect(out.attributes).toBeUndefined();
   });
 });

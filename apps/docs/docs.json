@@ -109,7 +109,10 @@
                   "document-api/available-operations"
                 ]
               },
-              "document-engine/sdks",
+              {
+                "group": "SDKs",
+                "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
+              },
               "document-engine/cli",
               {
                 "group": "AI Agents",

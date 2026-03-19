@@ -1,6 +1,6 @@
 import type { Position } from '../types/base.js';
 import type { TextTarget } from '../types/address.js';
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 
 // ---------------------------------------------------------------------------
@@ -80,12 +80,7 @@ export interface BookmarkMutationSuccess {
   bookmark: BookmarkAddress;
 }
 
-export interface BookmarkMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type BookmarkMutationResult = BookmarkMutationSuccess | BookmarkMutationFailure;
+export type BookmarkMutationResult = BookmarkMutationSuccess | AdapterMutationFailure;
 
 // ---------------------------------------------------------------------------
 // List result

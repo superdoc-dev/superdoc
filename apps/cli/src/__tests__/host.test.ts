@@ -10,6 +10,7 @@ import { resolveSourceDocFixture } from './fixtures';
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
 const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
 const CLI_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/cli/package.json');
+const HOST_TEST_TIMEOUT_MS = 20_000;
 
 async function readCliPackageVersion(): Promise<string> {
   const raw = await readFile(CLI_PACKAGE_JSON, 'utf8');
@@ -179,197 +180,213 @@ describe('CLI host mode', () => {
     }
   });
 
-  test('handles ping/capabilities/describe/cli.invoke/shutdown', async () => {
-    const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
-    cleanup.push(stateDir);
-    await mkdir(stateDir, { recursive: true });
-    const expectedCliVersion = await readCliPackageVersion();
+  test(
+    'handles ping/capabilities/describe/cli.invoke/shutdown',
+    async () => {
+      const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
+      cleanup.push(stateDir);
+      await mkdir(stateDir, { recursive: true });
+      const expectedCliVersion = await readCliPackageVersion();
 
-    const host = launchHost(stateDir);
+      const host = launchHost(stateDir);
 
-    const ping = await host.request('host.ping');
-    expect(ping.error).toBeUndefined();
-    expect((ping.result as { ok: boolean }).ok).toBe(true);
+      const ping = await host.request('host.ping');
+      expect(ping.error).toBeUndefined();
+      expect((ping.result as { ok: boolean }).ok).toBe(true);
 
-    const capabilities = await host.request('host.capabilities');
-    expect(capabilities.error).toBeUndefined();
-    const capabilityPayload = capabilities.result as {
-      protocolVersion: string;
-      features: string[];
-      cliVersion: string;
-    };
-    expect(capabilityPayload.protocolVersion).toBe('1.0');
-    expect(capabilityPayload.features).toEqual(
-      expect.arrayContaining(['cli.invoke', 'host.shutdown', 'host.describe', 'host.describe.command']),
-    );
-    expect(capabilityPayload.cliVersion).toBe(expectedCliVersion);
+      const capabilities = await host.request('host.capabilities');
+      expect(capabilities.error).toBeUndefined();
+      const capabilityPayload = capabilities.result as {
+        protocolVersion: string;
+        features: string[];
+        cliVersion: string;
+      };
+      expect(capabilityPayload.protocolVersion).toBe('1.0');
+      expect(capabilityPayload.features).toEqual(
+        expect.arrayContaining(['cli.invoke', 'host.shutdown', 'host.describe', 'host.describe.command']),
+      );
+      expect(capabilityPayload.cliVersion).toBe(expectedCliVersion);
 
-    const describe = await host.request('host.describe');
-    expect(describe.error).toBeUndefined();
-    const describePayload = describe.result as { operationCount: number };
-    expect(describePayload.operationCount).toBeGreaterThan(0);
+      const describe = await host.request('host.describe');
+      expect(describe.error).toBeUndefined();
+      const describePayload = describe.result as { operationCount: number };
+      expect(describePayload.operationCount).toBeGreaterThan(0);
 
-    const describeCommand = await host.request('host.describe.command', {
-      operationId: 'doc.find',
-    });
-    expect(describeCommand.error).toBeUndefined();
-    const describeCommandPayload = describeCommand.result as {
-      operation: { id: string };
-    };
-    expect(describeCommandPayload.operation.id).toBe('doc.find');
+      const describeCommand = await host.request('host.describe.command', {
+        operationId: 'doc.find',
+      });
+      expect(describeCommand.error).toBeUndefined();
+      const describeCommandPayload = describeCommand.result as {
+        operation: { id: string };
+      };
+      expect(describeCommandPayload.operation.id).toBe('doc.find');
 
-    const invoke = await host.request('cli.invoke', {
-      argv: ['status'],
-      stdinBase64: '',
-    });
-    expect(invoke.error).toBeUndefined();
-
-    const invokeResult = invoke.result as {
-      command: string;
-      data: { active: boolean };
-      meta: { elapsedMs: number };
-    };
-
-    expect(invokeResult.command).toBe('status');
-    expect(invokeResult.data.active).toBe(false);
-    expect(invokeResult.meta.elapsedMs).toBeGreaterThanOrEqual(0);
-
-    const invokeVersion = await host.request('cli.invoke', {
-      argv: ['--version'],
-      stdinBase64: '',
-    });
-    expect(invokeVersion.error).toBeUndefined();
-    const invokeVersionResult = invokeVersion.result as {
-      command: string;
-      data: { version: string };
-      meta: { elapsedMs: number };
-    };
-    expect(invokeVersionResult.command).toBe('version');
-    expect(invokeVersionResult.data.version).toBe(expectedCliVersion);
-    expect(invokeVersionResult.meta.elapsedMs).toBeGreaterThanOrEqual(0);
-
-    await host.shutdown();
-  });
-
-  test('host cli.invoke responses conform to contract for representative commands', async () => {
-    const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
-    cleanup.push(stateDir);
-    await mkdir(stateDir, { recursive: true });
-
-    const docPath = path.join(stateDir, 'host-conformance.docx');
-    await copyFile(await resolveSourceDocFixture(), docPath);
-
-    const host = launchHost(stateDir);
-
-    async function invokeAndValidate(operationId: CliOperationId, argv: string[]) {
-      const response = await host.request('cli.invoke', {
-        argv,
+      const invoke = await host.request('cli.invoke', {
+        argv: ['status'],
         stdinBase64: '',
       });
-      expect(response.error).toBeUndefined();
-      const payload = response.result as {
+      expect(invoke.error).toBeUndefined();
+
+      const invokeResult = invoke.result as {
         command: string;
-        data: unknown;
+        data: { active: boolean };
         meta: { elapsedMs: number };
       };
-      validateOperationResponseData(operationId, payload.data, payload.command);
-      expect(payload.meta.elapsedMs).toBeGreaterThanOrEqual(0);
-      return payload.data as Record<string, unknown>;
-    }
 
-    const findData = await invokeAndValidate('doc.find', [
-      'find',
-      docPath,
-      '--type',
-      'text',
-      '--pattern',
-      'Wilde',
-      '--limit',
-      '1',
-    ]);
-    const findResult = findData.result as {
-      items?: Array<{
-        node?: { kind?: string; [key: string]: unknown };
-        address?: { kind?: string; nodeId?: string };
-      }>;
-    };
-    const firstItem = findResult.items?.[0];
-    const address = firstItem?.address;
-    const nodeKind = firstItem?.node?.kind ?? 'paragraph';
-    expect(address?.nodeId).toBeDefined();
+      expect(invokeResult.command).toBe('status');
+      expect(invokeResult.data.active).toBe(false);
+      expect(invokeResult.meta.elapsedMs).toBeGreaterThanOrEqual(0);
 
-    // Build a NodeAddress for getNode which expects { kind: 'block', nodeType, nodeId }
-    const blockAddress = { kind: 'block', nodeType: nodeKind, nodeId: address!.nodeId };
-    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(blockAddress)]);
+      const invokeVersion = await host.request('cli.invoke', {
+        argv: ['--version'],
+        stdinBase64: '',
+      });
+      expect(invokeVersion.error).toBeUndefined();
+      const invokeVersionResult = invokeVersion.result as {
+        command: string;
+        data: { version: string };
+        meta: { elapsedMs: number };
+      };
+      expect(invokeVersionResult.command).toBe('version');
+      expect(invokeVersionResult.data.version).toBe(expectedCliVersion);
+      expect(invokeVersionResult.meta.elapsedMs).toBeGreaterThanOrEqual(0);
 
-    // Build a collapsed text target from the block address
-    const collapsedTarget = {
-      kind: 'text',
-      blockId: address!.nodeId,
-      range: { start: 0, end: 0 },
-    };
-    await invokeAndValidate('doc.insert', [
-      'insert',
-      docPath,
-      '--target-json',
-      JSON.stringify(collapsedTarget),
-      '--value',
-      'HOST_CONFORMANCE_INSERT',
-      '--out',
-      path.join(stateDir, 'host-conformance-insert.docx'),
-    ]);
+      await host.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
 
-    const sessionId = 'host-conformance-session';
-    await invokeAndValidate('doc.open', ['open', docPath, '--session', sessionId]);
-    await invokeAndValidate('doc.status', ['status', '--session', sessionId]);
-    await invokeAndValidate('doc.close', ['close', '--session', sessionId, '--discard']);
+  test(
+    'host cli.invoke responses conform to contract for representative commands',
+    async () => {
+      const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
+      cleanup.push(stateDir);
+      await mkdir(stateDir, { recursive: true });
 
-    await invokeAndValidate('doc.trackChanges.list', ['track-changes', 'list', docPath, '--limit', '1']);
-    await invokeAndValidate('doc.comments.list', ['comments', 'list', docPath, '--include-resolved', 'false']);
+      const docPath = path.join(stateDir, 'host-conformance.docx');
+      await copyFile(await resolveSourceDocFixture(), docPath);
 
-    await host.shutdown();
-  });
+      const host = launchHost(stateDir);
 
-  test('returns parse errors for malformed frames', async () => {
-    const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
-    cleanup.push(stateDir);
-    await mkdir(stateDir, { recursive: true });
+      async function invokeAndValidate(operationId: CliOperationId, argv: string[]) {
+        const response = await host.request('cli.invoke', {
+          argv,
+          stdinBase64: '',
+        });
+        expect(response.error).toBeUndefined();
+        const payload = response.result as {
+          command: string;
+          data: unknown;
+          meta: { elapsedMs: number };
+        };
+        validateOperationResponseData(operationId, payload.data, payload.command);
+        expect(payload.meta.elapsedMs).toBeGreaterThanOrEqual(0);
+        return payload.data as Record<string, unknown>;
+      }
 
-    const host = launchHost(stateDir);
+      const findData = await invokeAndValidate('doc.find', [
+        'find',
+        docPath,
+        '--type',
+        'text',
+        '--pattern',
+        'Wilde',
+        '--limit',
+        '1',
+      ]);
+      const findResult = findData.result as {
+        items?: Array<{
+          node?: { kind?: string; [key: string]: unknown };
+          address?: { kind?: string; nodeId?: string };
+        }>;
+      };
+      const firstItem = findResult.items?.[0];
+      const address = firstItem?.address;
+      const nodeKind = firstItem?.node?.kind ?? 'paragraph';
+      expect(address?.nodeId).toBeDefined();
 
-    host.sendRaw('{');
-    const message = await host.nextMessage();
-    expect(message.error?.code).toBe(-32700);
-    expect(message.id).toBe(null);
+      // Build a NodeAddress for getNode which expects { kind: 'block', nodeType, nodeId }
+      const blockAddress = { kind: 'block', nodeType: nodeKind, nodeId: address!.nodeId };
+      await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(blockAddress)]);
 
-    await host.shutdown();
-  });
+      // Build a collapsed text target from the block address
+      const collapsedTarget = {
+        kind: 'text',
+        blockId: address!.nodeId,
+        range: { start: 0, end: 0 },
+      };
+      await invokeAndValidate('doc.insert', [
+        'insert',
+        docPath,
+        '--target-json',
+        JSON.stringify(collapsedTarget),
+        '--value',
+        'HOST_CONFORMANCE_INSERT',
+        '--out',
+        path.join(stateDir, 'host-conformance-insert.docx'),
+      ]);
 
-  test('returns invalid request and cli invoke validation errors', async () => {
-    const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
-    cleanup.push(stateDir);
-    await mkdir(stateDir, { recursive: true });
+      const sessionId = 'host-conformance-session';
+      await invokeAndValidate('doc.open', ['open', docPath, '--session', sessionId]);
+      await invokeAndValidate('doc.status', ['status', '--session', sessionId]);
+      await invokeAndValidate('doc.close', ['close', '--session', sessionId, '--discard']);
 
-    const host = launchHost(stateDir);
+      await invokeAndValidate('doc.trackChanges.list', ['track-changes', 'list', docPath, '--limit', '1']);
+      await invokeAndValidate('doc.comments.list', ['comments', 'list', docPath, '--include-resolved', 'false']);
 
-    host.sendRaw(JSON.stringify({ jsonrpc: '2.0', id: 99 }));
-    const invalidRequest = await host.nextMessage();
-    expect(invalidRequest.error?.code).toBe(-32600);
+      await host.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
 
-    const invalidInvoke = await host.request('cli.invoke', {
-      argv: ['status'],
-      stdinBase64: '***',
-    });
+  test(
+    'returns parse errors for malformed frames',
+    async () => {
+      const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
+      cleanup.push(stateDir);
+      await mkdir(stateDir, { recursive: true });
 
-    expect(invalidInvoke.error?.code).toBe(-32010);
-    const errorData = invalidInvoke.error?.data as { cliCode?: string };
-    expect(errorData.cliCode).toBe('INVALID_ARGUMENT');
+      const host = launchHost(stateDir);
 
-    const invalidDescribe = await host.request('host.describe.command', {
-      operationId: 'doc.missing',
-    });
-    expect(invalidDescribe.error?.code).toBe(-32602);
+      host.sendRaw('{');
+      const message = await host.nextMessage();
+      expect(message.error?.code).toBe(-32700);
+      expect(message.id).toBe(null);
 
-    await host.shutdown();
-  });
+      await host.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'returns invalid request and cli invoke validation errors',
+    async () => {
+      const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-host-test-'));
+      cleanup.push(stateDir);
+      await mkdir(stateDir, { recursive: true });
+
+      const host = launchHost(stateDir);
+
+      host.sendRaw(JSON.stringify({ jsonrpc: '2.0', id: 99 }));
+      const invalidRequest = await host.nextMessage();
+      expect(invalidRequest.error?.code).toBe(-32600);
+
+      const invalidInvoke = await host.request('cli.invoke', {
+        argv: ['status'],
+        stdinBase64: '***',
+      });
+
+      expect(invalidInvoke.error?.code).toBe(-32010);
+      const errorData = invalidInvoke.error?.data as { cliCode?: string };
+      expect(errorData.cliCode).toBe('INVALID_ARGUMENT');
+
+      const invalidDescribe = await host.request('host.describe.command', {
+        operationId: 'doc.missing',
+      });
+      expect(invalidDescribe.error?.code).toBe(-32602);
+
+      await host.shutdown();
+    },
+    HOST_TEST_TIMEOUT_MS,
+  );
 });

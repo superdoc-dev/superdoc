@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node lib/checks.test.mjs && node --test providers/utils.test.mjs",
     "view": "npx promptfoo view",
-    "extract-tools": "node lib/extract.mjs",
+    "preeval": "node scripts/prepare-local-sdk.mjs --light",
+    "preeval:openai": "node scripts/prepare-local-sdk.mjs --light",
+    "preeval:e2e": "node scripts/prepare-local-sdk.mjs",
     "eval": "npx promptfoo eval --env-file .env -o results/latest.json",
     "eval:e2e": "npx promptfoo eval --env-file .env -c promptfooconfig.e2e.yaml -o results/latest-e2e.json",
     "eval:openai": "npx promptfoo eval --env-file .env --filter-providers 'GPT-*' -o results/latest-openai.json",
@@ -17,7 +20,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.76",
-    "@superdoc-dev/sdk": "1.0.0-alpha.38",
+    "@superdoc-dev/sdk": "workspace:*",
     "ai": "^6.0.116",
     "openai": "^6.25.0",
     "promptfoo": "^0.121.1"

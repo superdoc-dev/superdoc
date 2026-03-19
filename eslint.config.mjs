@@ -1,11 +1,11 @@
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import { configs as tseslintConfigs } from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
 import { importX } from 'eslint-plugin-import-x';
 
 export default [
   js.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...tseslintConfigs.recommended,
   importX.flatConfigs.recommended,
   importX.flatConfigs.typescript,
   prettierConfig,
@@ -144,8 +144,8 @@ export default [
             '^@.*$',
             '^bun:.*$', // Bun built-in modules
             '^superdoc$',
-            '^superdoc/style\\.css$',
-            '^\\..*\/generated\/', // Generated files (codegen artifacts, not in git)
+            '^superdoc/.*$',
+            '^\\..*/generated/', // Generated files (codegen artifacts, not in git)
           ],
         }
       ]

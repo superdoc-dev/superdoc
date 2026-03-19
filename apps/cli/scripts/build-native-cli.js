@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { cliRoot, ensureNoUnknownFlags, getOptionalFlagValue, isDirectExecution, repoRoot } from './utils.js';
+import { ensureSuperdocBuild } from './ensure-superdoc-build.js';
 
 const cliEntry = path.join(cliRoot, 'src/index.ts');
 const cliPackagePath = path.join(cliRoot, 'package.json');
@@ -155,6 +156,7 @@ async function writeManifest(entries) {
  */
 export async function main(argv = process.argv.slice(2)) {
   ensureNoUnknownFlags(argv, allowedFlags);
+  ensureSuperdocBuild();
   const targets = resolveRequestedTargets(argv);
   const hostTarget = resolveHostTargetId();
 

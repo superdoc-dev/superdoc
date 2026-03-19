@@ -19,7 +19,7 @@ const DEMO_USER = {
 
 app.use(
   cors({
-    origin: 'https://esign.superdoc.dev',
+    origin: 'https://demos.superdoc.dev',
   }),
 );
 app.use(express.json({ limit: '50mb' }));

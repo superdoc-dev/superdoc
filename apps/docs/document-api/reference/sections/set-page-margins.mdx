@@ -26,32 +26,55 @@ Returns a SectionMutationResult receipt; reports NO_OP if margins already match 
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
+| `top` | number | yes |  |
 
-### Variant 2
+### Variant 2 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `right` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 3
+### Variant 3 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bottom` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 4
+### Variant 4 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `left` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 5
+### Variant 5 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `gutter` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
-  "bottom": 12.5,
-  "right": 12.5,
   "target": {
     "kind": "section",
     "sectionId": "example"

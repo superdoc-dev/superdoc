@@ -1,7 +1,7 @@
 import type { DocumentApiAdapters } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { getAdapter } from './get-adapter.js';
-import { sdFindAdapter, findLegacyAdapter } from './find-adapter.js';
+import { sdFindAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { getMarkdownAdapter } from './get-markdown-adapter.js';
@@ -81,6 +81,14 @@ import {
   listsSetLevelTrailingCharacterWrapper,
   listsSetLevelMarkerFontWrapper,
   listsClearLevelOverridesWrapper,
+  listsGetStyleWrapper,
+  listsApplyStyleWrapper,
+  listsRestartAtWrapper,
+  listsSetLevelNumberStyleWrapper,
+  listsSetLevelTextWrapper,
+  listsSetLevelStartWrapper,
+  listsSetLevelLayoutWrapper,
+  registerSetValueDelegate,
 } from './plan-engine/lists-formatting-wrappers.js';
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
@@ -162,6 +170,7 @@ import {
   tablesClearDefaultStyleAdapter,
 } from './tables-adapter.js';
 import { createHistoryAdapter } from './history-adapter.js';
+import { createDiffAdapter } from './diff-adapter.js';
 import {
   tocListWrapper,
   tocGetWrapper,
@@ -326,13 +335,15 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
 
   const ccAdapter = createContentControlsAdapter(editor);
 
+  // Register the setValue delegate for the restartAt wrapper
+  registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
+
   return {
     get: {
       get: (input) => getAdapter(editor, input),
     },
     find: {
       find: (input) => sdFindAdapter(editor, input),
-      findLegacy: (query) => findLegacyAdapter(editor, query),
     },
     getNode: {
       getNode: (address) => getNodeAdapter(editor, address),
@@ -444,6 +455,15 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
       clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
       setType: (input, options) => listsSetTypeWrapper(editor, input, options),
+
+      // SD-2025 user-facing operations
+      getStyle: (input) => listsGetStyleWrapper(editor, input),
+      applyStyle: (input, options) => listsApplyStyleWrapper(editor, input, options),
+      restartAt: (input, options) => listsRestartAtWrapper(editor, input, options),
+      setLevelNumberStyle: (input, options) => listsSetLevelNumberStyleWrapper(editor, input, options),
+      setLevelText: (input, options) => listsSetLevelTextWrapper(editor, input, options),
+      setLevelStart: (input, options) => listsSetLevelStartWrapper(editor, input, options),
+      setLevelLayout: (input, options) => listsSetLevelLayoutWrapper(editor, input, options),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),
@@ -677,6 +697,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       preview: (input) => previewPlan(editor, input),
       apply: (input) => executePlan(editor, input),
     },
+    diff: createDiffAdapter(editor),
     history: createHistoryAdapter(editor),
   };
 }

@@ -174,7 +174,8 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     ],
     activeEditor: {
       commands: {
-        setCursorById: vi.fn(),
+        setCursorById: vi.fn().mockReturnValue(true),
+        setActiveComment: vi.fn(),
         rejectTrackedChangeById: vi.fn(),
         acceptTrackedChangeById: vi.fn(),
         setCommentInternal: vi.fn(),
@@ -226,9 +227,8 @@ describe('CommentDialog.vue', () => {
     const { wrapper, baseComment, superdocStub } = await mountDialog();
 
     await nextTick();
-    expect(baseComment.setActive).toHaveBeenCalledWith(superdocStub);
     expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId, {
-      preferredActiveThreadId: baseComment.commentId,
+      activeCommentId: baseComment.commentId,
     });
     expect(commentsStoreStub.activeComment.value).toBe(baseComment.commentId);
 
@@ -494,7 +494,8 @@ describe('CommentDialog.vue', () => {
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     headers[1].vm.$emit('overflow-select', 'edit');
     expect(commentsStoreStub.editingCommentId.value).toBe(childComment.commentId);
-    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, childComment.commentId);
+    // Edit activates the root thread (props.comment), not the individual child being edited
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, baseComment.commentId);
 
     commentsStoreStub.currentCommentText.value = '<p>Updated</p>';
     await nextTick();

@@ -763,12 +763,11 @@ const importHeadersFooters = (docx, converter, mainEditor, numbering, translated
 };
 
 const findSectPr = (obj, result = []) => {
-  for (const key in obj) {
-    if (obj[key] === 'w:sectPr') {
-      result.push(obj);
-    } else if (typeof obj[key] === 'object') {
-      findSectPr(obj[key], result);
-    }
+  if (obj && obj.name === 'w:sectPr') {
+    result.push(obj);
+  }
+  if (obj && obj.elements) {
+    obj.elements.forEach((el) => findSectPr(el, result));
   }
   return result;
 };

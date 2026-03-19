@@ -497,6 +497,154 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
   });
 
+  it('preserves fontFamily from marks when sdPreserveRunPropertiesKeys includes fontFamily', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({
+      fontFamily: { ascii: 'Georgia', eastAsia: 'Georgia', hAnsi: 'Georgia', cs: 'Georgia' },
+    }));
+    resolveRunPropertiesMock.mockImplementation(() => ({
+      fontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+    }));
+    // Even if encodeMarksFromRPr would normalize both to the same value (the bug scenario),
+    // the preserve mechanism should bypass that comparison entirely.
+    encodeMarksFromRPrMock.mockImplementation(() => [{ attrs: { fontFamily: 'Arial, sans-serif' } }]);
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, { runProperties: { rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 1);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    tr.setMeta('sdPreserveRunPropertiesKeys', ['fontFamily']);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({
+      rsidR: 'r1',
+      fontFamily: { ascii: 'Georgia', eastAsia: 'Georgia', hAnsi: 'Georgia', cs: 'Georgia' },
+    });
+  });
+
+  it('preserves existing rFonts metadata when fontFamily is preserved', () => {
+    const markFont = { ascii: 'Georgia', eastAsia: 'Georgia', hAnsi: 'Georgia', cs: 'Georgia' };
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: markFont }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+
+    const schema = makeSchema();
+    const existingFont = {
+      ascii: 'Georgia',
+      hAnsi: 'Georgia',
+      eastAsiaTheme: 'minorEastAsia',
+      csTheme: 'minorBidi',
+      hint: 'eastAsia',
+    };
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: existingFont, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 1);
+
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    tr.setMeta('sdPreserveRunPropertiesKeys', ['fontFamily']);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    // The merge preserves OOXML-only metadata from existing (themes, hint)
+    // while overlaying fresh font names from the mark-decoded value.
+    expect(runNode?.attrs.runProperties?.fontFamily).toEqual({
+      ...existingFont,
+      eastAsia: 'Georgia',
+      cs: 'Georgia',
+    });
+  });
+
+  it('preserves untouched eastAsia and hAnsi fonts during a partial rFonts update', () => {
+    const markFont = { ascii: 'Georgia', eastAsia: 'Georgia', hAnsi: 'Georgia', cs: 'Georgia' };
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: markFont }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+
+    const schema = makeSchema();
+    const existingFont = {
+      ascii: 'Times New Roman',
+      hAnsi: 'Cambria',
+      eastAsia: 'MS Gothic',
+      cs: 'Georgia',
+    };
+    const updatedFont = {
+      ascii: 'Georgia',
+      hAnsi: 'Cambria',
+      eastAsia: 'MS Gothic',
+      cs: 'Georgia',
+    };
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: existingFont, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const pos = runPos(state.doc);
+    const runNode = state.doc.nodeAt(pos ?? 0);
+
+    const tr = state.tr.setNodeMarkup(
+      pos ?? 0,
+      schema.nodes.run,
+      { ...runNode?.attrs, runProperties: { fontFamily: updatedFont, rsidR: 'r1' } },
+      runNode?.marks,
+    );
+    tr.setMeta('sdPreserveRunPropertiesKeys', [{ key: 'fontFamily', preferExisting: true }]);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const nextRunNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(nextRunNode?.attrs.runProperties?.fontFamily).toEqual(updatedFont);
+  });
+
+  it('preserves untouched cs and latin fonts during a partial rFonts update', () => {
+    const markFont = { ascii: 'Georgia', eastAsia: 'Georgia', hAnsi: 'Georgia', cs: 'Georgia' };
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: markFont }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+
+    const schema = makeSchema();
+    const existingFont = {
+      ascii: 'Times New Roman',
+      hAnsi: 'Cambria',
+      eastAsia: 'MS Gothic',
+      cs: 'Traditional Arabic',
+    };
+    const updatedFont = {
+      ascii: 'Times New Roman',
+      hAnsi: 'Cambria',
+      eastAsia: 'MS Gothic',
+      cs: 'Noto Sans Arabic',
+    };
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: existingFont, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const pos = runPos(state.doc);
+    const runNode = state.doc.nodeAt(pos ?? 0);
+
+    const tr = state.tr.setNodeMarkup(
+      pos ?? 0,
+      schema.nodes.run,
+      { ...runNode?.attrs, runProperties: { fontFamily: updatedFont, rsidR: 'r1' } },
+      runNode?.marks,
+    );
+    tr.setMeta('sdPreserveRunPropertiesKeys', [{ key: 'fontFamily', preferExisting: true }]);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const nextRunNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(nextRunNode?.attrs.runProperties?.fontFamily).toEqual(updatedFont);
+  });
+
+  it('does not preserve fontFamily when sdPreserveRunPropertiesKeys is not set', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ fontFamily: { ascii: 'Arial' } }));
+    encodeMarksFromRPrMock.mockImplementation(() => [{ attrs: { fontFamily: 'Arial, sans-serif' } }]);
+
+    const schema = makeSchema();
+    const doc = paragraphDoc(schema, { runProperties: { fontFamily: { ascii: 'Arial' }, rsidR: 'r1' } });
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, 1);
+
+    // No setMeta — fontFamily should be dropped since marks match styles
+    const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toEqual({ rsidR: 'r1' });
+  });
+
   it('maps changed ranges through later transactions', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [

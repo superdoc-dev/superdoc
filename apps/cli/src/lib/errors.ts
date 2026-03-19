@@ -42,7 +42,8 @@ export type CliErrorCode =
   | 'PAGE_NUMBERS_NOT_MATERIALIZED'
   | 'CAPABILITY_UNAVAILABLE'
   | 'INVALID_TARGET'
-  | 'AMBIGUOUS_TARGET';
+  | 'AMBIGUOUS_TARGET'
+  | 'CAPABILITY_UNSUPPORTED';
 
 /**
  * Intersection type for errors thrown by document-api adapter operations.

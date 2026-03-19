@@ -61,6 +61,33 @@ describe('addDefaultStylesIfMissing', () => {
 });
 
 describe('createDocumentJson', () => {
+  it('falls back to default document XML and base numbering when document.xml is missing', () => {
+    const docx = {};
+
+    const converter = {
+      headers: {},
+      footers: {},
+      headerIds: {},
+      footerIds: {},
+      docHiglightColors: new Set(),
+    };
+
+    const editor = { options: {}, emit: vi.fn() };
+
+    const result = createDocumentJson(docx, converter, editor);
+
+    expect(result).toBeTruthy();
+    expect(result.pmDoc?.type).toBe('doc');
+    expect(result.pageStyles.pageMargins.left).toBeCloseTo(1);
+    expect(result.pageStyles.pageSize.width).toBeCloseTo(8.5);
+    expect(Object.keys(result.numbering.definitions || {})).not.toHaveLength(0);
+    expect(Object.keys(result.numbering.abstracts || {})).not.toHaveLength(0);
+    expect(Object.keys(result.translatedNumbering.definitions || {})).not.toHaveLength(0);
+    expect(Object.keys(result.translatedNumbering.abstracts || {})).not.toHaveLength(0);
+    expect(converter.headers).toEqual({});
+    expect(converter.footers).toEqual({});
+  });
+
   it('handles missing document relationships gracefully', () => {
     const simpleDocXml =
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>';

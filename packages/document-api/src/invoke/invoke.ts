@@ -147,6 +147,15 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.setLevelMarkerFont': (input, options) => api.lists.setLevelMarkerFont(input, options),
     'lists.clearLevelOverrides': (input, options) => api.lists.clearLevelOverrides(input, options),
 
+    // --- lists.* (SD-2025 user-facing) ---
+    'lists.getStyle': (input) => api.lists.getStyle(input),
+    'lists.applyStyle': (input, options) => api.lists.applyStyle(input, options),
+    'lists.restartAt': (input, options) => api.lists.restartAt(input, options),
+    'lists.setLevelNumberStyle': (input, options) => api.lists.setLevelNumberStyle(input, options),
+    'lists.setLevelText': (input, options) => api.lists.setLevelText(input, options),
+    'lists.setLevelStart': (input, options) => api.lists.setLevelStart(input, options),
+    'lists.setLevelLayout': (input, options) => api.lists.setLevelLayout(input, options),
+
     // --- sections.* ---
     'sections.list': (input) => api.sections.list(input),
     'sections.get': (input) => api.sections.get(input),
@@ -267,7 +276,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'create.image': (input, options) => api.create.image(input, options),
 
     // --- images.* ---
-    'images.list': (input) => api.images.list(input ?? {}),
+    'images.list': (input) => api.images.list(input),
     'images.get': (input) => api.images.get(input),
     'images.delete': (input, options) => api.images.delete(input, options),
     'images.move': (input, options) => api.images.move(input, options),
@@ -490,5 +499,10 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'authorities.entries.insert': (input, options) => api.authorities.entries.insert(input, options),
     'authorities.entries.update': (input, options) => api.authorities.entries.update(input, options),
     'authorities.entries.remove': (input, options) => api.authorities.entries.remove(input, options),
+
+    // --- diff.* ---
+    'diff.capture': () => api.diff.capture(),
+    'diff.compare': (input) => api.diff.compare(input),
+    'diff.apply': (input, options) => api.diff.apply(input, options),
   };
 }

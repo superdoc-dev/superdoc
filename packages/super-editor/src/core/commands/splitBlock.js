@@ -30,6 +30,21 @@ const ensureMarks = (state, splittableMarks) => {
 };
 
 /**
+ * Extracts runProperties from the run node at the cursor position.
+ * When the cursor is directly inside a paragraph (not inside a run), it
+ * looks at the node just before the cursor (which is typically a run node).
+ * @param {import('prosemirror-model').ResolvedPos} $from
+ * @returns {Record<string, unknown> | null}
+ */
+const getRunPropertiesAtCursor = ($from) => {
+  const runNode = $from.nodeBefore;
+  if (runNode?.type.name === 'run' && runNode.attrs.runProperties) {
+    return { ...runNode.attrs.runProperties };
+  }
+  return null;
+};
+
+/**
  * Will split the current node into two nodes. If the selection is not
  * splittable, the command will be ignored.
  * @param options.keepMarks Keep marks from prev node.
@@ -67,6 +82,22 @@ export const splitBlock =
     if (dispatch) {
       const atEnd = $to.parentOffset === $to.parent.content.size;
       newAttrs = clearInheritedLinkedStyleId(newAttrs, editor, { emptyParagraph: atEnd });
+
+      // When splitting at the end (creating an empty new paragraph), store the
+      // current run's runProperties on the new paragraph so the toolbar and
+      // wrapTextInRunsPlugin know which inline formatting to inherit.
+      if (atEnd) {
+        const runProperties = getRunPropertiesAtCursor($from);
+        if (runProperties) {
+          newAttrs = {
+            ...newAttrs,
+            paragraphProperties: {
+              ...(newAttrs.paragraphProperties || {}),
+              runProperties,
+            },
+          };
+        }
+      }
       if (selection instanceof TextSelection) tr.deleteSelection();
       const deflt = $from.depth === 0 ? null : defaultBlockAt($from.node(-1).contentMatchAt($from.indexAfter(-1)));
 

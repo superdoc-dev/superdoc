@@ -311,10 +311,11 @@ superdoc info ./contract.docx --pretty
 
 ## Input payload flags
 
-- `--query-json`, `--query-file`
-- `--address-json`, `--address-file`
-- `--target-json`, `--target-file`
-- `--at-json`, `--at-file` (for `create paragraph`)
+- `--query-json`, `--query-file` (`find`, `lists list`)
+- `--address-json`, `--address-file` (`get-node`, `lists get`)
+- `--target-json` (mutation commands — no `--target-file` counterpart; use flat flags `--block-id`/`--start`/`--end` as alternative)
+- `--input-json`, `--input-file` (`call`, `create paragraph`)
+- `--at-json`, `--at-file` (`create paragraph`)
 
 ## Stdin support
 

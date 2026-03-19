@@ -103,8 +103,8 @@ async function main() {
   const summary = extractEvalSummary(resultsPath);
   console.log(`Results: ${summary.passed}/${summary.totalTests} passed (${summary.passRate}%), ${summary.failures.length} failures`);
 
-  const toolSchemas = readFileSync(resolve(EVALS_ROOT, 'lib/essential.json'), 'utf8');
-  const agentPrompt = readFileSync(resolve(EVALS_ROOT, 'prompts/agent.txt'), 'utf8');
+  const toolSchemas = readFileSync(resolve(EVALS_ROOT, '..', 'packages/sdk/tools/tools.openai.json'), 'utf8');
+  const agentPrompt = readFileSync(resolve(EVALS_ROOT, '..', 'packages/sdk/tools/system-prompt.md'), 'utf8');
   const testDefs = readFileSync(resolve(EVALS_ROOT, 'tests/tool-quality.yaml'), 'utf8');
 
   const prompt = `You have eval results from a SuperDoc AI tool quality test suite. Your job: generate a single self-contained HTML file at "${OUTPUT_HTML}" that visualizes the results as a beautiful dark-themed analysis dashboard. Then I will open it.
@@ -132,7 +132,7 @@ ${testDefs}
    - **Test matrix heatmap**: rows = tests, columns = model/prompt combos. Green = pass, red = fail. Show test names.
    - **Failure patterns**: group failures by root cause pattern with counts and descriptions
    - **Top recommendations**: ranked cards with impact scores
-   - **Schema improvements**: before/after diffs for discover_tools, apply_mutations, blocks_list descriptions
+   - **Schema improvements**: before/after diffs for superdoc_search, superdoc_mutations, superdoc_edit descriptions
 4. **Use CSS grid/flexbox for layout**. Responsive. Nice typography (use a Google Font like JetBrains Mono for data, Outfit for headings).
 5. **Subtle animations**: fade-in on scroll, counter animation for the hero number, bar chart animations.
 6. **All data must come from the eval results above** — hardcode the actual numbers and test names into the HTML.

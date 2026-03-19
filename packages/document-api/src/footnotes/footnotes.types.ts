@@ -1,4 +1,4 @@
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 import type { TextTarget } from '../types/address.js';
 
@@ -98,12 +98,7 @@ export interface FootnoteMutationSuccess {
   footnote: FootnoteAddress;
 }
 
-export interface FootnoteMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type FootnoteMutationResult = FootnoteMutationSuccess | FootnoteMutationFailure;
+export type FootnoteMutationResult = FootnoteMutationSuccess | AdapterMutationFailure;
 
 // ---------------------------------------------------------------------------
 // Config result
@@ -113,12 +108,7 @@ export interface FootnoteConfigSuccess {
   success: true;
 }
 
-export interface FootnoteConfigFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type FootnoteConfigResult = FootnoteConfigSuccess | FootnoteConfigFailure;
+export type FootnoteConfigResult = FootnoteConfigSuccess | AdapterMutationFailure;
 
 // ---------------------------------------------------------------------------
 // List result

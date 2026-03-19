@@ -291,8 +291,8 @@ const TAB_EPSILON = 0.1;
  * - Conservative value that prevents premature line breaks without allowing significant overflow
  *
  * Usage:
- * - When checking if word fits: `width + wordWidth > effectiveMaxWidth - WIDTH_FUDGE_PX`
- * - Gives layout a 0.5px safety margin before triggering a line break
+ * - When checking if another glyph still fits: `width + glyphWidth > effectiveMaxWidth - WIDTH_FUDGE_PX`
+ * - Gives layout a 0.5px safety margin before triggering a normal line break
  * - Prevents edge cases where measured text at 199.7px breaks on a 200px line
  */
 const WIDTH_FUDGE_PX = 0.5;
@@ -1242,6 +1242,13 @@ export function remeasureParagraph(
         }
         const w = measureRunSliceWidth(run, c, c + 1);
         if (width + w > effectiveMaxWidth - WIDTH_FUDGE_PX && width > 0) {
+          const canKeepBorderlineUnbreakableText = lastBreakRun < 0 && width + w <= effectiveMaxWidth + WIDTH_FUDGE_PX;
+          if (canKeepBorderlineUnbreakableText) {
+            width += w;
+            endRun = r;
+            endChar = c + 1;
+            continue;
+          }
           // Break line
           if (lastBreakRun >= 0) {
             endRun = lastBreakRun;

@@ -62,31 +62,12 @@ async function loadTools(sdk) {
   return map;
 }
 
-async function handleDiscoverTools(sdk, toolArgs, activeToolMap) {
-  const groups = Array.isArray(toolArgs.groups) ? toolArgs.groups : [];
-  const { tools } = await sdk.chooseTools({
-    provider: 'openai',
-    groups,
-    mode: 'essential',
-    includeDiscoverTool: false,
-  });
-  let added = 0;
-  for (const t of tools) {
-    const name = t.function?.name;
-    if (name && !activeToolMap.has(name)) {
-      activeToolMap.set(name, t);
-      added++;
-    }
-  }
-  return { ok: true, loaded: groups, newTools: added };
-}
-
 // --- Agent loop ---
 
 async function runAgentLoop(sdk, client, activeToolMap, task, model) {
   const openai = new OpenAI();
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT.replace('{{task}}', task) },
+    { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: task },
   ];
   const toolLog = [];
@@ -111,11 +92,7 @@ async function runAgentLoop(sdk, client, activeToolMap, task, model) {
 
       let result;
       try {
-        if (toolName === 'discover_tools') {
-          result = await handleDiscoverTools(sdk, toolArgs, activeToolMap);
-        } else {
-          result = await sdk.dispatchSuperDocTool(client, toolName, cleanArgs(toolArgs));
-        }
+        result = await sdk.dispatchSuperDocTool(client, toolName, cleanArgs(toolArgs));
       } catch (err) {
         result = { ok: false, error: err.message };
       }

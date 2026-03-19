@@ -1,6 +1,7 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { assertTargetPresent } from '../validation-primitives.js';
 import type {
   CitationAddress,
   CitationSourceAddress,
@@ -65,9 +66,7 @@ export type CitationsAdapter = CitationsApi;
 // ---------------------------------------------------------------------------
 
 function validateCitationTarget(target: unknown, operationName: string): asserts target is CitationAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
 
   const t = target as Record<string, unknown>;
   if (t.kind !== 'inline' || t.nodeType !== 'citation') {
@@ -80,9 +79,7 @@ function validateCitationTarget(target: unknown, operationName: string): asserts
 }
 
 function validateCitationSourceTarget(target: unknown, operationName: string): asserts target is CitationSourceAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
 
   const t = target as Record<string, unknown>;
   if (t.kind !== 'entity' || t.entityType !== 'citationSource' || typeof t.sourceId !== 'string') {
@@ -95,9 +92,7 @@ function validateCitationSourceTarget(target: unknown, operationName: string): a
 }
 
 function validateBibliographyTarget(target: unknown, operationName: string): asserts target is BibliographyAddress {
-  if (target === undefined || target === null) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
-  }
+  assertTargetPresent(target, operationName);
 
   const t = target as Record<string, unknown>;
   if (t.kind !== 'block' || t.nodeType !== 'bibliography' || typeof t.nodeId !== 'string') {

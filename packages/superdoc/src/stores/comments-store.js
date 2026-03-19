@@ -785,12 +785,19 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const removePendingComment = (superdoc) => {
+    const hadPending = !!pendingComment.value;
     currentCommentText.value = '';
     pendingComment.value = null;
-    activeComment.value = null;
     superdocStore.selectionPosition = null;
 
-    superdoc.activeEditor?.commands?.removeComment({ commentId: 'pending' });
+    // Only clear active comment when removing an actual pending comment.
+    // Replies and edits also call this to reset currentCommentText, but
+    // clearing activeComment would deactivate the thread (SD-2035).
+    if (hadPending) {
+      activeComment.value = null;
+    }
+
+    superdoc?.activeEditor?.commands?.removeComment({ commentId: 'pending' });
   };
 
   /**

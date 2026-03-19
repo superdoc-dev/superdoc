@@ -47,6 +47,7 @@ const FONT_FAMILY_FALLBACKS = Object.freeze({
 
 const DEFAULT_GENERIC_FALLBACK = 'sans-serif';
 const DEFAULT_FONT_SIZE_PT = 10;
+const CURRENT_APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0';
 
 /**
  * Pull default run formatting (font family, size, kern) out of a DOCX run properties node.
@@ -620,7 +621,7 @@ class SuperConverter {
     return SuperConverter.getStoredCustomProperty(docx, 'SuperdocVersion');
   }
 
-  static setStoredSuperdocVersion(docx = this.convertedXml, version = __APP_VERSION__) {
+  static setStoredSuperdocVersion(docx = this.convertedXml, version = CURRENT_APP_VERSION) {
     return SuperConverter.setStoredCustomProperty(docx, 'SuperdocVersion', version, false);
   }
 

@@ -55,6 +55,14 @@ import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-cha
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
 import type { HistoryState, HistoryActionResult } from '../history/history.types.js';
 import type {
+  DiffSnapshot,
+  DiffPayload,
+  DiffApplyResult,
+  DiffCompareInput,
+  DiffApplyInput,
+  DiffApplyOptions,
+} from '../diff/diff.types.js';
+import type {
   ListsListQuery,
   ListsListResult,
   ListsGetInput,
@@ -95,6 +103,14 @@ import type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from '../lists/lists.types.js';
 import type {
   ParagraphMutationResult,
@@ -682,6 +698,19 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: ListsMutateItemResult;
   };
 
+  // --- lists.* (SD-2025 user-facing) ---
+  'lists.getStyle': { input: ListsGetStyleInput; options: never; output: ListsGetStyleResult };
+  'lists.applyStyle': { input: ListsApplyStyleInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.restartAt': { input: ListsRestartAtInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelNumberStyle': {
+    input: ListsSetLevelNumberStyleInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelText': { input: ListsSetLevelTextInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelStart': { input: ListsSetLevelStartInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelLayout': { input: ListsSetLevelLayoutInput; options: MutationOptions; output: ListsMutateItemResult };
+
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };
   'sections.get': { input: SectionsGetInput; options: never; output: SectionInfo };
@@ -721,6 +750,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: SectionMutationResult;
   };
+  // Returns DocumentMutationResult (not SectionMutationResult) — document-level setting, not per-section.
   'sections.setOddEvenHeadersFooters': {
     input: SectionsSetOddEvenHeadersFootersInput;
     options: MutationOptions;
@@ -1413,6 +1443,11 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: AuthorityEntryMutationResult;
   };
+
+  // --- diff.* ---
+  'diff.capture': { input: undefined; options: never; output: DiffSnapshot };
+  'diff.compare': { input: DiffCompareInput; options: never; output: DiffPayload };
+  'diff.apply': { input: DiffApplyInput; options: DiffApplyOptions; output: DiffApplyResult };
 }
 
 // --- Bidirectional completeness checks ---

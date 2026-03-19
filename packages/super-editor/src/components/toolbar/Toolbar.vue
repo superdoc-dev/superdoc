@@ -77,10 +77,32 @@ const handleCommand = ({ item, argument, option }) => {
 const restoreSelection = () => {
   proxy.$toolbar.activeEditor?.commands?.restoreSelection();
 };
+
+/**
+ * Prevents the browser's default focus-transfer behavior when clicking toolbar buttons.
+ *
+ * Without this, clicking a toolbar button moves focus from the hidden ProseMirror editor
+ * to the toolbar button element. The subsequent refocus of the PM editor can trigger
+ * browser-native scroll adjustments that jump the page to the top — especially when
+ * the window (not a div) is the scroll container.
+ *
+ * Input elements are excluded so they still receive native focus and cursor placement.
+ */
+const handleToolbarMousedown = (e) => {
+  if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+  e.preventDefault();
+};
 </script>
 
 <template>
-  <div class="superdoc-toolbar" :key="toolbarKey" role="toolbar" aria-label="Toolbar" data-editor-ui-surface>
+  <div
+    class="superdoc-toolbar"
+    :key="toolbarKey"
+    role="toolbar"
+    aria-label="Toolbar"
+    data-editor-ui-surface
+    @mousedown="handleToolbarMousedown"
+  >
     <ButtonGroup
       tabindex="0"
       v-if="showLeftSide"

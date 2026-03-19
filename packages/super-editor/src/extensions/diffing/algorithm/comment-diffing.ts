@@ -90,14 +90,22 @@ export type CommentModifiedDiff = CommentDiffBase<'modified'> & {
 export type CommentDiff = CommentAddedDiff | CommentDeletedDiff | CommentModifiedDiff;
 
 /**
- * Comment attributes ignored during metadata diffing.
+ * Comment attributes ignored during metadata diffing and snapshot canonicalization.
  *
  * `trackedChangeParentId` is runtime-coupled to tracked-change mark ids, which
- * may be regenerated between imports of the same DOCX. Treating it as a stable
- * diffable attribute causes false-positive comment modifications that can break
- * thread linkage on replay.
+ * may be regenerated between imports of the same DOCX. `documentId`, `fileId`,
+ * and `selection` are non-semantic ownership/runtime fields that must be
+ * stripped before fingerprinting comment state.
  */
-const COMMENT_ATTRS_DIFF_IGNORED_KEYS = ['textJson', 'elements', 'commentId', 'trackedChangeParentId'];
+export const COMMENT_ATTRS_DIFF_IGNORED_KEYS = [
+  'textJson',
+  'elements',
+  'commentId',
+  'trackedChangeParentId',
+  'documentId',
+  'fileId',
+  'selection',
+];
 
 /**
  * Builds normalized tokens for diffing comment content.

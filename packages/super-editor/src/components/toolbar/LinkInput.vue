@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
+import { sanitizeHref } from '@superdoc/url-validation';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 import { TextSelection } from 'prosemirror-state';
@@ -118,20 +119,21 @@ const text = ref('');
 const rawUrl = ref('');
 const isAnchor = ref(false);
 
-// Prepend http if missing
+const HAS_PROTOCOL = /^[a-z][a-z0-9+.-]*:/i;
+
+// Default to https:// when no scheme is specified. Validation stays centralized in sanitizeHref.
 const url = computed(() => {
   if (!rawUrl.value) return '';
-  if (!rawUrl.value.startsWith('http') && !rawUrl.value.startsWith('#')) return 'http://' + rawUrl.value;
-  return rawUrl.value;
+  if (rawUrl.value.startsWith('#') || HAS_PROTOCOL.test(rawUrl.value)) return rawUrl.value;
+  return 'https://' + rawUrl.value;
 });
 
-const validUrl = computed(() => {
-  // anchors (starting with #) are always considered valid
-  if (url.value.startsWith('#')) return true;
-
-  const urlSplit = url.value.split('.').filter(Boolean);
-  return url.value.includes('.') && urlSplit.length > 1;
+const sanitizedUrl = computed(() => {
+  if (!url.value) return null;
+  return sanitizeHref(url.value);
 });
+
+const validUrl = computed(() => sanitizedUrl.value !== null);
 
 // --- CASE LOGIC ---
 const isEditing = computed(() => !isAnchor.value && !!getLinkHrefAtSelection());
@@ -141,7 +143,9 @@ const isDisabled = computed(() => !validUrl.value);
 const isViewingMode = computed(() => props.editor?.options?.documentMode === 'viewing');
 
 const openLink = () => {
-  window.open(url.value, '_blank');
+  const href = sanitizedUrl.value?.href;
+  if (!href) return;
+  window.open(href, '_blank');
 };
 
 const updateFromEditor = () => {
@@ -189,10 +193,16 @@ const handleSubmit = () => {
     return;
   }
 
-  const finalText = text.value || url.value;
+  const href = sanitizedUrl.value?.href;
+  if (!href) {
+    urlError.value = true;
+    return;
+  }
+
+  const finalText = text.value || href;
 
   if (editor.commands?.toggleLink) {
-    editor.commands.toggleLink({ href: url.value, text: finalText });
+    editor.commands.toggleLink({ href, text: finalText });
   }
 
   // Move cursor to end of link and refocus editor.
@@ -207,6 +217,15 @@ const handleRemove = () => {
   if (props.editor && props.editor.commands && props.editor.commands.unsetLink) {
     props.editor.commands.unsetLink();
     props.closePopover();
+  }
+};
+
+const navigateToAnchor = (url) => {
+  const presentationEditor = props.editor?.presentationEditor ?? null;
+  if (presentationEditor) {
+    presentationEditor.goToAnchor(url);
+  } else if (props.goToAnchor) {
+    props.goToAnchor(url);
   }
 };
 </script>
@@ -271,7 +290,9 @@ const handleRemove = () => {
     </div>
 
     <div v-else-if="isAnchor" class="input-row go-to-anchor clickable">
-      <a @click.stop.prevent="goToAnchor">Go to {{ rawUrl.startsWith('#_') ? rawUrl.substring(2) : rawUrl }}</a>
+      <a @click.stop.prevent="navigateToAnchor(rawUrl)"
+        >Go to {{ rawUrl.startsWith('#_') ? rawUrl.substring(2) : rawUrl }}</a
+      >
     </div>
   </div>
 </template>

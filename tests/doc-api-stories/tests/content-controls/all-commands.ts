@@ -430,8 +430,12 @@ describe('document-api story: all content-controls commands', () => {
   async function findParagraphNodeIds(sessionId: string): Promise<string[]> {
     const findResult = await callDocOperation<any>('find', {
       sessionId,
-      type: 'node',
-      nodeType: 'paragraph',
+      query: {
+        select: {
+          type: 'node',
+          nodeType: 'paragraph',
+        },
+      },
     });
 
     const nodeIds = (findResult?.items ?? [])
@@ -1114,8 +1118,12 @@ describe('document-api story: all content-controls commands', () => {
 
         const findResult = await callDocOperation<any>('find', {
           sessionId,
-          type: 'text',
-          pattern: insertedText,
+          query: {
+            select: {
+              type: 'text',
+              pattern: insertedText,
+            },
+          },
         });
         expect(findResult?.total).toBeGreaterThanOrEqual(1);
 
@@ -1147,8 +1155,12 @@ describe('document-api story: all content-controls commands', () => {
 
         const findResult = await callDocOperation<any>('find', {
           sessionId,
-          type: 'text',
-          pattern: insertedText,
+          query: {
+            select: {
+              type: 'text',
+              pattern: insertedText,
+            },
+          },
         });
         expect(findResult?.total).toBeGreaterThanOrEqual(1);
 

@@ -164,6 +164,28 @@ export type BlockNodeAddress = {
   nodeId: string;
 };
 
+export type TableAddress = {
+  kind: 'block';
+  nodeType: 'table';
+  nodeId: string;
+};
+
+export type TableRowAddress = {
+  kind: 'block';
+  nodeType: 'tableRow';
+  nodeId: string;
+};
+
+export type TableCellAddress = {
+  kind: 'block';
+  nodeType: 'tableCell';
+  nodeId: string;
+};
+
+export type TableOrRowAddress = TableAddress | TableRowAddress;
+
+export type TableOrCellAddress = TableAddress | TableCellAddress;
+
 export type DeletableBlockNodeAddress = {
   kind: 'block';
   nodeType: DeletableBlockNodeType;

@@ -1,6 +1,6 @@
 import type { InlineAnchor } from '../types/base.js';
 import type { TextTarget } from '../types/address.js';
-import type { ReceiptFailure } from '../types/receipt.js';
+import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 import type { TocCreateLocation } from '../toc/toc.types.js';
 
@@ -210,36 +210,21 @@ export interface CitationMutationSuccess {
   citation: CitationAddress;
 }
 
-export interface CitationMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type CitationMutationResult = CitationMutationSuccess | CitationMutationFailure;
+export type CitationMutationResult = CitationMutationSuccess | AdapterMutationFailure;
 
 export interface CitationSourceMutationSuccess {
   success: true;
   source: CitationSourceAddress;
 }
 
-export interface CitationSourceMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type CitationSourceMutationResult = CitationSourceMutationSuccess | CitationSourceMutationFailure;
+export type CitationSourceMutationResult = CitationSourceMutationSuccess | AdapterMutationFailure;
 
 export interface BibliographyMutationSuccess {
   success: true;
   bibliography: BibliographyAddress;
 }
 
-export interface BibliographyMutationFailure {
-  success: false;
-  failure: ReceiptFailure;
-}
-
-export type BibliographyMutationResult = BibliographyMutationSuccess | BibliographyMutationFailure;
+export type BibliographyMutationResult = BibliographyMutationSuccess | AdapterMutationFailure;
 
 // ---------------------------------------------------------------------------
 // List results

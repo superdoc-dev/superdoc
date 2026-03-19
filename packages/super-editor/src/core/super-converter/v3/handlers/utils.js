@@ -202,6 +202,29 @@ export function createTrackChangesPropertyHandler(xmlName, sdName = null, extraA
   };
 }
 
+const UNSUPPORTED_TABLE_IDENTITY_ATTRS = ['w14:paraId', 'w14:textId'];
+
+/**
+ * Removes legacy identity attributes from exported table containers whose OOXML
+ * schemas do not define `w14:paraId` / `w14:textId`.
+ *
+ * We still import these attributes from older SuperDoc-generated files for
+ * backwards compatibility, but we must not emit them on `<w:tbl>` or `<w:tc>`.
+ *
+ * @param {Record<string, unknown> | undefined} attrs
+ * @returns {Record<string, unknown>}
+ */
+export function stripUnsupportedTableIdentityAttributes(attrs) {
+  if (!attrs || typeof attrs !== 'object') return {};
+
+  const filteredAttrs = { ...attrs };
+  for (const attrName of UNSUPPORTED_TABLE_IDENTITY_ATTRS) {
+    delete filteredAttrs[attrName];
+  }
+
+  return filteredAttrs;
+}
+
 /**
  * Parses a measurement value, handling ECMA-376 percentage strings.
  *

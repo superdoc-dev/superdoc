@@ -5,6 +5,7 @@ import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
 import { DOCX } from '@superdoc/common';
 import { COMMENT_FILE_BASENAMES } from './super-converter/constants.js';
 import { syncPackageMetadata } from './opc/sync-package-metadata.js';
+import { reconcileDocumentRelationships, MANAGED_DOCUMENT_PARTS } from './opc/reconcile-document-relationships.js';
 
 /** Image file extensions recognized during import and export. */
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
@@ -239,6 +240,13 @@ class DocxZipper {
       if (!hasFootnotes) typesString += footnotesDef;
     }
 
+    // Update for managed document-level singleton parts (e.g., numbering)
+    for (const entry of MANAGED_DOCUMENT_PARTS) {
+      if (hasFile(entry.zipPath) && !hasPartOverride(`/${entry.zipPath}`)) {
+        typesString += `<Override PartName="/${entry.zipPath}" ContentType="${entry.contentType}" />`;
+      }
+    }
+
     const partNames = new Set(additionalPartNames);
     if (docx?.files) {
       if (fromJson && Array.isArray(docx.files)) {
@@ -330,6 +338,20 @@ class DocxZipper {
       const extendedDef = `<Override PartName="/${name}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.${type}+xml"/>`;
       updatedContentTypesXml = updatedContentTypesXml.replace('</Types>', `${extendedDef}</Types>`);
     });
+
+    // Reconcile document-level singleton relationships (e.g., numbering).
+    // Parts auto-created at runtime (via mutatePart/ensurePart) may exist in
+    // the package without a corresponding word/_rels/document.xml.rels entry.
+    if (relationshipsXml) {
+      const reconciledRels = reconcileDocumentRelationships(relationshipsXml, hasFile);
+      if (reconciledRels !== relationshipsXml) {
+        if (fromJson) {
+          updatedDocs['word/_rels/document.xml.rels'] = reconciledRels;
+        } else {
+          docx.file('word/_rels/document.xml.rels', reconciledRels);
+        }
+      }
+    }
 
     if (fromJson) return updatedContentTypesXml;
 

@@ -1,5 +1,5 @@
 import { NodeTranslator } from '../../../node-translator/node-translator';
-import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
+import { createAttributeHandler, stripUnsupportedTableIdentityAttributes } from '@converter/v3/handlers/utils.js';
 import { handleTableCellNode } from './helpers/legacy-handle-table-cell-node';
 import { translateTableCell } from './helpers/translate-table-cell';
 
@@ -10,7 +10,12 @@ const XML_NODE_NAME = 'w:tc';
 const SD_NODE_NAME = 'tableCell';
 
 /**
- * Attributes preserved across DOCX roundtrip for cell identity.
+ * Legacy cell identity attributes imported from older SuperDoc exports.
+ *
+ * WordprocessingML does not define `w14:paraId` / `w14:textId` on `<w:tc>`.
+ * We continue importing them for backwards compatibility, but decode strips
+ * them so newly exported DOCX files stay schema-valid.
+ *
  * @type {import('@translator').AttrConfig[]}
  */
 const validXmlAttributes = ['w14:paraId', 'w14:textId'].map((xmlName) => createAttributeHandler(xmlName));
@@ -60,8 +65,9 @@ function encode(params, encodedAttrs) {
  */
 function decode(params, decodedAttrs) {
   const translated = translateTableCell(params);
-  if (decodedAttrs && Object.keys(decodedAttrs).length) {
-    translated.attributes = { ...(translated.attributes || {}), ...decodedAttrs };
+  const filteredDecodedAttrs = stripUnsupportedTableIdentityAttributes(decodedAttrs);
+  if (Object.keys(filteredDecodedAttrs).length) {
+    translated.attributes = { ...(translated.attributes || {}), ...filteredDecodedAttrs };
   }
   return translated;
 }

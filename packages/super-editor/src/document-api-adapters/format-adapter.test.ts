@@ -8,6 +8,7 @@ import {
   formatUnderlineAdapter,
   formatStrikethroughAdapter,
 } from './format-adapter.js';
+import { styleApplyWrapper } from './plan-engine/plan-wrappers.js';
 
 type NodeOptions = {
   attrs?: Record<string, unknown>;
@@ -384,5 +385,45 @@ describe('formatStrikethroughAdapter', () => {
 
     expect(receipt.success).toBe(true);
     expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SD-2074 regression: format.letterSpacing false-success when textStyle mark
+// exists but the letterSpacing attr is not registered (LetterSpacing extension
+// absent).
+// ---------------------------------------------------------------------------
+
+describe('styleApplyWrapper — textStyle attr gating (SD-2074)', () => {
+  it('throws CAPABILITY_UNAVAILABLE for letterSpacing when its attr is missing from textStyle', () => {
+    const { editor } = makeEditor();
+    // Add a textStyle mark with attrs that do NOT include letterSpacing,
+    // simulating an editor where the LetterSpacing extension is not loaded.
+    (editor.schema as Record<string, unknown>).marks = {
+      ...editor.schema?.marks,
+      textStyle: {
+        create: vi.fn(() => ({ type: 'textStyle' })),
+        attrs: {
+          color: { default: null },
+          fontSize: { default: null },
+          fontFamily: { default: null },
+          vertAlign: { default: null },
+          position: { default: null },
+          textTransform: { default: null },
+          // letterSpacing deliberately omitted
+        },
+      },
+    };
+
+    expect(() =>
+      styleApplyWrapper(
+        editor,
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+          inline: { letterSpacing: 10 },
+        },
+        { changeMode: 'direct' },
+      ),
+    ).toThrow(/requires the "letterSpacing" attribute on the textStyle mark/);
   });
 });

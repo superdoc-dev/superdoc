@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promis
 import { join } from 'node:path';
 import { run } from '../index';
 import { resolveListDocFixture, resolveSourceDocFixture } from './fixtures';
+import { writeListDocWithoutParaIds } from './unstable-list-fixture';
 
 type RunResult = {
   code: number;
@@ -1216,6 +1217,55 @@ describe('superdoc CLI', () => {
       }>
     >(getResult);
     expect(getEnvelope.data.item.address.nodeId).toBe(address.nodeId);
+  });
+
+  test('lists list/get keep list item addresses stable for docs without paraIds in stateless mode', async () => {
+    const source = join(TEST_DIR, 'lists-no-paraids-stateless.docx');
+    await writeListDocWithoutParaIds(source);
+
+    const address = await firstListItemAddress(['lists', 'list', source, '--limit', '1']);
+
+    const getResult = await runCli(['lists', 'get', source, '--address-json', JSON.stringify(address)]);
+    expect(getResult.code).toBe(0);
+
+    const getEnvelope = parseJsonOutput<
+      SuccessEnvelope<{
+        address: ListItemAddress;
+        item: { address: ListItemAddress };
+      }>
+    >(getResult);
+    expect(getEnvelope.data.item.address.nodeId).toBe(address.nodeId);
+
+    const secondAddress = await firstListItemAddress(['lists', 'list', source, '--limit', '1']);
+    expect(secondAddress.nodeId).toBe(address.nodeId);
+  });
+
+  test('lists list/get keep list item addresses stable for docs without paraIds in stateful mode', async () => {
+    const source = join(TEST_DIR, 'lists-no-paraids-stateful.docx');
+    await writeListDocWithoutParaIds(source);
+
+    try {
+      const openResult = await runCli(['open', source]);
+      expect(openResult.code).toBe(0);
+
+      const address = await firstListItemAddress(['lists', 'list', '--limit', '1']);
+
+      const getResult = await runCli(['lists', 'get', '--address-json', JSON.stringify(address)]);
+      expect(getResult.code).toBe(0);
+
+      const getEnvelope = parseJsonOutput<
+        SuccessEnvelope<{
+          address: ListItemAddress;
+          item: { address: ListItemAddress };
+        }>
+      >(getResult);
+      expect(getEnvelope.data.item.address.nodeId).toBe(address.nodeId);
+
+      const secondAddress = await firstListItemAddress(['lists', 'list', '--limit', '1']);
+      expect(secondAddress.nodeId).toBe(address.nodeId);
+    } finally {
+      await runCli(['close', '--discard']);
+    }
   });
 
   test('lists list pretty prints list rows', async () => {

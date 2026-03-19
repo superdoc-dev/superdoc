@@ -253,6 +253,39 @@ describe('extraction', () => {
       });
     });
 
+    it('should extract explicit custom column widths when w:cols contains w:col children', () => {
+      const para: PMNode = {
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            sectPr: {
+              type: 'element',
+              name: 'w:sectPr',
+              elements: [
+                {
+                  name: 'w:cols',
+                  attributes: { 'w:num': '2', 'w:equalWidth': '0' },
+                  elements: [
+                    { name: 'w:col', attributes: { 'w:w': '1080', 'w:space': '1523' } },
+                    { name: 'w:col', attributes: { 'w:w': '7459' } },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      const result = extractSectionData(para);
+
+      expect(result?.columnsPx).toEqual({
+        count: 2,
+        gap: 101.53333333333333,
+        widths: [72, 497.26666666666665],
+        equalWidth: false,
+      });
+    });
+
     it('should handle section with only normalized margins and no sectPr elements', () => {
       const para: PMNode = {
         type: 'paragraph',

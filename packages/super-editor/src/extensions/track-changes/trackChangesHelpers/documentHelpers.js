@@ -64,7 +64,8 @@ export const findInlineNodes = (node, descend) => {
 export const hasAnyMark = (doc, markName) => {
   let found = false;
   doc.descendants((node) => {
-    if (found || !node.isText) return false;
+    if (found) return false;
+    if (!node.isInline) return;
 
     const hasMark = node.marks.some((mark) => mark.type.name === markName);
     if (!hasMark) return;

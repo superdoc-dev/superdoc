@@ -4,6 +4,7 @@ import { TrackChanges } from './track-changes.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from './constants.js';
 import { TrackChangesBasePlugin, TrackChangesBasePluginKey } from './plugins/trackChangesBasePlugin.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { hasAnyMark } from './trackChangesHelpers/documentHelpers.js';
 
 const commands = TrackChanges.config.addCommands();
 
@@ -700,6 +701,45 @@ describe('TrackChanges extension commands', () => {
     expect(afterReject).toBeDefined();
     expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
     expect(markPresent(afterReject.doc, 'textStyle')).toBe(false);
+  });
+
+  it('rejectTrackedChangesBetween preserves restored textStyle when before/after attrs overlap', () => {
+    const beforeTextStyle = schema.marks.textStyle.create({
+      color: '#0563C1',
+      fontFamily: 'Times New Roman, serif',
+      fontSize: '12pt',
+    });
+    const afterTextStyle = schema.marks.textStyle.create({
+      color: '#0563C1',
+      styleId: 'Hyperlink',
+      fontFamily: 'Calibri, sans-serif',
+      fontSize: '11pt',
+    });
+    const formatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-overlap-reject',
+      before: [{ type: 'textStyle', attrs: beforeTextStyle.attrs }],
+      after: [{ type: 'textStyle', attrs: afterTextStyle.attrs }],
+    });
+    const doc = createDoc('Styled', [afterTextStyle, formatMark]);
+    const rejectState = createState(doc);
+
+    let afterReject;
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state: rejectState,
+      dispatch: (tr) => {
+        afterReject = rejectState.apply(tr);
+      },
+    });
+
+    expect(afterReject).toBeDefined();
+    expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
+
+    const restoredTextStyle = afterReject.doc.nodeAt(1)?.marks.find((mark) => mark.type.name === 'textStyle');
+    expect(restoredTextStyle).toBeDefined();
+    expect(restoredTextStyle?.attrs).toEqual(beforeTextStyle.attrs);
   });
 
   it('rejectTrackedChangesBetween restores full before snapshot across tracked mark types', () => {

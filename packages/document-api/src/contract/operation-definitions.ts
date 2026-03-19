@@ -249,7 +249,17 @@ function camelToKebab(value: string): string {
 }
 
 function formatInlineAliasDescription(key: InlineRunPatchKey): string {
+  if (key === 'rtl') {
+    return 'Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL.';
+  }
   return `Set or clear the \`${key}\` inline run property on the target text range.`;
+}
+
+function formatInlineAliasExpectedResult(key: InlineRunPatchKey): string {
+  if (key === 'rtl') {
+    return 'Returns a TextMutationReceipt confirming only the inline run property patch was applied to the target range; paragraph direction is unchanged.';
+  }
+  return 'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.';
 }
 
 const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperationId, OperationDefinitionEntry> =
@@ -259,8 +269,7 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
       const definition: OperationDefinitionEntry = {
         memberPath: operationId,
         description: formatInlineAliasDescription(entry.key),
-        expectedResult:
-          'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.',
+        expectedResult: formatInlineAliasExpectedResult(entry.key),
         requiresDocumentContext: true,
         metadata: mutationOperation({
           idempotency: 'conditional',
@@ -1258,6 +1267,38 @@ export const OPERATION_DEFINITIONS = {
       throws: T_PARAGRAPH_MUTATION,
     }),
     referenceDocPath: 'format/paragraph/clear-shading.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setDirection': {
+    memberPath: 'format.paragraph.setDirection',
+    description: 'Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the direction already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-direction.mdx',
+    referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_direction',
+  },
+  'format.paragraph.clearDirection': {
+    memberPath: 'format.paragraph.clearDirection',
+    description: 'Remove explicit paragraph direction, reverting to inherited or default (LTR).',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no direction is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-direction.mdx',
     referenceGroup: 'format.paragraph',
   },
 

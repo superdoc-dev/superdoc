@@ -1,7 +1,7 @@
 ---
 title: format.rtl
 sidebarTitle: format.rtl
-description: "Set or clear the `rtl` inline run property on the target text range."
+description: "Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: "Set or clear the `rtl` inline run property on the target text rang
 
 ## Summary
 
-Set or clear the `rtl` inline run property on the target text range.
+Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL.
 
 - Operation ID: `format.rtl`
 - API member path: `editor.doc.format.rtl(...)`
@@ -22,7 +22,7 @@ Set or clear the `rtl` inline run property on the target text range.
 
 ## Expected result
 
-Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
+Returns a TextMutationReceipt confirming only the inline run property patch was applied to the target range; paragraph direction is unchanged.
 
 ## Input fields
 

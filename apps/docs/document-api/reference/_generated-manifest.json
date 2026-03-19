@@ -177,6 +177,7 @@
     "apps/docs/document-api/reference/format/paragraph/clear-alignment.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-all-tab-stops.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-border.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-direction.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-indentation.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-shading.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-spacing.mdx",
@@ -185,6 +186,7 @@
     "apps/docs/document-api/reference/format/paragraph/reset-direct-formatting.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-alignment.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-border.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-direction.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-flow-options.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-indentation.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-keep-options.mdx",
@@ -637,7 +639,9 @@
         "format.paragraph.setBorder",
         "format.paragraph.clearBorder",
         "format.paragraph.setShading",
-        "format.paragraph.clearShading"
+        "format.paragraph.clearShading",
+        "format.paragraph.setDirection",
+        "format.paragraph.clearDirection"
       ],
       "pagePath": "apps/docs/document-api/reference/format/paragraph/index.mdx",
       "title": "Paragraph Formatting"
@@ -982,5 +986,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "31ad98dfc8659ebef07fbe3070add1c26fbbc8e0fbfa284e52d0b17e9fdd6b0f"
+  "sourceHash": "dae934164941335b329bcc852b86b9c692662b326cbeb23d5498983dc265317b"
 }

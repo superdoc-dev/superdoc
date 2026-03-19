@@ -346,6 +346,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
   ParagraphMutationResult,
 } from './paragraphs/paragraphs.js';
 import {
@@ -368,6 +370,8 @@ import {
   executeParagraphsClearBorder,
   executeParagraphsSetShading,
   executeParagraphsClearShading,
+  executeParagraphsSetDirection,
+  executeParagraphsClearDirection,
 } from './paragraphs/paragraphs.js';
 import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
 import type {
@@ -1172,6 +1176,10 @@ export type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
+  ParagraphDirection,
+  AlignmentPolicy,
 } from './paragraphs/paragraphs.js';
 export {
   PARAGRAPH_ALIGNMENTS,
@@ -1180,6 +1188,8 @@ export {
   BORDER_SIDES,
   CLEAR_BORDER_SIDES,
   LINE_RULES,
+  PARAGRAPH_DIRECTIONS,
+  ALIGNMENT_POLICIES,
 } from './paragraphs/paragraphs.js';
 export type {
   BlockAddress,
@@ -1877,6 +1887,12 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         },
         clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearShading(adapters.paragraphs, input, options);
+        },
+        setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetDirection(adapters.paragraphs, input, options);
+        },
+        clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearDirection(adapters.paragraphs, input, options);
         },
       },
     },

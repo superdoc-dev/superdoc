@@ -3068,7 +3068,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBeUndefined();
+      expect(paragraph.attrs?.direction).toBe('rtl');
       expect(paragraph.attrs?.rtl).toBeUndefined();
       expect(paragraph.attrs?.indent?.left).toBe(24);
       expect(paragraph.attrs?.indent?.right).toBe(12);

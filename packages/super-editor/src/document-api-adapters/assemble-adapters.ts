@@ -38,6 +38,8 @@ import {
   paragraphsClearBorderWrapper,
   paragraphsSetShadingWrapper,
   paragraphsClearShadingWrapper,
+  paragraphsSetDirectionWrapper,
+  paragraphsClearDirectionWrapper,
 } from './plan-engine/paragraphs-wrappers.js';
 import {
   trackChangesListWrapper,
@@ -405,6 +407,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
       setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
       clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
+      setDirection: (input, options) => paragraphsSetDirectionWrapper(editor, input, options),
+      clearDirection: (input, options) => paragraphsClearDirectionWrapper(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),

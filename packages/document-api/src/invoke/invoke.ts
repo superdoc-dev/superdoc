@@ -105,6 +105,8 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'format.paragraph.clearBorder': (input, options) => api.format.paragraph.clearBorder(input, options),
     'format.paragraph.setShading': (input, options) => api.format.paragraph.setShading(input, options),
     'format.paragraph.clearShading': (input, options) => api.format.paragraph.clearShading(input, options),
+    'format.paragraph.setDirection': (input, options) => api.format.paragraph.setDirection(input, options),
+    'format.paragraph.clearDirection': (input, options) => api.format.paragraph.clearDirection(input, options),
 
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),

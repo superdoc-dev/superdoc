@@ -3138,6 +3138,25 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('format.paragraph.clearShading'),
   },
+  'format.paragraph.setDirection': {
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        direction: { type: 'string', enum: ['ltr', 'rtl'] },
+        alignmentPolicy: { type: 'string', enum: ['preserve', 'matchDirection'] },
+      },
+      ['target', 'direction'],
+    ),
+    output: paragraphMutationResultSchemaFor('format.paragraph.setDirection'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setDirection'),
+  },
+  'format.paragraph.clearDirection': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearDirection'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearDirection'),
+  },
   'styles.apply': (() => {
     // Derived from PROPERTY_REGISTRY — no hardcoded property lists
     const runInputSchema = objectSchema(

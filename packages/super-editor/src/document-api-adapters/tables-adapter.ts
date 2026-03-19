@@ -2347,6 +2347,13 @@ export function tablesMergeCellsAdapter(
   }
 }
 
+function isTableScopedUnmergeInput(
+  input: TablesUnmergeCellsInput,
+): input is Extract<TablesUnmergeCellsInput, { rowIndex: number; columnIndex: number }> {
+  const inputRecord = input as Record<string, unknown>;
+  return inputRecord.rowIndex !== undefined && inputRecord.columnIndex !== undefined;
+}
+
 /**
  * tables.unmergeCells — unmerge a merged cell back into individual cells.
  *
@@ -2364,14 +2371,8 @@ export function tablesUnmergeCellsAdapter(
   // { nodeId: '…', rowIndex: undefined } — the keys exist but the values
   // are absent. This must agree with the public-API validator in tables.ts
   // which checks `!== undefined`, not `in`.
-  const inputRecord = input as Record<string, unknown>;
-  const isTableScoped = inputRecord.rowIndex !== undefined && inputRecord.columnIndex !== undefined;
-  const resolved = isTableScoped
-    ? resolveTableScopedCellLocator(
-        editor,
-        input as { target?: TableAddress; nodeId?: string; rowIndex: number; columnIndex: number },
-        'tables.unmergeCells',
-      )
+  const resolved = isTableScopedUnmergeInput(input)
+    ? resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells')
     : resolveCellLocator(editor, input, 'tables.unmergeCells');
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
 

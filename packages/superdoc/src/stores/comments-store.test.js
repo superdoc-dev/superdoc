@@ -993,6 +993,81 @@ describe('comments-store', () => {
     expect(store.commentsList.filter((comment) => comment.commentId === 'tc-history-replay-reply')).toHaveLength(1);
   });
 
+  it('keeps already-resolved tracked-change comments during empty replay sync', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const superdoc = { emit: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([]);
+    groupChangesMock.mockReturnValue([]);
+
+    const resolvedComment = {
+      commentId: 'tc-already-resolved',
+      trackedChange: true,
+      trackedChangeText: 'Accepted text',
+      resolvedTime: 999,
+      resolvedByEmail: 'reviewer@example.com',
+      resolvedByName: 'Reviewer',
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({ commentId: 'tc-already-resolved', fileId: 'doc-1' })),
+    };
+    store.commentsList = [resolvedComment];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(resolvedComment.resolvedTime).toBe(999);
+    expect(syncCommentsToClientsMock).not.toHaveBeenCalledWith(
+      superdoc,
+      expect.objectContaining({ type: comments_module_events.DELETED }),
+    );
+  });
+
+  it('restores resolution snapshot instead of deleting when pruning a previously-reopened thread', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const superdoc = { emit: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    const existingComment = {
+      commentId: 'tc-snapshot-restore',
+      trackedChange: true,
+      trackedChangeText: 'Existing',
+      resolvedTime: 555,
+      resolvedByEmail: 'reviewer@example.com',
+      resolvedByName: 'Reviewer',
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({ commentId: 'tc-snapshot-restore' })),
+    };
+    store.commentsList = [existingComment];
+
+    // Step 1: undo — mark reappears, thread reopens (snapshot saved, resolvedTime cleared)
+    trackChangesHelpersMock.getTrackChanges.mockReturnValueOnce([{ mark: { attrs: { id: 'tc-snapshot-restore' } } }]);
+    groupChangesMock.mockReturnValueOnce([{ insertedMark: { mark: { attrs: { id: 'tc-snapshot-restore' } } } }]);
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(existingComment.resolvedTime).toBeNull();
+
+    // Step 2: redo — mark gone, snapshot should restore resolvedTime instead of deleting
+    trackChangesHelpersMock.getTrackChanges.mockReturnValueOnce([]);
+    groupChangesMock.mockReturnValueOnce([]);
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toHaveLength(1);
+    expect(existingComment.resolvedTime).toBe(555);
+    expect(existingComment.resolvedByEmail).toBe('reviewer@example.com');
+    expect(existingComment.resolvedByName).toBe('Reviewer');
+  });
+
   it('keeps tracked-change comments when importedId is live even if commentId differs', () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };

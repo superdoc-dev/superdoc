@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -5,7 +6,12 @@ import { test } from '../../fixtures/superdoc.js';
 
 test.use({ config: { toolbar: 'full', showCaret: true, showSelection: true } });
 
-const TEST_FILE = resolve(dirname(fileURLToPath(import.meta.url)), '../../test-data/tables/sd-2236-table-arrow-key-navigation.docx');
+const TEST_FILE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../test-data/tables/sd-2236-table-arrow-key-navigation.docx',
+);
+
+test.skip(!fs.existsSync(TEST_FILE), 'Test document not available — run pnpm corpus:pull');
 
 test('ArrowRight from the end of the bottom-right table cell exits to the paragraph after the table', async ({
   superdoc,

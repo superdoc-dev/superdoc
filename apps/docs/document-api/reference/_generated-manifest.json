@@ -348,6 +348,7 @@
     "apps/docs/document-api/reference/styles/paragraph/index.mdx",
     "apps/docs/document-api/reference/styles/paragraph/set-style.mdx",
     "apps/docs/document-api/reference/tables/apply-border-preset.mdx",
+    "apps/docs/document-api/reference/tables/apply-style.mdx",
     "apps/docs/document-api/reference/tables/clear-border.mdx",
     "apps/docs/document-api/reference/tables/clear-cell-spacing.mdx",
     "apps/docs/document-api/reference/tables/clear-contents.mdx",
@@ -374,6 +375,7 @@
     "apps/docs/document-api/reference/tables/move.mdx",
     "apps/docs/document-api/reference/tables/set-alt-text.mdx",
     "apps/docs/document-api/reference/tables/set-border.mdx",
+    "apps/docs/document-api/reference/tables/set-borders.mdx",
     "apps/docs/document-api/reference/tables/set-cell-padding.mdx",
     "apps/docs/document-api/reference/tables/set-cell-properties.mdx",
     "apps/docs/document-api/reference/tables/set-cell-spacing.mdx",
@@ -385,6 +387,7 @@
     "apps/docs/document-api/reference/tables/set-shading.mdx",
     "apps/docs/document-api/reference/tables/set-style-option.mdx",
     "apps/docs/document-api/reference/tables/set-style.mdx",
+    "apps/docs/document-api/reference/tables/set-table-options.mdx",
     "apps/docs/document-api/reference/tables/set-table-padding.mdx",
     "apps/docs/document-api/reference/tables/sort.mdx",
     "apps/docs/document-api/reference/tables/split-cell.mdx",
@@ -686,6 +689,9 @@
         "tables.setCellPadding",
         "tables.setCellSpacing",
         "tables.clearCellSpacing",
+        "tables.applyStyle",
+        "tables.setBorders",
+        "tables.setTableOptions",
         "tables.get",
         "tables.getCells",
         "tables.getProperties",
@@ -976,5 +982,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "5eb339719530fd6ff1e69c9c90c36637fedce9fc426b3aba84f973c73facf3e0"
+  "sourceHash": "7542c94d16850ad79775e20aa6a1b0f8355cc3c946f34731d91c6ac32804660d"
 }

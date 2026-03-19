@@ -36,14 +36,14 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | `target.start` | SelectionPoint | yes | SelectionPoint |
 | `text` | string | yes |  |
 
-### Variant 1.2 (ref, text)
+### Variant 1.2 (required: ref, text)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `ref` | string | yes |  |
 | `text` | string | yes |  |
 
-### Variant 2.1 (target, content)
+### Variant 2.1 (required: target, content)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
 | `target` | BlockNodeAddress \\| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
 
-### Variant 2.2 (ref, content)
+### Variant 2.2 (required: ref, content)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

@@ -1,6 +1,13 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import type {
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
+  TableBorderSpec,
+  TableStyleOptionsPatch,
+} from '../types/table-operations.types.js';
 
 // ---------------------------------------------------------------------------
 // Locator validation
@@ -192,5 +199,285 @@ export function executeDocumentLevelTableOp<TInput, TResult>(
   input: TInput,
   options?: MutationOptions,
 ): TResult {
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+// ---------------------------------------------------------------------------
+// Convenience operation validation helpers
+// ---------------------------------------------------------------------------
+
+const VALID_STYLE_OPTION_FLAGS = new Set([
+  'headerRow',
+  'lastRow',
+  'totalRow',
+  'firstColumn',
+  'lastColumn',
+  'bandedRows',
+  'bandedColumns',
+]);
+
+function validateStyleOptionsPatch(options: TableStyleOptionsPatch, operationName: string): void {
+  const keys = Object.keys(options);
+  for (const key of keys) {
+    if (!VALID_STYLE_OPTION_FLAGS.has(key)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: unrecognized style option flag "${key}".`,
+        { field: 'styleOptions', value: key },
+      );
+    }
+    if (typeof options[key as keyof TableStyleOptionsPatch] !== 'boolean') {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: style option "${key}" must be a boolean.`,
+        { field: `styleOptions.${key}` },
+      );
+    }
+  }
+}
+
+function validateBorderSpec(spec: TableBorderSpec, fieldPath: string, operationName: string): void {
+  if (typeof spec !== 'object' || spec === null) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath} must be a border spec object.`,
+    );
+  }
+  if (typeof spec.lineStyle !== 'string' || spec.lineStyle.length === 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.lineStyle must be a non-empty string.`,
+      {
+        field: `${fieldPath}.lineStyle`,
+      },
+    );
+  }
+  if (typeof spec.lineWeightPt !== 'number' || !Number.isFinite(spec.lineWeightPt) || spec.lineWeightPt <= 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.lineWeightPt must be a positive number.`,
+      { field: `${fieldPath}.lineWeightPt` },
+    );
+  }
+  if (typeof spec.color !== 'string' || spec.color.length === 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.color must be a non-empty string.`,
+      {
+        field: `${fieldPath}.color`,
+      },
+    );
+  }
+}
+
+function validateBorderPatchEdge(
+  value: TableBorderSpec | null | undefined,
+  edgeName: string,
+  operationName: string,
+): void {
+  if (value === undefined || value === null) return;
+  validateBorderSpec(value, `edges.${edgeName}`, operationName);
+}
+
+const VALID_APPLY_TO_VALUES = new Set([
+  'all',
+  'outside',
+  'inside',
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'insideH',
+  'insideV',
+]);
+
+const VALID_BORDER_EDGE_KEYS = new Set(['top', 'bottom', 'left', 'right', 'insideH', 'insideV']);
+
+// ---------------------------------------------------------------------------
+// Convenience operation execute wrappers
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate and execute `tables.applyStyle`.
+ */
+export function executeTablesApplyStyle<TResult>(
+  operationName: string,
+  adapter: (input: TablesApplyStyleInput, options?: MutationOptions) => TResult,
+  input: TablesApplyStyleInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableLocator(input, operationName);
+
+  const hasStyleId = input.styleId !== undefined;
+  const hasOptions = input.styleOptions !== undefined;
+
+  if (!hasStyleId && !hasOptions) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName} requires at least one of styleId or styleOptions.`,
+    );
+  }
+
+  if (hasStyleId && typeof input.styleId !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: styleId must be a string.`, {
+      field: 'styleId',
+    });
+  }
+
+  if (hasStyleId && input.styleId === '') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: styleId must be a non-empty string. Use tables.clearStyle to remove a style.`,
+      { field: 'styleId' },
+    );
+  }
+
+  if (hasOptions) {
+    if (typeof input.styleOptions !== 'object' || input.styleOptions === null || Array.isArray(input.styleOptions)) {
+      throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: styleOptions must be a plain object.`, {
+        field: 'styleOptions',
+      });
+    }
+    const optionKeys = Object.keys(input.styleOptions);
+    if (!hasStyleId && optionKeys.length === 0) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: styleOptions must contain at least one flag when styleId is absent.`,
+        { field: 'styleOptions' },
+      );
+    }
+    if (optionKeys.length > 0) {
+      validateStyleOptionsPatch(input.styleOptions!, operationName);
+    }
+  }
+
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Validate and execute `tables.setBorders`.
+ */
+export function executeTablesSetBorders<TResult>(
+  operationName: string,
+  adapter: (input: TablesSetBordersInput, options?: MutationOptions) => TResult,
+  input: TablesSetBordersInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableLocator(input, operationName);
+
+  if (!('mode' in input) || (input.mode !== 'applyTo' && input.mode !== 'edges')) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: mode must be "applyTo" or "edges".`, {
+      field: 'mode',
+    });
+  }
+
+  if (input.mode === 'applyTo') {
+    if (!VALID_APPLY_TO_VALUES.has(input.applyTo)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: applyTo must be one of: ${[...VALID_APPLY_TO_VALUES].join(', ')}.`,
+        { field: 'applyTo' },
+      );
+    }
+    if (input.border === undefined) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: border is required when mode is "applyTo".`,
+        { field: 'border' },
+      );
+    }
+    if (input.border !== null) {
+      validateBorderSpec(input.border, 'border', operationName);
+    }
+  }
+
+  if (input.mode === 'edges') {
+    if (!input.edges || typeof input.edges !== 'object') {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: edges is required when mode is "edges".`,
+        { field: 'edges' },
+      );
+    }
+    const edgeKeys = Object.keys(input.edges);
+    const definedKeys = edgeKeys.filter(
+      (k) => VALID_BORDER_EDGE_KEYS.has(k) && input.edges[k as keyof typeof input.edges] !== undefined,
+    );
+    if (definedKeys.length === 0) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: edges must contain at least one defined edge.`,
+        { field: 'edges' },
+      );
+    }
+    for (const key of edgeKeys) {
+      if (!VALID_BORDER_EDGE_KEYS.has(key)) {
+        throw new DocumentApiValidationError('INVALID_INPUT', `${operationName}: unrecognized edge "${key}".`, {
+          field: `edges.${key}`,
+        });
+      }
+      validateBorderPatchEdge(input.edges[key as keyof typeof input.edges], key, operationName);
+    }
+  }
+
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+/**
+ * Validate and execute `tables.setTableOptions`.
+ */
+export function executeTablesSetTableOptions<TResult>(
+  operationName: string,
+  adapter: (input: TablesSetTableOptionsInput, options?: MutationOptions) => TResult,
+  input: TablesSetTableOptionsInput,
+  options?: MutationOptions,
+): TResult {
+  validateTableLocator(input, operationName);
+
+  const hasMargins = input.defaultCellMargins !== undefined;
+  const hasSpacing = input.cellSpacingPt !== undefined;
+
+  if (!hasMargins && !hasSpacing) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName} requires at least one of defaultCellMargins or cellSpacingPt.`,
+    );
+  }
+
+  if (hasMargins) {
+    if (
+      typeof input.defaultCellMargins !== 'object' ||
+      input.defaultCellMargins === null ||
+      Array.isArray(input.defaultCellMargins)
+    ) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: defaultCellMargins must be a plain object with topPt, rightPt, bottomPt, leftPt.`,
+        { field: 'defaultCellMargins' },
+      );
+    }
+    const m = input.defaultCellMargins;
+    const sides = ['topPt', 'rightPt', 'bottomPt', 'leftPt'] as const;
+    for (const side of sides) {
+      if (typeof m[side] !== 'number' || !Number.isFinite(m[side]) || m[side] < 0) {
+        throw new DocumentApiValidationError(
+          'INVALID_INPUT',
+          `${operationName}: defaultCellMargins.${side} must be a non-negative number.`,
+          { field: `defaultCellMargins.${side}` },
+        );
+      }
+    }
+  }
+
+  if (hasSpacing && input.cellSpacingPt !== null) {
+    if (typeof input.cellSpacingPt !== 'number' || !Number.isFinite(input.cellSpacingPt) || input.cellSpacingPt < 0) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `${operationName}: cellSpacingPt must be a non-negative number or null.`,
+        { field: 'cellSpacingPt' },
+      );
+    }
+  }
+
   return adapter(input, normalizeMutationOptions(options));
 }

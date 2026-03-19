@@ -575,16 +575,16 @@ describe('getProperties reads from tableProperties', () => {
     expect(result.autoFitMode).toBe('fitContents');
   });
 
-  it('reads styleOptions from tblLook', () => {
+  it('reads styleOptions from tblLook — emits only explicitly stored flags', () => {
     const { editor } = makeTableEditorWithProps({
       tblLook: { firstRow: true, lastRow: false, noHBand: false, noVBand: true },
     });
     const result = tablesGetPropertiesAdapter(editor, { nodeId: 'table-1' });
+    // Only flags explicitly stored in tblLook are emitted.
+    // firstColumn and lastColumn are absent from the OOXML, so they are omitted.
     expect(result.styleOptions).toEqual({
       headerRow: true,
       lastRow: false,
-      firstColumn: false,
-      lastColumn: false,
       bandedRows: true,
       bandedColumns: false,
     });

@@ -26,15 +26,20 @@ Returns a TableMutationResult receipt; reports NO_OP if the cell is not merged.
 
 ## Input fields
 
-### Variant 1 (target.nodeType="tableCell")
+### Variant 1.1 (target.nodeType="tableCell")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `nodeId` | string | no |  |
-| `target` | TableCellAddress | no | TableCellAddress |
-| `target.kind` | `"block"` | no | Constant: `"block"` |
-| `target.nodeId` | string | no |  |
-| `target.nodeType` | `"tableCell"` | no | Constant: `"tableCell"` |
+| `target` | TableCellAddress | yes | TableCellAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableCell"` | yes | Constant: `"tableCell"` |
+
+### Variant 1.2 (required: nodeId)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | yes |  |
 
 ### Variant 2 (target.nodeType="table")
 
@@ -47,7 +52,7 @@ Returns a TableMutationResult receipt; reports NO_OP if the cell is not merged.
 | `target.nodeId` | string | yes |  |
 | `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 3 (nodeId, rowIndex, columnIndex)
+### Variant 3 (required: nodeId, rowIndex, columnIndex)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

@@ -265,6 +265,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
   TablesGetInput,
   TablesGetOutput,
   TablesGetCellsInput,
@@ -316,6 +319,9 @@ import {
   executeRowLocatorOp,
   executeCellOrTableScopedCellLocatorOp,
   executeDocumentLevelTableOp,
+  executeTablesApplyStyle,
+  executeTablesSetBorders,
+  executeTablesSetTableOptions,
 } from './tables/tables.js';
 import type {
   ParagraphsAdapter,
@@ -1367,6 +1373,9 @@ export interface TablesApi {
   setCellPadding(input: TablesSetCellPaddingInput, options?: MutationOptions): TableMutationResult;
   setCellSpacing(input: TablesSetCellSpacingInput, options?: MutationOptions): TableMutationResult;
   clearCellSpacing(input: TablesClearCellSpacingInput, options?: MutationOptions): TableMutationResult;
+  applyStyle(input: TablesApplyStyleInput, options?: MutationOptions): TableMutationResult;
+  setBorders(input: TablesSetBordersInput, options?: MutationOptions): TableMutationResult;
+  setTableOptions(input: TablesSetTableOptionsInput, options?: MutationOptions): TableMutationResult;
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
@@ -2447,6 +2456,30 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTableLocatorOp(
           'tables.clearCellSpacing',
           adapters.tables.clearCellSpacing.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      applyStyle(input, options?) {
+        return executeTablesApplyStyle(
+          'tables.applyStyle',
+          adapters.tables.applyStyle.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setBorders(input, options?) {
+        return executeTablesSetBorders(
+          'tables.setBorders',
+          adapters.tables.setBorders.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setTableOptions(input, options?) {
+        return executeTablesSetTableOptions(
+          'tables.setTableOptions',
+          adapters.tables.setTableOptions.bind(adapters.tables),
           input,
           options,
         );

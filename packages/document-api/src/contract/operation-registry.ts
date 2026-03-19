@@ -378,6 +378,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
   TableMutationResult,
   TablesGetInput,
   TablesGetOutput,
@@ -883,6 +886,13 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'tables.setCellSpacing': { input: TablesSetCellSpacingInput; options: MutationOptions; output: TableMutationResult };
   'tables.clearCellSpacing': {
     input: TablesClearCellSpacingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.applyStyle': { input: TablesApplyStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setBorders': { input: TablesSetBordersInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setTableOptions': {
+    input: TablesSetTableOptionsInput;
     options: MutationOptions;
     output: TableMutationResult;
   };

@@ -346,6 +346,149 @@ export interface TablesSetStyleOptionInput extends TableLocator {
 }
 
 // ---------------------------------------------------------------------------
+// Shared table-formatting types (used by both reads and writes)
+// ---------------------------------------------------------------------------
+
+/** Border spec for a single edge. Values are raw OOXML (line style, color). */
+export interface TableBorderSpec {
+  /** Raw OOXML `ST_Border` value (e.g., `single`, `double`, `dotted`). */
+  lineStyle: string;
+  /** Border weight in points. Must be positive (0 is rejected). */
+  lineWeightPt: number;
+  /** Uppercase hex without `#` (e.g., `000000`), or `auto`. */
+  color: string;
+}
+
+// ---------------------------------------------------------------------------
+// Write-only patch types (used by mutation inputs)
+// ---------------------------------------------------------------------------
+
+/** All four sides required when present. */
+export interface TableMargins {
+  topPt: number;
+  rightPt: number;
+  bottomPt: number;
+  leftPt: number;
+}
+
+/** Omitted flag = leave unchanged. */
+export interface TableStyleOptionsPatch {
+  headerRow?: boolean;
+  lastRow?: boolean;
+  /** @deprecated Use `lastRow` instead. */
+  totalRow?: boolean;
+  firstColumn?: boolean;
+  lastColumn?: boolean;
+  bandedRows?: boolean;
+  bandedColumns?: boolean;
+}
+
+/**
+ * Per-edge border patch for writes.
+ * - `null` = clear this edge (write explicit "no border")
+ * - Omitted = leave this edge unchanged
+ */
+export interface TableBorderPatch {
+  top?: TableBorderSpec | null;
+  bottom?: TableBorderSpec | null;
+  left?: TableBorderSpec | null;
+  right?: TableBorderSpec | null;
+  insideH?: TableBorderSpec | null;
+  insideV?: TableBorderSpec | null;
+}
+
+// ---------------------------------------------------------------------------
+// Read-only state types (used by getProperties output)
+// ---------------------------------------------------------------------------
+
+/** Absent key = no direct formatting for this flag. */
+export interface TableStyleOptionsState {
+  headerRow?: boolean;
+  lastRow?: boolean;
+  firstColumn?: boolean;
+  lastColumn?: boolean;
+  bandedRows?: boolean;
+  bandedColumns?: boolean;
+}
+
+/**
+ * Three states per edge:
+ * - Absent key = no direct formatting on this edge
+ * - `null` = explicit direct clear (overrides style-inherited borders)
+ * - `TableBorderSpec` = explicit direct border spec
+ */
+export interface TableBorderState {
+  top?: TableBorderSpec | null;
+  bottom?: TableBorderSpec | null;
+  left?: TableBorderSpec | null;
+  right?: TableBorderSpec | null;
+  insideH?: TableBorderSpec | null;
+  insideV?: TableBorderSpec | null;
+}
+
+/** Absent key = no direct formatting for this side. */
+export interface TableMarginsState {
+  topPt?: number;
+  rightPt?: number;
+  bottomPt?: number;
+  leftPt?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Convenience operation inputs
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a table style and/or style options in one call.
+ * At least one of `styleId` or `styleOptions` is required.
+ */
+export interface TablesApplyStyleInput extends TableLocator {
+  /** Table style ID. Not validated against the style catalog. */
+  styleId?: string;
+  /** Style option flags to merge into `tblLook`. Omitted flags are left unchanged. */
+  styleOptions?: TableStyleOptionsPatch;
+}
+
+/** Target set for the `applyTo` mode of `setBorders`. */
+export type TableBorderApplyTo =
+  | 'all'
+  | 'outside'
+  | 'inside'
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'insideH'
+  | 'insideV';
+
+/**
+ * Set borders on a table. Two modes:
+ * - `applyTo`: apply one border spec (or `null` to clear) to a named target set
+ * - `edges`: apply a per-edge patch
+ */
+export type TablesSetBordersInput =
+  | (TableLocator & {
+      mode: 'applyTo';
+      applyTo: TableBorderApplyTo;
+      border: TableBorderSpec | null;
+    })
+  | (TableLocator & {
+      mode: 'edges';
+      edges: TableBorderPatch;
+    });
+
+/**
+ * Set table-level default cell margins and/or cell spacing.
+ * At least one of `defaultCellMargins` or `cellSpacingPt` is required.
+ */
+export interface TablesSetTableOptionsInput extends TableLocator {
+  /** All four sides required when present. */
+  defaultCellMargins?: TableMargins;
+  /** Non-negative number, or `null` to clear. */
+  cellSpacingPt?: number | null;
+}
+
+// ---------------------------------------------------------------------------
 // Styling: borders
 // ---------------------------------------------------------------------------
 
@@ -492,7 +635,13 @@ export interface TablesGetCellsOutput {
 /** Input for `tables.getProperties` — locates a single table. */
 export type TablesGetPropertiesInput = TableLocator;
 
-/** Output for `tables.getProperties` — table layout/style metadata. */
+/**
+ * Output for `tables.getProperties` — table layout/style metadata.
+ *
+ * All fields reflect **direct formatting only**. Properties inherited from
+ * the table style are not included — use `styleId` and `styleOptions` to
+ * determine which style is active.
+ */
 export interface TablesGetPropertiesOutput {
   nodeId: string;
   address: TableAddress;
@@ -505,12 +654,12 @@ export interface TablesGetPropertiesOutput {
    */
   preferredWidth?: number;
   autoFitMode?: TableAutoFitMode;
-  styleOptions?: {
-    headerRow?: boolean;
-    lastRow?: boolean;
-    firstColumn?: boolean;
-    lastColumn?: boolean;
-    bandedRows?: boolean;
-    bandedColumns?: boolean;
-  };
+  /** Absent when `tblLook` has no direct formatting. Only explicitly stored flags are emitted. */
+  styleOptions?: TableStyleOptionsState;
+  /** Absent when no direct border formatting exists. Three states per edge (see `TableBorderState`). */
+  borders?: TableBorderState;
+  /** Default cell margins in points. Only sides with explicit direct formatting are included. */
+  defaultCellMargins?: TableMarginsState;
+  /** Cell spacing in points. `0` is explicit; absent = no direct formatting. */
+  cellSpacingPt?: number;
 }

@@ -108,6 +108,70 @@ const DOC_WITH_PROTECTED_TRAILING_PARAGRAPH = {
   ],
 };
 
+/**
+ * Same table layout as DOC, but the first cell has a leading bookmarkStart
+ * and the last cell has a trailing bookmarkEnd. This simulates imported
+ * documents where inline atom markers sit at paragraph edges.
+ */
+const DOC_WITH_INLINE_ATOMS = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [{ type: 'run', content: [{ type: 'text', text: 'Before' }] }],
+    },
+    {
+      type: 'table',
+      attrs: {
+        tableProperties: {},
+        grid: [{ col: 1500 }],
+      },
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [
+                    { type: 'bookmarkStart', attrs: { id: '0', name: 'bm1' } },
+                    { type: 'run', content: [{ type: 'text', text: 'First' }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [150] },
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [
+                    { type: 'run', content: [{ type: 'text', text: 'Last' }] },
+                    { type: 'bookmarkEnd', attrs: { id: '0' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'paragraph',
+      content: [{ type: 'run', content: [{ type: 'text', text: 'After' }] }],
+    },
+  ],
+};
+
 function findTextPos(doc, search) {
   let found = null;
   doc.descendants((node, pos) => {
@@ -280,5 +344,51 @@ describe('tableBoundaryNavigation', () => {
     });
 
     expect(handled).toBe(true);
+  });
+
+  describe('inline atom markers at paragraph edges', () => {
+    let atomEditor;
+    let atomDoc;
+
+    beforeEach(() => {
+      ({ editor: atomEditor } = initTestEditor({ loadFromSchema: true, content: DOC_WITH_INLINE_ATOMS }));
+      atomDoc = atomEditor.state.doc;
+    });
+
+    it('treats the end of the last run as paragraph end even with a trailing bookmarkEnd', () => {
+      const lastPos = findTextPos(atomDoc, 'Last');
+      const endOfLast = lastPos + 'Last'.length;
+      const state = atomEditor.state.apply(atomEditor.state.tr.setSelection(TextSelection.create(atomDoc, endOfLast)));
+
+      expect(isAtEffectiveParagraphEnd(state.selection.$head)).toBe(true);
+    });
+
+    it('treats the start of the first run as paragraph start even with a leading bookmarkStart', () => {
+      const firstPos = findTextPos(atomDoc, 'First');
+      const state = atomEditor.state.apply(atomEditor.state.tr.setSelection(TextSelection.create(atomDoc, firstPos)));
+
+      expect(isAtEffectiveParagraphStart(state.selection.$head)).toBe(true);
+    });
+
+    it('exits the table rightward from the last cell despite a trailing bookmarkEnd', () => {
+      const lastPos = findTextPos(atomDoc, 'Last');
+      const endOfLast = lastPos + 'Last'.length;
+      const afterPos = findTextPos(atomDoc, 'After');
+      const state = atomEditor.state.apply(atomEditor.state.tr.setSelection(TextSelection.create(atomDoc, endOfLast)));
+
+      const nextSelection = getTableBoundaryExitSelection(state, 1);
+      expect(nextSelection).not.toBeNull();
+      expect(nextSelection.from).toBe(afterPos);
+    });
+
+    it('exits the table leftward from the first cell despite a leading bookmarkStart', () => {
+      const firstPos = findTextPos(atomDoc, 'First');
+      const beforeEnd = findTextPos(atomDoc, 'Before') + 'Before'.length;
+      const state = atomEditor.state.apply(atomEditor.state.tr.setSelection(TextSelection.create(atomDoc, firstPos)));
+
+      const nextSelection = getTableBoundaryExitSelection(state, -1);
+      expect(nextSelection).not.toBeNull();
+      expect(nextSelection.from).toBe(beforeEnd);
+    });
   });
 });

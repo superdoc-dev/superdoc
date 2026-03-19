@@ -40,12 +40,38 @@ function findParagraphDepth($pos) {
 }
 
 /**
+ * Returns true when every sibling of the paragraph between `fromIndex`
+ * (inclusive) and `toIndex` (exclusive) is an invisible inline marker
+ * (e.g. bookmarkStart, bookmarkEnd, permEnd, commentRangeEnd). These are
+ * zero-width nodes the cursor should not stop at, so they should not
+ * prevent boundary detection.
+ *
+ * A node is considered an invisible marker when it is inline, not a run,
+ * and carries no text content.
+ *
+ * @param {import('prosemirror-model').Node} paragraph
+ * @param {number} fromIndex
+ * @param {number} toIndex
+ * @returns {boolean}
+ */
+function allInlineMarkersBetween(paragraph, fromIndex, toIndex) {
+  for (let i = fromIndex; i < toIndex; i += 1) {
+    const child = paragraph.child(i);
+    if (child.type.name === 'run') return false;
+    if (!child.isInline) return false;
+    if (child.textContent !== '') return false;
+  }
+  return true;
+}
+
+/**
  * Returns true when the caret should be treated as being at the effective end
  * of the paragraph for horizontal navigation purposes.
  *
  * This is run-aware: the end of the final run in the paragraph counts as the
  * end of the text block even when the selection has not advanced to the raw
- * paragraph boundary position yet.
+ * paragraph boundary position yet. Trailing inline atoms (bookmarks,
+ * permission markers, etc.) are ignored.
  *
  * @param {import('prosemirror-model').ResolvedPos} $head
  * @returns {boolean}
@@ -63,12 +89,15 @@ export function isAtEffectiveParagraphEnd($head) {
   if (runDepth < 0) return false;
   if ($head.pos !== $head.end(runDepth)) return false;
 
-  return $head.index(paragraphDepth) === paragraph.childCount - 1;
+  const runIndex = $head.index(paragraphDepth);
+  return allInlineMarkersBetween(paragraph, runIndex + 1, paragraph.childCount);
 }
 
 /**
  * Returns true when the caret should be treated as being at the effective start
  * of the paragraph for horizontal navigation purposes.
+ *
+ * Leading inline atoms (bookmarks, permission markers, etc.) are ignored.
  *
  * @param {import('prosemirror-model').ResolvedPos} $head
  * @returns {boolean}
@@ -86,7 +115,8 @@ export function isAtEffectiveParagraphStart($head) {
   if (runDepth < 0) return false;
   if ($head.pos !== $head.start(runDepth)) return false;
 
-  return $head.index(paragraphDepth) === 0;
+  const runIndex = $head.index(paragraphDepth);
+  return allInlineMarkersBetween(paragraph, 0, runIndex);
 }
 
 /**

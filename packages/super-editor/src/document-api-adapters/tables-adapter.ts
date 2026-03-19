@@ -2889,8 +2889,7 @@ function resolveTableOrCellTarget(
     };
   }
 
-  const scope: 'table' | 'cell' | 'invalid' =
-    candidate.nodeType === 'table' ? 'table' : candidate.nodeType === 'tableCell' ? 'cell' : 'invalid';
+  const scope: 'table' | 'cell' | 'invalid' = candidate.nodeType === 'table' ? 'table' : 'invalid';
   return { node: candidate.node, pos: candidate.pos, address: toBlockAddress(candidate) as TableAddress, scope };
 }
 

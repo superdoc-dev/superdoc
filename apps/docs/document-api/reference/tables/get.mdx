@@ -26,13 +26,20 @@ Returns a TablesGetOutput with the table row count, column count, and structural
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.kind="block")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 2
+### Variant 2 (nodeId)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | yes |  |
 
 ### Example request
 
@@ -41,7 +48,7 @@ _No fields._
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   }
 }
 ```
@@ -50,10 +57,10 @@ _No fields._
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `address` | BlockNodeAddress | yes | BlockNodeAddress |
+| `address` | TableAddress | yes | TableAddress |
 | `address.kind` | `"block"` | yes | Constant: `"block"` |
 | `address.nodeId` | string | yes |  |
-| `address.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `address.nodeType` | `"table"` | yes | Constant: `"table"` |
 | `columns` | integer | yes |  |
 | `nodeId` | string | yes |  |
 | `rows` | integer | yes |  |
@@ -65,7 +72,7 @@ _No fields._
   "address": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "columns": 1,
   "nodeId": "node-def456",
@@ -104,7 +111,7 @@ _No fields._
       "type": "string"
     },
     "target": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     }
   },
   "type": "object"
@@ -118,7 +125,7 @@ _No fields._
   "additionalProperties": false,
   "properties": {
     "address": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     },
     "columns": {
       "minimum": 0,

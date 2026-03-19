@@ -184,6 +184,36 @@ describe('document-api contract catalog', () => {
     expect(capabilitiesOutput.properties?.global?.required).toContain('history');
   });
 
+  it('narrows table operation address schemas to table-specific refs', () => {
+    const schemas = buildInternalContractSchemas();
+
+    const tablesGetInput = schemas.operations['tables.get'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const tablesGetOutput = schemas.operations['tables.get'].output as {
+      properties?: { address?: { $ref?: string } };
+    };
+    const insertRowInput = schemas.operations['tables.insertRow'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const unmergeInput = schemas.operations['tables.unmergeCells'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const setBorderInput = schemas.operations['tables.setBorder'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const insertRowSuccess = schemas.operations['tables.insertRow'].success as {
+      properties?: { table?: { $ref?: string } };
+    };
+
+    expect(tablesGetInput.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(tablesGetOutput.properties?.address?.$ref).toBe('#/$defs/TableAddress');
+    expect(insertRowInput.properties?.target?.$ref).toBe('#/$defs/TableOrRowAddress');
+    expect(unmergeInput.properties?.target?.$ref).toBe('#/$defs/TableCellAddress');
+    expect(setBorderInput.properties?.target?.$ref).toBe('#/$defs/TableOrCellAddress');
+    expect(insertRowSuccess.properties?.table?.$ref).toBe('#/$defs/TableAddress');
+  });
+
   it('declares images.setZOrder.relativeHeight as unsigned 32-bit integer', () => {
     const schemas = buildInternalContractSchemas();
     const inputSchema = schemas.operations['images.setZOrder'].input as {

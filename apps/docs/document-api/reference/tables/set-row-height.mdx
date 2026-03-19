@@ -26,13 +26,26 @@ Returns a TableMutationResult receipt; reports NO_OP if the row height already m
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.kind="block")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `heightPt` | number | yes |  |
+| `rowIndex` | integer | no |  |
+| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
+| `target` | TableOrRowAddress | yes | TableOrRowAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | enum | yes | `"table"`, `"tableRow"` |
 
-### Variant 2
+### Variant 2 (nodeId)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `heightPt` | number | yes |  |
+| `nodeId` | string | yes |  |
+| `rowIndex` | integer | no |  |
+| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
 
 ### Example request
 
@@ -44,7 +57,7 @@ _No fields._
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   }
 }
 ```
@@ -56,10 +69,10 @@ _No fields._
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `success` | `true` | yes | Constant: `true` |
-| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table` | TableAddress | no | TableAddress |
 | `table.kind` | `"block"` | no | Constant: `"block"` |
 | `table.nodeId` | string | no |  |
-| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
 | `trackedChangeRefs` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -80,7 +93,7 @@ _No fields._
   "table": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "trackedChangeRefs": [
     {
@@ -141,7 +154,7 @@ _No fields._
       ]
     },
     "target": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableOrRowAddress"
     }
   },
   "required": [
@@ -164,7 +177,7 @@ _No fields._
           "const": true
         },
         "table": {
-          "$ref": "#/$defs/BlockNodeAddress"
+          "$ref": "#/$defs/TableAddress"
         },
         "trackedChangeRefs": {
           "items": {
@@ -227,7 +240,7 @@ _No fields._
       "const": true
     },
     "table": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     },
     "trackedChangeRefs": {
       "items": {

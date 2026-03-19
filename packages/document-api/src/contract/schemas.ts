@@ -236,6 +236,46 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['kind', 'nodeType', 'nodeId'],
   ),
+  TableAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'table' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableRowAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'tableRow' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableCellAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'tableCell' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableOrRowAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: ['table', 'tableRow'] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  TableOrCellAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: ['table', 'tableCell'] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
   ParagraphAddress: objectSchema(
     {
       kind: { const: 'block' },
@@ -449,6 +489,10 @@ const textAddressSchema = ref('TextAddress');
 const textTargetSchema = ref('TextTarget');
 const blockNodeAddressSchema = ref('BlockNodeAddress');
 const deletableBlockNodeAddressSchema = ref('DeletableBlockNodeAddress');
+const tableAddressSchema = ref('TableAddress');
+const tableCellAddressSchema = ref('TableCellAddress');
+const tableOrRowAddressSchema = ref('TableOrRowAddress');
+const tableOrCellAddressSchema = ref('TableOrCellAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
 const listItemAddressSchema = ref('ListItemAddress');
@@ -1449,7 +1493,23 @@ const insertInputSchema: JsonSchema = {
 
 const tableLocatorSchema: JsonSchema = {
   ...objectSchema({
-    target: blockNodeAddressSchema,
+    target: tableAddressSchema,
+    nodeId: { type: 'string' },
+  }),
+  oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+};
+
+const cellLocatorSchema: JsonSchema = {
+  ...objectSchema({
+    target: tableCellAddressSchema,
+    nodeId: { type: 'string' },
+  }),
+  oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+};
+
+const tableOrCellLocatorSchema: JsonSchema = {
+  ...objectSchema({
+    target: tableOrCellAddressSchema,
     nodeId: { type: 'string' },
   }),
   oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
@@ -1458,7 +1518,7 @@ const tableLocatorSchema: JsonSchema = {
 const mergeRangeLocatorSchema: JsonSchema = {
   ...objectSchema(
     {
-      target: blockNodeAddressSchema,
+      target: tableAddressSchema,
       nodeId: { type: 'string' },
       start: objectSchema({ rowIndex: { type: 'integer', minimum: 0 }, columnIndex: { type: 'integer', minimum: 0 } }, [
         'rowIndex',
@@ -1488,7 +1548,7 @@ const tableCreateLocationSchema: JsonSchema = {
 const tableMutationSuccessSchema: JsonSchema = objectSchema(
   {
     success: { const: true },
-    table: blockNodeAddressSchema,
+    table: tableAddressSchema,
     trackedChangeRefs: arraySchema(entityAddressSchema),
   },
   ['success'],
@@ -1498,7 +1558,7 @@ const tableMutationSuccessSchema: JsonSchema = objectSchema(
 const createTableSuccessSchema: JsonSchema = objectSchema(
   {
     success: { const: true },
-    table: blockNodeAddressSchema,
+    table: tableAddressSchema,
     trackedChangeRefs: arraySchema(entityAddressSchema),
   },
   ['success', 'table'],
@@ -4401,7 +4461,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           destination: tableCreateLocationSchema,
         },
@@ -4417,7 +4477,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           atRowIndex: { type: 'integer', minimum: 1 },
         },
@@ -4432,7 +4492,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.convertToText': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         delimiter: { enum: ['tab', 'comma', 'paragraph'] },
       }),
@@ -4447,7 +4507,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.setLayout': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         preferredWidth: { type: 'number' },
         alignment: { enum: ['left', 'center', 'right'] },
@@ -4467,7 +4527,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrRowAddressSchema,
           nodeId: { type: 'string' },
           rowIndex: { type: 'integer', minimum: 0 },
           position: { enum: ['above', 'below'] },
@@ -4484,7 +4544,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.deleteRow': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableOrRowAddressSchema,
         nodeId: { type: 'string' },
         rowIndex: { type: 'integer', minimum: 0 },
       }),
@@ -4498,7 +4558,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrRowAddressSchema,
           nodeId: { type: 'string' },
           rowIndex: { type: 'integer', minimum: 0 },
           heightPt: { type: 'number', exclusiveMinimum: 0 },
@@ -4521,7 +4581,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.setRowOptions': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableOrRowAddressSchema,
         nodeId: { type: 'string' },
         rowIndex: { type: 'integer', minimum: 0 },
         allowBreakAcrossPages: { type: 'boolean' },
@@ -4539,7 +4599,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
           position: { enum: ['left', 'right'] },
@@ -4557,7 +4617,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
         },
@@ -4573,7 +4633,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
           widthPt: { type: 'number', exclusiveMinimum: 0 },
@@ -4589,7 +4649,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.distributeColumns': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         columnRange: objectSchema({ start: { type: 'integer', minimum: 0 }, end: { type: 'integer', minimum: 0 } }, [
           'start',
@@ -4608,7 +4668,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           mode: { enum: ['shiftRight', 'shiftDown'] },
         },
@@ -4624,7 +4684,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           mode: { enum: ['shiftLeft', 'shiftUp'] },
         },
@@ -4643,7 +4703,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.unmergeCells': {
-    input: tableLocatorSchema,
+    input: cellLocatorSchema,
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -4652,7 +4712,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           rows: { type: 'integer', minimum: 1 },
           columns: { type: 'integer', minimum: 1 },
@@ -4668,7 +4728,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.setCellProperties': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableCellAddressSchema,
         nodeId: { type: 'string' },
         preferredWidthPt: { type: 'number' },
         verticalAlign: { enum: ['top', 'center', 'bottom'] },
@@ -4687,7 +4747,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           keys: arraySchema(
             objectSchema(
@@ -4711,7 +4771,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.setAltText': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         title: { type: 'string' },
         description: { type: 'string' },
@@ -4728,7 +4788,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           styleId: { type: 'string' },
         },
@@ -4750,7 +4810,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           flag: { enum: ['headerRow', 'totalRow', 'firstColumn', 'lastColumn', 'bandedRows', 'bandedColumns'] },
           enabled: { type: 'boolean' },
@@ -4767,7 +4827,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
           edge: { enum: ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'diagonalDown', 'diagonalUp'] },
           lineStyle: { type: 'string' },
@@ -4786,7 +4846,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
           edge: { enum: ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'diagonalDown', 'diagonalUp'] },
         },
@@ -4802,7 +4862,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           preset: { enum: ['box', 'all', 'none', 'grid', 'custom'] },
         },
@@ -4818,7 +4878,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
           color: { type: 'string', pattern: '^([0-9A-Fa-f]{6}|auto)$' },
         },
@@ -4831,7 +4891,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.clearShading': {
-    input: tableLocatorSchema,
+    input: tableOrCellLocatorSchema,
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -4840,7 +4900,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           topPt: { type: 'number', minimum: 0 },
           rightPt: { type: 'number', minimum: 0 },
@@ -4859,7 +4919,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableCellAddressSchema,
           nodeId: { type: 'string' },
           topPt: { type: 'number', minimum: 0 },
           rightPt: { type: 'number', minimum: 0 },
@@ -4878,7 +4938,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...objectSchema(
         {
-          target: blockNodeAddressSchema,
+          target: tableAddressSchema,
           nodeId: { type: 'string' },
           spacingPt: { type: 'number', minimum: 0 },
         },
@@ -4904,7 +4964,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: objectSchema(
       {
         nodeId: { type: 'string' },
-        address: blockNodeAddressSchema,
+        address: tableAddressSchema,
         rows: { type: 'integer', minimum: 0 },
         columns: { type: 'integer', minimum: 0 },
       },
@@ -4914,7 +4974,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'tables.getCells': {
     input: {
       ...objectSchema({
-        target: blockNodeAddressSchema,
+        target: tableAddressSchema,
         nodeId: { type: 'string' },
         rowIndex: { type: 'integer', minimum: 0 },
         columnIndex: { type: 'integer', minimum: 0 },
@@ -4924,7 +4984,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: objectSchema(
       {
         nodeId: { type: 'string' },
-        address: blockNodeAddressSchema,
+        address: tableAddressSchema,
         cells: {
           type: 'array',
           items: objectSchema(
@@ -4947,7 +5007,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: objectSchema(
       {
         nodeId: { type: 'string' },
-        address: blockNodeAddressSchema,
+        address: tableAddressSchema,
         styleId: { type: 'string' },
         alignment: { enum: ['left', 'center', 'right'] },
         direction: { enum: ['ltr', 'rtl'] },

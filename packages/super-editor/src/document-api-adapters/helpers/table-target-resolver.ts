@@ -1,6 +1,13 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
-import type { BlockNodeAddress, TableLocator, TableCreateLocation } from '@superdoc/document-api';
+import type {
+  BlockNodeAddress,
+  TableAddress,
+  TableCellAddress,
+  TableCreateLocation,
+  TableLocator,
+  TableOrRowAddress,
+} from '@superdoc/document-api';
 import { TableMap } from 'prosemirror-tables';
 import { getBlockIndex } from './index-cache.js';
 import { findBlockById, findBlockByNodeIdOnly, toBlockAddress, type BlockCandidate } from './node-address-resolver.js';
@@ -11,7 +18,7 @@ import { DocumentApiAdapterError } from '../errors.js';
  */
 export interface ResolvedTable {
   candidate: BlockCandidate;
-  address: BlockNodeAddress;
+  address: TableAddress;
 }
 
 /**
@@ -79,7 +86,7 @@ export function resolveTableLocator(editor: Editor, locator: TableLocator, opera
     );
   }
 
-  return { candidate, address: toBlockAddress(candidate) };
+  return { candidate, address: toBlockAddress(candidate) as TableAddress };
 }
 
 /**
@@ -154,7 +161,7 @@ function findLastCandidate(
 export function resolveRowLocator(
   editor: Editor,
   input: {
-    target?: BlockNodeAddress;
+    target?: TableOrRowAddress;
     nodeId?: string;
     rowIndex?: number;
   },
@@ -180,7 +187,7 @@ export function resolveRowLocator(
 
     const rowIdx = getRowIndex(tableCandidate, candidate.pos);
     return {
-      table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) },
+      table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) as TableAddress },
       rowNode: candidate.node,
       rowPos: candidate.pos,
       rowIndex: rowIdx,
@@ -196,7 +203,7 @@ export function resolveRowLocator(
     );
   }
 
-  const table: ResolvedTable = { candidate, address: toBlockAddress(candidate) };
+  const table: ResolvedTable = { candidate, address: toBlockAddress(candidate) as TableAddress };
 
   if (input.rowIndex == null) {
     throw new DocumentApiAdapterError(
@@ -281,7 +288,7 @@ export interface ResolvedCell {
  */
 export function resolveCellLocator(
   editor: Editor,
-  locator: { target?: BlockNodeAddress; nodeId?: string },
+  locator: { target?: TableCellAddress; nodeId?: string },
   operationName: string,
 ): ResolvedCell {
   const candidate = resolveLocatorToCandidate(editor, locator, operationName);
@@ -315,7 +322,7 @@ export function resolveCellLocator(
   const columnIndex = mapIndex % map.width;
 
   return {
-    table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) },
+    table: { candidate: tableCandidate, address: toBlockAddress(tableCandidate) as TableAddress },
     cellNode: candidate.node,
     cellPos: candidate.pos,
     rowIndex: rowIndex >= 0 ? rowIndex : 0,
@@ -331,7 +338,7 @@ export function resolveCellLocator(
 export function resolveMergeRangeLocator(
   editor: Editor,
   input: {
-    target?: BlockNodeAddress;
+    target?: TableAddress;
     nodeId?: string;
     start: { rowIndex: number; columnIndex: number };
     end: { rowIndex: number; columnIndex: number };
@@ -377,7 +384,7 @@ export interface ResolvedColumn {
 export function resolveColumnLocator(
   editor: Editor,
   input: {
-    target?: BlockNodeAddress;
+    target?: TableAddress;
     nodeId?: string;
     columnIndex: number;
   },

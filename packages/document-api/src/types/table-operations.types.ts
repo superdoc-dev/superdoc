@@ -1,4 +1,11 @@
-import type { BlockNodeAddress } from './base.js';
+import type {
+  BlockNodeAddress,
+  TableAddress,
+  TableCellAddress,
+  TableOrCellAddress,
+  TableOrRowAddress,
+  TableRowAddress,
+} from './base.js';
 import type { ReceiptFailure, ReceiptInsert } from './receipt.js';
 
 // ---------------------------------------------------------------------------
@@ -10,7 +17,7 @@ import type { ReceiptFailure, ReceiptInsert } from './receipt.js';
  * Used as the base locator for table-scoped operations.
  */
 export interface TableLocator {
-  target?: BlockNodeAddress;
+  target?: TableAddress;
   nodeId?: string;
 }
 
@@ -18,13 +25,37 @@ export interface TableLocator {
  * Locates a table row. Identical shape to {@link TableLocator} when the
  * target/nodeId already points at a row node.
  */
-export type RowLocator = TableLocator;
+export interface RowLocator {
+  target?: TableRowAddress;
+  nodeId?: string;
+}
 
 /**
  * Locates a table cell. Identical shape to {@link TableLocator} when the
  * target/nodeId already points at a cell node.
  */
-export type CellLocator = TableLocator;
+export interface CellLocator {
+  target?: TableCellAddress;
+  nodeId?: string;
+}
+
+/**
+ * Locates either a table or one of its rows.
+ * Used by row operations that support both direct row targets and table+rowIndex mode.
+ */
+export interface TableOrRowLocator {
+  target?: TableOrRowAddress;
+  nodeId?: string;
+}
+
+/**
+ * Locates either a table or one of its cells.
+ * Used by operations that can target the whole table or a specific cell.
+ */
+export interface TableOrCellLocator {
+  target?: TableOrCellAddress;
+  nodeId?: string;
+}
 
 /**
  * Locates a row by its index within a specific table.
@@ -84,7 +115,7 @@ export type TableCreateLocation =
  */
 export interface TableMutationSuccess {
   success: true;
-  table?: BlockNodeAddress;
+  table?: TableAddress;
   trackedChangeRefs?: ReceiptInsert[];
 }
 
@@ -113,7 +144,7 @@ export interface CreateTableInput {
 
 export interface CreateTableSuccessResult {
   success: true;
-  table: BlockNodeAddress;
+  table: TableAddress;
   trackedChangeRefs?: ReceiptInsert[];
 }
 
@@ -190,28 +221,22 @@ export interface TablesSetLayoutInput extends TableLocator {
 
 export type RowInsertPosition = 'above' | 'below';
 
-export interface TablesInsertRowInput extends TableLocator {
-  rowIndex?: number;
-  position: RowInsertPosition;
-  count?: number;
-}
+export type TablesInsertRowInput =
+  | (TableScopedRowLocator & { position: RowInsertPosition; count?: number })
+  | (RowLocator & { position: RowInsertPosition; count?: number });
 
 export type TablesDeleteRowInput = RowLocator | TableScopedRowLocator;
 
-export interface TablesSetRowHeightInput extends TableLocator {
-  rowIndex?: number;
-  heightPt: number;
-  rule: 'atLeast' | 'exact' | 'auto';
-}
+export type TablesSetRowHeightInput =
+  | (TableScopedRowLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' })
+  | (RowLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' });
 
 /** Uses {@link TableLocator} directly as input. */
 export type TablesDistributeRowsInput = TableLocator;
 
-export interface TablesSetRowOptionsInput extends TableLocator {
-  rowIndex?: number;
-  allowBreakAcrossPages?: boolean;
-  repeatHeader?: boolean;
-}
+export type TablesSetRowOptionsInput =
+  | (TableScopedRowLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean })
+  | (RowLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean });
 
 // ---------------------------------------------------------------------------
 // Column operations
@@ -317,7 +342,7 @@ export interface TablesSetStyleOptionInput extends TableLocator {
 export type BorderEdge = 'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV' | 'diagonalDown' | 'diagonalUp';
 
 export interface TablesSetBorderInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
   edge: BorderEdge;
   lineStyle: string;
@@ -326,7 +351,7 @@ export interface TablesSetBorderInput {
 }
 
 export interface TablesClearBorderInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
   edge: BorderEdge;
 }
@@ -342,13 +367,13 @@ export interface TablesApplyBorderPresetInput extends TableLocator {
 // ---------------------------------------------------------------------------
 
 export interface TablesSetShadingInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
   color: string;
 }
 
 export interface TablesClearShadingInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
 }
 
@@ -422,7 +447,7 @@ export type TablesGetInput = TableLocator;
 /** Output for `tables.get` — table structure with stable refs. */
 export interface TablesGetOutput {
   nodeId: string;
-  address: BlockNodeAddress;
+  address: TableAddress;
   rows: number;
   columns: number;
 }
@@ -447,7 +472,7 @@ export interface TableCellInfo {
 /** Output for `tables.getCells`. */
 export interface TablesGetCellsOutput {
   nodeId: string;
-  address: BlockNodeAddress;
+  address: TableAddress;
   cells: TableCellInfo[];
 }
 
@@ -457,7 +482,7 @@ export type TablesGetPropertiesInput = TableLocator;
 /** Output for `tables.getProperties` — table layout/style metadata. */
 export interface TablesGetPropertiesOutput {
   nodeId: string;
-  address: BlockNodeAddress;
+  address: TableAddress;
   styleId?: string;
   alignment?: TableAlignment;
   direction?: TableDirection;

@@ -1,11 +1,15 @@
+import type { Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import { v4 as uuidv4 } from 'uuid';
 import type {
-  BlockNodeAddress,
   CreateTableInput,
   CreateTableResult,
   CreateTableSuccessResult,
   MutationOptions,
+  TableAddress,
+  TableCellAddress,
+  TableOrCellAddress,
+  TableOrRowAddress,
   TableLocator,
   TableMutationResult,
   TablesMoveInput,
@@ -118,7 +122,7 @@ function notYetImplemented(operationName: string): never {
 }
 
 function buildTableSuccess(
-  tableAddress?: BlockNodeAddress,
+  tableAddress?: TableAddress,
   trackedChangeRefs?: { kind: 'entity'; entityType: 'trackedChange'; entityId: string }[],
 ): TableMutationResult {
   return {
@@ -513,7 +517,7 @@ function applyTableBorderPresetToCellBorders(
 
 /** Flattened row locator shape accepted by {@link resolveRowLocator}. */
 type RowLocatorFields = {
-  target?: BlockNodeAddress;
+  target?: TableOrRowAddress;
   nodeId?: string;
   rowIndex?: number;
 };
@@ -539,6 +543,33 @@ function addColSpan(attrs: Record<string, unknown>, pos: number, n = 1): Record<
   return result;
 }
 
+function isHeaderColumn(tableNode: ProseMirrorNode, map: ReturnType<(typeof TableMap)['get']>, col: number): boolean {
+  for (let row = 0; row < map.height; row++) {
+    const cell = tableNode.nodeAt(map.map[col + row * map.width]);
+    if (!cell || cell.type.name !== 'tableHeader') return false;
+  }
+  return true;
+}
+
+function resolveInsertedColumnCellType(
+  tableNode: ProseMirrorNode,
+  map: ReturnType<(typeof TableMap)['get']>,
+  index: number,
+  col: number,
+): NodeType | null {
+  let refColumn: number | null = col > 0 ? -1 : 0;
+  if (isHeaderColumn(tableNode, map, col + refColumn)) {
+    refColumn = col === 0 || col === map.width ? null : 0;
+  }
+
+  if (refColumn == null) {
+    return tableNode.type.schema.nodes.tableCell ?? null;
+  }
+
+  const refPos = map.map[index + refColumn];
+  return refPos != null ? (tableNode.nodeAt(refPos)?.type ?? null) : null;
+}
+
 /** Inserts a column at `col` in the table (before that column index). Follows prosemirror-tables addColumn pattern. */
 function addColumnToTable(tr: Transaction, tablePos: number, col: number): void {
   const tableNode = tr.doc.nodeAt(tablePos);
@@ -549,12 +580,11 @@ function addColumnToTable(tr: Transaction, tablePos: number, col: number): void 
 
   for (let row = 0; row < map.height; row++) {
     const index = row * map.width + col;
-    const pos = map.map[index];
-    const cell = tableNode.nodeAt(pos);
-    if (!cell) continue;
-
-    if (col > 0 && map.map[index - 1] === pos) {
+    if (col > 0 && col < map.width && map.map[index - 1] === map.map[index]) {
       // Cell spans from the left — expand colspan
+      const pos = map.map[index];
+      const cell = tableNode.nodeAt(pos);
+      if (!cell) continue;
       tr.setNodeMarkup(
         tr.mapping.slice(mapStart).map(tableStart + pos),
         null,
@@ -563,10 +593,10 @@ function addColumnToTable(tr: Transaction, tablePos: number, col: number): void 
       row += (((cell.attrs as Record<string, unknown>).rowspan as number) || 1) - 1;
     } else {
       // Insert a new empty cell
-      const refType = col > 0 ? (tableNode.nodeAt(map.map[index - 1])?.type ?? cell.type) : cell.type;
+      const refType = resolveInsertedColumnCellType(tableNode, map, index, col);
+      if (!refType) continue;
       const cellPos = map.positionAt(row, col, tableNode);
       tr.insert(tr.mapping.slice(mapStart).map(tableStart + cellPos), refType.createAndFill()!);
-      row += ((cell.attrs?.rowspan as number) || 1) - 1;
     }
   }
 }
@@ -853,7 +883,7 @@ export function tablesDeleteAdapter(
   const { candidate } = resolveTableLocator(editor, input, 'tables.delete');
 
   if (options?.dryRun) {
-    return buildTableSuccess(toBlockAddress(candidate));
+    return buildTableSuccess();
   }
 
   try {
@@ -933,10 +963,10 @@ export function tablesMoveAdapter(
 ): TableMutationResult {
   rejectTrackedMode('tables.move', options);
 
-  const { candidate } = resolveTableLocator(editor, input, 'tables.move');
+  const { candidate, address } = resolveTableLocator(editor, input, 'tables.move');
 
   if (options?.dryRun) {
-    return buildTableSuccess(toBlockAddress(candidate));
+    return buildTableSuccess(address);
   }
 
   try {
@@ -1686,7 +1716,7 @@ export function tablesConvertFromTextAdapter(
   }
 
   if (options?.dryRun) {
-    return buildTableSuccess(toBlockAddress(candidate));
+    return buildTableSuccess();
   }
 
   try {
@@ -1776,7 +1806,7 @@ export function tablesConvertFromTextAdapter(
     const insertedTable = getBlockIndex(editor).candidates.find(
       (block) => block.nodeType === 'table' && block.pos === startPos,
     );
-    return buildTableSuccess(insertedTable ? toBlockAddress(insertedTable) : undefined);
+    return buildTableSuccess(insertedTable ? (toBlockAddress(insertedTable) as TableAddress) : undefined);
   } catch {
     return toTableFailure('INVALID_TARGET', 'Text-to-table conversion could not be applied.');
   }
@@ -2822,12 +2852,12 @@ export function tablesSetStyleOptionAdapter(
  */
 function resolveTableOrCellTarget(
   editor: Editor,
-  locator: { target?: BlockNodeAddress; nodeId?: string },
+  locator: { target?: TableOrCellAddress; nodeId?: string },
   operationName: string,
 ): {
   node: import('prosemirror-model').Node;
   pos: number;
-  address: BlockNodeAddress;
+  address: TableAddress;
   scope: 'table' | 'cell' | 'invalid';
 } {
   const index = getBlockIndex(editor);
@@ -2845,9 +2875,23 @@ function resolveTableOrCellTarget(
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: target was not found.`);
   }
 
+  if (candidate.nodeType === 'tableCell') {
+    const resolvedCell = resolveCellLocator(
+      editor,
+      locator as { target?: TableCellAddress; nodeId?: string },
+      operationName,
+    );
+    return {
+      node: candidate.node,
+      pos: candidate.pos,
+      address: resolvedCell.table.address,
+      scope: 'cell',
+    };
+  }
+
   const scope: 'table' | 'cell' | 'invalid' =
     candidate.nodeType === 'table' ? 'table' : candidate.nodeType === 'tableCell' ? 'cell' : 'invalid';
-  return { node: candidate.node, pos: candidate.pos, address: toBlockAddress(candidate), scope };
+  return { node: candidate.node, pos: candidate.pos, address: toBlockAddress(candidate) as TableAddress, scope };
 }
 
 /**
@@ -3576,7 +3620,7 @@ export function tablesGetCellsAdapter(editor: Editor, input: TablesGetCellsInput
 
   return {
     nodeId: resolved.candidate.nodeId,
-    address: toBlockAddress(resolved.candidate),
+    address: resolved.address,
     cells,
   };
 }
@@ -3587,7 +3631,7 @@ export function tablesGetPropertiesAdapter(editor: Editor, input: TablesGetPrope
 
   const result: TablesGetPropertiesOutput = {
     nodeId: resolved.candidate.nodeId,
-    address: toBlockAddress(resolved.candidate),
+    address: resolved.address,
   };
 
   if (tp.tableStyleId != null) result.styleId = String(tp.tableStyleId);

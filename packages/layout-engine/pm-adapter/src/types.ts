@@ -420,6 +420,6 @@ export interface OoxmlBorder {
 export type UnderlineStyle = NonNullable<import('@superdoc/contracts').TextRun['underline']>['style'];
 
 export type ParagraphFont = {
-  fontFamily?: string;
-  fontSize?: number;
+  fontFamily: string;
+  fontSize: number;
 };

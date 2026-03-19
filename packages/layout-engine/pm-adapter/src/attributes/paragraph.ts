@@ -119,6 +119,26 @@ export const normalizeNumberingProperties = (
   }
   return value;
 };
+
+export const hasExplicitParagraphRunProperties = (
+  paragraphProperties?: Pick<ParagraphProperties, 'runProperties'> | null,
+): boolean => paragraphProperties?.runProperties != null && Object.keys(paragraphProperties.runProperties).length > 0;
+
+const applyParagraphFontFallback = (
+  runAttrs: ResolvedRunProperties,
+  previousParagraphFont?: Partial<ParagraphFont>,
+): ResolvedRunProperties => {
+  if (!previousParagraphFont) {
+    return runAttrs;
+  }
+
+  return {
+    ...runAttrs,
+    fontFamily: previousParagraphFont.fontFamily ?? runAttrs.fontFamily,
+    fontSize: previousParagraphFont.fontSize ?? runAttrs.fontSize,
+  };
+};
+
 export const normalizeDropCap = (
   framePr: ParagraphFrameProperties | undefined,
   para: PMNode,
@@ -205,7 +225,6 @@ const extractDropCapRunFromParagraph = (para: PMNode, converterContext?: Convert
   const runAttrs = computeRunAttrs(
     resolvedRunProperties,
     converterContext,
-    undefined,
     DEFAULT_DROP_CAP_FONT_SIZE_PX,
     DEFAULT_DROP_CAP_FONT_FAMILY,
   );
@@ -300,18 +319,49 @@ export const computeParagraphAttrs = (
       Boolean(paragraphProperties.numberingProperties),
     );
 
-    const hasExplicitRunProps =
-      resolvedParagraphProperties.runProperties != null &&
-      Object.keys(resolvedParagraphProperties.runProperties).length > 0;
+    const markerRunAttrs = computeRunAttrs(markerRunProperties, converterContext);
+
+    // Only attempt to inherit `previousParagraphFont` when the paragraph doesn't define
+    // explicit runProperties. Otherwise markerRunProperties/resolveRunProperties already
+    // fully defines marker font.
+    let markerFontFallback: Partial<ParagraphFont> | undefined;
+    if (!hasExplicitParagraphRunProperties(paragraphProperties) && previousParagraphFont) {
+      // Detect whether numbering explicitly overrides the marker font family
+      // (e.g. Symbol/Wingdings). If it does, we must NOT overwrite it.
+      const markerRunPropertiesWithoutNumbering = resolveRunProperties(
+        converterContext!,
+        resolvedParagraphProperties.runProperties,
+        resolvedParagraphProperties,
+        converterContext!.tableInfo,
+        false,
+        Boolean(paragraphProperties.numberingProperties),
+      );
+
+      const markerFontFamilyFromNumbering = resolveDocxFontFamily(
+        markerRunProperties.fontFamily as Record<string, unknown>,
+        converterContext!.docx,
+      );
+      const markerFontFamilyWithoutNumbering = resolveDocxFontFamily(
+        markerRunPropertiesWithoutNumbering.fontFamily as Record<string, unknown>,
+        converterContext!.docx,
+      );
+
+      const numberingDefinesMarkerFontFamily =
+        markerFontFamilyFromNumbering != null && markerFontFamilyFromNumbering !== markerFontFamilyWithoutNumbering;
+
+      markerFontFallback = {
+        // When numbering explicitly sets a marker font (Symbol/Wingdings), keep it.
+        fontFamily: numberingDefinesMarkerFontFamily ? undefined : previousParagraphFont.fontFamily,
+        // Preserve existing behavior: if the paragraph has no explicit run props,
+        // marker font size inherits from the previous paragraph.
+        fontSize: previousParagraphFont.fontSize,
+      };
+    }
 
     paragraphAttrs.wordLayout = computeWordParagraphLayout({
       paragraph: paragraphAttrs,
       listRenderingAttrs: normalizedListRendering,
-      markerRun: computeRunAttrs(
-        markerRunProperties,
-        converterContext,
-        hasExplicitRunProps ? undefined : previousParagraphFont,
-      ),
+      markerRun: applyParagraphFontFallback(markerRunAttrs, markerFontFallback),
     });
   }
 
@@ -321,15 +371,12 @@ export const computeParagraphAttrs = (
 export const computeRunAttrs = (
   runProps: RunProperties,
   converterContext?: ConverterContext,
-  previousParagraphFont?: ParagraphFont,
   defaultFontSizePx = 12,
   defaultFontFamily = 'Times New Roman',
 ): ResolvedRunProperties => {
   let fontFamily;
 
-  if (previousParagraphFont && previousParagraphFont.fontFamily) {
-    fontFamily = previousParagraphFont.fontFamily;
-  } else if (converterContext) {
+  if (converterContext) {
     fontFamily =
       resolveDocxFontFamily(runProps.fontFamily as Record<string, unknown>, converterContext.docx) || defaultFontFamily;
   } else {
@@ -338,13 +385,7 @@ export const computeRunAttrs = (
   }
   const vertAlign = runProps.vertAlign as 'superscript' | 'subscript' | 'baseline' | undefined;
   const hasPosition = runProps.position != null && Number.isFinite(runProps.position);
-  let fontSize;
-
-  if (previousParagraphFont && previousParagraphFont.fontSize) {
-    fontSize = previousParagraphFont.fontSize;
-  } else {
-    fontSize = runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx;
-  }
+  let fontSize = runProps.fontSize ? ptToPx(runProps.fontSize / 2)! : defaultFontSizePx;
 
   // Scale font size for superscript/subscript when no custom position override
   if (!hasPosition && (vertAlign === 'superscript' || vertAlign === 'subscript')) {

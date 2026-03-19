@@ -10,7 +10,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deepClone, normalizeFramePr, normalizeDropCap, computeParagraphAttrs, computeRunAttrs } from './paragraph.js';
+import {
+  deepClone,
+  normalizeFramePr,
+  normalizeDropCap,
+  computeParagraphAttrs,
+  computeRunAttrs,
+  hasExplicitParagraphRunProperties,
+} from './paragraph.js';
 import { twipsToPx } from '../utilities.js';
 
 type PMNode = {
@@ -90,6 +97,12 @@ describe('normalizeDropCap', () => {
 });
 
 describe('computeParagraphAttrs', () => {
+  it('treats only raw paragraph runProperties as explicit', () => {
+    expect(hasExplicitParagraphRunProperties({ runProperties: { fontSize: 24 } } as never)).toBe(true);
+    expect(hasExplicitParagraphRunProperties({ styleId: 'Heading1' } as never)).toBe(false);
+    expect(hasExplicitParagraphRunProperties({ runProperties: {} } as never)).toBe(false);
+  });
+
   it('normalizes spacing, indent, alignment, and tabs from paragraphProperties', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
@@ -160,6 +173,61 @@ describe('computeParagraphAttrs', () => {
     expect(markerRun?.fontFamily).toContain('MarkerFont');
     expect(markerRun?.fontSize).toBe(11);
   });
+
+  it('does not overwrite numbering marker font family with previousParagraphFont', () => {
+    const previousFont = { fontFamily: 'PrevMarkerFont, sans-serif', fontSize: 11 };
+
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+        listRendering: {
+          markerText: '1.',
+          justification: 'left',
+          path: [0],
+          numberingType: 'decimal',
+          suffix: 'tab',
+        },
+      },
+    };
+
+    const minimalContext = {
+      translatedNumbering: {
+        definitions: {
+          '1': {
+            numId: 1,
+            abstractNumId: 1,
+          },
+        },
+        abstracts: {
+          '1': {
+            abstractNumId: 1,
+            levels: {
+              '0': {
+                ilvl: 0,
+                runProperties: {
+                  fontFamily: { ascii: 'Symbol' },
+                },
+              },
+            },
+          },
+        },
+      },
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, minimalContext as never, previousFont);
+    const markerRun = (
+      paragraphAttrs as { wordLayout?: { marker?: { run?: { fontFamily?: string; fontSize?: number } } } }
+    )?.wordLayout?.marker?.run;
+
+    expect(markerRun?.fontFamily).toContain('Symbol');
+    // Font size still inherits from previous paragraph when the paragraph has no explicit run props.
+    expect(markerRun?.fontSize).toBe(11);
+  });
 });
 
 describe('computeRunAttrs', () => {
@@ -185,29 +253,6 @@ describe('computeRunAttrs', () => {
     const result = computeRunAttrs(runProps as never);
 
     expect(result.vanish).toBe(true);
-  });
-
-  it('uses previousParagraphFont for fontFamily and fontSize when provided', () => {
-    const runProps = {};
-    const previousFont = { fontFamily: 'PreviousParaFont, sans-serif', fontSize: 14 };
-
-    const result = computeRunAttrs(runProps as never, undefined, previousFont);
-
-    expect(result.fontFamily).toContain('PreviousParaFont');
-    expect(result.fontSize).toBe(14);
-  });
-
-  it('prefers previousParagraphFont over runProps when both are provided', () => {
-    const runProps = {
-      fontFamily: { ascii: 'RunFont' },
-      fontSize: 22,
-    };
-    const previousFont = { fontFamily: 'PreviousFont, sans-serif', fontSize: 10 };
-
-    const result = computeRunAttrs(runProps as never, undefined, previousFont);
-
-    expect(result.fontFamily).toContain('PreviousFont');
-    expect(result.fontSize).toBe(10);
   });
 
   it('uses runProps font settings when previousParagraphFont is not provided', () => {

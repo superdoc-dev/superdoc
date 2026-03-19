@@ -8,7 +8,15 @@
  */
 
 import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
-import type { FlowBlock, ParagraphBlock, Run, TextRun, SdtMetadata, DrawingBlock, TrackedChangeMeta } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  ParagraphBlock,
+  Run,
+  TextRun,
+  SdtMetadata,
+  DrawingBlock,
+  TrackedChangeMeta,
+} from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
@@ -25,7 +33,7 @@ import { trackedChangesCompatible, applyMarksToRun, collectTrackedChangeFromMark
 import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { computeRunAttrs } from '../attributes/paragraph.js';
+import { computeRunAttrs, hasExplicitParagraphRunProperties } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import { endnoteReferenceToBlock } from './inline-converters/endnote-reference.js';
@@ -540,11 +548,10 @@ export function paragraphToFlowBlocks({
 
   // Extract font data for list items
   const extracted = extractDefaultFontProperties(converterContext, resolvedParagraphProperties);
-  const hasExplicitRunProps =
-    resolvedParagraphProperties.runProperties != null &&
-    Object.keys(resolvedParagraphProperties.runProperties).length > 0;
   const usePreviousFont =
-    previousParagraphFont != null && resolvedParagraphProperties.numberingProperties != null && !hasExplicitRunProps;
+    previousParagraphFont != null &&
+    resolvedParagraphProperties.numberingProperties != null &&
+    !hasExplicitParagraphRunProperties(paragraphProps);
   const defaultFont =
     usePreviousFont && previousParagraphFont.fontFamily ? previousParagraphFont.fontFamily : extracted.defaultFont;
   const defaultSize =
@@ -1013,6 +1020,12 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     const { entry: cached, nodeJson, nodeRev } = flowBlockCache.get(prefixedStableId, node);
     if (cached) {
       // Cache hit: reuse blocks with position adjustment
+      // Cache hit reuses previously-converted blocks as-is. That means we don't
+      // recompute previousParagraphFont (used for empty list items without
+      // explicit run properties). If the user changes the font on the prior
+      // paragraph (e.g. paragraph A), an empty list item (paragraph B) can keep
+      // the old font until the cache entry is invalidated. Narrow case, but
+      // avoids confusing incremental-edit behavior.
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
       applyTrackedGhostListAdjustments(node, reusedBlocks, context);

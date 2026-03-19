@@ -2987,11 +2987,52 @@ describe('paragraph converters', () => {
 
         it('ignores previousParagraphFont when paragraph has explicit run properties', () => {
           const previousFont = { fontFamily: 'PreviousFont', fontSize: 10 };
+          const paraWithExplicitRunProps: PMNode = {
+            ...emptyNumberedPara,
+            attrs: {
+              paragraphProperties: {
+                numberingProperties: { numId: 1, ilvl: 0 },
+                runProperties: { fontFamily: { ascii: 'ExplicitFont' }, fontSize: 24 },
+              },
+            },
+          };
+
           vi.mocked(computeParagraphAttrs).mockReturnValue({
             paragraphAttrs: {},
             resolvedParagraphProperties: {
               numberingProperties: { numId: 1, ilvl: 0 },
               runProperties: { fontFamily: { ascii: 'ExplicitFont' }, fontSize: 24 },
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: paraWithExplicitRunProps,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+            previousParagraphFont: previousFont,
+          });
+
+          expect(blocks).toHaveLength(1);
+          const paraBlock = blocks[0] as ParagraphBlock;
+          // Should use resolved run properties, not previousParagraphFont
+          expect(paraBlock.runs[0].fontFamily).toContain('ExplicitFont');
+          expect(paraBlock.runs[0].fontSize).not.toBe(10);
+        });
+
+        it('uses previousParagraphFont when run properties are only inherited from styles', () => {
+          const previousFont = { fontFamily: 'PreviousFont', fontSize: 10 };
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: { fontFamily: { ascii: 'StyledFont' }, fontSize: 24 },
             },
           });
 
@@ -3011,9 +3052,8 @@ describe('paragraph converters', () => {
 
           expect(blocks).toHaveLength(1);
           const paraBlock = blocks[0] as ParagraphBlock;
-          // Should use resolved run properties, not previousParagraphFont
-          expect(paraBlock.runs[0].fontFamily).toContain('ExplicitFont');
-          expect(paraBlock.runs[0].fontSize).not.toBe(10);
+          expect(paraBlock.runs[0].fontFamily).toBe(previousFont.fontFamily);
+          expect(paraBlock.runs[0].fontSize).toBe(previousFont.fontSize);
         });
       });
 

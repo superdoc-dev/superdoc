@@ -7,6 +7,14 @@ export type { EditorView } from 'prosemirror-view';
 export type { EditorState, Transaction } from 'prosemirror-state';
 export type { Schema } from 'prosemirror-model';
 export type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
+export type {
+  CreateHeadlessToolbarOptions,
+  HeadlessToolbarController,
+  HeadlessToolbarSurface,
+  ToolbarCommandState,
+  ToolbarContext,
+  ToolbarSnapshot,
+} from './headless-toolbar/types.js';
 
 /**
  * An opaque, session-local handle representing a captured editor selection.
@@ -1048,6 +1056,7 @@ export declare const registeredHandlers: {
 
 export declare function getMarksFromSelection(selection: any): any[];
 export declare function getActiveFormatting(state: any): Record<string, any>;
+export declare function createHeadlessToolbar(options: CreateHeadlessToolbarOptions): HeadlessToolbarController;
 export declare function getStarterExtensions(): any[];
 export declare function getRichTextExtensions(): any[];
 export declare function createZip(files: any): Promise<Blob>;

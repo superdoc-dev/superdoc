@@ -41,6 +41,11 @@
       "import": "./dist/super-editor.es.js",
       "require": "./dist/super-editor.cjs"
     },
+    "./headless-toolbar": {
+      "types": "./dist/superdoc/src/headless-toolbar.d.ts",
+      "source": "./src/headless-toolbar.js",
+      "import": "./dist/headless-toolbar.es.js"
+    },
     "./file-zipper": {
       "import": "./dist/super-editor/file-zipper.es.js"
     },
@@ -49,6 +54,9 @@
   "types": "./dist/superdoc/src/index.d.ts",
   "typesVersions": {
     "*": {
+      "headless-toolbar": [
+        "./dist/superdoc/src/headless-toolbar.d.ts"
+      ],
       "super-editor": [
         "./dist/superdoc/src/super-editor.d.ts"
       ],

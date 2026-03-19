@@ -1,0 +1,144 @@
+:root {
+  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  color: #111827;
+  background:
+    radial-gradient(circle at top left, rgba(251, 191, 36, 0.18), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 24px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #92400e;
+}
+
+.intro {
+  max-width: 520px;
+  margin: 0;
+  color: #4b5563;
+}
+
+.workspace {
+  position: relative;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.toolbar-floating {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  backdrop-filter: blur(14px);
+  background: rgba(255, 251, 235, 0.88);
+  border-bottom: 1px solid rgba(146, 64, 14, 0.12);
+}
+
+.toolbar-button {
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #ffffff;
+  color: #111827;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(146, 64, 14, 0.28);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbar-button-active {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+.toolbar-meta {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.editor-host {
+  display: flex;
+  justify-content: center;
+  min-height: calc(100vh - 210px);
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: start;
+  }
+
+  .app-header h1 {
+    font-size: 32px;
+  }
+
+  .toolbar-floating {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-meta {
+    margin-left: 0;
+    width: 100%;
+  }
+}

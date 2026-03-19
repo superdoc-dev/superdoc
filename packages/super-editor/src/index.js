@@ -13,6 +13,7 @@ import { SuperConverter } from './core/super-converter/SuperConverter';
 import { getMarksFromSelection } from './core/helpers/getMarksFromSelection.js';
 import { getActiveFormatting } from './core/helpers/getActiveFormatting.js';
 import { getStarterExtensions, getRichTextExtensions } from './extensions/index.js';
+import { createHeadlessToolbar } from './headless-toolbar/index.js';
 import { SuperToolbar } from './components/toolbar/super-toolbar.js';
 import { DocxZipper, helpers } from './core/index.js';
 import { Editor } from './core/Editor.js';
@@ -95,6 +96,7 @@ export {
   getMarksFromSelection,
   /** @internal */
   getActiveFormatting,
+  createHeadlessToolbar,
   getStarterExtensions,
   /** @internal */
   getRichTextExtensions,

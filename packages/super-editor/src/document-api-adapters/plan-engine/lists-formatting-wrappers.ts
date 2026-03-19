@@ -187,14 +187,13 @@ function resolveTargetAbstract(
 // ---------------------------------------------------------------------------
 
 const NUMBERING_PART: PartId = 'word/numbering.xml';
+type NumberingModel = Parameters<typeof syncNumberingToXmlTree>[1];
+type NumberingTransaction = Parameters<typeof updateNumberingProperties>[4];
 
-function getConverterNumbering(editor: Editor): {
-  abstracts: Record<number, unknown>;
-  definitions: Record<number, unknown>;
-} {
+function getConverterNumbering(editor: Editor): NumberingModel {
   return (
     editor as unknown as {
-      converter?: { numbering: { abstracts: Record<number, unknown>; definitions: Record<number, unknown> } };
+      converter?: { numbering: NumberingModel };
     }
   ).converter!.numbering;
 }
@@ -859,7 +858,7 @@ function ensureSequenceLocalAbstract(
  * Apply pending rebind operations to a PM transaction.
  * Must be called within the same transaction as the actual mutation.
  */
-function applyPendingRebind(editor: Editor, tr: unknown, local: SequenceLocalResult): void {
+function applyPendingRebind(editor: Editor, tr: NumberingTransaction, local: SequenceLocalResult): void {
   if (!local.pendingRebind) return;
   for (const item of local.pendingRebind) {
     updateNumberingProperties(

@@ -114,6 +114,16 @@ function dispatchEditorTransaction(editor: Editor, tr: unknown): void {
   );
 }
 
+type NumberingModel = Parameters<typeof syncNumberingToXmlTree>[1];
+
+function getConverterNumbering(editor: Editor): NumberingModel {
+  return (
+    editor as unknown as {
+      converter?: { numbering: NumberingModel };
+    }
+  ).converter!.numbering;
+}
+
 /**
  * Execute a domain command with automatic numbering rollback.
  *
@@ -606,8 +616,7 @@ export function listsCreateWrapper(
             LevelFormattingHelpers.applyTemplateToAbstract(editor, abstractNumId, styleTemplate, undefined);
             const numberingPart = getPart(editor, 'word/numbering.xml' as PartId);
             if (numberingPart) {
-              const converter = (editor as unknown as { converter: { numbering: Record<string, unknown> } }).converter;
-              syncNumberingToXmlTree(numberingPart, converter.numbering);
+              syncNumberingToXmlTree(numberingPart, getConverterNumbering(editor));
             }
           }
         }

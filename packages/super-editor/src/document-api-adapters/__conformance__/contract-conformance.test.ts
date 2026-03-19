@@ -1,5 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
@@ -10395,11 +10395,19 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
 };
 
-beforeEach(() => {
+beforeAll(() => {
   registerBuiltInExecutors();
   registerPartDescriptor(numberingPartDescriptor);
   registerPartDescriptor(settingsPartDescriptor);
   registerPartDescriptor(stylesPartDescriptor);
+});
+
+afterAll(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
+});
+
+const resetMocks = () => {
   vi.restoreAllMocks();
   mockedDeps.resolveCommentAnchorsById.mockReset();
   mockedDeps.resolveCommentAnchorsById.mockImplementation(() => []);
@@ -10425,11 +10433,10 @@ beforeEach(() => {
   refResolverMocks.getSourcesFromConverter.mockImplementation(() => []);
   refResolverMocks.findAllAuthorities.mockImplementation(() => []);
   refResolverMocks.findAllAuthorityEntries.mockImplementation(() => []);
-});
+};
 
-afterEach(() => {
-  clearPartDescriptors();
-  clearInvalidationHandlers();
+beforeEach(() => {
+  resetMocks();
 });
 
 describe('document-api adapter conformance', () => {

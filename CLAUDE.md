@@ -67,6 +67,10 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 | Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
 | Document API contract | `packages/document-api/src/contract/operation-definitions.ts` |
 | Adding a doc-api operation | See `packages/document-api/README.md` § "Adding a new operation" |
+| Theming (`createTheme()`) | `packages/superdoc/src/core/theme/create-theme.js` |
+| CSS variable defaults | `packages/superdoc/src/assets/styles/helpers/variables.css` |
+| Preset themes | `packages/superdoc/src/assets/styles/helpers/themes.css` |
+| Consumer-facing agent guide | `packages/superdoc/AGENTS.md` (ships with npm package) |
 
 ## Style Resolution Boundary
 

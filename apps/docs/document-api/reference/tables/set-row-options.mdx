@@ -26,37 +26,48 @@ Returns a TableMutationResult receipt; reports NO_OP if row options already matc
 
 ## Input fields
 
-### Variant 1 (target.kind="block")
+### Variant 1 (target.nodeType="tableRow")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `allowBreakAcrossPages` | boolean | no |  |
 | `repeatHeader` | boolean | no |  |
-| `rowIndex` | integer | no |  |
-| `target` | TableOrRowAddress | yes | TableOrRowAddress |
+| `target` | TableRowAddress | yes | TableRowAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
-| `target.nodeType` | enum | yes | `"table"`, `"tableRow"` |
+| `target.nodeType` | `"tableRow"` | yes | Constant: `"tableRow"` |
 
-### Variant 2 (nodeId)
+### Variant 2 (target.nodeType="table")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `allowBreakAcrossPages` | boolean | no |  |
+| `repeatHeader` | boolean | no |  |
+| `rowIndex` | integer | yes |  |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+
+### Variant 3 (nodeId, rowIndex)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `allowBreakAcrossPages` | boolean | no |  |
 | `nodeId` | string | yes |  |
 | `repeatHeader` | boolean | no |  |
-| `rowIndex` | integer | no |  |
+| `rowIndex` | integer | yes |  |
 
 ### Example request
 
 ```json
 {
   "allowBreakAcrossPages": true,
-  "rowIndex": 1,
+  "repeatHeader": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "table"
+    "nodeType": "tableRow"
   }
 }
 ```
@@ -124,38 +135,72 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
   "oneOf": [
     {
+      "additionalProperties": false,
+      "properties": {
+        "allowBreakAcrossPages": {
+          "type": "boolean"
+        },
+        "repeatHeader": {
+          "type": "boolean"
+        },
+        "target": {
+          "$ref": "#/$defs/TableRowAddress"
+        }
+      },
       "required": [
         "target"
-      ]
+      ],
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "allowBreakAcrossPages": {
+          "type": "boolean"
+        },
+        "repeatHeader": {
+          "type": "boolean"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/TableAddress"
+        }
+      },
       "required": [
-        "nodeId"
-      ]
+        "target",
+        "rowIndex"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "allowBreakAcrossPages": {
+          "type": "boolean"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "repeatHeader": {
+          "type": "boolean"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nodeId",
+        "rowIndex"
+      ],
+      "type": "object"
     }
-  ],
-  "properties": {
-    "allowBreakAcrossPages": {
-      "type": "boolean"
-    },
-    "nodeId": {
-      "type": "string"
-    },
-    "repeatHeader": {
-      "type": "boolean"
-    },
-    "rowIndex": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "target": {
-      "$ref": "#/$defs/TableOrRowAddress"
-    }
-  },
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

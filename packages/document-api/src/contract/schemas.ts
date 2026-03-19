@@ -490,8 +490,8 @@ const textTargetSchema = ref('TextTarget');
 const blockNodeAddressSchema = ref('BlockNodeAddress');
 const deletableBlockNodeAddressSchema = ref('DeletableBlockNodeAddress');
 const tableAddressSchema = ref('TableAddress');
+const tableRowAddressSchema = ref('TableRowAddress');
 const tableCellAddressSchema = ref('TableCellAddress');
-const tableOrRowAddressSchema = ref('TableOrRowAddress');
 const tableOrCellAddressSchema = ref('TableOrCellAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
@@ -1514,6 +1514,33 @@ const tableOrCellLocatorSchema: JsonSchema = {
   }),
   oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
 };
+
+function rowOperationInputSchema(
+  extraProperties: Record<string, JsonSchema>,
+  required: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema({ target: tableRowAddressSchema, ...extraProperties }, ['target', ...required]),
+      objectSchema(
+        {
+          target: tableAddressSchema,
+          rowIndex: { type: 'integer', minimum: 0 },
+          ...extraProperties,
+        },
+        ['target', 'rowIndex', ...required],
+      ),
+      objectSchema(
+        {
+          nodeId: { type: 'string' },
+          rowIndex: { type: 'integer', minimum: 0 },
+          ...extraProperties,
+        },
+        ['nodeId', 'rowIndex', ...required],
+      ),
+    ],
+  };
+}
 
 const mergeRangeLocatorSchema: JsonSchema = {
   ...objectSchema(
@@ -4524,50 +4551,31 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- tables: row structure ---
   'tables.insertRow': {
-    input: {
-      ...objectSchema(
-        {
-          target: tableOrRowAddressSchema,
-          nodeId: { type: 'string' },
-          rowIndex: { type: 'integer', minimum: 0 },
-          position: { enum: ['above', 'below'] },
-          count: { type: 'integer', minimum: 1 },
-        },
-        ['position'],
-      ),
-      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
-    },
+    input: rowOperationInputSchema(
+      {
+        position: { enum: ['above', 'below'] },
+        count: { type: 'integer', minimum: 1 },
+      },
+      ['position'],
+    ),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
   },
   'tables.deleteRow': {
-    input: {
-      ...objectSchema({
-        target: tableOrRowAddressSchema,
-        nodeId: { type: 'string' },
-        rowIndex: { type: 'integer', minimum: 0 },
-      }),
-      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
-    },
+    input: rowOperationInputSchema({}),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
   },
   'tables.setRowHeight': {
-    input: {
-      ...objectSchema(
-        {
-          target: tableOrRowAddressSchema,
-          nodeId: { type: 'string' },
-          rowIndex: { type: 'integer', minimum: 0 },
-          heightPt: { type: 'number', exclusiveMinimum: 0 },
-          rule: { enum: ['atLeast', 'exact', 'auto'] },
-        },
-        ['heightPt', 'rule'],
-      ),
-      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
-    },
+    input: rowOperationInputSchema(
+      {
+        heightPt: { type: 'number', exclusiveMinimum: 0 },
+        rule: { enum: ['atLeast', 'exact', 'auto'] },
+      },
+      ['heightPt', 'rule'],
+    ),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -4579,16 +4587,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.setRowOptions': {
-    input: {
-      ...objectSchema({
-        target: tableOrRowAddressSchema,
-        nodeId: { type: 'string' },
-        rowIndex: { type: 'integer', minimum: 0 },
-        allowBreakAcrossPages: { type: 'boolean' },
-        repeatHeader: { type: 'boolean' },
-      }),
-      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
-    },
+    input: rowOperationInputSchema({
+      allowBreakAcrossPages: { type: 'boolean' },
+      repeatHeader: { type: 'boolean' },
+    }),
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,

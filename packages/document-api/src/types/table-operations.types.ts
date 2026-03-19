@@ -228,22 +228,24 @@ export interface TablesSetLayoutInput extends TableLocator {
 
 export type RowInsertPosition = 'above' | 'below';
 
+type DirectRowTargetLocator = { target: TableRowAddress; nodeId?: never };
+
 export type TablesInsertRowInput =
   | (TableScopedRowLocator & { position: RowInsertPosition; count?: number })
-  | (RowLocator & { position: RowInsertPosition; count?: number });
+  | (DirectRowTargetLocator & { position: RowInsertPosition; count?: number });
 
-export type TablesDeleteRowInput = RowLocator | TableScopedRowLocator;
+export type TablesDeleteRowInput = DirectRowTargetLocator | TableScopedRowLocator;
 
 export type TablesSetRowHeightInput =
   | (TableScopedRowLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' })
-  | (RowLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' });
+  | (DirectRowTargetLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' });
 
 /** Uses {@link TableLocator} directly as input. */
 export type TablesDistributeRowsInput = TableLocator;
 
 export type TablesSetRowOptionsInput =
   | (TableScopedRowLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean })
-  | (RowLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean });
+  | (DirectRowTargetLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean });
 
 // ---------------------------------------------------------------------------
 // Column operations

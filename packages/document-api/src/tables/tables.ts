@@ -6,6 +6,12 @@ import { DocumentApiValidationError } from '../errors.js';
 // Locator validation
 // ---------------------------------------------------------------------------
 
+type RowLocatorInput = { target?: unknown; nodeId?: unknown; rowIndex?: unknown };
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Validates that a table locator has exactly one of `target` or `nodeId`.
  *
@@ -39,6 +45,38 @@ function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, ope
   }
 }
 
+function validateRowLocator(input: RowLocatorInput, operationName: string): void {
+  validateTableLocator(input, operationName);
+
+  if (input.nodeId != null) {
+    if (input.rowIndex == null) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        `${operationName}: rowIndex is required when using nodeId for row operations. ` +
+          `Use target to address a row directly, or pass nodeId + rowIndex to address a row within a table.`,
+      );
+    }
+    return;
+  }
+
+  if (!isObjectRecord(input.target) || input.target.kind !== 'block') return;
+
+  if (input.target.nodeType === 'table' && input.rowIndex == null) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName}: rowIndex is required when target is a table.`,
+    );
+  }
+
+  if (input.target.nodeType === 'tableRow' && input.rowIndex != null) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName}: rowIndex must not be provided when target is a row node. ` +
+        `Either pass a table target with rowIndex, or pass a row target without rowIndex.`,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Typed execute helpers
 // ---------------------------------------------------------------------------
@@ -54,6 +92,16 @@ export function executeTableLocatorOp<TInput extends { target?: unknown; nodeId?
   options?: MutationOptions,
 ): TResult {
   validateTableLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+export function executeRowLocatorOp<TInput extends RowLocatorInput, TResult>(
+  operationName: string,
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  validateRowLocator(input, operationName);
   return adapter(input, normalizeMutationOptions(options));
 }
 

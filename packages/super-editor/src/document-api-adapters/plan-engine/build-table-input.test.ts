@@ -7,24 +7,33 @@ describe('buildTableInput', () => {
     expect(result).toEqual({ nodeId: 'table-1', rowIndex: 2, position: 'after' });
   });
 
-  it('routes row ops without rowIndex to nodeId (direct row locator)', () => {
+  it('routes row ops without rowIndex to a direct row target', () => {
     const result = buildTableInput('tables.insertRow', 'row-1', { position: 'after' });
-    expect(result).toEqual({ nodeId: 'row-1', position: 'after' });
+    expect(result).toEqual({
+      target: { kind: 'block', nodeType: 'tableRow', nodeId: 'row-1' },
+      position: 'after',
+    });
   });
 
-  it('routes tables.deleteRow without rowIndex to nodeId', () => {
+  it('routes tables.deleteRow without rowIndex to a direct row target', () => {
     const result = buildTableInput('tables.deleteRow', 'row-1', {});
-    expect(result).toEqual({ nodeId: 'row-1' });
+    expect(result).toEqual({ target: { kind: 'block', nodeType: 'tableRow', nodeId: 'row-1' } });
   });
 
-  it('routes tables.setRowHeight without rowIndex to nodeId', () => {
+  it('routes tables.setRowHeight without rowIndex to a direct row target', () => {
     const result = buildTableInput('tables.setRowHeight', 'row-1', { heightPt: 30 });
-    expect(result).toEqual({ nodeId: 'row-1', heightPt: 30 });
+    expect(result).toEqual({
+      target: { kind: 'block', nodeType: 'tableRow', nodeId: 'row-1' },
+      heightPt: 30,
+    });
   });
 
-  it('routes tables.setRowOptions without rowIndex to nodeId', () => {
+  it('routes tables.setRowOptions without rowIndex to a direct row target', () => {
     const result = buildTableInput('tables.setRowOptions', 'row-1', { cantSplit: true });
-    expect(result).toEqual({ nodeId: 'row-1', cantSplit: true });
+    expect(result).toEqual({
+      target: { kind: 'block', nodeType: 'tableRow', nodeId: 'row-1' },
+      cantSplit: true,
+    });
   });
 
   it('routes column ops to nodeId', () => {

@@ -330,7 +330,7 @@ function preferredDiscriminator(
 ): { path: string; value: unknown } | undefined {
   if (discriminators.length === 0) return undefined;
 
-  const priorities = [/^success$/u, /(^|\.)(type|kind|mode|channel)$/u];
+  const priorities = [/^success$/u, /(^|\.)nodeType$/u, /(^|\.)(type|kind|mode|channel)$/u];
   for (const pattern of priorities) {
     const match = discriminators.find((entry) => pattern.test(entry.path));
     if (match) return match;

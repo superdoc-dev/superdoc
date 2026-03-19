@@ -26,25 +26,36 @@ Returns a TableMutationResult receipt; reports NO_OP if the row height already m
 
 ## Input fields
 
-### Variant 1 (target.kind="block")
+### Variant 1 (target.nodeType="tableRow")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `heightPt` | number | yes |  |
-| `rowIndex` | integer | no |  |
 | `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
-| `target` | TableOrRowAddress | yes | TableOrRowAddress |
+| `target` | TableRowAddress | yes | TableRowAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
-| `target.nodeType` | enum | yes | `"table"`, `"tableRow"` |
+| `target.nodeType` | `"tableRow"` | yes | Constant: `"tableRow"` |
 
-### Variant 2 (nodeId)
+### Variant 2 (target.nodeType="table")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `heightPt` | number | yes |  |
+| `rowIndex` | integer | yes |  |
+| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+
+### Variant 3 (nodeId, rowIndex, heightPt, rule)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `heightPt` | number | yes |  |
 | `nodeId` | string | yes |  |
-| `rowIndex` | integer | no |  |
+| `rowIndex` | integer | yes |  |
 | `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
 
 ### Example request
@@ -52,12 +63,11 @@ Returns a TableMutationResult receipt; reports NO_OP if the row height already m
 ```json
 {
   "heightPt": 12.5,
-  "rowIndex": 1,
   "rule": "atLeast",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "table"
+    "nodeType": "tableRow"
   }
 }
 ```
@@ -125,47 +135,93 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
   "oneOf": [
     {
+      "additionalProperties": false,
+      "properties": {
+        "heightPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "rule": {
+          "enum": [
+            "atLeast",
+            "exact",
+            "auto"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/TableRowAddress"
+        }
+      },
       "required": [
-        "target"
-      ]
+        "target",
+        "heightPt",
+        "rule"
+      ],
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "heightPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule": {
+          "enum": [
+            "atLeast",
+            "exact",
+            "auto"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/TableAddress"
+        }
+      },
       "required": [
-        "nodeId"
-      ]
+        "target",
+        "rowIndex",
+        "heightPt",
+        "rule"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "heightPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule": {
+          "enum": [
+            "atLeast",
+            "exact",
+            "auto"
+          ]
+        }
+      },
+      "required": [
+        "nodeId",
+        "rowIndex",
+        "heightPt",
+        "rule"
+      ],
+      "type": "object"
     }
-  ],
-  "properties": {
-    "heightPt": {
-      "exclusiveMinimum": 0,
-      "type": "number"
-    },
-    "nodeId": {
-      "type": "string"
-    },
-    "rowIndex": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "rule": {
-      "enum": [
-        "atLeast",
-        "exact",
-        "auto"
-      ]
-    },
-    "target": {
-      "$ref": "#/$defs/TableOrRowAddress"
-    }
-  },
-  "required": [
-    "heightPt",
-    "rule"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

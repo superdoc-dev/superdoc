@@ -2657,6 +2657,48 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
       expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteRow({ nodeId: 't1', rowIndex: 0 })).not.toThrow();
+    });
+
+    it('rejects table-target row ops without rowIndex at the public API boundary', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      expect(() => api.tables.insertRow({ target, position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ target } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ target, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ target, repeatHeader: true } as any)).toThrow(/rowIndex is required/);
+    });
+
+    it('rejects bare nodeId row ops at the public API boundary', () => {
+      const api = makeApi();
+
+      expect(() => api.tables.insertRow({ nodeId: 't1', position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ nodeId: 't1' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ nodeId: 't1', heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ nodeId: 't1', repeatHeader: true } as any)).toThrow(
+        /rowIndex is required/,
+      );
+    });
+
+    it('rejects redundant rowIndex on direct row targets at the public API boundary', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+
+      expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.deleteRow({ target, rowIndex: 0 } as any)).toThrow(/rowIndex must not be provided/);
+      expect(() => api.tables.setRowHeight({ target, rowIndex: 0, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.setRowOptions({ target, rowIndex: 0, repeatHeader: true } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
     });
 
     // -- column-locator operations (target/nodeId) --

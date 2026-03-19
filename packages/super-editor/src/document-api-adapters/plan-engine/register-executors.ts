@@ -336,9 +336,24 @@ const TABLE_ADAPTER_DISPATCH: Record<
  *
  * @internal Exported for testing only.
  */
-export function buildTableInput(_op: string, blockId: string, args: Record<string, unknown>): Record<string, unknown> {
+const ROW_TARGETED_TABLE_OPS = new Set([
+  'tables.insertRow',
+  'tables.deleteRow',
+  'tables.setRowHeight',
+  'tables.setRowOptions',
+]);
+
+export function buildTableInput(op: string, blockId: string, args: Record<string, unknown>): Record<string, unknown> {
   // Strip locator fields from args to prevent override of compiler-resolved target
   const { target: _target, nodeId: _n, ...safeArgs } = args;
+
+  if (ROW_TARGETED_TABLE_OPS.has(op) && safeArgs.rowIndex == null) {
+    return {
+      ...safeArgs,
+      target: { kind: 'block', nodeType: 'tableRow', nodeId: blockId },
+    };
+  }
+
   return { ...safeArgs, nodeId: blockId };
 }
 

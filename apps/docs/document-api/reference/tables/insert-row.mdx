@@ -26,26 +26,37 @@ Returns a TableMutationResult receipt confirming a row was inserted.
 
 ## Input fields
 
-### Variant 1 (target.kind="block")
+### Variant 1 (target.nodeType="tableRow")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `count` | integer | no |  |
 | `position` | enum | yes | `"above"`, `"below"` |
-| `rowIndex` | integer | no |  |
-| `target` | TableOrRowAddress | yes | TableOrRowAddress |
+| `target` | TableRowAddress | yes | TableRowAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
-| `target.nodeType` | enum | yes | `"table"`, `"tableRow"` |
+| `target.nodeType` | `"tableRow"` | yes | Constant: `"tableRow"` |
 
-### Variant 2 (nodeId)
+### Variant 2 (target.nodeType="table")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `count` | integer | no |  |
+| `position` | enum | yes | `"above"`, `"below"` |
+| `rowIndex` | integer | yes |  |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+
+### Variant 3 (nodeId, rowIndex, position)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `count` | integer | no |  |
 | `nodeId` | string | yes |  |
 | `position` | enum | yes | `"above"`, `"below"` |
-| `rowIndex` | integer | no |  |
+| `rowIndex` | integer | yes |  |
 
 ### Example request
 
@@ -53,11 +64,10 @@ Returns a TableMutationResult receipt confirming a row was inserted.
 {
   "count": 1,
   "position": "above",
-  "rowIndex": 1,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "table"
+    "nodeType": "tableRow"
   }
 }
 ```
@@ -125,45 +135,87 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
   "oneOf": [
     {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "position": {
+          "enum": [
+            "above",
+            "below"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/TableRowAddress"
+        }
+      },
       "required": [
-        "target"
-      ]
+        "target",
+        "position"
+      ],
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "position": {
+          "enum": [
+            "above",
+            "below"
+          ]
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/TableAddress"
+        }
+      },
       "required": [
-        "nodeId"
-      ]
+        "target",
+        "rowIndex",
+        "position"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "position": {
+          "enum": [
+            "above",
+            "below"
+          ]
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nodeId",
+        "rowIndex",
+        "position"
+      ],
+      "type": "object"
     }
-  ],
-  "properties": {
-    "count": {
-      "minimum": 1,
-      "type": "integer"
-    },
-    "nodeId": {
-      "type": "string"
-    },
-    "position": {
-      "enum": [
-        "above",
-        "below"
-      ]
-    },
-    "rowIndex": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "target": {
-      "$ref": "#/$defs/TableOrRowAddress"
-    }
-  },
-  "required": [
-    "position"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

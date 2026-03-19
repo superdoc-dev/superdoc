@@ -68,6 +68,7 @@ import {
   resolveRowLocator,
   resolveColumnLocator,
   resolveCellLocator,
+  resolveTableScopedCellLocator,
   resolveMergeRangeLocator,
   resolvePostMutationTableAddress,
   getTableColumnCount,
@@ -2359,7 +2360,19 @@ export function tablesUnmergeCellsAdapter(
 ): TableMutationResult {
   rejectTrackedMode('tables.unmergeCells', options);
 
-  const resolved = resolveCellLocator(editor, input, 'tables.unmergeCells');
+  // Discriminate by value, not by key presence. A JS caller may pass
+  // { nodeId: '…', rowIndex: undefined } — the keys exist but the values
+  // are absent. This must agree with the public-API validator in tables.ts
+  // which checks `!== undefined`, not `in`.
+  const inputRecord = input as Record<string, unknown>;
+  const isTableScoped = inputRecord.rowIndex !== undefined && inputRecord.columnIndex !== undefined;
+  const resolved = isTableScoped
+    ? resolveTableScopedCellLocator(
+        editor,
+        input as { target?: TableAddress; nodeId?: string; rowIndex: number; columnIndex: number },
+        'tables.unmergeCells',
+      )
+    : resolveCellLocator(editor, input, 'tables.unmergeCells');
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
 
   const attrs = cellNode.attrs as Record<string, unknown>;

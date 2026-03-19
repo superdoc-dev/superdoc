@@ -30,16 +30,30 @@ Returns a TableMutationResult receipt; reports NO_OP if the cell is not merged.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `target` | TableCellAddress | yes | TableCellAddress |
-| `target.kind` | `"block"` | yes | Constant: `"block"` |
-| `target.nodeId` | string | yes |  |
-| `target.nodeType` | `"tableCell"` | yes | Constant: `"tableCell"` |
+| `nodeId` | string | no |  |
+| `target` | TableCellAddress | no | TableCellAddress |
+| `target.kind` | `"block"` | no | Constant: `"block"` |
+| `target.nodeId` | string | no |  |
+| `target.nodeType` | `"tableCell"` | no | Constant: `"tableCell"` |
 
-### Variant 2 (nodeId)
+### Variant 2 (target.nodeType="table")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `columnIndex` | integer | yes |  |
+| `rowIndex` | integer | yes |  |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+
+### Variant 3 (nodeId, rowIndex, columnIndex)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | yes |  |
 | `nodeId` | string | yes |  |
+| `rowIndex` | integer | yes |  |
 
 ### Example request
 
@@ -116,28 +130,76 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
   "oneOf": [
     {
-      "required": [
-        "target"
-      ]
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "required": [
+            "nodeId"
+          ]
+        }
+      ],
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/TableCellAddress"
+        }
+      },
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "columnIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/TableAddress"
+        }
+      },
       "required": [
-        "nodeId"
-      ]
-    }
-  ],
-  "properties": {
-    "nodeId": {
-      "type": "string"
+        "target",
+        "rowIndex",
+        "columnIndex"
+      ],
+      "type": "object"
     },
-    "target": {
-      "$ref": "#/$defs/TableCellAddress"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "columnIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nodeId",
+        "rowIndex",
+        "columnIndex"
+      ],
+      "type": "object"
     }
-  },
-  "type": "object"
+  ]
 }
 ```
 </Accordion>

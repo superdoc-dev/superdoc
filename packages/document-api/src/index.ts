@@ -311,7 +311,12 @@ import type {
   DiffApplyInput,
   DiffApplyOptions,
 } from './diff/diff.types.js';
-import { executeTableLocatorOp, executeRowLocatorOp, executeDocumentLevelTableOp } from './tables/tables.js';
+import {
+  executeTableLocatorOp,
+  executeRowLocatorOp,
+  executeCellOrTableScopedCellLocatorOp,
+  executeDocumentLevelTableOp,
+} from './tables/tables.js';
 import type {
   ParagraphsAdapter,
   ParagraphFormatApi,
@@ -2321,7 +2326,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       unmergeCells(input, options?) {
-        return executeTableLocatorOp(
+        return executeCellOrTableScopedCellLocatorOp(
           'tables.unmergeCells',
           adapters.tables.unmergeCells.bind(adapters.tables),
           input,

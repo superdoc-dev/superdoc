@@ -285,7 +285,7 @@ export interface TablesDeleteCellInput extends CellLocator {
 
 export type TablesMergeCellsInput = MergeRangeLocator;
 
-export type TablesUnmergeCellsInput = CellLocator;
+export type TablesUnmergeCellsInput = CellLocator | TableScopedCellLocator;
 
 export interface TablesSplitCellInput extends CellLocator {
   rows: number;

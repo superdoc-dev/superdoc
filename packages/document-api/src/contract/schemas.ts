@@ -1507,6 +1507,32 @@ const cellLocatorSchema: JsonSchema = {
   oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
 };
 
+/**
+ * Accepts either a direct cell locator (target/nodeId pointing at a cell)
+ * or a table-scoped cell locator (target/nodeId pointing at a table + rowIndex + columnIndex).
+ */
+const cellOrTableScopedCellLocatorSchema: JsonSchema = {
+  oneOf: [
+    cellLocatorSchema,
+    objectSchema(
+      {
+        target: tableAddressSchema,
+        rowIndex: { type: 'integer', minimum: 0 },
+        columnIndex: { type: 'integer', minimum: 0 },
+      },
+      ['target', 'rowIndex', 'columnIndex'],
+    ),
+    objectSchema(
+      {
+        nodeId: { type: 'string' },
+        rowIndex: { type: 'integer', minimum: 0 },
+        columnIndex: { type: 'integer', minimum: 0 },
+      },
+      ['nodeId', 'rowIndex', 'columnIndex'],
+    ),
+  ],
+};
+
 const tableOrCellLocatorSchema: JsonSchema = {
   ...objectSchema({
     target: tableOrCellAddressSchema,
@@ -4925,7 +4951,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.unmergeCells': {
-    input: cellLocatorSchema,
+    input: cellOrTableScopedCellLocatorSchema,
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,

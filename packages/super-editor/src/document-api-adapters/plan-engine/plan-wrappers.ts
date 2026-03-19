@@ -31,6 +31,7 @@ import type {
   SelectionEdgeNodeType,
   StepOutcome,
   SelectionStepResolution,
+  StoryLocator,
 } from '@superdoc/document-api';
 import {
   isStructuralInsertInput,
@@ -76,6 +77,8 @@ import {
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
 import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue } from './inline-property-guards.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { resolveStoryFromInput } from '../story-runtime/resolve-story-context.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -341,9 +344,13 @@ function validateWriteRequest(request: WriteRequest, resolved: ResolvedWrite): R
  * that still uses `TextAddress`-based `InsertWriteRequest`.
  */
 export function writeWrapper(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
+  // Resolve story runtime from the request's `in` field.
+  const runtime = resolveStoryRuntime(editor, request.in);
+  const storyEditor = runtime.editor;
+
   const normalizedRequest = normalizeWriteLocator(request);
 
-  const resolved = resolveWriteTarget(editor, normalizedRequest);
+  const resolved = resolveWriteTarget(storyEditor, normalizedRequest);
   if (!resolved) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {
       target: normalizedRequest.target,
@@ -356,7 +363,7 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
   }
 
   const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') ensureTrackedCapability(editor, { operation: 'write' });
+  if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: 'write' });
 
   if (options?.dryRun) {
     return { success: true, resolution: resolved.resolution };
@@ -369,14 +376,15 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
     const insertPos = resolved.range.from;
     const text = normalizedRequest.text ?? '';
     const receipt = executeDomainCommand(
-      editor,
+      storyEditor,
       (): boolean => {
         const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
-        insertParagraphAtEnd(editor, insertPos, text, meta);
+        insertParagraphAtEnd(storyEditor, insertPos, text, meta);
         return true;
       },
       { expectedRevision: options?.expectedRevision },
     );
+    if (runtime.commit) runtime.commit(editor);
     return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
   }
 
@@ -393,14 +401,15 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
   const compiled: CompiledPlan = {
     mutationSteps: [{ step, targets: [target] }],
     assertSteps: [],
-    compiledRevision: getRevision(editor),
+    compiledRevision: getRevision(storyEditor),
   };
 
-  const receipt = executeCompiledPlan(editor, compiled, {
+  const receipt = executeCompiledPlan(storyEditor, compiled, {
     changeMode: mode,
     expectedRevision: options?.expectedRevision,
   });
 
+  if (runtime.commit) runtime.commit(editor);
   return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
 }
 
@@ -580,13 +589,20 @@ export function selectionMutationWrapper(
   request: SelectionMutationRequest,
   options?: MutationOptions,
 ): TextMutationReceipt {
+  // Resolve story runtime — combine explicit `request.in` with the story
+  // attached to the target by discovery operations (find, query.match).
+  const targetWithStory = request.target as { story?: StoryLocator } | undefined;
+  const effectiveLocator = resolveStoryFromInput({ in: request.in }, targetWithStory);
+  const runtime = resolveStoryRuntime(editor, effectiveLocator);
+  const storyEditor = runtime.editor;
+
   const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') ensureTrackedCapability(editor, { operation: request.kind });
+  if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: request.kind });
 
   // Capability checks for format operations.
   if (request.kind === 'format') {
     const inlineKeys = Object.keys(request.inline) as InlineRunPatchKey[];
-    ensureInlinePropertyCapabilities(editor, inlineKeys);
+    ensureInlinePropertyCapabilities(storyEditor, inlineKeys);
     if (mode === 'tracked') ensureTrackedInlinePropertySupport(inlineKeys);
   }
 
@@ -596,12 +612,13 @@ export function selectionMutationWrapper(
 
   // Compile the one-step plan through the real compiler.
   // Compilation is side-effect-free — it resolves targets against the current
-  // document state without mutating anything.
-  const compiled = compilePlan(editor, [step]);
+  // document state without mutating anything. The story editor is used so that
+  // the compiler resolves against the correct story's document state.
+  const compiled = compilePlan(storyEditor, [step]);
 
   // Enforce expectedRevision even on dry-run — callers need to know if the
   // document has drifted since their last query, regardless of execution.
-  checkRevision(editor, options?.expectedRevision);
+  checkRevision(storyEditor, options?.expectedRevision);
 
   // Dry-run: compile and resolve, but do NOT execute.
   if (options?.dryRun) {
@@ -610,7 +627,7 @@ export function selectionMutationWrapper(
   }
 
   // Execute through the shared execution engine.
-  const receipt = executeCompiledPlan(editor, compiled, {
+  const receipt = executeCompiledPlan(storyEditor, compiled, {
     changeMode: mode,
     expectedRevision: options?.expectedRevision,
   });
@@ -626,6 +643,12 @@ export function selectionMutationWrapper(
       resolution,
       failure: { code: 'NO_OP', message: `${request.kind} produced no change.` },
     };
+  }
+
+  // Persist non-body story changes back to the canonical OOXML parts.
+  // Body stories are handled by ProseMirror's normal persistence path.
+  if (runtime.commit) {
+    runtime.commit(editor);
   }
 
   return { success: true, resolution };
@@ -794,12 +817,26 @@ export function insertStructuredWrapper(
   input: InsertInput,
   options?: MutationOptions,
 ): SDMutationReceipt {
+  // Resolve story runtime from the input's `in` field.
+  const runtime = resolveStoryRuntime(editor, (input as { in?: StoryLocator }).in);
+  const storyEditor = runtime.editor;
+
+  let result: SDMutationReceipt;
+
   // Structural (SDFragment) inserts with a BlockNodeAddress target produce
   // a block-level receipt directly, avoiding the synthetic TextAddress bridge.
   if (isStructuralInsertInput(input) && input.target) {
-    return executeStructuralInsertDirect(editor, input, options);
+    result = executeStructuralInsertDirect(storyEditor, input, options);
+  } else {
+    result = textReceiptToSDReceipt(insertStructuredInner(storyEditor, input, options));
   }
-  return textReceiptToSDReceipt(insertStructuredInner(editor, input, options));
+
+  // Persist non-body story changes
+  if (result.success !== false && runtime.commit) {
+    runtime.commit(editor);
+  }
+
+  return result;
 }
 
 /**
@@ -1242,6 +1279,10 @@ export function replaceStructuredWrapper(
     );
   }
 
+  // Resolve story runtime from the input's `in` field.
+  const runtime = resolveStoryRuntime(editor, (input as { in?: StoryLocator }).in);
+  const storyEditor = runtime.editor;
+
   // When the target is a BlockNodeAddress, re-wrap the receipt to preserve
   // the block-level address instead of the synthetic TextAddress.
   const blockTarget =
@@ -1249,7 +1290,9 @@ export function replaceStructuredWrapper(
       ? (input.target as BlockNodeAddress)
       : undefined;
 
-  const textReceipt = executeStructuralReplaceWrapper(editor, input, options);
+  const textReceipt = executeStructuralReplaceWrapper(storyEditor, input, options);
+  if (runtime.commit) runtime.commit(editor);
+
   if (!blockTarget) return textReceiptToSDReceipt(textReceipt);
 
   const sdReceipt = textReceiptToSDReceipt(textReceipt);

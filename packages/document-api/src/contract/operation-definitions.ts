@@ -236,6 +236,15 @@ const T_HEADER_FOOTER_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 
+// Story-scoped throw-code arrays
+const T_STORY = [
+  'STORY_NOT_FOUND',
+  'STORY_MISMATCH',
+  'STORY_NOT_SUPPORTED',
+  'CROSS_STORY_PLAN',
+  'MATERIALIZATION_FAILED',
+] as const;
+
 // Reference-namespace throw-code shorthand arrays
 const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
 const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
@@ -267,7 +276,7 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
           supportsDryRun: true,
           supportsTrackedMode: entry.tracked,
           possibleFailureCodes: ['INVALID_TARGET'],
-          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
         }),
         referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
         referenceGroup: 'format',
@@ -302,7 +311,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE'],
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE', ...T_STORY],
       deterministicTargetResolution: false,
     }),
     referenceDocPath: 'find.mdx',
@@ -338,7 +347,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the plain-text content of the document.',
     expectedResult: 'Returns the full plain-text content of the document as a string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
 
@@ -350,7 +361,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the document content as a Markdown string.',
     expectedResult: 'Returns the full document content as a Markdown-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-markdown.mdx',
     referenceGroup: 'core',
     intentGroup: 'get_content',
@@ -361,7 +374,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the document content as an HTML string.',
     expectedResult: 'Returns the full document content as an HTML-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-html.mdx',
     referenceGroup: 'core',
     intentGroup: 'get_content',
@@ -447,6 +462,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'insert.mdx',
@@ -490,6 +506,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'replace.mdx',
@@ -509,7 +526,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
@@ -590,7 +607,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
@@ -627,7 +644,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
@@ -644,7 +661,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
@@ -1849,7 +1866,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_QUERY_MATCH,
+      throws: [...T_QUERY_MATCH, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'query/match.mdx',
@@ -1882,7 +1899,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_PLAN_ENGINE,
+      throws: [...T_PLAN_ENGINE, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'mutations/preview.mdx',
@@ -1907,6 +1924,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
       deterministicTargetResolution: true,
     }),
@@ -2846,7 +2864,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
-      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'create/image.mdx',
     referenceGroup: 'create',

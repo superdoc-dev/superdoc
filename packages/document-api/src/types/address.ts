@@ -1,4 +1,5 @@
 import type { BlockNodeType } from './base.js';
+import type { StoryLocator } from './story.types.js';
 
 export type Range = {
   /** Inclusive start offset (0-based, UTF-16 code units). */
@@ -11,6 +12,8 @@ export type TextAddress = {
   kind: 'text';
   blockId: string;
   range: Range;
+  /** Story containing this text. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 /**
@@ -40,6 +43,8 @@ export type TextSegment = {
 export type TextTarget = {
   kind: 'text';
   segments: [TextSegment, ...TextSegment[]];
+  /** Story containing this text target. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 // ---------------------------------------------------------------------------
@@ -69,6 +74,8 @@ export type SelectionEdgeNodeAddress = {
   kind: 'block';
   nodeType: SelectionEdgeNodeType;
   nodeId: string;
+  /** Story containing this node. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 /**
@@ -78,7 +85,12 @@ export type SelectionEdgeNodeAddress = {
  * - `nodeEdge`: The boundary of a block-level node (before or after).
  */
 export type SelectionPoint =
-  | { kind: 'text'; blockId: string; offset: number }
+  | {
+      kind: 'text';
+      blockId: string;
+      offset: number;
+      /** Story containing this point. Omit for body (backward compatible). */ story?: StoryLocator;
+    }
   | { kind: 'nodeEdge'; node: SelectionEdgeNodeAddress; edge: 'before' | 'after' };
 
 /**
@@ -91,6 +103,8 @@ export type SelectionTarget = {
   kind: 'selection';
   start: SelectionPoint;
   end: SelectionPoint;
+  /** Story containing this selection. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 /** Discriminated input for direct operations: either an explicit target or a ref string. */

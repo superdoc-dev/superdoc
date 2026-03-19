@@ -14,6 +14,7 @@ import type { SelectionTarget } from '../types/address.js';
 import type { SDMutationReceipt } from '../types/sd-contract.js';
 import type { SDReplaceInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import type { WriteAdapter } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
@@ -26,6 +27,7 @@ import {
 } from '../validation-primitives.js';
 import { isSelectionTarget } from '../validation/selection-target-validator.js';
 import { validateDocumentFragment } from '../validation/fragment-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 
 // ---------------------------------------------------------------------------
@@ -37,6 +39,8 @@ export interface TextReplaceInput {
   target?: SelectionTarget;
   ref?: string;
   text: string;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,8 +58,8 @@ export type ReplaceInput = TextReplaceInput | SDReplaceInput;
 // Allowlists
 // ---------------------------------------------------------------------------
 
-const TEXT_REPLACE_ALLOWED_KEYS = new Set(['text', 'target', 'ref']);
-const STRUCTURAL_REPLACE_ALLOWED_KEYS = new Set(['content', 'target', 'ref', 'nestingPolicy']);
+const TEXT_REPLACE_ALLOWED_KEYS = new Set(['text', 'target', 'ref', 'in']);
+const STRUCTURAL_REPLACE_ALLOWED_KEYS = new Set(['content', 'target', 'ref', 'nestingPolicy', 'in']);
 
 // ---------------------------------------------------------------------------
 // Shape discrimination
@@ -128,6 +132,8 @@ function validateReplaceInput(input: unknown): asserts input is ReplaceInput {
       fields: ['text', 'content'],
     });
   }
+
+  validateStoryLocator(input.in, 'in');
 
   if (hasContent) {
     validateStructuralReplaceInput(input);
@@ -222,6 +228,7 @@ export function executeReplace(
       target: textInput.target,
       ref: textInput.ref,
       text: textInput.text,
+      in: textInput.in,
     },
     normalizeMutationOptions(options),
   );

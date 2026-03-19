@@ -92,7 +92,7 @@ describe('document-api contract catalog', () => {
     const [legacyVariant, structuralVariant] = insertInputSchema.oneOf!;
 
     expect(legacyVariant.type).toBe('object');
-    expect(Object.keys(legacyVariant.properties!).sort()).toEqual(['target', 'type', 'value']);
+    expect(Object.keys(legacyVariant.properties!).sort()).toEqual(['in', 'target', 'type', 'value']);
     expect(legacyVariant.required).toEqual(['value']);
     expect(legacyVariant.additionalProperties).toBe(false);
     expect((legacyVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/TextAddress');
@@ -100,6 +100,7 @@ describe('document-api contract catalog', () => {
     expect(structuralVariant.type).toBe('object');
     expect(Object.keys(structuralVariant.properties!).sort()).toEqual([
       'content',
+      'in',
       'nestingPolicy',
       'placement',
       'target',

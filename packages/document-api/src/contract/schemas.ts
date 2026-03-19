@@ -435,6 +435,49 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
   BlockAddressOrRange: {
     oneOf: [ref('BlockAddress'), ref('BlockRange')],
   },
+
+  // -- Story locator (discriminated union on storyType) --
+  StoryLocator: {
+    oneOf: [
+      objectSchema({ kind: { const: 'story' }, storyType: { const: 'body' } }, ['kind', 'storyType']),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'headerFooterSlot' },
+          section: ref('SectionAddress'),
+          headerFooterKind: { enum: ['header', 'footer'] },
+          variant: { enum: ['default', 'first', 'even'] },
+          resolution: { enum: ['effective', 'explicit'] },
+          onWrite: { enum: ['materializeIfInherited', 'editResolvedPart', 'error'] },
+        },
+        ['kind', 'storyType', 'section', 'headerFooterKind', 'variant'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'headerFooterPart' },
+          refId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'refId'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'footnote' },
+          noteId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'noteId'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'endnote' },
+          noteId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'noteId'],
+      ),
+    ],
+  } satisfies JsonSchema,
 };
 
 // ---------------------------------------------------------------------------
@@ -472,6 +515,7 @@ const textMutationResolutionSchema = ref('TextMutationResolution');
 const textMutationSuccessSchema = ref('TextMutationSuccess');
 const matchRunSchema = ref('MatchRun');
 const matchBlockSchema = ref('MatchBlock');
+const storyLocatorSchema = ref('StoryLocator');
 
 // Keep these aliases for internal readability
 void positionSchema;
@@ -827,6 +871,7 @@ const sdReadOptionsSchema = objectSchema({
 
 const sdFindInputSchema = objectSchema(
   {
+    in: storyLocatorSchema,
     select: sdSelectorSchema,
     within: blockNodeAddressSchema,
     limit: { type: 'integer' },
@@ -1425,6 +1470,7 @@ const insertInputSchema: JsonSchema = {
   oneOf: [
     objectSchema(
       {
+        in: storyLocatorSchema,
         target: textAddressSchema,
         value: { type: 'string' },
         type: { type: 'string', enum: ['text', 'markdown', 'html'] },
@@ -1433,6 +1479,7 @@ const insertInputSchema: JsonSchema = {
     ),
     objectSchema(
       {
+        in: storyLocatorSchema,
         target: blockNodeAddressSchema,
         content: sdFragmentSchema,
         placement: placementSchema,
@@ -2614,15 +2661,20 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: sdNodeResultSchema,
   },
   getText: {
-    input: strictEmptyObjectSchema,
+    input: objectSchema({
+      in: storyLocatorSchema,
+    }),
     output: { type: 'string' },
   },
   getMarkdown: {
-    input: strictEmptyObjectSchema,
+    input: objectSchema({
+      in: storyLocatorSchema,
+    }),
     output: { type: 'string' },
   },
   getHtml: {
     input: objectSchema({
+      in: storyLocatorSchema,
       unflattenLists: { type: 'boolean' },
     }),
     output: { type: 'string' },
@@ -2669,13 +2721,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       oneOf: [
         // Text replacement: TargetLocator + text
         {
-          ...targetLocatorWithPayload({ text: { type: 'string' } }, ['text']),
+          ...targetLocatorWithPayload({ in: storyLocatorSchema, text: { type: 'string' } }, ['text']),
         },
         // Structural replacement: exactly one of (target | ref) + content
         {
           oneOf: [
             objectSchema(
               {
+                in: storyLocatorSchema,
                 target: { oneOf: [blockNodeAddressSchema, selectionTargetSchema] },
                 content: sdFragmentSchema,
                 nestingPolicy: nestingPolicySchema,
@@ -2684,6 +2737,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             ),
             objectSchema(
               {
+                in: storyLocatorSchema,
                 ref: { type: 'string' },
                 content: sdFragmentSchema,
                 nestingPolicy: nestingPolicySchema,
@@ -2700,7 +2754,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   delete: {
     input: {
-      ...targetLocatorWithPayload({ behavior: deleteBehaviorSchema }),
+      ...targetLocatorWithPayload({ in: storyLocatorSchema, behavior: deleteBehaviorSchema }),
     },
     output: textMutationResultSchemaFor('delete'),
     success: textMutationSuccessSchema,
@@ -2708,7 +2762,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'format.apply': {
     input: {
-      ...targetLocatorWithPayload({ inline: buildInlineRunPatchSchema() }, ['inline']),
+      ...targetLocatorWithPayload({ in: storyLocatorSchema, inline: buildInlineRunPatchSchema() }, ['inline']),
     },
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
@@ -3110,6 +3164,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   })(),
   'create.paragraph': {
     input: objectSchema({
+      in: storyLocatorSchema,
       at: {
         oneOf: [
           objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
@@ -3139,6 +3194,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.heading': {
     input: objectSchema(
       {
+        in: storyLocatorSchema,
         level: headingLevelSchema,
         at: {
           oneOf: [
@@ -4009,6 +4065,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'query.match': {
     input: objectSchema(
       {
+        in: storyLocatorSchema,
         select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
         within: blockNodeAddressSchema,
         require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
@@ -4247,6 +4304,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
     const mutationsInputSchema = objectSchema(
       {
+        in: storyLocatorSchema,
         expectedRevision: { type: 'string' },
         atomic: { const: true, type: 'boolean' },
         changeMode: { enum: ['direct', 'tracked'] },
@@ -5300,6 +5358,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.image': {
     input: objectSchema(
       {
+        in: storyLocatorSchema,
         src: { type: 'string' },
         alt: { type: 'string' },
         title: { type: 'string' },

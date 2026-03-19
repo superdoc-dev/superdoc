@@ -8,11 +8,13 @@
 import type { SelectionTarget, DeleteBehavior } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
 import type { MutationOptions } from '../types/mutation-plan.types.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
 import { isSelectionTarget } from '../validation/selection-target-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 
 // ---------------------------------------------------------------------------
 // Public input type
@@ -29,13 +31,15 @@ export interface DeleteInput {
    * - `'exact'`: delete only the exact resolved range.
    */
   behavior?: DeleteBehavior;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 }
 
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
-const DELETE_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'behavior']);
+const DELETE_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'behavior', 'in']);
 const VALID_BEHAVIORS: ReadonlySet<string> = new Set(['selection', 'exact']);
 
 function validateDeleteInput(input: unknown): asserts input is DeleteInput {
@@ -44,6 +48,7 @@ function validateDeleteInput(input: unknown): asserts input is DeleteInput {
   }
 
   assertNoUnknownFields(input, DELETE_INPUT_ALLOWED_KEYS, 'delete');
+  validateStoryLocator(input.in, 'in');
 
   const { target, ref, behavior } = input;
 
@@ -105,6 +110,7 @@ export function executeDelete(
       target: input.target,
       ref: input.ref,
       behavior: input.behavior ?? 'selection',
+      in: input.in,
     },
     normalizeMutationOptions(options),
   );

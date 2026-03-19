@@ -25,6 +25,7 @@ import type {
   CompiledSelectionTarget,
   CompiledSegment,
 } from './executor-registry.types.js';
+import { decodeRef, type StoryRefV4 } from '../story-runtime/story-ref-codec.js';
 import { planError } from './errors.js';
 import { hasStepExecutor } from './executor-registry.js';
 import { captureRunsInRange, checkUniformity, type CapturedStyle } from './style-resolver.js';
@@ -598,14 +599,6 @@ function getBlockText(editor: Editor, candidate: { pos: number; end: number }): 
 // Ref resolution
 // ---------------------------------------------------------------------------
 
-function decodeTextRefPayload(encoded: string, stepId: string): unknown {
-  try {
-    return JSON.parse(atob(encoded));
-  } catch {
-    throw planError('INVALID_INPUT', 'invalid text ref encoding', stepId);
-  }
-}
-
 /**
  * Resolves a V3 text ref into compiled targets.
  *
@@ -663,15 +656,85 @@ function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep,
   return [buildSpanTarget(editor, index, step, segments, refData.matchId)];
 }
 
-function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
-  const encoded = ref.slice(5); // strip 'text:' prefix
-  const payload = decodeTextRefPayload(encoded, step.id);
-
-  if (!isV3Ref(payload)) {
-    throw planError('INVALID_INPUT', 'only V3 text refs are supported', step.id);
+/**
+ * Resolves a V4 text ref into compiled targets.
+ *
+ * V4 refs include a storyKey for multi-story support. The compiler
+ * accepts any storyKey — the caller is responsible for passing the
+ * correct story editor (via runtime resolution in the adapter layer).
+ *
+ * The only cross-story constraint enforced here is that ALL refs
+ * within a single plan must share the same storyKey (single-story-per-call).
+ * That check is performed at the plan level in {@link compilePlan},
+ * not per-ref.
+ */
+function resolveV4TextRef(
+  editor: Editor,
+  index: BlockIndex,
+  step: MutationStep,
+  refData: StoryRefV4,
+): CompiledTarget[] {
+  const currentRevision = getRevision(editor);
+  if (refData.rev !== currentRevision) {
+    throw planError(
+      'REVISION_MISMATCH',
+      `Text ref is ephemeral and revision-scoped. Re-run query.match to obtain a fresh handle.ref for revision ${currentRevision}.`,
+      step.id,
+      {
+        refRevision: refData.rev,
+        currentRevision,
+        refStability: 'ephemeral',
+        storyKey: refData.storyKey,
+        remediation: 'Re-run query.match() to obtain a fresh ref valid for the current revision.',
+      },
+    );
   }
 
-  return resolveV3TextRef(editor, index, step, payload);
+  if (!refData.segments?.length) return [];
+
+  const segments = refData.segments.map((s) => ({ blockId: s.blockId, from: s.start, to: s.end }));
+
+  // Single-segment → range target
+  if (segments.length === 1) {
+    const seg = segments[0];
+    const candidate = index.candidates.find((c) => c.nodeId === seg.blockId);
+    if (!candidate) return [];
+
+    const blockText = getBlockText(editor, candidate);
+    const matchText = blockText.slice(seg.from, seg.to);
+
+    const addr: ResolvedAddress = {
+      blockId: seg.blockId,
+      from: seg.from,
+      to: seg.to,
+      text: matchText,
+      marks: [],
+      blockPos: candidate.pos,
+    };
+
+    const target = buildRangeTarget(editor, step, addr, candidate);
+    if (refData.matchId) target.matchId = refData.matchId;
+    return [target];
+  }
+
+  // Multi-segment → span target
+  return [buildSpanTarget(editor, index, step, segments, refData.matchId ?? `v4:${step.id}`)];
+}
+
+function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
+  // Use the shared codec to decode both V3 and V4 refs
+  const decoded = decodeRef(ref);
+
+  if (!decoded) {
+    throw planError('INVALID_INPUT', 'invalid text ref encoding', step.id);
+  }
+
+  if (decoded.v === 4) {
+    return resolveV4TextRef(editor, index, step, decoded as StoryRefV4);
+  }
+
+  // V3 fallback
+  return resolveV3TextRef(editor, index, step, decoded as TextRefV3);
 }
 
 function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
@@ -1262,6 +1325,45 @@ function assertNoDuplicateBlockIds(index: BlockIndex): void {
   }
 }
 
+/**
+ * Validates that all V4 refs in a plan share the same storyKey.
+ *
+ * Plans are single-story-per-call in the current model. If two steps
+ * carry V4 refs targeting different stories, this is a compile-time error.
+ */
+function assertSingleStoryKey(steps: MutationStep[]): void {
+  let seenStoryKey: string | undefined;
+  let seenStepId: string | undefined;
+
+  for (const step of steps) {
+    const where = step.where;
+    if (!isRefWhere(where)) continue;
+    const ref = where.ref;
+    if (!ref.startsWith('text:v4:')) continue;
+
+    const decoded = decodeRef(ref);
+    if (!decoded || decoded.v !== 4) continue;
+
+    const v4 = decoded as StoryRefV4;
+    if (seenStoryKey === undefined) {
+      seenStoryKey = v4.storyKey;
+      seenStepId = step.id;
+    } else if (v4.storyKey !== seenStoryKey) {
+      throw planError(
+        'CROSS_STORY_PLAN',
+        `Plan contains refs targeting different stories: step "${seenStepId}" targets "${seenStoryKey}" but step "${step.id}" targets "${v4.storyKey}". A single plan call must target one story.`,
+        step.id,
+        {
+          storyKeyA: seenStoryKey,
+          stepIdA: seenStepId,
+          storyKeyB: v4.storyKey,
+          stepIdB: step.id,
+        },
+      );
+    }
+  }
+}
+
 export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan {
   // D8: plan step limit
   if (steps.length > MAX_PLAN_STEPS) {
@@ -1289,6 +1391,10 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
     }
     seenIds.add(step.id);
   }
+
+  // Cross-story validation: all V4 refs in a plan must share the same storyKey.
+  // This enforces the single-story-per-call constraint at compile time.
+  assertSingleStoryKey(steps);
 
   // Separate assert steps from mutation steps
   let totalTargets = 0;

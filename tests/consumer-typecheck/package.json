@@ -1,0 +1,14 @@
+{
+  "name": "consumer-typecheck",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "superdoc": "file:../../packages/superdoc/superdoc.tgz"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

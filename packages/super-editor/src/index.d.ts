@@ -45,7 +45,20 @@ export type Command = (props: CommandProps) => boolean;
  * Chainable command object returned by editor.chain()
  */
 export interface ChainableCommandObject {
-  run: () => boolean;
+  /** Execute the chained commands */
+  run(): boolean;
+  /** Chain any command - returns self for further chaining */
+  toggleBold(): ChainableCommandObject;
+  toggleItalic(): ChainableCommandObject;
+  toggleUnderline(): ChainableCommandObject;
+  toggleStrike(): ChainableCommandObject;
+  setFontSize(size: string | number): ChainableCommandObject;
+  setFontFamily(family: string): ChainableCommandObject;
+  setTextColor(color: string): ChainableCommandObject;
+  setTextAlign(alignment: 'left' | 'center' | 'right' | 'justify'): ChainableCommandObject;
+  insertContent(content: any): ChainableCommandObject;
+  focus(position?: 'start' | 'end' | 'all' | number | boolean | null): ChainableCommandObject;
+  /** Allow any other command */
   [commandName: string]: ((...args: any[]) => ChainableCommandObject) | (() => boolean);
 }
 
@@ -165,6 +178,67 @@ export interface OpenOptions {
   content?: unknown;
   mediaFiles?: Record<string, unknown>;
   fonts?: Record<string, unknown>;
+}
+
+// ============================================
+// COMMENT TYPES
+// ============================================
+
+/** A comment element (paragraph, text run, etc.) */
+export interface CommentElement {
+  type: string;
+  content?: CommentElement[];
+  text?: string;
+}
+
+/** A comment in the document */
+export interface Comment {
+  /** Unique comment identifier */
+  commentId: string;
+  /** Timestamp when comment was created */
+  createdTime: number;
+  /** Email of the comment author */
+  creatorEmail: string;
+  /** Display name of the comment author */
+  creatorName: string;
+  /** Comment content elements */
+  elements: CommentElement[];
+  /** Original ID from imported document */
+  importedId?: string;
+  /** Whether the comment is resolved */
+  isDone: boolean;
+  /** Parent comment ID for replies */
+  parentCommentId?: string;
+  /** Raw JSON representation */
+  commentJSON?: unknown;
+}
+
+/** Event data for comments loaded event */
+export interface CommentsLoadedEventData {
+  comments: Comment[];
+}
+
+/** Event data for content error event */
+export interface ContentErrorEventData {
+  error: Error;
+}
+
+/** Font configuration */
+export interface FontConfig {
+  key: string;
+  label: string;
+  fontWeight?: number;
+  props?: {
+    style?: {
+      fontFamily?: string;
+    };
+  };
+}
+
+/** Font support information */
+export interface FontSupportInfo {
+  documentFonts: string[];
+  unsupportedFonts: string[];
 }
 
 // ============================================
@@ -554,8 +628,131 @@ export declare class Editor {
    */
   isEmpty: boolean;
 
-  /** Allow additional properties */
-  [key: string]: any;
+  // ============================================
+  // EVENT METHODS
+  // ============================================
+
+  /**
+   * Register an event listener.
+   * @param event - Event name ('update', 'create', 'transaction', etc.)
+   * @param handler - Event handler function
+   */
+  on(event: string, handler: (...args: any[]) => void): void;
+
+  /**
+   * Remove an event listener.
+   * @param event - Event name
+   * @param handler - Event handler function to remove
+   */
+  off(event: string, handler: (...args: any[]) => void): void;
+
+  /**
+   * Emit an event.
+   * @param event - Event name
+   * @param args - Arguments to pass to handlers
+   */
+  emit(event: string, ...args: any[]): void;
+
+  // ============================================
+  // DOCUMENT EXPORT METHODS
+  // ============================================
+
+  /**
+   * Export the document to DOCX format.
+   * @param options - Export options
+   * @returns Promise resolving to Blob (browser) or Buffer (Node.js)
+   */
+  exportDocx(options?: {
+    isFinalDoc?: boolean;
+    commentsType?: string;
+    comments?: Comment[];
+    fieldsHighlightColor?: string | null;
+    compression?: 'DEFLATE' | 'STORE';
+  }): Promise<Blob | ArrayBuffer>;
+
+  /**
+   * Export the document (alias for exportDocx).
+   */
+  exportDocument(options?: {
+    isFinalDoc?: boolean;
+    commentsType?: string;
+    comments?: Comment[];
+  }): Promise<Blob | ArrayBuffer>;
+
+  /**
+   * Save the document to the original source path (Node.js only).
+   */
+  save(options?: { isFinalDoc?: boolean; commentsType?: string; comments?: Comment[] }): Promise<void>;
+
+  /**
+   * Save the document to a specific path (Node.js only).
+   */
+  saveTo(
+    path: string,
+    options?: {
+      isFinalDoc?: boolean;
+      commentsType?: string;
+      comments?: Comment[];
+    },
+  ): Promise<void>;
+
+  // ============================================
+  // TOOLBAR & UI METHODS
+  // ============================================
+
+  /**
+   * Set the toolbar for this editor.
+   */
+  setToolbar(toolbar: any): void;
+
+  /**
+   * Set whether the editor is editable.
+   */
+  setEditable(editable: boolean, emitUpdate?: boolean): void;
+
+  /**
+   * Set the document mode.
+   */
+  setDocumentMode(mode: 'editing' | 'viewing' | 'suggesting'): void;
+
+  /**
+   * Focus the editor.
+   */
+  focus(): void;
+
+  /**
+   * Blur the editor.
+   */
+  blur(): void;
+
+  // ============================================
+  // DOCUMENT METHODS
+  // ============================================
+
+  /**
+   * Open a document.
+   */
+  open(source?: string | File | Blob | BinaryData, options?: OpenOptions): Promise<void>;
+
+  /**
+   * Close the current document.
+   */
+  close(): void;
+
+  /**
+   * Replace the current file.
+   */
+  replaceFile(newFile: File | Blob | BinaryData): Promise<void>;
+
+  /**
+   * Get the document as Markdown.
+   */
+  getMarkdown(): Promise<string>;
+
+  /**
+   * Check if the editor is currently active/focused.
+   */
+  isFocused: boolean;
 }
 
 // ============================================
@@ -909,8 +1106,15 @@ export declare class PresentationEditor {
    */
   emit(event: string, ...args: any[]): void;
 
-  /** Allow additional properties */
-  [key: string]: any;
+  /**
+   * Replace the current file.
+   */
+  replaceFile(newFile: File | Blob | BinaryData): Promise<void>;
+
+  /**
+   * Set the toolbar for the editor.
+   */
+  setToolbar(toolbar: any): void;
 }
 
 // ============================================

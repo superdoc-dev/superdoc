@@ -70,13 +70,13 @@ describe('SD-2126: post-mutation table ref handoff', () => {
     const id2 = requireTableNodeId(borderResult, 'tables.setBorder');
 
     // Step 3: insertColumn using setBorder's ref
-    const colResult = tablesInsertColumnAdapter(ed, { tableNodeId: id2, columnIndex: 0, position: 'right' }, DIRECT);
+    const colResult = tablesInsertColumnAdapter(ed, { nodeId: id2, columnIndex: 0, position: 'right' }, DIRECT);
     const id3 = requireTableNodeId(colResult, 'tables.insertColumn');
 
     // Step 4: mergeCells using insertColumn's ref
     const mergeResult = tablesMergeCellsAdapter(
       ed,
-      { tableNodeId: id3, start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 0, columnIndex: 1 } },
+      { nodeId: id3, start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 0, columnIndex: 1 } },
       DIRECT,
     );
     const id4 = requireTableNodeId(mergeResult, 'tables.mergeCells');
@@ -98,7 +98,7 @@ describe('SD-2126: post-mutation table ref handoff', () => {
     const id1 = requireTableNodeId(createResult, 'create.table');
 
     // Mutate — this changes positions/structure.
-    const colResult = tablesInsertColumnAdapter(ed, { tableNodeId: id1, columnIndex: 0, position: 'right' }, DIRECT);
+    const colResult = tablesInsertColumnAdapter(ed, { nodeId: id1, columnIndex: 0, position: 'right' }, DIRECT);
     const id2 = requireTableNodeId(colResult, 'tables.insertColumn');
 
     // The returned ref should work for a follow-up operation.
@@ -111,7 +111,7 @@ describe('SD-2126: post-mutation table ref handoff', () => {
     expect((borderResult as { table?: { nodeId?: string } }).table?.nodeId).toBeTruthy();
   });
 
-  it('cell-targeted setBorder preserves current cell address behavior', () => {
+  it('cell-targeted setBorder returns the parent table ref', () => {
     const ed = createEditor();
 
     // Create a table and find a cell to target.
@@ -133,9 +133,9 @@ describe('SD-2126: post-mutation table ref handoff', () => {
     );
 
     expect(borderResult.success).toBe(true);
-    // Cell-targeted ops return the cell address (not parent table) — unchanged behavior.
+    // Cell-targeted border/shading ops return the follow-up table ref.
     const table = (borderResult as { table?: { nodeType?: string } }).table;
-    expect(table?.nodeType).toBe('tableCell');
+    expect(table?.nodeType).toBe('table');
   });
 
   it('tables.move returns a chainable ref after relocating the table', () => {
@@ -178,7 +178,7 @@ describe('SD-2126: post-mutation table ref handoff', () => {
     const id2 = requireTableNodeId(r1, 'setBorder');
 
     // insertColumn
-    const r2 = tablesInsertColumnAdapter(ed, { tableNodeId: id2, columnIndex: 0, position: 'right' }, DIRECT);
+    const r2 = tablesInsertColumnAdapter(ed, { nodeId: id2, columnIndex: 0, position: 'right' }, DIRECT);
     expect(r2.success).toBe(true);
     expect((r2 as { table?: unknown }).table).toBeDefined();
 
@@ -187,7 +187,7 @@ describe('SD-2126: post-mutation table ref handoff', () => {
     // mergeCells
     const r3 = tablesMergeCellsAdapter(
       ed,
-      { tableNodeId: id3, start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 0, columnIndex: 1 } },
+      { nodeId: id3, start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 0, columnIndex: 1 } },
       DIRECT,
     );
     expect(r3.success).toBe(true);

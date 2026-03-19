@@ -26,24 +26,43 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if all indent values alre
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.nodeType="listItem")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `left` | integer | yes |  |
+| `level` | integer | yes |  |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
-### Variant 2
+### Variant 2 (target.nodeType="listItem")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `hanging` | integer | yes |  |
+| `level` | integer | yes |  |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
-### Variant 3
+### Variant 3 (target.nodeType="listItem")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `firstLine` | integer | yes |  |
+| `level` | integer | yes |  |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
 ```json
 {
-  "firstLine": 1,
-  "hanging": 1,
   "left": 1,
   "level": 1,
   "target": {

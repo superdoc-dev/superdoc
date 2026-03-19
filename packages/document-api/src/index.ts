@@ -159,6 +159,14 @@ import type {
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
   ListsSetTypeInput,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from './lists/lists.types.js';
 import {
   executeListsGet,
@@ -190,6 +198,13 @@ import {
   executeListsSetLevelMarkerFont,
   executeListsClearLevelOverrides,
   executeListsSetType,
+  executeListsGetStyle,
+  executeListsApplyStyle,
+  executeListsRestartAt,
+  executeListsSetLevelNumberStyle,
+  executeListsSetLevelText,
+  executeListsSetLevelStart,
+  executeListsSetLevelLayout,
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
@@ -296,13 +311,7 @@ import type {
   DiffApplyInput,
   DiffApplyOptions,
 } from './diff/diff.types.js';
-import {
-  executeTableLocatorOp,
-  executeRowLocatorOp,
-  executeColumnLocatorOp,
-  executeMergeRangeLocatorOp,
-  executeDocumentLevelTableOp,
-} from './tables/tables.js';
+import { executeTableLocatorOp, executeRowLocatorOp, executeDocumentLevelTableOp } from './tables/tables.js';
 import type {
   ParagraphsAdapter,
   ParagraphFormatApi,
@@ -1217,6 +1226,18 @@ export type {
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
   ListsSetTypeInput,
+  ListStyle,
+  ListLevelStyle,
+  ListLevelLayout,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsGetStyleSuccessResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from './lists/lists.types.js';
 export {
   LIST_KINDS,
@@ -2085,6 +2106,29 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsSetType(adapters.lists, input, options);
       },
+
+      // SD-2025 user-facing operations
+      getStyle(input: ListsGetStyleInput): ListsGetStyleResult {
+        return executeListsGetStyle(adapters.lists, input);
+      },
+      applyStyle(input: ListsApplyStyleInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsApplyStyle(adapters.lists, input, options);
+      },
+      restartAt(input: ListsRestartAtInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsRestartAt(adapters.lists, input, options);
+      },
+      setLevelNumberStyle(input: ListsSetLevelNumberStyleInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelNumberStyle(adapters.lists, input, options);
+      },
+      setLevelText(input: ListsSetLevelTextInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelText(adapters.lists, input, options);
+      },
+      setLevelStart(input: ListsSetLevelStartInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelStart(adapters.lists, input, options);
+      },
+      setLevelLayout(input: ListsSetLevelLayoutInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelLayout(adapters.lists, input, options);
+      },
     },
     sections: {
       list(query?: SectionsListQuery): SectionsListResult {
@@ -2221,7 +2265,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertColumn(input, options?) {
-        return executeColumnLocatorOp(
+        return executeTableLocatorOp(
           'tables.insertColumn',
           adapters.tables.insertColumn.bind(adapters.tables),
           input,
@@ -2229,7 +2273,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       deleteColumn(input, options?) {
-        return executeColumnLocatorOp(
+        return executeTableLocatorOp(
           'tables.deleteColumn',
           adapters.tables.deleteColumn.bind(adapters.tables),
           input,
@@ -2237,7 +2281,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       setColumnWidth(input, options?) {
-        return executeColumnLocatorOp(
+        return executeTableLocatorOp(
           'tables.setColumnWidth',
           adapters.tables.setColumnWidth.bind(adapters.tables),
           input,
@@ -2269,7 +2313,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       mergeCells(input, options?) {
-        return executeMergeRangeLocatorOp(
+        return executeTableLocatorOp(
           'tables.mergeCells',
           adapters.tables.mergeCells.bind(adapters.tables),
           input,

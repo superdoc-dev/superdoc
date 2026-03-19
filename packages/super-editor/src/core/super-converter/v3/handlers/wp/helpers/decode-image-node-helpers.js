@@ -37,9 +37,9 @@ function buildHlinkClickElement(attrs, hlinkRId) {
  * - `a:hlinkClick` child when hyperlink is set (Word's canonical placement per §20.4.2.5)
  * - Decorative extension child when attrs.decorative is true
  */
-function buildDocPrElement(attrs, imageName, hlinkRId) {
+function buildDocPrElement(attrs, imageName, hlinkRId, drawingId) {
   const docPrAttrs = {
-    id: attrs.id || 0,
+    id: drawingId,
     name: attrs.alt || `Picture ${imageName}`,
   };
   // Emit descr (accessibility description) unless decorative
@@ -84,7 +84,7 @@ function buildDocPrElement(attrs, imageName, hlinkRId) {
  * - `a:hlinkClick` child when hyperlink is set (mirrors wp:docPr for compatibility)
  * - `a:picLocks/@noChangeAspect` ← dynamic from attrs.lockAspectRatio
  */
-function buildNvPicPrElement(attrs, imageName, hlinkRId) {
+function buildNvPicPrElement(attrs, imageName, hlinkRId, drawingId) {
   // --- pic:cNvPr children (hyperlink) ---
   const cNvPrChildren = [];
   const hlinkEl = buildHlinkClickElement(attrs, hlinkRId);
@@ -96,7 +96,7 @@ function buildNvPicPrElement(attrs, imageName, hlinkRId) {
       {
         name: 'pic:cNvPr',
         attributes: {
-          id: attrs.id || 0,
+          id: drawingId,
           name: attrs.alt || `Picture ${imageName}`,
         },
         ...(cNvPrChildren.length ? { elements: cNvPrChildren } : {}),
@@ -295,6 +295,9 @@ export const translateImageNode = (params) => {
   // Resolve hyperlink relationship once; shared by wp:docPr and pic:cNvPr.
   const hlinkRId = resolveHyperlinkRId(attrs, params);
 
+  // Ensure valid positive docPr/cNvPr IDs (OOXML requires id > 0).
+  const drawingId = attrs.id && Number(attrs.id) > 0 ? attrs.id : Math.max(1, parseInt(generateDocxRandomId(), 16));
+
   return {
     attributes: inlineAttrs,
     elements: [
@@ -309,7 +312,7 @@ export const translateImageNode = (params) => {
         name: 'wp:effectExtent',
         attributes: effectExtentAttrs,
       },
-      buildDocPrElement(attrs, imageName, hlinkRId),
+      buildDocPrElement(attrs, imageName, hlinkRId, drawingId),
       {
         name: 'wp:cNvGraphicFramePr',
         elements: [
@@ -334,7 +337,7 @@ export const translateImageNode = (params) => {
                 name: 'pic:pic',
                 attributes: { 'xmlns:pic': pictureXmlns },
                 elements: [
-                  buildNvPicPrElement(attrs, imageName, hlinkRId),
+                  buildNvPicPrElement(attrs, imageName, hlinkRId, drawingId),
                   {
                     name: 'pic:blipFill',
                     elements: [

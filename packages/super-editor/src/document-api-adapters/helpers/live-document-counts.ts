@@ -21,11 +21,15 @@ export interface LiveDocumentCounts {
   trackedChanges: number;
   sdtFields: number;
   lists: number;
+  /** Page count from the layout engine, if pagination is active. */
+  pages?: number;
 }
+
+type CachedLiveDocumentCounts = Omit<LiveDocumentCounts, 'pages'>;
 
 type LiveDocumentCountsCacheEntry = {
   doc: Editor['state']['doc'];
-  counts: LiveDocumentCounts;
+  counts: CachedLiveDocumentCounts;
 };
 
 const FIELD_LIKE_SDT_TYPES = new Set(['text', 'date', 'checkbox', 'comboBox', 'dropDownList']);
@@ -34,10 +38,11 @@ const liveDocumentCountsCache = new WeakMap<Editor, LiveDocumentCountsCacheEntry
 /**
  * Computes live document counts from the current editor snapshot.
  *
- * The helper caches the fully-derived counts by immutable ProseMirror
+ * The helper caches document-derived counts by immutable ProseMirror
  * document snapshot. Repeated `doc.info()` reads against the same snapshot
  * reuse the cached result instead of rescanning text, tracked changes, or
- * content controls.
+ * content controls. Page count is merged in fresh on every call because
+ * layout can change without a ProseMirror doc mutation.
  *
  * Count semantics:
  * - `words`: whitespace-delimited tokens from the Document API text projection
@@ -52,22 +57,24 @@ const liveDocumentCountsCache = new WeakMap<Editor, LiveDocumentCountsCacheEntry
  * - `sdtFields`: field-like SDT/content-control nodes (text/date/checkbox/choice controls)
  * - `lists`: unique list sequences, not individual list items. When list items
  *    are visible but `numId` is unavailable, counts fall back to visible runs.
+ * - `pages`: layout page count (omitted when pagination is inactive)
  */
 export function getLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
   const currentDoc = editor.state.doc;
   const cached = liveDocumentCountsCache.get(editor);
+  const pages = countPages(editor);
 
   if (cached && cached.doc === currentDoc) {
-    return cloneLiveDocumentCounts(cached.counts);
+    return cloneLiveDocumentCounts(cached.counts, pages);
   }
 
   const counts = computeLiveDocumentCounts(editor);
   liveDocumentCountsCache.set(editor, { doc: currentDoc, counts });
 
-  return cloneLiveDocumentCounts(counts);
+  return cloneLiveDocumentCounts(counts, pages);
 }
 
-function computeLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
+function computeLiveDocumentCounts(editor: Editor): CachedLiveDocumentCounts {
   const text = getTextAdapter(editor, {});
   const blockIndex = getBlockIndex(editor);
   const inlineIndex = getInlineIndex(editor);
@@ -89,8 +96,8 @@ function computeLiveDocumentCounts(editor: Editor): LiveDocumentCounts {
   };
 }
 
-function cloneLiveDocumentCounts(counts: LiveDocumentCounts): LiveDocumentCounts {
-  return { ...counts };
+function cloneLiveDocumentCounts(counts: CachedLiveDocumentCounts, pages: number | undefined): LiveDocumentCounts {
+  return pages != null ? { ...counts, pages } : { ...counts };
 }
 
 /**
@@ -268,4 +275,13 @@ function resolveVisibleListLevel(item: ListItemProjection): number | undefined {
   }
 
   return item.path && item.path.length > 0 ? item.path.length - 1 : undefined;
+}
+
+/**
+ * Returns the current page count when pagination is active.
+ * Delegates to `editor.currentTotalPages`, which returns `undefined`
+ * when no PresentationEditor exists or layout hasn't completed.
+ */
+export function countPages(editor: Editor): number | undefined {
+  return editor.currentTotalPages;
 }

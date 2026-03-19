@@ -103,6 +103,14 @@ import type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from '../lists/lists.types.js';
 import type {
   ParagraphMutationResult,
@@ -689,6 +697,19 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ListsMutateItemResult;
   };
+
+  // --- lists.* (SD-2025 user-facing) ---
+  'lists.getStyle': { input: ListsGetStyleInput; options: never; output: ListsGetStyleResult };
+  'lists.applyStyle': { input: ListsApplyStyleInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.restartAt': { input: ListsRestartAtInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelNumberStyle': {
+    input: ListsSetLevelNumberStyleInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelText': { input: ListsSetLevelTextInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelStart': { input: ListsSetLevelStartInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelLayout': { input: ListsSetLevelLayoutInput; options: MutationOptions; output: ListsMutateItemResult };
 
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };

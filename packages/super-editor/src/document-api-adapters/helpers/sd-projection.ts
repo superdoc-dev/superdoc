@@ -106,9 +106,10 @@ export function projectMarkBasedInline(
 /**
  * Matches a PM block node against a blockId by checking all known ID attributes.
  *
- * The block index assigns primary IDs using `resolveBlockNodeId` which prefers
- * `paraId` over `sdBlockId` for paragraphs and tables. Inline anchors carry
- * this primary ID. To match correctly we must check all candidate attributes.
+ * The block index assigns primary IDs using `resolveBlockNodeId`, which may
+ * choose `paraId` or `sdBlockId` depending on node type and document origin.
+ * Inline anchors carry this primary ID, so matching must check all supported
+ * identity attributes rather than assuming a single source.
  */
 function blockMatchesId(node: ProseMirrorNode, blockId: string): boolean {
   const attrs = node.attrs as Record<string, unknown> | undefined;

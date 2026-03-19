@@ -26,25 +26,32 @@ Returns a ParagraphMutationResult; reports NO_OP if the shading already matches.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target, fill)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `fill` | string | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2
+### Variant 2 (target, color)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `color` | string | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3
+### Variant 3 (target, pattern)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pattern` | string | yes |  |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
 ### Example request
 
 ```json
 {
-  "color": "example",
   "fill": "example",
-  "pattern": "hello world",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",

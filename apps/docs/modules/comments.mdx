@@ -546,6 +546,39 @@ const superdoc = new SuperDoc({
 
 </CodeGroup>
 
+### `scrollToComment`
+
+Scroll the document to a comment and set it as active. Unlike `setCursorById`, this is a top-level SuperDoc method that works without accessing the editor directly.
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.scrollToComment("comment-123");
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  modules: { comments: {} },
+  onReady: (superdoc) => {
+    const { items } = superdoc.editor.doc.comments.list();
+    if (items.length > 0) {
+      superdoc.scrollToComment(items[0].id);
+    }
+  },
+});
+```
+
+</CodeGroup>
+
+<Tip>
+  See [SuperDoc Methods](/core/superdoc/methods#scrolltocomment) for full parameter documentation.
+</Tip>
+
 ## Events
 
 ### `onCommentsUpdate`

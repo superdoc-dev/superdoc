@@ -26,25 +26,38 @@ Returns a SectionMutationResult receipt; reports NO_OP if column configuration a
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `count` | integer | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 2
+### Variant 2 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `gap` | number | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
-### Variant 3
+### Variant 3 (target.kind="section")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `equalWidth` | boolean | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
   "count": 1,
-  "equalWidth": true,
-  "gap": 12.5,
   "target": {
     "kind": "section",
     "sectionId": "example"

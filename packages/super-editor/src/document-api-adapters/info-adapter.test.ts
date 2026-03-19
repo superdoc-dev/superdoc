@@ -129,6 +129,16 @@ describe('infoAdapter', () => {
     expect(result.revision).toBe('42');
   });
 
+  it('passes through pages count when present', () => {
+    const countsWithPages = { ...DEFAULT_COUNTS, pages: 12 };
+    getLiveDocumentCountsMock.mockReturnValue(countsWithPages);
+    findLegacyAdapterMock.mockReturnValue(makeFindOutput());
+
+    const result = infoAdapter({} as Editor, {});
+
+    expect(result.counts.pages).toBe(12);
+  });
+
   it('only calls findLegacyAdapter for heading query (not for counts)', () => {
     getLiveDocumentCountsMock.mockReturnValue(DEFAULT_COUNTS);
     findLegacyAdapterMock.mockReturnValue(makeFindOutput());

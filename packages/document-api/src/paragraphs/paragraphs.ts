@@ -136,7 +136,7 @@ export interface ParagraphFormatApi {
   clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
-/** Public API surface for `styles.paragraph.*` — paragraph style reference operations. */
+/** Public API surface for `styles.paragraph.*` — Word-like paragraph style application operations. */
 export interface ParagraphStylesApi {
   setStyle(input: ParagraphsSetStyleInput, options?: MutationOptions): ParagraphMutationResult;
   clearStyle(input: ParagraphsClearStyleInput, options?: MutationOptions): ParagraphMutationResult;

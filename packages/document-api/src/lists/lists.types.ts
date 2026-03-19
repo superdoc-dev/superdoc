@@ -154,9 +154,49 @@ export interface ListTargetInput {
 // Input types — new SD-1272 operations
 // ---------------------------------------------------------------------------
 
+/**
+ * Create a new list from existing paragraphs.
+ *
+ * When `sequence.mode` is `'continuePrevious'`, `preset` and `style` are
+ * not allowed — the new items inherit formatting from the previous sequence.
+ */
 export type ListsCreateInput =
-  | { mode: 'empty'; at: BlockAddress; kind: ListKind; level?: number }
-  | { mode: 'fromParagraphs'; target: BlockAddress | BlockRange; kind: ListKind; level?: number };
+  | {
+      mode: 'empty';
+      at: BlockAddress;
+      kind?: ListKind;
+      level?: number;
+      preset?: ListPresetId;
+      style?: ListStyle;
+      sequence?: { mode: 'new'; startAt?: number };
+    }
+  | {
+      mode: 'empty';
+      at: BlockAddress;
+      kind?: ListKind;
+      level?: number;
+      preset?: never;
+      style?: never;
+      sequence: { mode: 'continuePrevious' };
+    }
+  | {
+      mode: 'fromParagraphs';
+      target: BlockAddress | BlockRange;
+      kind?: ListKind;
+      level?: number;
+      preset?: ListPresetId;
+      style?: ListStyle;
+      sequence?: { mode: 'new'; startAt?: number };
+    }
+  | {
+      mode: 'fromParagraphs';
+      target: BlockAddress | BlockRange;
+      kind?: ListKind;
+      level?: number;
+      preset?: never;
+      style?: never;
+      sequence: { mode: 'continuePrevious' };
+    };
 
 export interface ListsAttachInput {
   target: BlockAddress | BlockRange;
@@ -232,12 +272,40 @@ export interface ListLevelTemplate {
   trailingCharacter?: TrailingCharacter;
   markerFont?: string;
   pictureBulletId?: number;
+  tabStopAt?: number | null;
 }
 
 /** A full list template: an array of level snapshots. */
 export interface ListTemplate {
   version: 1;
   levels: ListLevelTemplate[];
+}
+
+// ---------------------------------------------------------------------------
+// SD-2025 user-facing style aliases and new types
+// ---------------------------------------------------------------------------
+
+/** Reusable list style object — alias of ListTemplate for user-facing naming. */
+export type ListStyle = ListTemplate;
+
+/** Reusable level style — alias of ListLevelTemplate for user-facing naming. */
+export type ListLevelStyle = ListLevelTemplate;
+
+/**
+ * Dialog-shaped layout input for `lists.setLevelLayout`.
+ * All numeric values are in twips.
+ *
+ * Partial-update semantics:
+ *   - undefined (omitted): leave current value unchanged
+ *   - null (explicit):      remove/clear the value (only valid for tabStopAt)
+ *   - present value:        set it
+ */
+export interface ListLevelLayout {
+  alignment?: LevelAlignment;
+  alignedAt?: number;
+  textIndentAt?: number;
+  followCharacter?: TrailingCharacter;
+  tabStopAt?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +388,61 @@ export interface ListsClearLevelOverridesInput {
   target: ListItemAddress;
   level: number;
 }
+
+// ---------------------------------------------------------------------------
+// Input types — SD-2025 user-facing operations
+// ---------------------------------------------------------------------------
+
+export interface ListsGetStyleInput {
+  target: ListItemAddress;
+  levels?: number[];
+}
+
+export interface ListsApplyStyleInput {
+  target: ListItemAddress;
+  style: ListStyle;
+  levels?: number[];
+}
+
+export interface ListsRestartAtInput {
+  target: ListItemAddress;
+  startAt: number;
+}
+
+export interface ListsSetLevelNumberStyleInput {
+  target: ListItemAddress;
+  level: number;
+  numberStyle: string;
+}
+
+export interface ListsSetLevelTextInput {
+  target: ListItemAddress;
+  level: number;
+  text: string;
+}
+
+export interface ListsSetLevelStartInput {
+  target: ListItemAddress;
+  level: number;
+  startAt: number;
+}
+
+export interface ListsSetLevelLayoutInput {
+  target: ListItemAddress;
+  level: number;
+  layout: ListLevelLayout;
+}
+
+// ---------------------------------------------------------------------------
+// Result types — SD-2025
+// ---------------------------------------------------------------------------
+
+export interface ListsGetStyleSuccessResult {
+  success: true;
+  style: ListStyle;
+}
+
+export type ListsGetStyleResult = ListsGetStyleSuccessResult | ListsFailureResult;
 
 // ---------------------------------------------------------------------------
 // Result types — SD-1973

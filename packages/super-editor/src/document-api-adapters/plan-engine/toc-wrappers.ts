@@ -37,7 +37,13 @@ import {
   extractTocInfo,
   buildTocDiscoveryItem,
 } from '../helpers/toc-resolver.js';
-import { collectTocSources, buildTocEntryParagraphs, type EntryParagraphJson } from '../helpers/toc-entry-builder.js';
+import {
+  collectTocSources,
+  buildTocEntryParagraphs,
+  type EntryParagraphJson,
+  type TocSource,
+} from '../helpers/toc-entry-builder.js';
+import { syncTocBookmarks } from '../helpers/toc-bookmark-sync.js';
 import { paginate } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
 import { executeDomainCommand } from './plan-wrappers.js';
@@ -246,11 +252,16 @@ function sanitizeTocContentForSchema(content: EntryParagraphJson[], editor: Edit
   });
 }
 
-function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig, editor: Editor): EntryParagraphJson[] {
+interface MaterializedToc {
+  content: EntryParagraphJson[];
+  sources: TocSource[];
+}
+
+function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig, editor: Editor): MaterializedToc {
   const sources = collectTocSources(doc, config);
   const entryParagraphs = buildTocEntryParagraphs(sources, config);
   const content = entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
-  return sanitizeTocContentForSchema(content, editor);
+  return { content: sanitizeTocContentForSchema(content, editor), sources };
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +289,11 @@ export function tocConfigureWrapper(
   // Patch value takes priority; fall back to existing node attr.
   const effectiveRightAlign =
     input.patch.rightAlignPageNumbers ?? (resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined);
-  const nextContent = materializeTocContent(editor.state.doc, withRightAlign(patched, effectiveRightAlign), editor);
+  const { content: nextContent, sources } = materializeTocContent(
+    editor.state.doc,
+    withRightAlign(patched, effectiveRightAlign),
+    editor,
+  );
 
   if (areTocConfigsEqual(currentConfig, patched) && !rightAlignChanged) {
     return tocFailure('NO_OP', 'Configuration patch produced no change.');
@@ -332,6 +347,8 @@ export function tocConfigureWrapper(
     return tocFailure('NO_OP', 'Configuration change could not be applied.');
   }
 
+  syncTocBookmarks(editor, sources);
+
   // Re-resolve after mutation to return the current public TOC id.
   // We look up by sdBlockId because instruction updates may change fallback IDs.
   const postMutationId = resolvePostMutationTocId(editor.state.doc, commandNodeId);
@@ -361,7 +378,7 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
   const rightAlign = resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined;
-  const content = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor);
+  const { content, sources } = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor);
 
   // NO_OP detection: compare new content against existing before executing.
   // The PM command returns "found" (not "content changed"), so receipt-based
@@ -403,7 +420,12 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
           options?.expectedRevision,
         );
 
-  return receiptApplied(receipt) ? tocSuccess(resolved.nodeId) : tocFailure('NO_OP', 'TOC update produced no change.');
+  if (!receiptApplied(receipt)) {
+    return tocFailure('NO_OP', 'TOC update produced no change.');
+  }
+
+  syncTocBookmarks(editor, sources);
+  return tocSuccess(resolved.nodeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -642,7 +664,7 @@ export function createTableOfContentsWrapper(
   // Build instruction from config patch or use defaults
   const config = input.config ? applyTocPatchTyped(DEFAULT_TOC_CONFIG, input.config) : DEFAULT_TOC_CONFIG;
   const instruction = serializeTocInstruction(config);
-  const content = materializeTocContent(
+  const { content, sources } = materializeTocContent(
     editor.state.doc,
     withRightAlign(config, input.config?.rightAlignPageNumbers),
     editor,
@@ -715,6 +737,8 @@ export function createTableOfContentsWrapper(
       },
     };
   }
+
+  syncTocBookmarks(editor, sources);
 
   // Re-resolve and return the public TOC id exposed by toc.list/toc.get.
   const postMutationId = resolvePostMutationTocId(editor.state.doc, sdBlockId);

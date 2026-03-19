@@ -2531,38 +2531,22 @@ export function layoutHeaderFooter(
     return { pages: [], height: 0 };
   }
 
-  // Transform page-relative horizontal anchor offsets to content-relative for correct
-  // positioning. Headers/footers are rendered within the content box, but page-relative
-  // anchors specify offsets from the physical page edge.
-  const marginLeft = constraints.margins?.left ?? 0;
-  const transformedBlocks =
-    marginLeft > 0
-      ? blocks.map((block) => {
-          const hasPageRelativeAnchor =
-            (block.kind === 'image' || block.kind === 'drawing') &&
-            block.anchor?.hRelativeFrom === 'page' &&
-            block.anchor.offsetH != null;
-          if (hasPageRelativeAnchor) {
-            return {
-              ...block,
-              anchor: {
-                ...block.anchor,
-                offsetH: block.anchor!.offsetH! - marginLeft,
-              },
-            };
-          }
-          return block;
-        })
-      : blocks;
-
-  const layout = layoutDocument(transformedBlocks, measures, {
+  const layout = layoutDocument(blocks, measures, {
     pageSize: { w: width, h: height },
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
   });
 
-  // Post-normalize vertical positions of page-relative / margin-relative anchored
-  // drawings from the synthetic measurement canvas to header/footer-local coordinates.
-  if (kind && constraints.pageHeight != null) {
+  // Post-normalize page-relative anchored fragment Y positions for footers.
+  //
+  // The inner layoutDocument() uses the body content height as its page height,
+  // but page-relative anchors need the REAL physical page height to resolve
+  // bottom/center alignment correctly. This post-correction rewrites their Y
+  // to footer-band-local coordinates using the real page geometry.
+  //
+  // Headers don't need this: the inner layout's page-relative Y is already
+  // correct relative to the header container, and the painter handles the
+  // container-to-page offset via effectiveOffset subtraction.
+  if (kind === 'footer' && constraints.pageHeight != null) {
     normalizeFragmentsForRegion(layout.pages, blocks, measures, kind, constraints);
   }
 

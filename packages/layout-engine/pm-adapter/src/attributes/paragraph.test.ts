@@ -173,6 +173,7 @@ describe('computeParagraphAttrs', () => {
 
   it('passes previousParagraphFont to marker run when paragraph has listRendering and numbering', () => {
     const previousFont = { fontFamily: 'MarkerFont, sans-serif', fontSize: 11 };
+
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       attrs: {
@@ -257,6 +258,22 @@ describe('computeParagraphAttrs', () => {
     expect(markerRun?.fontFamily).toContain('Symbol');
     // Font size still inherits from previous paragraph when the paragraph has no explicit run props.
     expect(markerRun?.fontSize).toBe(11);
+  });
+
+  it('preserves explicit paragraph bidi direction', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.direction).toBe('rtl');
+    expect(paragraphAttrs.rtl).toBe(true);
   });
 });
 

@@ -283,6 +283,12 @@ export const computeParagraphAttrs = (
   const paragraphDecimalSeparator = DEFAULT_DECIMAL_SEPARATOR;
   const tabIntervalTwips = DEFAULT_TAB_INTERVAL_TWIPS;
   const normalizedFramePr = normalizeFramePr(resolvedParagraphProperties.framePr);
+  const normalizedDirection =
+    resolvedParagraphProperties.rightToLeft === true
+      ? 'rtl'
+      : resolvedParagraphProperties.rightToLeft === false
+        ? 'ltr'
+        : undefined;
   const floatAlignment = normalizedFramePr?.xAlign;
   const normalizedNumberingProperties = normalizeNumberingProperties(resolvedParagraphProperties.numberingProperties);
   const dropCapDescriptor = normalizeDropCap(resolvedParagraphProperties.framePr, para, converterContext);
@@ -312,7 +318,8 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    direction: resolvedParagraphProperties.rightToLeft ? 'rtl' : undefined,
+    direction: normalizedDirection,
+    rtl: normalizedDirection === 'rtl' ? true : normalizedDirection === 'ltr' ? false : undefined,
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {

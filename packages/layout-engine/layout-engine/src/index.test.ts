@@ -2639,10 +2639,10 @@ describe('layoutHeaderFooter', () => {
     expect(layout.height).toBeCloseTo(15);
   });
 
-  it('transforms page-relative anchor offsets by subtracting left margin', () => {
-    // An anchored image with hRelativeFrom='page' and offsetH=545 (absolute from page left)
-    // When left margin is 107, the image should be positioned at 545-107=438 within the header
-    // Anchored images are attached to the nearest paragraph and placed during paragraph layout
+  it('preserves page-relative horizontal anchor offset in header/footer layout', () => {
+    // page-relative hRelativeFrom='page' offsets are passed through to the inner
+    // layoutDocument unchanged. The painter handles the margin offset when
+    // positioning the container on the page.
     const paragraphBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'para-1',
@@ -2671,18 +2671,19 @@ describe('layoutHeaderFooter', () => {
     };
 
     const layout = layoutHeaderFooter([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], {
-      width: 602, // content width
+      width: 602,
       height: 100,
-      pageWidth: 816, // actual page width (8.5" at 96dpi)
+      pageWidth: 816,
       margins: { left: 107, right: 107 },
     });
 
     expect(layout.pages).toHaveLength(1);
-    // Find the image fragment (should be anchored)
     const imageFragment = layout.pages[0].fragments.find((f) => f.kind === 'image');
     expect(imageFragment).toBeDefined();
-    // The offsetH should be transformed: 545 - 107 = 438
-    expect(imageFragment!.x).toBe(438);
+    // offsetH is passed through to inner layout's computeAnchorX; the result
+    // includes the offset plus margin-left added by computeAnchorX for page-relative.
+    // Inner layout has margins=0, so computeAnchorX returns offsetH + 0 = 545.
+    expect(imageFragment!.x).toBe(545);
   });
 
   it('does not transform anchor offset when margins not provided', () => {
@@ -3062,11 +3063,11 @@ describe('layoutHeaderFooter', () => {
     expect(layout.renderHeight).toBeGreaterThan(layout.height);
   });
 
-  it('post-normalizes page-relative anchors when kind is provided', () => {
+  it('post-normalizes page-relative anchors in footer layout', () => {
     const paragraphBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'para-1',
-      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+      runs: [{ text: 'Footer text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
     };
     const imageBlock: FlowBlock = {
       kind: 'image',
@@ -3075,8 +3076,8 @@ describe('layoutHeaderFooter', () => {
       anchor: {
         isAnchored: true,
         vRelativeFrom: 'page',
-        alignV: 'top',
-        offsetV: 10,
+        alignV: 'bottom',
+        offsetV: 0,
         hRelativeFrom: 'page',
         offsetH: 0,
       },
@@ -3099,26 +3100,126 @@ describe('layoutHeaderFooter', () => {
       margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
     };
 
-    // Without kind: no normalization
+    // Without kind='footer': no normalization — raw inner-layout Y
     const withoutKind = layoutHeaderFooter([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], constraints);
     const imgFragWithout = withoutKind.pages[0]?.fragments.find((f) => f.kind === 'image');
 
-    // With kind: normalization converts synthetic y to header-local y
-    const withKind = layoutHeaderFooter(
+    // With kind='footer': normalization converts to footer-band-local Y
+    const withFooter = layoutHeaderFooter(
       [paragraphBlock, imageBlock],
       [paragraphMeasure, imageMeasure],
       constraints,
-      'header',
+      'footer',
     );
-    const imgFragWith = withKind.pages[0]?.fragments.find((f) => f.kind === 'image');
+    const imgFragFooter = withFooter.pages[0]?.fragments.find((f) => f.kind === 'image');
 
-    // The normalized y should be physicalY - bandOrigin = 10 - 36 = -26
-    expect(imgFragWith).toBeDefined();
-    expect(imgFragWith!.y).toBe(10 - 36);
+    // Footer band origin = pageHeight - marginBottom = 1056 - 72 = 984
+    // physicalY = pageHeight - imgHeight = 1056 - 30 = 1026
+    // normalized Y = 1026 - 984 = 42
+    expect(imgFragFooter).toBeDefined();
+    expect(imgFragFooter!.y).toBe(1056 - 30 - (1056 - 72));
 
-    // Without kind, the y is the synthetic canvas position (not normalized)
+    // Without kind, the Y is the synthetic canvas position (not normalized)
     expect(imgFragWithout).toBeDefined();
-    expect(imgFragWithout!.y).not.toBe(imgFragWith!.y);
+    expect(imgFragWithout!.y).not.toBe(imgFragFooter!.y);
+  });
+
+  it('does NOT post-normalize page-relative anchors in header layout', () => {
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: 10,
+      },
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+
+    const constraints = {
+      width: 200,
+      height: 800,
+      pageHeight: 1056,
+      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+    };
+
+    // With kind='header': no normalization — Y stays as inner-layout computed it
+    const withHeader = layoutHeaderFooter([imageBlock], [imageMeasure], constraints, 'header');
+    const imgFrag = withHeader.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // Without kind: same behavior (no normalization)
+    const withoutKind = layoutHeaderFooter([imageBlock], [imageMeasure], constraints);
+    const imgFragNoKind = withoutKind.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // Both should have the same Y — inner-layout raw position
+    expect(imgFrag).toBeDefined();
+    expect(imgFragNoKind).toBeDefined();
+    expect(imgFrag!.y).toBe(imgFragNoKind!.y);
+  });
+
+  it('does not narrow footer paragraphs around page-relative anchored textboxes', () => {
+    // Regression: the page-number textbox in the footer must not shrink
+    // unrelated earlier footer paragraphs via float-based remeasurement.
+    // Word keeps footer paragraphs full-width and positions page-relative
+    // textboxes independently.
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Footer text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        alignH: 'left',
+        vRelativeFrom: 'page',
+        alignV: 'bottom',
+        offsetV: 0,
+      },
+      wrap: {
+        type: 'Square',
+        wrapText: 'right',
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 180, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 80,
+      height: 60,
+    };
+    const constraints = {
+      width: 200,
+      height: 120,
+      pageHeight: 300,
+      margins: { left: 20, right: 20, top: 40, bottom: 60, header: 20 },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, imageBlock],
+      [paragraphMeasure, imageMeasure],
+      constraints,
+      'footer',
+    );
+
+    const paragraphFragment = layout.pages[0].fragments.find((fragment) => fragment.kind === 'para') as ParaFragment;
+
+    // Paragraph must keep the full footer width -- no float wrapping
+    expect(paragraphFragment).toBeDefined();
+    expect(paragraphFragment.x).toBe(0);
+    expect(paragraphFragment.width).toBe(200);
   });
 });
 

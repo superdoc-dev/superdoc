@@ -2969,6 +2969,157 @@ describe('layoutHeaderFooter', () => {
   // ALL behindDoc images are now excluded from height calculations, regardless of position.
   // See tests above: 'excludes ALL behindDoc anchored fragments from height (per OOXML spec)'
   // and 'excludes ALL behindDoc fragments but includes non-behindDoc anchored images'.
+
+  it('separates measurement bounds (height) from render bounds (minY/maxY/renderHeight)', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const behindDocImage: FlowBlock = {
+      kind: 'image',
+      id: 'img-behind',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        behindDoc: true,
+        offsetV: -30, // positioned above the band origin
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 40,
+    };
+
+    const layout = layoutHeaderFooter([paragraphBlock, behindDocImage], [paragraphMeasure, imageMeasure], {
+      width: 200,
+      height: 100,
+    });
+
+    // Measurement height should only include the paragraph (behindDoc excluded)
+    expect(layout.height).toBeCloseTo(15);
+    // Render bounds should include the behindDoc image (minY < 0 because of negative offsetV)
+    expect(layout.minY).toBeLessThan(0);
+    // renderHeight should be larger than measurement height
+    expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('returns renderHeight equal to height when no out-of-band fragments exist', () => {
+    const layout = layoutHeaderFooter([block], [makeMeasure([20, 10])], { width: 400, height: 80 });
+
+    // With only normal paragraphs, measurement and render bounds should match
+    expect(layout.height).toBeCloseTo(30);
+    expect(layout.renderHeight).toBe(layout.height);
+    expect(layout.minY).toBe(0);
+    expect(layout.maxY).toBeCloseTo(30);
+  });
+
+  it('excludes out-of-band page-relative anchors from measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    // Page-relative anchor positioned far above the measurement canvas
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: -100, // way above the canvas
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+
+    const layout = layoutHeaderFooter([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], {
+      width: 200,
+      height: 100,
+    });
+
+    // The page-relative anchor at y=-100 is fully out-of-band (bottom = -100+30 = -70 < 0)
+    // so it should be excluded from measurement height
+    expect(layout.height).toBeCloseTo(15);
+    // But render bounds should include it
+    expect(layout.minY).toBeLessThan(0);
+    expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('post-normalizes page-relative anchors when kind is provided', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: 10,
+        hRelativeFrom: 'page',
+        offsetH: 0,
+      },
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+
+    const constraints = {
+      width: 200,
+      height: 800,
+      pageHeight: 1056,
+      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+    };
+
+    // Without kind: no normalization
+    const withoutKind = layoutHeaderFooter([paragraphBlock, imageBlock], [paragraphMeasure, imageMeasure], constraints);
+    const imgFragWithout = withoutKind.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // With kind: normalization converts synthetic y to header-local y
+    const withKind = layoutHeaderFooter(
+      [paragraphBlock, imageBlock],
+      [paragraphMeasure, imageMeasure],
+      constraints,
+      'header',
+    );
+    const imgFragWith = withKind.pages[0]?.fragments.find((f) => f.kind === 'image');
+
+    // The normalized y should be physicalY - bandOrigin = 10 - 36 = -26
+    expect(imgFragWith).toBeDefined();
+    expect(imgFragWith!.y).toBe(10 - 36);
+
+    // Without kind, the y is the synthetic canvas position (not normalized)
+    expect(imgFragWithout).toBeDefined();
+    expect(imgFragWithout!.y).not.toBe(imgFragWith!.y);
+  });
 });
 
 describe('requirePageBoundary edge cases', () => {

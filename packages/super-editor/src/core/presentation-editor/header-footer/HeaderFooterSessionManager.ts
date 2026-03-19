@@ -40,6 +40,7 @@ import {
   type HeaderFooterIdentifier,
   type HeaderFooterLayoutResult,
   type MultiSectionHeaderFooterIdentifier,
+  type HeaderFooterConstraints,
 } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../dom/DomSelectionGeometry.js';
 
@@ -100,13 +101,7 @@ export type HeaderFooterInput = {
   footerBlocks?: unknown;
   headerBlocksByRId: Map<string, FlowBlock[]> | undefined;
   footerBlocksByRId: Map<string, FlowBlock[]> | undefined;
-  constraints: {
-    width: number;
-    height: number;
-    pageWidth: number;
-    margins: { left: number; right: number };
-    overflowBaseHeight?: number;
-  };
+  constraints: HeaderFooterConstraints;
 } | null;
 
 /**
@@ -1162,7 +1157,14 @@ export class HeaderFooterSessionManager {
       width: measurementWidth,
       height,
       pageWidth: pageSize.w,
-      margins: { left: marginLeft, right: marginRight },
+      pageHeight: pageSize.h,
+      margins: {
+        left: marginLeft,
+        right: marginRight,
+        top: marginTop,
+        bottom: marginBottom,
+        header: headerMargin,
+      },
       overflowBaseHeight,
     };
   }

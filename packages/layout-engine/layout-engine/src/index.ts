@@ -40,7 +40,13 @@ import { layoutParagraphBlock } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
 import { layoutDrawingBlock } from './layout-drawing.js';
 import { layoutTableBlock, createAnchoredTableFragment, ANCHORED_TABLE_FULL_WIDTH_RATIO } from './layout-table.js';
-import { collectAnchoredDrawings, collectAnchoredTables, collectPreRegisteredAnchors } from './anchors.js';
+import {
+  collectAnchoredDrawings,
+  collectAnchoredTables,
+  collectPreRegisteredAnchors,
+  isPageRelativeAnchor,
+} from './anchors.js';
+import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
 import { formatPageNumber } from './pageNumbering.js';
 import { shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
@@ -509,11 +515,25 @@ export type LayoutOptions = {
 
 export type HeaderFooterConstraints = {
   width: number;
+  /** Body content height used as the measurement canvas (pagination boundary). */
   height: number;
-  /** Actual page width for page-relative anchor positioning */
+  /** Actual page width for page-relative anchor positioning. */
   pageWidth?: number;
-  /** Page margins for page-relative anchor positioning */
-  margins?: { left: number; right: number };
+  /** Physical page height for vertical page-relative anchor conversion. */
+  pageHeight?: number;
+  /**
+   * Page margins for anchor positioning.
+   * `left`/`right`: horizontal page-relative conversion.
+   * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
+   * `header`: header distance from page top edge (header band origin).
+   */
+  margins?: {
+    left: number;
+    right: number;
+    top?: number;
+    bottom?: number;
+    header?: number;
+  };
   /**
    * Optional base height used to bound behindDoc overflow handling.
    * When provided, decorative assets far outside the header/footer band
@@ -2395,35 +2415,104 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 }
 
 /**
+ * Compute the bottom edge (y + height) of a fragment for bounds tracking.
+ */
+function computeFragmentBottom(fragment: Fragment, block: FlowBlock, measure: Measure): number {
+  let bottom = fragment.y;
+
+  if (fragment.kind === 'para' && measure?.kind === 'paragraph') {
+    let sum = 0;
+    for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
+      sum += measure.lines[li]?.lineHeight ?? 0;
+    }
+    bottom += sum;
+    const spacingAfter = (block as ParagraphBlock)?.attrs?.spacing?.after;
+    if (spacingAfter && fragment.toLine === measure.lines.length) {
+      bottom += Math.max(0, Number(spacingAfter));
+    }
+  } else if (fragment.kind === 'image') {
+    bottom +=
+      typeof fragment.height === 'number' ? fragment.height : ((measure as ImageMeasure | undefined)?.height ?? 0);
+  } else if (fragment.kind === 'drawing') {
+    bottom +=
+      typeof fragment.height === 'number' ? fragment.height : ((measure as DrawingMeasure | undefined)?.height ?? 0);
+  } else if (fragment.kind === 'list-item') {
+    const listMeasure = measure as ListMeasure | undefined;
+    if (listMeasure) {
+      const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
+      if (item?.paragraph) {
+        let sum = 0;
+        for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
+          sum += item.paragraph.lines[li]?.lineHeight ?? 0;
+        }
+        bottom += sum;
+      }
+    }
+  }
+
+  return bottom;
+}
+
+/**
+ * Determine whether a fragment should be excluded from measurement (pagination) bounds.
+ *
+ * Excluded fragments:
+ * 1. behindDoc anchored fragments — purely decorative z-order, per OOXML spec.
+ * 2. Page-relative anchored fragments whose local Y range [y, y+h] does not
+ *    intersect [0, canvasHeight] — they are out-of-band and should not inflate
+ *    the measurement used by body pagination.
+ */
+function shouldExcludeFromMeasurement(fragment: Fragment, block: FlowBlock, canvasHeight: number): boolean {
+  const isAnchoredFragment =
+    (fragment.kind === 'image' || fragment.kind === 'drawing') &&
+    (fragment as { isAnchored?: boolean }).isAnchored === true;
+
+  if (!isAnchoredFragment) return false;
+
+  if (block.kind !== 'image' && block.kind !== 'drawing') {
+    throw new Error(
+      `Type mismatch: fragment kind is ${fragment.kind} but block kind is ${block.kind} for block ${block.id}`,
+    );
+  }
+
+  const anchoredBlock = block as ImageBlock | DrawingBlock;
+
+  // behindDoc fragments never affect measurement
+  if (anchoredBlock.anchor?.behindDoc) return true;
+
+  // Page-relative anchored fragments that sit entirely outside the measurement band
+  // should not inflate pagination height.
+  if (isPageRelativeAnchor(anchoredBlock)) {
+    const fragmentHeight = (fragment as { height?: number }).height ?? 0;
+    const fragmentTop = fragment.y;
+    const fragmentBottom = fragment.y + fragmentHeight;
+    // Exclude if the fragment range [top, bottom] does not intersect [0, canvasHeight]
+    if (fragmentBottom <= 0 || fragmentTop >= canvasHeight) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Lays out header or footer content within specified dimensional constraints.
  *
- * This function positions blocks (paragraphs, images, drawings) within a header or footer region,
- * handling page-relative anchor transformations and computing the actual height required by
- * visible content. Headers and footers are rendered within the content box but may contain
- * page-relative anchored objects that need coordinate transformation.
+ * Positions blocks within a header/footer region, handling page-relative anchor
+ * transformations and computing the actual height required by visible content.
  *
- * @param blocks - The flow blocks to layout (paragraphs, images, drawings, etc.)
- * @param measures - Corresponding measurements for each block (must match blocks.length)
- * @param constraints - Dimensional constraints including width, height, and optional margins
+ * When `kind` and `constraints.pageHeight` are provided, page-relative and
+ * margin-relative anchored drawings are post-normalized from the synthetic
+ * measurement canvas to header/footer-local coordinates.
  *
- * @returns A HeaderFooterLayout containing:
- *   - pages: Array of laid-out pages with positioned fragments
- *   - height: The actual height consumed by visible content
- *
- * @throws {Error} If blocks and measures arrays have different lengths
- * @throws {Error} If width or height constraints are not positive finite numbers
- *
- * Special handling for behindDoc anchored fragments:
- * - Anchored images/drawings with behindDoc=true are decorative background elements
- * - Per OOXML spec, behindDoc is purely a z-ordering directive that should NOT affect layout
- * - These fragments are ALWAYS excluded from height calculations, regardless of position
- * - This matches Word behavior where behindDoc images never inflate header/footer margins
- * - All behindDoc fragments are still rendered in the layout; they're only excluded from height
+ * Returns separate measurement bounds (for pagination) and render bounds
+ * (for overlay shift). See the Coordinate Contract in the fix plan for details.
  */
 export function layoutHeaderFooter(
   blocks: FlowBlock[],
   measures: Measure[],
   constraints: HeaderFooterConstraints,
+  kind?: 'header' | 'footer',
 ): HeaderFooterLayout {
   if (blocks.length !== measures.length) {
     throw new Error(
@@ -2442,15 +2531,13 @@ export function layoutHeaderFooter(
     return { pages: [], height: 0 };
   }
 
-  // Transform page-relative anchor offsets to content-relative for correct positioning
-  // Headers/footers are rendered within the content box, but page-relative anchors
-  // specify offsets from the physical page edge. We need to adjust by subtracting
-  // the left margin so the image appears at the correct position within the header/footer.
+  // Transform page-relative horizontal anchor offsets to content-relative for correct
+  // positioning. Headers/footers are rendered within the content box, but page-relative
+  // anchors specify offsets from the physical page edge.
   const marginLeft = constraints.margins?.left ?? 0;
   const transformedBlocks =
     marginLeft > 0
       ? blocks.map((block) => {
-          // Handle both image blocks and drawing blocks (vectorShape, shapeGroup)
           const hasPageRelativeAnchor =
             (block.kind === 'image' || block.kind === 'drawing') &&
             block.anchor?.hRelativeFrom === 'page' &&
@@ -2473,14 +2560,25 @@ export function layoutHeaderFooter(
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
   });
 
+  // Post-normalize vertical positions of page-relative / margin-relative anchored
+  // drawings from the synthetic measurement canvas to header/footer-local coordinates.
+  if (kind && constraints.pageHeight != null) {
+    normalizeFragmentsForRegion(layout.pages, blocks, measures, kind, constraints);
+  }
+
   // Compute bounds using an index map to avoid building multiple Maps
   const idToIndex = new Map<string, number>();
   for (let i = 0; i < blocks.length; i += 1) {
     idToIndex.set(blocks[i].id, i);
   }
 
-  let minY = 0;
-  let maxY = 0;
+  // Track separate bounds for measurement (pagination) and rendering (overlay shift).
+  // Measurement bounds exclude behindDoc and out-of-band page-relative anchored fragments.
+  // Render bounds include all visible fragments.
+  let measureMinY = 0;
+  let measureMaxY = 0;
+  let renderMinY = 0;
+  let renderMaxY = 0;
 
   for (const page of layout.pages) {
     for (const fragment of page.fragments) {
@@ -2489,71 +2587,25 @@ export function layoutHeaderFooter(
       const block = blocks[idx];
       const measure = measures[idx];
 
-      // Exclude ALL behindDoc anchored fragments from height calculations.
-      // Per OOXML spec, behindDoc is purely a z-ordering directive that should NOT affect layout.
-      // These decorative background images/drawings render behind text but never inflate margins.
-      // Fragments are still rendered in the layout; we only skip them when computing total height.
-      const isAnchoredFragment =
-        (fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.isAnchored === true;
-      if (isAnchoredFragment) {
-        // Runtime validation: ensure block.kind matches fragment.kind before type assertion
-        if (block.kind !== 'image' && block.kind !== 'drawing') {
-          throw new Error(
-            `Type mismatch: fragment kind is ${fragment.kind} but block kind is ${block.kind} for block ${block.id}`,
-          );
-        }
-        const anchoredBlock = block as ImageBlock | DrawingBlock;
-        // behindDoc images never affect layout - skip entirely from height calculation
-        if (anchoredBlock.anchor?.behindDoc) {
-          continue;
-        }
-      }
+      const bottom = computeFragmentBottom(fragment, block, measure);
 
-      if (fragment.y < minY) minY = fragment.y;
-      let bottom = fragment.y;
+      // Track render bounds for all fragments (used by overlay shift in SessionManager)
+      if (fragment.y < renderMinY) renderMinY = fragment.y;
+      if (bottom > renderMaxY) renderMaxY = bottom;
 
-      if (fragment.kind === 'para' && measure?.kind === 'paragraph') {
-        let sum = 0;
-        for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
-          sum += measure.lines[li]?.lineHeight ?? 0;
-        }
-        bottom += sum;
-        const spacingAfter = (block as ParagraphBlock)?.attrs?.spacing?.after;
-        if (spacingAfter && fragment.toLine === measure.lines.length) {
-          bottom += Math.max(0, Number(spacingAfter));
-        }
-      } else if (fragment.kind === 'image') {
-        const h =
-          typeof fragment.height === 'number' ? fragment.height : ((measure as ImageMeasure | undefined)?.height ?? 0);
-        bottom += h;
-      } else if (fragment.kind === 'drawing') {
-        const drawingHeight =
-          typeof fragment.height === 'number'
-            ? fragment.height
-            : ((measure as DrawingMeasure | undefined)?.height ?? 0);
-        bottom += drawingHeight;
-      } else if (fragment.kind === 'list-item') {
-        const listMeasure = measure as ListMeasure | undefined;
-        if (listMeasure) {
-          const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
-          if (item?.paragraph) {
-            let sum = 0;
-            for (let li = fragment.fromLine; li < fragment.toLine; li += 1) {
-              sum += item.paragraph.lines[li]?.lineHeight ?? 0;
-            }
-            bottom += sum;
-          }
-        }
-      }
+      // Determine whether this fragment should be excluded from measurement (pagination) bounds
+      if (shouldExcludeFromMeasurement(fragment, block, height)) continue;
 
-      if (bottom > maxY) maxY = bottom;
+      if (fragment.y < measureMinY) measureMinY = fragment.y;
+      if (bottom > measureMaxY) measureMaxY = bottom;
     }
   }
 
   return {
-    height: maxY - minY,
-    minY,
-    maxY,
+    height: measureMaxY - measureMinY,
+    minY: renderMinY,
+    maxY: renderMaxY,
+    renderHeight: renderMaxY - renderMinY,
     pages: layout.pages.map((page) => ({ number: page.number, fragments: page.fragments })),
   };
 }

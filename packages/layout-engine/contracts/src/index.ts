@@ -1810,9 +1810,14 @@ export type HeaderFooterPage = {
 };
 
 export type HeaderFooterLayout = {
+  /** Measurement height for pagination — excludes out-of-band fragments. */
   height: number;
+  /** Minimum y of all rendered fragments (including out-of-band). */
   minY?: number;
+  /** Maximum y + fragmentHeight of all rendered fragments. */
   maxY?: number;
+  /** Full visual extent of all rendered fragments (renderMaxY - renderMinY). */
+  renderHeight?: number;
   pages: HeaderFooterPage[];
 };
 

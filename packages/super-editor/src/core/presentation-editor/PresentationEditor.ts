@@ -82,6 +82,7 @@ import {
 import type {
   HeaderFooterIdentifier,
   HeaderFooterLayoutResult,
+  HeaderFooterConstraints,
   HeaderFooterType,
   PositionHit,
   TableHitResult,
@@ -5113,9 +5114,15 @@ export class PresentationEditor extends EventEmitter {
     return {
       width: measurementWidth,
       height,
-      // Pass actual page dimensions for page-relative anchor positioning in headers/footers
       pageWidth: pageSize.w,
-      margins: { left: marginLeft, right: marginRight },
+      pageHeight: pageSize.h,
+      margins: {
+        left: marginLeft,
+        right: marginRight,
+        top: marginTop,
+        bottom: marginBottom,
+        header: headerMargin,
+      },
       overflowBaseHeight,
     };
   }
@@ -5134,7 +5141,7 @@ export class PresentationEditor extends EventEmitter {
       footerBlocks?: unknown;
       headerBlocksByRId: Map<string, FlowBlock[]> | undefined;
       footerBlocksByRId: Map<string, FlowBlock[]> | undefined;
-      constraints: { width: number; height: number; pageWidth: number; margins: { left: number; right: number } };
+      constraints: HeaderFooterConstraints;
     } | null,
     layout: Layout,
     sectionMetadata: SectionMetadata[],

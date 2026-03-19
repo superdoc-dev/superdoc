@@ -1066,6 +1066,22 @@ describe('comments-store', () => {
     expect(existingComment.resolvedTime).toBe(555);
     expect(existingComment.resolvedByEmail).toBe('reviewer@example.com');
     expect(existingComment.resolvedByName).toBe('Reviewer');
+
+    // Should emit UPDATE so collaborators see the re-resolved state
+    expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
+      superdoc,
+      expect.objectContaining({
+        type: comments_module_events.UPDATE,
+        comment: expect.objectContaining({ commentId: 'tc-snapshot-restore' }),
+      }),
+    );
+    expect(superdoc.emit).toHaveBeenCalledWith(
+      'comments-update',
+      expect.objectContaining({
+        type: comments_module_events.UPDATE,
+        comment: expect.objectContaining({ commentId: 'tc-snapshot-restore' }),
+      }),
+    );
   });
 
   it('keeps tracked-change comments when importedId is live even if commentId differs', () => {

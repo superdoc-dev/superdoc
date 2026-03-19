@@ -1096,6 +1096,7 @@ export const useCommentsStore = defineStore('comments', () => {
     if (!(liveTrackedChangeIds instanceof Set) || !activeDocumentId) return;
 
     const removedIds = new Set();
+    const restoredComments = [];
     const previousComments = [...commentsList.value];
 
     commentsList.value = commentsList.value.filter((comment) => {
@@ -1115,12 +1116,23 @@ export const useCommentsStore = defineStore('comments', () => {
         comment.resolvedTime = resolutionSnapshot.resolvedTime ?? Date.now();
         comment.resolvedByEmail = resolutionSnapshot.resolvedByEmail ?? null;
         comment.resolvedByName = resolutionSnapshot.resolvedByName ?? null;
+        restoredComments.push(comment);
         return true;
       }
 
       if (commentId) removedIds.add(commentId);
       if (importedId) removedIds.add(importedId);
       return false;
+    });
+
+    restoredComments.forEach((comment) => {
+      const payload = getCommentEventPayload(comment);
+      const event = {
+        type: COMMENT_EVENTS.UPDATE,
+        comment: payload,
+      };
+      syncCommentsToClients(superdoc, event);
+      superdoc?.emit?.('comments-update', event);
     });
 
     if (!removedIds.size) return;

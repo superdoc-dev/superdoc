@@ -285,7 +285,7 @@ export interface TablesDeleteCellInput extends CellLocator {
 
 export type TablesMergeCellsInput = MergeRangeLocator;
 
-export type TablesUnmergeCellsInput = CellLocator;
+export type TablesUnmergeCellsInput = CellLocator | TableScopedCellLocator;
 
 export interface TablesSplitCellInput extends CellLocator {
   rows: number;
@@ -333,7 +333,8 @@ export type TablesClearStyleInput = TableLocator;
 
 export type TableStyleOptionFlag =
   | 'headerRow'
-  | 'totalRow'
+  | 'lastRow'
+  | 'totalRow' // deprecated alias for 'lastRow' — will be removed in a future release
   | 'firstColumn'
   | 'lastColumn'
   | 'bandedRows'
@@ -471,7 +472,10 @@ export interface TablesGetCellsInput extends TableLocator {
 
 /** Per-cell info with stable ref for write handoff. */
 export interface TableCellInfo {
+  /** Shorthand cell identifier — convenient for logging, Map keys, and display. */
   nodeId: string;
+  /** Mutation-ready address — pass directly as `target` in follow-up cell operations. */
+  address: TableCellAddress;
   rowIndex: number;
   columnIndex: number;
   colspan: number;
@@ -503,7 +507,7 @@ export interface TablesGetPropertiesOutput {
   autoFitMode?: TableAutoFitMode;
   styleOptions?: {
     headerRow?: boolean;
-    totalRow?: boolean;
+    lastRow?: boolean;
     firstColumn?: boolean;
     lastColumn?: boolean;
     bandedRows?: boolean;

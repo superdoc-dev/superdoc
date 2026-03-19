@@ -138,6 +138,24 @@ describe('SD-2126: post-mutation table ref handoff', () => {
     expect(table?.nodeType).toBe('table');
   });
 
+  it('cell address from getCells is accepted as target in a follow-up mutation', () => {
+    const ed = createEditor();
+
+    const createResult = createTableAdapter(ed, { rows: 2, columns: 2, at: { kind: 'documentEnd' } }, DIRECT);
+    const tableNodeId = requireTableNodeId(createResult, 'create.table');
+    const cellsResult = tablesGetCellsAdapter(ed, { nodeId: tableNodeId });
+    const firstCell = cellsResult.cells[0]!;
+
+    // Use the cell's address (not its flat nodeId) as the mutation target.
+    const borderResult = tablesSetBorderAdapter(
+      ed,
+      { target: firstCell.address, edge: 'top', lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+      DIRECT,
+    );
+
+    expect(borderResult.success).toBe(true);
+  });
+
   it('tables.move returns a chainable ref after relocating the table', () => {
     const ed = createEditor();
 

@@ -31,7 +31,7 @@ Returns a TableMutationResult receipt; reports NO_OP if the style option already
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `enabled` | boolean | yes |  |
-| `flag` | enum | yes | `"headerRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
+| `flag` | enum | yes | `"headerRow"`, `"lastRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -42,7 +42,7 @@ Returns a TableMutationResult receipt; reports NO_OP if the style option already
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `enabled` | boolean | yes |  |
-| `flag` | enum | yes | `"headerRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
+| `flag` | enum | yes | `"headerRow"`, `"lastRow"`, `"totalRow"`, `"firstColumn"`, `"lastColumn"`, `"bandedRows"`, `"bandedColumns"` |
 | `nodeId` | string | yes |  |
 
 ### Example request
@@ -142,6 +142,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     "flag": {
       "enum": [
         "headerRow",
+        "lastRow",
         "totalRow",
         "firstColumn",
         "lastColumn",

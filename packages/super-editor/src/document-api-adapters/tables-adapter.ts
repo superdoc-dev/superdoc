@@ -36,6 +36,7 @@ import type {
   TablesSetStyleInput,
   TablesClearStyleInput,
   TablesSetStyleOptionInput,
+  TableStyleOptionFlag,
   TablesSetBorderInput,
   TablesClearBorderInput,
   TablesApplyBorderPresetInput,
@@ -68,6 +69,7 @@ import {
   resolveRowLocator,
   resolveColumnLocator,
   resolveCellLocator,
+  resolveTableScopedCellLocator,
   resolveMergeRangeLocator,
   resolvePostMutationTableAddress,
   getTableColumnCount,
@@ -2346,6 +2348,44 @@ export function tablesMergeCellsAdapter(
   }
 }
 
+function hasDefinedUnmergeCoordinates(
+  input: TablesUnmergeCellsInput,
+): input is Extract<TablesUnmergeCellsInput, { rowIndex: number; columnIndex: number }> {
+  const inputRecord = input as Record<string, unknown>;
+  return inputRecord.rowIndex != null && inputRecord.columnIndex != null;
+}
+
+function resolveUnmergeInput(editor: Editor, input: TablesUnmergeCellsInput) {
+  if (!hasDefinedUnmergeCoordinates(input)) {
+    return resolveCellLocator(editor, input, 'tables.unmergeCells');
+  }
+
+  const target = (input as { target?: unknown }).target;
+  if (target && typeof target === 'object' && !Array.isArray(target)) {
+    const blockTarget = target as { kind?: unknown; nodeType?: unknown };
+    if (blockTarget.kind === 'block' && blockTarget.nodeType === 'table') {
+      return resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells');
+    }
+    return resolveCellLocator(editor, { target: target as TableCellAddress }, 'tables.unmergeCells');
+  }
+
+  const nodeId = (input as { nodeId?: unknown }).nodeId;
+  if (typeof nodeId === 'string') {
+    const candidate = findBlockByNodeIdOnly(getBlockIndex(editor), nodeId);
+    if (!candidate) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'tables.unmergeCells: target was not found.', {
+        target: nodeId,
+      });
+    }
+
+    return candidate.nodeType === 'table'
+      ? resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells')
+      : resolveCellLocator(editor, { nodeId }, 'tables.unmergeCells');
+  }
+
+  return resolveCellLocator(editor, {}, 'tables.unmergeCells');
+}
+
 /**
  * tables.unmergeCells — unmerge a merged cell back into individual cells.
  *
@@ -2359,7 +2399,10 @@ export function tablesUnmergeCellsAdapter(
 ): TableMutationResult {
   rejectTrackedMode('tables.unmergeCells', options);
 
-  const resolved = resolveCellLocator(editor, input, 'tables.unmergeCells');
+  // Preserve read→write handoff from tables.getCells(): a TableCellInfo carries
+  // row/column metadata plus a cell nodeId. For nodeId-based inputs, resolve by
+  // actual node type instead of assuming coordinates always mean "table-scoped".
+  const resolved = resolveUnmergeInput(editor, input);
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
 
   const attrs = cellNode.attrs as Record<string, unknown>;
@@ -2798,10 +2841,58 @@ export function tablesClearStyleAdapter(
 }
 
 /**
+ * Word-effective defaults for `tblLook` when the element is absent (0x04A0).
+ * Defined locally to avoid a cross-layer dependency on the style-engine.
+ *
+ * @see ECMA-376 §17.4.56, Microsoft open specs for Word's tblLook defaults.
+ */
+const WORD_DEFAULT_TBL_LOOK: Readonly<Record<string, boolean>> = {
+  firstRow: true,
+  lastRow: false,
+  firstColumn: true,
+  lastColumn: false,
+  noHBand: false,
+  noVBand: true,
+};
+
+/** Maps every public `TableStyleOptionFlag` to its OOXML `tblLook` key. */
+type TblLookKey = 'firstRow' | 'lastRow' | 'firstColumn' | 'lastColumn' | 'noHBand' | 'noVBand';
+
+const FLAG_TO_OOXML_KEY: Record<Exclude<TableStyleOptionFlag, 'totalRow'>, TblLookKey> = {
+  headerRow: 'firstRow',
+  lastRow: 'lastRow',
+  firstColumn: 'firstColumn',
+  lastColumn: 'lastColumn',
+  bandedRows: 'noHBand',
+  bandedColumns: 'noVBand',
+};
+
+/** Flags whose OOXML semantics are inverted (enabled API → `false` on disk). */
+const INVERTED_FLAGS: ReadonlySet<TableStyleOptionFlag> = new Set<TableStyleOptionFlag>([
+  'bandedRows',
+  'bandedColumns',
+]);
+
+/**
+ * Resolves a public API flag to its OOXML tblLook key,
+ * normalizing the deprecated `totalRow` alias to `lastRow`.
+ */
+function resolveStyleOptionFlag(flag: TableStyleOptionFlag): TblLookKey {
+  const normalized: Exclude<TableStyleOptionFlag, 'totalRow'> = flag === 'totalRow' ? 'lastRow' : flag;
+  return FLAG_TO_OOXML_KEY[normalized];
+}
+
+/**
  * tables.setStyleOption — toggle a table style option flag.
  *
  * Maps API flags to OOXML `w:tblLook` attributes, inverting `bandedRows`
  * and `bandedColumns` to the `noHBand`/`noVBand` semantics.
+ *
+ * Behavioral notes:
+ * - Returns NO_OP when the explicit tblLook already holds the requested value.
+ * - On first write to a table with no explicit `tblLook`, seeds a full baseline
+ *   from Word's effective defaults (0x04A0) before applying the mutation.
+ * - Deletes stale `w:val` bitmask on any mutation (explicit attrs are canonical).
  */
 export function tablesSetStyleOptionAdapter(
   editor: Editor,
@@ -2817,31 +2908,29 @@ export function tablesSetStyleOptionAdapter(
   }
 
   try {
-    const tr = editor.state.tr;
+    const xmlKey = resolveStyleOptionFlag(input.flag);
+    const ooxmlValue = INVERTED_FLAGS.has(input.flag) ? !input.enabled : input.enabled;
+
     const currentAttrs = candidate.node.attrs as Record<string, unknown>;
     const currentTableProps = (currentAttrs.tableProperties ?? {}) as Record<string, unknown>;
-    const currentLook = {
-      ...((currentTableProps.tblLook ?? {}) as Record<string, unknown>),
-    };
+    const existingLook = currentTableProps.tblLook as Record<string, unknown> | undefined;
 
-    // Map API flag names to OOXML tblLook keys.
-    const flagMap: Record<string, string> = {
-      headerRow: 'firstRow',
-      totalRow: 'lastRow',
-      firstColumn: 'firstColumn',
-      lastColumn: 'lastColumn',
-      bandedRows: 'noHBand',
-      bandedColumns: 'noVBand',
-    };
-
-    const xmlKey = flagMap[input.flag];
-    if (xmlKey) {
-      // bandedRows/bandedColumns are inverted: enabled → noHBand = false.
-      const value = input.flag === 'bandedRows' || input.flag === 'bandedColumns' ? !input.enabled : input.enabled;
-      currentLook[xmlKey] = value;
+    // NO_OP: if tblLook already has an explicit value matching the request, skip.
+    if (existingLook != null && existingLook[xmlKey] === ooxmlValue) {
+      return toTableFailure('NO_OP', `Style option '${input.flag}' already has the requested value.`);
     }
 
-    const updatedTableProps = { ...currentTableProps, tblLook: currentLook };
+    // Seed from Word defaults on first materialization, then apply the mutation.
+    const updatedLook: Record<string, unknown> =
+      existingLook != null ? { ...existingLook } : { ...WORD_DEFAULT_TBL_LOOK };
+
+    updatedLook[xmlKey] = ooxmlValue;
+
+    // Delete stale w:val bitmask — explicit attrs are the canonical representation.
+    delete updatedLook.val;
+
+    const updatedTableProps = { ...currentTableProps, tblLook: updatedLook };
+    const tr = editor.state.tr;
     tr.setNodeMarkup(candidate.pos, null, {
       ...currentAttrs,
       tableProperties: updatedTableProps,
@@ -3632,8 +3721,10 @@ export function tablesGetCellsAdapter(editor: Editor, input: TablesGetCellsInput
     if (input.columnIndex != null && col !== input.columnIndex) continue;
 
     const attrs = candidate.node.attrs as Record<string, unknown>;
+    const cellNodeId = candidate.nodeId || resolveCellNodeId(attrs);
     cells.push({
-      nodeId: candidate.nodeId || resolveCellNodeId(attrs),
+      nodeId: cellNodeId,
+      address: { kind: 'block', nodeType: 'tableCell', nodeId: cellNodeId },
       rowIndex: row,
       columnIndex: col,
       colspan: typeof attrs.colspan === 'number' ? attrs.colspan : 1,
@@ -3684,7 +3775,7 @@ export function tablesGetPropertiesAdapter(editor: Editor, input: TablesGetPrope
   if (look) {
     result.styleOptions = {
       headerRow: look.firstRow === true,
-      totalRow: look.lastRow === true,
+      lastRow: look.lastRow === true,
       firstColumn: look.firstColumn === true,
       lastColumn: look.lastColumn === true,
       bandedRows: look.noHBand !== true,

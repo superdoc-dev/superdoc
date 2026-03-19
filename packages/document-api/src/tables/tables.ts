@@ -77,6 +77,74 @@ function validateRowLocator(input: RowLocatorInput, operationName: string): void
   }
 }
 
+type CellOrTableScopedCellLocatorInput = {
+  target?: unknown;
+  nodeId?: unknown;
+  rowIndex?: unknown;
+  columnIndex?: unknown;
+};
+
+/**
+ * Returns `true` when the input carries non-`undefined` row + column coordinates,
+ * meaning it can participate in table-scoped cell targeting.
+ *
+ * This is the validation-time check for coordinate presence. Adapter-level
+ * resolution may still refine ambiguous `nodeId` handoffs by resolved node
+ * type so payloads like `TableCellInfo` from `tables.getCells()` continue to
+ * work as direct cell locators.
+ */
+export function hasTableScopedCellCoordinates(input: CellOrTableScopedCellLocatorInput): boolean {
+  return input.rowIndex != null && input.columnIndex != null;
+}
+
+/**
+ * Validates a mixed cell locator: either a direct cell locator (target/nodeId
+ * pointing at a cell, no coordinates) or a table-scoped cell locator
+ * (target/nodeId pointing at a table + rowIndex + columnIndex).
+ *
+ * Rejects:
+ * - table target without both coordinates
+ * - only one of rowIndex / columnIndex
+ * - cell target plus coordinates
+ */
+function validateCellOrTableScopedCellLocator(input: CellOrTableScopedCellLocatorInput, operationName: string): void {
+  validateTableLocator(input, operationName);
+
+  const hasRowIndex = input.rowIndex != null;
+  const hasColumnIndex = input.columnIndex != null;
+
+  if (hasRowIndex !== hasColumnIndex) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName}: both rowIndex and columnIndex are required when using table-scoped cell targeting. ` +
+        `Provide both or neither.`,
+      { fields: ['rowIndex', 'columnIndex'] },
+    );
+  }
+
+  const hasCoordinates = hasTableScopedCellCoordinates(input);
+
+  // When target is a block address, check that coordinates match the node type.
+  if (isObjectRecord(input.target) && input.target.kind === 'block') {
+    if (input.target.nodeType === 'tableCell' && hasCoordinates) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        `${operationName}: rowIndex/columnIndex must not be provided when target is a cell node. ` +
+          `Either pass a table target with coordinates, or pass a cell target without coordinates.`,
+        { fields: ['rowIndex', 'columnIndex'] },
+      );
+    }
+
+    if (input.target.nodeType === 'table' && !hasCoordinates) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        `${operationName}: rowIndex and columnIndex are required when target is a table.`,
+        { fields: ['rowIndex', 'columnIndex'] },
+      );
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Typed execute helpers
 // ---------------------------------------------------------------------------
@@ -102,6 +170,16 @@ export function executeRowLocatorOp<TInput extends RowLocatorInput, TResult>(
   options?: MutationOptions,
 ): TResult {
   validateRowLocator(input, operationName);
+  return adapter(input, normalizeMutationOptions(options));
+}
+
+export function executeCellOrTableScopedCellLocatorOp<TInput extends CellOrTableScopedCellLocatorInput, TResult>(
+  operationName: string,
+  adapter: (input: TInput, options?: MutationOptions) => TResult,
+  input: TInput,
+  options?: MutationOptions,
+): TResult {
+  validateCellOrTableScopedCellLocator(input, operationName);
   return adapter(input, normalizeMutationOptions(options));
 }
 

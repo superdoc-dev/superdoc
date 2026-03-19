@@ -81,6 +81,11 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
   },
   "cells": [
     {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "tableCell"
+      },
       "colspan": 1,
       "columnIndex": 1,
       "nodeId": "node-def456",
@@ -151,6 +156,9 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
       "items": {
         "additionalProperties": false,
         "properties": {
+          "address": {
+            "$ref": "#/$defs/TableCellAddress"
+          },
           "colspan": {
             "minimum": 1,
             "type": "integer"
@@ -173,6 +181,7 @@ Returns a TablesGetCellsOutput with cell information for the requested rows and 
         },
         "required": [
           "nodeId",
+          "address",
           "rowIndex",
           "columnIndex",
           "colspan",

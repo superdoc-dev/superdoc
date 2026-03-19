@@ -194,7 +194,7 @@ describe('document-api contract catalog', () => {
       properties?: { address?: { $ref?: string } };
     };
     const unmergeInput = schemas.operations['tables.unmergeCells'].input as {
-      properties?: { target?: { $ref?: string } };
+      oneOf?: Array<Record<string, unknown>>;
     };
     const setBorderInput = schemas.operations['tables.setBorder'].input as {
       properties?: { target?: { $ref?: string } };
@@ -205,7 +205,25 @@ describe('document-api contract catalog', () => {
 
     expect(tablesGetInput.properties?.target?.$ref).toBe('#/$defs/TableAddress');
     expect(tablesGetOutput.properties?.address?.$ref).toBe('#/$defs/TableAddress');
-    expect(unmergeInput.properties?.target?.$ref).toBe('#/$defs/TableCellAddress');
+
+    // unmergeCells input is a oneOf: [cellLocator, tableScopedCellLocator (target), tableScopedCellLocator (nodeId)]
+    expect(unmergeInput.oneOf).toHaveLength(3);
+    const [cellBranch, tableTargetBranch, tableNodeIdBranch] = unmergeInput.oneOf as Array<{
+      properties?: { target?: { $ref?: string }; nodeId?: unknown; rowIndex?: unknown; columnIndex?: unknown };
+      required?: string[];
+    }>;
+    // First branch: direct cell locator (target.$ref → TableCellAddress)
+    expect(cellBranch.properties?.target?.$ref).toBe('#/$defs/TableCellAddress');
+    // Second branch: table-scoped with target (target.$ref → TableAddress + coordinates)
+    expect(tableTargetBranch.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(tableTargetBranch.required).toContain('rowIndex');
+    expect(tableTargetBranch.required).toContain('columnIndex');
+    // Third branch: table-scoped with nodeId + coordinates
+    expect(tableNodeIdBranch.properties?.nodeId).toBeDefined();
+    expect(tableNodeIdBranch.required).toContain('nodeId');
+    expect(tableNodeIdBranch.required).toContain('rowIndex');
+    expect(tableNodeIdBranch.required).toContain('columnIndex');
+
     expect(setBorderInput.properties?.target?.$ref).toBe('#/$defs/TableOrCellAddress');
     expect(insertRowSuccess.properties?.table?.$ref).toBe('#/$defs/TableAddress');
   });

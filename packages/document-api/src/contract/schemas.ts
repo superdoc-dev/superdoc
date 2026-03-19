@@ -1548,6 +1548,32 @@ const cellLocatorSchema: JsonSchema = {
   oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
 };
 
+/**
+ * Accepts either a direct cell locator (target/nodeId pointing at a cell)
+ * or a table-scoped cell locator (target/nodeId pointing at a table + rowIndex + columnIndex).
+ */
+const cellOrTableScopedCellLocatorSchema: JsonSchema = {
+  oneOf: [
+    cellLocatorSchema,
+    objectSchema(
+      {
+        target: tableAddressSchema,
+        rowIndex: { type: 'integer', minimum: 0 },
+        columnIndex: { type: 'integer', minimum: 0 },
+      },
+      ['target', 'rowIndex', 'columnIndex'],
+    ),
+    objectSchema(
+      {
+        nodeId: { type: 'string' },
+        rowIndex: { type: 'integer', minimum: 0 },
+        columnIndex: { type: 'integer', minimum: 0 },
+      },
+      ['nodeId', 'rowIndex', 'columnIndex'],
+    ),
+  ],
+};
+
 const tableOrCellLocatorSchema: JsonSchema = {
   ...objectSchema({
     target: tableOrCellAddressSchema,
@@ -5085,7 +5111,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: tableMutationFailureSchema,
   },
   'tables.unmergeCells': {
-    input: cellLocatorSchema,
+    input: cellOrTableScopedCellLocatorSchema,
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -5194,7 +5220,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         {
           target: tableAddressSchema,
           nodeId: { type: 'string' },
-          flag: { enum: ['headerRow', 'totalRow', 'firstColumn', 'lastColumn', 'bandedRows', 'bandedColumns'] },
+          flag: {
+            enum: ['headerRow', 'lastRow', 'totalRow', 'firstColumn', 'lastColumn', 'bandedRows', 'bandedColumns'],
+          },
           enabled: { type: 'boolean' },
         },
         ['flag', 'enabled'],
@@ -5372,12 +5400,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           items: objectSchema(
             {
               nodeId: { type: 'string' },
+              address: tableCellAddressSchema,
               rowIndex: { type: 'integer', minimum: 0 },
               columnIndex: { type: 'integer', minimum: 0 },
               colspan: { type: 'integer', minimum: 1 },
               rowspan: { type: 'integer', minimum: 1 },
             },
-            ['nodeId', 'rowIndex', 'columnIndex', 'colspan', 'rowspan'],
+            ['nodeId', 'address', 'rowIndex', 'columnIndex', 'colspan', 'rowspan'],
           ),
         },
       },
@@ -5397,7 +5426,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         autoFitMode: { enum: ['fixedWidth', 'fitContents', 'fitWindow'] },
         styleOptions: objectSchema({
           headerRow: { type: 'boolean' },
-          totalRow: { type: 'boolean' },
+          lastRow: { type: 'boolean' },
           firstColumn: { type: 'boolean' },
           lastColumn: { type: 'boolean' },
           bandedRows: { type: 'boolean' },

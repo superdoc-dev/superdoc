@@ -33,6 +33,7 @@ import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index
 import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
 import { translator as sdAutoPageNumberTranslator } from '@converter/v3/handlers/sd/autoPageNumber';
 import { translator as sdTotalPageNumberTranslator } from '@converter/v3/handlers/sd/totalPageNumber';
+import { translator as sdDocumentStatFieldTranslator } from '@converter/v3/handlers/sd/documentStatField/documentStatField-translator.js';
 import { translator as pictTranslator } from './v3/handlers/w/pict/pict-translator';
 import { translateVectorShape, translateShapeGroup } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers';
 import { translator as wTextTranslator } from '@converter/v3/handlers/w/t';
@@ -205,6 +206,7 @@ export function exportSchemaToJson(params) {
     authorityEntry: sdAuthorityEntryTranslator,
     tableOfAuthorities: sdTableOfAuthoritiesTranslator,
     sequenceField: sdSequenceFieldTranslator,
+    documentStatField: sdDocumentStatFieldTranslator,
     tableOfContents: sdTableOfContentsTranslator,
     index: sdIndexTranslator,
     indexEntry: sdIndexEntryTranslator,

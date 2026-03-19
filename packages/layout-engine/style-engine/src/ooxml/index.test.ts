@@ -1148,3 +1148,185 @@ describe('ooxml - DEFAULT_TBL_LOOK fallback when tblLook is absent', () => {
     expect(result.shading).toEqual({ val: 'clear', fill: 'HBAND' });
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Corner gating: corners only apply when both row and column toggles are on
+// (Word / Office behavior per MS-OI29500 §2.1.1310)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - corner cell gating matches Word behavior', () => {
+  const cornerStyles = {
+    ...emptyStyles,
+    styles: {
+      TestCorner: {
+        type: 'table',
+        tableProperties: {},
+        tableStyleProperties: {
+          wholeTable: { tableCellProperties: { shading: { fill: 'DEFAULT' } } },
+          firstRow: { tableCellProperties: { shading: { fill: 'FIRST_ROW' } } },
+          lastRow: { tableCellProperties: { shading: { fill: 'LAST_ROW' } } },
+          firstCol: { tableCellProperties: { shading: { fill: 'FIRST_COL' } } },
+          lastCol: { tableCellProperties: { shading: { fill: 'LAST_COL' } } },
+          nwCell: { tableCellProperties: { shading: { fill: 'NW' } } },
+          neCell: { tableCellProperties: { shading: { fill: 'NE' } } },
+          swCell: { tableCellProperties: { shading: { fill: 'SW' } } },
+          seCell: { tableCellProperties: { shading: { fill: 'SE' } } },
+        },
+      },
+    },
+  };
+
+  it('does NOT apply swCell when lastRow is true but firstColumn is false', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: { firstRow: true, lastRow: true, firstColumn: false, lastColumn: false, noHBand: true, noVBand: true },
+      },
+      rowIndex: 2,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('LAST_ROW');
+    expect(fills).not.toContain('SW');
+  });
+
+  it('does NOT apply seCell when lastRow is true but lastColumn is false', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: { firstRow: true, lastRow: true, firstColumn: false, lastColumn: false, noHBand: true, noVBand: true },
+      },
+      rowIndex: 2,
+      cellIndex: 2,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('LAST_ROW');
+    expect(fills).not.toContain('SE');
+  });
+
+  it('applies swCell when both lastRow and firstColumn are true', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: { firstRow: true, lastRow: true, firstColumn: true, lastColumn: false, noHBand: true, noVBand: true },
+      },
+      rowIndex: 2,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('LAST_ROW');
+    expect(fills).toContain('FIRST_COL');
+    expect(fills).toContain('SW');
+  });
+
+  it('applies seCell when both lastRow and lastColumn are true', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: { firstRow: true, lastRow: true, firstColumn: false, lastColumn: true, noHBand: true, noVBand: true },
+      },
+      rowIndex: 2,
+      cellIndex: 2,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('LAST_ROW');
+    expect(fills).toContain('LAST_COL');
+    expect(fills).toContain('SE');
+  });
+
+  it('does NOT apply nwCell when firstRow is true but firstColumn is false', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: {
+          firstRow: true,
+          lastRow: false,
+          firstColumn: false,
+          lastColumn: false,
+          noHBand: true,
+          noVBand: true,
+        },
+      },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('FIRST_ROW');
+    expect(fills).not.toContain('NW');
+  });
+
+  it('applies nwCell when both firstRow and firstColumn are true', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: { firstRow: true, lastRow: false, firstColumn: true, lastColumn: false, noHBand: true, noVBand: true },
+      },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('FIRST_ROW');
+    expect(fills).toContain('FIRST_COL');
+    expect(fills).toContain('NW');
+  });
+
+  it('does NOT apply neCell when firstRow is true but lastColumn is false', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: {
+          firstRow: true,
+          lastRow: false,
+          firstColumn: false,
+          lastColumn: false,
+          noHBand: true,
+          noVBand: true,
+        },
+      },
+      rowIndex: 0,
+      cellIndex: 2,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('FIRST_ROW');
+    expect(fills).not.toContain('NE');
+  });
+
+  it('applies neCell when both firstRow and lastColumn are true', () => {
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestCorner',
+        tblLook: { firstRow: true, lastRow: false, firstColumn: false, lastColumn: true, noHBand: true, noVBand: true },
+      },
+      rowIndex: 0,
+      cellIndex: 2,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, cornerStyles);
+    const fills = result.map((r: any) => r.shading?.fill);
+    expect(fills).toContain('FIRST_ROW');
+    expect(fills).toContain('LAST_COL');
+    expect(fills).toContain('NE');
+  });
+});

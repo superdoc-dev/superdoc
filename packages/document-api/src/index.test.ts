@@ -310,7 +310,16 @@ function makeTablesAdapter(): TablesAdapter {
     getCells: vi.fn(() => ({
       nodeId: 't1',
       address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
-      cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
+      cells: [
+        {
+          nodeId: 'c1',
+          address: { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' },
+          rowIndex: 0,
+          columnIndex: 0,
+          colspan: 1,
+          rowspan: 1,
+        },
+      ],
     })),
     getProperties: vi.fn(() => ({
       nodeId: 't1',
@@ -2731,6 +2740,94 @@ describe('createDocumentApi', () => {
       expect(() =>
         api.tables.mergeCells({ target, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
       ).not.toThrow();
+    });
+
+    // -- unmergeCells mixed cell/table-scoped locator validation --
+
+    it('accepts direct cell nodeId for unmergeCells', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'cell-1' })).not.toThrow();
+    });
+
+    it('accepts direct cell target for unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target })).not.toThrow();
+    });
+
+    it('treats explicit null coordinates as absent for direct cell target on unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).not.toThrow();
+    });
+
+    it('accepts table-scoped locator (nodeId + rowIndex + columnIndex) for unmergeCells', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', rowIndex: 0, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts table-scoped locator (target + rowIndex + columnIndex) for unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('treats explicit undefined coordinates as a direct cell call for unmergeCells', () => {
+      const api = makeApi();
+      // { nodeId, rowIndex: undefined, columnIndex: undefined } must pass validation
+      // as a direct-cell call — the keys exist but the values are absent.
+      expect(() =>
+        api.tables.unmergeCells({ nodeId: 'cell-1', rowIndex: undefined, columnIndex: undefined } as any),
+      ).not.toThrow();
+    });
+
+    it('rejects unmergeCells with only rowIndex (missing columnIndex)', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', rowIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+    });
+
+    it('rejects unmergeCells with only columnIndex (missing rowIndex)', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', columnIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+    });
+
+    it('rejects unmergeCells with cell target plus coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: 0 } as any)).toThrow(
+        /must not be provided when target is a cell node/,
+      );
+    });
+
+    it('rejects unmergeCells with table target without coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target } as any)).toThrow(
+        /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).toThrow(
+        /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and mixed null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: null } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
     });
 
     // -- create.table locator validation --

@@ -14,6 +14,7 @@ import { preProcessCitationInstruction } from './citation-preprocessor.js';
 import { preProcessBibliographyInstruction } from './bibliography-preprocessor.js';
 import { preProcessTaInstruction } from './ta-preprocessor.js';
 import { preProcessToaInstruction } from './toa-preprocessor.js';
+import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.js';
 
 /**
  * @callback InstructionPreProcessor
@@ -35,6 +36,9 @@ export const getInstructionPreProcessor = (instruction) => {
       return preProcessPageInstruction;
     case 'NUMPAGES':
       return preProcessNumPagesInstruction;
+    case 'NUMWORDS':
+    case 'NUMCHARS':
+      return preProcessDocumentStatInstruction;
     case 'PAGEREF':
       return preProcessPageRefInstruction;
     case 'HYPERLINK':

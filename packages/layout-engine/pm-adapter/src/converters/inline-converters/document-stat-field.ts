@@ -11,10 +11,16 @@ export function documentStatFieldNodeToRun(params: InlineConverterParams): TextR
 
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
   const resolvedText = (attrs.resolvedText as string) || '0';
+  const marksAsAttrs = Array.isArray(attrs.marksAsAttrs) ? attrs.marksAsAttrs : undefined;
 
   const run = textNodeToRun({
     ...params,
-    node: { type: 'text', text: resolvedText, marks: [...(node.marks ?? [])] } as PMNode,
+    node: {
+      type: 'text',
+      text: resolvedText,
+      marks: [...(node.marks ?? [])],
+      ...(marksAsAttrs ? { attrs: { marksAsAttrs } } : {}),
+    } as PMNode,
   });
 
   const pos = positions.get(node);

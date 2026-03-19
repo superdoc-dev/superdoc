@@ -1,27 +1,13 @@
 import { Extension } from '@core/index.js';
 import { findFieldsInRange } from '../../document-api-adapters/helpers/field-resolver.js';
-import { getWordStatistics, resolveMainBodyEditor } from '../../document-api-adapters/helpers/word-statistics.js';
+import {
+  getWordStatistics,
+  resolveDocumentStatFieldValue,
+  resolveMainBodyEditor,
+} from '../../document-api-adapters/helpers/word-statistics.js';
 
 /** Field types eligible for value updates via F9. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
-
-/**
- * Resolves the fresh display value for a field based on its type.
- * Returns `null` when the value cannot be determined (e.g. NUMPAGES
- * without pagination), signalling the caller to skip the field.
- */
-function resolveFieldValue(fieldType, stats) {
-  switch (fieldType) {
-    case 'NUMWORDS':
-      return String(stats.words);
-    case 'NUMCHARS':
-      return String(stats.charactersWithSpaces);
-    case 'NUMPAGES':
-      return stats.pages != null ? String(stats.pages) : null;
-    default:
-      return null;
-  }
-}
 
 /**
  * @module FieldUpdate
@@ -66,7 +52,7 @@ export const FieldUpdate = Extension.create({
           const sorted = [...updatable].sort((a, b) => b.pos - a.pos);
 
           for (const field of sorted) {
-            const freshValue = resolveFieldValue(field.fieldType, stats);
+            const freshValue = resolveDocumentStatFieldValue(field.fieldType, stats);
             if (freshValue == null) continue;
 
             const node = tr.doc.nodeAt(field.pos);

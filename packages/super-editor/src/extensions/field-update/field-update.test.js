@@ -9,6 +9,7 @@
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { getWordStatistics } from '../../document-api-adapters/helpers/word-statistics.js';
 
 describe('FieldUpdate extension', () => {
   let docData;
@@ -91,6 +92,7 @@ describe('FieldUpdate extension', () => {
 
   it('updates NUMCHARS field to a numeric string', () => {
     editor = createEditor();
+    const expectedValue = String(getWordStatistics(editor).characters);
 
     editor.commands.selectAll();
     editor.commands.updateFieldsInSelection();
@@ -102,6 +104,6 @@ describe('FieldUpdate extension', () => {
     });
 
     expect(numcharsField).toBeTruthy();
-    expect(Number(numcharsField.attrs.resolvedText)).toBeGreaterThan(0);
+    expect(numcharsField.attrs.resolvedText).toBe(expectedValue);
   });
 });

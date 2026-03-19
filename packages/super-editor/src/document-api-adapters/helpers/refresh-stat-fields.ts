@@ -11,7 +11,7 @@
  */
 
 import type { Editor } from '../../core/Editor.js';
-import { getWordStatistics, resolveMainBodyEditor } from './word-statistics.js';
+import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from './word-statistics.js';
 
 /** Maps uppercase field type (e.g. 'NUMWORDS') to its fresh string value. */
 export type StatFieldCacheMap = Map<string, string>;
@@ -29,11 +29,11 @@ export function refreshAllStatFields(editor: Editor): StatFieldCacheMap {
   const mainEditor = resolveMainBodyEditor(editor);
   const stats = getWordStatistics(mainEditor);
 
-  cacheMap.set('NUMWORDS', String(stats.words));
-  cacheMap.set('NUMCHARS', String(stats.charactersWithSpaces));
-
-  if (stats.pages != null) {
-    cacheMap.set('NUMPAGES', String(stats.pages));
+  for (const fieldType of ['NUMWORDS', 'NUMCHARS', 'NUMPAGES'] as const) {
+    const freshValue = resolveDocumentStatFieldValue(fieldType, stats);
+    if (freshValue != null) {
+      cacheMap.set(fieldType, freshValue);
+    }
   }
 
   return cacheMap;

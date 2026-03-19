@@ -60,4 +60,23 @@ describe('document-stat-preprocessor', () => {
 
     expect(result[0].attributes.instruction).toBe('NUMWORDS \\* MERGEFORMAT');
   });
+
+  it('uses 5th param fieldRunRPr when 3rd param is docx (body pipeline)', () => {
+    const docx = { 'word/document.xml': {} };
+    const fieldRPr = { name: 'w:rPr', elements: [{ name: 'w:b' }] };
+    const contentNodes = [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '10' }] }] }];
+
+    const result = preProcessDocumentStatInstruction(contentNodes, 'NUMWORDS', docx, null, fieldRPr);
+
+    expect(result[0].elements[0]).toBe(fieldRPr);
+  });
+
+  it('falls back to 3rd param w:rPr when 5th param is null (header/footer pipeline)', () => {
+    const rPrFromThirdParam = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
+    const contentNodes = [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }] }];
+
+    const result = preProcessDocumentStatInstruction(contentNodes, 'NUMCHARS', rPrFromThirdParam, null, null);
+
+    expect(result[0].elements[0]).toBe(rPrFromThirdParam);
+  });
 });

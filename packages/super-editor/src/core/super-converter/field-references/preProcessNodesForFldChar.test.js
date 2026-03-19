@@ -384,4 +384,42 @@ describe('preProcessNodesForFldChar', () => {
     expect(processedNodes[0].name).toBe('sd:indexEntry');
     expect(processedNodes[0].attributes.instruction).toBe('XE "Term"');
   });
+
+  it('passes field-sequence rPr into body NUMWORDS fields when cached-result runs have no styling', () => {
+    const nodes = [
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:rPr', elements: [{ name: 'w:b' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } },
+        ],
+      },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:rPr', elements: [{ name: 'w:b' }] },
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'NUMWORDS' }] },
+        ],
+      },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:rPr', elements: [{ name: 'w:b' }] },
+          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
+        ],
+      },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '12' }] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:documentStatField');
+    expect(processedNodes[0].attributes.instruction).toBe('NUMWORDS');
+    expect(processedNodes[0].elements?.[0]).toEqual({
+      name: 'w:rPr',
+      elements: [{ name: 'w:b' }],
+    });
+  });
 });

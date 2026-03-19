@@ -14,7 +14,7 @@ vi.mock('./live-document-counts.js', async (importOriginal) => {
   };
 });
 
-import { getWordStatistics } from './word-statistics.js';
+import { getWordStatistics, resolveDocumentStatFieldValue } from './word-statistics.js';
 import { getTextAdapter } from '../get-text-adapter.js';
 import { countPages } from './live-document-counts.js';
 
@@ -78,5 +78,30 @@ describe('word-statistics', () => {
     expect(stats.characters).toBe('Firstparagraph'.length + 'Secondparagraph'.length + 'Third'.length);
     // Characters with spaces but not newlines
     expect(stats.charactersWithSpaces).toBe('First paragraph'.length + 'Second paragraph'.length + 'Third'.length);
+  });
+
+  it('maps NUMCHARS to the characters metric', () => {
+    const stats = {
+      words: 12,
+      characters: 34,
+      charactersWithSpaces: 40,
+      pages: 2,
+    };
+
+    expect(resolveDocumentStatFieldValue('NUMWORDS', stats)).toBe('12');
+    expect(resolveDocumentStatFieldValue('NUMCHARS', stats)).toBe('34');
+    expect(resolveDocumentStatFieldValue('NUMPAGES', stats)).toBe('2');
+  });
+
+  it('returns null for unknown field types and unavailable NUMPAGES', () => {
+    const stats = {
+      words: 12,
+      characters: 34,
+      charactersWithSpaces: 40,
+      pages: undefined,
+    };
+
+    expect(resolveDocumentStatFieldValue('NUMPAGES', stats)).toBeNull();
+    expect(resolveDocumentStatFieldValue('AUTHOR', stats)).toBeNull();
   });
 });

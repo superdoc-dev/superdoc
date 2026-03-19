@@ -28,7 +28,7 @@ import { executeDomainCommand } from './plan-wrappers.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { getWordStatistics, resolveMainBodyEditor } from '../helpers/word-statistics.js';
+import { getWordStatistics, resolveDocumentStatFieldValue, resolveMainBodyEditor } from '../helpers/word-statistics.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -133,7 +133,7 @@ function insertDocumentStatField(
   const statsEditor = resolveMainBodyEditor(editor);
   const stats = getWordStatistics(statsEditor);
   const fieldType = extractFieldType(input.instruction);
-  const initialValue = fieldType === 'NUMWORDS' ? String(stats.words) : String(stats.charactersWithSpaces);
+  const initialValue = resolveDocumentStatFieldValue(fieldType, stats) ?? '';
 
   const receipt = executeDomainCommand(
     editor,
@@ -297,14 +297,7 @@ function rebuildDocumentStatField(
   if (!node) return fieldFailure('TARGET_NOT_FOUND', 'Node not found.');
 
   const fieldType = extractFieldType((node.attrs?.instruction as string) ?? '');
-  let freshValue: string;
-  if (fieldType === 'NUMWORDS') {
-    freshValue = String(stats.words);
-  } else if (fieldType === 'NUMCHARS') {
-    freshValue = String(stats.charactersWithSpaces);
-  } else {
-    freshValue = '';
-  }
+  const freshValue = resolveDocumentStatFieldValue(fieldType, stats) ?? '';
 
   const receipt = executeDomainCommand(
     editor,

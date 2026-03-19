@@ -21,7 +21,7 @@ import { countWordsFromText, countPages } from './live-document-counts.js';
 export interface WordStatistics {
   /** Word count — matches NUMWORDS / ap:Words semantics. */
   words: number;
-  /** Character count excluding spaces — matches ap:Characters. */
+  /** Character count excluding spaces — matches ap:Characters / NUMCHARS semantics. */
   characters: number;
   /** Character count including spaces — matches ap:CharactersWithSpaces. */
   charactersWithSpaces: number;
@@ -45,6 +45,25 @@ export function getWordStatistics(editor: Editor): WordStatistics {
     charactersWithSpaces: countCharactersWithSpaces(text),
     pages: countPages(editor),
   };
+}
+
+/**
+ * Resolves the live display value for a document-statistic field.
+ *
+ * Word's NUMCHARS field reads from the `Characters` metric (excluding
+ * spaces), not from `CharactersWithSpaces`.
+ */
+export function resolveDocumentStatFieldValue(fieldType: string, stats: WordStatistics): string | null {
+  switch (fieldType) {
+    case 'NUMWORDS':
+      return String(stats.words);
+    case 'NUMCHARS':
+      return String(stats.characters);
+    case 'NUMPAGES':
+      return stats.pages != null ? String(stats.pages) : null;
+    default:
+      return null;
+  }
 }
 
 /**
@@ -79,8 +98,7 @@ function countCharactersExcludingSpaces(text: string): number {
  *
  * Word's "CharactersWithSpaces" counts all visible characters plus spaces,
  * but not paragraph marks. The text projection inserts '\n' between blocks,
- * which we exclude. Word's NUMCHARS field typically maps to this metric
- * (characters with spaces), not to ap:Characters (without spaces).
+ * which we exclude.
  *
  * **Semantics note**: Same caveat as above — the formula should be verified
  * against Word-authored fixtures.

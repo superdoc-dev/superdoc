@@ -40,11 +40,12 @@ async function setupMergedTable(page: import('@playwright/test').Page): Promise<
 async function getCellInfo(
   page: import('@playwright/test').Page,
   tableNodeId: string,
-): Promise<Array<{ rowIndex: number; columnIndex: number; colspan: number; rowspan: number }>> {
+): Promise<Array<{ nodeId: string; rowIndex: number; columnIndex: number; colspan: number; rowspan: number }>> {
   return page.evaluate((tid) => {
     const doc = (window as any).editor.doc;
     const result = doc.tables.getCells({ nodeId: tid });
     return (result?.cells ?? []).map((c: any) => ({
+      nodeId: c.nodeId,
       rowIndex: c.rowIndex,
       columnIndex: c.columnIndex,
       colspan: c.colspan,
@@ -127,6 +128,36 @@ test('unmergeCells with direct cell nodeId still works', async ({ superdoc }) =>
   await superdoc.waitForStable();
 
   // Verify unmerge.
+  const cellsAfter = await getCellInfo(superdoc.page, tableNodeId);
+  const unmergedCell = cellsAfter.find((c) => c.rowIndex === 0 && c.columnIndex === 0);
+  expect(unmergedCell?.colspan).toBe(1);
+});
+
+test('unmergeCells accepts TableCellInfo handoff from getCells()', async ({ superdoc }) => {
+  await superdoc.waitForStable();
+
+  const tableNodeId = await setupMergedTable(superdoc.page);
+  await superdoc.waitForStable();
+
+  const cellInfo = await superdoc.page.evaluate((tid) => {
+    const doc = (window as any).editor.doc;
+    return doc.tables.getCells({ nodeId: tid, rowIndex: 0, columnIndex: 0 })?.cells?.[0] ?? null;
+  }, tableNodeId);
+
+  expect(cellInfo).toMatchObject({
+    nodeId: expect.any(String),
+    rowIndex: 0,
+    columnIndex: 0,
+    colspan: 2,
+    rowspan: 1,
+  });
+
+  const result = await superdoc.page.evaluate((payload) => {
+    return (window as any).editor.doc.tables.unmergeCells(payload);
+  }, cellInfo);
+  expect(result?.success).toBe(true);
+  await superdoc.waitForStable();
+
   const cellsAfter = await getCellInfo(superdoc.page, tableNodeId);
   const unmergedCell = cellsAfter.find((c) => c.rowIndex === 0 && c.columnIndex === 0);
   expect(unmergedCell?.colspan).toBe(1);

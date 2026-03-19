@@ -2755,6 +2755,12 @@ describe('createDocumentApi', () => {
       expect(() => api.tables.unmergeCells({ target })).not.toThrow();
     });
 
+    it('treats explicit null coordinates as absent for direct cell target on unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).not.toThrow();
+    });
+
     it('accepts table-scoped locator (nodeId + rowIndex + columnIndex) for unmergeCells', () => {
       const api = makeApi();
       expect(() => api.tables.unmergeCells({ nodeId: 'table-1', rowIndex: 0, columnIndex: 0 })).not.toThrow();
@@ -2802,6 +2808,25 @@ describe('createDocumentApi', () => {
       const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
       expect(() => api.tables.unmergeCells({ target } as any)).toThrow(
         /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).toThrow(
+        /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and mixed null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: null } as any)).toThrow(
+        /both rowIndex and columnIndex/,
       );
     });
 

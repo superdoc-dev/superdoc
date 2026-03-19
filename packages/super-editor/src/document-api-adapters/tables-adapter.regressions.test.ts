@@ -13,6 +13,7 @@ import {
   tablesSetShadingAdapter,
   tablesSplitCellAdapter,
   tablesSplitAdapter,
+  tablesUnmergeCellsAdapter,
 } from './tables-adapter.js';
 
 vi.mock('prosemirror-tables', () => ({
@@ -679,6 +680,34 @@ describe('tables-adapter regressions', () => {
         colspan: 2,
       }),
     );
+  });
+
+  it('rejects table nodeId unmerge requests with null coordinates before mutating cell (0,0)', () => {
+    const editor = makeTableEditor();
+    const dispatch = editor.dispatch as unknown as ReturnType<typeof vi.fn>;
+    const leadCell = (editor.state.doc.nodeAt(0)?.child(0).child(0) as unknown as { attrs: Record<string, unknown> })!;
+    leadCell.attrs.colspan = 2;
+
+    expect(() =>
+      tablesUnmergeCellsAdapter(editor, { nodeId: 'table-1', rowIndex: null, columnIndex: null } as any),
+    ).toThrow(/expected "tableCell"/);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects table target unmerge requests with null coordinates before mutating cell (0,0)', () => {
+    const editor = makeTableEditor();
+    const dispatch = editor.dispatch as unknown as ReturnType<typeof vi.fn>;
+    const leadCell = (editor.state.doc.nodeAt(0)?.child(0).child(0) as unknown as { attrs: Record<string, unknown> })!;
+    leadCell.attrs.colspan = 2;
+
+    expect(() =>
+      tablesUnmergeCellsAdapter(editor, {
+        target: { kind: 'block', nodeType: 'table', nodeId: 'table-1' },
+        rowIndex: null,
+        columnIndex: null,
+      } as any),
+    ).toThrow(/expected "tableCell"/);
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('rejects paragraph targets for tables.setBorder', () => {

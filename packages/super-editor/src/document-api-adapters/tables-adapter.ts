@@ -2347,11 +2347,42 @@ export function tablesMergeCellsAdapter(
   }
 }
 
-function isTableScopedUnmergeInput(
+function hasDefinedUnmergeCoordinates(
   input: TablesUnmergeCellsInput,
 ): input is Extract<TablesUnmergeCellsInput, { rowIndex: number; columnIndex: number }> {
   const inputRecord = input as Record<string, unknown>;
-  return inputRecord.rowIndex !== undefined && inputRecord.columnIndex !== undefined;
+  return inputRecord.rowIndex != null && inputRecord.columnIndex != null;
+}
+
+function resolveUnmergeInput(editor: Editor, input: TablesUnmergeCellsInput) {
+  if (!hasDefinedUnmergeCoordinates(input)) {
+    return resolveCellLocator(editor, input, 'tables.unmergeCells');
+  }
+
+  const target = (input as { target?: unknown }).target;
+  if (target && typeof target === 'object' && !Array.isArray(target)) {
+    const blockTarget = target as { kind?: unknown; nodeType?: unknown };
+    if (blockTarget.kind === 'block' && blockTarget.nodeType === 'table') {
+      return resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells');
+    }
+    return resolveCellLocator(editor, { target: target as TableCellAddress }, 'tables.unmergeCells');
+  }
+
+  const nodeId = (input as { nodeId?: unknown }).nodeId;
+  if (typeof nodeId === 'string') {
+    const candidate = findBlockByNodeIdOnly(getBlockIndex(editor), nodeId);
+    if (!candidate) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'tables.unmergeCells: target was not found.', {
+        target: nodeId,
+      });
+    }
+
+    return candidate.nodeType === 'table'
+      ? resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells')
+      : resolveCellLocator(editor, { nodeId }, 'tables.unmergeCells');
+  }
+
+  return resolveCellLocator(editor, {}, 'tables.unmergeCells');
 }
 
 /**
@@ -2367,13 +2398,10 @@ export function tablesUnmergeCellsAdapter(
 ): TableMutationResult {
   rejectTrackedMode('tables.unmergeCells', options);
 
-  // Discriminate by value, not by key presence. A JS caller may pass
-  // { nodeId: '…', rowIndex: undefined } — the keys exist but the values
-  // are absent. This must agree with the public-API validator in tables.ts
-  // which checks `!== undefined`, not `in`.
-  const resolved = isTableScopedUnmergeInput(input)
-    ? resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells')
-    : resolveCellLocator(editor, input, 'tables.unmergeCells');
+  // Preserve read→write handoff from tables.getCells(): a TableCellInfo carries
+  // row/column metadata plus a cell nodeId. For nodeId-based inputs, resolve by
+  // actual node type instead of assuming coordinates always mean "table-scoped".
+  const resolved = resolveUnmergeInput(editor, input);
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
 
   const attrs = cellNode.attrs as Record<string, unknown>;

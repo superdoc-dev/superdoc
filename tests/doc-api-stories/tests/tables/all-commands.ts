@@ -1316,6 +1316,36 @@ describe('document-api story: all table commands', () => {
     assertMutationSuccess('tables.unmergeCells', result);
   });
 
+  it('tables.unmergeCells: TableCellInfo handoff from tables.getCells still works', async () => {
+    const sessionId = makeSessionId('unmerge-cell-info-handoff');
+    const fixture = await setupTableFixture(sessionId);
+    const f = requireFixture('tables.unmergeCells', fixture);
+
+    const mergeResult = unwrap<any>(
+      await api.doc.tables.mergeCells({
+        sessionId,
+        nodeId: f.tableNodeId,
+        start: { rowIndex: 0, columnIndex: 0 },
+        end: { rowIndex: 0, columnIndex: 1 },
+      }),
+    );
+    assertMutationSuccess('tables.mergeCells', mergeResult);
+
+    const cellsResult = unwrap<any>(
+      await api.doc.tables.getCells({
+        sessionId,
+        nodeId: f.tableNodeId,
+        rowIndex: 0,
+        columnIndex: 0,
+      }),
+    );
+    const cellInfo = cellsResult.cells[0];
+    expect(cellInfo).toMatchObject({ rowIndex: 0, columnIndex: 0, colspan: 2, rowspan: 1 });
+
+    const result = unwrap<any>(await api.doc.tables.unmergeCells({ sessionId, ...cellInfo }));
+    assertMutationSuccess('tables.unmergeCells', result);
+  });
+
   it('tables.unmergeCells: non-anchor coordinate inside a merged span resolves correctly', async () => {
     const sessionId = makeSessionId('unmerge-non-anchor');
     const fixture = await setupTableFixture(sessionId);

@@ -86,14 +86,15 @@ type CellOrTableScopedCellLocatorInput = {
 
 /**
  * Returns `true` when the input carries non-`undefined` row + column coordinates,
- * meaning it should be resolved as a table-scoped cell locator.
+ * meaning it can participate in table-scoped cell targeting.
  *
- * This is the **single source of truth** for the direct-cell vs. table-scoped
- * discrimination. Both the public-API validator and the adapter-level resolver
- * dispatch must use this function so they agree on the classification.
+ * This is the validation-time check for coordinate presence. Adapter-level
+ * resolution may still refine ambiguous `nodeId` handoffs by resolved node
+ * type so payloads like `TableCellInfo` from `tables.getCells()` continue to
+ * work as direct cell locators.
  */
 export function hasTableScopedCellCoordinates(input: CellOrTableScopedCellLocatorInput): boolean {
-  return input.rowIndex !== undefined && input.columnIndex !== undefined;
+  return input.rowIndex != null && input.columnIndex != null;
 }
 
 /**
@@ -109,8 +110,8 @@ export function hasTableScopedCellCoordinates(input: CellOrTableScopedCellLocato
 function validateCellOrTableScopedCellLocator(input: CellOrTableScopedCellLocatorInput, operationName: string): void {
   validateTableLocator(input, operationName);
 
-  const hasRowIndex = input.rowIndex !== undefined;
-  const hasColumnIndex = input.columnIndex !== undefined;
+  const hasRowIndex = input.rowIndex != null;
+  const hasColumnIndex = input.columnIndex != null;
 
   if (hasRowIndex !== hasColumnIndex) {
     throw new DocumentApiValidationError(

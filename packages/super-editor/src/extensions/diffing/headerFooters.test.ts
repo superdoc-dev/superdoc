@@ -1,0 +1,344 @@
+import { describe, expect, it, vi } from 'vitest';
+import { Editor } from '@core/Editor.js';
+import { getStarterExtensions } from '@extensions/index.js';
+import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
+import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
+import { captureHeaderFooterState } from './algorithm/header-footer-diffing';
+
+/**
+ * Creates a headless editor from a DOCX fixture.
+ *
+ * @param user Optional user config for tracked replay tests.
+ * @returns Headless editor ready for diffing tests.
+ */
+async function createEditor(user?: { name: string; email: string }): Promise<Editor> {
+  const buffer = await getTestDataAsBuffer('diffing/diff_before2.docx');
+  const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+
+  return new Editor({
+    isHeadless: true,
+    extensions: getStarterExtensions(),
+    documentId: 'header-footer-diff-test',
+    content: docx,
+    mode: 'docx',
+    media,
+    mediaFiles,
+    fonts,
+    annotations: true,
+    user,
+  });
+}
+
+/**
+ * Builds a simple PM JSON document for header/footer content.
+ *
+ * @param editor Editor whose schema should be used.
+ * @param text Plain text content for the document.
+ * @returns PM JSON document with one paragraph.
+ */
+function createHeaderFooterDoc(editor: Editor, text: string): Record<string, unknown> {
+  const paragraph = editor.schema.nodes.paragraph.create(
+    undefined,
+    editor.schema.nodes.run.create(undefined, text ? [editor.schema.text(text)] : []),
+  );
+  return editor.schema.nodes.doc.create(undefined, [paragraph]).toJSON() as Record<string, unknown>;
+}
+
+/**
+ * Seeds one header/footer part into converter state and document relationships.
+ *
+ * @param editor Editor whose converter should be updated.
+ * @param params Header/footer part settings.
+ */
+function seedPart(
+  editor: Editor,
+  params: { kind: 'header' | 'footer'; refId: string; partPath: string; text: string },
+): void {
+  const { kind, refId, partPath, text } = params;
+  const converter = editor.converter!;
+  const collection = kind === 'header' ? (converter.headers ??= {}) : (converter.footers ??= {});
+  collection[refId] = createHeaderFooterDoc(editor, text);
+
+  const variantIds = kind === 'header' ? (converter.headerIds ??= {}) : (converter.footerIds ??= {});
+  if (!Array.isArray(variantIds.ids)) {
+    variantIds.ids = [];
+  }
+  if (!variantIds.ids.includes(refId)) {
+    variantIds.ids.push(refId);
+  }
+
+  if (!converter.convertedXml?.[partPath]) {
+    converter.convertedXml![partPath] = {
+      type: 'element',
+      name: 'document',
+      elements: [
+        {
+          type: 'element',
+          name: kind === 'header' ? 'w:hdr' : 'w:ftr',
+          elements: [],
+        },
+      ],
+    };
+  }
+
+  const relsPart = (converter.convertedXml!['word/_rels/document.xml.rels'] ??= {
+    type: 'element',
+    name: 'document',
+    elements: [],
+  }) as { elements?: Array<{ name?: string; attributes?: Record<string, string>; elements?: unknown[] }> };
+  if (!relsPart.elements) {
+    relsPart.elements = [];
+  }
+  let relsRoot = relsPart.elements.find((entry) => entry.name === 'Relationships');
+  if (!relsRoot) {
+    relsRoot = {
+      name: 'Relationships',
+      attributes: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+      elements: [],
+    };
+    relsPart.elements.push(relsRoot);
+  }
+  if (!relsRoot.elements) {
+    relsRoot.elements = [];
+  }
+
+  const existing = relsRoot.elements.find(
+    (entry) => entry?.name === 'Relationship' && entry.attributes?.Id === refId,
+  ) as { attributes?: Record<string, string> } | undefined;
+  const attributes = {
+    Id: refId,
+    Type:
+      kind === 'header'
+        ? 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header'
+        : 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer',
+    Target: partPath.replace(/^word\//, ''),
+  };
+
+  if (existing) {
+    existing.attributes = attributes;
+  } else {
+    relsRoot.elements.push({
+      name: 'Relationship',
+      attributes,
+      elements: [],
+    });
+  }
+}
+
+/**
+ * Writes the body section properties used by the section resolver.
+ *
+ * @param editor Editor whose body section properties should be updated.
+ * @param params Explicit section references to set.
+ */
+function setBodySection(
+  editor: Editor,
+  params: {
+    titlePg?: boolean;
+    headerDefault?: string | null;
+    footerDefault?: string | null;
+  },
+): void {
+  const elements: Array<Record<string, unknown>> = [
+    {
+      type: 'element',
+      name: 'w:pgSz',
+      attributes: { 'w:w': '12240', 'w:h': '15840' },
+    },
+    {
+      type: 'element',
+      name: 'w:pgMar',
+      attributes: {
+        'w:top': '1440',
+        'w:right': '1440',
+        'w:bottom': '1440',
+        'w:left': '1440',
+        'w:header': '708',
+        'w:footer': '708',
+        'w:gutter': '0',
+      },
+    },
+  ];
+
+  if (params.titlePg) {
+    elements.push({ type: 'element', name: 'w:titlePg', elements: [] });
+  }
+  if (params.headerDefault) {
+    elements.push({
+      type: 'element',
+      name: 'w:headerReference',
+      attributes: { 'w:type': 'default', 'r:id': params.headerDefault },
+      elements: [],
+    });
+  }
+  if (params.footerDefault) {
+    elements.push({
+      type: 'element',
+      name: 'w:footerReference',
+      attributes: { 'w:type': 'default', 'r:id': params.footerDefault },
+      elements: [],
+    });
+  }
+
+  editor.converter!.bodySectPr = {
+    type: 'element',
+    name: 'w:sectPr',
+    elements,
+  };
+}
+
+/**
+ * Seeds one default header for a single-section test document.
+ *
+ * @param editor Editor whose converter should be updated.
+ * @param text Header text content.
+ */
+function seedDefaultHeader(editor: Editor, text: string): void {
+  seedPart(editor, {
+    kind: 'header',
+    refId: 'rIdHeader1',
+    partPath: 'word/header1.xml',
+    text,
+  });
+  setBodySection(editor, { headerDefault: 'rIdHeader1' });
+}
+
+describe('Header/footer diffing', () => {
+  it('compares and replays a newly added header', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      setBodySection(beforeEditor, {});
+      seedDefaultHeader(afterEditor, 'New header');
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(diff.headerFootersDiff?.addedParts).toHaveLength(1);
+      expect(diff.headerFootersDiff?.slotChanges).toHaveLength(1);
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(captureHeaderFooterState(beforeEditor)).toEqual(captureHeaderFooterState(afterEditor));
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
+  it('emits a header/footer refresh signal when replay adds a new header', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      setBodySection(beforeEditor, {});
+      seedDefaultHeader(afterEditor, 'New header');
+
+      const emitSpy = vi.spyOn(beforeEditor, 'emit');
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(emitSpy).toHaveBeenCalledWith(
+        'headerFooterPartsChanged',
+        expect.objectContaining({
+          addedParts: ['rIdHeader1'],
+        }),
+      );
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
+  it('exports a valid header part after replay adds a new header', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      setBodySection(beforeEditor, {});
+      seedDefaultHeader(afterEditor, 'Exported header');
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+
+      const updatedDocs = await beforeEditor.exportDocx({ getUpdatedDocs: true });
+      expect(updatedDocs['word/header1.xml']).toContain('<w:hdr');
+      expect(updatedDocs['word/header1.xml']).toContain('xmlns:w=');
+      expect(updatedDocs['[Content_Types].xml']).toContain('/word/header1.xml');
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
+  it('compares and replays modified header content', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      seedDefaultHeader(beforeEditor, 'Old header');
+      seedDefaultHeader(afterEditor, 'Updated header');
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(diff.headerFootersDiff?.modifiedParts).toHaveLength(1);
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(captureHeaderFooterState(beforeEditor)).toEqual(captureHeaderFooterState(afterEditor));
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
+  it('compares and replays header removal', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      seedDefaultHeader(beforeEditor, 'Remove me');
+      setBodySection(afterEditor, {});
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(diff.headerFootersDiff?.removedParts).toHaveLength(1);
+      expect(diff.headerFootersDiff?.slotChanges).toHaveLength(1);
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+      expect(captureHeaderFooterState(beforeEditor)).toEqual(captureHeaderFooterState(afterEditor));
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+});

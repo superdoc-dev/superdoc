@@ -300,6 +300,7 @@ const handleCompareFile = async (event) => {
       compareComments,
       compareTranslatedLinkedStyles,
       compareTranslatedNumbering,
+      compareEditor,
     );
     const userToApply = editor.options?.user ?? user;
     editor.commands.replayDifferences(diff, { user: userToApply, applyTrackedChanges: true });

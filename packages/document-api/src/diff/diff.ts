@@ -19,8 +19,8 @@ import type {
 // Constants
 // ---------------------------------------------------------------------------
 
-const SNAPSHOT_VERSION = 'sd-diff-snapshot/v1';
-const PAYLOAD_VERSION = 'sd-diff-payload/v1';
+const SNAPSHOT_VERSIONS = new Set(['sd-diff-snapshot/v1', 'sd-diff-snapshot/v2']);
+const PAYLOAD_VERSIONS = new Set(['sd-diff-payload/v1', 'sd-diff-payload/v2']);
 
 // ---------------------------------------------------------------------------
 // Adapter interface — implemented by each engine
@@ -54,10 +54,10 @@ function validateSnapshotWrapper(snapshot: unknown): asserts snapshot is DiffSna
   if (!isRecord(snapshot)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'targetSnapshot must be a DiffSnapshot object.');
   }
-  if (snapshot.version !== SNAPSHOT_VERSION) {
+  if (!SNAPSHOT_VERSIONS.has(String(snapshot.version))) {
     throw new DocumentApiValidationError(
       'CAPABILITY_UNSUPPORTED',
-      `Unsupported snapshot version "${String(snapshot.version)}". Expected "${SNAPSHOT_VERSION}".`,
+      `Unsupported snapshot version "${String(snapshot.version)}". Expected one of "${[...SNAPSHOT_VERSIONS].join('", "')}".`,
     );
   }
   if (typeof snapshot.engine !== 'string') {
@@ -78,10 +78,10 @@ function validateDiffPayloadWrapper(diff: unknown): asserts diff is DiffPayload 
   if (!isRecord(diff)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'diff must be a DiffPayload object.');
   }
-  if (diff.version !== PAYLOAD_VERSION) {
+  if (!PAYLOAD_VERSIONS.has(String(diff.version))) {
     throw new DocumentApiValidationError(
       'CAPABILITY_UNSUPPORTED',
-      `Unsupported diff version "${String(diff.version)}". Expected "${PAYLOAD_VERSION}".`,
+      `Unsupported diff version "${String(diff.version)}". Expected one of "${[...PAYLOAD_VERSIONS].join('", "')}".`,
     );
   }
   if (typeof diff.engine !== 'string') {

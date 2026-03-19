@@ -15,12 +15,14 @@ export function buildDiffSummary(diff: DiffResult): DiffSummary {
   const commentsHasChanges = diff.commentDiffs.length > 0;
   const stylesHasChanges = diff.stylesDiff !== null;
   const numberingHasChanges = diff.numberingDiff !== null;
+  const headerFootersHasChanges = diff.headerFootersDiff !== null;
 
   const changedComponents: DiffSummary['changedComponents'] = [];
   if (bodyHasChanges) changedComponents.push('body');
   if (commentsHasChanges) changedComponents.push('comments');
   if (stylesHasChanges) changedComponents.push('styles');
   if (numberingHasChanges) changedComponents.push('numbering');
+  if (headerFootersHasChanges) changedComponents.push('headerFooters');
 
   return {
     hasChanges: changedComponents.length > 0,
@@ -29,5 +31,6 @@ export function buildDiffSummary(diff: DiffResult): DiffSummary {
     comments: { hasChanges: commentsHasChanges },
     styles: { hasChanges: stylesHasChanges },
     numbering: { hasChanges: numberingHasChanges },
+    headerFooters: { hasChanges: headerFootersHasChanges },
   };
 }

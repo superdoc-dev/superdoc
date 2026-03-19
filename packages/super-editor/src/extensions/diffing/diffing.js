@@ -2,6 +2,7 @@
 import { Extension } from '@core/Extension.js';
 import { computeDiff } from './computeDiff.ts';
 import { replayDiffs } from './replayDiffs.ts';
+import { captureHeaderFooterState } from './algorithm/header-footer-diffing.ts';
 
 export const Diffing = Extension.create({
   name: 'documentDiffing',
@@ -20,10 +21,11 @@ export const Diffing = Extension.create({
        * @param {import('./algorithm/comment-diffing.ts').CommentInput[]} [updatedComments]
        * @param {import('@superdoc/style-engine/ooxml').StylesDocumentProperties | null} [updatedStyles]
        * @param {import('@superdoc/style-engine/ooxml').NumberingProperties | null} [updatedNumbering]
+       * @param {import('./algorithm/header-footer-diffing.ts').HeaderFooterState | { state?: unknown; converter?: unknown } | null} [updatedHeaderFooters]
        * @returns {import('./computeDiff.ts').DiffResult}
        */
       compareDocuments:
-        (updatedDocument, updatedComments, updatedStyles, updatedNumbering) =>
+        (updatedDocument, updatedComments, updatedStyles, updatedNumbering, updatedHeaderFooters) =>
         ({ state, tr }) => {
           tr.setMeta('preventDispatch', true);
           const currentComments = this.editor.converter?.comments ?? [];
@@ -32,6 +34,13 @@ export const Diffing = Extension.create({
           const nextStyles = updatedStyles === undefined ? currentStyles : updatedStyles;
           const currentNumbering = this.editor.converter?.translatedNumbering ?? null;
           const nextNumbering = updatedNumbering === undefined ? currentNumbering : updatedNumbering;
+          const currentHeaderFooters = captureHeaderFooterState(this.editor);
+          const nextHeaderFooters =
+            updatedHeaderFooters === undefined
+              ? currentHeaderFooters
+              : updatedHeaderFooters?.state && updatedHeaderFooters?.converter
+                ? captureHeaderFooterState(updatedHeaderFooters)
+                : updatedHeaderFooters;
           const diffs = computeDiff(
             state.doc,
             updatedDocument,
@@ -42,6 +51,8 @@ export const Diffing = Extension.create({
             nextStyles,
             currentNumbering,
             nextNumbering,
+            currentHeaderFooters,
+            nextHeaderFooters,
           );
           return diffs;
         },
@@ -68,13 +79,19 @@ export const Diffing = Extension.create({
           const tr = state.tr;
 
           const canApplyTrackedChanges = applyTrackedChanges && Boolean(this.editor.options.user);
+          if (canApplyTrackedChanges) {
+            // Diff replay can add pagination and section metadata to the transaction.
+            // Marking it as programmatic keeps tracked replay enabled for body steps.
+            tr.setMeta('inputType', 'programmatic');
+          }
 
-          replayDiffs({
+          const replayResult = replayDiffs({
             tr,
             diff,
             schema: state.schema,
             comments,
             editor: this.editor,
+            trackedChangesRequested: canApplyTrackedChanges,
           });
           if (canApplyTrackedChanges) {
             tr.setMeta('forceTrackChanges', true);
@@ -82,7 +99,7 @@ export const Diffing = Extension.create({
             tr.setMeta('skipTrackChanges', true);
           }
 
-          if (dispatch && tr.docChanged) {
+          if (dispatch && (tr.docChanged || replayResult.appliedDiffs > 0)) {
             dispatch(tr);
           }
 

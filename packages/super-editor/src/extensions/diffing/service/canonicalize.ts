@@ -8,6 +8,7 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import type { CommentInput } from '../algorithm/comment-diffing';
+import type { HeaderFooterState } from '../algorithm/header-footer-diffing';
 import { COMMENT_ATTRS_DIFF_IGNORED_KEYS } from '../algorithm/comment-diffing';
 import { normalizeDocJSON } from '../algorithm/semantic-normalization';
 
@@ -17,6 +18,7 @@ export interface CanonicalDiffableState {
   comments: Record<string, unknown>[];
   styles: Record<string, unknown> | null;
   numbering: Record<string, unknown> | null;
+  headerFooters: HeaderFooterState | null;
 }
 
 /**
@@ -62,12 +64,14 @@ export function buildCanonicalDiffableState(
   comments: CommentInput[],
   styles: StylesDocumentProperties | null | undefined,
   numbering: NumberingProperties | null | undefined,
+  headerFooters: HeaderFooterState | null | undefined,
 ): CanonicalDiffableState {
   return {
     body: normalizeDocJSON(doc.toJSON() as Record<string, unknown>),
     comments: comments.map(canonicalizeComment),
     styles: styles ? (styles as unknown as Record<string, unknown>) : null,
     numbering: numbering ? (numbering as unknown as Record<string, unknown>) : null,
+    headerFooters: headerFooters ? structuredClone(headerFooters) : null,
   };
 }
 

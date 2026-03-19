@@ -11,4 +11,4 @@ export {
 export { buildCanonicalDiffableState, stableStringify, type CanonicalDiffableState } from './canonicalize';
 export { computeFingerprint } from './fingerprint';
 export { buildDiffSummary } from './summary';
-export { V1_COVERAGE, coverageEquals } from './coverage';
+export { V1_COVERAGE, V2_COVERAGE, coverageEquals } from './coverage';

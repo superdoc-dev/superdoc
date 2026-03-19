@@ -12,20 +12,23 @@ import type { Transaction } from 'prosemirror-state';
 import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import type { DiffSnapshot, DiffPayload, DiffApplyResult, DiffCoverage } from '@superdoc/document-api';
 import type { CommentInput } from '../algorithm/comment-diffing';
+import type { HeaderFooterState } from '../algorithm/header-footer-diffing';
+import { captureHeaderFooterState } from '../algorithm/header-footer-diffing';
 import type { DiffResult } from '../computeDiff';
 import { computeDiff } from '../computeDiff';
 import { replayDiffs, type ReplayDiffsResult } from '../replayDiffs';
 import { buildCanonicalDiffableState } from './canonicalize';
 import { computeFingerprint } from './fingerprint';
 import { buildDiffSummary } from './summary';
-import { V1_COVERAGE, coverageEquals } from './coverage';
+import { V2_COVERAGE, coverageEquals } from './coverage';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const SNAPSHOT_VERSION = 'sd-diff-snapshot/v1' as const;
-const PAYLOAD_VERSION = 'sd-diff-payload/v1' as const;
+const SNAPSHOT_VERSION_V2 = 'sd-diff-snapshot/v2' as const;
+const PAYLOAD_VERSION_V1 = 'sd-diff-payload/v1' as const;
+const PAYLOAD_VERSION_V2 = 'sd-diff-payload/v2' as const;
 const ENGINE_ID = 'super-editor' as const;
 
 // ---------------------------------------------------------------------------
@@ -38,6 +41,25 @@ export interface DiffServiceEditor {
     comments?: CommentInput[];
     translatedLinkedStyles?: StylesDocumentProperties | null;
     translatedNumbering?: NumberingProperties | null;
+    headers?: Record<string, unknown>;
+    footers?: Record<string, unknown>;
+    headerIds?: Record<string, unknown>;
+    footerIds?: Record<string, unknown>;
+    convertedXml?: Record<string, unknown>;
+    numbering?: Record<string, unknown>;
+    bodySectPr?: Record<string, unknown> | null;
+    savedTagsToRestore?: Array<Record<string, unknown>>;
+    headerFooterModified?: boolean;
+    documentModified?: boolean;
+    exportToXmlJson?: (opts: {
+      data: unknown;
+      editor: { schema: Schema; getUpdatedJson: () => unknown };
+      editorSchema: Schema;
+      isHeaderFooter: boolean;
+      comments?: unknown[];
+      commentDefinitions?: unknown[];
+      isFinalDoc?: boolean;
+    }) => { result?: { elements?: Array<{ elements?: unknown[] }> } };
   } | null;
   emit?: (event: string, payload: unknown) => void;
   options?: {
@@ -62,6 +84,38 @@ function getEditorNumbering(editor: DiffServiceEditor): NumberingProperties | nu
   return editor.converter?.translatedNumbering ?? null;
 }
 
+/**
+ * Captures the current editor's header/footer state for diffing.
+ *
+ * @param editor Editor whose converter and section XML should be read.
+ * @returns Canonical header/footer snapshot for the editor.
+ */
+function getEditorHeaderFooters(editor: DiffServiceEditor): HeaderFooterState {
+  return captureHeaderFooterState(editor);
+}
+
+/**
+ * Builds the canonical fingerprint input for one coverage profile.
+ *
+ * @param doc ProseMirror document snapshot.
+ * @param comments Comment snapshot.
+ * @param styles Styles snapshot.
+ * @param numbering Numbering snapshot.
+ * @param headerFooters Header/footer snapshot.
+ * @param coverage Coverage flags that decide which components participate.
+ * @returns Canonical diffable state used for fingerprinting.
+ */
+function buildCanonicalStateForCoverage(
+  doc: PMNode,
+  comments: CommentInput[],
+  styles: StylesDocumentProperties | null,
+  numbering: NumberingProperties | null,
+  headerFooters: HeaderFooterState | null,
+  coverage: DiffCoverage,
+) {
+  return buildCanonicalDiffableState(doc, comments, styles, numbering, coverage.headerFooters ? headerFooters : null);
+}
+
 // ---------------------------------------------------------------------------
 // Capture
 // ---------------------------------------------------------------------------
@@ -79,15 +133,16 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
   const comments = getEditorComments(editor);
   const styles = getEditorStyles(editor);
   const numbering = getEditorNumbering(editor);
+  const headerFooters = getEditorHeaderFooters(editor);
 
-  const canonical = buildCanonicalDiffableState(doc, comments, styles, numbering);
+  const canonical = buildCanonicalStateForCoverage(doc, comments, styles, numbering, headerFooters, V2_COVERAGE);
   const fingerprint = computeFingerprint(canonical);
 
   return {
-    version: SNAPSHOT_VERSION,
+    version: SNAPSHOT_VERSION_V2,
     engine: ENGINE_ID,
     fingerprint,
-    coverage: { ...V1_COVERAGE },
+    coverage: { ...V2_COVERAGE },
     // Deep-clone every slot so the snapshot is immutable.  doc.toJSON()
     // already returns a fresh tree; the rest are live references that would
     // drift if the editor keeps mutating after capture.
@@ -96,6 +151,7 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
       comments: comments as unknown as Record<string, unknown>[],
       styles: styles as unknown as Record<string, unknown> | null,
       numbering: numbering as unknown as Record<string, unknown> | null,
+      headerFooters: headerFooters as unknown as Record<string, unknown>,
     }),
   };
 }
@@ -113,7 +169,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   validateSnapshotVersion(targetSnapshot.version);
 
   const targetCoverage = targetSnapshot.coverage;
-  validateCoverageMatch(V1_COVERAGE, targetCoverage);
+  validateCoverageMatch(V2_COVERAGE, targetCoverage);
 
   // Structurally validate payload slots before use — the payload is opaque
   // and may have been deserialized from external JSON.
@@ -122,6 +178,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   const targetComments = (targetSnapshot.payload.comments ?? []) as CommentInput[];
   const targetStyles = targetSnapshot.payload.styles as StylesDocumentProperties | null;
   const targetNumbering = targetSnapshot.payload.numbering as NumberingProperties | null;
+  const targetHeaderFooters = (targetSnapshot.payload.headerFooters ?? null) as HeaderFooterState | null;
   const targetDoc = parseDocPayload(editor.state.schema, targetSnapshot.payload.doc);
 
   // Re-derive target fingerprint from payload to guard against tampered wrappers.
@@ -130,7 +187,14 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   // INVALID_INPUT rather than a raw TypeError.
   let reDerivedFingerprint: string;
   try {
-    const targetCanonical = buildCanonicalDiffableState(targetDoc, targetComments, targetStyles, targetNumbering);
+    const targetCanonical = buildCanonicalStateForCoverage(
+      targetDoc,
+      targetComments,
+      targetStyles,
+      targetNumbering,
+      targetHeaderFooters,
+      targetCoverage,
+    );
     reDerivedFingerprint = computeFingerprint(targetCanonical);
   } catch (err) {
     if (err instanceof DiffServiceError) throw err;
@@ -151,7 +215,15 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   const baseComments = getEditorComments(editor);
   const baseStyles = getEditorStyles(editor);
   const baseNumbering = getEditorNumbering(editor);
-  const baseCanonical = buildCanonicalDiffableState(baseDoc, baseComments, baseStyles, baseNumbering);
+  const baseHeaderFooters = getEditorHeaderFooters(editor);
+  const baseCanonical = buildCanonicalStateForCoverage(
+    baseDoc,
+    baseComments,
+    baseStyles,
+    baseNumbering,
+    baseHeaderFooters,
+    V2_COVERAGE,
+  );
   const baseFingerprint = computeFingerprint(baseCanonical);
 
   // Compute raw diff.  Wrap in try-catch so malformed nested comment bodies
@@ -169,6 +241,8 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
       targetStyles,
       baseNumbering,
       targetNumbering,
+      baseHeaderFooters,
+      targetHeaderFooters,
     );
   } catch (err) {
     if (err instanceof DiffServiceError) throw err;
@@ -184,14 +258,15 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     commentDiffs: rawDiff.commentDiffs as unknown as Record<string, unknown>[],
     stylesDiff: rawDiff.stylesDiff as unknown as Record<string, unknown> | null,
     numberingDiff: rawDiff.numberingDiff as unknown as Record<string, unknown> | null,
+    headerFootersDiff: rawDiff.headerFootersDiff as unknown as Record<string, unknown> | null,
   }) as Record<string, unknown>;
 
   return {
-    version: PAYLOAD_VERSION,
+    version: PAYLOAD_VERSION_V2,
     engine: ENGINE_ID,
     baseFingerprint,
     targetFingerprint: targetSnapshot.fingerprint,
-    coverage: { ...V1_COVERAGE },
+    coverage: { ...V2_COVERAGE },
     summary,
     // Detach the payload from editor-owned objects before returning it across
     // the API boundary. Comment diffs can otherwise retain live comment refs.
@@ -232,7 +307,15 @@ export function applyDiffPayload(
   const baseComments = getEditorComments(editor);
   const baseStyles = getEditorStyles(editor);
   const baseNumbering = getEditorNumbering(editor);
-  const baseCanonical = buildCanonicalDiffableState(baseDoc, baseComments, baseStyles, baseNumbering);
+  const baseHeaderFooters = getEditorHeaderFooters(editor);
+  const baseCanonical = buildCanonicalStateForCoverage(
+    baseDoc,
+    baseComments,
+    baseStyles,
+    baseNumbering,
+    baseHeaderFooters,
+    diffPayload.coverage,
+  );
   const currentFingerprint = computeFingerprint(baseCanonical);
 
   if (currentFingerprint !== diffPayload.baseFingerprint) {
@@ -282,6 +365,7 @@ export function applyDiffPayload(
     schema: editor.state.schema,
     comments: stagedComments,
     editor: staging as unknown as Parameters<typeof replayDiffs>[0]['editor'],
+    trackedChangesRequested: trackedRequested,
   });
 
   tr.setMeta('inputType', 'programmatic');
@@ -314,7 +398,7 @@ export function applyDiffPayload(
       appliedOperations: replayResult.appliedDiffs,
       baseFingerprint: diffPayload.baseFingerprint,
       targetFingerprint: diffPayload.targetFingerprint,
-      coverage: { ...V1_COVERAGE },
+      coverage: { ...diffPayload.coverage },
       summary: verifiedSummary,
       diagnostics: replayResult.warnings,
     },
@@ -337,6 +421,12 @@ const STAGED_CONVERTER_KEYS = [
   'translatedNumbering',
   'convertedXml',
   'numbering',
+  'headers',
+  'footers',
+  'headerIds',
+  'footerIds',
+  'bodySectPr',
+  'savedTagsToRestore',
   // promoteToGuid() mutates these on the converter during style/numbering
   // replay; they must be committed back since Editor.dispatch() only calls
   // promoteToGuid for body-changing transactions (tr.docChanged).
@@ -468,6 +558,7 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
   const commentDiffs = payload.commentDiffs;
   const stylesDiff = payload.stylesDiff;
   const numberingDiff = payload.numberingDiff;
+  const headerFootersDiff = payload.headerFootersDiff;
 
   if (!Array.isArray(docDiffs)) {
     throw new DiffServiceError('INVALID_INPUT', 'Diff payload.docDiffs must be an array.');
@@ -492,6 +583,13 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
   ) {
     throw new DiffServiceError('INVALID_INPUT', 'Diff payload.numberingDiff must be a plain object or null.');
   }
+  if (
+    headerFootersDiff !== null &&
+    headerFootersDiff !== undefined &&
+    (typeof headerFootersDiff !== 'object' || Array.isArray(headerFootersDiff))
+  ) {
+    throw new DiffServiceError('INVALID_INPUT', 'Diff payload.headerFootersDiff must be a plain object or null.');
+  }
 
   // Deep-clone commentDiffs so replay never holds references to caller-owned
   // objects.  Without this, commentJSON/newCommentJSON pushed into
@@ -502,6 +600,7 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
     commentDiffs: structuredClone(commentDiffs) as DiffResult['commentDiffs'],
     stylesDiff: (stylesDiff ?? null) as DiffResult['stylesDiff'],
     numberingDiff: (numberingDiff ?? null) as DiffResult['numberingDiff'],
+    headerFootersDiff: (headerFootersDiff ?? null) as DiffResult['headerFootersDiff'],
   };
 }
 
@@ -563,19 +662,19 @@ function validateEngine(engine: string): void {
 }
 
 function validateSnapshotVersion(version: string): void {
-  if (version !== SNAPSHOT_VERSION) {
+  if (version !== SNAPSHOT_VERSION_V2) {
     throw new DiffServiceError(
       'CAPABILITY_UNSUPPORTED',
-      `Unsupported snapshot version "${version}". Expected "${SNAPSHOT_VERSION}".`,
+      `Unsupported snapshot version "${version}". Expected "${SNAPSHOT_VERSION_V2}".`,
     );
   }
 }
 
 function validatePayloadVersion(version: string): void {
-  if (version !== PAYLOAD_VERSION) {
+  if (version !== PAYLOAD_VERSION_V1 && version !== PAYLOAD_VERSION_V2) {
     throw new DiffServiceError(
       'CAPABILITY_UNSUPPORTED',
-      `Unsupported diff version "${version}". Expected "${PAYLOAD_VERSION}".`,
+      `Unsupported diff version "${version}". Expected "${PAYLOAD_VERSION_V1}" or "${PAYLOAD_VERSION_V2}".`,
     );
   }
 }
@@ -605,6 +704,13 @@ function validateSnapshotPayload(payload: Record<string, unknown>): void {
     (typeof payload.numbering !== 'object' || Array.isArray(payload.numbering))
   ) {
     throw new DiffServiceError('INVALID_INPUT', 'Snapshot payload.numbering must be a plain object or null.');
+  }
+  if (
+    payload.headerFooters !== null &&
+    payload.headerFooters !== undefined &&
+    (typeof payload.headerFooters !== 'object' || Array.isArray(payload.headerFooters))
+  ) {
+    throw new DiffServiceError('INVALID_INPUT', 'Snapshot payload.headerFooters must be a plain object or null.');
   }
 }
 

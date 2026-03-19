@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EditorState } from 'prosemirror-state';
+import { EditorState, TextSelection } from 'prosemirror-state';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 import { createTable } from '../table/tableHelpers/createTable.js';
 
@@ -553,6 +553,122 @@ describe('updateStructuredContentByGroup', () => {
 
       consoleErrorSpy.mockRestore();
     });
+  });
+});
+
+describe('insertStructuredContentInline formatting', () => {
+  let editor;
+  let schema;
+
+  beforeEach(() => {
+    ({ editor } = initTestEditor());
+    ({ schema } = editor);
+  });
+
+  afterEach(() => {
+    editor?.destroy();
+    editor = null;
+    schema = null;
+  });
+
+  it('does not wrap structuredContent in a run when inserted inside a run', () => {
+    const fontFamily = {
+      ascii: 'Courier New',
+      eastAsia: 'Courier New',
+      hAnsi: 'Courier New',
+      cs: 'Courier New',
+    };
+    const textStyleMark = schema.marks.textStyle.create({
+      fontFamily: 'Courier New',
+      fontSize: '12pt',
+    });
+    const styledText = schema.text('This is some text', [textStyleMark]);
+    const run = schema.nodes.run.create({ runProperties: { fontFamily } }, styledText);
+    const paragraph = schema.nodes.paragraph.create(null, [run]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+
+    // run content starts at position 2 (doc > paragraph > run), so cursor after "This is " is at 2 + 8 = 10
+    const cursorPos = 2 + 'This is '.length; // 10
+    const nextState = EditorState.create({
+      schema,
+      doc,
+      plugins: editor.state.plugins,
+      selection: TextSelection.create(doc, cursorPos),
+    });
+    editor.setState(nextState);
+
+    editor.commands.insertStructuredContentInline({
+      text: 'Inline Header',
+      attrs: { group: 'header' },
+    });
+
+    const updatedParagraph = editor.state.doc.firstChild;
+
+    // The paragraph's direct children should be: run, structuredContent, run
+    // The structuredContent must NOT be wrapped in a run
+    const childTypes = [];
+    updatedParagraph.forEach((child) => {
+      childTypes.push(child.type.name);
+
+      // If a run contains a structuredContent as a child, that's the bug
+      if (child.type.name === 'run') {
+        child.forEach((grandchild) => {
+          if (grandchild.type.name === 'structuredContent') {
+            throw new Error('structuredContent should not be wrapped inside a run');
+          }
+        });
+      }
+    });
+
+    expect(childTypes).toContain('structuredContent');
+    expect(updatedParagraph.textContent).toBe('This is Inline Headersome text');
+
+    // The SDT's inner content should be a run with the inherited formatting
+    let sdt = null;
+    updatedParagraph.forEach((child) => {
+      if (child.type.name === 'structuredContent') sdt = child;
+    });
+    const innerRun = sdt.firstChild;
+    expect(innerRun.type.name).toBe('run');
+    expect(innerRun.attrs.runProperties).toMatchObject({ fontFamily });
+  });
+
+  it('removes selected text when inserting with a ranged selection inside a run', () => {
+    const fontFamily = {
+      ascii: 'Courier New',
+      eastAsia: 'Courier New',
+      hAnsi: 'Courier New',
+      cs: 'Courier New',
+    };
+    const textStyleMark = schema.marks.textStyle.create({
+      fontFamily: 'Courier New',
+      fontSize: '12pt',
+    });
+    const styledText = schema.text('This is some text', [textStyleMark]);
+    const run = schema.nodes.run.create({ runProperties: { fontFamily } }, styledText);
+    const paragraph = schema.nodes.paragraph.create(null, [run]);
+    const doc = schema.nodes.doc.create(null, [paragraph]);
+
+    // Select "some" (positions 10..14 inside run content starting at 2: "some" = chars 8..12)
+    const selFrom = 2 + 'This is '.length; // 10
+    const selTo = 2 + 'This is some'.length; // 14
+    const nextState = EditorState.create({
+      schema,
+      doc,
+      plugins: editor.state.plugins,
+      selection: TextSelection.create(doc, selFrom, selTo),
+    });
+    editor.setState(nextState);
+
+    editor.commands.insertStructuredContentInline({
+      text: 'Inline Header',
+      attrs: { group: 'header' },
+    });
+
+    const updatedParagraph = editor.state.doc.firstChild;
+
+    // "some" should be removed; remaining text is "This is " + "Inline Header" + " text"
+    expect(updatedParagraph.textContent).toBe('This is Inline Header text');
   });
 });
 

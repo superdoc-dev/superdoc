@@ -135,9 +135,10 @@ export const StructuredContentCommands = Extension.create({
               content = schema.text(' ');
             }
 
-            // When content was not provided as structured JSON, wrap it in a run
-            // that copies the formatting from the current cursor position so the
-            // inserted text visually matches its surroundings.
+            // When content was not provided as structured JSON, wrap the text
+            // in a formatted run inside the SDT so it visually matches the
+            // surrounding text. The run-split logic below prevents an outer run
+            // from wrapping the SDT itself.
             const runType = schema.nodes.run;
             if (runType && !options.json && content.isText) {
               const formattingState = getFormattingStateAtPos(state, from, editor);
@@ -178,7 +179,37 @@ export const StructuredContentCommands = Extension.create({
               from = to = insertPos;
             }
 
-            tr.replaceWith(from, to, node);
+            // If the cursor is inside a run, split the run first so the SDT
+            // is inserted at paragraph level rather than becoming a child of the run.
+            const $from = state.doc.resolve(from);
+            if (runType && $from.parent.type === runType) {
+              const runDepth = $from.depth;
+              const runStart = $from.before(runDepth);
+              const runEnd = $from.after(runDepth);
+              const parentRun = $from.parent;
+              const startOffset = $from.parentOffset;
+
+              // When the user has a ranged selection, cut the right half from
+              // the end of the selection so the selected text is removed.
+              const $to = state.doc.resolve(to);
+              const endOffset = $to.parent === parentRun ? $to.parentOffset : startOffset;
+
+              const leftContent = parentRun.content.cut(0, startOffset);
+              const rightContent = parentRun.content.cut(endOffset);
+
+              const fragments = [];
+              if (leftContent.size > 0) {
+                fragments.push(runType.create(parentRun.attrs, leftContent, parentRun.marks));
+              }
+              fragments.push(node);
+              if (rightContent.size > 0) {
+                fragments.push(runType.create(parentRun.attrs, rightContent, parentRun.marks));
+              }
+
+              tr.replaceWith(runStart, runEnd, fragments);
+            } else {
+              tr.replaceWith(from, to, node);
+            }
           }
 
           return true;

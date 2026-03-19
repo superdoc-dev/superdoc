@@ -369,4 +369,33 @@ describe('Header/footer diffing', () => {
       afterEditor.destroy?.();
     }
   });
+
+  it('updates titlePg cache after replay changes first-page header settings', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      seedDefaultHeader(beforeEditor, 'Default header');
+      seedDefaultHeader(afterEditor, 'Default header');
+      setBodySection(afterEditor, { titlePg: true, headerDefault: 'rIdHeader1' });
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(beforeEditor.converter?.headerIds?.titlePg).not.toBe(true);
+
+      expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
+
+      expect(beforeEditor.converter?.headerIds?.titlePg).toBe(true);
+      expect(beforeEditor.converter?.footerIds?.titlePg).toBe(true);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
 });

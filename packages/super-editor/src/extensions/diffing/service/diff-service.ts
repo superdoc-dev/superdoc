@@ -20,7 +20,7 @@ import { replayDiffs, type ReplayDiffsResult } from '../replayDiffs';
 import { buildCanonicalDiffableState } from './canonicalize';
 import { computeFingerprint } from './fingerprint';
 import { buildDiffSummary } from './summary';
-import { V2_COVERAGE, coverageEquals } from './coverage';
+import { V1_COVERAGE, V2_COVERAGE, coverageEquals } from './coverage';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -168,8 +168,9 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   validateEngine(targetSnapshot.engine);
   validateSnapshotVersion(targetSnapshot.version);
 
+  const expectedCoverage = getCoverageForSnapshotVersion(targetSnapshot.version);
   const targetCoverage = targetSnapshot.coverage;
-  validateCoverageMatch(V2_COVERAGE, targetCoverage);
+  validateCoverageMatch(expectedCoverage, targetCoverage);
 
   // Structurally validate payload slots before use — the payload is opaque
   // and may have been deserialized from external JSON.
@@ -222,7 +223,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     baseStyles,
     baseNumbering,
     baseHeaderFooters,
-    V2_COVERAGE,
+    targetCoverage,
   );
   const baseFingerprint = computeFingerprint(baseCanonical);
 
@@ -262,11 +263,11 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
   }) as Record<string, unknown>;
 
   return {
-    version: PAYLOAD_VERSION_V2,
+    version: getPayloadVersionForCoverage(targetCoverage),
     engine: ENGINE_ID,
     baseFingerprint,
     targetFingerprint: targetSnapshot.fingerprint,
-    coverage: { ...V2_COVERAGE },
+    coverage: { ...targetCoverage },
     summary,
     // Detach the payload from editor-owned objects before returning it across
     // the API boundary. Comment diffs can otherwise retain live comment refs.
@@ -471,6 +472,7 @@ function createStagingEditor(
     }
 
     // Replay also sets documentModified (primitive) — seed from current value
+    cloned.headerFooterModified = raw.headerFooterModified;
     cloned.documentModified = raw.documentModified;
     // Point cloned converter's comments at the staged array
     cloned.comments = stagedComments;
@@ -496,6 +498,7 @@ function createStagingEditor(
       for (const key of STAGED_CONVERTER_KEYS) {
         realRaw[key] = stagedRaw[key];
       }
+      realRaw.headerFooterModified = stagedRaw.headerFooterModified;
       realRaw.documentModified = stagedRaw.documentModified;
     }
 
@@ -662,10 +665,10 @@ function validateEngine(engine: string): void {
 }
 
 function validateSnapshotVersion(version: string): void {
-  if (version !== SNAPSHOT_VERSION_V2) {
+  if (version !== 'sd-diff-snapshot/v1' && version !== SNAPSHOT_VERSION_V2) {
     throw new DiffServiceError(
       'CAPABILITY_UNSUPPORTED',
-      `Unsupported snapshot version "${version}". Expected "${SNAPSHOT_VERSION_V2}".`,
+      `Unsupported snapshot version "${version}". Expected "sd-diff-snapshot/v1" or "${SNAPSHOT_VERSION_V2}".`,
     );
   }
 }
@@ -721,6 +724,14 @@ function validateCoverageMatch(base: DiffCoverage, target: DiffCoverage): void {
       `Coverage mismatch between base and target. Both must use the same coverage configuration.`,
     );
   }
+}
+
+function getCoverageForSnapshotVersion(version: DiffSnapshot['version']): DiffCoverage {
+  return version === 'sd-diff-snapshot/v1' ? V1_COVERAGE : V2_COVERAGE;
+}
+
+function getPayloadVersionForCoverage(coverage: DiffCoverage): DiffPayload['version'] {
+  return coverage.headerFooters ? PAYLOAD_VERSION_V2 : PAYLOAD_VERSION_V1;
 }
 
 // ---------------------------------------------------------------------------

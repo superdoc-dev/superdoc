@@ -5,7 +5,11 @@ import { BLANK_DOCX_BASE64 } from '@core/blank-docx.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import type { CommentInput } from '../algorithm/comment-diffing.ts';
+import { captureHeaderFooterState } from '../algorithm/header-footer-diffing.ts';
 import { applyDiffPayload, captureSnapshot, compareToSnapshot } from './index.ts';
+import { buildCanonicalDiffableState } from './canonicalize.ts';
+import { computeFingerprint } from './fingerprint.ts';
+import { V1_COVERAGE } from './coverage.ts';
 
 const TEST_USER = { name: 'Test User', email: 'test@example.com' };
 
@@ -34,6 +38,141 @@ function setEditorComments(editor: Editor, comments: CommentInput[]): void {
     throw new Error('Expected editor converter to be initialized.');
   }
   editor.converter.comments = comments;
+}
+
+function createHeaderFooterDoc(editor: Editor, text: string): Record<string, unknown> {
+  const paragraph = editor.schema.nodes.paragraph.create(
+    undefined,
+    editor.schema.nodes.run.create(undefined, text ? [editor.schema.text(text)] : []),
+  );
+  return editor.schema.nodes.doc.create(undefined, [paragraph]).toJSON() as Record<string, unknown>;
+}
+
+function seedPart(
+  editor: Editor,
+  params: { kind: 'header' | 'footer'; refId: string; partPath: string; text: string },
+): void {
+  const { kind, refId, partPath, text } = params;
+  const converter = editor.converter!;
+  const collection = kind === 'header' ? (converter.headers ??= {}) : (converter.footers ??= {});
+  collection[refId] = createHeaderFooterDoc(editor, text);
+
+  const variantIds = kind === 'header' ? (converter.headerIds ??= {}) : (converter.footerIds ??= {});
+  if (!Array.isArray(variantIds.ids)) {
+    variantIds.ids = [];
+  }
+  if (!variantIds.ids.includes(refId)) {
+    variantIds.ids.push(refId);
+  }
+
+  const relsPart = (converter.convertedXml!['word/_rels/document.xml.rels'] ??= {
+    type: 'element',
+    name: 'document',
+    elements: [],
+  }) as { elements?: Array<{ name?: string; attributes?: Record<string, string>; elements?: unknown[] }> };
+  if (!relsPart.elements) {
+    relsPart.elements = [];
+  }
+  let relsRoot = relsPart.elements.find((entry) => entry.name === 'Relationships');
+  if (!relsRoot) {
+    relsRoot = {
+      name: 'Relationships',
+      attributes: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+      elements: [],
+    };
+    relsPart.elements.push(relsRoot);
+  }
+  if (!relsRoot.elements) {
+    relsRoot.elements = [];
+  }
+
+  const existing = relsRoot.elements.find(
+    (entry) => entry?.name === 'Relationship' && entry.attributes?.Id === refId,
+  ) as { attributes?: Record<string, string> } | undefined;
+  const attributes = {
+    Id: refId,
+    Type:
+      kind === 'header'
+        ? 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header'
+        : 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer',
+    Target: partPath.replace(/^word\//, ''),
+  };
+
+  if (existing) {
+    existing.attributes = attributes;
+  } else {
+    relsRoot.elements.push({
+      name: 'Relationship',
+      attributes,
+      elements: [],
+    });
+  }
+}
+
+function setBodySection(
+  editor: Editor,
+  params: {
+    titlePg?: boolean;
+    headerDefault?: string | null;
+    footerDefault?: string | null;
+  },
+): void {
+  const elements: Array<Record<string, unknown>> = [
+    {
+      type: 'element',
+      name: 'w:pgSz',
+      attributes: { 'w:w': '12240', 'w:h': '15840' },
+    },
+    {
+      type: 'element',
+      name: 'w:pgMar',
+      attributes: {
+        'w:top': '1440',
+        'w:right': '1440',
+        'w:bottom': '1440',
+        'w:left': '1440',
+        'w:header': '708',
+        'w:footer': '708',
+        'w:gutter': '0',
+      },
+    },
+  ];
+
+  if (params.titlePg) {
+    elements.push({ type: 'element', name: 'w:titlePg', elements: [] });
+  }
+  if (params.headerDefault) {
+    elements.push({
+      type: 'element',
+      name: 'w:headerReference',
+      attributes: { 'w:type': 'default', 'r:id': params.headerDefault },
+      elements: [],
+    });
+  }
+  if (params.footerDefault) {
+    elements.push({
+      type: 'element',
+      name: 'w:footerReference',
+      attributes: { 'w:type': 'default', 'r:id': params.footerDefault },
+      elements: [],
+    });
+  }
+
+  editor.converter!.bodySectPr = {
+    type: 'element',
+    name: 'w:sectPr',
+    elements,
+  };
+}
+
+function seedDefaultHeader(editor: Editor, text: string): void {
+  seedPart(editor, {
+    kind: 'header',
+    refId: 'rIdHeader1',
+    partPath: 'word/header1.xml',
+    text,
+  });
+  setBodySection(editor, { headerDefault: 'rIdHeader1' });
 }
 
 async function openBlankDocxWithText(text: string): Promise<Editor> {
@@ -146,6 +285,59 @@ describe('diff-service tracked apply', () => {
       expect(() => compareToSnapshot(baseEditor, snapshot)).toThrowError(
         /fingerprint does not match re-derived value/i,
       );
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('accepts legacy v1 snapshots during compare', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Updated document.');
+
+    try {
+      const snapshot = captureSnapshot(targetEditor);
+      const legacySnapshot = structuredClone(snapshot);
+      legacySnapshot.version = 'sd-diff-snapshot/v1';
+      legacySnapshot.coverage = { ...V1_COVERAGE };
+      delete (legacySnapshot.payload as Record<string, unknown>).headerFooters;
+      legacySnapshot.fingerprint = computeFingerprint(
+        buildCanonicalDiffableState(
+          targetEditor.state.doc,
+          targetEditor.converter?.comments ?? [],
+          targetEditor.converter?.translatedLinkedStyles ?? null,
+          targetEditor.converter?.translatedNumbering ?? null,
+          null,
+        ),
+      );
+
+      const diff = compareToSnapshot(baseEditor, legacySnapshot);
+
+      expect(diff.version).toBe('sd-diff-payload/v1');
+      expect(diff.summary.body.hasChanges).toBe(true);
+    } finally {
+      baseEditor.destroy?.();
+      targetEditor.destroy?.();
+    }
+  });
+
+  it('commits headerFooterModified after applyDiffPayload replays header changes', async () => {
+    const baseEditor = await openBlankDocxWithText('Base document.');
+    const targetEditor = await openBlankDocxWithText('Base document.');
+
+    try {
+      setBodySection(baseEditor, {});
+      seedDefaultHeader(targetEditor, 'Applied header');
+      baseEditor.converter!.headerFooterModified = false;
+
+      const snapshot = captureSnapshot(targetEditor);
+      const diff = compareToSnapshot(baseEditor, snapshot);
+      const { tr } = applyDiffPayload(baseEditor, diff, { changeMode: 'direct' });
+
+      baseEditor.dispatch(tr);
+
+      expect(baseEditor.converter?.headerFooterModified).toBe(true);
+      expect(captureHeaderFooterState(baseEditor)).toEqual(captureHeaderFooterState(targetEditor));
     } finally {
       baseEditor.destroy?.();
       targetEditor.destroy?.();

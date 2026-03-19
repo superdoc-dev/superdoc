@@ -126,6 +126,10 @@ export function replayHeaderFooters({
     );
   }
 
+  if (headerFootersDiff.slotChanges.length > 0) {
+    syncTitlePageCache(tr, editor);
+  }
+
   for (const part of headerFootersDiff.removedParts) {
     deleteHeaderFooterPart(editor.converter, part);
     result.applied += 1;
@@ -361,6 +365,34 @@ function syncBodySectPrConverterCache(
   const preservedChildren = savedBodyNode.elements.filter((entry) => entry?.name !== 'w:sectPr');
   preservedChildren.push(cloneXmlElement(sectPr) as unknown as Record<string, unknown>);
   savedBodyNode.elements = preservedChildren;
+}
+
+/**
+ * Recomputes the converter's global title-page cache from the updated document.
+ *
+ * @param tr Transaction containing the latest section-property state.
+ * @param editor Editor whose converter caches should be refreshed.
+ */
+function syncTitlePageCache(tr: Transaction, editor: ReplayHeaderFooterEditor): void {
+  if (!editor.converter) {
+    return;
+  }
+
+  if (!editor.converter.headerIds) editor.converter.headerIds = {};
+  if (!editor.converter.footerIds) editor.converter.footerIds = {};
+
+  const projectionEditor = {
+    ...editor,
+    state: {
+      ...editor.state,
+      doc: tr.doc,
+    },
+  };
+  const hasTitlePage = resolveSectionProjections(projectionEditor as never).some(
+    (entry) => entry.range.titlePg === true,
+  );
+  editor.converter.headerIds.titlePg = hasTitlePage;
+  editor.converter.footerIds.titlePg = hasTitlePage;
 }
 
 /**

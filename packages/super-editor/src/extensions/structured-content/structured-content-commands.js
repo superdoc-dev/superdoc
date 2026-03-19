@@ -2,6 +2,7 @@ import { DOMParser as PMDOMParser } from 'prosemirror-model';
 import { Extension } from '@core/Extension.js';
 import { htmlHandler } from '@core/InputRule.js';
 import { findParentNode } from '@helpers/findParentNode.js';
+import { getFormattingStateAtPos } from '@core/helpers/getMarksFromSelection.js';
 import { generateRandomSigned32BitIntStrId } from '@core/helpers/generateDocxRandomId.js';
 import { getStructuredContentTagsById } from './structuredContentHelpers/getStructuredContentTagsById.js';
 import { getStructuredContentByGroup } from './structuredContentHelpers/getStructuredContentByGroup.js';
@@ -132,6 +133,26 @@ export const StructuredContentCommands = Extension.create({
 
             if (!content) {
               content = schema.text(' ');
+            }
+
+            // When content was not provided as structured JSON, wrap it in a run
+            // that copies the formatting from the current cursor position so the
+            // inserted text visually matches its surroundings.
+            const runType = schema.nodes.run;
+            if (runType && !options.json && content.isText) {
+              const formattingState = getFormattingStateAtPos(state, from, editor);
+              const runProperties = formattingState.inlineRunProperties || null;
+
+              // Apply resolved marks so calculateInlineRunPropertiesPlugin can diff correctly
+              if (formattingState.resolvedMarks?.length) {
+                const mergedMarks = formattingState.resolvedMarks.reduce(
+                  (set, mark) => mark.addToSet(set),
+                  content.marks,
+                );
+                content = content.mark(mergedMarks);
+              }
+
+              content = runType.create({ runProperties }, content);
             }
 
             // Handle group parameter: convert to JSON tag

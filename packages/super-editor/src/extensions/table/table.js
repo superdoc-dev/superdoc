@@ -188,7 +188,7 @@ import {
 } from '../table-cell/helpers/legacyBorderMigration.js';
 import { isInTable } from '@helpers/isInTable.js';
 import { findParentNode } from '@helpers/findParentNode.js';
-import { TextSelection, Plugin, PluginKey } from 'prosemirror-state';
+import { NodeSelection, TextSelection, Plugin, PluginKey } from 'prosemirror-state';
 import { isCellSelection } from './tableHelpers/isCellSelection.js';
 import {
   addColumnBefore as originalAddColumnBefore,
@@ -733,23 +733,35 @@ export const Table = Node.create({
           const node = createTable(editor.schema, rows, cols, withHeaderRow, null, widths, tableAttrs);
 
           if (dispatch) {
-            let offset = tr.selection.$from.end() + 1;
+            let offset;
             let replaceRange = undefined;
-            const paragraphDepth =
-              tr.selection.$from.parent?.type?.name === 'run' ? tr.selection.$from.depth - 1 : tr.selection.$from.depth;
-            const paragraph = tr.selection.$from.node(paragraphDepth);
-            const isTopLevelParagraph = paragraphDepth === 1;
-            const isEmptyParagraph = paragraph.type.name === 'paragraph' && paragraph.textContent === '';
 
-            if (isTopLevelParagraph && isEmptyParagraph) {
-              offset = tr.selection.$from.before(paragraphDepth);
-              replaceRange = {
-                from: tr.selection.$from.before(paragraphDepth),
-                to: tr.selection.$from.after(paragraphDepth),
-              };
-            } else if (tr.selection.$from.parent?.type?.name === 'run') {
-              // If in a run, insert after the parent paragraph.
-              offset = tr.selection.$from.after(paragraphDepth);
+            if (tr.selection.$from.depth === 0) {
+              // Selection is at the document root (e.g. AllSelection via Ctrl+A,
+              // or NodeSelection on a top-level block). Replace the selected
+              // range with the new table.
+              offset = tr.selection.from;
+              replaceRange = { from: tr.selection.from, to: tr.selection.to };
+            } else {
+              offset = tr.selection.$from.end() + 1;
+              const paragraphDepth =
+                tr.selection.$from.parent?.type?.name === 'run'
+                  ? tr.selection.$from.depth - 1
+                  : tr.selection.$from.depth;
+              const paragraph = tr.selection.$from.node(paragraphDepth);
+              const isTopLevelParagraph = paragraphDepth === 1;
+              const isEmptyParagraph = paragraph.type.name === 'paragraph' && paragraph.textContent === '';
+
+              if (isTopLevelParagraph && isEmptyParagraph) {
+                offset = tr.selection.$from.before(paragraphDepth);
+                replaceRange = {
+                  from: tr.selection.$from.before(paragraphDepth),
+                  to: tr.selection.$from.after(paragraphDepth),
+                };
+              } else if (tr.selection.$from.parent?.type?.name === 'run') {
+                // If in a run, insert after the parent paragraph.
+                offset = tr.selection.$from.after(paragraphDepth);
+              }
             }
 
             const { inserted } = insertTopLevelTableWithSeparators(tr, state.doc, offset, node, replaceRange);

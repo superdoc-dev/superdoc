@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { AllSelection, EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { CellSelection, TableMap } from 'prosemirror-tables';
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { createTable } from './tableHelpers/createTable.js';
@@ -1266,6 +1266,77 @@ describe('Table commands', async () => {
       expect(editor.state.doc.child(0).type.name).toBe('table');
       expect(editor.state.doc.child(1).type.name).toBe('paragraph');
       expect(editor.state.doc.childCount).toBe(2);
+    });
+
+    it('does not throw when insertTable is called with a NodeSelection on a top-level block', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Insert a documentSection (atom: true, group: 'block') to get a
+      // selectable top-level block node. When selected as a NodeSelection,
+      // $from.depth is 0 and $from.end() returns doc.content.size, which
+      // previously caused insertTable to compute an out-of-range offset.
+      const { schema } = editor.state;
+      const sectionNode = schema.nodes.documentSection.create(null, [schema.nodes.paragraph.create()]);
+      const { tr } = editor.state;
+      const insertPos = tr.selection.$from.before(1);
+      tr.insert(insertPos, sectionNode);
+      tr.setSelection(NodeSelection.create(tr.doc, insertPos));
+      editor.view.dispatch(tr);
+
+      expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+      expect(editor.state.selection.$from.depth).toBe(0);
+
+      // Inserting a table while a top-level node is selected should not throw
+      expect(() => editor.commands.insertTable({ rows: 2, cols: 2 })).not.toThrow();
+
+      // Verify a table was actually inserted
+      const tablePos = findTablePos(editor.state.doc);
+      expect(tablePos).not.toBeNull();
+
+      // Verify the cursor is inside the first table cell
+      const table = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(table);
+      const firstCellTextPos = tablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(firstCellTextPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
+    });
+
+    it('places cursor in first cell and adds trailing paragraph when inserting table with AllSelection', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Type some text so the paragraph is non-empty (simulates a real document)
+      editor.commands.insertContent('This is a test');
+
+      // Select all content (Ctrl+A equivalent)
+      editor.view.dispatch(editor.state.tr.setSelection(new AllSelection(editor.state.doc)));
+      expect(editor.state.selection).toBeInstanceOf(AllSelection);
+
+      // Insert a table while everything is selected
+      editor.commands.insertTable({ rows: 2, cols: 2 });
+
+      // The table should be followed by a trailing separator paragraph
+      const doc = editor.state.doc;
+      const tablePos = findTablePos(doc);
+      expect(tablePos).not.toBeNull();
+      const table = doc.nodeAt(tablePos);
+      const tableEndPos = tablePos + table.nodeSize;
+      const $afterTable = doc.resolve(tableEndPos);
+      const nodeAfterTable = $afterTable.nodeAfter;
+      expect(nodeAfterTable?.type.name).toBe('paragraph');
+
+      // The cursor should be in the first table cell, not the last
+      const map = TableMap.get(table);
+      const firstCellTextPos = tablePos + 1 + map.map[0] + 2;
+
+      const { $from } = editor.state.selection;
+      expect(editor.state.selection.from).toBe(firstCellTextPos);
+      expect($from.parent.type.name).toBe('paragraph');
+      expect($from.node($from.depth - 1).type.spec.tableRole).toBe('cell');
     });
   });
 

@@ -17,15 +17,15 @@ providers:
     config:
       modelId: openai/gpt-5.4
 
-  # - id: file://providers/superdoc-agent-gateway.mjs
-  #   label: Claude Haiku 4.5 (Gateway)
-  #   config:
-  #     modelId: anthropic/claude-haiku-4.5
+  - id: file://providers/superdoc-agent-gateway.mjs
+    label: Claude Haiku 4.5 (Gateway)
+    config:
+      modelId: anthropic/claude-haiku-4.5
 
-  # - id: file://providers/superdoc-agent-gateway.mjs
-  #   label: Gemini 2.5 Pro (Gateway)
-  #   config:
-  #     modelId: google/gemini-2.5-pro
+  - id: file://providers/superdoc-agent-gateway.mjs
+    label: Gemini 2.5 Pro (Gateway)
+    config:
+      modelId: google/gemini-2.5-pro
 
 evaluateOptions:
   maxConcurrency: 5

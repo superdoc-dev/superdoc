@@ -268,6 +268,15 @@ function validateBorderSpec(spec: TableBorderSpec, fieldPath: string, operationN
       },
     );
   }
+  if (!TABLE_BORDER_COLOR_PATTERN.test(spec.color)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${operationName}: ${fieldPath}.color must be a 6-digit hex color without "#" or "auto".`,
+      {
+        field: `${fieldPath}.color`,
+      },
+    );
+  }
 }
 
 function validateBorderPatchEdge(
@@ -278,6 +287,8 @@ function validateBorderPatchEdge(
   if (value === undefined || value === null) return;
   validateBorderSpec(value, `edges.${edgeName}`, operationName);
 }
+
+const TABLE_BORDER_COLOR_PATTERN = /^([0-9A-Fa-f]{6}|auto)$/u;
 
 const VALID_APPLY_TO_VALUES = new Set([
   'all',

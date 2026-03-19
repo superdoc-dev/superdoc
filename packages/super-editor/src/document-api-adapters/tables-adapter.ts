@@ -3544,13 +3544,16 @@ function writeTableLook(
   currentLook: Record<string, unknown> | undefined,
   patch: TableStyleOptionsPatch,
 ): Record<string, unknown> {
-  const result = { ...(currentLook ?? {}) };
+  // Match tables.setStyleOption behavior: once tblLook is materialized,
+  // omitted flags should preserve Word's effective default mask.
+  const result = currentLook ? { ...currentLook } : { ...WORD_DEFAULT_TBL_LOOK };
   for (const [apiFlag, value] of Object.entries(patch) as Array<[keyof TableStyleOptionsPatch, boolean | undefined]>) {
     if (value === undefined) continue;
     const normalizedFlag = apiFlag as TableStyleOptionFlag;
     const xmlKey = resolveStyleOptionFlag(normalizedFlag);
     result[xmlKey] = INVERTED_FLAGS.has(normalizedFlag) ? !value : value;
   }
+  delete result.val;
   return result;
 }
 
@@ -3613,6 +3616,29 @@ function readBordersAsState(borders: unknown): TableBorderState | undefined {
   return hasAny ? result : undefined;
 }
 
+type TableCellMarginKey = 'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft' | 'marginStart' | 'marginEnd';
+
+const TABLE_MARGIN_KEY_GROUPS: ReadonlyArray<{
+  keys: readonly TableCellMarginKey[];
+  apiKey: keyof TableMarginsState;
+}> = [
+  { keys: ['marginTop'], apiKey: 'topPt' },
+  { keys: ['marginRight', 'marginEnd'], apiKey: 'rightPt' },
+  { keys: ['marginBottom'], apiKey: 'bottomPt' },
+  { keys: ['marginLeft', 'marginStart'], apiKey: 'leftPt' },
+] as const;
+
+function readCellMarginEntry(
+  cellMargins: Record<string, unknown>,
+  keys: readonly TableCellMarginKey[],
+): { value?: number } | undefined {
+  for (const key of keys) {
+    const entry = cellMargins[key] as { value?: number } | undefined;
+    if (entry && typeof entry.value === 'number') return entry;
+  }
+  return undefined;
+}
+
 /** Read OOXML cell margins as `TableMarginsState`. Returns undefined if no direct formatting. */
 function readCellMarginsAsState(cellMargins: unknown): TableMarginsState | undefined {
   if (!cellMargins || typeof cellMargins !== 'object') return undefined;
@@ -3621,15 +3647,8 @@ function readCellMarginsAsState(cellMargins: unknown): TableMarginsState | undef
   const result: TableMarginsState = {};
   let hasAny = false;
 
-  const mapping: Array<[string, keyof TableMarginsState]> = [
-    ['marginTop', 'topPt'],
-    ['marginRight', 'rightPt'],
-    ['marginBottom', 'bottomPt'],
-    ['marginLeft', 'leftPt'],
-  ];
-
-  for (const [ooxmlKey, apiKey] of mapping) {
-    const entry = cm[ooxmlKey] as { value?: number } | undefined;
+  for (const { keys, apiKey } of TABLE_MARGIN_KEY_GROUPS) {
+    const entry = readCellMarginEntry(cm, keys);
     if (entry && typeof entry.value === 'number') {
       result[apiKey] = entry.value / POINTS_TO_TWIPS;
       hasAny = true;
@@ -3713,17 +3732,17 @@ function isTableOptionsSatisfied(
   input: TablesSetTableOptionsInput,
 ): boolean {
   if (input.defaultCellMargins !== undefined) {
-    const cm = currentTableProps.cellMargins as Record<string, { value?: number }> | undefined;
+    const cm = currentTableProps.cellMargins as Record<string, unknown> | undefined;
     if (!cm) return false;
     const m = input.defaultCellMargins;
-    const pairs: Array<[string, number]> = [
-      ['marginTop', m.topPt],
-      ['marginRight', m.rightPt],
-      ['marginBottom', m.bottomPt],
-      ['marginLeft', m.leftPt],
+    const pairs: Array<[readonly TableCellMarginKey[], number]> = [
+      [['marginTop'], m.topPt],
+      [['marginRight', 'marginEnd'], m.rightPt],
+      [['marginBottom'], m.bottomPt],
+      [['marginLeft', 'marginStart'], m.leftPt],
     ];
-    for (const [ooxmlKey, ptValue] of pairs) {
-      const entry = cm[ooxmlKey];
+    for (const [ooxmlKeys, ptValue] of pairs) {
+      const entry = readCellMarginEntry(cm, ooxmlKeys);
       if (!entry || entry.value !== Math.round(ptValue * POINTS_TO_TWIPS)) return false;
     }
   }

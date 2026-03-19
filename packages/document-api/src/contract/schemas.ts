@@ -1454,12 +1454,13 @@ const capabilitiesOutputSchema = objectSchema(
 );
 
 const strictEmptyObjectSchema = objectSchema({});
+const tableBorderColorPattern = '^([0-9A-Fa-f]{6}|auto)$';
 
 const tableBorderSpecSchema = objectSchema(
   {
     lineStyle: { type: 'string' },
     lineWeightPt: { type: 'number', exclusiveMinimum: 0 },
-    color: { type: 'string' },
+    color: { type: 'string', pattern: tableBorderColorPattern },
   },
   ['lineStyle', 'lineWeightPt', 'color'],
 );

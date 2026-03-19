@@ -127,6 +127,17 @@ describe('executeTablesSetBorders validation', () => {
     ).toThrow('non-empty string');
   });
 
+  it('rejects non-hex color strings', () => {
+    expect(() =>
+      executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, {
+        nodeId,
+        mode: 'applyTo',
+        applyTo: 'all',
+        border: { lineStyle: 'single', lineWeightPt: 1, color: 'red' },
+      } as any),
+    ).toThrow('6-digit hex color');
+  });
+
   it('rejects edges mode with empty edges object', () => {
     expect(() =>
       executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, {
@@ -154,6 +165,17 @@ describe('executeTablesSetBorders validation', () => {
         mode: 'applyTo',
         applyTo: 'all',
         border: null,
+      } as any),
+    ).not.toThrow();
+  });
+
+  it('accepts color: auto', () => {
+    expect(() =>
+      executeTablesSetBorders('tables.setBorders', MOCK_ADAPTER, {
+        nodeId,
+        mode: 'applyTo',
+        applyTo: 'all',
+        border: { lineStyle: 'single', lineWeightPt: 1, color: 'auto' },
       } as any),
     ).not.toThrow();
   });

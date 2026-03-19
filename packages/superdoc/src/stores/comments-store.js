@@ -29,6 +29,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
   const isDebugging = false;
   const debounceTimers = {};
+  const trackedChangeResolutionSnapshots = new WeakMap();
 
   const COMMENT_EVENTS = comments_module_events;
   const hasInitializedComments = ref(false);
@@ -188,6 +189,17 @@ export const useCommentsStore = defineStore('comments', () => {
 
   const clearResolvedMetadata = (comment) => {
     if (!comment) return;
+    if (
+      comment.resolvedTime !== undefined ||
+      comment.resolvedByEmail !== undefined ||
+      comment.resolvedByName !== undefined
+    ) {
+      trackedChangeResolutionSnapshots.set(comment, {
+        resolvedTime: comment.resolvedTime ?? null,
+        resolvedByEmail: comment.resolvedByEmail ?? null,
+        resolvedByName: comment.resolvedByName ?? null,
+      });
+    }
     // Sets the resolved state to null so it can be restored in the comments sidebar
     comment.resolvedTime = null;
     comment.resolvedByEmail = null;
@@ -981,18 +993,18 @@ export const useCommentsStore = defineStore('comments', () => {
     // History replay can opt in to excluding resolved tracked-change threads so
     // undo/redo reopens them when their marks reappear. Initial import rebuilds
     // keep resolved IDs in the set so resolved DOCX threads do not reopen on load.
-    const existingUnresolvedIds = new Set();
+    const skipIds = new Set();
     commentsList.value.forEach((comment) => {
       if (!comment?.trackedChange) return;
       if (!belongsToDocument(comment, activeDocumentId)) return;
       if (comment.resolvedTime && !reopenResolved) {
-        if (comment.commentId != null) existingUnresolvedIds.add(String(comment.commentId));
-        if (comment.importedId != null) existingUnresolvedIds.add(String(comment.importedId));
+        if (comment.commentId != null) skipIds.add(String(comment.commentId));
+        if (comment.importedId != null) skipIds.add(String(comment.importedId));
         return;
       }
       if (comment.resolvedTime) return;
-      if (comment.commentId != null) existingUnresolvedIds.add(String(comment.commentId));
-      if (comment.importedId != null) existingUnresolvedIds.add(String(comment.importedId));
+      if (comment.commentId != null) skipIds.add(String(comment.commentId));
+      if (comment.importedId != null) skipIds.add(String(comment.importedId));
     });
 
     // Build a Map of change ID → tracked change entries for O(1) lookup per group.
@@ -1009,7 +1021,7 @@ export const useCommentsStore = defineStore('comments', () => {
     // Build comment params directly from grouped changes — no PM dispatch needed
     groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
       const id = insertedMark?.mark.attrs.id || deletionMark?.mark.attrs.id || formatMark?.mark.attrs.id;
-      if (!id || existingUnresolvedIds.has(id)) return;
+      if (!id || skipIds.has(id)) return;
 
       const marks = {
         ...(insertedMark && { insertedMark: insertedMark.mark }),
@@ -1030,9 +1042,9 @@ export const useCommentsStore = defineStore('comments', () => {
 
       if (params) {
         handleTrackedChangeUpdate({ superdoc, params });
-        existingUnresolvedIds.add(String(id));
-        if (params.changeId != null) existingUnresolvedIds.add(String(params.changeId));
-        if (params.importedId != null) existingUnresolvedIds.add(String(params.importedId));
+        skipIds.add(String(id));
+        if (params.changeId != null) skipIds.add(String(params.changeId));
+        if (params.importedId != null) skipIds.add(String(params.importedId));
       }
     });
 
@@ -1096,6 +1108,15 @@ export const useCommentsStore = defineStore('comments', () => {
       const hasLiveImportedId = Boolean(importedId && liveTrackedChangeIds.has(importedId));
 
       if ((!commentId && !importedId) || hasLiveCommentId || hasLiveImportedId) return true;
+      if (comment.resolvedTime) return true;
+
+      const resolutionSnapshot = trackedChangeResolutionSnapshots.get(comment);
+      if (resolutionSnapshot) {
+        comment.resolvedTime = resolutionSnapshot.resolvedTime ?? Date.now();
+        comment.resolvedByEmail = resolutionSnapshot.resolvedByEmail ?? null;
+        comment.resolvedByName = resolutionSnapshot.resolvedByName ?? null;
+        return true;
+      }
 
       if (commentId) removedIds.add(commentId);
       if (importedId) removedIds.add(importedId);

@@ -940,6 +940,59 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('preserves tracked-change thread across accept undo redo undo history replay', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const superdoc = { emit: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    const rootComment = {
+      commentId: 'tc-history-replay',
+      trackedChange: true,
+      trackedChangeText: 'Existing',
+      resolvedTime: 123,
+      resolvedByEmail: 'reviewer@example.com',
+      resolvedByName: 'Reviewer',
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({ commentId: 'tc-history-replay' })),
+    };
+    const replyComment = {
+      commentId: 'tc-history-replay-reply',
+      parentCommentId: 'tc-history-replay',
+      fileId: 'doc-1',
+    };
+    store.commentsList = [rootComment, replyComment];
+
+    // undo: accepted mark returns, thread reopens
+    trackChangesHelpersMock.getTrackChanges.mockReturnValueOnce([{ mark: { attrs: { id: 'tc-history-replay' } } }]);
+    groupChangesMock.mockReturnValueOnce([{ insertedMark: { mark: { attrs: { id: 'tc-history-replay' } } } }]);
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(rootComment.resolvedTime).toBeNull();
+    expect(store.commentsList).toHaveLength(2);
+
+    // redo: accepted mark removed again, thread should not be deleted
+    trackChangesHelpersMock.getTrackChanges.mockReturnValueOnce([]);
+    groupChangesMock.mockReturnValueOnce([]);
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList).toHaveLength(2);
+    expect(store.commentsList.find((comment) => comment.commentId === 'tc-history-replay')).toBeTruthy();
+    expect(store.commentsList.find((comment) => comment.commentId === 'tc-history-replay-reply')).toBeTruthy();
+
+    // next undo: same original thread reopens, no rematerialized replacement thread
+    trackChangesHelpersMock.getTrackChanges.mockReturnValueOnce([{ mark: { attrs: { id: 'tc-history-replay' } } }]);
+    groupChangesMock.mockReturnValueOnce([{ insertedMark: { mark: { attrs: { id: 'tc-history-replay' } } } }]);
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    expect(store.commentsList.filter((comment) => comment.commentId === 'tc-history-replay')).toHaveLength(1);
+    expect(store.commentsList.filter((comment) => comment.commentId === 'tc-history-replay-reply')).toHaveLength(1);
+  });
+
   it('keeps tracked-change comments when importedId is live even if commentId differs', () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };

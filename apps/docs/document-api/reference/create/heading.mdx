@@ -120,6 +120,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
   "additionalProperties": false,
   "properties": {
     "at": {
+      "description": "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
       "oneOf": [
         {
           "additionalProperties": false,
@@ -180,11 +181,13 @@ Returns a CreateHeadingResult with the new heading block ID and address.
       ]
     },
     "level": {
+      "description": "Heading level (1-6).",
       "maximum": 6,
       "minimum": 1,
       "type": "integer"
     },
     "text": {
+      "description": "Heading text content.",
       "type": "string"
     }
   },

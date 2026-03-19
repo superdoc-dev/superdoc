@@ -65,10 +65,10 @@ function convertTool(fn, sdk, client, toolLog) {
       const cleaned = cleanArgs(args);
       try {
         const result = await sdk.dispatchSuperDocTool(client, fn.name, cleaned);
-        toolLog.push({ tool: fn.name, ok: true });
+        toolLog.push({ tool: fn.name, args: cleaned, ok: true });
         return result;
       } catch (err) {
-        toolLog.push({ tool: fn.name, ok: false });
+        toolLog.push({ tool: fn.name, args: cleaned, ok: false, error: err.message });
         return { ok: false, error: err.message };
       }
     },
@@ -152,6 +152,22 @@ export default class SuperDocAgentGatewayProvider {
       if (keepFile && outputPath) copyFileSync(docPath, outputPath);
       cleanupTemp(docPath, stateDir);
 
+      // Build a rich trace from AI SDK steps for assertion consumption.
+      // Each step has: toolCalls[{toolName, args}], toolResults[{toolName, result}], text
+      const trace = steps.map((step, i) => ({
+        step: i,
+        toolCalls: (step.toolCalls || []).map((tc) => ({
+          tool: tc.toolName,
+          args: tc.args,
+        })),
+        toolResults: (step.toolResults || []).map((tr) => ({
+          tool: tr.toolName,
+          ok: tr.result?.ok !== false,
+        })),
+        text: step.text || null,
+        finishReason: step.finishReason,
+      }));
+
       const result = {
         output: JSON.stringify({
           documentText,
@@ -159,7 +175,8 @@ export default class SuperDocAgentGatewayProvider {
           toolCalls: toolLog,
           turns: toolLog.length,
           usage: totalUsage,
-          steps: steps.length,
+          stepCount: steps.length,
+          trace,
         }),
       };
       writeCache(key, result);

@@ -185,23 +185,28 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
   "additionalProperties": false,
   "properties": {
     "includeNodes": {
+      "description": "When true, includes full node data in results. Default: false.",
       "type": "boolean"
     },
     "limit": {
+      "description": "Maximum number of matches to return.",
       "minimum": 1,
       "type": "integer"
     },
     "mode": {
+      "description": "Search mode: 'strict' (default, exact matching) or 'candidates' (returns scored potential matches).",
       "enum": [
         "strict",
         "candidates"
       ]
     },
     "offset": {
+      "description": "Number of matches to skip for pagination.",
       "minimum": 0,
       "type": "integer"
     },
     "require": {
+      "description": "Match cardinality: 'any' (all matches), 'first' (only first), 'exactlyOne' (fail if != 1), 'all' (fail if 0).",
       "enum": [
         "any",
         "first",
@@ -210,24 +215,29 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
       ]
     },
     "select": {
+      "description": "Search selector. Use {type:'text', pattern:'...'} for text search or {type:'node', nodeType:'paragraph'|'heading'|...} for node search.",
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
             "caseSensitive": {
+              "description": "Case-sensitive matching. Default: false.",
               "type": "boolean"
             },
             "mode": {
+              "description": "Match mode: 'contains' (substring) or 'regex'.",
               "enum": [
                 "contains",
                 "regex"
               ]
             },
             "pattern": {
+              "description": "Text or regex pattern to match.",
               "type": "string"
             },
             "type": {
-              "const": "text"
+              "const": "text",
+              "description": "Must be 'text' for text pattern search."
             }
           },
           "required": [
@@ -240,12 +250,14 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
           "additionalProperties": false,
           "properties": {
             "kind": {
+              "description": "Filter: 'block' or 'inline'.",
               "enum": [
                 "block",
                 "inline"
               ]
             },
             "nodeType": {
+              "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
               "enum": [
                 "paragraph",
                 "heading",
@@ -272,7 +284,8 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
               ]
             },
             "type": {
-              "const": "node"
+              "const": "node",
+              "description": "Must be 'node' for node type search."
             }
           },
           "required": [
@@ -283,7 +296,8 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
       ]
     },
     "within": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/BlockNodeAddress",
+      "description": "Limit search scope to within a specific block: {kind:'block', nodeType:'...', nodeId:'...'}."
     }
   },
   "required": [

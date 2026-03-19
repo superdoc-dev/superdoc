@@ -1,3 +1,200 @@
 :root {
-  /* CSS variables */
+  /* SuperDoc CSS Variables */
+
+  /* Primitive: colors */
+  --sd-color-blue-50: #ebf0ff;
+  --sd-color-blue-100: #d6e1ff;
+  --sd-color-blue-200: #adc3ff;
+  --sd-color-blue-300: #85a5ff;
+  --sd-color-blue-400: #5c87ff;
+  --sd-color-blue-500: #1355ff;
+  --sd-color-blue-600: #0f44cc;
+  --sd-color-blue-700: #0b3399;
+  --sd-color-blue-800: #082266;
+  --sd-color-blue-900: #041133;
+
+  --sd-color-gray-50: #fafafa;
+  --sd-color-gray-100: #f5f5f5;
+  --sd-color-gray-200: #f2f2f2;
+  --sd-color-gray-300: #e0e0e0;
+  --sd-color-gray-400: #dbdbdb;
+  --sd-color-gray-500: #ababab;
+  --sd-color-gray-600: #888888;
+  --sd-color-gray-700: #666666;
+  --sd-color-gray-800: #424242;
+  --sd-color-gray-900: #212121;
+
+  --sd-color-red-500: #ed4337;
+  --sd-color-green-500: #00853d;
+  --sd-color-rose-500: #cb0e47;
+
+  /* Primitive: font-size */
+  --sd-font-size-50: 10px;
+  --sd-font-size-100: 11px;
+  --sd-font-size-200: 12px;
+  --sd-font-size-300: 13px;
+  --sd-font-size-400: 14px;
+  --sd-font-size-500: 15px;
+  --sd-font-size-600: 16px;
+
+  /* Primitive: radius — old names (--sd-radius-sm/md/lg) honored via fallback */
+  --sd-radius-50: var(--sd-radius-sm, 4px);
+  --sd-radius-100: 6px;
+  --sd-radius-200: var(--sd-radius-md, 8px);
+  --sd-radius-300: var(--sd-radius-lg, 12px);
+
+  /*
+   * UI: general (semantic tier)
+   *
+   * These are the "5-variable theme" — change these and the entire UI updates.
+   * Component-specific variables below cascade from these defaults.
+   *
+   * Old-name fallbacks (var(--sd-old-name, ...)) honor pre-existing customer
+   * overrides. They resolve at computed-value time, so setting the old name on
+   * any element still works. These fallbacks will be removed in the next major.
+   */
+  --sd-ui-font-family: var(--sd-font-family, Arial, Helvetica, sans-serif);
+  --sd-ui-text: var(--sd-text-primary, #47484a);
+  --sd-ui-text-muted: var(--sd-text-muted, var(--sd-color-gray-700));
+  --sd-ui-text-disabled: var(--sd-text-placeholder, var(--sd-color-gray-500));
+  --sd-ui-bg: var(--sd-surface-card, #ffffff);
+  --sd-ui-hover-bg: var(--sd-surface-hover, var(--sd-color-gray-400));
+  --sd-ui-active-bg: #c8d0d8;
+  --sd-ui-disabled-bg: var(--sd-surface-muted, var(--sd-color-gray-100));
+  --sd-ui-border: var(--sd-border-default, var(--sd-color-gray-400));
+  --sd-ui-action: var(--sd-action-primary, var(--sd-color-blue-500));
+  --sd-ui-action-hover: var(--sd-action-primary-hover, var(--sd-color-blue-600));
+  --sd-ui-action-text: #ffffff;
+  --sd-ui-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --sd-ui-radius: var(--sd-radius-100);
+
+  --sd-ui-font-size-50: var(--sd-font-size-50);
+  --sd-ui-font-size-100: var(--sd-font-size-100);
+  --sd-ui-font-size-200: var(--sd-font-size-200);
+  --sd-ui-font-size-300: var(--sd-font-size-300);
+  --sd-ui-font-size-400: var(--sd-font-size-400);
+  --sd-ui-font-size-500: var(--sd-font-size-500);
+  --sd-ui-font-size-600: var(--sd-font-size-600);
+
+  /* UI: dropdown — cascades from semantic tier */
+  --sd-ui-dropdown-border: var(--sd-ui-border);
+  --sd-ui-dropdown-bg: var(--sd-ui-bg);
+  --sd-ui-dropdown-option-radius: 3px;
+  --sd-ui-dropdown-text: var(--sd-ui-text);
+  --sd-ui-dropdown-hover-text: var(--sd-ui-dropdown-text);
+  --sd-ui-dropdown-selected-text: var(--sd-ui-dropdown-text);
+  --sd-ui-dropdown-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-dropdown-active-bg: var(--sd-ui-active-bg);
+  --sd-ui-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+
+  /* UI: tooltip — intentionally inverted palette (dark bg, light text) */
+  --sd-ui-tooltip-bg: #262626;
+  --sd-ui-tooltip-text: #ffffff;
+  --sd-ui-tooltip-radius: var(--sd-radius-100);
+  --sd-ui-tooltip-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+
+  /* UI: toolbar — cascades from semantic tier */
+  --sd-ui-toolbar-height: 32px;
+  --sd-ui-toolbar-padding-x: 16px;
+  --sd-ui-toolbar-padding-y: 4px;
+  --sd-ui-toolbar-item-gap: 2px;
+  --sd-ui-toolbar-item-padding: 5px;
+  --sd-ui-toolbar-bg: transparent;
+  --sd-ui-toolbar-button-text: var(--sd-ui-text);
+  --sd-ui-toolbar-button-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-toolbar-button-active-bg: var(--sd-ui-active-bg);
+
+  /* UI: context menu — cascades from semantic tier */
+  --sd-ui-menu-bg: var(--sd-ui-bg);
+  --sd-ui-menu-text: var(--sd-ui-text);
+  --sd-ui-menu-font-size: var(--sd-font-size-200);
+  --sd-ui-menu-radius: 0;
+  --sd-ui-menu-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1);
+  --sd-ui-menu-border: var(--sd-ui-border);
+  --sd-ui-menu-input-border: var(--sd-ui-border);
+  --sd-ui-menu-input-focus-border: var(--sd-ui-action);
+  --sd-ui-menu-item-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-menu-item-active-bg: var(--sd-ui-active-bg);
+  --sd-ui-menu-item-active-text: var(--sd-ui-action);
+
+  /* UI: tools */
+  --sd-ui-tools-gap: 6px;
+  --sd-ui-tools-item-size: 50px;
+  --sd-ui-tools-item-radius: var(--sd-radius-300);
+  --sd-ui-tools-item-bg: rgba(219, 219, 219, 0.6);
+  --sd-ui-tools-icon-size: 20px;
+
+  /* UI: comments — cascades from semantic tier, old names honored via fallback */
+  --sd-ui-comments-card-bg: var(--sd-comment-bg, #f3f6fd);
+  --sd-ui-comments-card-hover-bg: var(--sd-comment-bg-hover, var(--sd-ui-comments-card-bg));
+  --sd-ui-comments-card-active-bg: var(--sd-comment-bg-active, var(--sd-ui-bg));
+  --sd-ui-comments-card-resolved-bg: var(--sd-comment-bg-resolved, var(--sd-ui-disabled-bg));
+  --sd-ui-comments-card-active-border: var(--sd-comment-border-active, var(--sd-ui-border));
+  --sd-ui-comments-card-radius: var(--sd-comment-radius, var(--sd-radius-300));
+  --sd-ui-comments-card-padding: var(--sd-comment-padding, 16px);
+  --sd-ui-comments-card-shadow: var(--sd-comment-shadow, 0px 4px 12px 0px rgba(50, 50, 50, 0.15));
+  --sd-ui-comments-separator: var(--sd-comment-separator, var(--sd-ui-border));
+  --sd-ui-comments-transition: var(--sd-comment-transition, all 200ms ease);
+  --sd-ui-comments-author-text: var(--sd-comment-author-color, var(--sd-ui-text));
+  --sd-ui-comments-author-size: var(--sd-comment-author-size, var(--sd-font-size-400));
+  --sd-ui-comments-author-weight: var(--sd-comment-author-weight, 600);
+  --sd-ui-comments-tag-text: var(--sd-ui-text-muted);
+  --sd-ui-comments-tag-bg: var(--sd-color-gray-200);
+  --sd-ui-comments-timestamp-text: var(--sd-comment-time-color, var(--sd-ui-text-muted));
+  --sd-ui-comments-timestamp-size: var(--sd-comment-time-size, var(--sd-font-size-200));
+  --sd-ui-comments-body-text: var(--sd-ui-text);
+  --sd-ui-comments-body-size: var(--sd-comment-body-size, var(--sd-font-size-400));
+  --sd-ui-comments-resolved-text: var(--sd-color-green-500);
+  --sd-ui-comments-insert-text: var(--sd-comment-tc-insert-color, var(--sd-color-green-500));
+  --sd-ui-comments-delete-text: var(--sd-comment-tc-delete-color, var(--sd-color-rose-500));
+  --sd-ui-comments-dropdown-border: var(--sd-ui-border);
+  --sd-ui-comments-dropdown-bg: var(--sd-ui-bg);
+  --sd-ui-comments-dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --sd-ui-comments-option-size: var(--sd-font-size-400);
+  --sd-ui-comments-option-text: var(--sd-ui-comments-body-text);
+  --sd-ui-comments-option-hover-text: var(--sd-ui-comments-option-text);
+  --sd-ui-comments-option-selected-text: var(--sd-ui-comments-option-text);
+  --sd-ui-comments-option-hover-bg: var(--sd-ui-hover-bg);
+  --sd-ui-comments-input-bg: var(--sd-ui-bg);
+  --sd-ui-comments-input-border: var(--sd-ui-border);
+  --sd-ui-comments-internal-bg: var(--sd-comment-internal-bg, #cde6e6);
+  --sd-ui-comments-external-bg: var(--sd-comment-external-bg, #f5cfda);
+
+  /* Styles: comments — old names honored via fallback */
+  --sd-comments-highlight-external-base: #b1124b;
+  --sd-comments-highlight-external: var(--sd-comment-highlight-external, #b1124b40);
+  --sd-comments-highlight-external-active: #b1124b66;
+  --sd-comments-highlight-external-faded: #b1124b20;
+  --sd-comments-highlight-internal-base: #078383;
+  --sd-comments-highlight-internal: var(--sd-comment-highlight-internal, #07838340);
+  --sd-comments-highlight-internal-active: #07838366;
+  --sd-comments-highlight-internal-faded: #07838320;
+  --sd-comments-highlight-external-nested-border: #b1124b99;
+  --sd-comments-highlight-internal-nested-border: #07838399;
+  --sd-comments-highlight-hover: #1354ff55;
+  --sd-comments-selection-background: #1354ff55;
+
+  /* Styles: tracked changes — old names honored via fallback */
+  --sd-tracked-changes-insert-background: var(--sd-track-insert-bg, #399c7222);
+  --sd-tracked-changes-insert-border: var(--sd-track-insert-border, #00853d);
+  --sd-tracked-changes-delete-background: var(--sd-track-delete-bg, #cb0e4722);
+  --sd-tracked-changes-delete-border: var(--sd-track-delete-border, #cb0e47);
+  --sd-tracked-changes-format-border: var(--sd-track-format-border, gold);
+  --sd-tracked-changes-insert-background-focused: #399c7244;
+  --sd-tracked-changes-delete-background-focused: #cb0e4744;
+  --sd-tracked-changes-format-background-focused: #ffd70033;
+
+  /* Styles: content controls (SDT) — blue accent, intentionally standalone */
+  --sd-content-controls-block-border: #629be7;
+  --sd-content-controls-block-hover-bg: var(--sd-ui-hover-bg);
+  --sd-content-controls-inline-border: #629be7;
+  --sd-content-controls-inline-hover-bg: var(--sd-ui-hover-bg);
+  --sd-content-controls-label-border: #629be7;
+  --sd-content-controls-label-bg: #629be7ee;
+  --sd-content-controls-label-text: #ffffff;
+  --sd-content-controls-lock-hover-bg: rgba(98, 155, 231, 0.08);
+
+  /* Styles: layout — cascades from semantic tier */
+  --sd-layout-page-bg: var(--sd-ui-bg);
+  --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }

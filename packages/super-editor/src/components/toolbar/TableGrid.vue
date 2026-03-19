@@ -157,13 +157,13 @@ onMounted(() => {
   .toolbar-table-grid__item {
     width: 20px;
     height: 20px;
-    border: 1px solid #d3d3d3;
+    border: 1px solid var(--sd-ui-border, #dbdbdb);
     cursor: pointer;
     transition: all 0.15s;
   }
 
   .toolbar-table-grid__item.selected {
-    background-color: #dbdbdb;
+    background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
   }
 
   &.high-contrast {
@@ -177,7 +177,7 @@ onMounted(() => {
   }
 
   .toolbar-table-grid-value {
-    font-size: 13px;
+    font-size: var(--sd-ui-font-size-300, 13px);
     line-height: 1.1;
     padding: 0px 8px 2px;
   }

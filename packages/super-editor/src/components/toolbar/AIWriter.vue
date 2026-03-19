@@ -419,7 +419,7 @@ const handleInput = (event) => {
   padding-left: 8px;
   width: 100%;
   color: #47484a;
-  font-size: 12px;
+  font-size: var(--sd-ui-font-size-200, 12px);
   border: none;
   background: transparent;
   outline: none;
@@ -449,7 +449,7 @@ const handleInput = (event) => {
 .ai-textarea-icon {
   display: block;
   font-weight: 800;
-  font-size: 14px;
+  font-size: var(--sd-ui-font-size-400, 14px);
   width: 16px;
   height: 16px;
 }

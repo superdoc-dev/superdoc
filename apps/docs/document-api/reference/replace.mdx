@@ -189,9 +189,11 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "additionalProperties": false,
           "properties": {
             "target": {
-              "$ref": "#/$defs/SelectionTarget"
+              "$ref": "#/$defs/SelectionTarget",
+              "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
             },
             "text": {
+              "description": "Replacement text content.",
               "type": "string"
             }
           },
@@ -205,9 +207,11 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "additionalProperties": false,
           "properties": {
             "ref": {
+              "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
               "type": "string"
             },
             "text": {
+              "description": "Replacement text content.",
               "type": "string"
             }
           },
@@ -225,6 +229,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "additionalProperties": false,
           "properties": {
             "content": {
+              "description": "Document fragment to replace with (structured content).",
               "oneOf": [
                 {
                   "type": "object"
@@ -239,6 +244,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
             },
             "nestingPolicy": {
               "additionalProperties": false,
+              "description": "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
               "properties": {
                 "tables": {
                   "enum": [
@@ -250,6 +256,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
               "type": "object"
             },
             "target": {
+              "description": "Target block or selection to replace.",
               "oneOf": [
                 {
                   "$ref": "#/$defs/BlockNodeAddress"
@@ -270,6 +277,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
           "additionalProperties": false,
           "properties": {
             "content": {
+              "description": "Document fragment to replace with (structured content).",
               "oneOf": [
                 {
                   "type": "object"
@@ -284,6 +292,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
             },
             "nestingPolicy": {
               "additionalProperties": false,
+              "description": "Controls nesting behavior. tables: 'allow' permits inserting tables inside other tables.",
               "properties": {
                 "tables": {
                   "enum": [
@@ -295,6 +304,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
               "type": "object"
             },
             "ref": {
+              "description": "Reference handle from a previous search result.",
               "type": "string"
             }
           },

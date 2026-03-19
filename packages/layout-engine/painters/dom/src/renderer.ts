@@ -591,11 +591,25 @@ const LIST_MARKER_GAP = 8;
 const DEFAULT_PAGE_HEIGHT_PX = 1056;
 /** Default gap used when virtualization is enabled (kept in sync with PresentationEditor layout defaults). */
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
-const COMMENT_EXTERNAL_COLOR = '#B1124B';
-const COMMENT_INTERNAL_COLOR = '#078383';
-const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
-const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
-const COMMENT_FADED_ALPHA = '20'; // ~12% for non-selected when another comment is active
+import { cssToken } from './css-token.js';
+import type { CssToken } from './css-token.js';
+
+type CommentHighlightToken = CssToken;
+
+const COMMENT_HIGHLIGHT_EXTERNAL = cssToken('--sd-comments-highlight-external', '#B1124B40');
+const COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE = cssToken('--sd-comments-highlight-external-active', '#B1124B66');
+const COMMENT_HIGHLIGHT_EXTERNAL_FADED = cssToken('--sd-comments-highlight-external-faded', '#B1124B20');
+const COMMENT_HIGHLIGHT_INTERNAL = cssToken('--sd-comments-highlight-internal', '#07838340');
+const COMMENT_HIGHLIGHT_INTERNAL_ACTIVE = cssToken('--sd-comments-highlight-internal-active', '#07838366');
+const COMMENT_HIGHLIGHT_INTERNAL_FADED = cssToken('--sd-comments-highlight-internal-faded', '#07838320');
+const COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER = cssToken(
+  '--sd-comments-highlight-external-nested-border',
+  '#B1124B99',
+);
+const COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER = cssToken(
+  '--sd-comments-highlight-internal-nested-border',
+  '#07838399',
+);
 
 type LinkRenderData = {
   href?: string;
@@ -2595,7 +2609,7 @@ export class DomPainter {
       const base = this.options.pageStyles ?? {};
       return {
         ...base,
-        background: base.background ?? '#fff',
+        background: base.background ?? 'var(--sd-layout-page-bg, #fff)',
         boxShadow: 'none',
         border: 'none',
         margin: '0',
@@ -4605,14 +4619,23 @@ export class DomPainter {
     const commentHighlight = getCommentHighlight(textRun, this.activeCommentId);
 
     if (commentHighlight.color && hasAnyComment) {
-      (elem as HTMLElement).style.backgroundColor = commentHighlight.color;
-      // Add thin visual indicator for nested comments when outer comment is selected
-      // Use box-shadow instead of border to avoid affecting text layout
-      if (commentHighlight.hasNestedComments && commentHighlight.baseColor) {
-        const borderColor = `${commentHighlight.baseColor}99`; // Semi-transparent for subtlety
-        (elem as HTMLElement).style.boxShadow = `inset 1px 0 0 ${borderColor}, inset -1px 0 0 ${borderColor}`;
+      const runElement = elem as HTMLElement;
+      const previousBackgroundColor = runElement.style.backgroundColor;
+      runElement.style.backgroundColor = commentHighlight.color.css;
+      // jsdom may drop var() values for inline style properties.
+      // Fall back to concrete color to keep rendering/tests stable.
+      if (!runElement.style.backgroundColor || runElement.style.backgroundColor === previousBackgroundColor) {
+        runElement.style.backgroundColor = commentHighlight.color.fallback;
+      }
+      // Add thin visual indicator for nested comments when outer comment is selected.
+      // Use box-shadow instead of border to avoid affecting text layout.
+      if (commentHighlight.hasNestedComments && commentHighlight.nestedBorderColor) {
+        runElement.style.boxShadow = `inset 1px 0 0 ${commentHighlight.nestedBorderColor.css}, inset -1px 0 0 ${commentHighlight.nestedBorderColor.css}`;
+        if (!runElement.style.boxShadow) {
+          runElement.style.boxShadow = `inset 1px 0 0 ${commentHighlight.nestedBorderColor.fallback}, inset -1px 0 0 ${commentHighlight.nestedBorderColor.fallback}`;
+        }
       } else {
-        (elem as HTMLElement).style.boxShadow = '';
+        runElement.style.boxShadow = '';
       }
     }
     // We still need to preserve the comment ids
@@ -6958,8 +6981,8 @@ const applyRunStyles = (element: HTMLElement, run: Run, _isLink = false): void =
 };
 
 interface CommentHighlightResult {
-  color?: string;
-  baseColor?: string;
+  color?: CommentHighlightToken;
+  nestedBorderColor?: CommentHighlightToken;
   hasNestedComments?: boolean;
 }
 
@@ -7000,27 +7023,25 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
       matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
     );
     if (activeComment) {
-      const base = activeComment.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-      // Check if there are OTHER comments besides the active one (nested comments)
       const nestedComments = comments.filter(
         (c) => !matchesId(c as { commentId: string; importedId?: string }, activeCommentId),
       );
       return {
-        color: `${base}${COMMENT_ACTIVE_ALPHA}`,
-        baseColor: base,
+        color: activeComment.internal ? COMMENT_HIGHLIGHT_INTERNAL_ACTIVE : COMMENT_HIGHLIGHT_EXTERNAL_ACTIVE,
+        nestedBorderColor: activeComment.internal
+          ? COMMENT_HIGHLIGHT_INTERNAL_NESTED_BORDER
+          : COMMENT_HIGHLIGHT_EXTERNAL_NESTED_BORDER,
         hasNestedComments: nestedComments.length > 0,
       };
     }
     // Active comment is set but this run does not belong to it - show faded highlight.
     const fadedPrimary = comments[0];
-    const fadedBase = fadedPrimary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-    return { color: `${fadedBase}${COMMENT_FADED_ALPHA}` };
+    return { color: fadedPrimary.internal ? COMMENT_HIGHLIGHT_INTERNAL_FADED : COMMENT_HIGHLIGHT_EXTERNAL_FADED };
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)
   const primary = comments[0];
-  const base = primary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
-  return { color: `${base}${COMMENT_INACTIVE_ALPHA}` };
+  return { color: primary.internal ? COMMENT_HIGHLIGHT_INTERNAL : COMMENT_HIGHLIGHT_EXTERNAL };
 };
 
 /**

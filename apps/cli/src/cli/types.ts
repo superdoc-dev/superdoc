@@ -38,6 +38,8 @@ export type CliOperationParamSpec = {
   type: 'string' | 'number' | 'boolean' | 'string[]' | 'json';
   required?: boolean;
   schema?: CliTypeSpec;
+  /** Human-readable description for agent tool schemas. */
+  description?: string;
   /** When false, param is a transport-envelope detail hidden from agent tool schemas. */
   agentVisible?: boolean;
 };

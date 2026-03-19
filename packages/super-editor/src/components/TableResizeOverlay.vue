@@ -14,6 +14,7 @@
     >
       <div
         v-for="(segment, segmentIndex) in getBoundarySegments(boundary)"
+        v-show="!rowDragState"
         :key="`handle-${boundary.type}-${boundary.index}-${segmentIndex}`"
         class="resize-handle"
         :class="{
@@ -33,6 +34,7 @@
     <!-- Resize handles for each row boundary -->
     <div
       v-for="(rowBoundary, rowBoundaryIndex) in resizableRowBoundaries"
+      v-show="!dragState"
       :key="`row-handle-${rowBoundary.i}`"
       class="resize-handle resize-handle--row"
       :class="{
@@ -78,6 +80,8 @@ const emit = defineEmits(['resize-start', 'resize-move', 'resize-end', 'resize-s
 
 const overlayEl = ref(null);
 const overlayRect = ref(null);
+const tableScreenWidth = computed(() => `${overlayRect.value?.width ?? 0}px`);
+const tableScreenHeight = computed(() => `${overlayRect.value?.height ?? 0}px`);
 const isViewingMode = () => props.editor?.options?.documentMode === 'viewing';
 /**
  * Parsed table metadata from data-table-boundaries attribute
@@ -225,12 +229,6 @@ const RESIZE_HANDLE_HEIGHT_PX = 9;
  */
 const RESIZE_HANDLE_OFFSET_PX = 4;
 
-/** Extension added to overlay width during drag for smooth mouse tracking */
-const DRAG_OVERLAY_EXTENSION_PX = 1000;
-
-/** Minimum overlay width during drag operations */
-const MIN_DRAG_OVERLAY_WIDTH_PX = 2000;
-
 /** Throttle interval for mouse move events (60fps = ~16.67ms) */
 const THROTTLE_INTERVAL_MS = 16;
 
@@ -288,25 +286,14 @@ const overlayStyle = computed(() => {
   if (!overlayRect.value || !props.tableElement) return {};
 
   const rect = overlayRect.value;
-
-  // During any drag operation, use a very large overlay to ensure smooth mouse tracking
-  // This prevents issues when the mouse moves beyond the original table bounds
-  let overlayWidth = rect.width;
-  let overlayHeight = rect.height;
   const isDragging = dragState.value || rowDragState.value;
-  if (dragState.value) {
-    overlayWidth = Math.max(rect.width + DRAG_OVERLAY_EXTENSION_PX, MIN_DRAG_OVERLAY_WIDTH_PX);
-  }
-  if (rowDragState.value) {
-    overlayHeight = Math.max(rect.height + DRAG_OVERLAY_EXTENSION_PX, MIN_DRAG_OVERLAY_WIDTH_PX);
-  }
 
   return {
     position: 'absolute',
     left: `${rect.left}px`,
     top: `${rect.top}px`,
-    width: `${overlayWidth}px`,
-    height: `${overlayHeight}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
     pointerEvents: isDragging ? 'auto' : 'none',
     zIndex: 10,
   };
@@ -530,7 +517,7 @@ function getSegmentHandleStyle(boundary, segment) {
     left: `${scaledX}px`,
     top: scaledY != null ? `${scaledY}px` : '0',
     width: `${RESIZE_HANDLE_WIDTH_PX}px`,
-    height: scaledH != null ? `${scaledH}px` : '100%',
+    height: scaledH != null ? `${scaledH}px` : tableScreenHeight.value,
     transform: `translateX(-${RESIZE_HANDLE_OFFSET_PX}px)`,
     cursor: 'col-resize',
     pointerEvents: 'auto',
@@ -558,7 +545,7 @@ const guidelineStyle = computed(() => {
     left: `${newX}px`,
     top: '0',
     width: '2px',
-    height: '100%',
+    height: tableScreenHeight.value,
     backgroundColor: '#4A90E2',
     pointerEvents: 'none',
     zIndex: 20,
@@ -578,7 +565,7 @@ function getRowHandleStyle(rowBoundary) {
     position: 'absolute',
     left: '0',
     top: `${scaledY}px`,
-    width: '100%',
+    width: tableScreenWidth.value,
     height: `${RESIZE_HANDLE_HEIGHT_PX}px`,
     transform: `translateY(-${RESIZE_HANDLE_OFFSET_PX}px)`,
     cursor: 'row-resize',
@@ -602,7 +589,7 @@ const rowGuidelineStyle = computed(() => {
     position: 'absolute',
     left: '0',
     top: `${newY}px`,
-    width: '100%',
+    width: tableScreenWidth.value,
     height: '2px',
     backgroundColor: '#4A90E2',
     pointerEvents: 'none',
@@ -909,20 +896,18 @@ function onDocumentMouseUp(event) {
     pmView.style.pointerEvents = 'auto';
   }
 
-  // Only dispatch transaction if:
-  // 1. Not a forced cleanup
-  // 2. Delta is significant (> MIN_RESIZE_DELTA_PX)
+  // Only dispatch transaction if not a forced cleanup and delta is significant
   if (!forcedCleanup.value && Math.abs(finalDelta) > MIN_RESIZE_DELTA_PX) {
     dispatchResizeTransaction(columnIndex, newWidths);
-
-    emit('resize-end', {
-      columnIndex,
-      finalWidths: newWidths,
-      delta: finalDelta,
-    });
   }
 
-  // Clear drag state
+  // Always emit resize-end so the parent can clear its dragging flag
+  emit('resize-end', {
+    columnIndex,
+    finalWidths: newWidths,
+    delta: finalDelta,
+  });
+
   dragState.value = null;
 }
 
@@ -1187,8 +1172,10 @@ function onRowDocumentMouseUp() {
 
   if (!forcedCleanup.value && Math.abs(finalDelta) > MIN_RESIZE_DELTA_PX) {
     dispatchRowResizeTransaction(rowIndex, newHeight);
-    emit('resize-end', { rowIndex, newHeight, delta: finalDelta });
   }
+
+  // Always emit resize-end so the parent can clear its dragging flag
+  emit('resize-end', { rowIndex, newHeight, delta: finalDelta });
 
   rowDragState.value = null;
 }
@@ -1398,20 +1385,20 @@ onBeforeUnmount(() => {
 .resize-handle--row::before {
   left: 0;
   top: 50%;
-  width: 100%;
+  width: inherit;
   height: 2px;
   transform: translateY(-1px);
 }
 
 .resize-handle--row:hover::before {
   height: 3px;
-  width: 100%;
+  width: inherit;
   transform: translateY(-1.5px);
 }
 
 .resize-handle--row.resize-handle--active::before {
   height: 2px;
-  width: 100%;
+  width: inherit;
   transform: translateY(-1px);
 }
 

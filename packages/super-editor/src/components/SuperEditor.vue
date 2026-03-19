@@ -302,6 +302,7 @@ const openPopover = (component, props, position) => {
 const tableResizeState = reactive({
   visible: false,
   tableElement: null,
+  dragging: false,
 });
 
 /**
@@ -553,6 +554,9 @@ const isNearRowBoundary = (event, tableElement) => {
  * @returns {void}
  */
 const updateTableResizeOverlay = (event) => {
+  // Don't change overlay visibility while a resize drag is active
+  if (tableResizeState.dragging) return;
+
   // Throttle: skip if called too frequently
   const now = Date.now();
   if (now - lastUpdateTableResizeTimestamp < TABLE_RESIZE_THROTTLE_MS) {
@@ -594,6 +598,17 @@ const updateTableResizeOverlay = (event) => {
  * Hide table resize overlay (on mouse leave)
  */
 const hideTableResizeOverlay = () => {
+  if (tableResizeState.dragging) return;
+  tableResizeState.visible = false;
+  tableResizeState.tableElement = null;
+};
+
+const onTableResizeStart = () => {
+  tableResizeState.dragging = true;
+};
+
+const onTableResizeEnd = () => {
+  tableResizeState.dragging = false;
   tableResizeState.visible = false;
   tableResizeState.tableElement = null;
 };
@@ -735,7 +750,12 @@ const handleOverlayUpdates = (event) => {
   } else {
     updateTableResizeOverlay(event);
   }
-  updateImageResizeOverlay(event);
+  // Don't evaluate image overlay during an active table resize drag —
+  // without the oversized table overlay, pointer events can reach images
+  // and spuriously activate the image resize overlay mid-drag.
+  if (!tableResizeState.dragging) {
+    updateImageResizeOverlay(event);
+  }
 };
 
 /**
@@ -1207,6 +1227,8 @@ onBeforeUnmount(() => {
         :editor="activeEditor"
         :visible="tableResizeState.visible"
         :tableElement="tableResizeState.tableElement"
+        @resize-start="onTableResizeStart"
+        @resize-end="onTableResizeEnd"
       />
       <!-- Image resize overlay for interactive image resizing -->
       <ImageResizeOverlay

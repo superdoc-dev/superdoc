@@ -1308,5 +1308,91 @@ describe('TableResizeOverlay', () => {
 
       wrapper.unmount();
     });
+
+    it('should cancel an active column drag on window blur', async () => {
+      const editor = createMockEditor();
+      const tableElement = createMockTableElement();
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor,
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const downEvent = new MouseEvent('mousedown', { clientX: 100 });
+      Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
+      Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+      wrapper.vm.onHandleMouseDown(downEvent, 0);
+
+      expect(wrapper.vm.dragState).not.toBeNull();
+      expect(editor.view.dom.style.pointerEvents).toBe('none');
+
+      window.dispatchEvent(new Event('blur'));
+      await nextTick();
+
+      expect(wrapper.vm.dragState).toBeNull();
+      expect(editor.view.dom.style.pointerEvents).toBe('auto');
+      expect(wrapper.emitted('resize-end')).toBeDefined();
+
+      wrapper.unmount();
+    });
+
+    it('should cancel an active row drag when the document becomes hidden', async () => {
+      const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        value: 'hidden',
+      });
+
+      try {
+        const editor = createMockEditor();
+        const metadata = {
+          columns: [
+            { i: 0, x: 0, w: 100, min: 50, r: 1 },
+            { i: 1, x: 100, w: 150, min: 50, r: 1 },
+          ],
+          rows: [
+            { i: 0, y: 0, h: 50, min: 30, r: 1 },
+            { i: 1, y: 50, h: 50, min: 30, r: 1 },
+          ],
+        };
+        const tableElement = createMockTableElement(metadata);
+        const wrapper = mount(TableResizeOverlay, {
+          props: {
+            editor,
+            visible: true,
+            tableElement,
+          },
+        });
+
+        await nextTick();
+
+        const downEvent = new MouseEvent('mousedown', { clientY: 50 });
+        Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
+        Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+        wrapper.vm.onRowHandleMouseDown(downEvent, 0);
+
+        expect(wrapper.vm.rowDragState).not.toBeNull();
+        expect(editor.view.dom.style.pointerEvents).toBe('none');
+
+        document.dispatchEvent(new Event('visibilitychange'));
+        await nextTick();
+
+        expect(wrapper.vm.rowDragState).toBeNull();
+        expect(editor.view.dom.style.pointerEvents).toBe('auto');
+        expect(wrapper.emitted('resize-end')).toBeDefined();
+
+        wrapper.unmount();
+      } finally {
+        if (originalVisibilityState) {
+          Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+        } else {
+          delete document.visibilityState;
+        }
+      }
+    });
   });
 });

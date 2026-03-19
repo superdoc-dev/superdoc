@@ -242,6 +242,36 @@ const MIN_RESIZE_DELTA_PX = 1;
 let rafId = null;
 let isUnmounted = false;
 
+function removeInteractionCancelListeners() {
+  window.removeEventListener('blur', onInteractionCancel);
+  document.removeEventListener('visibilitychange', onInteractionCancel);
+}
+
+function cancelActiveResizeDrag() {
+  if (!dragState.value && !rowDragState.value) return;
+
+  forcedCleanup.value = true;
+  if (dragState.value) {
+    onDocumentMouseUp(new MouseEvent('mouseup'));
+  }
+  if (rowDragState.value) {
+    onRowDocumentMouseUp();
+  }
+  forcedCleanup.value = false;
+}
+
+function onInteractionCancel(event) {
+  if (!dragState.value && !rowDragState.value) return;
+  if (event?.type === 'visibilitychange' && document.visibilityState === 'visible') {
+    return;
+  }
+  if (document.visibilityState && document.visibilityState !== 'visible') {
+    cancelActiveResizeDrag();
+    return;
+  }
+  cancelActiveResizeDrag();
+}
+
 /**
  * Starts continuous RAF-based tracking of the overlay position.
  *
@@ -763,6 +793,8 @@ function onHandleMouseDown(event, resizableBoundaryIndex) {
   try {
     document.addEventListener('mousemove', onDocumentMouseMove);
     document.addEventListener('mouseup', onDocumentMouseUp);
+    window.addEventListener('blur', onInteractionCancel);
+    document.addEventListener('visibilitychange', onInteractionCancel);
 
     emit('resize-start', {
       columnIndex: boundary.index,
@@ -890,6 +922,7 @@ function onDocumentMouseUp(event) {
   // Clean up event listeners and restore pointer events
   document.removeEventListener('mousemove', onDocumentMouseMove);
   document.removeEventListener('mouseup', onDocumentMouseUp);
+  removeInteractionCancelListeners();
 
   if (props.editor?.view?.dom) {
     const pmView = props.editor.view.dom;
@@ -1130,6 +1163,8 @@ function onRowHandleMouseDown(event, rowBoundaryIndex) {
 
   document.addEventListener('mousemove', onRowDocumentMouseMove);
   document.addEventListener('mouseup', onRowDocumentMouseUp);
+  window.addEventListener('blur', onInteractionCancel);
+  document.addEventListener('visibilitychange', onInteractionCancel);
 
   emit('resize-start', { rowIndex: rowBoundary.i });
 }
@@ -1165,6 +1200,7 @@ function onRowDocumentMouseUp() {
 
   document.removeEventListener('mousemove', onRowDocumentMouseMove);
   document.removeEventListener('mouseup', onRowDocumentMouseUp);
+  removeInteractionCancelListeners();
 
   if (props.editor?.view?.dom) {
     props.editor.view.dom.style.pointerEvents = 'auto';
@@ -1286,16 +1322,7 @@ watch(
     } else {
       stopOverlayTracking();
       // Clean up drag state if overlay is hidden
-      if (dragState.value) {
-        forcedCleanup.value = true;
-        onDocumentMouseUp(new MouseEvent('mouseup'));
-        forcedCleanup.value = false;
-      }
-      if (rowDragState.value) {
-        forcedCleanup.value = true;
-        onRowDocumentMouseUp();
-        forcedCleanup.value = false;
-      }
+      cancelActiveResizeDrag();
     }
   },
 );
@@ -1333,6 +1360,7 @@ onBeforeUnmount(() => {
     props.editor.view.dom.style.pointerEvents = 'auto';
   }
 
+  removeInteractionCancelListeners();
   window.removeEventListener('scroll', updateOverlayRect, true);
   window.removeEventListener('resize', updateOverlayRect);
 });

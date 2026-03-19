@@ -360,6 +360,95 @@ describe('table setter/getter parity', () => {
       const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
       expect(tp.tblLook.noHBand).toBe(false);
     });
+
+    it('writes lastRow flag via lastRow input', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'lastRow', enabled: true });
+
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      expect(tp.tblLook.lastRow).toBe(true);
+    });
+
+    it('writes lastColumn flag via lastColumn input', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'lastColumn', enabled: true });
+
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      expect(tp.tblLook.lastColumn).toBe(true);
+    });
+
+    it('normalizes deprecated totalRow alias to lastRow', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'totalRow', enabled: true });
+
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      expect(tp.tblLook.lastRow).toBe(true);
+    });
+
+    it('disables lastRow by writing false', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps({
+        tblLook: { firstRow: true, lastRow: true, firstColumn: true, lastColumn: false, noHBand: false, noVBand: true },
+      });
+      tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'lastRow', enabled: false });
+
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      expect(tp.tblLook.lastRow).toBe(false);
+    });
+
+    it('returns NO_OP when tblLook already has the requested value', () => {
+      const { editor } = makeTableEditorWithProps({
+        tblLook: { firstRow: true, lastRow: true, firstColumn: true, lastColumn: false, noHBand: false, noVBand: true },
+      });
+      const result = tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'lastRow', enabled: true });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('NO_OP');
+      }
+    });
+
+    it('does not return NO_OP when tblLook is absent (materializes baseline)', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      const result = tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'lastRow', enabled: true });
+
+      expect(result.success).toBe(true);
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      expect(tp.tblLook.lastRow).toBe(true);
+    });
+
+    it('seeds full Word-default baseline on first materialization', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'lastRow', enabled: true });
+
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      const look = tp.tblLook;
+      // Word defaults (0x04A0) plus the requested mutation
+      expect(look.firstRow).toBe(true);
+      expect(look.lastRow).toBe(true); // mutated
+      expect(look.firstColumn).toBe(true);
+      expect(look.lastColumn).toBe(false);
+      expect(look.noHBand).toBe(false);
+      expect(look.noVBand).toBe(true);
+    });
+
+    it('deletes stale w:val on mutation', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps({
+        tblLook: {
+          val: '04A0',
+          firstRow: true,
+          lastRow: false,
+          firstColumn: true,
+          lastColumn: false,
+          noHBand: false,
+          noVBand: true,
+        },
+      });
+      tablesSetStyleOptionAdapter(editor, { nodeId: 'table-1', flag: 'lastRow', enabled: true });
+
+      const tp = lastWrittenAttrs(getSetNodeMarkupCalls()).tableProperties as any;
+      expect(tp.tblLook.lastRow).toBe(true);
+      expect(tp.tblLook.val).toBeUndefined();
+    });
   });
 
   describe('setCellSpacing → canonical key', () => {
@@ -493,11 +582,20 @@ describe('getProperties reads from tableProperties', () => {
     const result = tablesGetPropertiesAdapter(editor, { nodeId: 'table-1' });
     expect(result.styleOptions).toEqual({
       headerRow: true,
-      totalRow: false,
+      lastRow: false,
       firstColumn: false,
       lastColumn: false,
       bandedRows: true,
       bandedColumns: false,
     });
+  });
+
+  it('does not include totalRow in styleOptions output', () => {
+    const { editor } = makeTableEditorWithProps({
+      tblLook: { firstRow: true, lastRow: true, noHBand: false, noVBand: true },
+    });
+    const result = tablesGetPropertiesAdapter(editor, { nodeId: 'table-1' });
+    expect(result.styleOptions).toHaveProperty('lastRow', true);
+    expect(result.styleOptions).not.toHaveProperty('totalRow');
   });
 });

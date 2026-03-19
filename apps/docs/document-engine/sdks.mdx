@@ -580,7 +580,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.stylisticSets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
 | `doc.format.contextualAlternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
 | `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
-| `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references. |
 | `doc.styles.paragraph.clearStyle` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.resetDirectFormatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.setAlignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
@@ -1025,7 +1025,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.stylistic_sets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
 | `doc.format.contextual_alternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
 | `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
-| `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references. |
 | `doc.styles.paragraph.clear_style` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.reset_direct_formatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.set_alignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |

@@ -5034,7 +5034,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         {
           target: tableAddressSchema,
           nodeId: { type: 'string' },
-          flag: { enum: ['headerRow', 'totalRow', 'firstColumn', 'lastColumn', 'bandedRows', 'bandedColumns'] },
+          flag: {
+            enum: ['headerRow', 'lastRow', 'totalRow', 'firstColumn', 'lastColumn', 'bandedRows', 'bandedColumns'],
+          },
           enabled: { type: 'boolean' },
         },
         ['flag', 'enabled'],
@@ -5238,7 +5240,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         autoFitMode: { enum: ['fixedWidth', 'fitContents', 'fitWindow'] },
         styleOptions: objectSchema({
           headerRow: { type: 'boolean' },
-          totalRow: { type: 'boolean' },
+          lastRow: { type: 'boolean' },
           firstColumn: { type: 'boolean' },
           lastColumn: { type: 'boolean' },
           bandedRows: { type: 'boolean' },

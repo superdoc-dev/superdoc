@@ -10519,7 +10519,7 @@ describe('document-api adapter conformance', () => {
       autoFitMode: 'fixedWidth',
       styleOptions: {
         headerRow: true,
-        totalRow: false,
+        lastRow: false,
         bandedRows: true,
         bandedColumns: false,
       },

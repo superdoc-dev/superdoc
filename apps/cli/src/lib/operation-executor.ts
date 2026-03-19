@@ -188,9 +188,10 @@ async function preflightCallContext(
  */
 function normalizeLegacyInput(operationId: string, input: Record<string, unknown>): Record<string, unknown> {
   // SD-2132: tables.split renamed atRowIndex → rowIndex.
-  if (operationId === 'doc.tables.split' && input.atRowIndex !== undefined && input.rowIndex === undefined) {
+  if (operationId === 'doc.tables.split' && input.atRowIndex !== undefined) {
     const { atRowIndex, ...rest } = input;
-    return { ...rest, rowIndex: atRowIndex };
+    // When both are present, prefer the canonical rowIndex; otherwise migrate.
+    return rest.rowIndex !== undefined ? rest : { ...rest, rowIndex: atRowIndex };
   }
   return input;
 }

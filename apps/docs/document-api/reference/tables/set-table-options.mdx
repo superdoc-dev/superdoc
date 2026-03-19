@@ -1,7 +1,7 @@
 ---
-title: tables.setStyle
-sidebarTitle: tables.setStyle
-description: Apply a named table style to the target table.
+title: tables.setTableOptions
+sidebarTitle: tables.setTableOptions
+description: Set table-level default cell margins and/or cell spacing.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,48 +10,64 @@ description: Apply a named table style to the target table.
 
 ## Summary
 
-Apply a named table style to the target table.
+Set table-level default cell margins and/or cell spacing.
 
-- Operation ID: `tables.setStyle`
-- API member path: `editor.doc.tables.setStyle(...)`
+- Operation ID: `tables.setTableOptions`
+- API member path: `editor.doc.tables.setTableOptions(...)`
 - Mutates document: `yes`
-- Idempotency: `idempotent`
+- Idempotency: `conditional`
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a TableMutationResult receipt; reports NO_OP if the table already uses the requested style.
+Returns a TableMutationResult receipt; reports NO_OP if the provided values already match current direct formatting.
 
 ## Input fields
 
-### Variant 1 (target.nodeType="table")
+### Variant 1 (target.kind="block")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `styleId` | string | yes |  |
-| `target` | TableAddress | yes | TableAddress |
+| `cellSpacingPt` | number \\| null | no | One of: number, null |
+| `defaultCellMargins` | object | no |  |
+| `defaultCellMargins.bottomPt` | number | no |  |
+| `defaultCellMargins.leftPt` | number | no |  |
+| `defaultCellMargins.rightPt` | number | no |  |
+| `defaultCellMargins.topPt` | number | no |  |
+| `target` | BlockNodeAddress | yes | BlockNodeAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
-| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 
 ### Variant 2 (required: nodeId)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `cellSpacingPt` | number \\| null | no | One of: number, null |
+| `defaultCellMargins` | object | no |  |
+| `defaultCellMargins.bottomPt` | number | no |  |
+| `defaultCellMargins.leftPt` | number | no |  |
+| `defaultCellMargins.rightPt` | number | no |  |
+| `defaultCellMargins.topPt` | number | no |  |
 | `nodeId` | string | yes |  |
-| `styleId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
-  "styleId": "style-001",
+  "cellSpacingPt": 12.5,
+  "defaultCellMargins": {
+    "bottomPt": 12.5,
+    "leftPt": 12.5,
+    "rightPt": 12.5,
+    "topPt": 12.5
+  },
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "table"
+    "nodeType": "paragraph"
   }
 }
 ```
@@ -111,8 +127,9 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 
 ## Non-applied failure codes
 
-- `INVALID_TARGET`
 - `NO_OP`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Raw schemas
 
@@ -133,19 +150,52 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     }
   ],
   "properties": {
+    "cellSpacingPt": {
+      "oneOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "defaultCellMargins": {
+      "additionalProperties": false,
+      "properties": {
+        "bottomPt": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "leftPt": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "rightPt": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "topPt": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "topPt",
+        "rightPt",
+        "bottomPt",
+        "leftPt"
+      ],
+      "type": "object"
+    },
     "nodeId": {
       "type": "string"
     },
-    "styleId": {
-      "type": "string"
-    },
     "target": {
-      "$ref": "#/$defs/TableAddress"
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
-  "required": [
-    "styleId"
-  ],
   "type": "object"
 }
 ```

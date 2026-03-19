@@ -2646,6 +2646,58 @@ export const OPERATION_DEFINITIONS = {
   },
 
   // -------------------------------------------------------------------------
+  // Tables: convenience operations (SD-2129)
+  // -------------------------------------------------------------------------
+
+  'tables.applyStyle': {
+    memberPath: 'tables.applyStyle',
+    description: 'Apply a table style and/or style options in one call.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/apply-style.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setBorders': {
+    memberPath: 'tables.setBorders',
+    description: 'Set borders on a table using a target set or per-edge patch.',
+    expectedResult: 'Returns a TableMutationResult receipt. Does not perform NO_OP detection.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-borders.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setTableOptions': {
+    memberPath: 'tables.setTableOptions',
+    description: 'Set table-level default cell margins and/or cell spacing.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the provided values already match current direct formatting.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-table-options.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
   // Tables: read operations (B4 ref handoff)
   // -------------------------------------------------------------------------
 
@@ -2676,7 +2728,8 @@ export const OPERATION_DEFINITIONS = {
   'tables.getProperties': {
     memberPath: 'tables.getProperties',
     description: 'Retrieve layout and style properties of a table.',
-    expectedResult: 'Returns a TablesGetPropertiesOutput with the table layout, style, border, and shading properties.',
+    expectedResult:
+      'Returns a TablesGetPropertiesOutput with direct table layout and style state, including style options, borders, default cell margins, and cell spacing when explicitly set.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',

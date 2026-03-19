@@ -1,7 +1,7 @@
 ---
-title: tables.setStyle
-sidebarTitle: tables.setStyle
-description: Apply a named table style to the target table.
+title: tables.applyStyle
+sidebarTitle: tables.applyStyle
+description: Apply a table style and/or style options in one call.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,48 +10,68 @@ description: Apply a named table style to the target table.
 
 ## Summary
 
-Apply a named table style to the target table.
+Apply a table style and/or style options in one call.
 
-- Operation ID: `tables.setStyle`
-- API member path: `editor.doc.tables.setStyle(...)`
+- Operation ID: `tables.applyStyle`
+- API member path: `editor.doc.tables.applyStyle(...)`
 - Mutates document: `yes`
-- Idempotency: `idempotent`
+- Idempotency: `conditional`
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a TableMutationResult receipt; reports NO_OP if the table already uses the requested style.
+Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.
 
 ## Input fields
 
-### Variant 1 (target.nodeType="table")
+### Variant 1 (target.kind="block")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `styleId` | string | yes |  |
-| `target` | TableAddress | yes | TableAddress |
+| `styleId` | string | no |  |
+| `styleOptions` | object | no |  |
+| `styleOptions.bandedColumns` | boolean | no |  |
+| `styleOptions.bandedRows` | boolean | no |  |
+| `styleOptions.firstColumn` | boolean | no |  |
+| `styleOptions.headerRow` | boolean | no |  |
+| `styleOptions.lastColumn` | boolean | no |  |
+| `styleOptions.lastRow` | boolean | no |  |
+| `styleOptions.totalRow` | boolean | no |  |
+| `target` | BlockNodeAddress | yes | BlockNodeAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
-| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 
 ### Variant 2 (required: nodeId)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `nodeId` | string | yes |  |
-| `styleId` | string | yes |  |
+| `styleId` | string | no |  |
+| `styleOptions` | object | no |  |
+| `styleOptions.bandedColumns` | boolean | no |  |
+| `styleOptions.bandedRows` | boolean | no |  |
+| `styleOptions.firstColumn` | boolean | no |  |
+| `styleOptions.headerRow` | boolean | no |  |
+| `styleOptions.lastColumn` | boolean | no |  |
+| `styleOptions.lastRow` | boolean | no |  |
+| `styleOptions.totalRow` | boolean | no |  |
 
 ### Example request
 
 ```json
 {
   "styleId": "style-001",
+  "styleOptions": {
+    "headerRow": true,
+    "lastRow": true
+  },
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "table"
+    "nodeType": "paragraph"
   }
 }
 ```
@@ -111,8 +131,9 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 
 ## Non-applied failure codes
 
-- `INVALID_TARGET`
 - `NO_OP`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Raw schemas
 
@@ -139,13 +160,37 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     "styleId": {
       "type": "string"
     },
+    "styleOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "bandedColumns": {
+          "type": "boolean"
+        },
+        "bandedRows": {
+          "type": "boolean"
+        },
+        "firstColumn": {
+          "type": "boolean"
+        },
+        "headerRow": {
+          "type": "boolean"
+        },
+        "lastColumn": {
+          "type": "boolean"
+        },
+        "lastRow": {
+          "type": "boolean"
+        },
+        "totalRow": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "target": {
-      "$ref": "#/$defs/TableAddress"
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
-  "required": [
-    "styleId"
-  ],
   "type": "object"
 }
 ```

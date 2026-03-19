@@ -246,6 +246,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.setCellPadding': (input, options) => api.tables.setCellPadding(input, options),
     'tables.setCellSpacing': (input, options) => api.tables.setCellSpacing(input, options),
     'tables.clearCellSpacing': (input, options) => api.tables.clearCellSpacing(input, options),
+    'tables.applyStyle': (input, options) => api.tables.applyStyle(input, options),
+    'tables.setBorders': (input, options) => api.tables.setBorders(input, options),
+    'tables.setTableOptions': (input, options) => api.tables.setTableOptions(input, options),
 
     // --- tables.* reads ---
     'tables.get': (input) => api.tables.get(input),

@@ -439,6 +439,8 @@ function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
   const { resolved } = resolveRef(schema, $defs);
   // Flatten allOf first — the merged schema may itself contain oneOf/anyOf.
   const flat = flattenAllOf(resolved, $defs);
+  const sharedProperties = (flat.properties as Record<string, JsonSchema> | undefined) ?? undefined;
+  const sharedRequired = new Set<string>(Array.isArray(flat.required) ? (flat.required as string[]) : []);
 
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = flat[keyword];
@@ -446,60 +448,57 @@ function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
 
     return variants.flatMap((variant, index) => {
       const resolvedVariant = flattenAllOf(resolveRef(variant as JsonSchema, $defs).resolved, $defs);
-      const variantProperties = resolvedVariant.properties as Record<string, JsonSchema> | undefined;
-      const parentProperties = flat.properties as Record<string, JsonSchema> | undefined;
+      const variantProperties = (resolvedVariant.properties as Record<string, JsonSchema> | undefined) ?? undefined;
+      const variantRequired = Array.isArray(resolvedVariant.required) ? (resolvedVariant.required as string[]) : [];
+      const variantRequiredSet = new Set<string>(variantRequired);
       const hasOwnProperties = !!variantProperties && Object.keys(variantProperties).length > 0;
-      const variantRequired = new Set<string>(
-        Array.isArray(resolvedVariant.required) ? (resolvedVariant.required as string[]) : [],
-      );
-
-      // For schemas like `{ properties: {...}, oneOf: [{required:['target']}, {required:['nodeId']}] }`,
-      // inherit the parent properties into each variant so the field table shows
-      // the actual payload shape instead of `_No fields._`.
       const hiddenFields = new Set<string>();
-      if (parentProperties && !hasOwnProperties) {
+      if (sharedProperties && !hasOwnProperties) {
         for (let otherIndex = 0; otherIndex < variants.length; otherIndex++) {
           if (otherIndex === index) continue;
           const otherRequired = Array.isArray((variants[otherIndex] as JsonSchema).required)
             ? ((variants[otherIndex] as JsonSchema).required as string[])
             : [];
           for (const field of otherRequired) {
-            if (!variantRequired.has(field)) hiddenFields.add(field);
+            if (!variantRequiredSet.has(field)) hiddenFields.add(field);
           }
         }
       }
-
-      const variantSchema =
-        parentProperties && !hasOwnProperties
+      const visibleSharedProperties = sharedProperties
+        ? Object.fromEntries(Object.entries(sharedProperties).filter(([field]) => !hiddenFields.has(field)))
+        : undefined;
+      const mergedRequired = new Set<string>(variantRequired);
+      for (const field of sharedRequired) mergedRequired.add(field);
+      const variantSchema: JsonSchema =
+        visibleSharedProperties || variantProperties
           ? {
               ...resolvedVariant,
               type: 'object',
-              properties: Object.fromEntries(
-                Object.entries(parentProperties).filter(([field]) => !hiddenFields.has(field)),
-              ),
+              properties: {
+                ...(visibleSharedProperties ?? {}),
+                ...(variantProperties ?? {}),
+              },
               additionalProperties: resolvedVariant.additionalProperties ?? flat.additionalProperties ?? false,
-              required: [
-                ...new Set([...(Array.isArray(flat.required) ? (flat.required as string[]) : []), ...variantRequired]),
-              ],
+              ...(mergedRequired.size > 0 ? { required: [...mergedRequired] } : {}),
             }
           : resolvedVariant;
-
+      const variantOnlyRequired = variantRequired.filter((field) => !sharedRequired.has(field));
       const discriminators = collectConstDiscriminators(variantSchema, $defs);
       const preferred = preferredDiscriminator(discriminators);
       const variantLabelSuffix = preferred
         ? `${preferred.path}=${JSON.stringify(preferred.value)}`
-        : variantRequired.size > 0
-          ? [...variantRequired].join(', ')
+        : variantOnlyRequired.length > 0
+          ? `required: ${variantOnlyRequired.join(', ')}`
           : undefined;
       const label = variantLabelSuffix ? `Variant ${index + 1} (${variantLabelSuffix})` : `Variant ${index + 1}`;
-      const rows = buildFieldRows(variantSchema, $defs);
-      if (rows.length === 0 && hasTopLevelUnion(variantSchema)) {
+      if (hasTopLevelUnion(variantSchema)) {
         return buildFieldSections(variantSchema, $defs).map((section) => ({
           title: combineVariantTitles(label, section.title),
           rows: section.rows,
         }));
       }
 
+      const rows = buildFieldRows(variantSchema, $defs);
       return {
         title: label,
         rows,

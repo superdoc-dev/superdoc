@@ -160,6 +160,9 @@ import {
   tablesSetCellPaddingWrapper,
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
+  tablesApplyStyleWrapper,
+  tablesSetBordersWrapper,
+  tablesSetTableOptionsWrapper,
 } from './plan-engine/tables-wrappers.js';
 import {
   tablesGetAdapter,
@@ -522,6 +525,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setCellPadding: (input, options) => tablesSetCellPaddingWrapper(editor, input, options),
       setCellSpacing: (input, options) => tablesSetCellSpacingWrapper(editor, input, options),
       clearCellSpacing: (input, options) => tablesClearCellSpacingWrapper(editor, input, options),
+      applyStyle: (input, options) => tablesApplyStyleWrapper(editor, input, options),
+      setBorders: (input, options) => tablesSetBordersWrapper(editor, input, options),
+      setTableOptions: (input, options) => tablesSetTableOptionsWrapper(editor, input, options),
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),

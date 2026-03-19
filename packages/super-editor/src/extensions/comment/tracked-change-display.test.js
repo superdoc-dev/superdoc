@@ -73,6 +73,23 @@ describe('resolveTrackedFormatDisplay', () => {
     });
   });
 
+  it('treats same-target link text edits as a modification, not a no-op', () => {
+    const result = resolveTrackedFormatDisplay({
+      attrs: {
+        before: [{ type: 'link', attrs: { href: 'https://example.com', text: 'old label' } }],
+        after: [
+          { type: 'link', attrs: { href: 'https://example.com', text: 'new label' } },
+          { type: 'underline', attrs: {} },
+        ],
+      },
+      nodes: [makeNode({ text: 'new label' })],
+    });
+    expect(result).toEqual({
+      trackedChangeDisplayType: HyperlinkModifiedDisplayType,
+      trackedChangeText: 'https://example.com',
+    });
+  });
+
   it('returns null for link modification when no label can be resolved', () => {
     const result = resolveTrackedFormatDisplay({
       attrs: {

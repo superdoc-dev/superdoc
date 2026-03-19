@@ -80,6 +80,21 @@ const isUnderlineOnlyFormatDelta = ({ before, after }) => {
   return removedTypes.length === 0 && addedTypes.length === 1 && addedTypes[0] === 'underline';
 };
 
+const snapshotAttrsEqual = (a, b) => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((key) => {
+    const valA = a[key];
+    const valB = b[key];
+    // Treat null/undefined as equivalent (attrs often mix the two)
+    if (valA == null && valB == null) return true;
+    return valA === valB;
+  });
+};
+
 /**
  * Detect tracked format changes that should render with hyperlink-specific copy.
  *
@@ -104,12 +119,8 @@ export const resolveTrackedFormatDisplay = ({ attrs = {}, nodes = [] }) => {
   // Handle here instead of falling through to the generic translator, which would
   // produce a spurious "Format: underline" comment.
   if (beforeLink && addedLink) {
-    const beforeTarget = getHyperlinkTarget(beforeLink);
-    const afterTarget = getHyperlinkTarget(addedLink);
-
-    // No-op: same link target — return empty text so the caller's
-    // `if (!deletionText && !trackedChangeText)` guard suppresses the comment.
-    if (beforeTarget && afterTarget && beforeTarget === afterTarget) {
+    // True no-op: every link attr is identical — suppress the comment.
+    if (snapshotAttrsEqual(beforeLink.attrs, addedLink.attrs)) {
       return { trackedChangeDisplayType: null, trackedChangeText: '' };
     }
 

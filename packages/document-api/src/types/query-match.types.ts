@@ -13,6 +13,7 @@ import type { SelectionTarget } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { DiscoveryItem, DiscoveryOutput, DiscoveryResult } from './discovery.js';
 import type { InlineToggleDirective } from './style-policy.types.js';
+import type { StoryLocator } from './story.types.js';
 
 export type CardinalityRequirement = 'any' | 'first' | 'exactlyOne' | 'all';
 
@@ -221,6 +222,8 @@ export interface QueryMatchMeta {
 export interface QueryMatchInput {
   select: TextSelector | NodeSelector;
   within?: BlockNodeAddress;
+  /** Restrict matching to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   require?: CardinalityRequirement;
   /** Match evaluation mode. `'candidates'` (default) returns best-effort matches; `'strict'` enforces exact semantics (future). */
   mode?: 'strict' | 'candidates';

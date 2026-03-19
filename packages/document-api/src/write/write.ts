@@ -2,6 +2,7 @@ import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../typ
 import type { BlockRelativeLocator } from './locator.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
+import type { StoryLocator } from '../types/story.types.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
@@ -42,6 +43,8 @@ export type InsertWriteRequest = {
    */
   target?: TextAddress;
   text: string;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 } & Partial<BlockRelativeLocator>;
 
 /**

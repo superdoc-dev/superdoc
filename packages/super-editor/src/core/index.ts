@@ -11,6 +11,9 @@ export * as coreExtensions from './extensions/index.js';
 export * as helpers from './helpers/index.js';
 export * as utilities from './utilities/index.js';
 
+export { createStoryEditor } from './story-editor-factory.js';
+export type { StoryEditorOptions } from './story-editor-factory.js';
+
 // This needs to be last otherwise it causes circular dependencies
 export * from './Editor.js';
 

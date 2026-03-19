@@ -1,8 +1,7 @@
 import { PluginKey } from 'prosemirror-state';
-import { Editor as SuperEditor } from '@core/Editor.js';
-import { getStarterExtensions } from '@extensions/index.js';
 import { isApplyingRemotePartChanges } from '@extensions/collaboration/part-sync/index.js';
 import { exportSubEditorToPart } from '@core/parts/adapters/header-footer-sync.js';
+import { createStoryEditor } from '@core/story-editor-factory.js';
 import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
 import { isHeadless } from '@utils/headless-helpers.js';
 
@@ -161,6 +160,8 @@ export const createHeaderFooterEditor = ({
     }
   }
 
+  // --- DOM layout & styling (UI-only concerns) ---
+
   const parentStyles = editor.converter.getDocumentDefaultStyles();
   const { fontSizePt, typeface, fontFamilyCss } = parentStyles;
   const fontSizeInPixles = fontSizePt * 1.3333;
@@ -198,44 +199,22 @@ export const createHeaderFooterEditor = ({
     document.body.appendChild(editorContainer);
   }
 
-  const headerFooterEditor = new SuperEditor({
-    role: editor.options.role,
-    loadFromSchema: true,
-    mode: 'docx',
-    element: editorContainer,
-    content: data,
-    extensions: getStarterExtensions(),
-    documentId: sectionId || 'sectionId',
-    media: editor.storage.image.media,
-    mediaFiles: editor.storage.image.media,
-    fonts: editor.options.fonts,
-    isHeaderOrFooter: true, // This flag prevents pagination from being enabled
-    headerFooterType: type,
-    isHeadless: editor.options.isHeadless,
-    pagination: false, // Explicitly disable pagination
-    annotations: true,
-    currentPageNumber: currentPageNumber ?? 1,
-    totalPageCount: totalPageCount ?? 1,
-    // Don't set parentEditor to avoid circular reference issues
-    // parentEditor: editor,
-    // IMPORTANT: Start with editable: false to prevent triggering update cascades during creation.
-    // PresentationEditor#enterHeaderFooterMode will call setEditable(true) when entering edit mode.
-    editable: false,
-    documentMode: 'viewing',
-    onCreate: (evt) => setEditorToolbar(evt, editor),
-    onBlur: (evt) => onHeaderFooterDataUpdate(evt, editor, sectionId, type),
-  });
+  // --- Core editor construction via reusable factory ---
 
-  // Store parent editor reference separately to avoid circular reference in options
-  // This allows access when needed without creating serialization issues
-  Object.defineProperty(headerFooterEditor.options, 'parentEditor', {
-    enumerable: false, // Don't include in serialization
-    configurable: true,
-    get() {
-      return editor;
+  const headerFooterEditor = createStoryEditor(editor, data, {
+    documentId: sectionId || 'sectionId',
+    isHeaderOrFooter: true,
+    currentPageNumber,
+    totalPageCount,
+    element: editorContainer,
+    editorOptions: {
+      headerFooterType: type,
+      onCreate: (evt) => setEditorToolbar(evt, editor),
+      onBlur: (evt) => onHeaderFooterDataUpdate(evt, editor, sectionId, type),
     },
   });
-  headerFooterEditor.setEditable(false, false);
+
+  // --- Post-creation DOM adjustments (UI-only concerns) ---
 
   const pm = editorContainer.querySelector('.ProseMirror');
   if (pm) {

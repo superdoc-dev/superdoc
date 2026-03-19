@@ -1,4 +1,8 @@
+import type { StoryLocator } from '../types/story.types.js';
+
 export interface GetHtmlInput {
+  /** Restrict the read to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   /**
    * Convert SuperDoc's internal flat-list representation to proper nested
    * `<ol>`/`<ul>` HTML. Defaults to `true`.

@@ -2,6 +2,7 @@ import type { BlockNodeAddress, NodeAddress, NodeKind, NodeType } from './base.j
 import type { NodeInfo } from './node.js';
 import type { Range, TextAddress, SelectionTarget } from './address.js';
 import type { DiscoveryOutput } from './discovery.js';
+import type { StoryLocator } from './story.types.js';
 
 export interface TextSelector {
   type: 'text';
@@ -39,6 +40,8 @@ export interface Query {
   /** Selector that determines which nodes to match. */
   select: NodeSelector | TextSelector;
   within?: BlockNodeAddress;
+  /** Restrict the query to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   limit?: number;
   offset?: number;
   /**

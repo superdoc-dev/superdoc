@@ -9,10 +9,12 @@ import type { MutationOptions } from '../types/mutation-plan.types.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import type { SelectionTarget } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
 import { isSelectionTarget } from '../validation/selection-target-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import type { InlineRunPatch, InlineRunPatchKey } from './inline-run-patch.js';
 import { INLINE_PROPERTY_BY_KEY, validateInlineRunPatch } from './inline-run-patch.js';
 
@@ -52,8 +54,8 @@ type ImplicitTrueKey =
  * omission defaults to `true` for ergonomic "turn on" calls.
  */
 export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends ImplicitTrueKey
-  ? { target?: SelectionTarget; ref?: string; value?: InlineRunPatch[K] }
-  : { target?: SelectionTarget; ref?: string; value: InlineRunPatch[K] };
+  ? { target?: SelectionTarget; ref?: string; value?: InlineRunPatch[K]; in?: StoryLocator }
+  : { target?: SelectionTarget; ref?: string; value: InlineRunPatch[K]; in?: StoryLocator };
 
 /**
  * Input payload for `format.apply`.
@@ -64,6 +66,8 @@ export interface StyleApplyInput {
   target?: SelectionTarget;
   ref?: string;
   inline: InlineRunPatch;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 }
 
 /**
@@ -130,7 +134,7 @@ function validateTargetLocator(input: Record<string, unknown>, operation: string
 // format.apply — validation and execution
 // ---------------------------------------------------------------------------
 
-const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'inline']);
+const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'inline', 'in']);
 
 function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInput {
   if (!isRecord(input)) {
@@ -138,6 +142,7 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
   }
 
   assertNoUnknownFields(input, STYLE_APPLY_INPUT_ALLOWED_KEYS, 'format.apply');
+  validateStoryLocator(input.in, 'in');
   validateTargetLocator(input, 'format.apply');
 
   if (input.inline === undefined || input.inline === null) {
@@ -162,6 +167,7 @@ export function executeStyleApply(
       target: input.target,
       ref: input.ref,
       inline: input.inline,
+      in: input.in,
     },
     normalizeMutationOptions(options),
   );
@@ -171,7 +177,7 @@ export function executeStyleApply(
 // format.<inlineKey> aliases — normalize to format.apply payloads
 // ---------------------------------------------------------------------------
 
-const INLINE_ALIAS_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'value']);
+const INLINE_ALIAS_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'value', 'in']);
 
 function acceptsImplicitTrue(key: InlineRunPatchKey): boolean {
   return INLINE_PROPERTY_BY_KEY[key].type === 'boolean' || key === 'underline';
@@ -195,6 +201,7 @@ function validateInlineAliasInput<K extends InlineRunPatchKey>(
   const operation = `format.${key}`;
   const candidate = isRecord(input) ? input : {};
   assertNoUnknownFields(candidate, INLINE_ALIAS_INPUT_ALLOWED_KEYS, operation);
+  validateStoryLocator(candidate.in, 'in');
   validateTargetLocator(candidate, operation);
 }
 
@@ -218,6 +225,7 @@ export function executeInlineAlias<K extends InlineRunPatchKey>(
       target: input.target,
       ref: input.ref,
       inline,
+      in: (input as { in?: StoryLocator }).in,
     },
     normalizeMutationOptions(options),
   );

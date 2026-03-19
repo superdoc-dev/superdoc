@@ -9,7 +9,7 @@ import {
   uploadAndInsertImage,
 } from './startImageUpload.js';
 import { findPlaceholder, removeImagePlaceholder } from './imageRegistrationPlugin.js';
-import * as docRelsModule from '@core/super-converter/docx-helpers/document-rels.js';
+import * as relsMutationModule from '@core/parts/adapters/relationships-mutation.js';
 
 const originalAlert = window.alert;
 
@@ -193,9 +193,7 @@ describe('image upload helpers integration', () => {
     editor.options.mode = 'docx';
     editor.options.handleImageUpload = vi.fn().mockResolvedValue('data:image/png;base64,CCC');
 
-    const relSpy = vi.spyOn(docRelsModule, 'insertNewRelationship').mockImplementation(() => {
-      throw new Error('insert failure');
-    });
+    const relSpy = vi.spyOn(relsMutationModule, 'findOrCreateRelationship').mockReturnValue(null);
 
     replaceSelectionWithImagePlaceholder({
       view: editor.view,
@@ -292,10 +290,8 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
       addImagePlaceholder: vi.fn(),
     }));
 
-    vi.doMock('@core/super-converter/docx-helpers/document-rels.js', () => ({
-      insertNewRelationship: vi.fn(() => 'rId100'),
-      findRelationshipIdFromTarget: vi.fn(),
-      getNewRelationshipId: vi.fn(),
+    vi.doMock('@core/parts/adapters/relationships-mutation.js', () => ({
+      findOrCreateRelationship: vi.fn(() => 'rId100'),
     }));
 
     const { uploadAndInsertImage } = await import('./startImageUpload.js');
@@ -362,10 +358,8 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
       addImagePlaceholder: vi.fn(),
     }));
 
-    vi.doMock('@core/super-converter/docx-helpers/document-rels.js', () => ({
-      insertNewRelationship: vi.fn(() => 'rId200'),
-      findRelationshipIdFromTarget: vi.fn(),
-      getNewRelationshipId: vi.fn(),
+    vi.doMock('@core/parts/adapters/relationships-mutation.js', () => ({
+      findOrCreateRelationship: vi.fn(() => 'rId200'),
     }));
 
     const OriginalFile = globalThis.File;
@@ -477,10 +471,8 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
       addImagePlaceholder: vi.fn(),
     }));
     const relationshipSpy = vi.fn(() => 'rId500');
-    vi.doMock('@core/super-converter/docx-helpers/document-rels.js', () => ({
-      insertNewRelationship: relationshipSpy,
-      findRelationshipIdFromTarget: vi.fn(),
-      getNewRelationshipId: vi.fn(),
+    vi.doMock('@core/parts/adapters/relationships-mutation.js', () => ({
+      findOrCreateRelationship: relationshipSpy,
     }));
     const randomSpy = vi.fn().mockReturnValueOnce('0000007b').mockReturnValueOnce('0000007c');
     vi.doMock('@core/helpers/index.js', () => ({
@@ -542,7 +534,10 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
     });
 
     expect(defaultUpload).toHaveBeenCalledTimes(1);
-    expect(relationshipSpy).toHaveBeenCalledWith('media/image.png', 'image', editor);
+    expect(relationshipSpy).toHaveBeenCalledWith(editor, 'startImageUpload:addImageRelationship', {
+      target: 'media/image.png',
+      type: 'image',
+    });
     const createdNodeAttrs = imageCreateSpy.mock.calls[0][0];
     expect(createdNodeAttrs.id).toBe('124');
 

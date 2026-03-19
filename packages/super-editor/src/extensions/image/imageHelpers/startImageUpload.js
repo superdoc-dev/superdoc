@@ -3,7 +3,7 @@ import { handleImageUpload as handleImageUploadDefault } from './handleImageUplo
 import { processUploadedImage } from './processUploadedImage.js';
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
-import { insertNewRelationship } from '@core/super-converter/docx-helpers/document-rels.js';
+import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 
 const fileTooLarge = (file) => {
   let fileSizeMb = Number((file.size / (1024 * 1024)).toFixed(4));
@@ -136,12 +136,8 @@ export async function uploadAndInsertImage({ editor, view, file, size, id }) {
 }
 
 export function addImageRelationship({ editor, path }) {
-  const target = path;
-  const type = 'image';
-  try {
-    const id = insertNewRelationship(target, type, editor);
-    return id;
-  } catch {
-    return null;
-  }
+  return findOrCreateRelationship(editor, 'startImageUpload:addImageRelationship', {
+    target: path,
+    type: 'image',
+  });
 }

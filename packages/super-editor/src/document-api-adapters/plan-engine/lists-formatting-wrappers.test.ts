@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt } from '@superdoc/document-api';
 import type { ListItemProjection } from '../helpers/list-item-resolver.js';
+import { registerPartDescriptor, clearPartDescriptors } from '../../core/parts/registry/part-registry.js';
+import { numberingPartDescriptor } from '../../core/parts/adapters/numbering-part-descriptor.js';
+import { clearInvalidationHandlers } from '../../core/parts/invalidation/part-invalidation-registry.js';
 
 // ---------------------------------------------------------------------------
 // Module mocks — hoisted before any imports of the module under test
@@ -38,6 +41,7 @@ vi.mock('../helpers/list-item-resolver.js', () => ({
 
 vi.mock('../helpers/list-sequence-helpers.js', () => ({
   getAbstractNumId: vi.fn(),
+  getAllListItemProjections: vi.fn(() => []),
   getContiguousSequence: vi.fn(() => []),
   findAdjacentSequence: vi.fn(() => null),
 }));
@@ -60,17 +64,27 @@ vi.mock('../../core/helpers/list-level-formatting-helpers.js', () => ({
   LevelFormattingHelpers: {
     getPresetTemplate: vi.fn(),
     applyTemplateToAbstract: vi.fn(),
+    captureEffectiveStyle: vi.fn(),
     hasLevel: vi.fn(() => true),
     hasLevelOverride: vi.fn(() => false),
     clearLevelOverride: vi.fn(),
+    materializeLevelFormattingOverride: vi.fn(() => false),
+    copySequenceStateOverrides: vi.fn(() => false),
     captureTemplate: vi.fn(),
+    isAbstractShared: vi.fn(() => false),
+    cloneAbstractIntoNum: vi.fn(() => ({ newAbstractNumId: 98 })),
+    cloneAbstractAndNum: vi.fn(() => ({ newAbstractNumId: 99, newNumId: 199 })),
     setLevelNumberingFormat: vi.fn(() => true),
+    setLevelNumberStyle: vi.fn(() => true),
+    setLevelText: vi.fn(() => true),
+    setLevelStart: vi.fn(() => true),
     setLevelBulletMarker: vi.fn(() => true),
     setLevelPictureBullet: vi.fn(() => true),
     setLevelAlignment: vi.fn(() => true),
     setLevelIndents: vi.fn(() => true),
     setLevelTrailingCharacter: vi.fn(() => true),
     setLevelMarkerFont: vi.fn(() => true),
+    setLevelLayout: vi.fn(() => ({ changed: true })),
   },
 }));
 
@@ -78,9 +92,14 @@ vi.mock('../../core/helpers/list-level-formatting-helpers.js', () => ({
 // Now import wrappers and mocked modules
 // ---------------------------------------------------------------------------
 
-import { listsSetTypeWrapper } from './lists-formatting-wrappers.js';
+import { listsApplyStyleWrapper, listsSetLevelTextWrapper, listsSetTypeWrapper } from './lists-formatting-wrappers.js';
 import { resolveListItem } from '../helpers/list-item-resolver.js';
-import { getAbstractNumId, getContiguousSequence, findAdjacentSequence } from '../helpers/list-sequence-helpers.js';
+import {
+  getAbstractNumId,
+  getAllListItemProjections,
+  getContiguousSequence,
+  findAdjacentSequence,
+} from '../helpers/list-sequence-helpers.js';
 import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
 import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
@@ -98,6 +117,18 @@ import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
  * bug class where code accidentally grabs multiple fresh transactions instead
  * of threading a single one.
  */
+function makeBaseNumberingXml() {
+  return {
+    elements: [
+      {
+        type: 'element',
+        name: 'w:numbering',
+        elements: [],
+      },
+    ],
+  };
+}
+
 function makeEditor(): Editor {
   return {
     state: {
@@ -108,9 +139,15 @@ function makeEditor(): Editor {
     },
     view: { dispatch: vi.fn() },
     dispatch: vi.fn(),
+    emit: vi.fn(),
     converter: {
+      convertedXml: {
+        'word/numbering.xml': makeBaseNumberingXml(),
+      },
       numbering: { definitions: {}, abstracts: {} },
       translatedNumbering: { definitions: {} },
+      documentModified: false,
+      documentGuid: 'test-guid',
     },
   } as unknown as Editor;
 }
@@ -136,6 +173,50 @@ function makeProjection(overrides: Partial<ListItemProjection> = {}): ListItemPr
 
 const MOCK_TEMPLATE = { version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] };
 
+/**
+ * Mock `applyTemplateToAbstract` so it reports `changed: true` AND
+ * actually modifies `converter.numbering`, making the XML tree diff
+ * detect a real change via `syncNumberingToXmlTree`.
+ */
+function mockApplyTemplateChanged(editorRef: Editor): void {
+  vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockImplementation((_editor, abstractNumId) => {
+    const conv = (editorRef as unknown as { converter: { numbering: { abstracts: Record<number, unknown> } } })
+      .converter;
+    conv.numbering.abstracts[abstractNumId] = {
+      type: 'element',
+      name: 'w:abstractNum',
+      attributes: { 'w:abstractNumId': String(abstractNumId) },
+      elements: [{ type: 'element', name: 'w:lvl', attributes: { 'w:ilvl': '0' }, elements: [] }],
+    };
+    return { changed: true };
+  });
+}
+
+function mockSetLevelTextChanged(editorRef: Editor): void {
+  vi.mocked(LevelFormattingHelpers.setLevelText).mockImplementation((_editor, abstractNumId, ilvl, text) => {
+    const conv = (editorRef as unknown as { converter: { numbering: { abstracts: Record<number, any> } } }).converter;
+    if (!conv.numbering.abstracts[abstractNumId]) {
+      conv.numbering.abstracts[abstractNumId] = {
+        type: 'element',
+        name: 'w:abstractNum',
+        attributes: { 'w:abstractNumId': String(abstractNumId) },
+        elements: [{ type: 'element', name: 'w:lvl', attributes: { 'w:ilvl': String(ilvl) }, elements: [] }],
+      };
+    }
+    const lvl = conv.numbering.abstracts[abstractNumId].elements.find(
+      (el: any) => el.name === 'w:lvl' && el.attributes?.['w:ilvl'] === String(ilvl),
+    );
+    const existing = lvl.elements.find((el: any) => el.name === 'w:lvlText');
+    if (existing?.attributes?.['w:val'] === text) return false;
+    if (existing) {
+      existing.attributes['w:val'] = text;
+    } else {
+      lvl.elements.push({ type: 'element', name: 'w:lvlText', attributes: { 'w:val': text } });
+    }
+    return true;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -144,12 +225,18 @@ let editor: ReturnType<typeof makeEditor>;
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  registerPartDescriptor(numberingPartDescriptor);
   editor = makeEditor();
   // Default: getPresetTemplate returns a valid template
   vi.mocked(LevelFormattingHelpers.getPresetTemplate).mockReturnValue(MOCK_TEMPLATE);
   // Default: no adjacent sequences
   vi.mocked(findAdjacentSequence).mockReturnValue(null);
   vi.mocked(getContiguousSequence).mockReturnValue([]);
+});
+
+afterEach(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
 });
 
 describe('listsSetTypeWrapper', () => {
@@ -161,7 +248,7 @@ describe('listsSetTypeWrapper', () => {
     const target = makeProjection({ numId: 1, kind: 'bullet' });
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
     vi.mocked(findAdjacentSequence).mockReturnValue(null);
 
     const result = listsSetTypeWrapper(editor, {
@@ -178,7 +265,7 @@ describe('listsSetTypeWrapper', () => {
     const target = makeProjection({ numId: 1, kind: 'ordered' });
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
 
     listsSetTypeWrapper(editor, { target: target.address, kind: 'bullet' });
 
@@ -203,7 +290,7 @@ describe('listsSetTypeWrapper', () => {
 
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
 
     // After applying preset, findAdjacentSequence finds a compatible previous
     vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
@@ -244,7 +331,7 @@ describe('listsSetTypeWrapper', () => {
 
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
 
     vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withNext') {
@@ -275,7 +362,7 @@ describe('listsSetTypeWrapper', () => {
 
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
 
     vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withNext') {
@@ -300,7 +387,7 @@ describe('listsSetTypeWrapper', () => {
 
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
 
     vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withNext') {
@@ -333,7 +420,7 @@ describe('listsSetTypeWrapper', () => {
 
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
     vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withPrevious') {
         return { sequence: [prevItem], numId: 1, abstractNumId: 10 };
@@ -363,7 +450,7 @@ describe('listsSetTypeWrapper', () => {
 
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
     vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withPrevious') {
         return { sequence: [prevItem], numId: 1, abstractNumId: 10 };
@@ -393,7 +480,7 @@ describe('listsSetTypeWrapper', () => {
     const target = makeProjection({ numId: 1, kind: 'ordered' });
     vi.mocked(resolveListItem).mockReturnValue(target);
     vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    mockApplyTemplateChanged(editor);
 
     const result = listsSetTypeWrapper(editor, {
       target: target.address,
@@ -513,5 +600,94 @@ describe('listsSetTypeWrapper', () => {
     expect(() =>
       listsSetTypeWrapper(editor, { target: target.address, kind: 'ordered' }, { changeMode: 'tracked' }),
     ).toThrow();
+  });
+});
+
+describe('SD-2025 style wrappers', () => {
+  it('materializes formatting overrides instead of clearing the whole lvlOverride during applyStyle', () => {
+    const target = makeProjection({ numId: 1, level: 0 });
+    vi.mocked(resolveListItem).mockReturnValue(target);
+    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    mockApplyTemplateChanged(editor);
+
+    const result = listsApplyStyleWrapper(editor, {
+      target: target.address,
+      style: { version: 1, levels: [{ level: 0, lvlText: '(%1)' }] },
+    });
+
+    expect(result.success).toBe(true);
+    expect(LevelFormattingHelpers.materializeLevelFormattingOverride).toHaveBeenCalledWith(editor, 10, 1, 0);
+    expect(LevelFormattingHelpers.clearLevelOverride).not.toHaveBeenCalled();
+  });
+
+  it('retargets the existing num when the target sequence already owns its numId', () => {
+    const target = makeProjection({ numId: 10, level: 0 });
+    vi.mocked(resolveListItem).mockReturnValue(target);
+    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    vi.mocked(getContiguousSequence).mockReturnValue([target]);
+    vi.mocked(getAllListItemProjections).mockReturnValue([target]);
+    vi.mocked(LevelFormattingHelpers.isAbstractShared).mockReturnValue(true);
+    mockApplyTemplateChanged(editor);
+
+    const result = listsApplyStyleWrapper(editor, {
+      target: target.address,
+      style: { version: 1, levels: [{ level: 0, lvlText: '(%1)' }] },
+    });
+
+    expect(result.success).toBe(true);
+    expect(LevelFormattingHelpers.cloneAbstractIntoNum).toHaveBeenCalledWith(editor, 10, 10);
+    expect(LevelFormattingHelpers.cloneAbstractAndNum).not.toHaveBeenCalled();
+    expect(updateNumberingProperties).not.toHaveBeenCalled();
+  });
+
+  it('preserves sequence-state overrides when clone-on-write allocates a fresh num', () => {
+    const target = makeProjection({ numId: 10, level: 0 });
+    const other = makeProjection({
+      numId: 10,
+      address: { kind: 'block', nodeType: 'listItem', nodeId: 'p2' },
+      candidate: {
+        nodeType: 'listItem',
+        nodeId: 'p2',
+        node: { attrs: { paragraphProperties: { numberingProperties: { numId: 10, ilvl: 0 } } } },
+        pos: 30,
+        end: 40,
+      },
+    });
+
+    vi.mocked(resolveListItem).mockReturnValue(target);
+    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    vi.mocked(getContiguousSequence).mockReturnValue([target]);
+    vi.mocked(getAllListItemProjections).mockReturnValue([target, other]);
+    vi.mocked(LevelFormattingHelpers.isAbstractShared).mockReturnValue(true);
+    mockApplyTemplateChanged(editor);
+
+    const result = listsApplyStyleWrapper(editor, {
+      target: target.address,
+      style: { version: 1, levels: [{ level: 0, lvlText: '(%1)' }] },
+    });
+
+    expect(result.success).toBe(true);
+    expect(LevelFormattingHelpers.cloneAbstractAndNum).toHaveBeenCalledWith(editor, 10, 10);
+    expect(LevelFormattingHelpers.copySequenceStateOverrides).toHaveBeenCalledWith(editor, 10, 199, [0]);
+  });
+
+  it('materializes formatting overrides before sequence-local level edits', () => {
+    const target = makeProjection({ numId: 1, level: 0 });
+    vi.mocked(resolveListItem).mockReturnValue(target);
+    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    mockSetLevelTextChanged(editor);
+
+    const result = listsSetLevelTextWrapper(editor, {
+      target: target.address,
+      level: 0,
+      text: '(%1)',
+    });
+
+    expect(result.success).toBe(true);
+    expect(LevelFormattingHelpers.materializeLevelFormattingOverride).toHaveBeenCalledWith(editor, 10, 1, 0);
+    expect(LevelFormattingHelpers.setLevelText).toHaveBeenCalledWith(editor, 10, 0, '(%1)');
+    expect(
+      vi.mocked(LevelFormattingHelpers.materializeLevelFormattingOverride).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(LevelFormattingHelpers.setLevelText).mock.invocationCallOrder[0]);
   });
 });

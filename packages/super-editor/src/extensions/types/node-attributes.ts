@@ -279,9 +279,9 @@ export interface TableAttrs extends TableNodeAttributes {
   tableGrid: TableGrid | null;
   /** Table properties */
   tableProperties: TableProperties | null;
-  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  /** Legacy imported identity preserved for backwards compatibility */
   paraId?: string | null;
-  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  /** Legacy imported text identifier preserved for backwards compatibility */
   textId?: string | null;
 }
 
@@ -367,9 +367,9 @@ export interface CellBackground {
 
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {
-  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  /** Legacy imported identity preserved for backwards compatibility */
   paraId?: string | null;
-  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  /** Legacy imported text identifier preserved for backwards compatibility */
   textId?: string | null;
   /** Number of columns this cell spans */
   colspan: number;
@@ -499,6 +499,11 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   clipPath?: string;
   /** @internal Raw a:srcRect element for lossless round-trip export */
   rawSrcRect?: Record<string, unknown> | null;
+  /** @internal DrawingML luminance adjustment from a:lum */
+  lum?: {
+    bright?: number;
+    contrast?: number;
+  } | null;
   /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
   lockAspectRatio?: boolean;
   /** Decorative image flag. Maps to OOXML adec:decorative. */
@@ -673,6 +678,12 @@ export interface BookmarkStartAttrs extends InlineNodeAttributes {
   name?: string | null;
   /** Unique identifier for the bookmark */
   id?: string | null;
+  /** First column reference */
+  colFirst?: number | string | null;
+  /** Last column reference */
+  colLast?: number | string | null;
+  /** Indicates if bookmark was displaced by custom XML */
+  displacedByCustomXml?: string | null;
 }
 
 /** Bookmark end node attributes */
@@ -1030,6 +1041,16 @@ export interface StructuredContentBlockAttrs extends BlockNodeAttributes {
   tag?: string | null;
   /** Display name/alias */
   alias?: string | null;
+  /** Lock mode (ECMA-376 w:lock). */
+  lockMode?: string | null;
+  /** Semantic control type (text, date, checkbox, etc.). */
+  controlType?: string | null;
+  /** Legacy type field (fallback for controlType). */
+  type?: string | null;
+  /** Visual appearance (boundingBox, tags, hidden). */
+  appearance?: string | null;
+  /** Placeholder text. */
+  placeholder?: string | null;
   /** @internal Structured document tag properties */
   sdtPr?: unknown;
 }

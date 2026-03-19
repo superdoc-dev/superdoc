@@ -68,6 +68,7 @@ export class SuperDoc extends EventEmitter {
     superdocId: null,
     selector: '#superdoc',
     documentMode: 'editing',
+    allowSelectionInViewMode: false,
     role: 'editor',
     document: {},
     documents: [],
@@ -800,6 +801,29 @@ export class SuperDoc extends EventEmitter {
       this.commentsList = null;
       if (this.config.onCommentsListChange) this.config.onCommentsListChange({ isRendered: false });
     }
+  }
+
+  /**
+   * Scroll the document to a given comment by id.
+   *
+   * @param {string} commentId The comment id
+   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
+   * @returns {boolean} Whether a matching element was found
+   */
+  scrollToComment(commentId, options = {}) {
+    const commentsConfig = this.config?.modules?.comments;
+    if (!commentsConfig || commentsConfig === false) return false;
+    if (!commentId || typeof commentId !== 'string') return false;
+
+    const root = this.element || document;
+    const escaped = globalThis.CSS?.escape ? globalThis.CSS.escape(commentId) : commentId.replace(/"/g, '\\"');
+    const element = root.querySelector(`[data-comment-ids*="${escaped}"]`);
+    if (!element) return false;
+
+    const { behavior = 'smooth', block = 'start' } = options ?? {};
+    element.scrollIntoView({ behavior, block });
+    this.commentsStore?.setActiveComment?.(this, commentId);
+    return true;
   }
 
   /**

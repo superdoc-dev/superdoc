@@ -17,7 +17,6 @@ from .format import (
     unformat_strikethrough,
     unformat_underline,
 )
-
 __all__ = [
     "clear_bold",
     "clear_italic",

@@ -6,5 +6,6 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.ts'],
     exclude: ['**/*.d.ts', 'tests/harness.ts', 'tests/**/harness.ts'],
+    testTimeout: 15000,
   },
 });

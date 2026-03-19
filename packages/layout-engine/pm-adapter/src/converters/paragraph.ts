@@ -8,7 +8,7 @@
  */
 
 import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
-import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock } from '@superdoc/contracts';
+import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock, TrackedChangeMeta } from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
@@ -21,13 +21,14 @@ import { getStableParagraphId, shiftCachedBlocks } from '../cache.js';
 import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
-import { trackedChangesCompatible, applyMarksToRun } from '../marks/index.js';
+import { trackedChangesCompatible, applyMarksToRun, collectTrackedChangeFromMarks } from '../marks/index.js';
 import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
 import { computeRunAttrs } from '../attributes/paragraph.js';
 import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
+import { endnoteReferenceToBlock } from './inline-converters/endnote-reference.js';
 import {
   HiddenByVanishError,
   NotInlineNodeError,
@@ -42,16 +43,23 @@ import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js
 import { tabNodeToRun } from './inline-converters/tab.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
+import { crossReferenceNodeToRun } from './inline-converters/cross-reference.js';
+import { sequenceFieldNodeToRun } from './inline-converters/sequence-field.js';
+import { citationNodeToRun } from './inline-converters/citation.js';
+import { authorityEntryNodeToRun } from './inline-converters/authority-entry.js';
 import { lineBreakNodeToRun } from './inline-converters/line-break.js';
 import { lineBreakNodeToBreakBlock } from './break.js';
 import { inlineContentBlockConverter } from './inline-converters/content-block.js';
 import { handleImageNode } from './image.js';
+import { generateOrderedListIndex } from '../list-helpers.js';
+import { getListOrdinalFromPath, getListRendering } from '@superdoc/common/list-rendering';
 import {
   shapeContainerNodeToDrawingBlock,
   shapeGroupNodeToDrawingBlock,
   shapeTextboxNodeToDrawingBlock,
   vectorShapeNodeToDrawingBlock,
 } from './shapes.js';
+import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
 
 // ============================================================================
@@ -221,6 +229,249 @@ function extractDefaultFontProperties(
   };
 }
 
+const toTrackChangeAttrs = (value: unknown): Record<string, unknown> | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+};
+
+// Paragraph-mark revisions are stored in paragraphProperties.runProperties (pPr/rPr), not inline text marks.
+// Convert them into mark-like metadata so tracked-change filtering can reuse the same projection pipeline.
+const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties): TrackedChangeMeta | undefined => {
+  const runProperties =
+    paragraphProperties?.runProperties && typeof paragraphProperties.runProperties === 'object'
+      ? (paragraphProperties.runProperties as Record<string, unknown>)
+      : undefined;
+  if (!runProperties) {
+    return undefined;
+  }
+
+  const trackInsertAttrs = toTrackChangeAttrs(runProperties.trackInsert);
+  const trackDeleteAttrs = toTrackChangeAttrs(runProperties.trackDelete);
+  if (!trackInsertAttrs && !trackDeleteAttrs) {
+    return undefined;
+  }
+
+  const marks: PMMark[] = [];
+  if (trackInsertAttrs) {
+    marks.push({ type: 'trackInsert', attrs: trackInsertAttrs });
+  }
+  if (trackDeleteAttrs) {
+    marks.push({ type: 'trackDelete', attrs: trackDeleteAttrs });
+  }
+  return collectTrackedChangeFromMarks(marks);
+};
+
+const isEmptyTextRun = (run: Run): boolean => {
+  if (!isTextRun(run)) {
+    return false;
+  }
+  return run.text.length === 0;
+};
+
+/**
+ * Extracts the marker record from a paragraph FlowBlock's wordLayout attrs.
+ * Shared by ghost-list marker adjustment helpers to avoid duplicated extraction logic.
+ */
+const getBlockMarker = (block: FlowBlock): Record<string, unknown> | undefined => {
+  if (!('attrs' in block) || !block.attrs || typeof block.attrs !== 'object') return undefined;
+  const wordLayout = (block.attrs as Record<string, unknown>).wordLayout;
+  if (!wordLayout || typeof wordLayout !== 'object') return undefined;
+  const marker = (wordLayout as Record<string, unknown>).marker;
+  if (!marker || typeof marker !== 'object') return undefined;
+  return marker as Record<string, unknown>;
+};
+
+/**
+ * Returns the original (pre-adjustment) marker text from a marker record.
+ * Prefers the saved pmAdapterOriginalMarkerText over the current markerText.
+ */
+const getOriginalMarkerText = (marker: Record<string, unknown>): string | undefined => {
+  if (typeof marker.pmAdapterOriginalMarkerText === 'string') return marker.pmAdapterOriginalMarkerText;
+  return typeof marker.markerText === 'string' ? marker.markerText : undefined;
+};
+
+/**
+ * Ghost list artifact suppression only applies in modes that display tracked changes
+ * visually (review/markup). In final/original, applyTrackedChangesModeToRuns already
+ * handles visibility correctly — surviving empty list items are real content.
+ */
+const isGhostSuppressionMode = (mode: string): boolean => mode !== 'off' && mode !== 'final' && mode !== 'original';
+
+const getListKey = (numId: unknown, ilvl: unknown): string | undefined => {
+  if ((typeof numId !== 'number' && typeof numId !== 'string') || typeof ilvl !== 'number') {
+    return undefined;
+  }
+  const normalizedNumId = String(numId).trim();
+  if (!normalizedNumId) {
+    return undefined;
+  }
+  return `${normalizedNumId}:${ilvl}`;
+};
+
+const getParagraphListKeyFromAttrs = (attrs: unknown): string | undefined => {
+  if (!attrs || typeof attrs !== 'object') {
+    return undefined;
+  }
+  const numberingProperties = (attrs as { numberingProperties?: { numId?: unknown; ilvl?: unknown } })
+    .numberingProperties;
+  if (!numberingProperties) {
+    return undefined;
+  }
+  return getListKey(numberingProperties.numId, numberingProperties.ilvl);
+};
+
+const TRAILING_MARKER_TOKEN_RE = /^(.*?)([\p{L}\p{N}]+)([^\p{L}\p{N}]*)$/u;
+
+const getNodeListOrdinal = (node: PMNode): number | undefined => {
+  const listRendering = getListRendering(node.attrs?.listRendering);
+  if (!listRendering || listRendering.numberingType === 'bullet') {
+    return undefined;
+  }
+  return getListOrdinalFromPath(listRendering.path);
+};
+
+const formatListOrdinalToken = (numberingType: string, ordinal: number, customFormat?: string): string | undefined => {
+  if (!Number.isFinite(ordinal) || ordinal < 1 || numberingType === 'bullet') {
+    return undefined;
+  }
+  const formatted = generateOrderedListIndex({
+    listLevel: [Math.trunc(ordinal)],
+    lvlText: '%1',
+    listNumberingType: numberingType,
+    customFormat,
+  });
+  return formatted ?? undefined;
+};
+
+const replaceTrailingMarkerToken = (markerText: string, replacementToken: string): string | undefined => {
+  const match = TRAILING_MARKER_TOKEN_RE.exec(markerText);
+  if (!match) {
+    return undefined;
+  }
+  return `${match[1] ?? ''}${replacementToken}${match[3] ?? ''}`;
+};
+
+const updateGhostListMarkerOffsets = (
+  node: PMNode,
+  paragraphBlocks: FlowBlock[],
+  context: NodeHandlerContext,
+): void => {
+  if (!context.trackedChangesConfig.enabled) {
+    return;
+  }
+  if (paragraphBlocks.some((block) => block.kind === 'paragraph')) {
+    return;
+  }
+  if (Array.isArray(node.content) && node.content.length > 0) {
+    return;
+  }
+  const paragraphProperties =
+    typeof node.attrs?.paragraphProperties === 'object' && node.attrs.paragraphProperties !== null
+      ? (node.attrs.paragraphProperties as ParagraphProperties)
+      : {};
+  if (!getParagraphMarkTrackedChange(paragraphProperties)) {
+    return;
+  }
+
+  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext);
+  const key = getParagraphListKeyFromAttrs(paragraphAttrs);
+  if (!key) {
+    return;
+  }
+  const offsets = context.trackedListMarkerOffsets;
+  if (!offsets) {
+    return;
+  }
+  // Each suppressed empty tracked list paragraph consumes one source ordinal that Word does not render.
+  offsets.set(key, (offsets.get(key) ?? 0) + 1);
+};
+
+const getNodeListKey = (node: PMNode, context: NodeHandlerContext): string | undefined => {
+  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext);
+  return getParagraphListKeyFromAttrs(paragraphAttrs);
+};
+
+const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[], context: NodeHandlerContext): void => {
+  const offsets = context.trackedListMarkerOffsets;
+  const lastOrdinals = context.trackedListLastOrdinals;
+  if (!offsets || offsets.size === 0 || !context.trackedChangesConfig.enabled) {
+    return;
+  }
+  const listRendering = getListRendering(node.attrs?.listRendering);
+  const numberingType = listRendering?.numberingType;
+  if (!numberingType || numberingType === 'bullet') {
+    return;
+  }
+  const sourceOrdinal = getNodeListOrdinal(node);
+  if (!sourceOrdinal) {
+    return;
+  }
+  const nodeListKey = getNodeListKey(node, context);
+  if (!nodeListKey) {
+    return;
+  }
+  const previousOrdinal = lastOrdinals?.get(nodeListKey);
+  // Restart detection must be per source paragraph node (not per emitted block),
+  // because one source list paragraph can split into multiple rendered blocks.
+  if (previousOrdinal != null && sourceOrdinal <= previousOrdinal) {
+    // Marker sequence moved backwards/repeated -> list restart boundary.
+    offsets.delete(nodeListKey);
+  }
+  lastOrdinals?.set(nodeListKey, sourceOrdinal);
+
+  const offset = offsets.get(nodeListKey) ?? 0;
+  if (offset <= 0) {
+    return;
+  }
+  const adjustedOrdinal = sourceOrdinal - offset;
+  if (adjustedOrdinal < 1) {
+    // Stale offset would underflow this marker; treat as a restart boundary.
+    offsets.delete(nodeListKey);
+    paragraphBlocks.forEach((block) => {
+      if (block.kind !== 'paragraph' || getParagraphListKeyFromAttrs(block.attrs) !== nodeListKey) return;
+      const marker = getBlockMarker(block);
+      if (!marker) return;
+      const sourceMarkerText = getOriginalMarkerText(marker);
+      if (sourceMarkerText) {
+        marker.markerText = sourceMarkerText;
+      }
+    });
+    return;
+  }
+
+  const replacementToken = formatListOrdinalToken(numberingType, adjustedOrdinal, listRendering.customFormat);
+  if (!replacementToken) {
+    return;
+  }
+
+  paragraphBlocks.forEach((block) => {
+    if (block.kind !== 'paragraph' || getParagraphListKeyFromAttrs(block.attrs) !== nodeListKey) return;
+    const marker = getBlockMarker(block);
+    if (!marker) return;
+    const sourceMarkerText = getOriginalMarkerText(marker);
+    if (!sourceMarkerText) return;
+    const adjustedText = replaceTrailingMarkerToken(sourceMarkerText, replacementToken);
+    if (!adjustedText || adjustedText === sourceMarkerText) return;
+    // Preserve the source marker so repeated conversions/cache reuse remain idempotent.
+    marker.pmAdapterOriginalMarkerText = sourceMarkerText;
+    marker.markerText = adjustedText;
+  });
+};
+
+const applyTrackedGhostListAdjustments = (
+  node: PMNode,
+  paragraphBlocks: FlowBlock[],
+  context: NodeHandlerContext,
+): void => {
+  if (!context.trackedChangesConfig.enabled) {
+    return;
+  }
+  updateGhostListMarkerOffsets(node, paragraphBlocks, context);
+  applyGhostListMarkerOffsets(node, paragraphBlocks, context);
+};
+
 /**
  * Converts a paragraph PM node to an array of FlowBlocks.
  *
@@ -295,6 +546,7 @@ export function paragraphToFlowBlocks({
     if (paragraphProps.runProperties?.vanish) {
       return blocks;
     }
+    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps);
     // Get the PM position of the empty paragraph for caret rendering
     const paraPos = positions.get(para);
     const emptyRun: TextRun = {
@@ -302,6 +554,9 @@ export function paragraphToFlowBlocks({
       fontFamily: defaultFont,
       fontSize: defaultSize,
     };
+    if (paragraphMarkTrackedChange) {
+      emptyRun.trackedChange = paragraphMarkTrackedChange;
+    }
     // For empty paragraphs, the cursor position is inside the paragraph (start + 1)
     // The range spans from the opening to closing position of the paragraph
     if (paraPos) {
@@ -320,8 +575,49 @@ export function paragraphToFlowBlocks({
       kind: 'paragraph',
       id: baseBlockId,
       runs: [emptyRun],
-      attrs: deepClone(paragraphAttrs),
+      attrs: emptyParagraphAttrs,
     });
+    if (!trackedChangesConfig) {
+      return blocks;
+    }
+
+    const paragraphBlock = blocks[blocks.length - 1];
+    if (paragraphBlock?.kind !== 'paragraph') {
+      return blocks;
+    }
+
+    const filteredRuns = applyTrackedChangesModeToRuns(
+      paragraphBlock.runs,
+      trackedChangesConfig,
+      hyperlinkConfig,
+      applyMarksToRun,
+      themeColors,
+      enableComments,
+    );
+
+    // Ghost list artifact suppression only applies in markup/review modes.
+    // In final/original, applyTrackedChangesModeToRuns already handles visibility:
+    // insertions survive in final and deletions survive in original — these are real content,
+    // not phantom list items that need hiding.
+    const isGhostTrackedListArtifact =
+      trackedChangesConfig.enabled &&
+      isGhostSuppressionMode(trackedChangesConfig.mode) &&
+      Boolean(paragraphAttrs.numberingProperties) &&
+      Boolean(paragraphMarkTrackedChange) &&
+      filteredRuns.length > 0 &&
+      filteredRuns.every(isEmptyTextRun);
+
+    if (trackedChangesConfig.enabled && (filteredRuns.length === 0 || isGhostTrackedListArtifact)) {
+      blocks.pop();
+      return blocks;
+    }
+
+    paragraphBlock.runs = filteredRuns;
+    paragraphBlock.attrs = {
+      ...(paragraphBlock.attrs ?? {}),
+      trackedChangesMode: trackedChangesConfig.mode,
+      trackedChangesEnabled: trackedChangesConfig.enabled,
+    };
     return blocks;
   }
 
@@ -536,6 +832,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   footnoteReference: {
     inlineConverter: footnoteReferenceToBlock,
   },
+  endnoteReference: {
+    inlineConverter: endnoteReferenceToBlock,
+  },
   text: {
     inlineConverter: textNodeToRun,
     extraCheck: (node: PMNode) => Boolean(node.text),
@@ -553,6 +852,18 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   pageReference: {
     inlineConverter: pageReferenceNodeToBlock,
+  },
+  crossReference: {
+    inlineConverter: crossReferenceNodeToRun,
+  },
+  sequenceField: {
+    inlineConverter: sequenceFieldNodeToRun,
+  },
+  citation: {
+    inlineConverter: citationNodeToRun,
+  },
+  authorityEntry: {
+    inlineConverter: authorityEntryNodeToRun,
   },
   bookmarkStart: {
     inlineConverter: bookmarkStartNodeToBlocks,
@@ -594,6 +905,7 @@ const SHAPE_CONVERTERS_REGISTRY: Record<
   shapeGroup: shapeGroupNodeToDrawingBlock,
   shapeContainer: shapeContainerNodeToDrawingBlock,
   shapeTextbox: shapeTextboxNodeToDrawingBlock,
+  chart: chartNodeToDrawingBlock,
 };
 
 /**
@@ -657,6 +969,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       // Cache hit: reuse blocks with position adjustment
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
+      applyTrackedGhostListAdjustments(node, reusedBlocks, context);
 
       reusedBlocks.forEach((block) => {
         blocks.push(block);
@@ -683,6 +996,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       enableComments,
       stableBlockId: prefixedStableId,
     });
+    applyTrackedGhostListAdjustments(node, paragraphBlocks, context);
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);
@@ -708,6 +1022,8 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     enableComments,
     stableBlockId: prefixedStableId ?? undefined,
   });
+  applyTrackedGhostListAdjustments(node, paragraphBlocks, context);
+
   paragraphBlocks.forEach((block) => {
     blocks.push(block);
     recordBlockKind?.(block.kind);

@@ -14,7 +14,40 @@ import { checkRevision } from './plan-engine/revision-tracker.js';
 import { insertParagraphAtEnd, resolveWriteTarget, type ResolvedWrite } from './helpers/adapter-utils.js';
 import { toCanonicalTrackedChangeId } from './helpers/tracked-change-resolver.js';
 
-function validateWriteRequest(request: WriteRequest, resolvedTarget: ResolvedWrite): ReceiptFailure | null {
+type LegacyReplaceWriteRequest = {
+  kind: 'replace';
+  target?: TextAddress;
+  text: string;
+  blockId?: string;
+  start?: number;
+  end?: number;
+};
+
+type LegacyDeleteWriteRequest = {
+  kind: 'delete';
+  target?: TextAddress;
+  blockId?: string;
+  start?: number;
+  end?: number;
+};
+
+type LegacyWriteRequest = WriteRequest | LegacyReplaceWriteRequest | LegacyDeleteWriteRequest;
+
+function resolveLegacyWriteTarget(editor: Editor, request: LegacyWriteRequest): ResolvedWrite | null {
+  if (request.kind === 'insert') {
+    return resolveWriteTarget(editor, request);
+  }
+
+  if (!request.target) return null;
+
+  return resolveWriteTarget(editor, {
+    kind: 'insert',
+    target: request.target,
+    text: '',
+  });
+}
+
+function validateWriteRequest(request: LegacyWriteRequest, resolvedTarget: ResolvedWrite): ReceiptFailure | null {
   if (request.kind === 'insert') {
     if (!request.text) {
       return {
@@ -70,19 +103,17 @@ function validateWriteRequest(request: WriteRequest, resolvedTarget: ResolvedWri
  *
  * Returns the original request unchanged when no friendly locator is present.
  */
-function normalizeWriteLocator(request: WriteRequest): WriteRequest {
+function normalizeWriteLocator(request: LegacyWriteRequest): LegacyWriteRequest {
   if (request.kind === 'insert') {
     const hasBlockId = request.blockId !== undefined;
     const hasOffset = request.offset !== undefined;
 
-    // Defensive: reject offset mixed with canonical target.
     if (hasOffset && request.target) {
       throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
         fields: ['target', 'offset'],
       });
     }
 
-    // Defensive: reject orphaned offset without blockId (safety net for direct adapter callers).
     if (hasOffset && !hasBlockId) {
       throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
         fields: ['offset', 'blockId'],
@@ -91,7 +122,6 @@ function normalizeWriteLocator(request: WriteRequest): WriteRequest {
 
     if (!hasBlockId) return request;
 
-    // Defensive: reject mixed locator modes at adapter boundary (safety net).
     if (request.target) {
       throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
         fields: ['target', 'blockId'],
@@ -108,56 +138,51 @@ function normalizeWriteLocator(request: WriteRequest): WriteRequest {
     return { kind: 'insert', target, text: request.text };
   }
 
-  // replace / delete: range normalization (blockId + start + end → TextAddress)
-  if (request.kind === 'replace' || request.kind === 'delete') {
-    const hasBlockId = request.blockId !== undefined;
-    const hasStart = request.start !== undefined;
-    const hasEnd = request.end !== undefined;
+  const hasBlockId = request.blockId !== undefined;
+  const hasStart = request.start !== undefined;
+  const hasEnd = request.end !== undefined;
 
-    // Defensive: reject range fields mixed with canonical target.
-    if (request.target && (hasBlockId || hasStart || hasEnd)) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        `Cannot combine target with blockId/start/end on ${request.kind} request.`,
-        { fields: ['target', 'blockId', 'start', 'end'] },
-      );
-    }
-
-    // Defensive: reject orphaned start/end without blockId.
-    if (!hasBlockId && (hasStart || hasEnd)) {
-      throw new DocumentApiAdapterError('INVALID_TARGET', `start/end require blockId on ${request.kind} request.`, {
-        fields: ['blockId', 'start', 'end'],
-      });
-    }
-
-    if (!hasBlockId) return request;
-
-    // Defensive: reject incomplete range.
-    if (!hasStart || !hasEnd) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        `blockId requires both start and end on ${request.kind} request.`,
-        { fields: ['blockId', 'start', 'end'] },
-      );
-    }
-
-    const target: TextAddress = {
-      kind: 'text',
-      blockId: request.blockId!,
-      range: { start: request.start!, end: request.end! },
-    };
-
-    // Construct clean canonical objects — no leftover friendly fields.
-    if (request.kind === 'replace') {
-      return { kind: 'replace', target, text: request.text };
-    }
-    return { kind: 'delete', target, text: '' };
+  if (request.target && (hasBlockId || hasStart || hasEnd)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `Cannot combine target with blockId/start/end on ${request.kind} request.`,
+      { fields: ['target', 'blockId', 'start', 'end'] },
+    );
   }
 
-  return request;
+  if (!hasBlockId && (hasStart || hasEnd)) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', `start/end require blockId on ${request.kind} request.`, {
+      fields: ['blockId', 'start', 'end'],
+    });
+  }
+
+  if (!hasBlockId) return request;
+
+  if (!hasStart || !hasEnd) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `blockId requires both start and end on ${request.kind} request.`,
+      { fields: ['blockId', 'start', 'end'] },
+    );
+  }
+
+  const target: TextAddress = {
+    kind: 'text',
+    blockId: request.blockId!,
+    range: { start: request.start!, end: request.end! },
+  };
+
+  if (request.kind === 'replace') {
+    return { kind: 'replace', target, text: request.text };
+  }
+  return { kind: 'delete', target };
 }
 
-function applyDirectWrite(editor: Editor, request: WriteRequest, resolvedTarget: ResolvedWrite): TextMutationReceipt {
+function applyDirectWrite(
+  editor: Editor,
+  request: LegacyWriteRequest,
+  resolvedTarget: ResolvedWrite,
+): TextMutationReceipt {
   if (request.kind === 'delete') {
     const tr = applyDirectMutationMeta(editor.state.tr.delete(resolvedTarget.range.from, resolvedTarget.range.to));
     editor.dispatch(tr);
@@ -179,14 +204,19 @@ function applyDirectWrite(editor: Editor, request: WriteRequest, resolvedTarget:
   return { success: true, resolution: resolvedTarget.resolution };
 }
 
-function applyTrackedWrite(editor: Editor, request: WriteRequest, resolvedTarget: ResolvedWrite): TextMutationReceipt {
+function applyTrackedWrite(
+  editor: Editor,
+  request: LegacyWriteRequest,
+  resolvedTarget: ResolvedWrite,
+): TextMutationReceipt {
   ensureTrackedCapability(editor, { operation: 'write' });
 
   // Structural-end: create a tracked paragraph at the document end.
   // insertTrackedChange cannot operate between block nodes, so we use
   // a direct tr.insert with tracked mutation meta instead.
   if (resolvedTarget.structuralEnd) {
-    insertParagraphAtEnd(editor, resolvedTarget.range.from, request.text ?? '', applyTrackedMutationMeta);
+    const text = request.kind === 'delete' ? '' : (request.text ?? '');
+    insertParagraphAtEnd(editor, resolvedTarget.range.from, text, applyTrackedMutationMeta);
     return { success: true, resolution: resolvedTarget.resolution };
   }
 
@@ -242,11 +272,15 @@ function toFailureReceipt(failure: ReceiptFailure, resolvedTarget: ResolvedWrite
 export function writeAdapter(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
   checkRevision(editor, options?.expectedRevision);
 
+  // Keep the internal helper backwards-compatible for direct test callers
+  // that still exercise legacy replace/delete paths outside the public adapter.
+  const legacyRequest = request as LegacyWriteRequest;
+
   // Normalize friendly locator fields (blockId + offset) into canonical TextAddress
   // before resolution. This is the adapter-layer normalization per the contract.
-  const normalizedRequest = normalizeWriteLocator(request);
+  const normalizedRequest = normalizeWriteLocator(legacyRequest);
 
-  const resolvedTarget = resolveWriteTarget(editor, normalizedRequest);
+  const resolvedTarget = resolveLegacyWriteTarget(editor, normalizedRequest);
   if (!resolvedTarget) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {
       target: normalizedRequest.target,

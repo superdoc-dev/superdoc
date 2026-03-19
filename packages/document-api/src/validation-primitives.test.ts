@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isRecord,
-  isInteger,
-  isTextAddress,
-  assertNoUnknownFields,
-  assertNonNegativeInteger,
-} from './validation-primitives.js';
+import { isRecord, isInteger, isTextAddress, assertNoUnknownFields } from './validation-primitives.js';
 import { DocumentApiValidationError } from './errors.js';
 
 describe('isRecord', () => {
@@ -95,7 +89,7 @@ describe('assertNoUnknownFields', () => {
     expect(() => assertNoUnknownFields({}, allowlist, 'test')).not.toThrow();
   });
 
-  it('throws INVALID_TARGET for unknown fields', () => {
+  it('throws INVALID_INPUT for unknown fields', () => {
     const allowlist = new Set(['a']);
     try {
       assertNoUnknownFields({ a: 1, unknown: 2 }, allowlist, 'test');
@@ -103,57 +97,9 @@ describe('assertNoUnknownFields', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(DocumentApiValidationError);
       const e = err as DocumentApiValidationError;
-      expect(e.code).toBe('INVALID_TARGET');
+      expect(e.code).toBe('INVALID_INPUT');
       expect(e.message).toContain('Unknown field "unknown"');
       expect(e.message).toContain('test');
-    }
-  });
-});
-
-describe('assertNonNegativeInteger', () => {
-  it('does not throw for valid non-negative integers', () => {
-    expect(() => assertNonNegativeInteger(0, 'offset')).not.toThrow();
-    expect(() => assertNonNegativeInteger(10, 'offset')).not.toThrow();
-  });
-
-  it('throws for negative numbers', () => {
-    try {
-      assertNonNegativeInteger(-1, 'offset');
-      expect.fail('Should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(DocumentApiValidationError);
-      const e = err as DocumentApiValidationError;
-      expect(e.code).toBe('INVALID_TARGET');
-      expect(e.message).toContain('non-negative integer');
-    }
-  });
-
-  it('throws for non-integer numbers', () => {
-    try {
-      assertNonNegativeInteger(1.5, 'start');
-      expect.fail('Should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(DocumentApiValidationError);
-      expect((err as DocumentApiValidationError).code).toBe('INVALID_TARGET');
-    }
-  });
-
-  it('throws for non-numbers', () => {
-    try {
-      assertNonNegativeInteger('5', 'end');
-      expect.fail('Should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(DocumentApiValidationError);
-      expect((err as DocumentApiValidationError).code).toBe('INVALID_TARGET');
-    }
-  });
-
-  it('includes field name in error message', () => {
-    try {
-      assertNonNegativeInteger(-1, 'myField');
-      expect.fail('Should have thrown');
-    } catch (err) {
-      expect((err as DocumentApiValidationError).message).toContain('myField');
     }
   });
 });

@@ -3,6 +3,7 @@ import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'v
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
+import { PresentationEditor } from '@superdoc/super-editor';
 import { superdocIcons } from '@superdoc/icons.js';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
@@ -30,7 +31,14 @@ const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
 /* Comments store refs */
-const { addComment, cancelComment, deleteComment, removePendingComment } = commentsStore;
+const {
+  addComment,
+  cancelComment,
+  deleteComment,
+  removePendingComment,
+  requestInstantSidebarAlignment,
+  clearInstantSidebarAlignment,
+} = commentsStore;
 const {
   suppressInternalExternal,
   getConfig,
@@ -81,15 +89,6 @@ const isPendingNewComment = computed(() => {
   return pendingComment.value && pendingComment.value.commentId === props.comment.commentId;
 });
 
-const showButtons = computed(() => {
-  return (
-    !getConfig.readOnly &&
-    isActiveComment.value &&
-    !props.comment.resolvedTime &&
-    editingCommentId.value !== props.comment.commentId
-  );
-});
-
 const showSeparator = computed(() => (index) => {
   const visible = visibleComments.value;
   if (showInputSection.value && index === visible.length - 1) return true;
@@ -97,12 +96,7 @@ const showSeparator = computed(() => (index) => {
 });
 
 const showInputSection = computed(() => {
-  return (
-    !getConfig.readOnly &&
-    isActiveComment.value &&
-    !props.comment.resolvedTime &&
-    editingCommentId.value !== props.comment.commentId
-  );
+  return !getConfig.readOnly && isActiveComment.value && !props.comment.resolvedTime && !isEditingAnyComment.value;
 });
 
 // Reply pill → expanded editor toggle
@@ -268,6 +262,11 @@ const isInternalDropdownDisabled = computed(() => {
 
 const isEditingThisComment = computed(() => (comment) => editingCommentId.value === comment.commentId);
 
+const isEditingAnyComment = computed(() => {
+  if (!editingCommentId.value) return false;
+  return comments.value.some((c) => c.commentId === editingCommentId.value);
+});
+
 const shouldShowInternalExternal = computed(() => {
   if (!proxy.$superdoc.config.isInternal) return false;
   return !suppressInternalExternal.value && !props.comment.trackedChange;
@@ -279,21 +278,43 @@ const hasTextContent = computed(() => {
 
 const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
-
-  // Only set as active if not resolved (resolved comments can't be edited)
-  if (!props.comment.resolvedTime) {
-    activeComment.value = props.comment.commentId;
-    props.comment.setActive(proxy.$superdoc);
+  const targetClientY = commentDialogElement.value?.getBoundingClientRect?.()?.top;
+  const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
+  if (willChangeActiveThread) {
+    requestInstantSidebarAlignment(targetClientY);
+  } else {
+    clearInstantSidebarAlignment();
   }
 
-  // Always allow scrolling to the comment location, even for resolved comments
+  // Update Vue store immediately for responsive UI
+  if (!props.comment.resolvedTime) {
+    activeComment.value = props.comment.commentId;
+  }
+
+  // Move cursor to the comment location and set active comment in a single PM
+  // transaction. This prevents a race where position-based comment detection in the
+  // plugin clears the activeThreadId before the setActiveComment meta is processed.
   if (editor) {
-    // For resolved comments, use commentId since prepareCommentsForImport rewrites
-    // commentRangeStart/End nodes' w:id to the internal commentId (not importedId)
     const cursorId = props.comment.resolvedTime
       ? props.comment.commentId
       : props.comment.importedId || props.comment.commentId;
-    editor.commands?.setCursorById(cursorId);
+    if (props.comment.resolvedTime) {
+      editor.commands?.setCursorById(cursorId);
+    } else {
+      const activeCommentId = props.comment.commentId;
+      const didScroll = editor.commands?.setCursorById(cursorId, { activeCommentId });
+      if (!didScroll) {
+        editor.commands?.setActiveComment({ commentId: activeCommentId });
+      }
+    }
+    const presentation = props.comment.fileId ? PresentationEditor.getInstance(props.comment.fileId) : null;
+    if (presentation && Number.isFinite(targetClientY)) {
+      const fallbackThreadId = props.comment.commentId;
+      const scrolled = presentation.scrollThreadAnchorToClientY(cursorId, targetClientY, { behavior: 'auto' });
+      if (!scrolled && fallbackThreadId && fallbackThreadId !== cursorId) {
+        presentation.scrollThreadAnchorToClientY(fallbackThreadId, targetClientY, { behavior: 'auto' });
+      }
+    }
   }
 };
 
@@ -301,7 +322,7 @@ const handleClickOutside = (e) => {
   const targetElement = e.target instanceof Element ? e.target : e.target?.parentElement;
   const clickedIgnoredTarget = targetElement?.closest?.(
     [
-      '.n-dropdown-option-body__label',
+      '.comments-dropdown__option-label',
       '.superdoc-comment-highlight',
       '.sd-editor-comment-highlight',
       '.sd-editor-tracked-change-highlight',
@@ -349,6 +370,8 @@ const handleAddComment = () => {
 
   const comment = commentsStore.getPendingComment(options);
   addComment({ superdoc: proxy.$superdoc, comment });
+  isReplying.value = false;
+  nextTick(() => emit('resize'));
 };
 
 const handleReject = () => {
@@ -411,7 +434,7 @@ const handleOverflowSelect = (value, comment) => {
   switch (value) {
     case 'edit':
       currentCommentText.value = comment?.commentText?.value ?? comment?.commentText ?? '';
-      activeComment.value = comment.commentId;
+      activeComment.value = props.comment.commentId;
       editingCommentId.value = comment.commentId;
       commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
       nextTick(() => {
@@ -441,7 +464,7 @@ const handleInternalExternalSelect = (value) => {
 const getSidebarCommentStyle = computed(() => {
   const style = {};
 
-  if (isActiveComment.value || isPendingNewComment.value) {
+  if (isActiveComment.value || isPendingNewComment.value || isEditingAnyComment.value) {
     style.zIndex = 50;
   }
 
@@ -455,6 +478,7 @@ const getProcessedDate = (timestamp) => {
 
 const handleCancel = (comment) => {
   editingCommentId.value = null;
+  isReplying.value = false;
   cancelComment(proxy.$superdoc);
 };
 
@@ -639,17 +663,26 @@ watch(editingCommentId, (commentId) => {
               editorCommentPositions[comment.importedId !== undefined ? comment.importedId : comment.commentId]?.bounds
             }}
           </div>
-          <div v-else class="comment-editing">
-            <CommentInput
-              :ref="setEditCommentInputRef(comment.commentId)"
-              :users="usersFiltered"
-              :config="getConfig"
-              :include-header="false"
-              :comment="comment"
-            />
-            <div class="comment-footer">
-              <button class="sd-button" @click.stop.prevent="handleCancel(comment)">Cancel</button>
-              <button class="sd-button primary" @click.stop.prevent="handleCommentUpdate(comment)">Update</button>
+          <div v-else class="reply-expanded">
+            <div class="reply-input-wrapper">
+              <CommentInput
+                :ref="setEditCommentInputRef(comment.commentId)"
+                :users="usersFiltered"
+                :config="getConfig"
+                :include-header="false"
+                :comment="comment"
+              />
+            </div>
+            <div class="reply-actions">
+              <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel(comment)">Cancel</button>
+              <button
+                class="sd-button primary reply-btn-primary"
+                @click.stop.prevent="handleCommentUpdate(comment)"
+                :disabled="!hasTextContent"
+                :class="{ 'is-disabled': !hasTextContent }"
+              >
+                Update
+              </button>
             </div>
           </div>
           <div
@@ -734,6 +767,8 @@ watch(editingCommentId, (commentId) => {
   max-width: var(--sd-comment-max-width, 300px);
   min-width: var(--sd-comment-min-width, 200px);
   width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .comments-dialog:not(.is-active) {
   cursor: pointer;
@@ -983,24 +1018,7 @@ watch(editingCommentId, (commentId) => {
   margin-bottom: 10px;
 }
 
-.comment-footer {
-  margin: 5px 0 5px;
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-}
-.comment-footer .sd-button {
-  font-size: 12px;
-  margin-left: 5px;
-}
-
 .internal-dropdown {
   display: inline-block;
-}
-.comment-editing {
-  padding-bottom: 10px;
-}
-.comment-editing button {
-  margin-left: 5px;
 }
 </style>

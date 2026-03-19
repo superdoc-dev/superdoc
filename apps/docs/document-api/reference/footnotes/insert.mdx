@@ -1,0 +1,277 @@
+---
+title: footnotes.insert
+sidebarTitle: footnotes.insert
+description: Insert a new footnote or endnote at a target location.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert a new footnote or endnote at a target location.
+
+- Operation ID: `footnotes.insert`
+- API member path: `editor.doc.footnotes.insert(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a FootnoteMutationResult indicating success with the footnote address or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | yes | TextTarget |
+| `at.kind` | `"text"` | yes | Constant: `"text"` |
+| `at.segments` | TextSegment[] | yes |  |
+| `content` | string | yes |  |
+| `type` | enum | yes | `"footnote"`, `"endnote"` |
+
+### Example request
+
+```json
+{
+  "at": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
+  "content": "example",
+  "type": "footnote"
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `footnote` | object(kind="entity") | yes |  |
+| `footnote.entityType` | `"footnote"` | yes | Constant: `"footnote"` |
+| `footnote.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `footnote.noteId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "footnote": {
+    "entityType": "footnote",
+    "kind": "entity",
+    "noteId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "at": {
+      "$ref": "#/$defs/TextTarget"
+    },
+    "content": {
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "footnote",
+        "endnote"
+      ]
+    }
+  },
+  "required": [
+    "at",
+    "type",
+    "content"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "footnote": {
+          "additionalProperties": false,
+          "properties": {
+            "entityType": {
+              "const": "footnote"
+            },
+            "kind": {
+              "const": "entity"
+            },
+            "noteId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "entityType",
+            "noteId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "footnote"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "footnote": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "footnote"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "noteId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "noteId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "footnote"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

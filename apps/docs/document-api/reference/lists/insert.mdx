@@ -1,7 +1,7 @@
 ---
 title: lists.insert
 sidebarTitle: lists.insert
-description: Insert a new list at the target position.
+description: Insert a new list item before or after an existing list item. The new item inherits the target list context.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Insert a new list at the target position.
 
 ## Summary
 
-Insert a new list at the target position.
+Insert a new list item before or after an existing list item. The new item inherits the target list context.
 
 - Operation ID: `lists.insert`
 - API member path: `editor.doc.lists.insert(...)`
@@ -51,7 +51,7 @@ Returns a ListsInsertResult with the new list item address and block ID.
 
 ## Output fields
 
-### Variant 1 (item.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

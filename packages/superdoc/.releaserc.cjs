@@ -76,22 +76,12 @@ const isPrerelease = config.branches.some(
 )
 
 if (!isPrerelease) {
-  // Add changelog BEFORE git
-  config.plugins.push([
-    '@semantic-release/changelog',
-    {
-      changelogFile: 'CHANGELOG.md'
-    }
-  ])
-
-  // Git plugin comes AFTER npm and changelog
+  // Git plugin commits the version bump back to the branch.
+  // No changelog — release notes live on the GitHub release only.
   config.plugins.push([
     '@semantic-release/git',
     {
-      assets: [
-        'CHANGELOG.md',
-        'package.json'
-      ],
+      assets: ['package.json'],
       message:
         'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
     },

@@ -76,10 +76,17 @@ function resolveMarksForRange(editor: Editor, target: CompiledRangeTarget, step:
   const rewriteStep = step as TextRewriteStep;
   const policy = rewriteStep.args.style?.inline ?? DEFAULT_INLINE_POLICY;
 
-  const captured =
-    target.capturedStyle ??
-    captureRunsInRange(editor, toAbsoluteBlockPos(editor, target.blockId), target.from, target.to);
+  // capturedStyle is populated at compile time for selection targets.
+  // Fall back to live capture only for range targets with a real blockId.
+  if (target.capturedStyle) {
+    return resolveInlineStyle(editor, target.capturedStyle, policy, step.id);
+  }
 
+  // Synthetic blockId ('__selection__') means both selection endpoints were
+  // nodeEdge anchors with no text block — no inline style to preserve.
+  if (target.blockId === '__selection__') return [];
+
+  const captured = captureRunsInRange(editor, toAbsoluteBlockPos(editor, target.blockId), target.from, target.to);
   return resolveInlineStyle(editor, captured, policy, step.id);
 }
 
@@ -121,7 +128,7 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
 // ---------------------------------------------------------------------------
 
 type InlineRunPatch = StyleApplyInput['inline'];
-type TextStylePatchKey = 'color' | 'fontSize' | 'letterSpacing' | 'vertAlign' | 'position';
+type TextStylePatchKey = 'color' | 'fontSize' | 'fontFamily' | 'letterSpacing' | 'vertAlign' | 'position';
 type TextStylePatch = Partial<Pick<InlineRunPatch, TextStylePatchKey>> & {
   /** Derived from `caps` boolean — mapped to the textStyle mark's `textTransform` attribute. */
   textTransform?: string | null;
@@ -138,7 +145,7 @@ interface OverlappingRun {
 }
 
 const BOOLEAN_INLINE_MARK_KEYS = ['bold', 'italic', 'strike'] as const;
-const TEXT_STYLE_KEYS = ['color', 'fontSize', 'letterSpacing', 'vertAlign', 'position'] as const;
+const TEXT_STYLE_KEYS = ['color', 'fontSize', 'fontFamily', 'letterSpacing', 'vertAlign', 'position'] as const;
 const PRESERVE_RUN_PROPERTIES_META_KEY = 'sdPreserveRunPropertiesKeys';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -500,7 +507,7 @@ function applyRunAttributePatch(
   if (overlappingRuns.length === 0) return false;
 
   if (Object.prototype.hasOwnProperty.call(updates, 'fontFamily')) {
-    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, ['fontFamily']);
+    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, [{ key: 'fontFamily', preferExisting: true }]);
   }
 
   let changed = false;
@@ -623,6 +630,16 @@ function applyInlinePatchToRange(
   if (inline.caps !== undefined) {
     textStylePatch.textTransform = capsToTextTransform(inline.caps ?? null);
   }
+  // When fontFamily is being set (not cleared) via the textStyle mark path,
+  // tell the calculateInlineRunPropertiesPlugin to preserve the mark-derived
+  // fontFamily rather than re-deriving it through the encodeMarksFromRPr
+  // comparison (which can incorrectly drop it due to theme font normalization).
+  // Only for non-null values — clearing fontFamily must not trigger preservation,
+  // otherwise the plugin would copy the old value back from existingRunProperties.
+  if (textStylePatch.fontFamily != null) {
+    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, ['fontFamily']);
+  }
+
   if (applyTextStylePatch(tr, schema.marks.textStyle, absFrom, absTo, textStylePatch)) {
     changed = true;
   }

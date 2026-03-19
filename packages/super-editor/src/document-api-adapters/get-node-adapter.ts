@@ -1,9 +1,10 @@
 import type { Editor } from '../core/Editor.js';
-import type { BlockNodeType, GetNodeByIdInput, NodeAddress, NodeInfo } from '@superdoc/document-api';
+import type { BlockNodeType, GetNodeByIdInput, NodeAddress, SDNodeResult } from '@superdoc/document-api';
 import type { BlockCandidate, BlockIndex } from './helpers/node-address-resolver.js';
+import { findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
-import { mapNodeInfo } from './helpers/node-info-mapper.js';
+import { projectContentNode, projectInlineNode, projectMarkBasedInline } from './helpers/sd-projection.js';
 import { DocumentApiAdapterError } from './errors.js';
 
 function findBlocksByTypeAndId(blockIndex: BlockIndex, nodeType: BlockNodeType, nodeId: string): BlockCandidate[] {
@@ -16,26 +17,25 @@ function findBlocksByTypeAndId(blockIndex: BlockIndex, nodeType: BlockNodeType, 
   return blockIndex.candidates.filter((candidate) => candidate.nodeType === nodeType && candidate.nodeId === nodeId);
 }
 
+/** Returns the input block address as-is (already a NodeAddress). */
+function buildBlockAddress(address: NodeAddress & { kind: 'block' }): NodeAddress {
+  return address;
+}
+
+/** Returns the input inline address as-is (already a NodeAddress). */
+function buildInlineAddress(address: NodeAddress & { kind: 'inline' }): NodeAddress {
+  return address;
+}
+
 /**
- * Resolves a {@link NodeAddress} to full {@link NodeInfo} by looking up the
- * node in the editor's current document state.
- *
- * @param editor - The editor instance to query.
- * @param address - The node address to resolve.
- * @returns Detailed node information with typed properties.
- * @throws {DocumentApiAdapterError} If no node is found for the given address.
+ * Resolves a {@link NodeAddress} to an {@link SDNodeResult} by looking up the
+ * node in the editor's current document state and projecting it to SDM/1.
  */
-export function getNodeAdapter(editor: Editor, address: NodeAddress): NodeInfo {
+export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResult {
   const blockIndex = getBlockIndex(editor);
 
   if (address.kind === 'block') {
     const matches = findBlocksByTypeAndId(blockIndex, address.nodeType, address.nodeId);
-    if (matches.length === 0) {
-      throw new DocumentApiAdapterError(
-        'TARGET_NOT_FOUND',
-        `Node "${address.nodeType}" not found for id "${address.nodeId}".`,
-      );
-    }
     if (matches.length > 1) {
       throw new DocumentApiAdapterError(
         'TARGET_NOT_FOUND',
@@ -43,7 +43,30 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): NodeInfo {
       );
     }
 
-    return mapNodeInfo(matches[0]!, address.nodeType, editor.state.doc);
+    let candidate = matches[0];
+
+    // Fallback: nodeId-only lookup handles stale subtypes after paragraph ↔
+    // heading / listItem restyling (the PM node and its nodeId stay the same
+    // but the indexed nodeType changes).
+    if (!candidate) {
+      try {
+        candidate = findBlockByNodeIdOnly(blockIndex, address.nodeId);
+      } catch {
+        // AMBIGUOUS_TARGET / TARGET_NOT_FOUND — throw the original error below
+      }
+    }
+
+    if (!candidate) {
+      throw new DocumentApiAdapterError(
+        'TARGET_NOT_FOUND',
+        `Node "${address.nodeType}" not found for id "${address.nodeId}".`,
+      );
+    }
+
+    return {
+      node: projectContentNode(candidate.node),
+      address: { kind: 'block', nodeType: candidate.nodeType, nodeId: candidate.nodeId } as NodeAddress,
+    };
   }
 
   const inlineIndex = getInlineIndex(editor);
@@ -55,7 +78,25 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): NodeInfo {
     );
   }
 
-  return mapNodeInfo(candidate, address.nodeType, editor.state.doc);
+  // Node-based inlines (image, tab, run, etc.) have a PM node reference.
+  if (candidate.node) {
+    return {
+      node: projectInlineNode(candidate.node),
+      address: buildInlineAddress(address),
+    };
+  }
+
+  // Mark-based inlines (hyperlink, comment) have a mark but no node.
+  // Project from the mark data and resolve text content from the document.
+  const projected = projectMarkBasedInline(editor, candidate);
+  if (projected) {
+    return { node: projected, address: buildInlineAddress(address) };
+  }
+
+  throw new DocumentApiAdapterError(
+    'TARGET_NOT_FOUND',
+    `Inline node "${address.nodeType}" could not be projected from the provided anchor.`,
+  );
 }
 
 function resolveBlockById(
@@ -97,16 +138,16 @@ function resolveBlockById(
 }
 
 /**
- * Resolves a block node by its ID (and optional type) to full {@link NodeInfo}.
- *
- * @param editor - The editor instance to query.
- * @param input - The block node id input payload.
- * @returns Detailed node information with typed properties.
- * @throws {DocumentApiAdapterError} If no node matches or multiple nodes match without a type disambiguator.
+ * Resolves a block node by its ID (and optional type) to an {@link SDNodeResult}.
  */
-export function getNodeByIdAdapter(editor: Editor, input: GetNodeByIdInput): NodeInfo {
+export function getNodeByIdAdapter(editor: Editor, input: GetNodeByIdInput): SDNodeResult {
   const { nodeId, nodeType } = input;
   const { candidate, resolvedType } = resolveBlockById(editor, nodeId, nodeType);
-  const displayType = nodeType ?? resolvedType;
-  return mapNodeInfo(candidate, displayType, editor.state.doc);
+  return {
+    node: projectContentNode(candidate.node),
+    // Use candidate.nodeId (the canonical ID) rather than the caller's input,
+    // which may be an alias (e.g. sdBlockId). This ensures the emitted address
+    // is resolvable by getNode(), which looks up by primary nodeId.
+    address: { kind: 'block', nodeType: resolvedType, nodeId: candidate.nodeId } as NodeAddress,
+  };
 }

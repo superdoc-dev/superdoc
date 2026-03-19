@@ -1,4 +1,5 @@
 // @ts-check
+import { findOrCreateRelationship } from '../../../../../../parts/adapters/relationships-mutation.js';
 
 /**
  * @typedef {import('prosemirror-state').Transaction} Transaction
@@ -22,22 +23,22 @@ export function ensureValidImageRID(images, editor, tr, logger) {
   images.forEach(({ node, pos }) => {
     const { rId, src } = node.attrs;
     if (!rId && src) {
-      let newId = editor.converter.docxHelpers.findRelationshipIdFromTarget(src, editor);
-      if (newId) logger.debug('Reusing existing rId for image:', newId, 'at pos:', pos);
-
-      // If we still don't have an rId, create a new relationship
-      if (!newId) {
-        newId = editor.converter.docxHelpers.insertNewRelationship(src, 'image', editor);
-        logger.debug('Creating new rId for image at pos:', pos, 'with src:', src);
-      }
-
-      tr.setNodeMarkup(pos, undefined, {
-        ...node.attrs,
-        rId: newId,
+      const newId = findOrCreateRelationship(editor, 'image-rid:ensureValidImageRID', {
+        target: src,
+        type: 'image',
       });
 
-      results.push(`Added missing rId to image at pos ${pos}`);
-      modified = true;
+      if (newId) {
+        logger.debug('Assigned rId for image:', newId, 'at pos:', pos);
+
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          rId: newId,
+        });
+
+        results.push(`Added missing rId to image at pos ${pos}`);
+        modified = true;
+      }
     }
   });
 

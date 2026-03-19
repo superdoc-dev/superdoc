@@ -1,4 +1,5 @@
-import type { BlockNodeType, NodeAddress, NodeInfo } from '../types/index.js';
+import type { BlockNodeType, NodeAddress } from '../types/index.js';
+import type { SDNodeResult } from '../types/sd-envelope.js';
 
 /**
  * Input for resolving a block node by its unique ID.
@@ -13,21 +14,21 @@ export interface GetNodeByIdInput {
  */
 export interface GetNodeAdapter {
   /**
-   * Resolve a node address to full node information.
+   * Resolve a node address to an SDNodeResult.
    *
    * @param address - The node address to resolve.
-   * @returns Full node information including typed properties.
+   * @returns SDNodeResult with the projected node and its address.
    * @throws When the address cannot be resolved.
    */
-  getNode(address: NodeAddress): NodeInfo;
+  getNode(address: NodeAddress): SDNodeResult;
   /**
    * Resolve a block node by its ID.
    *
    * @param input - The node-id input payload.
-   * @returns Full node information including typed properties.
+   * @returns SDNodeResult with the projected node and its address.
    * @throws When the node ID cannot be found.
    */
-  getNodeById(input: GetNodeByIdInput): NodeInfo;
+  getNodeById(input: GetNodeByIdInput): SDNodeResult;
 }
 
 /**
@@ -35,9 +36,9 @@ export interface GetNodeAdapter {
  *
  * @param adapter - Engine-specific getNode adapter.
  * @param address - The node address to resolve.
- * @returns Full node information including typed properties.
+ * @returns SDNodeResult with the projected node and its address.
  */
-export function executeGetNode(adapter: GetNodeAdapter, address: NodeAddress): NodeInfo {
+export function executeGetNode(adapter: GetNodeAdapter, address: NodeAddress): SDNodeResult {
   return adapter.getNode(address);
 }
 
@@ -46,8 +47,8 @@ export function executeGetNode(adapter: GetNodeAdapter, address: NodeAddress): N
  *
  * @param adapter - Engine-specific getNode adapter.
  * @param input - The node-id input payload.
- * @returns Full node information including typed properties.
+ * @returns SDNodeResult with the projected node and its address.
  */
-export function executeGetNodeById(adapter: GetNodeAdapter, input: GetNodeByIdInput): NodeInfo {
+export function executeGetNodeById(adapter: GetNodeAdapter, input: GetNodeByIdInput): SDNodeResult {
   return adapter.getNodeById(input);
 }

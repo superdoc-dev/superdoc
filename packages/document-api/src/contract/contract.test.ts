@@ -75,22 +75,80 @@ describe('document-api contract catalog', () => {
     }
   });
 
-  it('uses simplified target-based insert input schema without locator constraints', () => {
+  it('declares insert input as a legacy-text or structural-content union', () => {
     const schemas = buildInternalContractSchemas();
     const insertInputSchema = schemas.operations.insert.input as {
-      type?: string;
-      properties?: Record<string, unknown>;
-      required?: string[];
-      allOf?: unknown;
-      additionalProperties?: boolean;
+      oneOf?: Array<{
+        type?: string;
+        properties?: Record<string, unknown>;
+        required?: string[];
+        additionalProperties?: boolean;
+      }>;
     };
 
-    // Simplified schema: target (optional) + value (required) + type (optional enum), no allOf constraints
-    expect(insertInputSchema.type).toBe('object');
-    expect(Object.keys(insertInputSchema.properties!).sort()).toEqual(['target', 'type', 'value']);
-    expect(insertInputSchema.required).toEqual(['value']);
-    expect(insertInputSchema.allOf).toBeUndefined();
-    expect(insertInputSchema.additionalProperties).toBe(false);
+    expect(Array.isArray(insertInputSchema.oneOf)).toBe(true);
+    expect(insertInputSchema.oneOf).toHaveLength(2);
+
+    const [legacyVariant, structuralVariant] = insertInputSchema.oneOf!;
+
+    expect(legacyVariant.type).toBe('object');
+    expect(Object.keys(legacyVariant.properties!).sort()).toEqual(['target', 'type', 'value']);
+    expect(legacyVariant.required).toEqual(['value']);
+    expect(legacyVariant.additionalProperties).toBe(false);
+    expect((legacyVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/TextAddress');
+
+    expect(structuralVariant.type).toBe('object');
+    expect(Object.keys(structuralVariant.properties!).sort()).toEqual([
+      'content',
+      'nestingPolicy',
+      'placement',
+      'target',
+    ]);
+    expect(structuralVariant.required).toEqual(['content']);
+    expect(structuralVariant.additionalProperties).toBe(false);
+    expect((structuralVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/BlockNodeAddress');
+    expect((structuralVariant.properties!.placement as { enum?: string[] }).enum).toEqual([
+      'before',
+      'after',
+      'insideStart',
+      'insideEnd',
+    ]);
+    expect(
+      (
+        structuralVariant.properties!.nestingPolicy as {
+          properties?: { tables?: { enum?: string[] } };
+        }
+      ).properties?.tables?.enum,
+    ).toEqual(['forbid', 'allow']);
+  });
+
+  it('accepts both object and array SDFragment in structural insert content schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertInput = schemas.operations.insert.input as { oneOf?: Array<{ properties?: Record<string, unknown> }> };
+    const structuralVariant = insertInput.oneOf![1];
+    const contentSchema = structuralVariant.properties!.content as { oneOf?: Array<{ type?: string }> };
+
+    expect(Array.isArray(contentSchema.oneOf)).toBe(true);
+    expect(contentSchema.oneOf).toHaveLength(2);
+    expect(contentSchema.oneOf![0].type).toBe('object');
+    expect(contentSchema.oneOf![1].type).toBe('array');
+  });
+
+  it('accepts both object and array SDFragment in structural replace content schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const replaceInput = schemas.operations.replace.input as {
+      oneOf?: Array<{ oneOf?: Array<{ properties?: Record<string, unknown> }> }>;
+    };
+    // The structural branch is the second oneOf element
+    const structuralBranch = replaceInput.oneOf![1] as { oneOf?: Array<{ properties?: Record<string, unknown> }> };
+
+    for (const variant of structuralBranch.oneOf!) {
+      const contentSchema = variant.properties!.content as { oneOf?: Array<{ type?: string }> };
+      expect(Array.isArray(contentSchema.oneOf)).toBe(true);
+      expect(contentSchema.oneOf).toHaveLength(2);
+      expect(contentSchema.oneOf![0].type).toBe('object');
+      expect(contentSchema.oneOf![1].type).toBe('array');
+    }
   });
 
   it('declares UNSUPPORTED_ENVIRONMENT for insert metadata and generated failure schema', () => {
@@ -124,6 +182,74 @@ describe('document-api contract catalog', () => {
 
     expect(capabilitiesOutput.properties?.global?.properties).toHaveProperty('history');
     expect(capabilitiesOutput.properties?.global?.required).toContain('history');
+  });
+
+  it('narrows table operation address schemas to table-specific refs', () => {
+    const schemas = buildInternalContractSchemas();
+
+    const tablesGetInput = schemas.operations['tables.get'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const tablesGetOutput = schemas.operations['tables.get'].output as {
+      properties?: { address?: { $ref?: string } };
+    };
+    const unmergeInput = schemas.operations['tables.unmergeCells'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const setBorderInput = schemas.operations['tables.setBorder'].input as {
+      properties?: { target?: { $ref?: string } };
+    };
+    const insertRowSuccess = schemas.operations['tables.insertRow'].success as {
+      properties?: { table?: { $ref?: string } };
+    };
+
+    expect(tablesGetInput.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(tablesGetOutput.properties?.address?.$ref).toBe('#/$defs/TableAddress');
+    expect(unmergeInput.properties?.target?.$ref).toBe('#/$defs/TableCellAddress');
+    expect(setBorderInput.properties?.target?.$ref).toBe('#/$defs/TableOrCellAddress');
+    expect(insertRowSuccess.properties?.table?.$ref).toBe('#/$defs/TableAddress');
+  });
+
+  it('preserves row-locator constraints in row operation schemas', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertRowInput = schemas.operations['tables.insertRow'].input as {
+      oneOf?: Array<{
+        properties?: {
+          target?: { $ref?: string };
+          nodeId?: { type?: string };
+          rowIndex?: { type?: string; minimum?: number };
+          position?: { enum?: string[] };
+        };
+        required?: string[];
+      }>;
+    };
+    const deleteRowInput = schemas.operations['tables.deleteRow'].input as {
+      oneOf?: Array<{
+        properties?: {
+          target?: { $ref?: string };
+          nodeId?: { type?: string };
+          rowIndex?: { type?: string; minimum?: number };
+        };
+        required?: string[];
+      }>;
+    };
+
+    expect(insertRowInput.oneOf).toHaveLength(3);
+    expect(insertRowInput.oneOf?.[0]?.properties?.target?.$ref).toBe('#/$defs/TableRowAddress');
+    expect(insertRowInput.oneOf?.[0]?.required).toEqual(['target', 'position']);
+    expect(insertRowInput.oneOf?.[1]?.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(insertRowInput.oneOf?.[1]?.required).toEqual(['target', 'rowIndex', 'position']);
+    expect(insertRowInput.oneOf?.[2]?.properties?.rowIndex).toEqual({ type: 'integer', minimum: 0 });
+    expect(insertRowInput.oneOf?.[2]?.required).toEqual(['nodeId', 'rowIndex', 'position']);
+
+    expect(deleteRowInput.oneOf).toHaveLength(3);
+    expect(deleteRowInput.oneOf?.[0]?.properties?.target?.$ref).toBe('#/$defs/TableRowAddress');
+    expect(deleteRowInput.oneOf?.[0]?.required).toEqual(['target']);
+    expect(deleteRowInput.oneOf?.[1]?.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(deleteRowInput.oneOf?.[1]?.required).toEqual(['target', 'rowIndex']);
+    expect(deleteRowInput.oneOf?.[2]?.properties?.nodeId?.type).toBe('string');
+    expect(deleteRowInput.oneOf?.[2]?.properties?.rowIndex).toEqual({ type: 'integer', minimum: 0 });
+    expect(deleteRowInput.oneOf?.[2]?.required).toEqual(['nodeId', 'rowIndex']);
   });
 
   it('declares images.setZOrder.relativeHeight as unsigned 32-bit integer', () => {
@@ -175,6 +301,18 @@ describe('document-api contract catalog', () => {
       'toc',
       'images',
       'hyperlinks',
+      'headerFooters',
+      'contentControls',
+      'bookmarks',
+      'footnotes',
+      'crossRefs',
+      'index',
+      'captions',
+      'fields',
+      'citations',
+      'authorities',
+      'ranges',
+      'diff',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);
@@ -244,9 +382,11 @@ describe('document-api contract catalog', () => {
     for (const id of historyUnsafeOps) {
       expect(
         id.startsWith('sections.') ||
+          id.startsWith('headerFooters.') ||
           id === 'styles.apply' ||
           id === 'tables.setDefaultStyle' ||
-          id === 'tables.clearDefaultStyle',
+          id === 'tables.clearDefaultStyle' ||
+          id === 'diff.apply',
         `unexpected historyUnsafe: ${id}`,
       ).toBe(true);
     }

@@ -95,6 +95,34 @@ export const StructuredContent = Node.create({
         },
       },
 
+      controlType: {
+        default: null,
+        parseDOM: (elem) => elem.getAttribute('data-control-type'),
+        renderDOM: (attrs) => {
+          if (!attrs.controlType) return {};
+          return { 'data-control-type': attrs.controlType };
+        },
+      },
+
+      type: {
+        default: null,
+        rendered: false,
+      },
+
+      appearance: {
+        default: null,
+        parseDOM: (elem) => elem.getAttribute('data-appearance'),
+        renderDOM: (attrs) => {
+          if (!attrs.appearance) return {};
+          return { 'data-appearance': attrs.appearance };
+        },
+      },
+
+      placeholder: {
+        default: null,
+        rendered: false,
+      },
+
       sdtPr: {
         rendered: false,
       },

@@ -1,9 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Editor } from 'superdoc/super-editor';
-import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
-import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
-import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
+import {
+  Editor,
+  BLANK_DOCX_BASE64,
+  getDocumentApiAdapters,
+  markdownToPmDoc,
+  initPartsRuntime,
+} from 'superdoc/super-editor';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import { createCliDomEnvironment } from './dom-environment';
@@ -66,14 +69,43 @@ export interface FileOutputMeta {
   byteLength: number;
 }
 
-function toUint8Array(data: unknown): Uint8Array {
+function bindCurrentDocumentApi(editor: Editor): EditorWithDoc {
+  const editorWithDoc = editor as EditorWithDoc;
+
+  // Shadow the lazy getter with an eagerly-created DocumentApi so the CLI and
+  // story harnesses always dispatch against the same source-backed adapter graph.
+  Object.defineProperty(editorWithDoc, 'doc', {
+    configurable: true,
+    value: createDocumentApi(getDocumentApiAdapters(editor)),
+  });
+
+  return editorWithDoc;
+}
+
+async function toUint8Array(data: unknown): Promise<Uint8Array> {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   if (ArrayBuffer.isView(data)) {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    return new Uint8Array(await data.arrayBuffer());
+  }
+  if (typeof data === 'object' && data !== null && 'arrayBuffer' in data && typeof data.arrayBuffer === 'function') {
+    const arrayBuffer = await data.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  }
 
-  throw new CliError('DOCUMENT_EXPORT_FAILED', 'Exported document data is not binary.');
+  const constructorName =
+    typeof data === 'object' && data !== null && 'constructor' in data && typeof data.constructor === 'function'
+      ? data.constructor.name
+      : undefined;
+  const objectKeys = typeof data === 'object' && data !== null ? Object.keys(data).slice(0, 8) : [];
+
+  throw new CliError(
+    'DOCUMENT_EXPORT_FAILED',
+    `Exported document data is not binary (type=${typeof data}, constructor=${constructorName ?? 'unknown'}, keys=${objectKeys.join(',')}).`,
+  );
 }
 
 async function readDocumentSource(doc: string, io: CliIO): Promise<{ bytes: Uint8Array; meta: DocumentSourceMeta }> {
@@ -155,6 +187,7 @@ export async function openDocument(
     editor = await Editor.open(Buffer.from(source), {
       documentId: options.documentId ?? meta.path ?? 'blank.docx',
       document: domEnv.document,
+      isHeadless: true,
       user: options.user
         ? { name: options.user.name, email: options.user.email, image: null }
         : { id: 'cli', name: 'CLI' },
@@ -177,6 +210,10 @@ export async function openDocument(
     });
   }
 
+  // Parts/runtime registration is idempotent. Re-run it here so adapter-side
+  // afterCommit hooks are always wired, including in headless CLI sessions.
+  initPartsRuntime(editor as never);
+
   // Apply content override post-init.
   //   - markdown: DOM-free AST pipeline
   //   - plainText: builds PM paragraphs directly, preserving all whitespace
@@ -184,8 +221,7 @@ export async function openDocument(
     try {
       const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
       const tr = editor.state.tr;
-      // The PM Fragment type is opaque at the CLI boundary — cast through unknown.
-      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content as any);
+      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content);
       editor.dispatch(tr);
     } catch (error) {
       editor.destroy();
@@ -218,10 +254,7 @@ export async function openDocument(
     }
   }
 
-  const adapters = getDocumentApiAdapters(editor);
-  const docApi = createDocumentApi(adapters);
-  Object.defineProperty(editor, 'doc', { value: docApi, configurable: true, writable: true });
-  const editorWithDoc = editor as EditorWithDoc;
+  const editorWithDoc = bindCurrentDocumentApi(editor);
 
   return {
     editor: editorWithDoc,
@@ -417,7 +450,7 @@ export async function exportToPath(editor: Editor, outputPath: string, force = f
     });
   }
 
-  const bytes = toUint8Array(exported);
+  const bytes = await toUint8Array(exported);
 
   try {
     await writeFile(outputPath, bytes);

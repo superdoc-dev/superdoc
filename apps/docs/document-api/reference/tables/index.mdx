@@ -12,6 +12,10 @@ description: Tables operation reference from the canonical Document API contract
 
 Table structure, layout, styling, and cell operations.
 
+<Tip>
+For non-destructive table-targeted mutations, reuse `result.table.nodeId` from the previous success result instead of re-running `find()`. Cell-targeted border/shading calls may still return a `tableCell` address.
+</Tip>
+
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/convert-from-text"><code>tables.convertFromText</code></a></span> | `tables.convertFromText` | Yes | `non-idempotent` | No | Yes |

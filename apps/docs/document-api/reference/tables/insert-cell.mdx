@@ -26,39 +26,47 @@ Returns a TableMutationResult receipt confirming a cell was inserted.
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.nodeType="tableCell")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mode` | enum | yes | `"shiftRight"`, `"shiftDown"` |
+| `target` | TableCellAddress | yes | TableCellAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableCell"` | yes | Constant: `"tableCell"` |
 
-### Variant 2
+### Variant 2 (nodeId)
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mode` | enum | yes | `"shiftRight"`, `"shiftDown"` |
+| `nodeId` | string | yes |  |
 
 ### Example request
 
 ```json
 {
   "mode": "shiftRight",
-  "nodeId": "node-def456",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "tableCell"
   }
 }
 ```
 
 ## Output fields
 
-### Variant 1 (table.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `success` | `true` | yes | Constant: `true` |
-| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table` | TableAddress | no | TableAddress |
 | `table.kind` | `"block"` | no | Constant: `"block"` |
 | `table.nodeId` | string | no |  |
-| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
 | `trackedChangeRefs` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -71,6 +79,10 @@ _No fields._
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
 ### Example response
 
 ```json
@@ -79,7 +91,7 @@ _No fields._
   "table": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "trackedChangeRefs": [
     {
@@ -131,7 +143,7 @@ _No fields._
       "type": "string"
     },
     "target": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableCellAddress"
     }
   },
   "required": [
@@ -153,7 +165,7 @@ _No fields._
           "const": true
         },
         "table": {
-          "$ref": "#/$defs/BlockNodeAddress"
+          "$ref": "#/$defs/TableAddress"
         },
         "trackedChangeRefs": {
           "items": {
@@ -216,7 +228,7 @@ _No fields._
       "const": true
     },
     "table": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     },
     "trackedChangeRefs": {
       "items": {

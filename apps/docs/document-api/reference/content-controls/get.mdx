@@ -1,0 +1,114 @@
+---
+title: contentControls.get
+sidebarTitle: contentControls.get
+description: Retrieve a single content control by target.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Retrieve a single content control by target.
+
+- Operation ID: `contentControls.get`
+- API member path: `editor.doc.contentControls.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ContentControlInfo with full properties.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(nodeType="sdt") | yes |  |
+| `target.kind` | enum | yes | `"block"`, `"inline"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"sdt"` | yes | Constant: `"sdt"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "sdt"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block",
+            "inline"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "sdt"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "description": "ContentControlInfo",
+  "type": "object"
+}
+```
+</Accordion>

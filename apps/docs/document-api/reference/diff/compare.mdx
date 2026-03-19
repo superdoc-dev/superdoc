@@ -1,0 +1,357 @@
+---
+title: diff.compare
+sidebarTitle: diff.compare
+description: Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target.
+
+- Operation ID: `diff.compare`
+- API member path: `editor.doc.diff.compare(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a DiffPayload with a summary and opaque payload.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `targetSnapshot` | object(version="sd-diff-snapshot/v1") | yes |  |
+| `targetSnapshot.coverage` | object | yes |  |
+| `targetSnapshot.coverage.body` | `true` | yes | Constant: `true` |
+| `targetSnapshot.coverage.comments` | boolean | yes |  |
+| `targetSnapshot.coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `targetSnapshot.coverage.numbering` | boolean | yes |  |
+| `targetSnapshot.coverage.styles` | boolean | yes |  |
+| `targetSnapshot.engine` | enum | yes | `"super-editor"` |
+| `targetSnapshot.fingerprint` | string | yes |  |
+| `targetSnapshot.payload` | object | yes |  |
+| `targetSnapshot.version` | `"sd-diff-snapshot/v1"` | yes | Constant: `"sd-diff-snapshot/v1"` |
+
+### Example request
+
+```json
+{
+  "targetSnapshot": {
+    "coverage": {
+      "body": true,
+      "comments": true,
+      "headerFooters": false,
+      "numbering": true,
+      "styles": true
+    },
+    "engine": "super-editor",
+    "fingerprint": "example",
+    "payload": {},
+    "version": "sd-diff-snapshot/v1"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `baseFingerprint` | string | yes |  |
+| `coverage` | object | yes |  |
+| `coverage.body` | `true` | yes | Constant: `true` |
+| `coverage.comments` | boolean | yes |  |
+| `coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `coverage.numbering` | boolean | yes |  |
+| `coverage.styles` | boolean | yes |  |
+| `engine` | enum | yes | `"super-editor"` |
+| `payload` | object | yes |  |
+| `summary` | object | yes |  |
+| `summary.body` | object | yes |  |
+| `summary.body.hasChanges` | boolean | yes |  |
+| `summary.changedComponents` | enum[] | yes |  |
+| `summary.comments` | object | yes |  |
+| `summary.comments.hasChanges` | boolean | yes |  |
+| `summary.hasChanges` | boolean | yes |  |
+| `summary.numbering` | object | yes |  |
+| `summary.numbering.hasChanges` | boolean | yes |  |
+| `summary.styles` | object | yes |  |
+| `summary.styles.hasChanges` | boolean | yes |  |
+| `targetFingerprint` | string | yes |  |
+| `version` | `"sd-diff-payload/v1"` | yes | Constant: `"sd-diff-payload/v1"` |
+
+### Example response
+
+```json
+{
+  "baseFingerprint": "example",
+  "coverage": {
+    "body": true,
+    "comments": true,
+    "headerFooters": false,
+    "numbering": true,
+    "styles": true
+  },
+  "engine": "super-editor",
+  "payload": {},
+  "summary": {
+    "body": {
+      "hasChanges": true
+    },
+    "changedComponents": [
+      "body"
+    ],
+    "comments": {
+      "hasChanges": true
+    },
+    "hasChanges": true,
+    "numbering": {
+      "hasChanges": true
+    },
+    "styles": {
+      "hasChanges": true
+    }
+  },
+  "targetFingerprint": "example",
+  "version": "sd-diff-payload/v1"
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `CAPABILITY_UNSUPPORTED`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "targetSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "const": true,
+              "type": "boolean"
+            },
+            "comments": {
+              "type": "boolean"
+            },
+            "headerFooters": {
+              "const": false,
+              "type": "boolean"
+            },
+            "numbering": {
+              "type": "boolean"
+            },
+            "styles": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "body",
+            "comments",
+            "styles",
+            "numbering",
+            "headerFooters"
+          ],
+          "type": "object"
+        },
+        "engine": {
+          "enum": [
+            "super-editor"
+          ],
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "payload": {
+          "description": "Opaque engine-owned snapshot data.",
+          "type": "object"
+        },
+        "version": {
+          "const": "sd-diff-snapshot/v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "engine",
+        "fingerprint",
+        "coverage",
+        "payload"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "targetSnapshot"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "baseFingerprint": {
+      "type": "string"
+    },
+    "coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "const": true,
+          "type": "boolean"
+        },
+        "comments": {
+          "type": "boolean"
+        },
+        "headerFooters": {
+          "const": false,
+          "type": "boolean"
+        },
+        "numbering": {
+          "type": "boolean"
+        },
+        "styles": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "body",
+        "comments",
+        "styles",
+        "numbering",
+        "headerFooters"
+      ],
+      "type": "object"
+    },
+    "engine": {
+      "enum": [
+        "super-editor"
+      ],
+      "type": "string"
+    },
+    "payload": {
+      "description": "Opaque engine-owned diff data.",
+      "type": "object"
+    },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "changedComponents": {
+          "items": {
+            "enum": [
+              "body",
+              "comments",
+              "styles",
+              "numbering"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "comments": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "hasChanges": {
+          "type": "boolean"
+        },
+        "numbering": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "styles": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "hasChanges",
+        "changedComponents",
+        "body",
+        "comments",
+        "styles",
+        "numbering"
+      ],
+      "type": "object"
+    },
+    "targetFingerprint": {
+      "type": "string"
+    },
+    "version": {
+      "const": "sd-diff-payload/v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "engine",
+    "baseFingerprint",
+    "targetFingerprint",
+    "coverage",
+    "summary",
+    "payload"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

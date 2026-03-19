@@ -141,26 +141,6 @@ vi.mock('@superdoc/components/CommentsLayer/CommentsLayer.vue', () => ({
   default: CommentsLayerStub,
 }));
 
-vi.mock('naive-ui', () => ({
-  NConfigProvider: defineComponent({
-    name: 'NConfigProvider',
-    props: {
-      abstract: Boolean,
-      preflightStyleDisabled: Boolean,
-      styleMountTarget: Object,
-    },
-    setup(_, { slots }) {
-      return () => slots.default?.();
-    },
-  }),
-  NMessageProvider: defineComponent({
-    name: 'NMessageProvider',
-    setup(_, { slots }) {
-      return () => h('div', { class: 'n-message-provider-stub' }, slots.default?.());
-    },
-  }),
-}));
-
 const buildSuperdocStore = () => {
   const documents = ref([
     {
@@ -197,15 +177,50 @@ const buildCommentsStore = () => ({
   handleEditorLocationsUpdate: vi.fn(),
   clearEditorCommentPositions: vi.fn(),
   handleTrackedChangeUpdate: vi.fn(),
+  syncTrackedChangeComments: vi.fn(),
   removePendingComment: vi.fn(),
   setActiveComment: vi.fn(),
+  addComment: vi.fn(),
+  getComment: vi.fn(() => null),
+  getCommentDocumentId: vi.fn((comment) => {
+    if (!comment) return null;
+    if (comment.fileId != null) return String(comment.fileId);
+    if (comment.documentId != null) return String(comment.documentId);
+    if (comment.selection?.documentId != null) return String(comment.selection.documentId);
+    return null;
+  }),
+  belongsToDocument: vi.fn((comment, activeDocumentId) => {
+    if (!activeDocumentId) return false;
+    const commentDocumentId =
+      comment?.fileId != null
+        ? String(comment.fileId)
+        : comment?.documentId != null
+          ? String(comment.documentId)
+          : comment?.selection?.documentId != null
+            ? String(comment.selection.documentId)
+            : null;
+    if (commentDocumentId) return commentDocumentId === String(activeDocumentId);
+
+    const docs = superdocStoreStub?.documents?.value;
+    if (Array.isArray(docs) && docs.length === 1) {
+      const onlyDocumentId = docs[0]?.id != null ? String(docs[0].id) : null;
+      return onlyDocumentId === String(activeDocumentId);
+    }
+
+    return false;
+  }),
+  COMMENT_EVENTS: {
+    ADD: 'add',
+    UPDATE: 'update',
+    DELETED: 'deleted',
+  },
   processLoadedDocxComments: vi.fn(),
   translateCommentsForExport: vi.fn(() => []),
   getPendingComment: vi.fn(() => ({ commentId: 'pending', selection: { getValues: () => ({}) } })),
   commentsParentElement: null,
   editorCommentIds: [],
   proxy: null,
-  commentsList: [],
+  commentsList: ref([]),
   lastUpdate: null,
   gesturePositions: ref([]),
   suppressInternalExternal: ref(false),
@@ -464,6 +479,384 @@ describe('SuperDoc.vue', () => {
     expect(superdocStub.emit).toHaveBeenCalledWith('exception', { error: expect.any(Error), editor: editorMock });
   });
 
+  it('handles replay comment update/delete events and triggers tracked-change resync', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = { commentId: 'c-1', commentText: 'Old text' };
+
+    commentsStoreStub.getComment.mockImplementation((id) => (id === 'c-1' ? existingComment : null));
+    commentsStoreStub.commentsList.value = [
+      existingComment,
+      { commentId: 'c-2', parentCommentId: 'c-1', commentText: 'Reply' },
+      { commentId: 'tc-child', trackedChangeParentId: 'c-1', commentText: 'Tracked thread comment' },
+    ];
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: { commentId: 'c-1', commentText: 'Updated text' },
+    });
+    expect(existingComment.commentText).toBe('Updated text');
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1' },
+    });
+    expect(commentsStoreStub.commentsList.value).toEqual([]);
+
+    options.onCommentsUpdate({ type: 'replayCompleted' });
+    await nextTick();
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: superdocStub.activeEditor,
+    });
+    commentsStoreStub.syncTrackedChangeComments.mockClear();
+
+    options.onCommentLocationsUpdate({ allCommentPositions: { 'tc-new': { start: 1, end: 2 } } });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+  });
+
+  it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'old-runtime-id',
+      importedId: 'imp-1',
+      commentText: 'Old text',
+      fileId: 'doc-1',
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
+    const otherDocumentComment = {
+      commentId: 'doc2-id',
+      importedId: 'imp-1',
+      commentText: 'Doc 2 text',
+      fileId: 'doc-2',
+    };
+
+    // Keep the non-active-document comment first to ensure active selection does
+    // not fall back to global importedId matching.
+    commentsStoreStub.commentsList.value = [otherDocumentComment, existingComment];
+    commentsStoreStub.addComment.mockClear();
+    commentsStoreStub.setActiveComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'new-runtime-id',
+        importedId: 'imp-1',
+        commentText: 'Updated text',
+      },
+    });
+    await nextTick();
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(commentsStoreStub.commentsList.value).toHaveLength(2);
+    expect(existingComment.commentId).toBe('old-runtime-id');
+    expect(existingComment.importedId).toBe('imp-1');
+    expect(existingComment.getValues().commentId).toBe('old-runtime-id');
+    expect(existingComment.getValues().importedId).toBe('imp-1');
+    expect(existingComment.commentText).toBe('Updated text');
+    expect(otherDocumentComment.commentId).toBe('doc2-id');
+    expect(otherDocumentComment.commentText).toBe('Doc 2 text');
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalled();
+  });
+
+  it('updates docxCommentJSON from replayed elements for imported comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'old-runtime-id',
+      importedId: 'imp-1',
+      commentText: 'Old text',
+      fileId: 'doc-1',
+      docxCommentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'old' }] }],
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    const updatedElements = [{ type: 'paragraph', content: [{ type: 'text', text: 'new' }] }];
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'new-runtime-id',
+        importedId: 'imp-1',
+        text: 'Updated text',
+        elements: updatedElements,
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.commentText).toBe('Updated text');
+    expect(existingComment.docxCommentJSON).toEqual(updatedElements);
+  });
+
+  it('updates replayed parent linkage fields for existing comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'reply-1',
+      importedId: 'imp-reply-1',
+      parentCommentId: 'parent-old',
+      trackedChangeParentId: 'tc-parent-old',
+      fileId: 'doc-1',
+      commentText: 'Reply',
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'reply-1',
+        importedId: 'imp-reply-1',
+        parentCommentId: 'parent-new',
+        trackedChangeParentId: 'tc-parent-new',
+        threadingParentCommentId: 'thread-parent-new',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.parentCommentId).toBe('parent-new');
+    expect(existingComment.trackedChangeParentId).toBe('tc-parent-new');
+    expect(existingComment.threadingParentCommentId).toBe('thread-parent-new');
+  });
+
+  it('maps replayed isDone updates to resolved fields when explicit resolved metadata is missing', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'c-1',
+      importedId: 'imp-1',
+      commentText: 'Old text',
+      fileId: 'doc-1',
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+      resolvedTime: null,
+      resolvedByEmail: null,
+      resolvedByName: null,
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'c-1',
+        importedId: 'imp-1',
+        isDone: true,
+        resolvedTime: null,
+        resolvedByEmail: null,
+        resolvedByName: null,
+        creatorEmail: 'imported@example.com',
+        creatorName: 'Imported Author',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.resolvedTime).not.toBeNull();
+    expect(existingComment.resolvedByEmail).toBe('imported@example.com');
+    expect(existingComment.resolvedByName).toBe('Imported Author');
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'c-1',
+        importedId: 'imp-1',
+        isDone: false,
+      },
+    });
+
+    expect(existingComment.resolvedTime).toBeNull();
+    expect(existingComment.resolvedByEmail).toBeNull();
+    expect(existingComment.resolvedByName).toBeNull();
+  });
+
+  it('maps replay-added elements to docxCommentJSON for imported comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.addComment.mockClear();
+
+    const addedElements = [{ type: 'paragraph', content: [{ type: 'text', text: 'added' }] }];
+    options.onCommentsUpdate({
+      type: 'add',
+      comment: {
+        commentId: 'new-add-id',
+        importedId: 'imp-add',
+        text: 'Added text',
+        elements: addedElements,
+      },
+    });
+
+    expect(commentsStoreStub.addComment).toHaveBeenCalledTimes(1);
+    const [{ comment: addedComment }] = commentsStoreStub.addComment.mock.calls[0];
+    expect(addedComment.commentText).toBe('Added text');
+    expect(addedComment.docxCommentJSON).toEqual(addedElements);
+  });
+
+  it('does not drop replay add when same id exists only in another document', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'shared-id', importedId: 'shared-imported-id', fileId: 'doc-2', commentText: 'Doc 2 comment' },
+    ];
+    commentsStoreStub.getComment.mockImplementation((id) =>
+      commentsStoreStub.commentsList.value.find((comment) => comment.commentId === id || comment.importedId === id),
+    );
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'add',
+      comment: {
+        commentId: 'shared-id',
+        importedId: 'shared-imported-id',
+        commentText: 'Doc 1 replay add',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).toHaveBeenCalledTimes(1);
+    const [{ comment: addedComment }] = commentsStoreStub.addComment.mock.calls[0];
+    expect(addedComment.commentId).toBe('shared-id');
+    expect(addedComment.importedId).toBe('shared-imported-id');
+    expect(addedComment.fileId).toBe('doc-1');
+  });
+
+  it('removes replay-deleted comments when payload commentId is stale but importedId matches', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'live-runtime-id', importedId: 'imp-1', commentText: 'Parent' },
+      { commentId: 'child-1', parentCommentId: 'live-runtime-id', commentText: 'Reply' },
+      { commentId: 'other', commentText: 'Unrelated' },
+    ];
+    commentsStoreStub.activeComment.value = 'child-1';
+    commentsStoreStub.setActiveComment.mockClear();
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'stale-runtime-id', importedId: 'imp-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([{ commentId: 'other', commentText: 'Unrelated' }]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('clears active comment when replay deletion removes the active reply', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'c-1', commentText: 'Parent' },
+      { commentId: 'c-2', parentCommentId: 'c-1', commentText: 'Reply' },
+    ];
+    commentsStoreStub.activeComment.value = 'c-2';
+    commentsStoreStub.setActiveComment.mockClear();
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('removes full reply subtree when replay deletion removes a parent comment', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'c-1', commentText: 'Parent' },
+      { commentId: 'c-2', parentCommentId: 'c-1', commentText: 'Child' },
+      { commentId: 'c-3', parentCommentId: 'c-2', commentText: 'Grandchild' },
+      { commentId: 'c-4', trackedChangeParentId: 'c-3', commentText: 'Tracked descendant' },
+      { commentId: 'c-99', commentText: 'Unrelated' },
+    ];
+    commentsStoreStub.activeComment.value = 'c-3';
+    commentsStoreStub.setActiveComment.mockClear();
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([{ commentId: 'c-99', commentText: 'Unrelated' }]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('scopes replay deletion subtree to the active document when IDs overlap across documents', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'c-1', importedId: 'imp-1', fileId: 'doc-1', commentText: 'Doc 1 parent' },
+      { commentId: 'c-2', parentCommentId: 'c-1', fileId: 'doc-1', commentText: 'Doc 1 child' },
+      { commentId: 'c-1', importedId: 'imp-1', fileId: 'doc-2', commentText: 'Doc 2 parent' },
+      { commentId: 'c-3', parentCommentId: 'c-1', fileId: 'doc-2', commentText: 'Doc 2 child' },
+    ];
+    commentsStoreStub.activeComment.value = 'c-3';
+    commentsStoreStub.setActiveComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1', importedId: 'imp-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([
+      { commentId: 'c-1', importedId: 'imp-1', fileId: 'doc-2', commentText: 'Doc 2 parent' },
+      { commentId: 'c-3', parentCommentId: 'c-1', fileId: 'doc-2', commentText: 'Doc 2 child' },
+    ]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalledWith(superdocStub, null);
+  });
+
   it('passes slash menu and context menu options through to SuperEditor', async () => {
     const superdocStub = createSuperdocStub();
     const slashMenuConfig = {
@@ -502,6 +895,102 @@ describe('SuperDoc.vue', () => {
     expect(doc.setPresentationEditor).toHaveBeenCalledWith(presentationEditor);
     expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(true);
     expect(presentationEditor.on).toHaveBeenCalledWith('commentPositions', expect.any(Function));
+  });
+
+  it('forwards header/footer presentation events through the public update callbacks', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.onTransaction = vi.fn();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    const listeners = {};
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const bodyEditor = { options: { documentId: 'doc-1' } };
+    const sourceEditor = { options: { documentId: 'header-doc' } };
+
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', {
+      editor: bodyEditor,
+      presentationEditor,
+    });
+    await nextTick();
+
+    listeners.headerFooterUpdate({
+      editor: bodyEditor,
+      sourceEditor,
+      surface: 'header',
+      headerId: 'rId-header-default',
+      sectionType: 'default',
+    });
+    expect(superdocStub.emit).toHaveBeenCalledWith('editor-update', {
+      editor: bodyEditor,
+      sourceEditor,
+      surface: 'header',
+      headerId: 'rId-header-default',
+      sectionType: 'default',
+    });
+
+    const transaction = { docChanged: true, getMeta: vi.fn(() => null) };
+    listeners.headerFooterTransaction({
+      editor: bodyEditor,
+      sourceEditor,
+      transaction,
+      duration: 12,
+      surface: 'footer',
+      headerId: 'rId-footer-default',
+      sectionType: 'default',
+    });
+    expect(superdocStub.config.onTransaction).toHaveBeenCalledWith({
+      editor: bodyEditor,
+      sourceEditor,
+      transaction,
+      duration: 12,
+      surface: 'footer',
+      headerId: 'rId-footer-default',
+      sectionType: 'default',
+    });
+  });
+
+  it('falls back to sourceEditor for body update and transaction payloads', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.onTransaction = vi.fn();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const bodyEditor = { options: { documentId: 'doc-1' } };
+    const transaction = { docChanged: true, getMeta: vi.fn(() => null) };
+
+    options.onUpdate({ sourceEditor: bodyEditor });
+    expect(superdocStub.emit).toHaveBeenCalledWith('editor-update', {
+      editor: bodyEditor,
+      sourceEditor: bodyEditor,
+      surface: 'body',
+      headerId: null,
+      sectionType: null,
+    });
+
+    options.onTransaction({
+      sourceEditor: bodyEditor,
+      transaction,
+      duration: 7,
+    });
+    expect(superdocStub.config.onTransaction).toHaveBeenCalledWith({
+      editor: bodyEditor,
+      sourceEditor: bodyEditor,
+      transaction,
+      duration: 7,
+      surface: 'body',
+      headerId: null,
+      sectionType: null,
+    });
   });
 
   it('shows comments sidebar and tools, handles menu actions', async () => {
@@ -552,7 +1041,7 @@ describe('SuperDoc.vue', () => {
 
     const handleToolClick = wrapper.vm.$.setupState.handleToolClick;
     handleToolClick('comments');
-    expect(commentsStoreStub.showAddComment).toHaveBeenCalledWith(superdocStub);
+    expect(commentsStoreStub.showAddComment).toHaveBeenCalledWith(superdocStub, 20);
 
     handleToolClick('ai');
     const aiMockResult = useAiMock.mock.results.at(-1)?.value;

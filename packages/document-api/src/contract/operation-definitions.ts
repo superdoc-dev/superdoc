@@ -51,7 +51,19 @@ export type ReferenceGroupKey =
   | 'history'
   | 'toc'
   | 'images'
-  | 'hyperlinks';
+  | 'hyperlinks'
+  | 'headerFooters'
+  | 'contentControls'
+  | 'bookmarks'
+  | 'footnotes'
+  | 'crossRefs'
+  | 'index'
+  | 'captions'
+  | 'fields'
+  | 'citations'
+  | 'authorities'
+  | 'ranges'
+  | 'diff';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -66,9 +78,33 @@ export interface OperationDefinitionEntry {
   referenceDocPath: string;
   referenceGroup: ReferenceGroupKey;
   skipAsATool?: boolean;
-  /** When true, this tool is included in the default "essential" tool set. */
-  essential?: boolean;
+  /** Which intent tool this operation belongs to (e.g. 'edit' → superdoc_edit). */
+  intentGroup?: string;
+  /** Action enum value within the intent group (e.g. 'insert', 'replace'). */
+  intentAction?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Intent group metadata — tool-level names and descriptions
+// ---------------------------------------------------------------------------
+
+export type IntentGroupMeta = { toolName: string; description: string };
+
+export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
+  search: { toolName: 'superdoc_search', description: 'Find text or nodes in the document' },
+  get_content: { toolName: 'superdoc_get_content', description: 'Read document content in various formats' },
+  edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
+  create: { toolName: 'superdoc_create', description: 'Create structural block elements' },
+  format: { toolName: 'superdoc_format', description: 'Change text and paragraph formatting' },
+  table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
+  list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },
+  comment: { toolName: 'superdoc_comment', description: 'Comment threads — create, edit, delete' },
+  track_changes: { toolName: 'superdoc_track_changes', description: 'Review and resolve tracked changes' },
+  link: { toolName: 'superdoc_link', description: 'Manage hyperlinks' },
+  image: { toolName: 'superdoc_image', description: 'Image placement and properties' },
+  section: { toolName: 'superdoc_section', description: 'Page layout, margins, columns' },
+  mutations: { toolName: 'superdoc_mutations', description: 'Atomic multi-step batch edits (escape hatch)' },
+};
 
 // ---------------------------------------------------------------------------
 // Metadata helpers (moved from command-catalog.ts)
@@ -154,10 +190,24 @@ const T_PLAN_ENGINE = [
 // All mutation operations include CAPABILITY_UNAVAILABLE (contract invariant).
 // _TRACKED suffix signals the operation also supports tracked change mode.
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
-const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
 
 // Image operations can throw AMBIGUOUS_TARGET when multiple images share an sdImageId.
 const T_IMAGE_COMMAND = ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
+
+// Content controls throw-code families
+const T_CC_READ = ['TARGET_NOT_FOUND', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_CC_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'AMBIGUOUS_TARGET',
+  'INVALID_INPUT',
+  'LOCK_VIOLATION',
+  'REVISION_MISMATCH',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
+const T_CC_TYPED = [...T_CC_MUTATION, 'TYPE_MISMATCH'] as const;
+const T_CC_TYPED_READ = [...T_CC_READ, 'TYPE_MISMATCH'] as const;
+const T_CC_RAW = ['TARGET_NOT_FOUND', 'INVALID_INPUT', 'REVISION_MISMATCH', 'CAPABILITY_UNAVAILABLE'] as const;
 
 const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
 const T_SECTION_CREATE = [
@@ -178,6 +228,19 @@ const T_SECTION_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 const T_SECTION_SETTINGS_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'] as const;
+const T_HEADER_FOOTER_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'INVALID_INPUT',
+  'CAPABILITY_UNAVAILABLE',
+  'INTERNAL_ERROR',
+] as const;
+
+// Reference-namespace throw-code shorthand arrays
+const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
+const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_REF_MUTATION_REMOVE = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_REF_INSERT = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
 
 type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
 
@@ -219,15 +282,27 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
 // ---------------------------------------------------------------------------
 
 export const OPERATION_DEFINITIONS = {
-  find: {
-    memberPath: 'find',
-    description: 'Search the document for nodes matching type, text, or attribute criteria.',
-    expectedResult:
-      'Returns a FindOutput with matched items array and total count, or an empty items array if no nodes match.',
+  get: {
+    memberPath: 'get',
+    description: 'Read the full document as an SDDocument structure.',
+    expectedResult: 'Returns an SDDocument with body content projected into SDM/1 canonical shapes.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'get.mdx',
+    referenceGroup: 'core' as ReferenceGroupKey,
+  },
+  find: {
+    memberPath: 'find',
+    description:
+      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.',
+    expectedResult:
+      'Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE'],
       deterministicTargetResolution: false,
     }),
     referenceDocPath: 'find.mdx',
@@ -237,11 +312,11 @@ export const OPERATION_DEFINITIONS = {
   getNode: {
     memberPath: 'getNode',
     description: 'Retrieve a single node by target position.',
-    expectedResult: 'Returns a NodeInfo object with the node type, address, content, and typed properties.',
+    expectedResult: 'Returns an SDNodeResult envelope with the projected SDM/1 node and canonical address.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_NOT_FOUND,
+      throws: [...T_NOT_FOUND, 'ADDRESS_STALE'],
     }),
     referenceDocPath: 'get-node.mdx',
     referenceGroup: 'core',
@@ -249,7 +324,7 @@ export const OPERATION_DEFINITIONS = {
   getNodeById: {
     memberPath: 'getNodeById',
     description: 'Retrieve a single node by its unique ID.',
-    expectedResult: 'Returns a NodeInfo object with the node type, address, content, and typed properties.',
+    expectedResult: 'Returns an SDNodeResult envelope with the projected SDM/1 node and canonical address.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -257,7 +332,6 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'get-node-by-id.mdx',
     referenceGroup: 'core',
-    essential: true,
   },
   getText: {
     memberPath: 'getText',
@@ -267,7 +341,9 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
-    essential: true,
+
+    intentGroup: 'get_content',
+    intentAction: 'text',
   },
   getMarkdown: {
     memberPath: 'getMarkdown',
@@ -277,6 +353,8 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-markdown.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'markdown',
   },
   getHtml: {
     memberPath: 'getHtml',
@@ -286,15 +364,30 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-html.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'html',
+  },
+  markdownToFragment: {
+    memberPath: 'markdownToFragment',
+    description: 'Convert a Markdown string into an SDM/1 structural fragment.',
+    expectedResult: 'Returns an SDMarkdownToFragmentResult with the converted fragment, lossy flag, and diagnostics.',
+    requiresDocumentContext: true,
+    metadata: readOperation(),
+    referenceDocPath: 'markdown-to-fragment.mdx',
+    referenceGroup: 'core',
   },
   info: {
     memberPath: 'info',
-    description: 'Return document metadata including revision, node count, and capabilities.',
-    expectedResult: 'Returns a DocumentInfo object with revision, word/paragraph/heading counts, and capability flags.',
+    description:
+      'Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities.',
+    expectedResult:
+      'Returns a DocumentInfo object with counts (words, characters, paragraphs, headings, tables, images, comments, trackedChanges, sdtFields, lists, and optionally pages when pagination is active), document outline, capability flags, and revision.',
     requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',
     referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'info',
   },
 
   clearContent: {
@@ -316,57 +409,133 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field.',
+      'Insert content into the document. Two input shapes: ' +
+      'legacy string-based (value + type) inserts inline content at a text position within an existing block; ' +
+      'structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. ' +
+      'When target is omitted, content appends at the end of the document. ' +
+      'Legacy mode supports text (default), markdown, and html content types via the `type` field. ' +
+      'Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.',
+      'Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'CAPABILITY_UNAVAILABLE', 'UNSUPPORTED_ENVIRONMENT'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'NO_OP',
+        'CAPABILITY_UNAVAILABLE',
+        'UNSUPPORTED_ENVIRONMENT',
+        'INVALID_NESTING',
+        'INVALID_PLACEMENT',
+        'INVALID_PAYLOAD',
+        'CAPABILITY_UNSUPPORTED',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'INVALID_CONTEXT',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'INVALID_INPUT',
+      ],
+      throws: [
+        ...T_NOT_FOUND_CAPABLE,
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'CAPABILITY_UNSUPPORTED',
+      ],
     }),
     referenceDocPath: 'insert.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'insert',
   },
   replace: {
     memberPath: 'replace',
-    description: 'Replace content at a target position with new text or inline content.',
+    description:
+      'Replace content at a contiguous document selection. ' +
+      'Text path accepts a SelectionTarget or ref plus replacement text. ' +
+      'Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
+      'Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'NO_OP',
+        'INVALID_NESTING',
+        'INVALID_PLACEMENT',
+        'INVALID_PAYLOAD',
+        'CAPABILITY_UNSUPPORTED',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'INVALID_CONTEXT',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'INVALID_INPUT',
+      ],
+      throws: [
+        ...T_NOT_FOUND_CAPABLE,
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'CAPABILITY_UNSUPPORTED',
+      ],
     }),
     referenceDocPath: 'replace.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'replace',
   },
   delete: {
     memberPath: 'delete',
-    description: 'Delete content at a target position.',
+    description:
+      'Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode.',
     expectedResult:
-      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is already empty.',
+      'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is collapsed or empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
+    intentGroup: 'edit',
+    intentAction: 'delete',
+  },
+
+  'blocks.list': {
+    memberPath: 'blocks.list',
+    description:
+      'List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.',
+    expectedResult:
+      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['INVALID_INPUT'],
+    }),
+    referenceDocPath: 'blocks/list.mdx',
+    referenceGroup: 'blocks',
   },
 
   'blocks.delete': {
     memberPath: 'blocks.delete',
     description: 'Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.',
-    expectedResult: 'Returns a BlocksDeleteResult receipt confirming the block was removed from the document.',
+    expectedResult:
+      'Returns a BlocksDeleteResult receipt confirming the block was removed, including a deletedBlock summary with ordinal, nodeType, and textPreview.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -386,6 +555,31 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'blocks',
   },
 
+  'blocks.deleteRange': {
+    memberPath: 'blocks.deleteRange',
+    description:
+      'Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview.',
+    expectedResult:
+      'Returns a BlocksDeleteRangeResult with deletedCount, deletedBlocks array (each with ordinal, nodeId, nodeType, textPreview), before/after revision, and dryRun flag.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: [
+        'TARGET_NOT_FOUND',
+        'AMBIGUOUS_TARGET',
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'CAPABILITY_UNAVAILABLE',
+        'INTERNAL_ERROR',
+      ],
+    }),
+    referenceDocPath: 'blocks/delete-range.mdx',
+    referenceGroup: 'blocks',
+  },
+
   'format.apply': {
     memberPath: 'format.apply',
     description: 'Apply inline run-property patch changes to the target range with explicit set/clear semantics.',
@@ -400,6 +594,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
+    intentGroup: 'format',
+    intentAction: 'inline',
   },
   ...FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS,
 
@@ -423,7 +619,7 @@ export const OPERATION_DEFINITIONS = {
 
   'create.paragraph': {
     memberPath: 'create.paragraph',
-    description: 'Create a new paragraph at the target position.',
+    description: 'Create a standalone paragraph at the target position. To add a list item, use lists.insert instead.',
     expectedResult: 'Returns a CreateParagraphResult with the new paragraph block ID and address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -435,6 +631,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'paragraph',
   },
   'create.heading': {
     memberPath: 'create.heading',
@@ -450,6 +648,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
+    intentGroup: 'create',
+    intentAction: 'heading',
   },
   'create.sectionBreak': {
     memberPath: 'create.sectionBreak',
@@ -627,7 +827,8 @@ export const OPERATION_DEFINITIONS = {
   'sections.setOddEvenHeadersFooters': {
     memberPath: 'sections.setOddEvenHeadersFooters',
     description: 'Enable or disable odd/even header-footer mode in document settings.',
-    expectedResult: 'Returns a DocumentMutationResult receipt; reports NO_OP if the odd/even setting already matches.',
+    expectedResult:
+      'Returns a DocumentMutationResult (not SectionMutationResult) because odd/even headers-footers is a document-level setting, not per-section. Reports NO_OP if the setting already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -762,8 +963,10 @@ export const OPERATION_DEFINITIONS = {
 
   'styles.paragraph.setStyle': {
     memberPath: 'styles.paragraph.setStyle',
-    description: 'Set the paragraph style reference (w:pStyle) on a paragraph-like block.',
-    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the style already matches.',
+    description:
+      'Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references.',
+    expectedResult:
+      'Returns a ParagraphMutationResult; reports NO_OP if the style already matches. When the style changes, direct run formatting is cleared while character-style references are preserved.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -774,6 +977,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'styles/paragraph/set-style.mdx',
     referenceGroup: 'styles.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_style',
   },
   'styles.paragraph.clearStyle': {
     memberPath: 'styles.paragraph.clearStyle',
@@ -823,6 +1028,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-alignment.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_alignment',
   },
   'format.paragraph.clearAlignment': {
     memberPath: 'format.paragraph.clearAlignment',
@@ -853,6 +1060,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-indentation.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_indentation',
   },
   'format.paragraph.clearIndentation': {
     memberPath: 'format.paragraph.clearIndentation',
@@ -883,6 +1092,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/paragraph/set-spacing.mdx',
     referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_spacing',
   },
   'format.paragraph.clearSpacing': {
     memberPath: 'format.paragraph.clearSpacing',
@@ -1076,7 +1287,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.insert': {
     memberPath: 'lists.insert',
-    description: 'Insert a new list at the target position.',
+    description:
+      'Insert a new list item before or after an existing list item. The new item inherits the target list context.',
     expectedResult: 'Returns a ListsInsertResult with the new list item address and block ID.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1088,21 +1300,26 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/insert.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'insert',
   },
   'lists.create': {
     memberPath: 'lists.create',
-    description: 'Create a new list from one or more paragraphs, or convert existing paragraphs into a new list.',
+    description:
+      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.',
     expectedResult: 'Returns a ListsCreateResult with the new listId and the first item address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'LEVEL_OUT_OF_RANGE'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: ['INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'INVALID_INPUT', 'NO_COMPATIBLE_PREVIOUS'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'lists/create.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'create',
   },
   'lists.attach': {
     memberPath: 'lists.attach',
@@ -1133,6 +1350,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/detach.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'detach',
   },
   'lists.indent': {
     memberPath: 'lists.indent',
@@ -1149,6 +1368,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/indent.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'indent',
   },
   'lists.outdent': {
     memberPath: 'lists.outdent',
@@ -1164,6 +1385,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/outdent.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'outdent',
   },
   'lists.join': {
     memberPath: 'lists.join',
@@ -1226,6 +1449,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-level.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_level',
   },
   'lists.setValue': {
     memberPath: 'lists.setValue',
@@ -1304,7 +1529,8 @@ export const OPERATION_DEFINITIONS = {
   // SD-1973 — List formatting and templates
   'lists.applyTemplate': {
     memberPath: 'lists.applyTemplate',
-    description: 'Apply a captured ListTemplate to the target list, optionally filtered to specific levels.',
+    description:
+      'Advanced alias for lists.applyStyle. Apply a captured ListTemplate to the target list (abstract-scoped, no clone-on-write).',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1348,10 +1574,13 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-type.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_type',
   },
   'lists.captureTemplate': {
     memberPath: 'lists.captureTemplate',
-    description: 'Capture the formatting of a list as a reusable ListTemplate.',
+    description:
+      'Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting).',
     expectedResult: 'Returns a ListsCaptureTemplateResult containing the captured template.',
     requiresDocumentContext: true,
     metadata: readOperation({
@@ -1364,7 +1593,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.setLevelNumbering': {
     memberPath: 'lists.setLevelNumbering',
-    description: 'Set the numbering format, pattern, and optional start value for a specific list level.',
+    description:
+      'Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1490,6 +1720,118 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
+  // SD-2025 — User-facing list style operations
+  'lists.getStyle': {
+    memberPath: 'lists.getStyle',
+    description:
+      'Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle.',
+    expectedResult: 'Returns a ListsGetStyleResult containing the captured style.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
+    }),
+    referenceDocPath: 'lists/get-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.applyStyle': {
+    memberPath: 'lists.applyStyle',
+    description:
+      'Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/apply-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.restartAt': {
+    memberPath: 'lists.restartAt',
+    description:
+      'Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/restart-at.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelNumberStyle': {
+    memberPath: 'lists.setLevelNumberStyle',
+    description:
+      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-number-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelText': {
+    memberPath: 'lists.setLevelText',
+    description:
+      'Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-text.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelStart': {
+    memberPath: 'lists.setLevelStart',
+    description:
+      'Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-start.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelLayout': {
+    memberPath: 'lists.setLevelLayout',
+    description:
+      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all values already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-layout.mdx',
+    referenceGroup: 'lists',
+  },
+
   'comments.create': {
     memberPath: 'comments.create',
     description: 'Create a new comment thread (or reply when parentCommentId is given).',
@@ -1505,6 +1847,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/create.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'create',
   },
   'comments.patch': {
     memberPath: 'comments.patch',
@@ -1520,6 +1864,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/patch.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'update',
   },
   'comments.delete': {
     memberPath: 'comments.delete',
@@ -1536,6 +1882,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/delete.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'delete',
   },
   'comments.get': {
     memberPath: 'comments.get',
@@ -1548,6 +1896,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/get.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'get',
   },
   'comments.list': {
     memberPath: 'comments.list',
@@ -1560,6 +1910,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'comments/list.mdx',
     referenceGroup: 'comments',
+    intentGroup: 'comment',
+    intentAction: 'list',
   },
 
   'trackChanges.list': {
@@ -1573,6 +1925,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'track-changes/list.mdx',
     referenceGroup: 'trackChanges',
+    intentGroup: 'track_changes',
+    intentAction: 'list',
   },
   'trackChanges.get': {
     memberPath: 'trackChanges.get',
@@ -1601,11 +1955,14 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'track-changes/decide.mdx',
     referenceGroup: 'trackChanges',
+    intentGroup: 'track_changes',
+    intentAction: 'decide',
   },
 
   'query.match': {
     memberPath: 'query.match',
-    description: 'Deterministic selector-based search with cardinality contracts for mutation targeting.',
+    description:
+      'Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation.',
     expectedResult: 'Returns a QueryMatchOutput with the resolved target address and cardinality metadata.',
     requiresDocumentContext: true,
     metadata: readOperation({
@@ -1615,7 +1972,25 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'query/match.mdx',
     referenceGroup: 'query',
-    essential: true,
+
+    intentGroup: 'search',
+    intentAction: 'match',
+  },
+
+  'ranges.resolve': {
+    memberPath: 'ranges.resolve',
+    description:
+      'Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic.',
+    expectedResult:
+      'Returns a ResolveRangeOutput with evaluatedRevision, handle.ref, target (SelectionTarget), and preview metadata.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_TARGET', 'TARGET_NOT_FOUND', 'INVALID_CONTEXT', 'REVISION_MISMATCH'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'ranges/resolve.mdx',
+    referenceGroup: 'ranges',
   },
 
   'mutations.preview': {
@@ -1630,6 +2005,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'mutations/preview.mdx',
     referenceGroup: 'mutations',
+    intentGroup: 'mutations',
+    intentAction: 'preview',
   },
 
   'mutations.apply': {
@@ -1641,13 +2018,20 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'non-idempotent',
       supportsDryRun: false,
       supportsTrackedMode: true,
-      possibleFailureCodes: NONE_FAILURES,
-      throws: T_PLAN_ENGINE,
+      possibleFailureCodes: ['INVALID_CONTEXT'],
+      throws: [
+        ...T_PLAN_ENGINE,
+        'DUPLICATE_ID',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'CAPABILITY_UNSUPPORTED',
+      ],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'mutations/apply.mdx',
     referenceGroup: 'mutations',
-    essential: true,
+    intentGroup: 'mutations',
+    intentAction: 'apply',
   },
 
   'capabilities.get': {
@@ -1677,7 +2061,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
     }),
     referenceDocPath: 'create/table.mdx',
     referenceGroup: 'create',
@@ -1712,7 +2096,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete.mdx',
     referenceGroup: 'tables',
@@ -1814,7 +2198,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/insert-row.mdx',
     referenceGroup: 'tables',
@@ -1829,7 +2213,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete-row.mdx',
     referenceGroup: 'tables',
@@ -1894,7 +2278,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/insert-column.mdx',
     referenceGroup: 'tables',
@@ -1909,7 +2293,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'tables/delete-column.mdx',
     referenceGroup: 'tables',
@@ -2531,7 +2915,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'history.undo',
     description: 'Undo the most recent history-safe mutation in the active editor.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the undo stack is empty.',
+      'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -2542,14 +2926,16 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/undo.mdx',
     referenceGroup: 'history',
-    essential: true,
+
+    intentGroup: 'edit',
+    intentAction: 'undo',
   },
 
   'history.redo': {
     memberPath: 'history.redo',
     description: 'Redo the most recently undone action in the active editor.',
     expectedResult:
-      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the redo stack is empty.',
+      'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -2560,6 +2946,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/redo.mdx',
     referenceGroup: 'history',
+    intentGroup: 'edit',
+    intentAction: 'redo',
   },
 
   // -------------------------------------------------------------------------
@@ -3114,6 +3502,1946 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'hyperlinks/remove.mdx',
     referenceGroup: 'hyperlinks',
+  },
+
+  // =========================================================================
+  // headerFooters.*
+  // =========================================================================
+
+  'headerFooters.list': {
+    memberPath: 'headerFooters.list',
+    description: 'List header/footer slot entries across sections.',
+    expectedResult: 'Returns a paginated DiscoveryOutput of HeaderFooterSlotEntry items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['INVALID_INPUT', 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'header-footers/list.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.get': {
+    memberPath: 'headerFooters.get',
+    description: 'Get a single header/footer slot entry by address.',
+    expectedResult: 'Returns a HeaderFooterSlotEntry for the targeted section slot.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/get.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.resolve': {
+    memberPath: 'headerFooters.resolve',
+    description: 'Resolve the effective header/footer reference for a slot, walking the section inheritance chain.',
+    expectedResult:
+      'Returns a HeaderFooterResolveResult indicating explicit, inherited, or none status with the resolved refId.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/resolve.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.set': {
+    memberPath: 'headerFooters.refs.set',
+    description: 'Set an explicit header/footer reference on a section slot.',
+    expectedResult:
+      'Returns a SectionMutationResult receipt; reports NO_OP if the reference already matches, INVALID_TARGET if the relationship does not exist.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/set.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.clear': {
+    memberPath: 'headerFooters.refs.clear',
+    description: 'Clear an explicit header/footer reference from a section slot.',
+    expectedResult: 'Returns a SectionMutationResult receipt; reports NO_OP if no explicit reference existed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/clear.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.refs.setLinkedToPrevious': {
+    memberPath: 'headerFooters.refs.setLinkedToPrevious',
+    description: 'Link or unlink a header/footer slot to/from the previous section.',
+    expectedResult:
+      'Returns a SectionMutationResult receipt; reports NO_OP if the link state already matches, INVALID_TARGET for the first section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_HEADER_FOOTER_MUTATION,
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/refs/set-linked-to-previous.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.list': {
+    memberPath: 'headerFooters.parts.list',
+    description: 'List unique header/footer part records from document relationships.',
+    expectedResult: 'Returns a paginated DiscoveryOutput of HeaderFooterPartEntry items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'header-footers/parts/list.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.create': {
+    memberPath: 'headerFooters.parts.create',
+    description: 'Create a new independent header/footer part, optionally cloned from an existing part.',
+    expectedResult:
+      'Returns a HeaderFooterPartsMutationResult with the new refId/partPath on success, INVALID_TARGET failure when sourceRefId is invalid or mismatched.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: ['INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/parts/create.mdx',
+    referenceGroup: 'headerFooters',
+  },
+  'headerFooters.parts.delete': {
+    memberPath: 'headerFooters.parts.delete',
+    description: 'Delete a header/footer part and its associated relationship when no section slots reference it.',
+    expectedResult:
+      'Returns a HeaderFooterPartsMutationResult on success; INVALID_TARGET failure if sections still reference the part.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'header-footers/parts/delete.mdx',
+    referenceGroup: 'headerFooters',
+  },
+
+  // =========================================================================
+  // Content Controls (SD-2070)
+  // =========================================================================
+
+  // --- A. Core CRUD + Discovery ---
+
+  'create.contentControl': {
+    memberPath: 'create.contentControl',
+    description: 'Create a new content control (SDT) in the document.',
+    expectedResult: 'Returns a ContentControlMutationResult with the created content control target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/create.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.list': {
+    memberPath: 'contentControls.list',
+    description: 'List all content controls in the document with optional type/tag filtering.',
+    expectedResult: 'Returns a ContentControlsListResult with items and total count.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/list.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.get': {
+    memberPath: 'contentControls.get',
+    description: 'Retrieve a single content control by target.',
+    expectedResult: 'Returns a ContentControlInfo with full properties.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.listInRange': {
+    memberPath: 'contentControls.listInRange',
+    description: 'List content controls within a block range.',
+    expectedResult: 'Returns a ContentControlsListResult scoped to the range.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/list-in-range.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.selectByTag': {
+    memberPath: 'contentControls.selectByTag',
+    description: 'Select content controls matching a specific tag value.',
+    expectedResult: 'Returns a ContentControlsListResult with matching items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/select-by-tag.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.selectByTitle': {
+    memberPath: 'contentControls.selectByTitle',
+    description: 'Select content controls matching a specific title (alias) value.',
+    expectedResult: 'Returns a ContentControlsListResult with matching items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/select-by-title.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.listChildren': {
+    memberPath: 'contentControls.listChildren',
+    description: 'List direct child content controls nested inside the target.',
+    expectedResult: 'Returns a ContentControlsListResult with child items.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/list-children.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.getParent': {
+    memberPath: 'contentControls.getParent',
+    description: 'Get the parent content control of the target, if any.',
+    expectedResult: 'Returns a ContentControlInfo for the parent, or null if no parent SDT exists.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-parent.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.wrap': {
+    memberPath: 'contentControls.wrap',
+    description: 'Wrap existing content with a new content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the wrapper target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/wrap.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.unwrap': {
+    memberPath: 'contentControls.unwrap',
+    description: 'Remove the content control wrapper, preserving its content in place.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already unwrapped.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/unwrap.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.delete': {
+    memberPath: 'contentControls.delete',
+    description: 'Delete a content control and its content from the document.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already removed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/delete.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.copy': {
+    memberPath: 'contentControls.copy',
+    description: 'Copy a content control to a destination position. Copied SDTs receive new IDs.',
+    expectedResult: 'Returns a ContentControlMutationResult with the copied content control target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/copy.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.move': {
+    memberPath: 'contentControls.move',
+    description: 'Move a content control to a new position. Preserves original IDs.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target position.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/move.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.patch': {
+    memberPath: 'contentControls.patch',
+    description: 'Patch metadata properties on a content control (tag, alias, appearance, color, etc.).',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if no fields changed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/patch.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.setLockMode': {
+    memberPath: 'contentControls.setLockMode',
+    description: 'Set the lock mode on a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if lock mode unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/set-lock-mode.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.setType': {
+    memberPath: 'contentControls.setType',
+    description:
+      'Transition a content control to a different semantic type. Metadata-only; no implicit content rewrite.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if type unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/set-type.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.getContent': {
+    memberPath: 'contentControls.getContent',
+    description: 'Get the text content of a content control.',
+    expectedResult: 'Returns a ContentControlsGetContentResult with the content string and format.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.replaceContent': {
+    memberPath: 'contentControls.replaceContent',
+    description: 'Replace the entire content of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/replace-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.clearContent': {
+    memberPath: 'contentControls.clearContent',
+    description: 'Clear all content inside a content control, leaving it empty.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/clear-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.appendContent': {
+    memberPath: 'contentControls.appendContent',
+    description: 'Append content to the end of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/append-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.prependContent': {
+    memberPath: 'contentControls.prependContent',
+    description: 'Prepend content to the beginning of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/prepend-content.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.insertBefore': {
+    memberPath: 'contentControls.insertBefore',
+    description: 'Insert content immediately before a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/insert-before.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.insertAfter': {
+    memberPath: 'contentControls.insertAfter',
+    description: 'Insert content immediately after a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/insert-after.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  // --- B. Data Binding + Raw/Compatibility ---
+
+  'contentControls.getBinding': {
+    memberPath: 'contentControls.getBinding',
+    description: 'Get the data binding metadata (w:dataBinding) of a content control.',
+    expectedResult: 'Returns the ContentControlBinding or null if no binding is set.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-binding.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.setBinding': {
+    memberPath: 'contentControls.setBinding',
+    description: 'Set data binding metadata on a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if binding unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/set-binding.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.clearBinding': {
+    memberPath: 'contentControls.clearBinding',
+    description: 'Remove data binding metadata from a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if no binding existed.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/clear-binding.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.getRawProperties': {
+    memberPath: 'contentControls.getRawProperties',
+    description: 'Get the raw sdtPr properties of a content control as a passthrough hash.',
+    expectedResult: 'Returns a ContentControlsGetRawPropertiesResult with the raw properties.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/get-raw-properties.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.patchRawProperties': {
+    memberPath: 'contentControls.patchRawProperties',
+    description: 'Apply raw XML-level patches to the sdtPr subtree of a content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if no effective changes.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_RAW,
+    }),
+    referenceDocPath: 'content-controls/patch-raw-properties.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.validateWordCompatibility': {
+    memberPath: 'contentControls.validateWordCompatibility',
+    description: 'Validate a content control for Word compatibility issues.',
+    expectedResult: 'Returns a compatibility result with diagnostics.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_READ }),
+    referenceDocPath: 'content-controls/validate-word-compatibility.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.normalizeWordCompatibility': {
+    memberPath: 'contentControls.normalizeWordCompatibility',
+    description: 'Normalize a content control to resolve Word compatibility issues.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already compatible.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_RAW,
+    }),
+    referenceDocPath: 'content-controls/normalize-word-compatibility.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.normalizeTagPayload': {
+    memberPath: 'contentControls.normalizeTagPayload',
+    description: 'Normalize a content control tag between plain-string and JSON-encoded formats.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already normalized.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_RAW,
+    }),
+    referenceDocPath: 'content-controls/normalize-tag-payload.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  // --- C. Typed Controls ---
+
+  'contentControls.text.setMultiline': {
+    memberPath: 'contentControls.text.setMultiline',
+    description: 'Set or clear the multiline attribute on a plain-text content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/text/set-multiline.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.text.setValue': {
+    memberPath: 'contentControls.text.setValue',
+    description: 'Set the text value of a plain-text content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/text/set-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.text.clearValue': {
+    memberPath: 'contentControls.text.clearValue',
+    description: 'Clear the text value of a plain-text content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/text/clear-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setValue': {
+    memberPath: 'contentControls.date.setValue',
+    description: 'Set the date value of a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.clearValue': {
+    memberPath: 'contentControls.date.clearValue',
+    description: 'Clear the date value of a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/clear-value.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setDisplayFormat': {
+    memberPath: 'contentControls.date.setDisplayFormat',
+    description: 'Set the display format string for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-display-format.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setDisplayLocale': {
+    memberPath: 'contentControls.date.setDisplayLocale',
+    description: 'Set the display locale for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-display-locale.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setStorageFormat': {
+    memberPath: 'contentControls.date.setStorageFormat',
+    description: 'Set the XML storage format for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-storage-format.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.date.setCalendar': {
+    memberPath: 'contentControls.date.setCalendar',
+    description: 'Set the calendar type for a date content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/date/set-calendar.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.getState': {
+    memberPath: 'contentControls.checkbox.getState',
+    description: 'Get the checked state of a checkbox content control.',
+    expectedResult: 'Returns a CheckboxGetStateResult with the checked boolean.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_TYPED_READ }),
+    referenceDocPath: 'content-controls/checkbox/get-state.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.setState': {
+    memberPath: 'contentControls.checkbox.setState',
+    description: 'Set the checked state of a checkbox content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/checkbox/set-state.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.toggle': {
+    memberPath: 'contentControls.checkbox.toggle',
+    description: 'Toggle the checked state of a checkbox content control.',
+    expectedResult: 'Returns a ContentControlMutationResult with the updated state.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/checkbox/toggle.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.checkbox.setSymbolPair': {
+    memberPath: 'contentControls.checkbox.setSymbolPair',
+    description: 'Set the checked and unchecked symbol glyphs for a checkbox content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if symbols unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/checkbox/set-symbol-pair.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.choiceList.getItems': {
+    memberPath: 'contentControls.choiceList.getItems',
+    description: 'Get the list items and selected value of a comboBox or dropDownList content control.',
+    expectedResult: 'Returns a ChoiceListGetItemsResult with items and selectedValue.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_TYPED_READ }),
+    referenceDocPath: 'content-controls/choice-list/get-items.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.choiceList.setItems': {
+    memberPath: 'contentControls.choiceList.setItems',
+    description: 'Replace the list items of a comboBox or dropDownList content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if items unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/choice-list/set-items.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.choiceList.setSelected': {
+    memberPath: 'contentControls.choiceList.setSelected',
+    description: 'Set the selected value of a comboBox or dropDownList content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if selection unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/choice-list/set-selected.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  // --- D. Repeating Section + Group ---
+
+  'contentControls.repeatingSection.listItems': {
+    memberPath: 'contentControls.repeatingSection.listItems',
+    description: 'List the repeating section items inside a repeating section content control.',
+    expectedResult: 'Returns a RepeatingSectionListItemsResult with child item info.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ throws: T_CC_TYPED_READ }),
+    referenceDocPath: 'content-controls/repeating-section/list-items.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.insertItemBefore': {
+    memberPath: 'contentControls.repeatingSection.insertItemBefore',
+    description: 'Insert a new item before a specific index in a repeating section.',
+    expectedResult: 'Returns a ContentControlMutationResult with the new item target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/insert-item-before.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.insertItemAfter': {
+    memberPath: 'contentControls.repeatingSection.insertItemAfter',
+    description: 'Insert a new item after a specific index in a repeating section.',
+    expectedResult: 'Returns a ContentControlMutationResult with the new item target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/insert-item-after.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.cloneItem': {
+    memberPath: 'contentControls.repeatingSection.cloneItem',
+    description: 'Clone a repeating section item at the given index. Cloned SDTs receive new IDs.',
+    expectedResult: 'Returns a ContentControlMutationResult with the cloned item target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/clone-item.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.deleteItem': {
+    memberPath: 'contentControls.repeatingSection.deleteItem',
+    description: 'Delete a repeating section item at the given index.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if item does not exist.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/delete-item.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.repeatingSection.setAllowInsertDelete': {
+    memberPath: 'contentControls.repeatingSection.setAllowInsertDelete',
+    description: 'Set the allowInsertDelete flag on a repeating section.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/repeating-section/set-allow-insert-delete.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.group.wrap': {
+    memberPath: 'contentControls.group.wrap',
+    description: 'Wrap a content control inside a new group content control. Always nests; not idempotent.',
+    expectedResult: 'Returns a ContentControlMutationResult with the new group wrapper target.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: [],
+      throws: T_CC_MUTATION,
+    }),
+    referenceDocPath: 'content-controls/group/wrap.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  'contentControls.group.ungroup': {
+    memberPath: 'contentControls.group.ungroup',
+    description: 'Remove the group designation from a group content control.',
+    expectedResult: 'Returns a ContentControlMutationResult; reports NO_OP if not a group.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_CC_TYPED,
+    }),
+    referenceDocPath: 'content-controls/group/ungroup.mdx',
+    referenceGroup: 'contentControls',
+  },
+
+  // Bookmarks
+  // -------------------------------------------------------------------------
+
+  'bookmarks.list': {
+    memberPath: 'bookmarks.list',
+    description: 'List all bookmarks in the document.',
+    expectedResult: 'Returns a BookmarksListResult containing discovered bookmarks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'bookmarks/list.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.get': {
+    memberPath: 'bookmarks.get',
+    description: 'Get detailed information about a specific bookmark.',
+    expectedResult: "Returns a BookmarkInfo object with the bookmark's name, range, and optional table-column data.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'bookmarks/get.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.insert': {
+    memberPath: 'bookmarks.insert',
+    description: 'Insert a new named bookmark at a target location.',
+    expectedResult: 'Returns a BookmarkMutationResult indicating success with the bookmark address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'bookmarks/insert.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.rename': {
+    memberPath: 'bookmarks.rename',
+    description: 'Rename an existing bookmark.',
+    expectedResult:
+      'Returns a BookmarkMutationResult indicating success with the updated bookmark address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'bookmarks/rename.mdx',
+    referenceGroup: 'bookmarks',
+  },
+  'bookmarks.remove': {
+    memberPath: 'bookmarks.remove',
+    description: 'Remove a bookmark from the document.',
+    expectedResult: 'Returns a BookmarkMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'bookmarks/remove.mdx',
+    referenceGroup: 'bookmarks',
+  },
+
+  // -------------------------------------------------------------------------
+  // Footnotes
+  // -------------------------------------------------------------------------
+
+  'footnotes.list': {
+    memberPath: 'footnotes.list',
+    description: 'List all footnotes and endnotes in the document.',
+    expectedResult: 'Returns a FootnotesListResult containing discovered footnotes with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'footnotes/list.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.get': {
+    memberPath: 'footnotes.get',
+    description: 'Get detailed information about a specific footnote or endnote.',
+    expectedResult: "Returns a FootnoteInfo object with the note's type, display number, and content.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'footnotes/get.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.insert': {
+    memberPath: 'footnotes.insert',
+    description: 'Insert a new footnote or endnote at a target location.',
+    expectedResult: 'Returns a FootnoteMutationResult indicating success with the footnote address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'footnotes/insert.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.update': {
+    memberPath: 'footnotes.update',
+    description: 'Update the content of an existing footnote or endnote.',
+    expectedResult:
+      'Returns a FootnoteMutationResult indicating success with the updated footnote address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'footnotes/update.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.remove': {
+    memberPath: 'footnotes.remove',
+    description: 'Remove a footnote or endnote from the document.',
+    expectedResult: 'Returns a FootnoteMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'footnotes/remove.mdx',
+    referenceGroup: 'footnotes',
+  },
+  'footnotes.configure': {
+    memberPath: 'footnotes.configure',
+    description: 'Configure numbering and placement for footnotes or endnotes.',
+    expectedResult: 'Returns a FootnoteConfigResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'footnotes/configure.mdx',
+    referenceGroup: 'footnotes',
+  },
+
+  // -------------------------------------------------------------------------
+  // Cross-References
+  // -------------------------------------------------------------------------
+
+  'crossRefs.list': {
+    memberPath: 'crossRefs.list',
+    description: 'List all cross-reference fields in the document.',
+    expectedResult:
+      'Returns a CrossRefsListResult containing discovered cross-references with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'cross-refs/list.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.get': {
+    memberPath: 'crossRefs.get',
+    description: 'Get detailed information about a specific cross-reference field.',
+    expectedResult: "Returns a CrossRefInfo object with the cross-reference's target, display, and resolved text.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'cross-refs/get.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.insert': {
+    memberPath: 'crossRefs.insert',
+    description: 'Insert a new cross-reference field at a target location.',
+    expectedResult:
+      'Returns a CrossRefMutationResult indicating success with the cross-reference address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'cross-refs/insert.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.rebuild': {
+    memberPath: 'crossRefs.rebuild',
+    description: 'Rebuild (recalculate) a cross-reference field.',
+    expectedResult: 'Returns a CrossRefMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'cross-refs/rebuild.mdx',
+    referenceGroup: 'crossRefs',
+  },
+  'crossRefs.remove': {
+    memberPath: 'crossRefs.remove',
+    description: 'Remove a cross-reference field from the document.',
+    expectedResult: 'Returns a CrossRefMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'cross-refs/remove.mdx',
+    referenceGroup: 'crossRefs',
+  },
+
+  // -------------------------------------------------------------------------
+  // Index
+  // -------------------------------------------------------------------------
+
+  'index.list': {
+    memberPath: 'index.list',
+    description: 'List all index blocks in the document.',
+    expectedResult: 'Returns an IndexListResult containing discovered index blocks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'index/list.mdx',
+    referenceGroup: 'index',
+  },
+  'index.get': {
+    memberPath: 'index.get',
+    description: 'Get detailed information about a specific index block.',
+    expectedResult: "Returns an IndexInfo object with the index's instruction, configuration, and entry count.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'index/get.mdx',
+    referenceGroup: 'index',
+  },
+  'index.insert': {
+    memberPath: 'index.insert',
+    description: 'Insert a new index block at a target location.',
+    expectedResult: 'Returns an IndexMutationResult indicating success with the index address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'index/insert.mdx',
+    referenceGroup: 'index',
+  },
+  'index.configure': {
+    memberPath: 'index.configure',
+    description: 'Update the configuration of an existing index block.',
+    expectedResult: 'Returns an IndexMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'index/configure.mdx',
+    referenceGroup: 'index',
+  },
+  'index.rebuild': {
+    memberPath: 'index.rebuild',
+    description: 'Rebuild (regenerate) an index block from its entries.',
+    expectedResult: 'Returns an IndexMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'index/rebuild.mdx',
+    referenceGroup: 'index',
+  },
+  'index.remove': {
+    memberPath: 'index.remove',
+    description: 'Remove an index block from the document.',
+    expectedResult: 'Returns an IndexMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'index/remove.mdx',
+    referenceGroup: 'index',
+  },
+
+  // -------------------------------------------------------------------------
+  // Index: XE entry management
+  // -------------------------------------------------------------------------
+
+  'index.entries.list': {
+    memberPath: 'index.entries.list',
+    description: 'List all XE (index entry) fields in the document.',
+    expectedResult: 'Returns an IndexEntryListResult containing discovered index entries with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'index/entries-list.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.get': {
+    memberPath: 'index.entries.get',
+    description: 'Get detailed information about a specific XE index entry.',
+    expectedResult: "Returns an IndexEntryInfo object with the entry's text, sub-entry, formatting, and instruction.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'index/entries-get.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.insert': {
+    memberPath: 'index.entries.insert',
+    description: 'Insert a new XE index entry field at a target location.',
+    expectedResult: 'Returns an IndexEntryMutationResult indicating success with the entry address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'index/entries-insert.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.update': {
+    memberPath: 'index.entries.update',
+    description: 'Update the properties of an existing XE index entry.',
+    expectedResult: 'Returns an IndexEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'index/entries-update.mdx',
+    referenceGroup: 'index',
+  },
+  'index.entries.remove': {
+    memberPath: 'index.entries.remove',
+    description: 'Remove an XE index entry field from the document.',
+    expectedResult: 'Returns an IndexEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'index/entries-remove.mdx',
+    referenceGroup: 'index',
+  },
+
+  // -------------------------------------------------------------------------
+  // Captions
+  // -------------------------------------------------------------------------
+
+  'captions.list': {
+    memberPath: 'captions.list',
+    description: 'List all caption paragraphs in the document.',
+    expectedResult: 'Returns a CaptionsListResult containing discovered captions with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'captions/list.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.get': {
+    memberPath: 'captions.get',
+    description: 'Get detailed information about a specific caption paragraph.',
+    expectedResult: "Returns a CaptionInfo object with the caption's label, number, text, and instruction.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'captions/get.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.insert': {
+    memberPath: 'captions.insert',
+    description: 'Insert a new caption paragraph adjacent to a target block.',
+    expectedResult: 'Returns a CaptionMutationResult indicating success with the caption address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'captions/insert.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.update': {
+    memberPath: 'captions.update',
+    description: 'Update the text of an existing caption paragraph.',
+    expectedResult: 'Returns a CaptionMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'captions/update.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.remove': {
+    memberPath: 'captions.remove',
+    description: 'Remove a caption paragraph from the document.',
+    expectedResult: 'Returns a CaptionMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'captions/remove.mdx',
+    referenceGroup: 'captions',
+  },
+  'captions.configure': {
+    memberPath: 'captions.configure',
+    description: 'Configure numbering format for a caption label.',
+    expectedResult: 'Returns a CaptionConfigResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'captions/configure.mdx',
+    referenceGroup: 'captions',
+  },
+
+  // -------------------------------------------------------------------------
+  // Fields
+  // -------------------------------------------------------------------------
+
+  'fields.list': {
+    memberPath: 'fields.list',
+    description: 'List all fields in the document.',
+    expectedResult: 'Returns a FieldsListResult containing discovered fields with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'fields/list.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.get': {
+    memberPath: 'fields.get',
+    description: 'Get detailed information about a specific field.',
+    expectedResult: "Returns a FieldInfo object with the field's instruction, result text, and nesting data.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'fields/get.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.insert': {
+    memberPath: 'fields.insert',
+    description: 'Insert a raw field code at a target location.',
+    expectedResult: 'Returns a FieldMutationResult indicating success with the field address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'fields/insert.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.rebuild': {
+    memberPath: 'fields.rebuild',
+    description: 'Rebuild (recalculate) a field.',
+    expectedResult: 'Returns a FieldMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'fields/rebuild.mdx',
+    referenceGroup: 'fields',
+  },
+  'fields.remove': {
+    memberPath: 'fields.remove',
+    description: 'Remove a field from the document.',
+    expectedResult: 'Returns a FieldMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'fields/remove.mdx',
+    referenceGroup: 'fields',
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations
+  // -------------------------------------------------------------------------
+
+  'citations.list': {
+    memberPath: 'citations.list',
+    description: 'List all citation marks in the document.',
+    expectedResult: 'Returns a CitationsListResult containing discovered citation marks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'citations/list.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.get': {
+    memberPath: 'citations.get',
+    description: 'Get detailed information about a specific citation mark.',
+    expectedResult: "Returns a CitationInfo object with the citation's source references and display text.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'citations/get.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.insert': {
+    memberPath: 'citations.insert',
+    description: 'Insert a new citation mark at a target location.',
+    expectedResult: 'Returns a CitationMutationResult indicating success with the citation address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'citations/insert.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.update': {
+    memberPath: 'citations.update',
+    description: "Update an existing citation mark's source references.",
+    expectedResult: 'Returns a CitationMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/update.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.remove': {
+    memberPath: 'citations.remove',
+    description: 'Remove a citation mark from the document.',
+    expectedResult: 'Returns a CitationMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'citations/remove.mdx',
+    referenceGroup: 'citations',
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations: sources
+  // -------------------------------------------------------------------------
+
+  'citations.sources.list': {
+    memberPath: 'citations.sources.list',
+    description: 'List all citation sources in the document store.',
+    expectedResult: 'Returns a CitationSourcesListResult containing discovered sources with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'citations/sources-list.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.get': {
+    memberPath: 'citations.sources.get',
+    description: 'Get detailed information about a specific citation source.',
+    expectedResult: "Returns a CitationSourceInfo object with the source's type, fields, and metadata.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'citations/sources-get.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.insert': {
+    memberPath: 'citations.sources.insert',
+    description: 'Register a new citation source in the document store.',
+    expectedResult: 'Returns a CitationSourceMutationResult indicating success with the source address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'citations/sources-insert.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.update': {
+    memberPath: 'citations.sources.update',
+    description: 'Update the fields of an existing citation source.',
+    expectedResult: 'Returns a CitationSourceMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/sources-update.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.sources.remove': {
+    memberPath: 'citations.sources.remove',
+    description: 'Remove a citation source from the document store.',
+    expectedResult: 'Returns a CitationSourceMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'citations/sources-remove.mdx',
+    referenceGroup: 'citations',
+  },
+
+  // -------------------------------------------------------------------------
+  // Citations: bibliography
+  // -------------------------------------------------------------------------
+
+  'citations.bibliography.get': {
+    memberPath: 'citations.bibliography.get',
+    description: 'Get information about the bibliography block.',
+    expectedResult: "Returns a BibliographyInfo object with the bibliography's address and configuration.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'citations/bibliography-get.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.insert': {
+    memberPath: 'citations.bibliography.insert',
+    description: 'Insert a bibliography block at a target location.',
+    expectedResult:
+      'Returns a BibliographyMutationResult indicating success with the bibliography address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'citations/bibliography-insert.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.rebuild': {
+    memberPath: 'citations.bibliography.rebuild',
+    description: 'Rebuild the bibliography from current sources.',
+    expectedResult: 'Returns a BibliographyMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/bibliography-rebuild.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.configure': {
+    memberPath: 'citations.bibliography.configure',
+    description: 'Configure the bibliography style.',
+    expectedResult: 'Returns a BibliographyMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'citations/bibliography-configure.mdx',
+    referenceGroup: 'citations',
+  },
+  'citations.bibliography.remove': {
+    memberPath: 'citations.bibliography.remove',
+    description: 'Remove the bibliography block from the document.',
+    expectedResult: 'Returns a BibliographyMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'citations/bibliography-remove.mdx',
+    referenceGroup: 'citations',
+  },
+
+  // -------------------------------------------------------------------------
+  // Authorities
+  // -------------------------------------------------------------------------
+
+  'authorities.list': {
+    memberPath: 'authorities.list',
+    description: 'List all table-of-authorities blocks in the document.',
+    expectedResult: 'Returns an AuthoritiesListResult containing discovered TOA blocks with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'authorities/list.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.get': {
+    memberPath: 'authorities.get',
+    description: 'Get detailed information about a specific table-of-authorities block.',
+    expectedResult: "Returns an AuthoritiesInfo object with the TOA's category filter and configuration.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'authorities/get.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.insert': {
+    memberPath: 'authorities.insert',
+    description: 'Insert a new table-of-authorities block at a target location.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success with the TOA address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'authorities/insert.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.configure': {
+    memberPath: 'authorities.configure',
+    description: 'Update the configuration of an existing table-of-authorities block.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'authorities/configure.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.rebuild': {
+    memberPath: 'authorities.rebuild',
+    description: 'Rebuild a table-of-authorities block from its entries.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'authorities/rebuild.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.remove': {
+    memberPath: 'authorities.remove',
+    description: 'Remove a table-of-authorities block from the document.',
+    expectedResult: 'Returns an AuthoritiesMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'authorities/remove.mdx',
+    referenceGroup: 'authorities',
+  },
+
+  // -------------------------------------------------------------------------
+  // Authorities: TA entry management
+  // -------------------------------------------------------------------------
+
+  'authorities.entries.list': {
+    memberPath: 'authorities.entries.list',
+    description: 'List all TA (authority entry) fields in the document.',
+    expectedResult: 'Returns an AuthorityEntryListResult containing discovered entries with address and domain data.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'authorities/entries-list.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.get': {
+    memberPath: 'authorities.entries.get',
+    description: 'Get detailed information about a specific TA authority entry.',
+    expectedResult: "Returns an AuthorityEntryInfo object with the entry's citations and category.",
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'authorities/entries-get.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.insert': {
+    memberPath: 'authorities.entries.insert',
+    description: 'Insert a new TA authority entry field at a target location.',
+    expectedResult: 'Returns an AuthorityEntryMutationResult indicating success with the entry address or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'authorities/entries-insert.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.update': {
+    memberPath: 'authorities.entries.update',
+    description: 'Update the properties of an existing TA authority entry.',
+    expectedResult: 'Returns an AuthorityEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'authorities/entries-update.mdx',
+    referenceGroup: 'authorities',
+  },
+  'authorities.entries.remove': {
+    memberPath: 'authorities.entries.remove',
+    description: 'Remove a TA authority entry field from the document.',
+    expectedResult: 'Returns an AuthorityEntryMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'authorities/entries-remove.mdx',
+    referenceGroup: 'authorities',
+  },
+
+  // ---------------------------------------------------------------------------
+  // diff.*
+  // ---------------------------------------------------------------------------
+
+  'diff.capture': {
+    memberPath: 'diff.capture',
+    description:
+      "Capture the current document's diffable state as a versioned snapshot. " +
+      'v1 covers body, comments, styles, and numbering. Header/footer content is not included.',
+    expectedResult: 'Returns a DiffSnapshot with a fingerprint and opaque payload.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'diff/capture.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  'diff.compare': {
+    memberPath: 'diff.compare',
+    description:
+      'Compare the current document (base) against a previously captured target snapshot. ' +
+      'Returns a versioned diff payload describing the changes from base to target.',
+    expectedResult: 'Returns a DiffPayload with a summary and opaque payload.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED'],
+    }),
+    referenceDocPath: 'diff/compare.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
+  },
+  'diff.apply': {
+    memberPath: 'diff.apply',
+    description:
+      'Apply a previously computed diff payload to the current document. ' +
+      'The document fingerprint must match the diff base fingerprint. ' +
+      'Tracked mode governs body content only; styles, numbering, and comments are always applied directly.',
+    expectedResult: 'Returns a DiffApplyResult with applied operation count and diagnostics.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNSUPPORTED', 'PRECONDITION_FAILED', 'CAPABILITY_UNAVAILABLE'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'diff/apply.mdx',
+    referenceGroup: 'diff',
+    skipAsATool: true,
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

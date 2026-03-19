@@ -1,0 +1,109 @@
+---
+title: footnotes.get
+sidebarTitle: footnotes.get
+description: Get detailed information about a specific footnote or endnote.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Get detailed information about a specific footnote or endnote.
+
+- Operation ID: `footnotes.get`
+- API member path: `editor.doc.footnotes.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a FootnoteInfo object with the note's type, display number, and content.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="entity") | yes |  |
+| `target.entityType` | `"footnote"` | yes | Constant: `"footnote"` |
+| `target.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `target.noteId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "target": {
+    "entityType": "footnote",
+    "kind": "entity",
+    "noteId": "example"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "footnote"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "noteId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "noteId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

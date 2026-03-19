@@ -251,6 +251,7 @@ export function createNumberingPlugin(editor) {
             justification,
             path,
             numberingType: listNumberingType,
+            ...(customFormat ? { customFormat } : {}),
           };
 
           if (JSON.stringify(node.attrs.listRendering) !== JSON.stringify(newListRendering)) {

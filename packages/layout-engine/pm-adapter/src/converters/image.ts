@@ -257,6 +257,9 @@ export function imageNodeToBlock(
   const explicitObjectFit = typeof attrs.objectFit === 'string' ? (attrs.objectFit as string) : undefined;
   const shouldCover = attrs.shouldCover === true;
   const isAnchor = anchor?.isAnchored ?? (typeof attrs.isAnchor === 'boolean' ? attrs.isAnchor : false);
+  const lum = isPlainObject(attrs.lum) ? attrs.lum : undefined;
+  const lumBright = pickNumber(lum?.bright);
+  const lumContrast = pickNumber(lum?.contrast);
 
   const objectFit: 'contain' | 'cover' | 'fill' | 'scale-down' | undefined = isAllowedObjectFit(explicitObjectFit)
     ? explicitObjectFit
@@ -299,6 +302,13 @@ export function imageNodeToBlock(
       typeof attrs.blacklevel === 'string' || typeof attrs.blacklevel === 'number' ? attrs.blacklevel : undefined,
     // OOXML image effects (grayscale, etc.)
     grayscale: typeof attrs.grayscale === 'boolean' ? attrs.grayscale : undefined,
+    lum:
+      lumBright != null || lumContrast != null
+        ? {
+            ...(lumBright != null ? { bright: lumBright } : {}),
+            ...(lumContrast != null ? { contrast: lumContrast } : {}),
+          }
+        : undefined,
     // Image transformations from OOXML a:xfrm
     ...(rotation !== undefined && { rotation }),
     ...(flipH !== undefined && { flipH }),

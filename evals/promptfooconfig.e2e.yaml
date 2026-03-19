@@ -1,0 +1,40 @@
+# Execution tests via Vercel AI Gateway -- any model, one provider.
+# Run: pnpm run eval:e2e
+#
+# Uses the AI SDK + AI Gateway as a unified router.
+# Add more providers below to test the same tasks across models.
+#
+# Requires: AI_GATEWAY_API_KEY in .env
+
+description: 'SuperDoc Execution Tests (AI Gateway)'
+
+prompts:
+  - '{{task}}'
+
+providers:
+  - id: file://providers/superdoc-agent-gateway.mjs
+    label: GPT-5.4 (Gateway)
+    config:
+      modelId: openai/gpt-5.4
+
+  - id: file://providers/superdoc-agent-gateway.mjs
+    label: Claude Haiku 4.5 (Gateway)
+    config:
+      modelId: anthropic/claude-haiku-4.5
+
+  - id: file://providers/superdoc-agent-gateway.mjs
+    label: Gemini 2.5 Pro (Gateway)
+    config:
+      modelId: google/gemini-2.5-pro
+
+defaultTest:
+  options:
+    transform: |
+      try { return JSON.parse(output).documentText; } catch { return output; }
+
+evaluateOptions:
+  maxConcurrency: 5
+  timeoutMs: 120000
+
+tests:
+  - file://tests/execution.yaml

@@ -215,7 +215,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
             document: {
               path: metadata.sourcePath,
               source: metadata.source,
-              byteLength: output.byteLength,
+              byteLength: opened.meta.byteLength,
               revision: metadata.revision,
             },
             dirty: metadata.dirty,

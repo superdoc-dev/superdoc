@@ -22,8 +22,12 @@ import { effectiveTableCellSpacing } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { rescaleColumnWidths } from '@superdoc/layout-engine';
 import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
-import type { BlockLookup, FragmentRenderContext } from '../renderer.js';
-import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
+import type { FragmentRenderContext } from '../renderer.js';
+import {
+  applyParagraphBorderStyles,
+  applyParagraphShadingStyles,
+  type BlockLookup,
+} from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
 import {
@@ -32,7 +36,11 @@ import {
   getSdtContainerKey,
   type SdtBoundaryOptions,
 } from '../utils/sdt-helpers.js';
-import { computeTabWidth } from '../utils/marker-helpers.js';
+import {
+  computeTabWidth,
+  resolvePainterListMarkerGeometry,
+  resolvePainterListTextStartPx,
+} from '../utils/marker-helpers.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 
@@ -231,6 +239,8 @@ type MarkerRenderParams = {
   doc: Document;
   /** Line element to which the marker will be attached */
   lineEl: HTMLElement;
+  /** Full word-layout information for this paragraph */
+  wordLayout?: WordLayoutInfo;
   /** Marker layout information from word-layout engine */
   markerLayout: WordLayoutMarker;
   /** Marker measurement data from measurement stage */
@@ -271,24 +281,39 @@ type TableCellIndentParams = {
  * Renders a list marker (bullet or number) for a paragraph line inside a table cell.
  *
  * Mirrors the top-level renderer approach: the marker and suffix separator are prepended
- * inside `lineEl` as inline elements, and `lineEl.paddingLeft` controls the text start
- * position. This avoids a wrapper div and ensures consistent positioning across all
- * justification modes.
- *
- * **Anchor Point Model:**
- * The anchor point (`indentLeftPx - hangingIndent + firstLineIndent`) is where the
- * numbering position is defined in OOXML. Justification determines how the marker text
- * aligns relative to this point:
- * - `left`: Marker text starts at anchor, flows right
- * - `right`: Marker text ends at anchor
- * - `center`: Marker text is centered on anchor
- *
- * After the marker, a suffix separator (tab/space/nothing) fills the gap to the text start.
+ * inside `lineEl`, and `lineEl.paddingLeft` controls the text start position. This keeps
+ * table cell list markers aligned with the top-level paragraph renderer.
  *
  * @param params - Marker rendering parameters
  */
 function renderListMarker(params: MarkerRenderParams): void {
-  const { doc, lineEl, markerLayout, markerMeasure, indentLeftPx, hangingIndentPx, firstLineIndentPx, tabsPx } = params;
+  const {
+    doc,
+    lineEl,
+    wordLayout,
+    markerLayout,
+    markerMeasure,
+    indentLeftPx,
+    hangingIndentPx,
+    firstLineIndentPx,
+    tabsPx,
+  } = params;
+
+  const shouldUseSharedInlinePrefixGeometry =
+    markerLayout?.justification === 'left' &&
+    wordLayout?.firstLineIndentMode !== true &&
+    typeof markerMeasure?.markerTextWidth === 'number' &&
+    Number.isFinite(markerMeasure.markerTextWidth) &&
+    markerMeasure.markerTextWidth >= 0;
+  const markerGeometry = shouldUseSharedInlinePrefixGeometry
+    ? resolvePainterListMarkerGeometry({
+        wordLayout,
+        indentLeftPx,
+        hangingIndentPx,
+        firstLineIndentPx,
+        markerTextWidthPx: markerMeasure?.markerTextWidth,
+      })
+    : undefined;
 
   const anchorPoint = indentLeftPx - hangingIndentPx + firstLineIndentPx;
 
@@ -309,7 +334,9 @@ function renderListMarker(params: MarkerRenderParams): void {
 
   const suffix = markerLayout?.suffix ?? 'tab';
   let listTabWidth = 0;
-  if (suffix === 'tab') {
+  if (markerGeometry && (suffix === 'tab' || suffix === 'space')) {
+    listTabWidth = markerGeometry.suffixWidthPx;
+  } else if (suffix === 'tab') {
     listTabWidth = computeTabWidth(
       currentPos,
       markerJustification,
@@ -524,6 +551,7 @@ type EmbeddedTableRenderParams = {
     context: FragmentRenderContext,
     lineIndex: number,
     isLastLine: boolean,
+    resolvedListTextStartPx?: number,
   ) => HTMLElement;
   /** Optional callback invoked after a table line's final styles/markers are applied. */
   captureLineSnapshot?: (
@@ -852,6 +880,7 @@ type TableCellRenderDependencies = {
     context: FragmentRenderContext,
     lineIndex: number,
     isLastLine: boolean,
+    resolvedListTextStartPx?: number,
   ) => HTMLElement;
   /** Optional callback invoked after a table line's final styles/markers are applied. */
   captureLineSnapshot?: (
@@ -1306,6 +1335,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const firstLineIndentPx =
           block.attrs?.indent && typeof block.attrs.indent.firstLine === 'number' ? block.attrs.indent.firstLine : 0;
         const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
+        const listFirstLineTextStartPx =
+          markerLayout && markerMeasure
+            ? resolvePainterListTextStartPx({
+                wordLayout: wordLayout ?? undefined,
+                indentLeftPx,
+                hangingIndentPx,
+                firstLineIndentPx,
+                markerTextWidthPx: markerMeasure.markerTextWidth,
+              })
+            : undefined;
 
         // Calculate the global line indices for this block
         const blockStartGlobal = cumulativeLineCount;
@@ -1378,6 +1417,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             { ...context, section: 'body' },
             lineIdx,
             isLastLine,
+            lineIdx === 0 && localStartLine === 0 ? listFirstLineTextStartPx : undefined,
           );
           lineEl.style.paddingLeft = '';
           lineEl.style.paddingRight = '';
@@ -1402,6 +1442,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             renderListMarker({
               doc,
               lineEl,
+              wordLayout: wordLayout ?? undefined,
               markerLayout,
               markerMeasure,
               indentLeftPx,

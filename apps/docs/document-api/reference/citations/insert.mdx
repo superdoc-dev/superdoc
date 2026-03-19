@@ -1,0 +1,288 @@
+---
+title: citations.insert
+sidebarTitle: citations.insert
+description: Insert a new citation mark at a target location.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert a new citation mark at a target location.
+
+- Operation ID: `citations.insert`
+- API member path: `editor.doc.citations.insert(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CitationMutationResult indicating success with the citation address or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `at` | TextTarget | yes | TextTarget |
+| `at.kind` | `"text"` | yes | Constant: `"text"` |
+| `at.segments` | TextSegment[] | yes |  |
+| `sourceIds` | string[] | yes |  |
+
+### Example request
+
+```json
+{
+  "at": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
+  "sourceIds": [
+    "example"
+  ]
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `citation` | object(kind="inline") | yes |  |
+| `citation.anchor` | InlineAnchor | yes | InlineAnchor |
+| `citation.anchor.end` | Position | yes | Position |
+| `citation.anchor.end.blockId` | string | yes |  |
+| `citation.anchor.end.offset` | integer | yes |  |
+| `citation.anchor.start` | Position | yes | Position |
+| `citation.anchor.start.blockId` | string | yes |  |
+| `citation.anchor.start.offset` | integer | yes |  |
+| `citation.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `citation.nodeType` | `"citation"` | yes | Constant: `"citation"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "citation": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "inline",
+    "nodeType": "citation"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "at": {
+      "$ref": "#/$defs/TextTarget"
+    },
+    "sourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "at",
+    "sourceIds"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "citation": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "$ref": "#/$defs/InlineAnchor"
+            },
+            "kind": {
+              "const": "inline"
+            },
+            "nodeType": {
+              "const": "citation"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "anchor"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "citation"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "citation": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InlineAnchor"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "citation"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "citation"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

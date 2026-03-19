@@ -1,0 +1,309 @@
+---
+title: authorities.configure
+sidebarTitle: authorities.configure
+description: Update the configuration of an existing table-of-authorities block.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Update the configuration of an existing table-of-authorities block.
+
+- Operation ID: `authorities.configure`
+- API member path: `editor.doc.authorities.configure(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an AuthoritiesMutationResult indicating success or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.category` | integer | no |  |
+| `patch.entryPageSeparator` | string | no |  |
+| `patch.includeHeadings` | boolean | no |  |
+| `patch.pageRangeSeparator` | string | no |  |
+| `patch.tabLeader` | string | no |  |
+| `patch.usePassim` | boolean | no |  |
+| `target` | object(kind="block") | yes |  |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableOfAuthorities"` | yes | Constant: `"tableOfAuthorities"` |
+
+### Example request
+
+```json
+{
+  "patch": {
+    "category": 1,
+    "entryPageSeparator": "example"
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "tableOfAuthorities"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `authorities` | object(kind="block") | yes |  |
+| `authorities.kind` | `"block"` | yes | Constant: `"block"` |
+| `authorities.nodeId` | string | yes |  |
+| `authorities.nodeType` | `"tableOfAuthorities"` | yes | Constant: `"tableOfAuthorities"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "authorities": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "tableOfAuthorities"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "patch": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "integer"
+        },
+        "entryPageSeparator": {
+          "type": "string"
+        },
+        "includeHeadings": {
+          "type": "boolean"
+        },
+        "pageRangeSeparator": {
+          "type": "string"
+        },
+        "tabLeader": {
+          "type": "string"
+        },
+        "usePassim": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "tableOfAuthorities"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "patch"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authorities": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "tableOfAuthorities"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "authorities"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "authorities": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "tableOfAuthorities"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "authorities"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

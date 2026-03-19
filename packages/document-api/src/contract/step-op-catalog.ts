@@ -1,6 +1,6 @@
 import type { OperationId } from './types.js';
 
-export type StepOpDomain = 'assert' | 'text' | 'format' | 'create' | 'tables' | 'internal';
+export type StepOpDomain = 'assert' | 'text' | 'format' | 'create' | 'tables' | 'structural' | 'internal';
 export type StepOpSurface = 'public' | 'internal';
 
 export interface StepOpCatalogEntry<
@@ -168,6 +168,14 @@ const STEP_OP_CATALOG_UNFROZEN = [
   }),
   step('tables.clearCellSpacing', 'tables', 'Clear table cell spacing.', {
     referenceOperationId: 'tables.clearCellSpacing',
+  }),
+
+  // Structural content operations
+  step('structural.insert', 'structural', 'Insert structural content (SDFragment) at a target position.', {
+    referenceOperationId: 'insert',
+  }),
+  step('structural.replace', 'structural', 'Replace content at a target range with structural content (SDFragment).', {
+    referenceOperationId: 'replace',
   }),
 
   // Internal bridge op used by wrappers that execute pre-compiled plans with _handler closures.

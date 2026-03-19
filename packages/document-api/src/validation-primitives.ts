@@ -8,8 +8,20 @@
  * Internal — not exported from the package root.
  */
 
-import type { TextAddress } from './types/index.js';
+import type { BlockNodeAddress, TextAddress } from './types/index.js';
+import { BLOCK_NODE_TYPES } from './types/base.js';
+import { TABLE_NESTING_POLICY_VALUES } from './types/placement.js';
 import { DocumentApiValidationError } from './errors.js';
+
+/**
+ * Throws INVALID_TARGET if target is null or undefined.
+ * Shared preamble for optional adapter namespace validators.
+ */
+export function assertTargetPresent(target: unknown, operationName: string): void {
+  if (target === undefined || target === null) {
+    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
+  }
+}
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
@@ -30,8 +42,20 @@ export function isTextAddress(value: unknown): value is TextAddress {
   return range.start <= range.end;
 }
 
+const BLOCK_NODE_TYPES_SET: ReadonlySet<string> = new Set(BLOCK_NODE_TYPES);
+
+/** Type guard for BlockNodeAddress. Checks shape and nodeType membership. */
+export function isBlockNodeAddress(value: unknown): value is BlockNodeAddress {
+  if (!isRecord(value)) return false;
+  if (value.kind !== 'block') return false;
+  if (typeof value.nodeType !== 'string' || !BLOCK_NODE_TYPES_SET.has(value.nodeType)) return false;
+  if (typeof value.nodeId !== 'string') return false;
+  return true;
+}
+
 /**
- * Throws INVALID_TARGET if any key on the input object is not in the allowlist.
+ * Throws INVALID_INPUT if any key on the input object is not in the allowlist.
+ * Unknown fields are a payload shape issue, not a locator problem.
  */
 export function assertNoUnknownFields(
   input: Record<string, unknown>,
@@ -41,7 +65,7 @@ export function assertNoUnknownFields(
   for (const key of Object.keys(input)) {
     if (!allowlist.has(key)) {
       throw new DocumentApiValidationError(
-        'INVALID_TARGET',
+        'INVALID_INPUT',
         `Unknown field "${key}" on ${operationName} input. Allowed fields: ${[...allowlist].join(', ')}.`,
         { field: key },
       );
@@ -49,15 +73,42 @@ export function assertNoUnknownFields(
   }
 }
 
+const NESTING_POLICY_ALLOWED_KEYS: ReadonlySet<string> = new Set(['tables']);
+
 /**
- * Throws INVALID_TARGET if the value is not a non-negative integer.
+ * Validates a nestingPolicy value: must be an object with only known keys,
+ * and the `tables` field (if present) must be a valid TableNestingPolicy value.
+ *
+ * Used by both insert and replace structural validators.
  */
-export function assertNonNegativeInteger(value: unknown, fieldName: string): void {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+export function validateNestingPolicyValue(value: unknown): void {
+  if (value === undefined) return;
+
+  if (!isRecord(value)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `nestingPolicy must be an object, got ${typeof value}.`, {
+      field: 'nestingPolicy',
+      value,
+    });
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!NESTING_POLICY_ALLOWED_KEYS.has(key)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `Unknown field "${key}" on nestingPolicy. Allowed fields: ${[...NESTING_POLICY_ALLOWED_KEYS].join(', ')}.`,
+        { field: `nestingPolicy.${key}` },
+      );
+    }
+  }
+
+  if (
+    value.tables !== undefined &&
+    (typeof value.tables !== 'string' || !TABLE_NESTING_POLICY_VALUES.has(value.tables))
+  ) {
     throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `${fieldName} must be a non-negative integer, got ${JSON.stringify(value)}.`,
-      { field: fieldName, value },
+      'INVALID_INPUT',
+      `nestingPolicy.tables must be one of: forbid, allow. Got "${String(value.tables)}".`,
+      { field: 'nestingPolicy.tables', value: value.tables },
     );
   }
 }

@@ -29,11 +29,27 @@ import type {
   ListTemplate,
   MutationOptions,
   ReceiptFailureCode,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from '@superdoc/document-api';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
-import { executeDomainCommand } from './plan-wrappers.js';
+import { mutatePart } from '../../core/parts/mutation/mutate-part.js';
+import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
+import { syncNumberingToXmlTree } from '../../core/parts/adapters/numbering-part-descriptor.js';
+import type { PartId } from '../../core/parts/types.js';
 import { resolveListItem, type ListItemProjection } from '../helpers/list-item-resolver.js';
-import { getAbstractNumId, getContiguousSequence, findAdjacentSequence } from '../helpers/list-sequence-helpers.js';
+import {
+  getAbstractNumId,
+  getAllListItemProjections,
+  getContiguousSequence,
+  findAdjacentSequence,
+} from '../helpers/list-sequence-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
 import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
@@ -69,9 +85,9 @@ function validateLevel(level: number): ListsMutateItemResult | null {
 }
 
 /**
- * Validate the `levels` array for multi-level operations.
- * Must be unique, sorted ascending, and each entry 0–8.
- * Returns a failure result if invalid, or null if valid.
+ * Validate and normalize the `levels` array for multi-level operations.
+ * Range-checks each entry (0–8). Silently deduplicates and sorts.
+ * Returns a failure result if out-of-range, or null if valid.
  */
 function validateLevelsArray(
   levels: number[] | undefined,
@@ -84,17 +100,15 @@ function validateLevelsArray(
     }
   }
 
-  if (new Set(levels).size !== levels.length) {
-    return toListsFailure('INVALID_INPUT', 'levels must contain unique values.', { levels });
-  }
-
-  for (let i = 1; i < levels.length; i++) {
-    if (levels[i] <= levels[i - 1]) {
-      return toListsFailure('INVALID_INPUT', 'levels must be sorted in ascending order.', { levels });
-    }
-  }
-
   return null;
+}
+
+/**
+ * Normalize a levels array: deduplicate and sort ascending.
+ */
+function normalizeLevels(levels: number[] | undefined): number[] | undefined {
+  if (!levels) return undefined;
+  return [...new Set(levels)].sort((a, b) => a - b);
 }
 
 /**
@@ -177,11 +191,23 @@ function resolveTargetAbstract(
 // Single-level mutation helper (DRY pattern for all setLevel* operations)
 // ---------------------------------------------------------------------------
 
+const NUMBERING_PART: PartId = 'word/numbering.xml';
+type NumberingModel = Parameters<typeof syncNumberingToXmlTree>[1];
+type NumberingTransaction = Parameters<typeof updateNumberingProperties>[4];
+
+function getConverterNumbering(editor: Editor): NumberingModel {
+  return (
+    editor as unknown as {
+      converter?: { numbering: NumberingModel };
+    }
+  ).converter!.numbering;
+}
+
 /**
  * Execute a single-level mutation operation on an abstract definition.
  * Handles: tracked mode rejection, target resolution, level validation,
  * level existence check, dry-run short-circuit, no-op detection, and
- * domain command execution.
+ * mutation via the centralized parts pipeline.
  */
 function executeSingleLevelMutation(
   editor: Editor,
@@ -211,20 +237,123 @@ function executeSingleLevelMutation(
     return { success: true, item: targetResult.resolved.address };
   }
 
-  const receipt = executeDomainCommand(
+  let noOp = false;
+
+  const compound = compoundMutation({
     editor,
-    () => {
-      const changed = mutate(targetResult.abstractNumId, level);
-      if (!changed) return false;
+    source: operationId,
+    affectedParts: [NUMBERING_PART],
+    execute() {
+      const result = mutatePart({
+        editor,
+        partId: NUMBERING_PART,
+        operation: 'mutate',
+        source: operationId,
+        expectedRevision: options?.expectedRevision,
+        mutate({ part }) {
+          const changed = mutate(targetResult.abstractNumId, level);
+          if (!changed) return false;
+          syncNumberingToXmlTree(part, getConverterNumbering(editor));
+          return true;
+        },
+      });
+
+      if (!result.changed) {
+        noOp = true;
+        return false;
+      }
+
       dispatchEditorTransaction(editor, editor.state.tr);
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (noOp) {
     return toListsFailure('NO_OP', `${operationId}: values already match.`, { target });
   }
+  if (!compound.success) {
+    return toListsFailure('NO_OP', `${operationId}: mutation failed.`, { target });
+  }
+
+  return { success: true, item: targetResult.resolved.address };
+}
+
+// ---------------------------------------------------------------------------
+// Shared template application helper (used by applyTemplate + applyPreset)
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a template to an abstract numbering definition with full atomicity.
+ * Shared by `listsApplyTemplateWrapper` and `listsApplyPresetWrapper` —
+ * both resolve a template then apply it to the same abstract-definition pipeline.
+ */
+function applyTemplateCompound(
+  editor: Editor,
+  source: string,
+  target: { kind: 'block'; nodeType: 'listItem'; nodeId: string },
+  template: ListTemplate,
+  levels: number[] | undefined,
+  options: MutationOptions | undefined,
+  noOpMessage: string,
+  failMessage: string,
+): ListsMutateItemResult {
+  const levelsError = validateLevelsArray(levels);
+  if (levelsError) return levelsError;
+
+  const targetResult = resolveTargetAbstract(editor, target);
+  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
+
+  const preflightError = preflightTemplateLevels(template, levels, target);
+  if (preflightError) return preflightError;
+
+  if (options?.dryRun) {
+    return { success: true, item: targetResult.resolved.address };
+  }
+
+  let applyError: string | undefined;
+  let noOp = false;
+
+  const compound = compoundMutation({
+    editor,
+    source,
+    affectedParts: [NUMBERING_PART],
+    execute() {
+      const result = mutatePart({
+        editor,
+        partId: NUMBERING_PART,
+        operation: 'mutate',
+        source,
+        expectedRevision: options?.expectedRevision,
+        mutate({ part }) {
+          const applyResult = LevelFormattingHelpers.applyTemplateToAbstract(
+            editor,
+            targetResult.abstractNumId,
+            template,
+            levels,
+          ) as { changed: boolean; error?: string };
+          if (applyResult.error) {
+            applyError = applyResult.error;
+            return false;
+          }
+          if (!applyResult.changed) return false;
+          syncNumberingToXmlTree(part, getConverterNumbering(editor));
+          return true;
+        },
+      });
+
+      if (applyError || !result.changed) {
+        noOp = !applyError;
+        return false;
+      }
+
+      dispatchEditorTransaction(editor, editor.state.tr);
+      return true;
+    },
+  });
+
+  if (applyError) return toApplyTemplateError(applyError, target);
+  if (noOp) return toListsFailure('NO_OP', noOpMessage, { target });
+  if (!compound.success) return toListsFailure('NO_OP', failMessage, { target });
 
   return { success: true, item: targetResult.resolved.address };
 }
@@ -244,50 +373,16 @@ export function listsApplyTemplateWrapper(
     return toListsFailure('INVALID_INPUT', 'Unsupported template version.', { version: input.template.version });
   }
 
-  const levelsError = validateLevelsArray(input.levels);
-  if (levelsError) return levelsError;
-
-  const targetResult = resolveTargetAbstract(editor, input.target);
-  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
-
-  // Preflight: validate template levels before dry-run can succeed
-  const preflightError = preflightTemplateLevels(input.template, input.levels, input.target);
-  if (preflightError) return preflightError;
-
-  if (options?.dryRun) {
-    return { success: true, item: targetResult.resolved.address };
-  }
-
-  let applyError: string | undefined;
-
-  const receipt = executeDomainCommand(
+  return applyTemplateCompound(
     editor,
-    () => {
-      const result = LevelFormattingHelpers.applyTemplateToAbstract(
-        editor,
-        targetResult.abstractNumId,
-        input.template,
-        input.levels,
-      ) as { changed: boolean; error?: string };
-      if (result.error) {
-        applyError = result.error;
-        return false;
-      }
-      if (!result.changed) return false;
-      dispatchEditorTransaction(editor, editor.state.tr);
-      return true;
-    },
-    { expectedRevision: options?.expectedRevision },
+    'lists.applyTemplate',
+    input.target,
+    input.template,
+    input.levels,
+    options,
+    'All template levels already match.',
+    'Template application failed.',
   );
-
-  if (applyError) {
-    return toApplyTemplateError(applyError, input.target);
-  }
-  if (receipt.steps[0]?.effect !== 'changed') {
-    return toListsFailure('NO_OP', 'All template levels already match.', { target: input.target });
-  }
-
-  return { success: true, item: targetResult.resolved.address };
 }
 
 export function listsApplyPresetWrapper(
@@ -302,50 +397,16 @@ export function listsApplyPresetWrapper(
     return toListsFailure('INVALID_INPUT', `Unknown preset: ${input.preset}.`, { preset: input.preset });
   }
 
-  const levelsError = validateLevelsArray(input.levels);
-  if (levelsError) return levelsError;
-
-  const targetResult = resolveTargetAbstract(editor, input.target);
-  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
-
-  // Preflight: validate template levels before dry-run can succeed
-  const preflightError = preflightTemplateLevels(template, input.levels, input.target);
-  if (preflightError) return preflightError;
-
-  if (options?.dryRun) {
-    return { success: true, item: targetResult.resolved.address };
-  }
-
-  let applyError: string | undefined;
-
-  const receipt = executeDomainCommand(
+  return applyTemplateCompound(
     editor,
-    () => {
-      const result = LevelFormattingHelpers.applyTemplateToAbstract(
-        editor,
-        targetResult.abstractNumId,
-        template,
-        input.levels,
-      ) as { changed: boolean; error?: string };
-      if (result.error) {
-        applyError = result.error;
-        return false;
-      }
-      if (!result.changed) return false;
-      dispatchEditorTransaction(editor, editor.state.tr);
-      return true;
-    },
-    { expectedRevision: options?.expectedRevision },
+    'lists.applyPreset',
+    input.target,
+    template,
+    input.levels,
+    options,
+    'All preset levels already match.',
+    'Preset application failed.',
   );
-
-  if (applyError) {
-    return toApplyTemplateError(applyError, input.target);
-  }
-  if (receipt.steps[0]?.effect !== 'changed') {
-    return toListsFailure('NO_OP', 'All preset levels already match.', { target: input.target });
-  }
-
-  return { success: true, item: targetResult.resolved.address };
 }
 
 // ---------------------------------------------------------------------------
@@ -438,56 +499,82 @@ export function listsSetTypeWrapper(
 
   const continuity = input.continuity ?? 'preserve';
   let applyError: string | undefined;
+  let noOp = false;
 
-  const receipt = executeDomainCommand(
+  const compound = compoundMutation({
     editor,
-    () => {
+    source: 'lists.setType',
+    affectedParts: [NUMBERING_PART],
+    execute() {
       let didAnything = false;
 
-      // Phase 1: Apply the preset to change the formatting
-      const result = LevelFormattingHelpers.applyTemplateToAbstract(
+      // Phase 1: Apply the preset formatting via mutatePart
+      const formatResult = mutatePart({
         editor,
-        targetResult.abstractNumId,
-        template,
-        undefined, // apply to all levels
-      ) as { changed: boolean; error?: string };
-      if (result.error) {
-        applyError = result.error;
-        return false;
-      }
-      if (result.changed) didAnything = true;
+        partId: NUMBERING_PART,
+        operation: 'mutate',
+        source: 'lists.setType',
+        expectedRevision: options?.expectedRevision,
+        mutate({ part }) {
+          const result = LevelFormattingHelpers.applyTemplateToAbstract(
+            editor,
+            targetResult.abstractNumId,
+            template,
+            undefined, // apply to all levels
+          ) as { changed: boolean; error?: string };
+          if (result.error) {
+            applyError = result.error;
+            return false;
+          }
+          if (result.changed) {
+            syncNumberingToXmlTree(part, getConverterNumbering(editor));
+          }
+          return result.changed;
+        },
+      });
 
-      // Grab a single transaction *once* — all merge mutations must accumulate
-      // on this same tr so they are dispatched together. Accessing editor.state.tr
-      // multiple times creates fresh transactions and drops prior steps.
-      const { tr } = editor.state;
+      if (applyError) return false;
+      if (formatResult.changed) didAnything = true;
 
-      // Phase 2: Merge adjacent compatible sequences if continuity is 'preserve'.
-      // This runs even when the preset didn't change (items may already be the
-      // target kind but split across separate numIds — the core of SD-2052).
+      // Phase 2: Merge adjacent compatible sequences via PM transaction.
+      let mergeDispatched = false;
       if (continuity === 'preserve') {
         clearIndexCache(editor);
         const freshTarget = resolveListItem(editor, input.target);
         if (freshTarget.numId != null) {
+          const { tr } = editor.state;
           const merged = mergeAdjacentCompatibleSequences(editor, tr, freshTarget, targetResult.abstractNumId);
-          if (merged) didAnything = true;
+          if (merged) {
+            didAnything = true;
+            mergeDispatched = true;
+            dispatchEditorTransaction(editor, tr);
+            clearIndexCache(editor);
+          }
         }
       }
 
-      if (!didAnything) return false;
+      if (!didAnything) {
+        noOp = true;
+        return false;
+      }
 
-      dispatchEditorTransaction(editor, tr);
-      if (continuity === 'preserve') clearIndexCache(editor);
+      // Dispatch re-render if formatting changed but no merge transaction was already dispatched
+      if (formatResult.changed && !mergeDispatched) {
+        dispatchEditorTransaction(editor, editor.state.tr);
+      }
+
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
   if (applyError) {
     return toApplyTemplateError(applyError, input.target);
   }
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (noOp) {
     return toListsFailure('NO_OP', 'List type is already the requested kind.', { target: input.target });
+  }
+  if (!compound.success) {
+    return toListsFailure('NO_OP', 'setType mutation failed.', { target: input.target });
   }
 
   return { success: true, item: targetResult.resolved.address };
@@ -730,6 +817,481 @@ export function listsSetLevelMarkerFontWrapper(
   );
 }
 
+// ---------------------------------------------------------------------------
+// SD-2025 — Clone-on-write helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of a clone-on-write check. If cloning was needed, `pendingRebind`
+ * contains the items that must be rebound to the new numId. The caller
+ * MUST apply the rebinding in the same PM transaction as the actual mutation
+ * so that a subsequent NO_OP / failure leaves the document unchanged.
+ */
+type SequenceLocalResult = {
+  abstractNumId: number;
+  numId: number;
+  sourceNumId: number;
+  pendingRebind: ListItemProjection[] | null;
+};
+
+/**
+ * Ensure the target sequence has its own private abstract definition.
+ * If the abstract is shared, prefer retargeting the existing w:num when
+ * the sequence already owns its numId. Only allocate a fresh w:num when
+ * that numId is reused outside the target sequence.
+ */
+function ensureSequenceLocalAbstract(
+  editor: Editor,
+  target: ListItemProjection,
+  targetAbstractNumId: number,
+  targetNumId: number,
+): SequenceLocalResult {
+  if (!LevelFormattingHelpers.isAbstractShared(editor, targetAbstractNumId, targetNumId)) {
+    return { abstractNumId: targetAbstractNumId, numId: targetNumId, sourceNumId: targetNumId, pendingRebind: null };
+  }
+
+  const sequence = getContiguousSequence(editor, target);
+  const sequenceNodeIds = new Set(sequence.map((item) => item.address.nodeId));
+  const allItemsWithNumId = getAllListItemProjections(editor).filter((item) => item.numId === targetNumId);
+
+  if (
+    allItemsWithNumId.length === sequence.length &&
+    allItemsWithNumId.every((item) => sequenceNodeIds.has(item.address.nodeId))
+  ) {
+    const { newAbstractNumId } = LevelFormattingHelpers.cloneAbstractIntoNum(editor, targetAbstractNumId, targetNumId);
+    return { abstractNumId: newAbstractNumId, numId: targetNumId, sourceNumId: targetNumId, pendingRebind: null };
+  }
+
+  const { newAbstractNumId, newNumId } = LevelFormattingHelpers.cloneAbstractAndNum(
+    editor,
+    targetAbstractNumId,
+    targetNumId,
+  );
+
+  return { abstractNumId: newAbstractNumId, numId: newNumId, sourceNumId: targetNumId, pendingRebind: sequence };
+}
+
+/**
+ * Apply pending rebind operations to a PM transaction.
+ * Must be called within the same transaction as the actual mutation.
+ */
+function applyPendingRebind(editor: Editor, tr: NumberingTransaction, local: SequenceLocalResult): void {
+  if (!local.pendingRebind) return;
+  for (const item of local.pendingRebind) {
+    updateNumberingProperties(
+      { numId: local.numId, ilvl: item.level ?? 0 },
+      item.candidate.node,
+      item.candidate.pos,
+      editor,
+      tr,
+    );
+  }
+}
+
+/**
+ * Execute a single-level mutation with clone-on-write semantics.
+ * Like `executeSingleLevelMutation` but ensures the abstract is sequence-local first.
+ */
+function executeSequenceLocalLevelMutation(
+  editor: Editor,
+  operationId: string,
+  target: { kind: 'block'; nodeType: 'listItem'; nodeId: string },
+  level: number,
+  options: MutationOptions | undefined,
+  mutate: (abstractNumId: number, ilvl: number) => boolean,
+): ListsMutateItemResult {
+  rejectTrackedMode(operationId, options);
+
+  const levelError = validateLevel(level);
+  if (levelError) return levelError;
+
+  const targetResult = resolveTargetAbstract(editor, target);
+  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
+
+  if (!LevelFormattingHelpers.hasLevel(editor, targetResult.abstractNumId, level)) {
+    return toListsFailure('LEVEL_NOT_FOUND', `Level ${level} does not exist in the abstract definition.`, {
+      target,
+      level,
+    });
+  }
+
+  if (options?.dryRun) {
+    return { success: true, item: targetResult.resolved.address };
+  }
+
+  let noOp = false;
+
+  const compound = compoundMutation({
+    editor,
+    source: operationId,
+    affectedParts: [NUMBERING_PART],
+    execute() {
+      // Clone-on-write: prepare sequence-local abstract (converter-only, no PM dispatch).
+      // This is cheap (just converter data) and will be rolled back by compoundMutation
+      // if we return false.
+      const resolved = resolveListItem(editor, target);
+      const local = ensureSequenceLocalAbstract(editor, resolved, targetResult.abstractNumId, targetResult.numId);
+
+      const result = mutatePart({
+        editor,
+        partId: NUMBERING_PART,
+        operation: 'mutate',
+        source: operationId,
+        expectedRevision: options?.expectedRevision,
+        mutate({ part }) {
+          LevelFormattingHelpers.materializeLevelFormattingOverride(editor, local.abstractNumId, local.numId, level);
+          const changed = mutate(local.abstractNumId, level);
+          if (!changed) return false;
+          LevelFormattingHelpers.copySequenceStateOverrides(editor, local.sourceNumId, local.numId, [level]);
+          syncNumberingToXmlTree(part, getConverterNumbering(editor));
+          return true;
+        },
+      });
+
+      // The mutation itself must have changed something — a clone alone is not enough.
+      if (!result.changed) {
+        noOp = true;
+        return false; // compoundMutation rolls back the clone
+      }
+
+      // Apply rebinding + re-render in a single PM transaction
+      const { tr } = editor.state;
+      applyPendingRebind(editor, tr, local);
+      dispatchEditorTransaction(editor, tr);
+      if (local.pendingRebind) clearIndexCache(editor);
+      return true;
+    },
+  });
+
+  if (noOp) {
+    return toListsFailure('NO_OP', `${operationId}: values already match.`, { target });
+  }
+  if (!compound.success) {
+    return toListsFailure('NO_OP', `${operationId}: mutation failed.`, { target });
+  }
+
+  return { success: true, item: targetResult.resolved.address };
+}
+
+// ---------------------------------------------------------------------------
+// SD-2025 — New user-facing wrappers
+// ---------------------------------------------------------------------------
+
+export function listsGetStyleWrapper(editor: Editor, input: ListsGetStyleInput): ListsGetStyleResult {
+  const levelsError = validateLevelsArray(input.levels);
+  if (levelsError) return levelsError;
+
+  const normalized = normalizeLevels(input.levels);
+
+  const targetResult = resolveTargetAbstract(editor, input.target);
+  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
+
+  const style = LevelFormattingHelpers.captureEffectiveStyle(
+    editor,
+    targetResult.abstractNumId,
+    targetResult.numId,
+    normalized,
+  ) as ListTemplate | null;
+
+  if (!style) {
+    return toListsFailure('INVALID_TARGET', 'Could not capture style from target.', { target: input.target });
+  }
+
+  return { success: true, style };
+}
+
+export function listsApplyStyleWrapper(
+  editor: Editor,
+  input: ListsApplyStyleInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  rejectTrackedMode('lists.applyStyle', options);
+
+  if (input.style.version !== 1) {
+    return toListsFailure('INVALID_INPUT', 'Unsupported style version.', { version: input.style.version });
+  }
+
+  const levelsError = validateLevelsArray(input.levels);
+  if (levelsError) return levelsError;
+
+  const normalized = normalizeLevels(input.levels);
+
+  const targetResult = resolveTargetAbstract(editor, input.target);
+  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
+
+  const preflightError = preflightTemplateLevels(input.style, normalized, input.target);
+  if (preflightError) return preflightError;
+
+  if (options?.dryRun) {
+    return { success: true, item: targetResult.resolved.address };
+  }
+
+  let applyError: string | undefined;
+  let noOp = false;
+
+  const compound = compoundMutation({
+    editor,
+    source: 'lists.applyStyle',
+    affectedParts: [NUMBERING_PART],
+    execute() {
+      const resolved = resolveListItem(editor, input.target);
+      const local = ensureSequenceLocalAbstract(editor, resolved, targetResult.abstractNumId, targetResult.numId);
+
+      const result = mutatePart({
+        editor,
+        partId: NUMBERING_PART,
+        operation: 'mutate',
+        source: 'lists.applyStyle',
+        expectedRevision: options?.expectedRevision,
+        mutate({ part }) {
+          const affectedLevels = normalized ?? input.style.levels.map((l) => l.level);
+          for (const ilvl of affectedLevels) {
+            LevelFormattingHelpers.materializeLevelFormattingOverride(editor, local.abstractNumId, local.numId, ilvl);
+          }
+
+          const applyResult = LevelFormattingHelpers.applyTemplateToAbstract(
+            editor,
+            local.abstractNumId,
+            input.style,
+            normalized,
+          ) as { changed: boolean; error?: string };
+          if (applyResult.error) {
+            applyError = applyResult.error;
+            return false;
+          }
+
+          if (!applyResult.changed) return false;
+          LevelFormattingHelpers.copySequenceStateOverrides(editor, local.sourceNumId, local.numId, affectedLevels);
+          syncNumberingToXmlTree(part, getConverterNumbering(editor));
+          return true;
+        },
+      });
+
+      if (applyError || !result.changed) {
+        noOp = !applyError;
+        return false; // compoundMutation rolls back the clone
+      }
+
+      const { tr } = editor.state;
+      applyPendingRebind(editor, tr, local);
+      dispatchEditorTransaction(editor, tr);
+      if (local.pendingRebind) clearIndexCache(editor);
+      return true;
+    },
+  });
+
+  if (applyError) return toApplyTemplateError(applyError, input.target);
+  if (noOp) return toListsFailure('NO_OP', 'All style levels already match.', { target: input.target });
+  if (!compound.success) return toListsFailure('NO_OP', 'Style application failed.', { target: input.target });
+
+  return { success: true, item: targetResult.resolved.address };
+}
+
+type SetValueInput = { target: { kind: 'block'; nodeType: 'listItem'; nodeId: string }; value: number | null };
+type SetValueDelegate = (editor: Editor, input: SetValueInput, options?: MutationOptions) => ListsMutateItemResult;
+
+let _setValueDelegate: SetValueDelegate | undefined;
+
+/** Register the setValue delegate so restartAt can reuse its separation + override logic. */
+export function registerSetValueDelegate(fn: SetValueDelegate): void {
+  _setValueDelegate = fn;
+}
+
+export function listsRestartAtWrapper(
+  editor: Editor,
+  input: ListsRestartAtInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  rejectTrackedMode('lists.restartAt', options);
+
+  if (input.startAt < 1 || !Number.isInteger(input.startAt)) {
+    return toListsFailure('INVALID_INPUT', 'startAt must be a positive integer (>= 1).', { startAt: input.startAt });
+  }
+
+  const resolved = resolveListItem(editor, input.target);
+  if (resolved.numId == null) {
+    return toListsFailure('INVALID_TARGET', 'Target must have numbering metadata.', { target: input.target });
+  }
+
+  // Reject bullet sequences
+  if (resolved.kind === 'bullet') {
+    return toListsFailure('INVALID_INPUT', 'Cannot restart numbering on a bullet list.', { target: input.target });
+  }
+
+  if (!_setValueDelegate) {
+    return toListsFailure('INVALID_INPUT', 'restartAt: internal delegate not registered.', { target: input.target });
+  }
+
+  // Delegate to the existing setValue wrapper which handles both
+  // first-in-sequence and mid-sequence (auto-separate + startOverride)
+  return _setValueDelegate(editor, { target: input.target, value: input.startAt }, options);
+}
+
+export function listsSetLevelNumberStyleWrapper(
+  editor: Editor,
+  input: ListsSetLevelNumberStyleInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  // Reject 'bullet' — must use setLevelBullet or setLevelPictureBullet
+  if (input.numberStyle === 'bullet') {
+    return toListsFailure('INVALID_INPUT', 'Use setLevelBullet or setLevelPictureBullet to set bullet format.', {
+      numberStyle: input.numberStyle,
+    });
+  }
+
+  return executeSequenceLocalLevelMutation(
+    editor,
+    'lists.setLevelNumberStyle',
+    input.target,
+    input.level,
+    options,
+    (abstractNumId, ilvl) => LevelFormattingHelpers.setLevelNumberStyle(editor, abstractNumId, ilvl, input.numberStyle),
+  );
+}
+
+export function listsSetLevelTextWrapper(
+  editor: Editor,
+  input: ListsSetLevelTextInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  return executeSequenceLocalLevelMutation(
+    editor,
+    'lists.setLevelText',
+    input.target,
+    input.level,
+    options,
+    (abstractNumId, ilvl) => LevelFormattingHelpers.setLevelText(editor, abstractNumId, ilvl, input.text),
+  );
+}
+
+export function listsSetLevelStartWrapper(
+  editor: Editor,
+  input: ListsSetLevelStartInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  if (input.startAt < 1 || !Number.isInteger(input.startAt)) {
+    return toListsFailure('INVALID_INPUT', 'startAt must be a positive integer (>= 1).', { startAt: input.startAt });
+  }
+
+  // Pre-check: reject bullet levels before entering the shared mutation path
+  const levelError = validateLevel(input.level);
+  if (!levelError) {
+    const targetResult = resolveTargetAbstract(editor, input.target);
+    if (targetResult.ok && LevelFormattingHelpers.hasLevel(editor, targetResult.abstractNumId, input.level)) {
+      const abstracts = getConverterNumbering(editor).abstracts as Record<number, unknown>;
+      const lvlEl = LevelFormattingHelpers.findLevelElement(abstracts[targetResult.abstractNumId], input.level);
+      const props = LevelFormattingHelpers.readLevelProperties(lvlEl, input.level);
+      if (props.numFmt === 'bullet') {
+        return toListsFailure('INVALID_INPUT', 'Cannot set start value on a bullet level.', {
+          target: input.target,
+          level: input.level,
+        });
+      }
+    }
+  }
+
+  return executeSequenceLocalLevelMutation(
+    editor,
+    'lists.setLevelStart',
+    input.target,
+    input.level,
+    options,
+    (abstractNumId, ilvl) => LevelFormattingHelpers.setLevelStart(editor, abstractNumId, ilvl, input.startAt),
+  );
+}
+
+export function listsSetLevelLayoutWrapper(
+  editor: Editor,
+  input: ListsSetLevelLayoutInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  rejectTrackedMode('lists.setLevelLayout', options);
+
+  const levelError = validateLevel(input.level);
+  if (levelError) return levelError;
+
+  const targetResult = resolveTargetAbstract(editor, input.target);
+  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
+
+  if (!LevelFormattingHelpers.hasLevel(editor, targetResult.abstractNumId, input.level)) {
+    return toListsFailure('LEVEL_NOT_FOUND', `Level ${input.level} does not exist in the abstract definition.`, {
+      target: input.target,
+      level: input.level,
+    });
+  }
+
+  if (options?.dryRun) {
+    return { success: true, item: targetResult.resolved.address };
+  }
+
+  let noOp = false;
+  let layoutError: string | undefined;
+
+  const compound = compoundMutation({
+    editor,
+    source: 'lists.setLevelLayout',
+    affectedParts: [NUMBERING_PART],
+    execute() {
+      const resolved = resolveListItem(editor, input.target);
+      const local = ensureSequenceLocalAbstract(editor, resolved, targetResult.abstractNumId, targetResult.numId);
+
+      const result = mutatePart({
+        editor,
+        partId: NUMBERING_PART,
+        operation: 'mutate',
+        source: 'lists.setLevelLayout',
+        expectedRevision: options?.expectedRevision,
+        mutate({ part }) {
+          LevelFormattingHelpers.materializeLevelFormattingOverride(
+            editor,
+            local.abstractNumId,
+            local.numId,
+            input.level,
+          );
+          const layoutResult = LevelFormattingHelpers.setLevelLayout(
+            editor,
+            local.abstractNumId,
+            input.level,
+            input.layout,
+          ) as { changed: boolean; error?: string };
+
+          if (layoutResult.error) {
+            layoutError = layoutResult.error;
+            return false;
+          }
+          if (!layoutResult.changed) return false;
+          syncNumberingToXmlTree(part, getConverterNumbering(editor));
+          return true;
+        },
+      });
+
+      if (layoutError || !result.changed) {
+        noOp = !layoutError;
+        return false;
+      }
+
+      const { tr } = editor.state;
+      applyPendingRebind(editor, tr, local);
+      dispatchEditorTransaction(editor, tr);
+      if (local.pendingRebind) clearIndexCache(editor);
+      return true;
+    },
+  });
+
+  if (layoutError) {
+    return toListsFailure('INVALID_INPUT', `Layout mutation failed: ${layoutError}.`, { target: input.target });
+  }
+  if (noOp) return toListsFailure('NO_OP', 'lists.setLevelLayout: values already match.', { target: input.target });
+  if (!compound.success)
+    return toListsFailure('NO_OP', 'lists.setLevelLayout: mutation failed.', { target: input.target });
+
+  return { success: true, item: targetResult.resolved.address };
+}
+
+// ---------------------------------------------------------------------------
+// Existing wrappers (clearLevelOverrides)
+// ---------------------------------------------------------------------------
+
 export function listsClearLevelOverridesWrapper(
   editor: Editor,
   input: ListsClearLevelOverridesInput,
@@ -754,18 +1316,41 @@ export function listsClearLevelOverridesWrapper(
     return toListsFailure('NO_OP', 'No override exists for this level.', { target: input.target, level: input.level });
   }
 
-  const receipt = executeDomainCommand(
+  let noOp = false;
+
+  const compound = compoundMutation({
     editor,
-    () => {
-      LevelFormattingHelpers.clearLevelOverride(editor, resolved.numId!, input.level);
+    source: 'lists.clearLevelOverrides',
+    affectedParts: [NUMBERING_PART],
+    execute() {
+      const result = mutatePart({
+        editor,
+        partId: NUMBERING_PART,
+        operation: 'mutate',
+        source: 'lists.clearLevelOverrides',
+        expectedRevision: options?.expectedRevision,
+        mutate({ part }) {
+          LevelFormattingHelpers.clearLevelOverride(editor, resolved.numId!, input.level);
+          syncNumberingToXmlTree(part, getConverterNumbering(editor));
+          return true;
+        },
+      });
+
+      if (!result.changed) {
+        noOp = true;
+        return false;
+      }
+
       dispatchEditorTransaction(editor, editor.state.tr);
       return true;
     },
-    { expectedRevision: options?.expectedRevision },
-  );
+  });
 
-  if (receipt.steps[0]?.effect !== 'changed') {
+  if (noOp) {
     return toListsFailure('NO_OP', 'clearLevelOverrides could not be applied.', { target: input.target });
+  }
+  if (!compound.success) {
+    return toListsFailure('NO_OP', 'clearLevelOverrides mutation failed.', { target: input.target });
   }
 
   return { success: true, item: resolved.address };

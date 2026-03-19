@@ -5,7 +5,7 @@ export function getActiveFormatting(editor) {
   const { state } = editor;
   const { selection } = state;
 
-  const marks = selection.empty && state.storedMarks != null ? state.storedMarks : getMarksFromSelection(state);
+  const marks = selection.empty && state.storedMarks != null ? state.storedMarks : getMarksFromSelection(state, editor);
   const markAttrs = selection.$head.parent.attrs.marksAttrs;
 
   const marksToProcess = marks

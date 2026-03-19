@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue';
-import { NCheckbox } from 'naive-ui';
 
 const props = defineProps({
   field: {
@@ -43,7 +42,8 @@ const getPreviewStyle = computed(() => {
 
 <template>
   <div class="checkbox-container">
-    <n-checkbox v-if="props.isEditing" :checked="getValue" :disabled="!props.isEditing"></n-checkbox>
+    <!-- TODO: check when migrating CLM -->
+    <div v-if="props.isEditing" class="checkbox-editing-placeholder"></div>
     <div v-else class="checkbox-preview" :style="getPreviewStyle">{{ getValue ? 'x' : '' }}</div>
   </div>
 </template>
@@ -63,6 +63,11 @@ const getPreviewStyle = computed(() => {
   justify-content: center;
   align-items: center;
   line-height: 1.2;
+  width: 100%;
+  height: 100%;
+}
+
+.checkbox-editing-placeholder {
   width: 100%;
   height: 100%;
 }

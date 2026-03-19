@@ -1,0 +1,291 @@
+---
+title: fields.remove
+sidebarTitle: fields.remove
+description: Remove a field from the document.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Remove a field from the document.
+
+- Operation ID: `fields.remove`
+- API member path: `editor.doc.fields.remove(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a FieldMutationResult indicating success or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mode` | `"raw"` | yes | Constant: `"raw"` |
+| `target` | object(kind="field") | yes |  |
+| `target.blockId` | string | yes |  |
+| `target.kind` | `"field"` | yes | Constant: `"field"` |
+| `target.nestingDepth` | integer | no |  |
+| `target.occurrenceIndex` | integer | yes |  |
+
+### Example request
+
+```json
+{
+  "mode": "raw",
+  "target": {
+    "blockId": "block-abc123",
+    "kind": "field",
+    "nestingDepth": 1,
+    "occurrenceIndex": 1
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `field` | object(kind="field") | yes |  |
+| `field.blockId` | string | yes |  |
+| `field.kind` | `"field"` | yes | Constant: `"field"` |
+| `field.nestingDepth` | integer | no |  |
+| `field.occurrenceIndex` | integer | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "field": {
+    "blockId": "block-abc123",
+    "kind": "field",
+    "nestingDepth": 1,
+    "occurrenceIndex": 1
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "const": "raw"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "blockId": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "field"
+        },
+        "nestingDepth": {
+          "type": "integer"
+        },
+        "occurrenceIndex": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "blockId",
+        "occurrenceIndex"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "mode",
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "additionalProperties": false,
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "field"
+            },
+            "nestingDepth": {
+              "type": "integer"
+            },
+            "occurrenceIndex": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "occurrenceIndex"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "field"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "field": {
+      "additionalProperties": false,
+      "properties": {
+        "blockId": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "field"
+        },
+        "nestingDepth": {
+          "type": "integer"
+        },
+        "occurrenceIndex": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "blockId",
+        "occurrenceIndex"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "field"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

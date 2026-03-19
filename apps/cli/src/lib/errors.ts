@@ -40,7 +40,10 @@ export type CliErrorCode =
   | 'CROSS_BLOCK_MATCH'
   | 'SPAN_FRAGMENTED'
   | 'PAGE_NUMBERS_NOT_MATERIALIZED'
-  | 'CAPABILITY_UNAVAILABLE';
+  | 'CAPABILITY_UNAVAILABLE'
+  | 'INVALID_TARGET'
+  | 'AMBIGUOUS_TARGET'
+  | 'CAPABILITY_UNSUPPORTED';
 
 /**
  * Intersection type for errors thrown by document-api adapter operations.

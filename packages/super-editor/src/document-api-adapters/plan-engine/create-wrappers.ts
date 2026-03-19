@@ -19,7 +19,7 @@ import type {
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import { type BlockCandidate } from '../helpers/node-address-resolver.js';
-import { resolveBlockInsertionPos } from './create-insertion.js';
+import { resolveCreateAnchor } from './create-insertion.js';
 import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, ensureTrackedCapability } from '../helpers/mutation-helpers.js';
@@ -55,15 +55,15 @@ type InsertHeadingAtCommand = (options: InsertHeadingAtCommandOptions) => boolea
 function resolveCreateInsertPosition(
   editor: Editor,
   at: CreateParagraphInput['at'] | CreateHeadingInput['at'],
-  operationLabel: string,
 ): number {
   const location = at ?? { kind: 'documentEnd' };
 
   if (location.kind === 'documentStart') return 0;
   if (location.kind === 'documentEnd') return editor.state.doc.content.size;
 
-  // Delegate before/after resolution to shared helper (§13.15 — single insertion path)
-  return resolveBlockInsertionPos(editor, location.target.nodeId, location.kind);
+  // Delegate before/after resolution to shared helper with pre-flight nodeType validation
+  const { pos } = resolveCreateAnchor(editor, location.target, location.kind);
+  return pos;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ export function createParagraphWrapper(
     ensureTrackedCapability(editor, { operation: 'create.paragraph' });
   }
 
-  const insertAt = resolveCreateInsertPosition(editor, input.at, 'paragraph');
+  const insertAt = resolveCreateInsertPosition(editor, input.at);
 
   if (options?.dryRun) {
     const canInsert = editor.can().insertParagraphAt?.({
@@ -190,6 +190,7 @@ export function createParagraphWrapper(
   }
 
   const paragraphId = uuidv4();
+  let canonicalId = paragraphId;
   let trackedChangeRefs: CreateParagraphSuccessResult['trackedChangeRefs'] | undefined;
 
   const receipt = executeDomainCommand(
@@ -205,6 +206,7 @@ export function createParagraphWrapper(
         clearIndexCache(editor);
         try {
           const paragraph = resolveCreatedBlock(editor, 'paragraph', paragraphId);
+          canonicalId = paragraph.nodeId;
           if (mode === 'tracked') {
             trackedChangeRefs = collectTrackInsertRefsInRange(editor, paragraph.pos, paragraph.end);
           }
@@ -230,7 +232,7 @@ export function createParagraphWrapper(
     };
   }
 
-  return buildParagraphCreateSuccess(paragraphId, trackedChangeRefs);
+  return buildParagraphCreateSuccess(canonicalId, trackedChangeRefs);
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +254,7 @@ export function createHeadingWrapper(
     ensureTrackedCapability(editor, { operation: 'create.heading' });
   }
 
-  const insertAt = resolveCreateInsertPosition(editor, input.at, 'heading');
+  const insertAt = resolveCreateInsertPosition(editor, input.at);
 
   if (options?.dryRun) {
     const canInsert = editor.can().insertHeadingAt?.({
@@ -288,6 +290,7 @@ export function createHeadingWrapper(
   }
 
   const headingId = uuidv4();
+  let canonicalId = headingId;
   let trackedChangeRefs: CreateHeadingSuccessResult['trackedChangeRefs'] | undefined;
 
   const receipt = executeDomainCommand(
@@ -304,6 +307,7 @@ export function createHeadingWrapper(
         clearIndexCache(editor);
         try {
           const heading = resolveCreatedBlock(editor, 'heading', headingId);
+          canonicalId = heading.nodeId;
           if (mode === 'tracked') {
             trackedChangeRefs = collectTrackInsertRefsInRange(editor, heading.pos, heading.end);
           }
@@ -326,5 +330,5 @@ export function createHeadingWrapper(
     };
   }
 
-  return buildHeadingCreateSuccess(headingId, trackedChangeRefs);
+  return buildHeadingCreateSuccess(canonicalId, trackedChangeRefs);
 }

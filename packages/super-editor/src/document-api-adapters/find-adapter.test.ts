@@ -1,7 +1,7 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import type { Query } from '@superdoc/document-api';
-import { findAdapter } from './find-adapter.js';
+import { findLegacyAdapter } from './find-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Helpers — lightweight ProseMirror-like stubs
@@ -133,7 +133,7 @@ function buildDoc(...args: unknown[]): ProseMirrorNode {
 // Block selector queries
 // ---------------------------------------------------------------------------
 
-describe('findAdapter — block selectors', () => {
+describe('findLegacyAdapter — block selectors', () => {
   it('returns all paragraphs when select.type is "paragraph"', () => {
     const doc = buildDoc(
       { typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, offset: 0 },
@@ -143,7 +143,7 @@ describe('findAdapter — block selectors', () => {
     const editor = makeEditor(doc);
     const query: Query = { select: { type: 'node', nodeType: 'paragraph' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(2);
     expect(result.items.map((i) => i.address)).toEqual([
@@ -161,7 +161,7 @@ describe('findAdapter — block selectors', () => {
     const editor = makeEditor(doc);
     const query: Query = { select: { type: 'node', nodeType: 'heading' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(1);
     expect(result.items[0].address).toEqual({ kind: 'block', nodeType: 'heading', nodeId: 'h1' });
@@ -175,7 +175,7 @@ describe('findAdapter — block selectors', () => {
     const editor = makeEditor(doc);
     const query: Query = { select: { type: 'node', kind: 'block' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(2);
   });
@@ -188,7 +188,7 @@ describe('findAdapter — block selectors', () => {
     const editor = makeEditor(doc);
     const query: Query = { select: { type: 'node', nodeType: 'table' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(1);
     expect(result.items[0].address.nodeId).toBe('t1');
@@ -202,7 +202,7 @@ describe('findAdapter — block selectors', () => {
     const editor = makeEditor(doc);
     const query: Query = { select: { type: 'node', nodeType: 'paragraph' }, includeUnknown: true };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.items.map((i) => i.address)).toEqual([{ kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }]);
     expect(result.total).toBe(1);
@@ -220,7 +220,7 @@ describe('findAdapter — block selectors', () => {
     const editor = makeEditor(doc);
     const query: Query = { select: { type: 'node', nodeType: 'paragraph' }, includeUnknown: true };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     const diagnostic = result.diagnostics?.find((entry) => entry.message.includes('Unknown inline node type'));
     expect(diagnostic).toBeDefined();
@@ -238,7 +238,7 @@ describe('findAdapter — block selectors', () => {
 // Within scope
 // ---------------------------------------------------------------------------
 
-describe('findAdapter — within scope', () => {
+describe('findLegacyAdapter — within scope', () => {
   it('limits block results to within a parent node', () => {
     const doc = buildDoc(
       { typeName: 'table', attrs: { sdBlockId: 'tbl1' }, nodeSize: 50, offset: 0 },
@@ -251,7 +251,7 @@ describe('findAdapter — within scope', () => {
       within: { kind: 'block', nodeType: 'table', nodeId: 'tbl1' },
     };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(1);
     expect(result.items[0].address.nodeId).toBe('p-inside');
@@ -265,29 +265,29 @@ describe('findAdapter — within scope', () => {
       within: { kind: 'block', nodeType: 'table', nodeId: 'no-such-table' },
     };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.items).toEqual([]);
     expect(result.diagnostics).toBeDefined();
     expect(result.diagnostics![0].message).toContain('was not found');
   });
 
-  it('returns empty with diagnostic for inline within scope', () => {
+  it('returns empty with diagnostic for non-existent within scope', () => {
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, offset: 0 });
     const editor = makeEditor(doc);
     const query: Query = {
       select: { type: 'node', nodeType: 'paragraph' },
       within: {
-        kind: 'inline',
-        nodeType: 'run',
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 5 } },
+        kind: 'block',
+        nodeType: 'paragraph',
+        nodeId: 'nonexistent',
       },
     };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.items).toEqual([]);
-    expect(result.diagnostics![0].message).toContain('Inline');
+    expect(result.diagnostics![0].message).toContain('not found');
   });
 });
 
@@ -295,7 +295,7 @@ describe('findAdapter — within scope', () => {
 // Pagination
 // ---------------------------------------------------------------------------
 
-describe('findAdapter — pagination', () => {
+describe('findLegacyAdapter — pagination', () => {
   function buildThreeParagraphs() {
     return buildDoc(
       { typeName: 'paragraph', attrs: { sdBlockId: 'a' }, offset: 0 },
@@ -308,7 +308,7 @@ describe('findAdapter — pagination', () => {
     const editor = makeEditor(buildThreeParagraphs());
     const query: Query = { select: { type: 'node', nodeType: 'paragraph' }, limit: 2 };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(3);
     expect(result.items).toHaveLength(2);
@@ -320,7 +320,7 @@ describe('findAdapter — pagination', () => {
     const editor = makeEditor(buildThreeParagraphs());
     const query: Query = { select: { type: 'node', nodeType: 'paragraph' }, offset: 1 };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(3);
     expect(result.items).toHaveLength(2);
@@ -331,7 +331,7 @@ describe('findAdapter — pagination', () => {
     const editor = makeEditor(buildThreeParagraphs());
     const query: Query = { select: { type: 'node', nodeType: 'paragraph' }, offset: 1, limit: 1 };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(3);
     expect(result.items).toHaveLength(1);
@@ -343,7 +343,7 @@ describe('findAdapter — pagination', () => {
 // Inline selectors
 // ---------------------------------------------------------------------------
 
-describe('findAdapter — inline selectors', () => {
+describe('findLegacyAdapter — inline selectors', () => {
   it('returns run matches', () => {
     const runText = makeNode('text', {}, 2, [], 'Hi');
     const runNode = makeNode('run', { runProperties: { bold: true } }, 4, [{ node: runText, offset: 0 }]);
@@ -351,7 +351,7 @@ describe('findAdapter — inline selectors', () => {
     const doc = makeNode('doc', {}, 8, [{ node: paragraph, offset: 0 }]);
     const editor = makeEditor(doc);
 
-    const result = findAdapter(editor, { select: { type: 'node', nodeType: 'run' } });
+    const result = findLegacyAdapter(editor, { select: { type: 'node', nodeType: 'run' } });
 
     expect(result.total).toBe(1);
     expect(result.items[0].address).toEqual({
@@ -375,7 +375,7 @@ describe('findAdapter — inline selectors', () => {
     const doc = makeNode('doc', {}, 7, [{ node: paragraph, offset: 0 }]);
     const editor = makeEditor(doc);
 
-    const result = findAdapter(editor, { select: { type: 'node', nodeType: 'hyperlink' } });
+    const result = findLegacyAdapter(editor, { select: { type: 'node', nodeType: 'hyperlink' } });
 
     expect(result.total).toBe(1);
     expect(result.items[0].address).toEqual({
@@ -395,7 +395,7 @@ describe('findAdapter — inline selectors', () => {
     const doc = makeNode('doc', {}, 7, [{ node: paragraph, offset: 0 }]);
     const editor = makeEditor(doc);
 
-    const result = findAdapter(editor, { select: { type: 'node', nodeType: 'image' } });
+    const result = findLegacyAdapter(editor, { select: { type: 'node', nodeType: 'image' } });
 
     expect(result.total).toBe(1);
     expect(result.items[0].address).toEqual({
@@ -415,7 +415,7 @@ describe('findAdapter — inline selectors', () => {
     ]);
     const editor = makeEditor(doc);
 
-    const shorthand = findAdapter(editor, { select: { type: 'node', nodeType: 'sdt' } });
+    const shorthand = findLegacyAdapter(editor, { select: { type: 'node', nodeType: 'sdt' } });
     expect(shorthand.total).toBe(2);
     expect(shorthand.items.map((i) => i.address)).toEqual(
       expect.arrayContaining([
@@ -428,7 +428,7 @@ describe('findAdapter — inline selectors', () => {
       ]),
     );
 
-    const nodeSelector = findAdapter(editor, { select: { type: 'node', nodeType: 'sdt' } });
+    const nodeSelector = findLegacyAdapter(editor, { select: { type: 'node', nodeType: 'sdt' } });
     expect(nodeSelector.total).toBe(2);
     expect(nodeSelector.items.map((i) => i.address)).toEqual(
       expect.arrayContaining([
@@ -452,11 +452,11 @@ describe('findAdapter — inline selectors', () => {
     ]);
     const editor = makeEditor(doc);
 
-    const blockResult = findAdapter(editor, { select: { type: 'node', kind: 'block', nodeType: 'sdt' } });
+    const blockResult = findLegacyAdapter(editor, { select: { type: 'node', kind: 'block', nodeType: 'sdt' } });
     expect(blockResult.total).toBe(1);
     expect(blockResult.items[0].address).toEqual({ kind: 'block', nodeType: 'sdt', nodeId: 'sdt-block' });
 
-    const inlineResult = findAdapter(editor, { select: { type: 'node', kind: 'inline', nodeType: 'sdt' } });
+    const inlineResult = findLegacyAdapter(editor, { select: { type: 'node', kind: 'inline', nodeType: 'sdt' } });
     expect(inlineResult.total).toBe(1);
     expect(inlineResult.items[0].address).toEqual({
       kind: 'inline',
@@ -472,7 +472,7 @@ describe('findAdapter — inline selectors', () => {
     const doc = makeNode('doc', {}, 8, [{ node: paragraph, offset: 0 }]);
     const editor = makeEditor(doc);
 
-    const result = findAdapter(editor, { select: { type: 'node', nodeType: 'run' }, includeNodes: true });
+    const result = findLegacyAdapter(editor, { select: { type: 'node', nodeType: 'run' }, includeNodes: true });
 
     expect(result.total).toBe(1);
     expect(result.items).toHaveLength(1);
@@ -488,7 +488,7 @@ describe('findAdapter — inline selectors', () => {
 // Text selector queries
 // ---------------------------------------------------------------------------
 
-describe('findAdapter — text selectors', () => {
+describe('findLegacyAdapter — text selectors', () => {
   // Pad textContent to 102 chars so textBetween returns something for any position in the two paragraphs.
   const defaultText = 'a'.repeat(102);
 
@@ -511,7 +511,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeSearchableEditor([{ from: 5, to: 10, text: 'hello' }], text);
     const query: Query = { select: { type: 'text', pattern: 'hello' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(1);
     expect(result.items[0].address).toEqual({ kind: 'block', nodeType: 'paragraph', nodeId: 'p1' });
@@ -527,7 +527,7 @@ describe('findAdapter — text selectors', () => {
     ]);
     const query: Query = { select: { type: 'text', pattern: 'test' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(2);
     expect(result.items[0].address.nodeId).toBe('p1');
@@ -538,7 +538,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeSearchableEditor([]);
     const query: Query = { select: { type: 'text', pattern: '' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.items).toEqual([]);
     expect(result.diagnostics).toBeDefined();
@@ -549,7 +549,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeSearchableEditor([]);
     const query: Query = { select: { type: 'text', pattern: '[invalid', mode: 'regex' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.items).toEqual([]);
     expect(result.diagnostics).toBeDefined();
@@ -571,7 +571,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'hel+o', mode: 'regex' } };
 
-    findAdapter(editor, query);
+    findLegacyAdapter(editor, query);
 
     expect(capturedPattern).toBeInstanceOf(RegExp);
     expect((capturedPattern as RegExp).source).toBe('hel+o');
@@ -588,7 +588,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'Hello', mode: 'regex', caseSensitive: true } };
 
-    findAdapter(editor, query);
+    findLegacyAdapter(editor, query);
 
     expect(capturedPattern).toBeInstanceOf(RegExp);
     expect((capturedPattern as RegExp).flags).not.toContain('i');
@@ -604,7 +604,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'hello' } };
 
-    findAdapter(editor, query);
+    findLegacyAdapter(editor, query);
 
     expect(capturedPattern).toBeInstanceOf(RegExp);
     expect((capturedPattern as RegExp).source).toBe('hello');
@@ -646,7 +646,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: '/foo/' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(1);
     expect(result.items[0].context).toBeDefined();
@@ -664,7 +664,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'Hello', caseSensitive: true } };
 
-    findAdapter(editor, query);
+    findLegacyAdapter(editor, query);
 
     expect(capturedPattern).toBeInstanceOf(RegExp);
     expect((capturedPattern as RegExp).source).toBe('Hello');
@@ -681,7 +681,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'Hello', caseSensitive: true } };
 
-    findAdapter(editor, query);
+    findLegacyAdapter(editor, query);
 
     expect(capturedOptions).toBeDefined();
     expect(capturedOptions!.caseSensitive).toBe(true);
@@ -697,7 +697,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'a' }, offset: 0, limit: 2 };
 
-    findAdapter(editor, query);
+    findLegacyAdapter(editor, query);
 
     expect(capturedOptions).toBeDefined();
     expect(capturedOptions!.maxMatches).toBe(Infinity);
@@ -708,7 +708,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc); // no search command
     const query: Query = { select: { type: 'text', pattern: 'hello' } };
 
-    expect(() => findAdapter(editor, query)).toThrow('command is not available');
+    expect(() => findLegacyAdapter(editor, query)).toThrow('command is not available');
   });
 
   it('paginates text results and contexts together', () => {
@@ -719,7 +719,7 @@ describe('findAdapter — text selectors', () => {
     ]);
     const query: Query = { select: { type: 'text', pattern: 'test' }, offset: 1, limit: 1 };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(3);
     expect(result.items).toHaveLength(1);
@@ -749,7 +749,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'test' }, offset: 0, limit: 2 };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.items).toHaveLength(2);
     expect(result.total).toBe(5); // must be 5, not 2
@@ -778,7 +778,7 @@ describe('findAdapter — text selectors', () => {
       limit: 2,
     };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(totalMatches);
     expect(result.items).toHaveLength(2);
@@ -808,7 +808,7 @@ describe('findAdapter — text selectors', () => {
       limit: 2,
     };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(totalMatches);
     expect(result.items).toHaveLength(2);
@@ -842,7 +842,7 @@ describe('findAdapter — text selectors', () => {
       within: { kind: 'block', nodeType: 'table', nodeId: 'tbl1' },
     };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(2);
     expect(result.items).toHaveLength(2);
@@ -866,7 +866,7 @@ describe('findAdapter — text selectors', () => {
       within: { kind: 'block', nodeType: 'table', nodeId: 'tbl1' },
     };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(1);
     expect(result.items[0].address.nodeId).toBe('p-in');
@@ -887,7 +887,7 @@ describe('findAdapter — text selectors', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'test' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.total).toBe(1);
     expect(result.items[0].address.nodeId).toBe('p1');
@@ -898,7 +898,7 @@ describe('findAdapter — text selectors', () => {
 // Context / snippet building
 // ---------------------------------------------------------------------------
 
-describe('findAdapter — snippet context', () => {
+describe('findLegacyAdapter — snippet context', () => {
   it('includes highlight range in context', () => {
     // Text: 40 chars of padding, then "hello" at positions 40-45, then more padding
     const text = 'a'.repeat(40) + 'hello' + 'a'.repeat(55);
@@ -907,7 +907,7 @@ describe('findAdapter — snippet context', () => {
     const editor = makeEditor(doc, search);
     const query: Query = { select: { type: 'text', pattern: 'hello' } };
 
-    const result = findAdapter(editor, query);
+    const result = findLegacyAdapter(editor, query);
 
     expect(result.items[0].context).toBeDefined();
     const ctx = result.items[0].context!;

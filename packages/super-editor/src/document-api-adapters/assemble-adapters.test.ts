@@ -23,7 +23,7 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('info.info');
     expect(adapters).toHaveProperty('comments');
     expect(adapters).toHaveProperty('write.write');
-    expect(adapters).toHaveProperty('format.apply');
+    expect(adapters).toHaveProperty('selectionMutation.execute');
     expect(adapters).toHaveProperty('paragraphs.setStyle');
     expect(adapters).toHaveProperty('paragraphs.clearStyle');
     expect(adapters).toHaveProperty('paragraphs.resetDirectFormatting');
@@ -103,7 +103,7 @@ describe('assembleDocumentApiAdapters', () => {
 
     expect(typeof adapters.find.find).toBe('function');
     expect(typeof adapters.write.write).toBe('function');
-    expect(typeof adapters.format.apply).toBe('function');
+    expect(typeof adapters.selectionMutation.execute).toBe('function');
     expect(typeof adapters.paragraphs.setStyle).toBe('function');
     expect(typeof adapters.paragraphs.setAlignment).toBe('function');
     expect(typeof adapters.paragraphs.setBorder).toBe('function');

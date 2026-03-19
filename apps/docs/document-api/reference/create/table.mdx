@@ -67,6 +67,10 @@ Returns a CreateTableResult with the new table block ID and address.
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
+<Tip>
+On success, `result.table` is the created table address. Reuse `result.table.nodeId` for follow-up table operations in the same session.
+</Tip>
+
 ### Example response
 
 ```json
@@ -75,7 +79,7 @@ Returns a CreateTableResult with the new table block ID and address.
   "table": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "trackedChangeRefs": [
     {

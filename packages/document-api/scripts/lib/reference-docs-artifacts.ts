@@ -682,6 +682,101 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function makeExampleBlockAddress(nodeType: string): Record<string, unknown> {
+  return {
+    kind: 'block',
+    nodeId: 'node-def456',
+    nodeType,
+  };
+}
+
+function isTableReferenceOperation(operationId: ContractOperationSnapshot['operationId']): boolean {
+  return operationId === 'create.table' || operationId.startsWith('tables.');
+}
+
+function normalizeTableOperationInputExample(
+  operationId: ContractOperationSnapshot['operationId'],
+  input: unknown,
+): unknown {
+  if (!isTableReferenceOperation(operationId) || operationId === 'create.table' || !isObjectRecord(input)) {
+    return input;
+  }
+
+  const clone = structuredClone(input) as Record<string, unknown>;
+
+  if (isObjectRecord(clone.tableTarget)) {
+    clone.tableTarget = makeExampleBlockAddress('table');
+    delete clone.tableNodeId;
+    delete clone.target;
+    delete clone.nodeId;
+    return clone;
+  }
+
+  if (isObjectRecord(clone.target)) {
+    clone.target = makeExampleBlockAddress('table');
+    delete clone.nodeId;
+  }
+
+  return clone;
+}
+
+function normalizeTableOperationOutputExample(
+  operationId: ContractOperationSnapshot['operationId'],
+  output: unknown,
+): unknown {
+  if (!isTableReferenceOperation(operationId) || !isObjectRecord(output)) {
+    return output;
+  }
+
+  const clone = structuredClone(output) as Record<string, unknown>;
+  if (isObjectRecord(clone.table)) {
+    clone.table = makeExampleBlockAddress('table');
+  }
+  return clone;
+}
+
+function schemaHasTopLevelField(schema: JsonSchema, $defs: Defs, fieldName: string, depth = 0): boolean {
+  if (depth > 8) return false;
+
+  const { resolved } = resolveRef(schema, $defs);
+  const flat = flattenAllOf(resolved, $defs);
+  const properties = flat.properties as Record<string, JsonSchema> | undefined;
+  if (properties && Object.prototype.hasOwnProperty.call(properties, fieldName)) {
+    return true;
+  }
+
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = flat[keyword];
+    if (!Array.isArray(variants)) continue;
+    for (const variant of variants as JsonSchema[]) {
+      if (schemaHasTopLevelField(variant, $defs, fieldName, depth + 1)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function renderTableResultNote(operation: ContractOperationSnapshot, $defs: Defs): string {
+  if (
+    !isTableReferenceOperation(operation.operationId) ||
+    !schemaHasTopLevelField(operation.schemas.output, $defs, 'table')
+  ) {
+    return '';
+  }
+
+  if (operation.operationId === 'create.table') {
+    return `<Tip>
+On success, \`result.table\` is the created table address. Reuse \`result.table.nodeId\` for follow-up table operations in the same session.
+</Tip>`;
+  }
+
+  return `<Tip>
+When present, \`result.table\` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass \`result.table.nodeId\` to the next table operation instead of re-running \`find()\`. Destructive operations may omit \`table\`, and cell-targeted border/shading calls may still return a \`tableCell\` address.
+</Tip>`;
+}
+
 function buildCapabilitiesOutputExample(snapshot: ReturnType<typeof buildContractSnapshot>): unknown {
   const operation = snapshot.operations.find((entry) => entry.operationId === 'capabilities.get');
   if (!operation) return {};
@@ -789,9 +884,12 @@ function getOperationExamples(
     },
   };
 
+  const input = inputOverrides[operation.operationId] ?? generateExample(operation.schemas.input, snapshot.$defs);
+  const output = outputOverrides[operation.operationId] ?? generateExample(operation.schemas.output, snapshot.$defs);
+
   return {
-    input: inputOverrides[operation.operationId] ?? generateExample(operation.schemas.input, snapshot.$defs),
-    output: outputOverrides[operation.operationId] ?? generateExample(operation.schemas.output, snapshot.$defs),
+    input: normalizeTableOperationInputExample(operation.operationId, input),
+    output: normalizeTableOperationOutputExample(operation.operationId, output),
   };
 }
 
@@ -858,6 +956,7 @@ function renderOperationPage(
 
   const inputFields = renderFieldSections(operation.schemas.input, $defs);
   const outputFields = renderFieldSections(operation.schemas.output, $defs);
+  const tableResultNote = renderTableResultNote(operation, $defs);
 
   const { input: inputExample, output: outputExample } = getOperationExamples(operation, snapshot);
   const stepOpsSection = renderStepOpsSection(operation);
@@ -912,7 +1011,7 @@ ${stableStringify(inputExample)}
 
 ## Output fields
 
-${outputFields}
+${outputFields}${tableResultNote ? `\n\n${tableResultNote}` : ''}
 
 ### Example response
 
@@ -970,7 +1069,15 @@ ${GENERATED_MARKER}
 
 [Back to full reference](${toRelativeDocHref(group.pagePath, REFERENCE_INDEX_PATH)})
 
-${group.definition.description}
+${group.definition.description}${
+    group.definition.key === 'tables'
+      ? `
+
+<Tip>
+For non-destructive table-targeted mutations, reuse \`result.table.nodeId\` from the previous success result instead of re-running \`find()\`. Cell-targeted border/shading calls may still return a \`tableCell\` address.
+</Tip>`
+      : ''
+  }
 
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |

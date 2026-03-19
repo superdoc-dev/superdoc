@@ -167,7 +167,7 @@ _No fields._
       "description": "Required when mode is 'empty'. The paragraph to create the list at. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}."
     },
     "kind": {
-      "description": "Required. List type: 'bullet' for bullet points, 'ordered' for numbered lists.",
+      "description": "List type: 'bullet' for bullet points, 'ordered' for numbered lists.",
       "enum": [
         "ordered",
         "bullet"
@@ -187,6 +187,7 @@ _No fields._
       ]
     },
     "preset": {
+      "description": "Predefined list style preset. Overrides 'kind' with a specific numbering or bullet format.",
       "enum": [
         "decimal",
         "decimalParenthesis",

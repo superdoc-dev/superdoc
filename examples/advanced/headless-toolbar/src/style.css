@@ -1,0 +1,263 @@
+:root {
+  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  color: #111827;
+  background:
+    radial-gradient(circle at top left, rgba(251, 191, 36, 0.18), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+select {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 24px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #92400e;
+}
+
+.intro {
+  max-width: 520px;
+  margin: 0;
+  color: #4b5563;
+}
+
+.workspace {
+  position: relative;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.toolbar-floating {
+  position: relative;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 16px 20px;
+  backdrop-filter: blur(14px);
+  background: rgba(255, 251, 235, 0.88);
+  border-bottom: 1px solid rgba(146, 64, 14, 0.12);
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-row-secondary {
+  padding-top: 2px;
+}
+
+.toolbar-button {
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #ffffff;
+  color: #111827;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(146, 64, 14, 0.28);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbar-button-active {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+.toolbar-button-compact {
+  padding-inline: 12px;
+}
+
+.toolbar-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-field-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.toolbar-select {
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #ffffff;
+  color: #111827;
+  border-radius: 999px;
+  padding: 10px 14px;
+  min-width: 92px;
+}
+
+.toolbar-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbar-dropdown {
+  position: relative;
+}
+
+.toolbar-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 188px;
+  padding: 10px;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  z-index: 50;
+}
+
+.toolbar-dropdown-menu-wide {
+  min-width: 220px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.toolbar-link-menu {
+  min-width: 280px;
+}
+
+.toolbar-dropdown-item {
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #ffffff;
+  color: #111827;
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toolbar-dropdown-item-active {
+  border-color: rgba(17, 24, 39, 0.2);
+  background: #f8fafc;
+}
+
+.toolbar-dropdown-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbar-dropdown-item-linked-style {
+  padding: 0;
+}
+
+.toolbar-linked-style-name {
+  display: block;
+  width: 100%;
+  padding: 14px 12px;
+  text-align: left;
+}
+
+.toolbar-link-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toolbar-link-input {
+  width: 100%;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #ffffff;
+  color: #111827;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.toolbar-link-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar-segmented {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-host {
+  display: flex;
+  justify-content: center;
+  min-height: calc(100vh - 210px);
+  padding: 20px;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: start;
+  }
+
+  .app-header h1 {
+    font-size: 32px;
+  }
+
+  .toolbar-floating {
+    align-items: start;
+  }
+}

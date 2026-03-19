@@ -1269,6 +1269,7 @@ export class SuperDoc extends EventEmitter {
 
     if (types[type]) {
       types[type]();
+      this.emit('document-mode-change', { documentMode: type });
     }
   }
 

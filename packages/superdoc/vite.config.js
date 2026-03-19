@@ -179,6 +179,7 @@ export default defineConfig(({ mode, command }) => {
       rollupOptions: {
         input: {
           'superdoc': 'src/index.js',
+          'headless-toolbar': 'src/headless-toolbar.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',

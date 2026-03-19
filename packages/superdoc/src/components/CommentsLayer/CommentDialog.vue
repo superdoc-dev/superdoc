@@ -997,7 +997,7 @@ watch(editingCommentId, (commentId) => {
   border: none;
   font-size: 13px;
   font-weight: 600;
-  color: var(--sd-ui-bg, #ffffff);
+  color: var(--sd-ui-action-text, #ffffff);
   cursor: pointer;
   padding: 6px 16px;
   border-radius: 9999px;

@@ -64,6 +64,7 @@
   --sd-ui-border: var(--sd-border-default, var(--sd-color-gray-400));
   --sd-ui-action: var(--sd-action-primary, var(--sd-color-blue-500));
   --sd-ui-action-hover: var(--sd-action-primary-hover, var(--sd-color-blue-600));
+  --sd-ui-action-text: #ffffff;
   --sd-ui-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   --sd-ui-radius: var(--sd-radius-100);
 

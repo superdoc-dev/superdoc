@@ -486,7 +486,7 @@ const navigateToAnchor = (url) => {
   outline: none;
   border: none;
   background-color: var(--sd-ui-action, #1355ff);
-  color: var(--sd-ui-bg, #ffffff);
+  color: var(--sd-ui-action-text, #ffffff);
   font-weight: 400;
   font-size: var(--sd-ui-font-size-300, 13px);
   cursor: pointer;

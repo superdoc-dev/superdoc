@@ -3,6 +3,8 @@ export interface ThemeColors {
   action?: string;
   /** Action hover state. Default: #0f44cc */
   actionHover?: string;
+  /** Text color on action-colored buttons. Default: #ffffff */
+  actionText?: string;
   /** Default background for panels, cards, dropdowns. Default: #ffffff */
   bg?: string;
   /** Hover background. Default: #dbdbdb */
@@ -49,6 +51,7 @@ export interface ThemeResult {
 const COLORS_TO_VARS: Record<string, string> = {
   action: '--sd-ui-action',
   actionHover: '--sd-ui-action-hover',
+  actionText: '--sd-ui-action-text',
   bg: '--sd-ui-bg',
   hoverBg: '--sd-ui-hover-bg',
   activeBg: '--sd-ui-active-bg',
@@ -67,7 +70,8 @@ let themeCounter = 0;
  */
 function generateTheme(config: ThemeConfig): ThemeResult {
   const { name, font, radius, shadow, colors, vars } = config;
-  const className = `sd-theme-${name || `custom-${++themeCounter}`}`;
+  const safeName = name ? name.replace(/[^a-zA-Z0-9-_]/g, '-') : null;
+  const className = `sd-theme-${safeName || `custom-${++themeCounter}`}`;
 
   const declarations: string[] = [];
 

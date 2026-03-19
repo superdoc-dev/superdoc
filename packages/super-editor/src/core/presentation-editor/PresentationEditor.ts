@@ -113,6 +113,9 @@ import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
+import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
+import type { SelectionHandle } from '../selection-state.js';
+
 // Types
 import type {
   PageSize,
@@ -165,6 +168,21 @@ export type {
   ImageDeselectedEvent,
   TelemetryEvent,
 } from './types.js';
+
+/**
+ * Bundles the active editing surface's editor, document API, surface label,
+ * and resolved selection range into a single coherent object.
+ *
+ * Guarantees that `doc` and `range` refer to the same editing surface.
+ * This is the canonical layout-mode command surface — use it whenever the
+ * active context (body / header / footer) matters for the follow-up mutation.
+ */
+export type SelectionCommandContext = {
+  editor: Editor;
+  doc: DocumentApi;
+  surface: 'body' | 'header' | 'footer';
+  range: ResolveRangeOutput;
+};
 
 // Mark name constants
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
@@ -961,6 +979,129 @@ export class PresentationEditor extends EventEmitter {
       return this.#editor;
     }
     return activeHfEditor;
+  }
+
+  // -------------------------------------------------------------------
+  // Selection bridge — tracked handles + snapshot convenience
+  // -------------------------------------------------------------------
+
+  /**
+   * Inspects `#headerFooterSession` to determine which editing surface is active.
+   */
+  #resolveActiveSurface(): 'body' | 'header' | 'footer' {
+    const mode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (mode === 'header') return 'header';
+    if (mode === 'footer') return 'footer';
+    return 'body';
+  }
+
+  // --- Tracked handle API ---
+
+  /**
+   * Capture the live PM selection on the active editor as a tracked handle.
+   *
+   * The handle is bound to the specific editor that captured it (not just
+   * the surface label), so it remains valid even if the active header/footer
+   * session changes later.
+   */
+  captureCurrentSelectionHandle(): SelectionHandle {
+    const surface = this.#resolveActiveSurface();
+    return this.getActiveEditor().captureCurrentSelectionHandle(surface);
+  }
+
+  /**
+   * Capture the "effective" selection on the active editor as a tracked handle.
+   * Uses the same fallback chain: live non-collapsed → preserved → live.
+   */
+  captureEffectiveSelectionHandle(): SelectionHandle {
+    const surface = this.#resolveActiveSurface();
+    return this.getActiveEditor().captureEffectiveSelectionHandle(surface);
+  }
+
+  /**
+   * Resolve a previously captured handle into a `SelectionCommandContext`.
+   *
+   * The handle carries a reference to the editor that captured it, so
+   * resolution always reads from the correct editor's plugin state —
+   * even if the active header/footer session has changed since capture.
+   *
+   * Returns `null` when:
+   * - the handle was released
+   * - a previously non-empty selection collapsed (content was deleted)
+   */
+  resolveSelectionHandle(handle: SelectionHandle): SelectionCommandContext | null {
+    // The handle's _owner is the Editor that captured it. We use it to
+    // resolve the range, but we need the Editor type for the context.
+    // Since _owner satisfies SelectionHandleOwner (which Editor implements),
+    // and capture always passes `this` (an Editor), this cast is safe.
+    const ownerEditor = handle._owner as Editor;
+    const range = ownerEditor.resolveSelectionHandle(handle);
+    if (!range) return null;
+    return { editor: ownerEditor, doc: ownerEditor.doc, surface: handle.surface, range };
+  }
+
+  /**
+   * Release a tracked selection handle.
+   *
+   * Routes to the owning editor regardless of the current active surface.
+   */
+  releaseSelectionHandle(handle: SelectionHandle): void {
+    (handle._owner as Editor).releaseSelectionHandle(handle);
+  }
+
+  // --- Snapshot convenience API ---
+
+  /**
+   * Snapshot convenience: resolve the live PM selection on the active editor
+   * into a canonical Document API range immediately.
+   */
+  getCurrentSelectionRange(): ResolveRangeOutput {
+    return this.getActiveEditor().getCurrentSelectionRange();
+  }
+
+  /**
+   * Snapshot convenience: resolve the "effective" selection on the active
+   * editor into a canonical Document API range immediately.
+   */
+  getEffectiveSelectionRange(): ResolveRangeOutput {
+    return this.getActiveEditor().getEffectiveSelectionRange();
+  }
+
+  /**
+   * Snapshot convenience: returns the current live selection plus the active
+   * editing context. Guarantees `doc` and `range` refer to the same surface.
+   */
+  getCurrentSelectionContext(): SelectionCommandContext {
+    const activeEditor = this.getActiveEditor();
+    return {
+      editor: activeEditor,
+      doc: activeEditor.doc,
+      surface: this.#resolveActiveSurface(),
+      range: activeEditor.getCurrentSelectionRange(),
+    };
+  }
+
+  /**
+   * Snapshot convenience: returns the effective selection plus the active
+   * editing context. The canonical layout-mode command surface.
+   *
+   * @example
+   * ```ts
+   * const ctx = presentationEditor.getEffectiveSelectionContext();
+   * ctx.doc.replace({
+   *   target: ctx.range.target,
+   *   text: 'New content',
+   * });
+   * ```
+   */
+  getEffectiveSelectionContext(): SelectionCommandContext {
+    const activeEditor = this.getActiveEditor();
+    return {
+      editor: activeEditor,
+      doc: activeEditor.doc,
+      surface: this.#resolveActiveSurface(),
+      range: activeEditor.getEffectiveSelectionRange(),
+    };
   }
 
   /**

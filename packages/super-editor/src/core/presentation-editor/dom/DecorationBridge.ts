@@ -6,7 +6,7 @@ import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/ind
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 import { customSearchHighlightsKey } from '@extensions/search/search.js';
 import { AiPluginKey } from '@extensions/ai/ai-plugin.js';
-import { CustomSelectionPluginKey } from '@extensions/custom-selection/custom-selection.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { LinkedStylesPluginKey } from '@extensions/linked-styles/plugin.js';
 import { NodeResizerKey } from '@extensions/noderesizer/noderesizer.js';
 

@@ -1305,15 +1305,16 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.create': {
     memberPath: 'lists.create',
-    description: 'Create a new list from one or more paragraphs, or convert existing paragraphs into a new list.',
+    description:
+      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.',
     expectedResult: 'Returns a ListsCreateResult with the new listId and the first item address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'LEVEL_OUT_OF_RANGE'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: ['INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'INVALID_INPUT', 'NO_COMPATIBLE_PREVIOUS'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'lists/create.mdx',
     referenceGroup: 'lists',
@@ -1528,7 +1529,8 @@ export const OPERATION_DEFINITIONS = {
   // SD-1973 — List formatting and templates
   'lists.applyTemplate': {
     memberPath: 'lists.applyTemplate',
-    description: 'Apply a captured ListTemplate to the target list, optionally filtered to specific levels.',
+    description:
+      'Advanced alias for lists.applyStyle. Apply a captured ListTemplate to the target list (abstract-scoped, no clone-on-write).',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1577,7 +1579,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.captureTemplate': {
     memberPath: 'lists.captureTemplate',
-    description: 'Capture the formatting of a list as a reusable ListTemplate.',
+    description:
+      'Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting).',
     expectedResult: 'Returns a ListsCaptureTemplateResult containing the captured template.',
     requiresDocumentContext: true,
     metadata: readOperation({
@@ -1590,7 +1593,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.setLevelNumbering': {
     memberPath: 'lists.setLevelNumbering',
-    description: 'Set the numbering format, pattern, and optional start value for a specific list level.',
+    description:
+      'Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write).',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1713,6 +1717,118 @@ export const OPERATION_DEFINITIONS = {
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/clear-level-overrides.mdx',
+    referenceGroup: 'lists',
+  },
+
+  // SD-2025 — User-facing list style operations
+  'lists.getStyle': {
+    memberPath: 'lists.getStyle',
+    description:
+      'Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle.',
+    expectedResult: 'Returns a ListsGetStyleResult containing the captured style.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
+    }),
+    referenceDocPath: 'lists/get-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.applyStyle': {
+    memberPath: 'lists.applyStyle',
+    description:
+      'Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/apply-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.restartAt': {
+    memberPath: 'lists.restartAt',
+    description:
+      'Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/restart-at.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelNumberStyle': {
+    memberPath: 'lists.setLevelNumberStyle',
+    description:
+      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-number-style.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelText': {
+    memberPath: 'lists.setLevelText',
+    description:
+      'Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-text.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelStart': {
+    memberPath: 'lists.setLevelStart',
+    description:
+      'Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-start.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelLayout': {
+    memberPath: 'lists.setLevelLayout',
+    description:
+      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all values already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-layout.mdx',
     referenceGroup: 'lists',
   },
 

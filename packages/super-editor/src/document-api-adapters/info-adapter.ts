@@ -62,8 +62,8 @@ function extractTextFormatting(node: import('prosemirror-model').Node): { fontFa
   // to get consistent "first run" formatting rather than mixed properties.
   node.descendants((child) => {
     if (fontFamily !== undefined || fontSize !== undefined) return false;
-    if (!child.isText || child.marks.length === 0) return;
-    const marks = child.marks;
+    const marks = child.marks ?? [];
+    if (!child.isText || marks.length === 0) return;
     for (const mark of marks) {
       const attrs = mark.attrs as Record<string, unknown>;
       if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) {

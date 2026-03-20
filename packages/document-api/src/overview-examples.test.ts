@@ -7,7 +7,7 @@
  * and must be updated to match.
  */
 import { describe, expect, it, mock } from 'bun:test';
-import { createDocumentApi } from './index.js';
+import { createDocumentApi, type DocumentApiAdapters } from './index.js';
 import type { DocumentApiCapabilities } from './capabilities/capabilities.js';
 import type { SelectionTarget } from './types/index.js';
 
@@ -361,7 +361,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof mock> } {
   return { get: mock(() => caps) };
 }
 
-function makeApi() {
+function makeApi(overrides: Partial<DocumentApiAdapters> = {}) {
   return createDocumentApi({
     find: makeFindAdapter(),
     getNode: makeGetNodeAdapter(),
@@ -433,6 +433,7 @@ function makeApi() {
         timing: { totalMs: 0 },
       })),
     },
+    ...overrides,
   });
 }
 
@@ -660,6 +661,44 @@ describe('common-workflows.mdx: Find text and insert at position', () => {
     const match = doc.query.match({ type: 'node', nodeType: 'paragraph' });
 
     expect(match.items).toBeDefined();
+  });
+
+  it('query.match promotes flat query options out of shorthand selectors', () => {
+    const queryMatch = mock(() => ({
+      evaluatedRevision: 'r1',
+      total: 0,
+      items: [],
+      page: { limit: 0, offset: 0, returned: 0 },
+      meta: { effectiveResolved: true },
+    }));
+    const doc = makeApi({ query: { match: queryMatch } as DocumentApiAdapters['query'] });
+
+    doc.query.match({ type: 'text', pattern: 'Materials and methods', require: 'first', limit: 1 } as any);
+
+    expect(queryMatch).toHaveBeenCalledWith({
+      select: { type: 'text', pattern: 'Materials and methods' },
+      require: 'first',
+      limit: 1,
+    });
+  });
+
+  it('query.match promotes query options out of type-less node shorthand', () => {
+    const queryMatch = mock(() => ({
+      evaluatedRevision: 'r1',
+      total: 0,
+      items: [],
+      page: { limit: 0, offset: 0, returned: 0 },
+      meta: { effectiveResolved: true },
+    }));
+    const doc = makeApi({ query: { match: queryMatch } as DocumentApiAdapters['query'] });
+
+    doc.query.match({ nodeType: 'paragraph', require: 'first', limit: 1 } as any);
+
+    expect(queryMatch).toHaveBeenCalledWith({
+      select: { type: 'node', nodeType: 'paragraph' },
+      require: 'first',
+      limit: 1,
+    });
   });
 });
 

@@ -172,6 +172,7 @@ export interface CitationSourceDomain {
 
 export interface BibliographyInsertInput {
   at: TocCreateLocation;
+  style?: string;
 }
 
 export interface BibliographyRebuildInput {
@@ -179,6 +180,7 @@ export interface BibliographyRebuildInput {
 }
 
 export interface BibliographyConfigureInput {
+  target: BibliographyAddress;
   style: string;
 }
 

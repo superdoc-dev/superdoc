@@ -16,6 +16,7 @@ import type {
 } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { resolvePublicReferenceBlockNodeId } from './reference-block-node-id.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,6 +26,7 @@ export interface ResolvedAuthority {
   node: ProseMirrorNode;
   pos: number;
   nodeId: string;
+  commandNodeId?: string;
 }
 
 export interface ResolvedAuthorityEntry {
@@ -45,8 +47,9 @@ export function findAllAuthorities(doc: ProseMirrorNode): ResolvedAuthority[] {
   const results: ResolvedAuthority[] = [];
   doc.descendants((node, pos) => {
     if (node.type.name === 'tableOfAuthorities') {
-      const nodeId = (node.attrs?.sdBlockId as string) ?? `toa-${pos}`;
-      results.push({ node, pos, nodeId });
+      const commandNodeId = node.attrs?.sdBlockId as string | undefined;
+      const nodeId = resolvePublicReferenceBlockNodeId(node, pos);
+      results.push({ node, pos, nodeId, commandNodeId });
       return false;
     }
     return true;
@@ -56,7 +59,7 @@ export function findAllAuthorities(doc: ProseMirrorNode): ResolvedAuthority[] {
 
 export function resolveAuthorityTarget(doc: ProseMirrorNode, target: AuthoritiesAddress): ResolvedAuthority {
   const all = findAllAuthorities(doc);
-  const found = all.find((a) => a.nodeId === target.nodeId);
+  const found = all.find((a) => a.nodeId === target.nodeId || a.commandNodeId === target.nodeId);
   if (!found) {
     throw new DocumentApiAdapterError(
       'TARGET_NOT_FOUND',
@@ -64,6 +67,12 @@ export function resolveAuthorityTarget(doc: ProseMirrorNode, target: Authorities
     );
   }
   return found;
+}
+
+export function resolvePostMutationAuthorityId(doc: ProseMirrorNode, sdBlockId: string): string {
+  const all = findAllAuthorities(doc);
+  const found = all.find((node) => node.commandNodeId === sdBlockId);
+  return found?.nodeId ?? sdBlockId;
 }
 
 export function extractAuthorityInfo(resolved: ResolvedAuthority): AuthoritiesInfo {

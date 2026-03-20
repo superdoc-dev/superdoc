@@ -246,6 +246,8 @@ export function captionsConfigureWrapper(
 ): CaptionConfigResult {
   rejectTrackedMode('captions.configure', options);
 
+  if (options?.dryRun) return configSuccess();
+
   // Update all SEQ fields matching the label with the new format settings.
   // This is a PM mutation — we walk the document and update sequenceField attrs.
   const receipt = executeDomainCommand(

@@ -201,9 +201,27 @@ describe('index validation', () => {
   });
 
   describe('executeIndexInsert', () => {
-    it('delegates to adapter.insert (no target validation)', () => {
+    it('throws INVALID_INPUT when at is missing or malformed', () => {
       const adapter = makeAdapter();
-      const input = { position: 'end' };
+      expect(() => executeIndexInsert(adapter, {} as any)).toThrow(DocumentApiValidationError);
+      expect(() => executeIndexInsert(adapter, { at: null } as any)).toThrow(DocumentApiValidationError);
+      expect(() => executeIndexInsert(adapter, { at: 'bad' } as any)).toThrow(DocumentApiValidationError);
+    });
+
+    it('throws INVALID_INPUT when at.kind is not a valid create-location kind', () => {
+      const adapter = makeAdapter();
+      expect(() => executeIndexInsert(adapter, { at: { kind: 'bogus' } } as any)).toThrow(DocumentApiValidationError);
+      expect(() => executeIndexInsert(adapter, { at: { kind: 'cursor' } } as any)).toThrow(DocumentApiValidationError);
+    });
+
+    it('throws INVALID_TARGET when before/after positioning omits at.target', () => {
+      const adapter = makeAdapter();
+      expect(() => executeIndexInsert(adapter, { at: { kind: 'before' } } as any)).toThrow(DocumentApiValidationError);
+    });
+
+    it('delegates to adapter.insert for valid input', () => {
+      const adapter = makeAdapter();
+      const input = { at: { kind: 'documentEnd' } };
       executeIndexInsert(adapter, input as any);
       expect(adapter.insert).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: false });
     });

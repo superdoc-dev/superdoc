@@ -6935,7 +6935,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     ...bibliographyMutation,
   },
   'citations.bibliography.configure': {
-    input: objectSchema({ style: { type: 'string' } }, ['style']),
+    input: objectSchema({ target: bibliographyAddressSchema, style: { type: 'string' } }, ['target', 'style']),
     ...bibliographyMutation,
   },
   'citations.bibliography.remove': {

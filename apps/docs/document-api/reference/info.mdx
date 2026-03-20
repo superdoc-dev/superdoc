@@ -57,6 +57,8 @@ _No fields._
 | `counts.words` | integer | yes |  |
 | `outline` | object[] | yes |  |
 | `revision` | string | yes |  |
+| `styles` | object | no |  |
+| `styles.paragraphStyles` | object[] | no |  |
 
 ### Example response
 
@@ -88,7 +90,15 @@ _No fields._
       "text": "Hello, world."
     }
   ],
-  "revision": "example"
+  "revision": "example",
+  "styles": {
+    "paragraphStyles": [
+      {
+        "count": 1,
+        "styleId": "style-001"
+      }
+    ]
+  }
 }
 ```
 
@@ -217,6 +227,38 @@ _No fields._
     },
     "revision": {
       "type": "string"
+    },
+    "styles": {
+      "additionalProperties": false,
+      "description": "Styles currently in use in the document.",
+      "properties": {
+        "paragraphStyles": {
+          "description": "Paragraph styles in use, sorted by frequency (most common first).",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "description": "Number of paragraphs using this style.",
+                "type": "integer"
+              },
+              "styleId": {
+                "description": "Style identifier (e.g. 'Normal', 'Heading1', 'BodyText').",
+                "type": "string"
+              }
+            },
+            "required": [
+              "styleId",
+              "count"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "paragraphStyles"
+      ],
+      "type": "object"
     }
   },
   "required": [

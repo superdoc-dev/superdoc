@@ -31,6 +31,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
 | `in` | StoryLocator | no | StoryLocator |
 | `level` | integer | yes |  |
+| `styleId` | string | no |  |
 | `text` | string | no |  |
 
 ### Example request
@@ -197,6 +198,10 @@ Returns a CreateHeadingResult with the new heading block ID and address.
       "maximum": 6,
       "minimum": 1,
       "type": "integer"
+    },
+    "styleId": {
+      "description": "Named heading style (e.g. 'Heading1', 'Heading2'). Omit for default heading style.",
+      "type": "string"
     },
     "text": {
       "description": "Heading text content.",

@@ -59,8 +59,11 @@ function buildSearchPattern(selector: TextSelector, diagnostics: UnknownNodeDiag
   // string can be reinterpreted by the search command (e.g. slash-delimited
   // strings like "/foo/" are parsed as regex syntax by some implementations).
   const escaped = selector.pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Make quotes flexible: DOCX stores smart quotes (Unicode), LLMs send straight quotes.
+  // Match either variant so searches don't fail on quote style differences.
+  const flexible = escaped.replace(/"/g, '[\u0022\u201C\u201D\u201E]').replace(/'/g, '[\u0027\u2018\u2019\u201A]');
   const flags = selector.caseSensitive ? 'g' : 'gi';
-  return new RegExp(escaped, flags);
+  return new RegExp(flexible, flags);
 }
 
 /**

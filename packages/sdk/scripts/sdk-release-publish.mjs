@@ -45,6 +45,35 @@ function parseArgs(argv) {
   return { tag, npmOnly, dryRun };
 }
 
+function resolveLocalPypiPublishConfig({ npmOnly, dryRun }) {
+  if (npmOnly || dryRun) return null;
+
+  try {
+    execFileSync('python3', ['-m', 'twine', '--version'], { stdio: 'pipe' });
+  } catch {
+    throw new Error(
+      'twine is not installed. Install it with:\n  pip install twine',
+    );
+  }
+
+  const pypiToken = process.env.PYPI_PUBLISH_TOKEN;
+  if (!pypiToken) {
+    throw new Error(
+      'PYPI_PUBLISH_TOKEN env var is required for local PyPI publishing.\n' +
+        'Set it in your shell profile or pass it inline:\n' +
+        '  PYPI_PUBLISH_TOKEN=pypi-... node sdk-release-publish.mjs --tag latest',
+    );
+  }
+
+  return {
+    twineEnv: {
+      ...process.env,
+      TWINE_USERNAME: '__token__',
+      TWINE_PASSWORD: pypiToken,
+    },
+  };
+}
+
 function main() {
   const { tag, npmOnly, dryRun } = parseArgs(process.argv.slice(2));
   const dryRunSuffix = dryRun ? ' [dry-run]' : '';
@@ -54,6 +83,9 @@ function main() {
   console.log(`  npm-only: ${npmOnly}`);
 
   const totalSteps = npmOnly ? 6 : 8;
+  // Stable local releases must fail before any npm publish if PyPI upload
+  // cannot run; otherwise the release can become partially published.
+  const localPypiPublishConfig = resolveLocalPypiPublishConfig({ npmOnly, dryRun });
 
   // 1. Build superdoc (required for CLI native bundling)
   run('pnpm', ['--prefix', path.join(REPO_ROOT, 'packages/superdoc'), 'run', 'build:es'], {
@@ -96,30 +128,6 @@ function main() {
     });
 
     if (!dryRun) {
-      // 8. Upload to PyPI via twine (local stable releases)
-      try {
-        execFileSync('python3', ['-m', 'twine', '--version'], { stdio: 'pipe' });
-      } catch {
-        throw new Error(
-          'twine is not installed. Install it with:\n  pip install twine',
-        );
-      }
-
-      const pypiToken = process.env.PYPI_PUBLISH_TOKEN;
-      if (!pypiToken) {
-        throw new Error(
-          'PYPI_PUBLISH_TOKEN env var is required for local PyPI publishing.\n' +
-            'Set it in your shell profile or pass it inline:\n' +
-            '  PYPI_PUBLISH_TOKEN=pypi-... node sdk-release-publish.mjs --tag latest',
-        );
-      }
-
-      const twineEnv = {
-        ...process.env,
-        TWINE_USERNAME: '__token__',
-        TWINE_PASSWORD: pypiToken,
-      };
-
       const companionDist = path.join(REPO_ROOT, 'packages/sdk/langs/python/companion-dist');
       const rootDist = path.join(REPO_ROOT, 'packages/sdk/langs/python/dist');
 
@@ -136,12 +144,12 @@ function main() {
 
       run('python3', ['-m', 'twine', 'upload', '--skip-existing', ...companionFiles], {
         label: `Step 8/${totalSteps}: Publish companion Python packages to PyPI`,
-        env: twineEnv,
+        env: localPypiPublishConfig.twineEnv,
       });
 
       run('python3', ['-m', 'twine', 'upload', '--skip-existing', ...rootFiles], {
         label: `Step 8/${totalSteps}: Publish main Python SDK to PyPI`,
-        env: twineEnv,
+        env: localPypiPublishConfig.twineEnv,
       });
     } else {
       console.log('\n  Dry run — skipping PyPI upload.\n');

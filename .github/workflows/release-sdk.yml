@@ -118,31 +118,55 @@ jobs:
         run: |
           BEFORE="${{ steps.tags_before.outputs.tags }}"
           AFTER=$(git tag --list 'sdk-v*' | sort | tr '\n' ',')
-          if [ "$BEFORE" = "$AFTER" ]; then
+          RELEASE_TAG=$(git tag --points-at HEAD --list 'sdk-v*' --sort=-version:refname | head -n 1)
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "release_present=false" >> "$GITHUB_OUTPUT"
             echo "released=false" >> "$GITHUB_OUTPUT"
             echo "version=" >> "$GITHUB_OUTPUT"
-            echo "No new SDK release."
+            echo "dist_tag=" >> "$GITHUB_OUTPUT"
+            echo "No SDK release tag at HEAD."
           else
-            echo "released=true" >> "$GITHUB_OUTPUT"
-            VERSION=$(node -p "require('./packages/sdk/package.json').version")
+            echo "release_present=true" >> "$GITHUB_OUTPUT"
+            if [ "$BEFORE" = "$AFTER" ]; then
+              echo "released=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "released=true" >> "$GITHUB_OUTPUT"
+            fi
+            VERSION="${RELEASE_TAG#sdk-v}"
+            if [[ "$VERSION" == *-next.* ]]; then
+              DIST_TAG="next"
+            else
+              DIST_TAG="latest"
+            fi
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-            echo "Released SDK v$VERSION"
+            echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+            if [ "$BEFORE" = "$AFTER" ]; then
+              echo "SDK release tag already present at HEAD: $RELEASE_TAG"
+            else
+              echo "Released SDK v$VERSION"
+            fi
           fi
 
-      # Only build + publish Python when a release actually happened
+      - name: Resume Node SDK publish for existing release tag
+        if: steps.detect.outputs.release_present == 'true' && steps.detect.outputs.released != 'true'
+        run: node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ steps.detect.outputs.dist_tag }}" --npm-only
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Build + publish Python whenever this commit corresponds to an SDK release
       - name: Build and verify Python SDK
-        if: steps.detect.outputs.released == 'true'
+        if: steps.detect.outputs.release_present == 'true'
         run: node packages/sdk/scripts/build-python-sdk.mjs
 
       - name: Publish companion Python packages to PyPI
-        if: steps.detect.outputs.released == 'true'
+        if: steps.detect.outputs.release_present == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/sdk/langs/python/companion-dist/
           skip-existing: true
 
       - name: Publish main Python SDK to PyPI
-        if: steps.detect.outputs.released == 'true'
+        if: steps.detect.outputs.release_present == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/sdk/langs/python/dist/

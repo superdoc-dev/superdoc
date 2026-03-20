@@ -53,20 +53,24 @@ Single-action tools like `superdoc_search` do not require an `action` parameter.
 
 ## Workflow
 
-**ALWAYS start by calling `superdoc_get_content({action: "info"})` before any other tool.** This returns the document's structure, available styles (with fonts and sizes), and default formatting. You need this context to create content that matches the document.
+**ALWAYS start by calling `superdoc_get_content({action: "blocks"})` before any other tool.** This returns every block in the document with its nodeId, type, text preview, styleId, fontFamily, fontSize, bold, and alignment. You need this to:
+- Know the document's structure and block IDs for targeting
+- See what fonts, sizes, and styles are used so new content matches
+- Find blocks by their text preview without a separate search
 
-After getting info:
-1. **Search before editing**: Use `superdoc_search` to get valid targets.
+After getting blocks:
+1. **Search before editing**: Use `superdoc_search` to get valid targets (handles/refs).
 2. **Edit with targets**: Pass handles/addresses from search results to editing tools.
 3. **Re-search after each mutation**: Refs expire after any edit. Always search again before the next operation.
-4. **Batch when possible**: For multi-step edits (e.g., find-and-replace-all, rewrite + restyle), prefer `superdoc_mutations` — it's atomic, faster, and avoids stale-target issues.
+4. **Batch when possible**: For multi-step edits, prefer `superdoc_mutations`.
 
 ### Style-aware content creation
 
-The info response includes `styles.paragraphStyles` (with fontFamily and fontSize) and `defaults` (the document's most common body formatting). Use this to create matching content:
+The blocks response shows each block's `styleId`, `fontFamily`, and `fontSize`. Use the same `styleId` when creating new content:
 
 - **Create with style**: `superdoc_create({action: "paragraph", text: "...", styleId: "Normal"})`
 - **Apply style after**: `superdoc_format({action: "set_style", target: {kind: "block", ...}, styleId: "BodyText"})`
+- If blocks have no `styleId`, use the `fontFamily` and `fontSize` values from the blocks response to understand what formatting the document uses.
 
 ### Placing content near specific text
 

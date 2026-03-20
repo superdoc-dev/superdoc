@@ -303,8 +303,10 @@ function buildIntentTools(contract) {
             description: existing ? `${existing} ${suffix}` : suffix,
           };
         } else if (total > 0 && total < opCount && requiredCount === 0) {
-          // Case 2: appears in some actions but required by none — annotate scope
-          // Collect which actions have this param
+          // Case 2: appears in some actions but required by none — annotate scope.
+          // Only annotate when the param appears in a MINORITY of actions (at most half).
+          // Params in most actions are the norm and don't need "Only for" annotations,
+          // which can cause the model to avoid them unnecessarily.
           const presentIn = [];
           for (const { operation } of ops) {
             const opSchema = buildInputSchemaFromParams(operation);
@@ -312,7 +314,7 @@ function buildIntentTools(contract) {
               presentIn.push(operation.intentAction);
             }
           }
-          if (presentIn.length < opCount) {
+          if (presentIn.length <= opCount / 2) {
             const actions = presentIn.map((a) => `'${a}'`).join(', ');
             const suffix = `Only for ${presentIn.length === 1 ? 'action' : 'actions'} ${actions}. Omit for other actions.`;
             allProperties[propName] = {

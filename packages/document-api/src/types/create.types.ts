@@ -14,8 +14,6 @@ export interface CreateParagraphInput {
   in?: StoryLocator;
   at?: ParagraphCreateLocation;
   text?: string;
-  /** Named paragraph style to apply (e.g. 'Normal', 'BodyText'). Omit for document default. */
-  styleId?: string;
 }
 
 export interface CreateParagraphSuccessResult {
@@ -42,8 +40,6 @@ export interface CreateHeadingInput {
   level: HeadingLevel;
   at?: HeadingCreateLocation;
   text?: string;
-  /** Named heading style to apply (e.g. 'Heading1'). Omit for default heading style. */
-  styleId?: string;
 }
 
 export interface CreateHeadingSuccessResult {

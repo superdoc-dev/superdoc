@@ -66,11 +66,13 @@ After getting blocks:
 
 ### Style-aware content creation
 
-The blocks response shows each block's `styleId`, `fontFamily`, and `fontSize`. Use the same `styleId` when creating new content:
+After creating any content (paragraph, heading), you MUST match the document's formatting:
 
-- **Create with style**: `superdoc_create({action: "paragraph", text: "...", styleId: "Normal"})`
-- **Apply style after**: `superdoc_format({action: "set_style", target: {kind: "block", ...}, styleId: "BodyText"})`
-- If blocks have no `styleId`, use the `fontFamily` and `fontSize` values from the blocks response to understand what formatting the document uses.
+1. **Create** the content with `superdoc_create`
+2. **Search** for the new text with `superdoc_search` to get a ref handle
+3. **Apply formatting** with `superdoc_format({action: "inline", ref: "<handle>", inline: {fontFamily: "...", fontSize: ...}})` using the fontFamily and fontSize values from the neighboring blocks in the blocks data
+
+Example: if blocks show `fontFamily: "Times New Roman, serif"` and `fontSize: 9.5`, apply those same values to your new content.
 
 ### Placing content near specific text
 

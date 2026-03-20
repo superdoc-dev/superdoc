@@ -1,16 +1,11 @@
-import { findNearbyMarks } from '../helpers/findNearbyMarks.js';
-
 /**
  * Insert a paragraph node at an absolute document position.
  *
- * When text is provided, copies formatting (font, size, etc.) from the
- * nearest body paragraph so new content matches the document.
- *
- * @param {{ pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean; styleId?: string }} options
+ * @param {{ pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertParagraphAt =
-  ({ pos, text = '', sdBlockId, paraId, tracked, styleId }) =>
+  ({ pos, text = '', sdBlockId, paraId, tracked }) =>
   ({ state, dispatch }) => {
     const paragraphType = state.schema.nodes.paragraph;
     if (!paragraphType) return false;
@@ -19,15 +14,9 @@ export const insertParagraphAt =
     const attrs = {
       ...(sdBlockId ? { sdBlockId } : undefined),
       ...(paraId ? { paraId } : undefined),
-      ...(styleId ? { paragraphProperties: { styleId } } : undefined),
     };
     const normalizedText = typeof text === 'string' ? text : '';
-
-    let textNode = null;
-    if (normalizedText.length > 0) {
-      const marks = findNearbyMarks(state.doc, pos, { prefer: 'body' });
-      textNode = marks.length > 0 ? state.schema.text(normalizedText, marks) : state.schema.text(normalizedText);
-    }
+    const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;
 
     let paragraphNode;
     try {

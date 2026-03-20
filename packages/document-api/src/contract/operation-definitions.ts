@@ -101,7 +101,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create paragraphs and headings. Pass styleId only if the blocks data shows styled blocks. If blocks have no styleId, omit it — the engine matches nearby fonts automatically.',
+      'Create paragraphs and headings. After creating, use superdoc_get_content blocks to check the new block, then apply formatting with superdoc_format inline to match neighboring blocks (fontFamily, fontSize, bold).',
   },
   format: {
     toolName: 'superdoc_format',

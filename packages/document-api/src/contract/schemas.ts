@@ -3444,11 +3444,6 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ],
       },
       text: { type: 'string', description: 'Paragraph text content.' },
-      styleId: {
-        type: 'string',
-        description:
-          'Pass the styleId shown in the blocks data for matching paragraphs. If no blocks have styleId values, OMIT this field — the engine copies fonts from nearby content automatically.',
-      },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
     success: createParagraphSuccessSchema,
@@ -3482,11 +3477,6 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ],
         },
         text: { type: 'string', description: 'Heading text content.' },
-        styleId: {
-          type: 'string',
-          description:
-            'Only pass styleId if the blocks data shows heading-styled blocks. If no blocks have styleId, OMIT this field — the engine copies fonts from nearby content automatically.',
-        },
       },
       ['level'],
     ),

@@ -1,20 +1,14 @@
-import { findNearbyMarks } from '../helpers/findNearbyMarks.js';
-
 /**
  * Insert a heading node at an absolute document position.
  *
  * Internally, headings are paragraph nodes with a heading styleId
  * (`Heading1` through `Heading6`) set on `paragraphProperties`.
  *
- * When text is provided, copies formatting from the nearest heading
- * (or body paragraph if no headings exist) so new headings match
- * the document's font family.
- *
- * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean; styleId?: string }} options
+ * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertHeadingAt =
-  ({ pos, level, text = '', sdBlockId, paraId, tracked, styleId }) =>
+  ({ pos, level, text = '', sdBlockId, paraId, tracked }) =>
   ({ state, dispatch }) => {
     const paragraphType = state.schema.nodes.paragraph;
     if (!paragraphType) return false;
@@ -24,15 +18,10 @@ export const insertHeadingAt =
     const attrs = {
       ...(sdBlockId ? { sdBlockId } : undefined),
       ...(paraId ? { paraId } : undefined),
-      paragraphProperties: { styleId: styleId || `Heading${level}` },
+      paragraphProperties: { styleId: `Heading${level}` },
     };
     const normalizedText = typeof text === 'string' ? text : '';
-
-    let textNode = null;
-    if (normalizedText.length > 0) {
-      const marks = findNearbyMarks(state.doc, pos, { prefer: 'heading' });
-      textNode = marks.length > 0 ? state.schema.text(normalizedText, marks) : state.schema.text(normalizedText);
-    }
+    const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;
 
     let paragraphNode;
     try {

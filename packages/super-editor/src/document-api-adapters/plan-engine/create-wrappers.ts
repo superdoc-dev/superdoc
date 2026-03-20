@@ -27,41 +27,6 @@ import { requireEditorCommand, ensureTrackedCapability } from '../helpers/mutati
 import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
 
 // ---------------------------------------------------------------------------
-// Style resolution helpers
-// ---------------------------------------------------------------------------
-
-import { HEADING_STYLE_PATTERN } from '../../core/helpers/findNearbyMarks.js';
-
-/**
- * Scan the document for the most common non-heading paragraph styleId.
- * Falls back to 'Normal' (the OOXML default) when no explicit styles are
- * found — most DOCX paragraphs omit `<w:pStyle>` and implicitly use Normal.
- */
-function resolveDefaultParagraphStyle(editor: Editor): string {
-  const counts = new Map<string, number>();
-
-  editor.state.doc.descendants((node) => {
-    if (node.type.name !== 'paragraph') return;
-    const sid = (node.attrs as { paragraphProperties?: { styleId?: string } }).paragraphProperties?.styleId;
-    if (sid && !HEADING_STYLE_PATTERN.test(sid)) {
-      counts.set(sid, (counts.get(sid) ?? 0) + 1);
-    }
-  });
-
-  if (counts.size === 0) return 'Normal';
-
-  let best = '';
-  let bestCount = 0;
-  for (const [sid, count] of counts) {
-    if (count > bestCount) {
-      best = sid;
-      bestCount = count;
-    }
-  }
-  return best || 'Normal';
-}
-
-// ---------------------------------------------------------------------------
 // Command types (internal to the wrapper)
 // ---------------------------------------------------------------------------
 
@@ -70,7 +35,6 @@ type InsertParagraphAtCommandOptions = {
   text?: string;
   sdBlockId?: string;
   tracked?: boolean;
-  styleId?: string;
 };
 
 type InsertParagraphAtCommand = (options: InsertParagraphAtCommandOptions) => boolean;
@@ -81,7 +45,6 @@ type InsertHeadingAtCommandOptions = {
   text?: string;
   sdBlockId?: string;
   tracked?: boolean;
-  styleId?: string;
 };
 
 type InsertHeadingAtCommand = (options: InsertHeadingAtCommandOptions) => boolean;
@@ -244,17 +207,11 @@ export function createParagraphWrapper(
     const receipt = executeDomainCommand(
       storyEditor,
       () => {
-        // Auto-resolve style: if the caller didn't provide a styleId,
-        // use the most common paragraph style in the document so new
-        // content matches existing formatting automatically.
-        const effectiveStyleId = input.styleId || resolveDefaultParagraphStyle(storyEditor);
-
         const didApply = insertParagraphAt({
           pos: insertAt,
           text: input.text,
           sdBlockId: paragraphId,
           tracked: mode === 'tracked',
-          styleId: effectiveStyleId,
         });
         if (didApply) {
           clearIndexCache(storyEditor);
@@ -365,7 +322,6 @@ export function createHeadingWrapper(
           text: input.text,
           sdBlockId: headingId,
           tracked: mode === 'tracked',
-          styleId: input.styleId,
         });
         if (didApply) {
           clearIndexCache(storyEditor);

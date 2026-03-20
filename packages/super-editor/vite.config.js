@@ -3,14 +3,16 @@ import { configDefaults } from 'vitest/config'
 import { fileURLToPath, URL } from 'node:url'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import vue from '@vitejs/plugin-vue'
-import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 
 import { version as superdocVersion } from '../superdoc/package.json';
 import sourceResolve from '../../vite.sourceResolve'
 
-// Files migrated to bun:test — exclude from vitest
-const bunTestFiles = readFileSync(
-  new URL('./bun-test-files.txt', import.meta.url), 'utf8'
+// Auto-detect files migrated to bun:test and exclude them from vitest.
+// Uses grep at config time so no static file list needs to be maintained.
+const bunTestFiles = execSync(
+  "grep -rl \"from 'bun:test'\" src/ --include='*.test.*' 2>/dev/null || true",
+  { cwd: new URL('.', import.meta.url).pathname, encoding: 'utf8' }
 ).split('\n').filter(Boolean).map(f => `**/${f}`);
 
 const testPool = process.env.VITEST_POOL ?? 'threads';

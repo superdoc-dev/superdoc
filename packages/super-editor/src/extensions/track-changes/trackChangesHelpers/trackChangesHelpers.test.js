@@ -671,6 +671,119 @@ describe('trackChangesHelpers', () => {
     expect(tracked.getMeta('composition')).toBe(42);
   });
 
+  it('replaces a dead-key composition placeholder at paragraph start instead of keeping both characters', () => {
+    let state = createState(schema.nodes.doc.create({}, [schema.nodes.paragraph.create()]));
+
+    const deadKeyTr = state.tr.insertText('´', 1);
+    deadKeyTr.setMeta('inputType', 'insertText');
+    deadKeyTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: deadKeyTr, state, user }));
+
+    const accentPos = findTextPos(state.doc, '´');
+    expect(accentPos).toBeTypeOf('number');
+
+    const composedCharTr = state.tr.insertText('é', accentPos, accentPos + 1);
+    composedCharTr.setMeta('inputType', 'insertText');
+    composedCharTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: composedCharTr, state, user }));
+
+    expect(state.doc.textContent).toBe('é');
+
+    const inlineNodes = documentHelpers.findInlineNodes(state.doc);
+    const composedInsertions = inlineNodes.filter(
+      ({ node }) => node.text === 'é' && node.marks.some((mark) => mark.type.name === TrackInsertMarkName),
+    );
+
+    expect(composedInsertions).toHaveLength(1);
+    expect(inlineNodes.some(({ node }) => node.text === '´')).toBe(false);
+  });
+
+  it('folds a composition insertion after a tracked dead-key placeholder into a replacement', () => {
+    let state = createState(schema.nodes.doc.create({}, [schema.nodes.paragraph.create()]));
+
+    const deadKeyTr = state.tr.insertText('´', 1);
+    deadKeyTr.setMeta('inputType', 'insertText');
+    deadKeyTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: deadKeyTr, state, user }));
+
+    const composedCharTr = state.tr.insertText('é', 2);
+    composedCharTr.setMeta('inputType', 'insertText');
+    composedCharTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: composedCharTr, state, user }));
+
+    expect(state.doc.textContent).toBe('é');
+
+    const inlineNodes = documentHelpers.findInlineNodes(state.doc);
+    const composedInsertions = inlineNodes.filter(
+      ({ node }) => node.text === 'é' && node.marks.some((mark) => mark.type.name === TrackInsertMarkName),
+    );
+
+    expect(composedInsertions).toHaveLength(1);
+    expect(inlineNodes.some(({ node }) => node.text === '´')).toBe(false);
+  });
+
+  it('folds a composition insertion after a tracked dead-key placeholder when inputType is missing', () => {
+    let state = createState(schema.nodes.doc.create({}, [schema.nodes.paragraph.create()]));
+
+    const deadKeyTr = state.tr.insertText('´', 1);
+    deadKeyTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: deadKeyTr, state, user }));
+
+    const composedCharTr = state.tr.insertText('é', 2);
+    composedCharTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: composedCharTr, state, user }));
+
+    expect(state.doc.textContent).toBe('é');
+
+    const inlineNodes = documentHelpers.findInlineNodes(state.doc);
+    const composedInsertions = inlineNodes.filter(
+      ({ node }) => node.text === 'é' && node.marks.some((mark) => mark.type.name === TrackInsertMarkName),
+    );
+
+    expect(composedInsertions).toHaveLength(1);
+    expect(inlineNodes.some(({ node }) => node.text === '´')).toBe(false);
+  });
+
+  it('folds a composed character after a tracked dead-key placeholder when composition meta is missing', () => {
+    let state = createState(schema.nodes.doc.create({}, [schema.nodes.paragraph.create()]));
+
+    const deadKeyTr = state.tr.insertText('´', 1);
+    deadKeyTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: deadKeyTr, state, user }));
+
+    const composedCharTr = state.tr.insertText('é', 2);
+    state = state.apply(trackedTransaction({ tr: composedCharTr, state, user }));
+
+    expect(state.doc.textContent).toBe('é');
+
+    const inlineNodes = documentHelpers.findInlineNodes(state.doc);
+    const composedInsertions = inlineNodes.filter(
+      ({ node }) => node.text === 'é' && node.marks.some((mark) => mark.type.name === TrackInsertMarkName),
+    );
+
+    expect(composedInsertions).toHaveLength(1);
+    expect(inlineNodes.some(({ node }) => node.text === '´')).toBe(false);
+  });
+
+  it('drops the dead-key placeholder when a composition replacement contains both placeholder and composed text', () => {
+    let state = createState(schema.nodes.doc.create({}, [schema.nodes.paragraph.create()]));
+
+    const deadKeyTr = state.tr.insertText('´', 1);
+    deadKeyTr.setMeta('inputType', 'insertText');
+    deadKeyTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: deadKeyTr, state, user }));
+
+    const accentPos = findTextPos(state.doc, '´');
+    expect(accentPos).toBeTypeOf('number');
+
+    const composedCharTr = state.tr.insertText('´é', accentPos, accentPos + 1);
+    composedCharTr.setMeta('inputType', 'insertText');
+    composedCharTr.setMeta('composition', 7);
+    state = state.apply(trackedTransaction({ tr: composedCharTr, state, user }));
+
+    expect(state.doc.textContent).toBe('é');
+  });
+
   it('trackedTransaction preserves addToHistory meta when inputType is programmatic', () => {
     // Create initial state with history plugin (editor already has it from basePlugins)
     let state = createState(createDocWithText('initial'));

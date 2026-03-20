@@ -1,4 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
+import { __endComposition } from 'prosemirror-view';
 import { Extension } from '../Extension.js';
 
 const handleBackwardReplaceInsertText = (view, event) => {
@@ -25,6 +26,19 @@ const handleBackwardReplaceInsertText = (view, event) => {
   event.preventDefault();
 
   return true;
+};
+
+const shouldForceEndStaleComposition = (view, event) => {
+  if (!view.composing || event?.isComposing) {
+    return false;
+  }
+
+  const inputType = event?.inputType ?? null;
+  if (!inputType) {
+    return false;
+  }
+
+  return !['insertCompositionText', 'deleteCompositionText'].includes(inputType);
 };
 
 const NAVIGATION_KEYS = new Set([
@@ -86,6 +100,10 @@ export const Editable = Extension.create({
               return true;
             }
 
+            if (shouldForceEndStaleComposition(view, event)) {
+              __endComposition(view);
+            }
+
             // Backward (right-to-left) replacement can be misinterpreted downstream as
             // deleteContentBackward. Handle this narrow case explicitly at beforeinput level.
             if (handleBackwardReplaceInsertText(view, event)) {
@@ -93,6 +111,9 @@ export const Editable = Extension.create({
             }
             return false;
           },
+          compositionstart: (view, event) => blockWhenNotEditable(view, event),
+          compositionupdate: (view, event) => blockWhenNotEditable(view, event),
+          compositionend: (view, event) => blockWhenNotEditable(view, event),
           mousedown: (_view, event) => {
             if (isFullyBlocked()) {
               event.preventDefault();
@@ -108,12 +129,6 @@ export const Editable = Extension.create({
             }
             return false;
           },
-          // Block IME composition events when not editable.
-          // The input bridge forwards composition events when view.editable is true
-          // (e.g. allowSelectionInViewMode), but we must prevent document mutations.
-          compositionstart: blockWhenNotEditable,
-          compositionupdate: blockWhenNotEditable,
-          compositionend: blockWhenNotEditable,
         },
         handleClick: () => isFullyBlocked(),
         handleDoubleClick: () => isFullyBlocked(),

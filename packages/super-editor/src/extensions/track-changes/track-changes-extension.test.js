@@ -880,6 +880,46 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
+  it('interaction: composition at paragraph start replaces a dead-key placeholder in suggesting mode', async () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const view = interactionEditor.view;
+      const getContainer = () => {
+        const paragraph = view.dom.querySelector('p');
+        return paragraph?.querySelector('.sd-paragraph-content') ?? paragraph;
+      };
+      const getBreak = () => getContainer()?.querySelector('br.ProseMirror-trailingBreak');
+
+      view.focus();
+      view.dom.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+
+      expect(getContainer()).toBeTruthy();
+
+      getContainer().insertBefore(document.createTextNode('´'), getBreak() ?? null);
+      view.domObserver.flush();
+      await Promise.resolve();
+
+      getContainer().insertBefore(document.createTextNode('é'), getBreak() ?? null);
+      view.domObserver.flush();
+      await Promise.resolve();
+
+      view.dom.dispatchEvent(new CompositionEvent('compositionend', { data: 'é', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(interactionEditor.state.doc.textContent).toBe('é');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
   it('undo/redo restores partially accepted insertion splits', () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',

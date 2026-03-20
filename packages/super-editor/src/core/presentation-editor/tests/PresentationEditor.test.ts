@@ -1273,6 +1273,31 @@ describe('PresentationEditor', () => {
       expect(dispatchSpy).not.toHaveBeenCalled();
     });
 
+    it('does not forward dead keys that start a composition sequence', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+      const dispatchSpy = mockEditorInstance.view.dom.dispatchEvent;
+
+      const event = new KeyboardEvent('keydown', {
+        key: 'Dead',
+        code: 'KeyE',
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+
+      container.dispatchEvent(event);
+      await Promise.resolve();
+
+      expect(dispatchSpy).not.toHaveBeenCalled();
+    });
+
     it('does not forward plain character keys without modifiers', async () => {
       editor = new PresentationEditor({
         element: container,
@@ -1461,6 +1486,91 @@ describe('PresentationEditor', () => {
       await Promise.resolve();
 
       expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'beforeinput' }));
+    });
+
+    it('forwards composing beforeinput events to the hidden editor via the input bridge', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+      const dispatchSpy = mockEditorInstance.view.dom.dispatchEvent;
+
+      const event = new InputEvent('beforeinput', {
+        data: 'é',
+        inputType: 'insertCompositionText',
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'isComposing', { value: true, writable: false });
+
+      container.dispatchEvent(event);
+      await Promise.resolve();
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'beforeinput', inputType: 'insertCompositionText', isComposing: true }),
+      );
+    });
+
+    it('forwards composing input events to the hidden editor via the input bridge', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+      const dispatchSpy = mockEditorInstance.view.dom.dispatchEvent;
+
+      const event = new InputEvent('input', {
+        data: 'é',
+        inputType: 'insertCompositionText',
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'isComposing', { value: true, writable: false });
+
+      container.dispatchEvent(event);
+      await Promise.resolve();
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'input', inputType: 'insertCompositionText', isComposing: true }),
+      );
+    });
+
+    it('dispatches composing beforeinput before a following compositionend can overtake it', () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+        (Editor as unknown as MockedEditor).mock.results.length - 1
+      ].value;
+      const calls: string[] = [];
+
+      mockEditorInstance.view.dom.dispatchEvent = vi.fn((event: Event) => {
+        calls.push(event.type);
+        return true;
+      });
+
+      const beforeInputEvent = new InputEvent('beforeinput', {
+        data: 'é',
+        inputType: 'insertCompositionText',
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(beforeInputEvent, 'isComposing', { value: true, writable: false });
+
+      container.dispatchEvent(beforeInputEvent);
+      container.dispatchEvent(new CompositionEvent('compositionend', { data: 'é', bubbles: true, cancelable: true }));
+
+      expect(calls[0]).toBe('beforeinput');
+      expect(calls[1]).toBe('compositionend');
     });
 
     it('forwards composition events to the hidden editor via the input bridge', () => {

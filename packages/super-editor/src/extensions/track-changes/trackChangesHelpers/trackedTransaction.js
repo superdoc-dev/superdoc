@@ -1,14 +1,199 @@
 import { Mapping, ReplaceStep, AddMarkStep, RemoveMarkStep, ReplaceAroundStep } from 'prosemirror-transform';
 import { TextSelection } from 'prosemirror-state';
+import { Fragment, Slice } from 'prosemirror-model';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { replaceStep } from './replaceStep.js';
 import { addMarkStep } from './addMarkStep.js';
 import { removeMarkStep } from './removeMarkStep.js';
 import { replaceAroundStep } from './replaceAroundStep.js';
-import { TrackDeleteMarkName } from '../constants.js';
+import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
+
+const DEAD_KEY_PLACEHOLDER_MARKS = new Map([
+  ['`', '\u0300'],
+  ["'", '\u0301'],
+  ['´', '\u0301'],
+  ['^', '\u0302'],
+  ['~', '\u0303'],
+  ['¨', '\u0308'],
+]);
+
+const getTextNodeAtPos = ({ doc, pos }) => {
+  let found = null;
+
+  doc.nodesBetween(Math.max(0, pos - 1), Math.min(doc.content.size, pos + 1), (node, nodePos) => {
+    if (found || !node.isText || !node.text) {
+      return;
+    }
+
+    const from = nodePos;
+    const to = nodePos + node.text.length;
+    if (pos >= from && pos < to) {
+      found = { node, from };
+      return false;
+    }
+  });
+
+  return found;
+};
+
+const getOwnedDeadKeyPlaceholderAt = ({ doc, pos, user, composedChar }) => {
+  const placeholderChar = doc.textBetween(pos, pos + 1);
+  const combiningMark = DEAD_KEY_PLACEHOLDER_MARKS.get(placeholderChar);
+  if (!combiningMark || !composedChar.normalize('NFD').includes(combiningMark)) {
+    return null;
+  }
+
+  const textNodeAtPos = getTextNodeAtPos({ doc, pos });
+  const hasOwnTrackedInsert = textNodeAtPos?.node?.marks?.some(
+    (mark) => mark.type.name === TrackInsertMarkName && mark.attrs?.authorEmail === user.email,
+  );
+
+  return hasOwnTrackedInsert ? { placeholderChar, combiningMark, textNodeAtPos } : null;
+};
+
+const stripDeadKeyPlaceholders = (text) => {
+  const chars = Array.from(text);
+  const normalized = [];
+
+  for (let index = 0; index < chars.length; index += 1) {
+    const current = chars[index];
+    const next = chars[index + 1];
+    const combiningMark = DEAD_KEY_PLACEHOLDER_MARKS.get(current);
+
+    if (combiningMark && next && next.normalize('NFD').includes(combiningMark)) {
+      continue;
+    }
+
+    normalized.push(current);
+  }
+
+  return normalized.join('');
+};
+
+const createNormalizedSlice = ({ step, normalizedText, doc }) => {
+  const { schema } = doc.type;
+  const firstChild = step.slice.content.firstChild;
+  if (!firstChild) {
+    return null;
+  }
+
+  if (firstChild.isText) {
+    return new Slice(
+      Fragment.from(schema.text(normalizedText, firstChild.marks)),
+      step.slice.openStart,
+      step.slice.openEnd,
+    );
+  }
+
+  if (firstChild.childCount === 1 && firstChild.firstChild?.isText) {
+    const textChild = firstChild.firstChild;
+    const normalizedFirstChild = firstChild.copy(Fragment.from(schema.text(normalizedText, textChild.marks)));
+    return new Slice(Fragment.from(normalizedFirstChild), step.slice.openStart, step.slice.openEnd);
+  }
+
+  return null;
+};
+
+const foldCollapsedPlaceholderInsertion = ({ step, doc, user, composedChar }) => {
+  const candidatePositions = [step.from, step.from - 1];
+
+  for (const pos of candidatePositions) {
+    if (pos < 1 || pos >= doc.content.size) {
+      continue;
+    }
+
+    const placeholder = getOwnedDeadKeyPlaceholderAt({ doc, pos, user, composedChar });
+    if (!placeholder) {
+      continue;
+    }
+
+    try {
+      const candidate = new ReplaceStep(pos, pos + 1, step.slice, step.structure);
+      if (!candidate.apply(doc).failed) {
+        return candidate;
+      }
+    } catch {
+      // Ignore invalid normalization attempts and keep the original step.
+    }
+  }
+
+  return null;
+};
+
+const normalizeCompositionInsertStep = ({ step, doc, tr, user }) => {
+  if (!(step instanceof ReplaceStep)) {
+    return step;
+  }
+
+  const insertedText = step.slice.content.textBetween(0, step.slice.content.size);
+  const [composedChar] = Array.from(insertedText);
+  if (!composedChar) {
+    return step;
+  }
+
+  const normalizedInsertedText = stripDeadKeyPlaceholders(insertedText);
+  if (normalizedInsertedText !== insertedText) {
+    const normalizedSlice = createNormalizedSlice({ step, normalizedText: normalizedInsertedText, doc });
+    const [normalizedChar] = Array.from(normalizedInsertedText);
+
+    if (normalizedSlice && normalizedChar) {
+      if (step.from !== step.to) {
+        const placeholderInRange = getOwnedDeadKeyPlaceholderAt({
+          doc,
+          pos: step.from,
+          user,
+          composedChar: normalizedChar,
+        });
+        if (placeholderInRange) {
+          try {
+            const candidate = new ReplaceStep(step.from, step.to, normalizedSlice, step.structure);
+            if (!candidate.apply(doc).failed) {
+              return candidate;
+            }
+          } catch {
+            // Ignore invalid normalization attempts and keep the original step.
+          }
+        }
+      } else {
+        const candidatePositions = [step.from, step.from - 1];
+        for (const pos of candidatePositions) {
+          if (pos < 1 || pos >= doc.content.size) {
+            continue;
+          }
+          const placeholder = getOwnedDeadKeyPlaceholderAt({ doc, pos, user, composedChar: normalizedChar });
+          if (!placeholder) {
+            continue;
+          }
+          try {
+            const candidate = new ReplaceStep(pos, pos + 1, normalizedSlice, step.structure);
+            if (!candidate.apply(doc).failed) {
+              return candidate;
+            }
+          } catch {
+            // Ignore invalid normalization attempts and keep the original step.
+          }
+        }
+      }
+    }
+  }
+
+  if (step.from === step.to) {
+    const folded = foldCollapsedPlaceholderInsertion({
+      step,
+      doc,
+      user,
+      composedChar,
+    });
+
+    if (folded) {
+      return folded;
+    }
+  }
+  return step;
+};
 
 /**
  * Tracked transaction to track changes.
@@ -39,12 +224,14 @@ export const trackedTransaction = ({ tr, state, user }) => {
   const date = new Date(fixedTimeTo10Mins).toISOString();
 
   tr.steps.forEach((originalStep, originalStepIndex) => {
-    const step = originalStep.map(map);
     const { doc } = newTr;
+    let step = originalStep.map(map);
 
     if (!step) {
       return;
     }
+
+    step = normalizeCompositionInsertStep({ step, doc, tr, user });
 
     if (step instanceof ReplaceStep) {
       replaceStep({

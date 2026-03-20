@@ -121,7 +121,7 @@
                   "document-engine/ai-agents/integrations",
                   "document-engine/ai-agents/best-practices",
                   "document-engine/ai-agents/debugging",
-                  "document-api/eval-results"
+                  "document-engine/ai-agents/eval-results"
                 ]
               }
             ]
@@ -324,6 +324,10 @@
     {
       "source": "/getting-started/ai-agents",
       "destination": "/document-engine/ai-agents/llm-tools"
+    },
+    {
+      "source": "/document-api/eval-results",
+      "destination": "/document-engine/ai-agents/eval-results"
     },
     {
       "source": "/document-engine/mcp",

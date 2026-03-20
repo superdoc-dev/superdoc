@@ -500,6 +500,8 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
 
   // -- Story locator (discriminated union on storyType) --
   StoryLocator: {
+    description:
+      "Story scope. Defaults to document body when omitted. Use {kind:'story', storyType:'body'} for body, or other storyType values for headers, footers, footnotes, endnotes.",
     oneOf: [
       objectSchema({ kind: { const: 'story' }, storyType: { const: 'body' } }, ['kind', 'storyType']),
       objectSchema(

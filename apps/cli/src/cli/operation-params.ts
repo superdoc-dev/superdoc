@@ -95,7 +95,7 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'in']);
 
 type ObjectSchemaVariant = {
   properties: Record<string, JsonSchema>;
@@ -459,6 +459,10 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
   // CLI uses flat flags (--type, --pattern, --mode) or --query-json; `select`
   // is an internal document-api field that the invoker builds from flat flags.
   'doc.find': new Set(['select']),
+  // CLI shortcut params (blockId, start, end) conflict with the `target` object
+  // on comment operations. LLMs should use `target` or `ref`, not flat params.
+  'doc.comments.create': new Set(['blockId', 'start', 'end']),
+  'doc.comments.patch': new Set(['blockId', 'start', 'end']),
 };
 
 // ---------------------------------------------------------------------------
@@ -1029,6 +1033,7 @@ function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata
       }
       for (const param of extraParams) {
         if (seenNames.has(param.name)) continue;
+        if (exclusions?.has(param.name)) continue;
         seenNames.add(param.name);
         mergedParams.push(param);
       }

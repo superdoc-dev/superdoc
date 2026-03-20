@@ -98,6 +98,14 @@ The comment tool manages comment threads in the document.
 - **`get`** — Retrieve a single comment thread by ID, including replies.
 - **`list`** — List all comment threads in the document.
 
+### Creating comments
+
+To add a comment on specific text:
+1. Search for the text: `superdoc_search({select: {type: "text", pattern: "target phrase"}, require: "first"})`
+2. Pass the `handle.ref` as `target`: `superdoc_comment({action: "create", text: "My comment", target: "<handle.ref string>"})`
+
+**Do NOT construct a target object with `blockId`/`start`/`end` manually.** Always use a ref from search results.
+
 ### Resolving and reopening comments
 
 To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: "resolved" }`. To reopen it, use `status: "open"`. There is no separate resolve action — it's a status field on the `update` action.
@@ -106,6 +114,10 @@ To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: 
 
 - **Do NOT combine `limit`/`offset` with `require: "first"` or `require: "exactlyOne"`** in superdoc_search. Use `require: "any"` with `limit` for paginated results.
 - **superdoc_search `select.type`** must be `"text"` or `"node"`. To find headings, use `{type: "node", nodeType: "heading"}`, NOT `{type: "heading"}`.
+- **Search patterns are plain text**, not markdown. Don't include `#`, `**`, or formatting markers in search patterns.
+- **`within` scopes to a single block**, not a section. To find text in a section, search the full document for the text directly.
+- **Refs expire after any mutation.** When applying the same change to multiple matches (e.g., bold every occurrence), use `superdoc_mutations` with multiple `format.apply` steps referencing the search refs, instead of calling `superdoc_format` individually per match.
+- **Replace all occurrences** of the same text with a single mutation step using `require: "all"`, not multiple steps targeting the same pattern (which causes overlap conflicts).
 - For `superdoc_format` inline properties, use `null` inside the `inline` object to clear a property (e.g., `"inline": { "bold": null }` removes bold).
 - **Creating lists** requires two modes:
   - `mode: "fromParagraphs"` — converts existing paragraphs into list items. Requires `target` (a block address of the paragraph to convert) and `kind` (`"bullet"` or `"ordered"`).

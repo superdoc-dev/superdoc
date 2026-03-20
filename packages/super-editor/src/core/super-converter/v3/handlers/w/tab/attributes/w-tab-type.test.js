@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { encode, decode, attrConfig } from './w-tab-type.js';
 
 describe('w:tab w:val (tabType) encoder', () => {

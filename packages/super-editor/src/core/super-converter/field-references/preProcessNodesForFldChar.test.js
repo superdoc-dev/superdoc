@@ -1,15 +1,14 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { preProcessNodesForFldChar } from './preProcessNodesForFldChar.js';
+const { preProcessNodesForFldChar } = await import('./preProcessNodesForFldChar.js');
 import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
 
-vi.mock('@helpers/generateDocxRandomId.js', () => ({
-  generateDocxRandomId: vi.fn(),
+mock.module('@helpers/generateDocxRandomId.js', () => ({
+  generateDocxRandomId: mock(),
 }));
 
 describe('preProcessNodesForFldChar', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     generateDocxRandomId.mockReturnValue('abc12345');
   });
 

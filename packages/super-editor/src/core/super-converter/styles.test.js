@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, spyOn, beforeAll } from 'bun:test';
 import { encodeMarksFromRPr, decodeRPrFromMarks, encodeCSSFromRPr, encodeCSSFromPPr } from './styles.js';
 
 beforeAll(() => {
-  vi.stubGlobal('SuperConverter', {
+  globalThis.SuperConverter = {
     toCssFontFamily: (font) => font,
-  });
+  };
 });
 
 describe('encodeMarksFromRPr', () => {
@@ -171,7 +171,7 @@ describe('decodeRPrFromMarks', () => {
   });
 
   it('does not write debug output while decoding marks', () => {
-    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const spy = spyOn(console, 'log').mockImplementation(() => {});
     try {
       decodeRPrFromMarks([{ type: { name: 'bold' }, attrs: { value: true } }]);
       expect(spy).not.toHaveBeenCalled();

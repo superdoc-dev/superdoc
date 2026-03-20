@@ -1,20 +1,19 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { translateAnchorNode } from './translate-anchor-node.js';
-import { translateImageNode } from '../../helpers/decode-image-node-helpers.js';
-import { pixelsToEmu, objToPolygon } from '../../../../../helpers.js';
+const { translateImageNode } = await import('../../helpers/decode-image-node-helpers.js');
+const { pixelsToEmu, objToPolygon } = await import('../../../../../helpers.js');
 
-vi.mock('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
-  translateImageNode: vi.fn(),
+mock.module('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
+  translateImageNode: mock(),
 }));
 
-vi.mock('@converter/helpers.js', () => ({
-  pixelsToEmu: vi.fn(),
-  objToPolygon: vi.fn(),
+mock.module('@converter/helpers.js', () => ({
+  pixelsToEmu: mock(),
+  objToPolygon: mock(),
 }));
 
 describe('translateAnchorNode', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-
     // default mock for translateImageNode — must include wp:extent so the guard passes
     translateImageNode.mockReturnValue({
       attributes: { fakeAttr: 'val' },

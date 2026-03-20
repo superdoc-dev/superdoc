@@ -1,72 +1,71 @@
-import { describe, it, expect, vi } from 'vitest';
-
+import { describe, it, expect, mock } from 'bun:test';
 // Mock the individual border property translators
-vi.mock('../bottom', () => ({
+mock.module('../bottom', () => ({
   translator: {
     xmlName: 'w:bottom',
     sdNodeOrKeyName: 'bottom',
-    encode: vi.fn(() => 'encoded_bottom'),
-    decode: vi.fn(() => ({ name: 'w:bottom' })),
+    encode: mock(() => 'encoded_bottom'),
+    decode: mock(() => ({ name: 'w:bottom' })),
   },
 }));
-vi.mock('../end', () => ({
+mock.module('../end', () => ({
   translator: {
     xmlName: 'w:end',
     sdNodeOrKeyName: 'end',
-    encode: vi.fn(() => 'encoded_end'),
-    decode: vi.fn(() => ({ name: 'w:end' })),
+    encode: mock(() => 'encoded_end'),
+    decode: mock(() => ({ name: 'w:end' })),
   },
 }));
-vi.mock('../insideH', () => ({
+mock.module('../insideH', () => ({
   translator: {
     xmlName: 'w:insideH',
     sdNodeOrKeyName: 'insideH',
-    encode: vi.fn(() => 'encoded_insideH'),
-    decode: vi.fn(() => ({ name: 'w:insideH' })),
+    encode: mock(() => 'encoded_insideH'),
+    decode: mock(() => ({ name: 'w:insideH' })),
   },
 }));
-vi.mock('../insideV', () => ({
+mock.module('../insideV', () => ({
   translator: {
     xmlName: 'w:insideV',
     sdNodeOrKeyName: 'insideV',
-    encode: vi.fn(() => 'encoded_insideV'),
-    decode: vi.fn(() => ({ name: 'w:insideH' })),
+    encode: mock(() => 'encoded_insideV'),
+    decode: mock(() => ({ name: 'w:insideH' })),
   },
 }));
-vi.mock('../left', () => ({
+mock.module('../left', () => ({
   translator: {
     xmlName: 'w:left',
     sdNodeOrKeyName: 'left',
-    encode: vi.fn(() => 'encoded_left'),
-    decode: vi.fn(() => ({ name: 'w:left' })),
+    encode: mock(() => 'encoded_left'),
+    decode: mock(() => ({ name: 'w:left' })),
   },
 }));
-vi.mock('../right', () => ({
+mock.module('../right', () => ({
   translator: {
     xmlName: 'w:right',
     sdNodeOrKeyName: 'right',
-    encode: vi.fn(() => 'encoded_right'),
-    decode: vi.fn(() => ({ name: 'w:right' })),
+    encode: mock(() => 'encoded_right'),
+    decode: mock(() => ({ name: 'w:right' })),
   },
 }));
-vi.mock('../start', () => ({
+mock.module('../start', () => ({
   translator: {
     xmlName: 'w:start',
     sdNodeOrKeyName: 'start',
-    encode: vi.fn(() => 'encoded_start'),
-    decode: vi.fn(() => ({ name: 'w:start' })),
+    encode: mock(() => 'encoded_start'),
+    decode: mock(() => ({ name: 'w:start' })),
   },
 }));
-vi.mock('../top', () => ({
+mock.module('../top', () => ({
   translator: {
     xmlName: 'w:top',
     sdNodeOrKeyName: 'top',
-    encode: vi.fn(() => 'encoded_top'),
-    decode: vi.fn(() => ({ name: 'w:top' })),
+    encode: mock(() => 'encoded_top'),
+    decode: mock(() => ({ name: 'w:top' })),
   },
 }));
 
-import { translator } from './tblBorders-translator.js';
+const { translator } = await import('./tblBorders-translator.js');
 
 describe('w:tblBorders translator', () => {
   describe('config', () => {

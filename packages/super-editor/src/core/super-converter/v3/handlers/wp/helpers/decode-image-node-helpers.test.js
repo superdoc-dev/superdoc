@@ -1,3 +1,4 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import {
   translateImageNode,
   translateVectorShape,
@@ -5,32 +6,32 @@ import {
 import * as helpers from '@converter/helpers.js';
 import * as annotationHelpers from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 
-vi.mock('@converter/helpers.js', async (importOriginal) => {
-  const actual = await importOriginal();
+mock.module('@converter/helpers.js', async (importOriginal) => {
+  const actual = await import(/* original */ '.');
   return {
     ...actual,
-    emuToPixels: vi.fn((v) => v / 9525), // 1 emu ≈ 1/9525 px
-    pixelsToEmu: vi.fn((v) => v * 9525),
-    getTextIndentExportValue: vi.fn((v) => v),
-    inchesToTwips: vi.fn((v) => v),
-    linesToTwips: vi.fn((v) => v),
-    pixelsToEightPoints: vi.fn((v) => v),
-    pixelsToTwips: vi.fn((v) => v),
-    ptToTwips: vi.fn((v) => v),
-    rgbToHex: vi.fn(() => '#000000'),
-    degreesToRot: vi.fn((v) => v),
+    emuToPixels: mock((v) => v / 9525), // 1 emu ≈ 1/9525 px
+    pixelsToEmu: mock((v) => v * 9525),
+    getTextIndentExportValue: mock((v) => v),
+    inchesToTwips: mock((v) => v),
+    linesToTwips: mock((v) => v),
+    pixelsToEightPoints: mock((v) => v),
+    pixelsToTwips: mock((v) => v),
+    ptToTwips: mock((v) => v),
+    rgbToHex: mock(() => '#000000'),
+    degreesToRot: mock((v) => v),
   };
 });
 
-vi.mock('@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js', () => ({
-  prepareTextAnnotation: vi.fn(() => ({ type: 'text', text: 'annotation' })),
+mock.module('@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js', () => ({
+  prepareTextAnnotation: mock(() => ({ type: 'text', text: 'annotation' })),
 }));
 
-vi.mock(import('@core/helpers/index.js'), async (importOriginal) => {
-  const actual = await importOriginal();
+mock.module('@core/helpers/index.js', async (importOriginal) => {
+  const actual = await import(/* original */ '.');
   return {
     ...actual,
-    generateDocxRandomId: vi.fn(() => '123'),
+    generateDocxRandomId: mock(() => '123'),
   };
 });
 
@@ -59,7 +60,6 @@ describe('translateImageNode', () => {
         media: {},
       },
     };
-    vi.clearAllMocks();
   });
 
   it('should convert basic image node with size to wp:extent', () => {

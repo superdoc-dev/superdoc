@@ -1,15 +1,15 @@
-vi.mock('../../../../exporter.js', () => {
-  const processOutputMarks = vi.fn((marks) => marks || []);
-  const generateRunProps = vi.fn((processedMarks) => ({
+import { describe, it, expect, mock } from 'bun:test';
+mock.module('../../../../exporter.js', () => {
+  const processOutputMarks = mock((marks) => marks || []);
+  const generateRunProps = mock((processedMarks) => ({
     name: 'w:rPr',
     elements: [],
   }));
   return { processOutputMarks, generateRunProps };
 });
 
-import { describe, it, expect } from 'vitest';
-import { translator } from './pPr-translator.js';
-import { NodeTranslator } from '@translator';
+const { translator } = await import('./pPr-translator.js');
+const { NodeTranslator } = await import('@translator');
 
 describe('w:pPr translator', () => {
   describe('config', () => {

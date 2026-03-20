@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { handlePassthroughNode, isInlineContext } from './passthroughNodeImporter.js';
 
 const createParams = (node, extra = {}) => ({
@@ -30,7 +30,7 @@ describe('passthrough node importer', () => {
   it('stores converted child content and original xml children', () => {
     const child = { name: 'w:r', elements: [{ name: 'w:t', elements: [], attributes: {} }] };
     const node = { name: 'w:unknown', elements: [child] };
-    const handler = vi.fn(() => [{ type: 'text', text: 'child' }]);
+    const handler = mock(() => [{ type: 'text', text: 'child' }]);
     const params = createParams(node, {
       nodeListHandler: { handler, handlerEntities: [] },
     });

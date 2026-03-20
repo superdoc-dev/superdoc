@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 // @ts-check
-import { describe, it, expect } from 'vitest';
 import { preProcessPageRefInstruction } from './page-ref-preprocessor.js';
 
 describe('preProcessPageRefInstruction', () => {

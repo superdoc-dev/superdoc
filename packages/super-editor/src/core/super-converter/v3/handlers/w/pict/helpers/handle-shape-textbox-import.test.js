@@ -1,18 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { handleShapeTextboxImport } from './handle-shape-textbox-import';
 import { parseInlineStyles } from './parse-inline-styles';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter';
 import { preProcessTextBoxContent } from '@converter/v3/handlers/wp/helpers/textbox-content-helpers.js';
 
-vi.mock('./parse-inline-styles');
-vi.mock('@converter/v2/importer/docxImporter');
-vi.mock('@converter/v2/importer/paragraphNodeImporter');
-vi.mock('@converter/v3/handlers/wp/helpers/textbox-content-helpers.js', async (importOriginal) => {
-  const actual = await importOriginal();
+mock.module('./parse-inline-styles');
+mock.module('@converter/v2/importer/docxImporter');
+mock.module('@converter/v2/importer/paragraphNodeImporter');
+mock.module('@converter/v3/handlers/wp/helpers/textbox-content-helpers.js', async (importOriginal) => {
+  const actual = await import(/* original */ '.');
   return {
     ...actual,
-    preProcessTextBoxContent: vi.fn((content) => content),
+    preProcessTextBoxContent: mock((content) => content),
   };
 });
 
@@ -40,7 +40,6 @@ describe('handleShapeTextboxImport', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     parseInlineStyles.mockReturnValue({});
     defaultNodeListHandler.mockReturnValue({});
     handleParagraphNode.mockReturnValue({ nodes: [] });

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './keepNext-translator.js';
 
 describe('w:keepNext translator', () => {

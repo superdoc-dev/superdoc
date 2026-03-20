@@ -1,18 +1,16 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { config, translator } from './tableOfContents-translator.js';
-import { NodeTranslator } from '../../../node-translator/node-translator.js';
+const { config, translator } = await import('./tableOfContents-translator.js');
+const { NodeTranslator } = await import('../../../node-translator/node-translator.js');
 import { exportSchemaToJson } from '../../../../exporter.js';
 
 // Mock the exporter
-vi.mock('../../../../exporter.js', () => ({
-  exportSchemaToJson: vi.fn(),
+mock.module('../../../../exporter.js', () => ({
+  exportSchemaToJson: mock(),
 }));
 
 describe('sd:tableOfContents translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('sd:tableOfContents');
@@ -27,7 +25,7 @@ describe('sd:tableOfContents translator', () => {
   describe('encode', () => {
     it('should encode a sd:tableOfContents node correctly', () => {
       const mockNodeListHandler = {
-        handler: vi.fn(() => [{ type: 'paragraph', content: [] }]),
+        handler: mock(() => [{ type: 'paragraph', content: [] }]),
       };
       const params = {
         nodes: [
@@ -55,7 +53,7 @@ describe('sd:tableOfContents translator', () => {
 
     it('derives rightAlignPageNumbers true from right-aligned tab stops', () => {
       const mockNodeListHandler = {
-        handler: vi.fn(() => [
+        handler: mock(() => [
           {
             type: 'paragraph',
             attrs: { paragraphProperties: { tabStops: [{ tab: { tabType: 'right', pos: 9350 } }] } },
@@ -74,7 +72,7 @@ describe('sd:tableOfContents translator', () => {
 
     it('derives rightAlignPageNumbers false when no right-aligned tab stops', () => {
       const mockNodeListHandler = {
-        handler: vi.fn(() => [
+        handler: mock(() => [
           {
             type: 'paragraph',
             attrs: { paragraphProperties: { tabStops: [{ tab: { tabType: 'left', pos: 100 } }] } },
@@ -124,7 +122,7 @@ describe('sd:tableOfContents translator', () => {
     ];
 
     it('should decode a TOC node with content correctly', () => {
-      vi.mocked(exportSchemaToJson).mockImplementation(({ node }) => {
+      exportSchemaToJson.mockImplementation(({ node }) => {
         if (node.content[0].text === 'First Para') {
           return { name: 'w:p', elements: [{ name: 'w:pPr' }, { name: 'w:r', text: 'First Para' }] };
         } else {
@@ -142,7 +140,7 @@ describe('sd:tableOfContents translator', () => {
     });
 
     it('should insert begin elements at the start if w:pPr is missing', () => {
-      vi.mocked(exportSchemaToJson).mockReturnValue({ name: 'w:p', elements: [{ name: 'w:r' }] });
+      exportSchemaToJson.mockReturnValue({ name: 'w:p', elements: [{ name: 'w:r' }] });
 
       const result = config.decode(mockParams);
 
@@ -151,7 +149,7 @@ describe('sd:tableOfContents translator', () => {
 
     it('should create a new paragraph if content is empty', () => {
       const emptyContentParams = { ...mockParams, node: { ...mockParams.node, content: [] } };
-      vi.mocked(exportSchemaToJson).mockReturnValue([]);
+      exportSchemaToJson.mockReturnValue([]);
 
       const result = config.decode(emptyContentParams);
 
@@ -164,7 +162,7 @@ describe('sd:tableOfContents translator', () => {
     it('should handle missing content by creating a TOC field paragraph', () => {
       const noContentParams = { ...mockParams, node: { ...mockParams.node } };
       delete noContentParams.node.content;
-      vi.mocked(exportSchemaToJson).mockReturnValue([]);
+      exportSchemaToJson.mockReturnValue([]);
 
       const result = config.decode(noContentParams);
 

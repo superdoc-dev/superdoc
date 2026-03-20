@@ -1,27 +1,25 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { config, translator } from './totalPageNumber-translator.js';
-import { NodeTranslator } from '../../../node-translator/node-translator.js';
+const { config, translator } = await import('./totalPageNumber-translator.js');
+const { NodeTranslator } = await import('../../../node-translator/node-translator.js');
 import { processOutputMarks } from '../../../../exporter.js';
 import { parseMarks } from './../../../../v2/importer/markImporter.js';
 
-vi.mock('../../../../exporter.js', () => ({
-  processOutputMarks: vi.fn(() => []),
+mock.module('../../../../exporter.js', () => ({
+  processOutputMarks: mock(() => []),
 }));
 
-vi.mock('./../../../../v2/importer/markImporter.js', () => ({
-  parseMarks: vi.fn(() => []),
+mock.module('./../../../../v2/importer/markImporter.js', () => ({
+  parseMarks: mock(() => []),
 }));
 
-vi.mock('../build-complex-field-runs.js', async (importOriginal) => {
-  const actual = await importOriginal();
+mock.module('../build-complex-field-runs.js', async (importOriginal) => {
+  const actual = await import(/* original */ '.');
   return actual;
 });
 
 describe('sd:totalPageNumber translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('sd:totalPageNumber');
@@ -36,7 +34,7 @@ describe('sd:totalPageNumber translator', () => {
   describe('encode', () => {
     it('encodes a sd:totalPageNumber node capturing marks from rPr', () => {
       const marks = [{ type: 'textStyle', attrs: { fontSize: '16pt' } }];
-      vi.mocked(parseMarks).mockReturnValue(marks);
+      parseMarks.mockReturnValue(marks);
 
       const params = {
         nodes: [
@@ -66,7 +64,7 @@ describe('sd:totalPageNumber translator', () => {
     });
 
     it('preserves importedCachedText from preprocessor attributes', () => {
-      vi.mocked(parseMarks).mockReturnValue([]);
+      parseMarks.mockReturnValue([]);
 
       const result = config.encode({
         nodes: [
@@ -98,7 +96,7 @@ describe('sd:totalPageNumber translator', () => {
 
   describe('decode', () => {
     it('marks NUMPAGES dirty when no cache map is provided (non-paginated)', () => {
-      vi.mocked(processOutputMarks).mockReturnValue([{ name: 'w:u' }]);
+      processOutputMarks.mockReturnValue([{ name: 'w:u' }]);
 
       const node = {
         type: 'total-page-number',
@@ -118,7 +116,7 @@ describe('sd:totalPageNumber translator', () => {
     });
 
     it('omits w:dirty when cache map has a fresh NUMPAGES value (paginated)', () => {
-      vi.mocked(processOutputMarks).mockReturnValue([]);
+      processOutputMarks.mockReturnValue([]);
 
       const cacheMap = new Map([['NUMPAGES', '12']]);
       const node = {
@@ -139,7 +137,7 @@ describe('sd:totalPageNumber translator', () => {
     });
 
     it('falls back to resolvedText when cache map is absent', () => {
-      vi.mocked(processOutputMarks).mockReturnValue([]);
+      processOutputMarks.mockReturnValue([]);
 
       const node = {
         type: 'total-page-number',
@@ -153,7 +151,7 @@ describe('sd:totalPageNumber translator', () => {
     });
 
     it('falls back to importedCachedText when no resolvedText or cache map', () => {
-      vi.mocked(processOutputMarks).mockReturnValue([]);
+      processOutputMarks.mockReturnValue([]);
 
       const node = {
         type: 'total-page-number',
@@ -166,7 +164,7 @@ describe('sd:totalPageNumber translator', () => {
     });
 
     it('produces a valid 5-run structure with empty text when all fallbacks are empty', () => {
-      vi.mocked(processOutputMarks).mockReturnValue([]);
+      processOutputMarks.mockReturnValue([]);
 
       const result = config.decode({
         node: {

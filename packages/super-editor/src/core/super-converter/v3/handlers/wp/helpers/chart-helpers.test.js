@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
 
 describe('chart-helpers', () => {

@@ -1,15 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { handleStructuredContentNode } from './handle-structured-content-node';
 import { parseAnnotationMarks } from './handle-annotation-node';
 
 // Mock dependencies
-vi.mock('./handle-annotation-node', () => ({
-  parseAnnotationMarks: vi.fn(),
+mock.module('./handle-annotation-node', () => ({
+  parseAnnotationMarks: mock(),
 }));
 
 describe('handleStructuredContentNode', () => {
   const mockNodeListHandler = {
-    handler: vi.fn(() => [{ type: 'text', text: 'translated content' }]),
+    handler: mock(() => [{ type: 'text', text: 'translated content' }]),
   };
 
   const createNode = (sdtPrElements = [], sdtContentElements = []) => ({
@@ -27,7 +27,6 @@ describe('handleStructuredContentNode', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     parseAnnotationMarks.mockReturnValue({ marks: [] });
   });
 

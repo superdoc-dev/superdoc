@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
 import { translateParagraphNode } from './helpers/translate-paragraph-node.js';
 
 // Mock attribute handlers before importing the SUT so the config captures them.
 // Define everything inside the factory to avoid hoisting issues.
-vi.mock('./attributes/index.js', () => ({
+mock.module('./attributes/index.js', () => ({
   default: [
     {
       xmlName: 'w14:paraId',
@@ -46,8 +46,8 @@ vi.mock('./attributes/index.js', () => ({
 }));
 
 // Mock legacy paragraph handler used by encode
-vi.mock('./helpers/legacy-handle-paragraph-node.js', () => ({
-  handleParagraphNode: vi.fn(() => ({
+mock.module('./helpers/legacy-handle-paragraph-node.js', () => ({
+  handleParagraphNode: mock(() => ({
     type: 'paragraph',
     attrs: { fromLegacy: true },
     content: [],
@@ -55,8 +55,8 @@ vi.mock('./helpers/legacy-handle-paragraph-node.js', () => ({
 }));
 
 // Mock exporter decode function used by decode
-vi.mock('./helpers/translate-paragraph-node.js', () => ({
-  translateParagraphNode: vi.fn(() => ({
+mock.module('./helpers/translate-paragraph-node.js', () => ({
+  translateParagraphNode: mock(() => ({
     name: 'w:p',
     elements: [],
     attributes: { existing: 'keep' },
@@ -64,14 +64,12 @@ vi.mock('./helpers/translate-paragraph-node.js', () => ({
 }));
 
 // Import after mocks
-import { translator, config } from './p-translator.js';
-import { NodeTranslator } from '@translator';
+const { translator, config } = await import('./p-translator.js');
+const { NodeTranslator } = await import('@translator');
 import { handleParagraphNode } from './helpers/legacy-handle-paragraph-node.js';
 
 describe('w/p p-translator', () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  afterEach(() => {});
 
   it('exposes correct config', () => {
     expect(config.xmlName).toBe('w:p');

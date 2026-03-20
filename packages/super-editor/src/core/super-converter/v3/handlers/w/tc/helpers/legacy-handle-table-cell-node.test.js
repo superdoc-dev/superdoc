@@ -1,16 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // Mock table importer helpers used by the handler
-vi.mock('@converter/v2/importer/tableImporter', () => ({
-  getGridColumnWidths: vi.fn(() => [90, 100, 110]),
-  getReferencedTableStyles: vi.fn(() => ({
+mock.module('@converter/v2/importer/tableImporter', () => ({
+  getGridColumnWidths: mock(() => [90, 100, 110]),
+  getReferencedTableStyles: mock(() => ({
     fontSize: '12pt',
     fonts: { ascii: 'Arial' },
     cellMargins: { marginLeft: 720, marginBottom: 240 },
   })),
 }));
 
-import { handleTableCellNode } from './legacy-handle-table-cell-node.js';
+const { handleTableCellNode } = await import('./legacy-handle-table-cell-node.js');
 
 const createEditorStub = (typeConfig = {}) => {
   const nodes = {};
@@ -31,9 +30,7 @@ const createEditorStub = (typeConfig = {}) => {
 };
 
 describe('legacy-handle-table-cell-node', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('builds SuperDoc tableCell with attrs merged from tcPr, styles, and vertical merge', () => {
     // tc with properties
@@ -94,7 +91,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
+      nodeListHandler: { handler: mock(() => 'CONTENT') },
       path: [],
       editor: createEditorStub(),
     };
@@ -181,7 +178,7 @@ describe('legacy-handle-table-cell-node', () => {
     const table = { name: 'w:tbl', elements: [row1, row2] };
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
+      nodeListHandler: { handler: mock(() => 'CONTENT') },
       path: [],
       editor: createEditorStub(),
     };
@@ -239,7 +236,7 @@ describe('legacy-handle-table-cell-node', () => {
     const table = { name: 'w:tbl', elements: [row1, row2] };
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
+      nodeListHandler: { handler: mock(() => 'CONTENT') },
       path: [],
       editor: createEditorStub(),
     };
@@ -281,7 +278,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => []) },
+      nodeListHandler: { handler: mock(() => []) },
       path: [],
       editor: createEditorStub(),
     };
@@ -322,7 +319,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => []) },
+      nodeListHandler: { handler: mock(() => []) },
       path: [],
       editor: createEditorStub(),
     };
@@ -357,7 +354,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => []) },
+      nodeListHandler: { handler: mock(() => []) },
       path: [],
       editor: createEditorStub(),
     };
@@ -396,7 +393,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => []) },
+      nodeListHandler: { handler: mock(() => []) },
       path: [],
       editor: createEditorStub(),
     };
@@ -435,7 +432,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => []) },
+      nodeListHandler: { handler: mock(() => []) },
       path: [],
       editor: createEditorStub(),
     };
@@ -469,7 +466,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => [bookmarkStart, bookmarkEnd, paragraph]) },
+      nodeListHandler: { handler: mock(() => [bookmarkStart, bookmarkEnd, paragraph]) },
       path: [],
       editor: createEditorStub({
         bookmarkStart: { isInline: true },
@@ -509,7 +506,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => [paragraph, bookmarkEnd]) },
+      nodeListHandler: { handler: mock(() => [paragraph, bookmarkEnd]) },
       path: [],
       editor: createEditorStub({
         bookmarkStart: { isInline: true },
@@ -545,7 +542,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => [paragraph, bookmarkStart, bookmarkEnd]) },
+      nodeListHandler: { handler: mock(() => [paragraph, bookmarkStart, bookmarkEnd]) },
       path: [],
       editor: createEditorStub({
         bookmarkStart: { isInline: true },
@@ -582,7 +579,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => [bookmarkStart, textNode, bookmarkEnd]) },
+      nodeListHandler: { handler: mock(() => [bookmarkStart, textNode, bookmarkEnd]) },
       path: [],
       editor: createEditorStub({
         bookmarkStart: { isInline: true },
@@ -619,7 +616,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => [paragraph, mention, nextParagraph]) },
+      nodeListHandler: { handler: mock(() => [paragraph, mention, nextParagraph]) },
       path: [],
       editor: createEditorStub({
         text: { isInline: true },
@@ -654,7 +651,7 @@ describe('legacy-handle-table-cell-node', () => {
 
     const params = {
       docx: {},
-      nodeListHandler: { handler: vi.fn(() => [bookmarkStart, customBlock]) },
+      nodeListHandler: { handler: mock(() => [bookmarkStart, customBlock]) },
       path: [],
       editor: createEditorStub({
         bookmarkStart: { isInline: true },

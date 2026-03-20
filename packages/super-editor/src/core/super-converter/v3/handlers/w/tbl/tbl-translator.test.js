@@ -1,17 +1,16 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
 // Mock dependencies
-vi.mock('@core/super-converter/helpers.js', () => ({
-  twipsToPixels: vi.fn((val) => (val ? parseInt(val, 10) / 20 : null)),
-  eighthPointsToPixels: vi.fn((val) => (val ? parseInt(val, 10) / 8 : null)),
-  halfPointToPoints: vi.fn((val) => (val ? parseInt(val, 10) / 2 : null)),
-  pixelsToTwips: vi.fn((val) => (val ? Math.round(val * 20) : 0)),
+mock.module('@core/super-converter/helpers.js', () => ({
+  twipsToPixels: mock((val) => (val ? parseInt(val, 10) / 20 : null)),
+  eighthPointsToPixels: mock((val) => (val ? parseInt(val, 10) / 8 : null)),
+  halfPointToPoints: mock((val) => (val ? parseInt(val, 10) / 2 : null)),
+  pixelsToTwips: mock((val) => (val ? Math.round(val * 20) : 0)),
 }));
 
-vi.mock('../tr', () => ({
+mock.module('../tr', () => ({
   translator: {
-    encode: vi.fn((params) => ({
+    encode: mock((params) => ({
       type: 'tableRow',
       attrs: { from: 'trTranslator' },
       content: [
@@ -19,23 +18,21 @@ vi.mock('../tr', () => ({
         { name: 'tableCell', attributes: {} },
       ],
     })),
-    decode: vi.fn(() => ({ name: 'w:tr', comment: 'mocked row' })),
+    decode: mock(() => ({ name: 'w:tr', comment: 'mocked row' })),
   },
 }));
 
-vi.mock('@core/super-converter/v2/exporter/helpers/index.js', () => ({
-  translateChildNodes: vi.fn(() => [{ name: 'w:tr', comment: 'mocked row' }]),
+mock.module('@core/super-converter/v2/exporter/helpers/index.js', () => ({
+  translateChildNodes: mock(() => [{ name: 'w:tr', comment: 'mocked row' }]),
 }));
 
-import { translator, _getReferencedTableStyles } from './tbl-translator.js';
-import { NodeTranslator } from '@translator';
+const { translator, _getReferencedTableStyles } = await import('./tbl-translator.js');
+const { NodeTranslator } = await import('@translator');
 import { translator as trTranslator } from '../tr';
 import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
 
 describe('w:tbl translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   describe('config', () => {
     it('should have correct properties', () => {
@@ -322,7 +319,7 @@ describe('w:tbl translator', () => {
         const mockEditorSchema = {
           nodes: {
             paragraph: {
-              createAndFill: vi.fn(() => ({ toJSON: () => ({ type: 'paragraph', content: [] }) })),
+              createAndFill: mock(() => ({ toJSON: () => ({ type: 'paragraph', content: [] }) })),
             },
           },
         };

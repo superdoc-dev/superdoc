@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { getTestDataByFileName } from '../../../../../../tests/helpers/helpers.js';
 import { translator as w_b_translator } from './b-translator.js';
 

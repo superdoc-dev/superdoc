@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { join } from 'path';
 import { readFile } from 'fs/promises';
 import { JSDOM } from 'jsdom';
@@ -37,9 +37,7 @@ describe('metafile-converter', () => {
   });
 
   describe('convertMetafileToSvg', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
+    beforeEach(() => {});
 
     it('returns null for unsupported extension', () => {
       const result = convertMetafileToSvg('data:image/png;base64,abc', 'png');

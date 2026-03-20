@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './contextualSpacing-translator.js';
 
 describe('w:contextualSpacing translator', () => {

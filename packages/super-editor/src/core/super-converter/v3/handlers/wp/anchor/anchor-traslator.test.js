@@ -1,21 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { config, translator } from './anchor-translator.js';
-import { NodeTranslator } from '../../../node-translator/index.js';
-import { translateAnchorNode } from './helpers/translate-anchor-node.js';
-import { handleAnchorNode } from './helpers/handle-anchor-node.js';
+const { NodeTranslator } = await import('../../../node-translator/index.js');
+const { translateAnchorNode } = await import('./helpers/translate-anchor-node.js');
+const { handleAnchorNode } = await import('./helpers/handle-anchor-node.js');
 
-vi.mock('@converter/v3/handlers/wp/anchor/helpers/handle-anchor-node.js', () => ({
-  handleAnchorNode: vi.fn(),
+mock.module('@converter/v3/handlers/wp/anchor/helpers/handle-anchor-node.js', () => ({
+  handleAnchorNode: mock(),
 }));
 
-vi.mock('@converter/v3/handlers/wp/anchor/helpers/translate-anchor-node.js', () => ({
-  translateAnchorNode: vi.fn(),
+mock.module('@converter/v3/handlers/wp/anchor/helpers/translate-anchor-node.js', () => ({
+  translateAnchorNode: mock(),
 }));
 
 describe('wp:anchor translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('wp:anchor');

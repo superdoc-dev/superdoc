@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
 import {
   polygonToObj,
   objToPolygon,
@@ -304,7 +304,6 @@ describe('getArrayBufferFromUrl', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
   });
 
   it('fetches remote resources when given an HTTP URL', async () => {
@@ -313,10 +312,10 @@ describe('getArrayBufferFromUrl', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      arrayBuffer: vi.fn().mockResolvedValue(payload.buffer),
+      arrayBuffer: mock().mockResolvedValue(payload.buffer),
     };
 
-    globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
+    globalThis.fetch = mock().mockResolvedValue(mockResponse);
 
     const result = await getArrayBufferFromUrl('https://example.com/image.png');
 

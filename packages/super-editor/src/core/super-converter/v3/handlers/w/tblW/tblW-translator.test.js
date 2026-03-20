@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './tblW-translator.js';
 
 describe('w:tblW translator', () => {

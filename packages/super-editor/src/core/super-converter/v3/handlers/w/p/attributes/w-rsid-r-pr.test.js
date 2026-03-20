@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 // @ts-check
-import { describe, it, expect } from 'vitest';
 import { encode, decode, attrConfig } from './w-rsid-r-pr.js';
 
 describe('w:rsidRPr attribute handlers', () => {

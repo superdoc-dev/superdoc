@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { advancePastRowSpans, createPlaceholderCell, fillPlaceholderColumns, isPlaceholderCell } from './tr-helpers.js';
 
 const makeCell = (overrides = {}) => ({

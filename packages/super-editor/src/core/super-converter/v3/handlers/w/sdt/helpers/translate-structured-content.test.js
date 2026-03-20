@@ -1,15 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { translateStructuredContent } from './translate-structured-content';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 
 // Mock dependencies
-vi.mock('@converter/v2/exporter/helpers/translateChildNodes', () => ({
-  translateChildNodes: vi.fn(),
+mock.module('@converter/v2/exporter/helpers/translateChildNodes', () => ({
+  translateChildNodes: mock(),
 }));
 
 describe('translateStructuredContent', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     translateChildNodes.mockReturnValue([{ name: 'w:p', elements: [{ name: 'w:t', text: 'Test content' }] }]);
   });
 

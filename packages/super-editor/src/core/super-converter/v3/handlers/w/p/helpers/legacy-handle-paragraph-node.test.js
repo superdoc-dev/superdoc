@@ -1,20 +1,19 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
 // Mock dependencies used by the helper
-vi.mock('@core/utilities/carbonCopy.js', () => ({
+mock.module('@core/utilities/carbonCopy.js', () => ({
   carbonCopy: (obj) => JSON.parse(JSON.stringify(obj)),
 }));
 
 // Mock parseMarks/mergeTextNodes as vi.fn so tests can reconfigure
-vi.mock('@converter/v2/importer/index.js', () => ({
-  parseMarks: vi.fn(() => []),
-  mergeTextNodes: vi.fn((content) => content),
+mock.module('@converter/v2/importer/index.js', () => ({
+  parseMarks: mock(() => []),
+  mergeTextNodes: mock((content) => content),
 }));
 
 // Simple and predictable conversion for positions
-vi.mock('@converter/helpers.js', async (importOriginal) => {
-  const actual = await importOriginal();
+mock.module('@converter/helpers.js', async (importOriginal) => {
+  const actual = await import(/* original */ '.');
   return {
     ...actual,
     twipsToPixels: (twips) => (twips === undefined ? undefined : Number(twips) / 20),
@@ -24,11 +23,11 @@ vi.mock('@converter/helpers.js', async (importOriginal) => {
   };
 });
 
-import { handleParagraphNode } from './legacy-handle-paragraph-node.js';
+const { handleParagraphNode } = await import('./legacy-handle-paragraph-node.js');
 import { parseMarks, mergeTextNodes } from '@converter/v2/importer/index.js';
 
 const makeParams = (overrides = {}) => {
-  const defaultHandler = vi.fn(() => overrides._mockContent || []);
+  const defaultHandler = mock(() => overrides._mockContent || []);
   const { nodeListHandler, ...rest } = overrides;
   return {
     filename: 'source.docx',
@@ -49,7 +48,6 @@ const makeParams = (overrides = {}) => {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
   parseMarks.mockReset().mockImplementation(() => []);
   mergeTextNodes.mockReset().mockImplementation((c) => c);
 });

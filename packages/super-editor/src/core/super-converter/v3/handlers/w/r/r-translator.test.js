@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock, spyOn } from 'bun:test';
 import { translator, config } from './r-translator.js';
 import * as converterStyles from '../../../../styles.js';
 
@@ -19,7 +19,7 @@ describe('w:r r-translator (node)', () => {
 
     const params = {
       nodes: [runNode],
-      nodeListHandler: { handler: vi.fn(() => [fakeChild]) },
+      nodeListHandler: { handler: mock(() => [fakeChild]) },
       docx: {},
     };
     const out = translator.encode(params);
@@ -41,7 +41,7 @@ describe('w:r r-translator (node)', () => {
     const params = {
       nodes: [boldRun],
       nodeListHandler: {
-        handler: vi.fn(({ nodes }) =>
+        handler: mock(({ nodes }) =>
           nodes
             .map((node) => {
               if (node.name === 'w:t') return { type: 'text', text: node.elements?.[0]?.text ?? '', marks: [] };
@@ -78,7 +78,7 @@ describe('w:r r-translator (node)', () => {
     const params = {
       nodes: [styledRun],
       nodeListHandler: {
-        handler: vi.fn(({ nodes }) =>
+        handler: mock(({ nodes }) =>
           nodes
             .map((node) => {
               if (node.name === 'w:t') return { type: 'text', text: node.elements?.[0]?.text ?? '', marks: [] };
@@ -110,7 +110,7 @@ describe('w:r r-translator (node)', () => {
     const params = {
       nodes: [run],
       nodeListHandler: {
-        handler: vi.fn(() => [
+        handler: mock(() => [
           { type: 'text', text: 'Left', marks: [] },
           { type: 'tab', attrs: { val: 'start' } },
           { type: 'text', text: 'Right', marks: [] },
@@ -141,7 +141,7 @@ describe('w:r r-translator (node)', () => {
 
     const params = {
       nodes: [runNode],
-      nodeListHandler: { handler: vi.fn(() => [passthroughChild]) },
+      nodeListHandler: { handler: mock(() => [passthroughChild]) },
       docx: {},
     };
 
@@ -165,7 +165,7 @@ describe('w:r r-translator (node)', () => {
 
     const params = {
       nodes: [runNode],
-      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'Cell', marks: [] }]) },
+      nodeListHandler: { handler: mock(() => [{ type: 'text', text: 'Cell', marks: [] }]) },
       docx: {},
       extraParams: {
         paragraphProperties: { styleId: 'ListParagraph' },
@@ -200,7 +200,7 @@ describe('w:r r-translator (node)', () => {
   });
 
   it('passes null tableInfo to resolveRunProperties when table context is incomplete', () => {
-    const resolveRunPropertiesSpy = vi.spyOn(converterStyles, 'resolveRunProperties').mockImplementation(() => ({}));
+    const resolveRunPropertiesSpy = spyOn(converterStyles, 'resolveRunProperties').mockImplementation(() => ({}));
     const runNode = {
       name: 'w:r',
       elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'No table context' }] }],
@@ -208,7 +208,7 @@ describe('w:r r-translator (node)', () => {
 
     const params = {
       nodes: [runNode],
-      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'No table context', marks: [] }]) },
+      nodeListHandler: { handler: mock(() => [{ type: 'text', text: 'No table context', marks: [] }]) },
       docx: {},
       extraParams: {
         paragraphProperties: { styleId: 'Normal' },

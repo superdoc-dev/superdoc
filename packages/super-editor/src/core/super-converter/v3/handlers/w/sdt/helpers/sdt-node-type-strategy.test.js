@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
 import { sdtNodeTypeStrategy } from './sdt-node-type-strategy';
 import { parseTagValueJSON } from './parse-tag-value-json';
 import { handleAnnotationNode } from './handle-annotation-node';
@@ -6,11 +6,11 @@ import { handleDocPartObj } from './handle-doc-part-obj';
 import { handleDocumentSectionNode } from './handle-document-section-node';
 import { handleStructuredContentNode } from './handle-structured-content-node';
 
-vi.mock('./parse-tag-value-json');
-vi.mock('./handle-annotation-node');
-vi.mock('./handle-doc-part-obj');
-vi.mock('./handle-document-section-node');
-vi.mock('./handle-structured-content-node');
+mock.module('./parse-tag-value-json');
+mock.module('./handle-annotation-node');
+mock.module('./handle-doc-part-obj');
+mock.module('./handle-document-section-node');
+mock.module('./handle-structured-content-node');
 
 describe('sdtNodeTypeStrategy', () => {
   const createBaseNode = (elements = []) => ({
@@ -40,9 +40,7 @@ describe('sdtNodeTypeStrategy', () => {
     attributes: { 'w:val': value },
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  afterEach(() => {});
 
   describe('docPartObj handler', () => {
     it('should return docPartObj type when docPartObj element exists', () => {

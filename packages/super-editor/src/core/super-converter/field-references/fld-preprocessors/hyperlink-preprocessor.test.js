@@ -1,16 +1,15 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
-import { translator } from '../../v3/handlers/w/hyperlink';
+const { preProcessHyperlinkInstruction } = await import('./hyperlink-preprocessor.js');
+const { translator } = await import('../../v3/handlers/w/hyperlink');
 import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
 
-vi.mock('@helpers/generateDocxRandomId.js', () => ({
-  generateDocxRandomId: vi.fn(),
+mock.module('@helpers/generateDocxRandomId.js', () => ({
+  generateDocxRandomId: mock(),
 }));
 
 describe('preProcessHyperlinkInstruction', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     generateDocxRandomId.mockReturnValue('abc12345');
   });
 

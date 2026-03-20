@@ -1,22 +1,20 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { config, translator } from './autoPageNumber-translator.js';
-import { NodeTranslator } from '../../../node-translator/node-translator.js';
+const { config, translator } = await import('./autoPageNumber-translator.js');
+const { NodeTranslator } = await import('../../../node-translator/node-translator.js');
 import { processOutputMarks } from '../../../../exporter.js';
 import { parseMarks } from './../../../../v2/importer/markImporter.js';
 
-vi.mock('../../../../exporter.js', () => ({
-  processOutputMarks: vi.fn(() => []),
+mock.module('../../../../exporter.js', () => ({
+  processOutputMarks: mock(() => []),
 }));
 
-vi.mock('./../../../../v2/importer/markImporter.js', () => ({
-  parseMarks: vi.fn(() => []),
+mock.module('./../../../../v2/importer/markImporter.js', () => ({
+  parseMarks: mock(() => []),
 }));
 
 describe('sd:autoPageNumber translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('sd:autoPageNumber');
@@ -31,7 +29,7 @@ describe('sd:autoPageNumber translator', () => {
   describe('encode', () => {
     it('encodes a sd:autoPageNumber node and captures marks from rPr', () => {
       const marks = [{ type: 'textStyle', attrs: { fontSize: '12pt' } }];
-      vi.mocked(parseMarks).mockReturnValue(marks);
+      parseMarks.mockReturnValue(marks);
 
       const params = {
         nodes: [
@@ -81,7 +79,7 @@ describe('sd:autoPageNumber translator', () => {
   describe('decode', () => {
     it('decodes a page-number node back into the PAGE field structure', () => {
       const processedMarks = [{ name: 'w:b' }];
-      vi.mocked(processOutputMarks).mockReturnValue(processedMarks);
+      processOutputMarks.mockReturnValue(processedMarks);
 
       const node = {
         type: 'page-number',

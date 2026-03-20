@@ -1,17 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { config, translator } from './del-translator.js';
-import { NodeTranslator } from '@translator';
+const { NodeTranslator } = await import('@translator');
 import { exportSchemaToJson } from '@converter/exporter.js';
 
 // Mock external modules
-vi.mock('@converter/exporter.js', () => ({
-  exportSchemaToJson: vi.fn(),
+mock.module('@converter/exporter.js', () => ({
+  exportSchemaToJson: mock(),
 }));
 
 describe('w:del translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('w:del');
@@ -32,7 +30,7 @@ describe('w:del translator', () => {
 
     function encodeWith({ converter, id = '123' } = {}) {
       const mockSubNodes = [{ content: [{ type: 'text', text: 'deleted text' }] }];
-      const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
+      const mockNodeListHandler = { handler: mock().mockReturnValue(mockSubNodes) };
 
       const encodedAttrs = {
         author: 'Test',

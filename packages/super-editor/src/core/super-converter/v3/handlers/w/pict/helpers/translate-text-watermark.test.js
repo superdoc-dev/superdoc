@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { translateTextWatermark } from './translate-text-watermark';
 
 // Mock the dependencies
-vi.mock('@helpers/generateDocxRandomId', () => ({
+mock.module('@helpers/generateDocxRandomId', () => ({
   generateRandomSigned32BitIntStrId: () => '12345678',
 }));
 

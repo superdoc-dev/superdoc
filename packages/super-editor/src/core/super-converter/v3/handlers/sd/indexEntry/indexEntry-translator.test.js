@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { config, translator } from './index.js';
 
 describe('sd:indexEntry translator', () => {
@@ -12,7 +12,7 @@ describe('sd:indexEntry translator', () => {
   describe('encode', () => {
     it('encodes sd:indexEntry node to SuperDoc indexEntry node', () => {
       const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue([{ type: 'text', text: 'hidden' }]),
+        handler: mock().mockReturnValue([{ type: 'text', text: 'hidden' }]),
       };
 
       const result = config.encode({
@@ -34,7 +34,7 @@ describe('sd:indexEntry translator', () => {
 
     it('preserves instruction tokens when present', () => {
       const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue([]),
+        handler: mock().mockReturnValue([]),
       };
 
       const instructionTokens = [{ type: 'text', text: 'XE "Term:Subterm"' }];
@@ -58,7 +58,7 @@ describe('sd:indexEntry translator', () => {
 
     it('captures marks from node', () => {
       const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue([]),
+        handler: mock().mockReturnValue([]),
       };
 
       const marks = [{ type: 'bold' }, { type: 'italic' }];
@@ -82,7 +82,7 @@ describe('sd:indexEntry translator', () => {
 
     it('handles missing instruction attribute', () => {
       const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue([]),
+        handler: mock().mockReturnValue([]),
       };
 
       const result = config.encode({

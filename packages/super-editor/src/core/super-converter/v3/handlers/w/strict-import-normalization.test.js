@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'bun:test';
 /**
  * Phase 6 hardening tests: strict import normalization for core-4 inline properties.
  *
@@ -7,7 +8,6 @@
  * - Case-sensitivity enforcement
  * - Tri-state roundtrip (encode → decode)
  */
-import { describe, it, expect, beforeEach } from 'vitest';
 import { createStrictTogglePropertyHandler, parseStrictStOnOff } from '../../handlers/utils.js';
 import { startCollection, drainDiagnostics } from '../../handlers/import-diagnostics.js';
 import { translator as boldTranslator } from './b/b-translator.js';

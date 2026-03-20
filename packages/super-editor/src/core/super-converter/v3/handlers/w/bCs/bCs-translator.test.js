@@ -1,5 +1,4 @@
-import { describe, it, expect } from 'vitest';
-
+import { describe, it, expect } from 'bun:test';
 import { translator } from './bCs-translator.js';
 
 describe('w:bCs translator (attribute)', () => {

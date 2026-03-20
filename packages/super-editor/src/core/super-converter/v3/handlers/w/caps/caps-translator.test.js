@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 // @ts-check
-import { describe, it, expect } from 'vitest';
 import { translator } from './caps-translator.js';
 import { NodeTranslator } from '../../../node-translator/node-translator.js';
 

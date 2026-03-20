@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './tblCellSpacing-translator.js';
 
 describe('w:tblCellSpacing translator', () => {

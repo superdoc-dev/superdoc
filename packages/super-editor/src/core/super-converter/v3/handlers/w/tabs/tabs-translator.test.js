@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { translator } from './tabs-translator.js';
 
-vi.mock('../../../../exporter.js', () => {
-  const processOutputMarks = vi.fn((marks) => marks || []);
-  const generateRunProps = vi.fn((processedMarks) => ({
+mock.module('../../../../exporter.js', () => {
+  const processOutputMarks = mock((marks) => marks || []);
+  const generateRunProps = mock((processedMarks) => ({
     name: 'w:rPr',
     elements: [],
   }));

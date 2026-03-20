@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
 import { isTiffExtension, convertTiffToPng, setTiffDomEnvironment } from './tiff-converter.js';
 
 describe('tiff-converter', () => {
@@ -30,9 +30,7 @@ describe('tiff-converter', () => {
   });
 
   describe('convertTiffToPng', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
+    beforeEach(() => {});
 
     it('returns null for invalid data', () => {
       const result = convertTiffToPng('not-valid-base64!!!');
@@ -64,7 +62,7 @@ describe('tiff-converter', () => {
     // mocked utif2 — vi.doMock applies lazily and needs a fresh module graph entry.
     it('returns a PNG data URI for valid TIFF input', () => {
       const fakeRgba = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]);
-      vi.doMock('utif2', () => ({
+      mock.module('utif2', () => ({
         decode: () => [{ t256: [2], t257: [2] }],
         decodeImage: (_buf, ifd) => {
           ifd.width = 2;
@@ -82,22 +80,21 @@ describe('tiff-converter', () => {
         }),
         toDataURL: () => 'data:image/png;base64,iVBORw0KGgo=',
       };
-      const spy = vi.spyOn(document, 'createElement').mockReturnValue(mockCanvas);
+      const spy = spyOn(document, 'createElement').mockReturnValue(mockCanvas);
 
       return import('./tiff-converter.js?happy').then(({ convertTiffToPng: fn }) => {
         const result = fn('SU8qAA==');
         expect(result).toEqual({ dataUri: 'data:image/png;base64,iVBORw0KGgo=', format: 'png' });
 
         spy.mockRestore();
-        vi.doUnmock('utif2');
       });
     });
 
     it('returns null for TIFF with dimensions exceeding pixel limit', () => {
       // Mock utif2 to return oversized dimensions via IFD tags.
       // decodeImage should never be called.
-      const decodeImageSpy = vi.fn();
-      vi.doMock('utif2', () => ({
+      const decodeImageSpy = mock();
+      mock.module('utif2', () => ({
         decode: () => [{ t256: [100_000], t257: [10_000] }],
         decodeImage: decodeImageSpy,
         toRGBA8: () => new Uint8Array(0),
@@ -107,12 +104,11 @@ describe('tiff-converter', () => {
         const result = fn('SU8qAA==');
         expect(result).toBeNull();
         expect(decodeImageSpy).not.toHaveBeenCalled();
-        vi.doUnmock('utif2');
       });
     });
 
     it('returns null when decode returns empty IFDs', () => {
-      vi.doMock('utif2', () => ({
+      mock.module('utif2', () => ({
         decode: () => [],
         decodeImage: () => {},
         toRGBA8: () => new Uint8Array(0),
@@ -121,12 +117,11 @@ describe('tiff-converter', () => {
       return import('./tiff-converter.js?emptyIfds').then(({ convertTiffToPng: fn }) => {
         const result = fn('SU8qAA==');
         expect(result).toBeNull();
-        vi.doUnmock('utif2');
       });
     });
 
     it('returns null when toRGBA8 returns empty data', () => {
-      vi.doMock('utif2', () => ({
+      mock.module('utif2', () => ({
         decode: () => [{ t256: [2], t257: [2] }],
         decodeImage: () => {},
         toRGBA8: () => new Uint8Array(0),
@@ -135,7 +130,6 @@ describe('tiff-converter', () => {
       return import('./tiff-converter.js?emptyRgba').then(({ convertTiffToPng: fn }) => {
         const result = fn('SU8qAA==');
         expect(result).toBeNull();
-        vi.doUnmock('utif2');
       });
     });
   });

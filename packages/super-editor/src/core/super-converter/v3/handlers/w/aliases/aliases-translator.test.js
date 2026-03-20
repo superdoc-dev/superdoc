@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './aliases-translator.js';
 
 describe('w:aliases translator', () => {

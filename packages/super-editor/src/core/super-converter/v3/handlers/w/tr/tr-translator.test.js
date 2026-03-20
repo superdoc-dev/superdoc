@@ -1,20 +1,19 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
 // Mock dependencies
-vi.mock('@core/super-converter/helpers.js', () => ({
-  twipsToPixels: vi.fn((val) => (val ? parseInt(val, 10) / 20 : 0)),
-  pixelsToTwips: vi.fn((val) => (val ? Math.round(val * 20) : 0)),
-  eighthPointsToPixels: vi.fn((val) => (val != null ? parseInt(val, 10) / 8 : 0)),
+mock.module('@core/super-converter/helpers.js', () => ({
+  twipsToPixels: mock((val) => (val ? parseInt(val, 10) / 20 : 0)),
+  pixelsToTwips: mock((val) => (val ? Math.round(val * 20) : 0)),
+  eighthPointsToPixels: mock((val) => (val != null ? parseInt(val, 10) / 8 : 0)),
 }));
 
-vi.mock('@core/super-converter/v2/exporter/helpers/index.js', () => ({
-  translateChildNodes: vi.fn(() => [{ name: 'w:tc', comment: 'mocked cell' }]),
+mock.module('@core/super-converter/v2/exporter/helpers/index.js', () => ({
+  translateChildNodes: mock(() => [{ name: 'w:tc', comment: 'mocked cell' }]),
 }));
 
-vi.mock('../tc', () => ({
+mock.module('../tc', () => ({
   translator: {
-    encode: vi.fn((params) => {
+    encode: mock((params) => {
       const tcNode = params.extraParams.node;
       const tcPr = tcNode.elements?.find((el) => el.name === 'w:tcPr');
       const gridSpan = tcPr?.elements?.find((el) => el.name === 'w:gridSpan');
@@ -32,23 +31,21 @@ vi.mock('../tc', () => ({
   },
 }));
 
-vi.mock('../trPr', () => ({
+mock.module('../trPr', () => ({
   translator: {
-    encode: vi.fn(() => ({ encoded: 'trPr' })),
-    decode: vi.fn(() => ({ name: 'w:trPr', comment: 'mocked trPr' })),
+    encode: mock(() => ({ encoded: 'trPr' })),
+    decode: mock(() => ({ name: 'w:trPr', comment: 'mocked trPr' })),
   },
 }));
 
-import { translator } from './tr-translator.js';
-import { NodeTranslator } from '@translator';
+const { translator } = await import('./tr-translator.js');
+const { NodeTranslator } = await import('@translator');
 import { translator as tcTranslator } from '../tc';
 import { translator as trPrTranslator } from '../trPr';
 import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
 
 describe('w:tr translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   describe('config and attributes', () => {
     it('should have correct properties', () => {

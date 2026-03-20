@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.js';
 
 describe('document-stat-preprocessor', () => {

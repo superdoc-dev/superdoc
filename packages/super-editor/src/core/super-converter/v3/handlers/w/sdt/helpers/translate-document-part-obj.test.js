@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 // @ts-check
-import { describe, it, expect } from 'vitest';
 import { translateDocumentPartObj } from './translate-document-part-obj.js';
 
 describe('translateDocumentPartObj', () => {

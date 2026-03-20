@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { config, translator } from './index.js';
 
 describe('sd:index translator', () => {
@@ -12,7 +12,7 @@ describe('sd:index translator', () => {
   describe('encode', () => {
     it('encodes sd:index node to SuperDoc index node', () => {
       const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue([{ type: 'paragraph', content: [] }]),
+        handler: mock().mockReturnValue([{ type: 'paragraph', content: [] }]),
       };
 
       const result = config.encode({
@@ -35,7 +35,7 @@ describe('sd:index translator', () => {
 
     it('preserves instruction tokens when present', () => {
       const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue([]),
+        handler: mock().mockReturnValue([]),
       };
 
       const instructionTokens = [{ type: 'text', text: 'INDEX \\e "' }, { type: 'tab' }, { type: 'text', text: '"' }];
@@ -59,7 +59,7 @@ describe('sd:index translator', () => {
 
     it('handles missing instruction attribute', () => {
       const mockNodeListHandler = {
-        handler: vi.fn().mockReturnValue([]),
+        handler: mock().mockReturnValue([]),
       };
 
       const result = config.encode({

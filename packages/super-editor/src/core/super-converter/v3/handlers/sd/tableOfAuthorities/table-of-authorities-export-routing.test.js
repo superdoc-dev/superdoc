@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { exportSchemaToJson } from '../../../../exporter.js';
 
 const TABLE_OF_AUTHORITIES_INSTRUCTION = 'TOA \\c 1 \\e ", " \\p \\h \\l "." \\g "-"';

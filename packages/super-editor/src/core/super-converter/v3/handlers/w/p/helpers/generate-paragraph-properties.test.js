@@ -1,18 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('../../pPr/pPr-translator.js', () => ({
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+mock.module('../../pPr/pPr-translator.js', () => ({
   translator: {
-    decode: vi.fn(),
+    decode: mock(),
   },
 }));
 
-import { generateParagraphProperties } from './generate-paragraph-properties.js';
+const { generateParagraphProperties } = await import('./generate-paragraph-properties.js');
 import { translator as wPPrNodeTranslator } from '../../pPr/pPr-translator.js';
 
 describe('generateParagraphProperties', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('deep clones paragraphProperties before decoding', () => {
     const paragraphProperties = {

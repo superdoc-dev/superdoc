@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import {
   collectTextBoxParagraphs,
   preProcessTextBoxContent,
@@ -15,49 +15,47 @@ import { resolveRunProperties } from '@converter/styles';
 import { translator as rPrTranslator } from '@converter/v3/handlers/w/rpr';
 
 // Mock all dependencies
-vi.mock('@converter/field-references/preProcessNodesForFldChar.js', () => ({
-  preProcessNodesForFldChar: vi.fn((nodes) => ({ processedNodes: nodes })),
+mock.module('@converter/field-references/preProcessNodesForFldChar.js', () => ({
+  preProcessNodesForFldChar: mock((nodes) => ({ processedNodes: nodes })),
 }));
 
-vi.mock('@converter/field-references/preProcessPageFieldsOnly.js', () => ({
-  preProcessPageFieldsOnly: vi.fn((nodes) => ({ processedNodes: nodes })),
+mock.module('@converter/field-references/preProcessPageFieldsOnly.js', () => ({
+  preProcessPageFieldsOnly: mock((nodes) => ({ processedNodes: nodes })),
 }));
 
-vi.mock('@core/utilities/carbonCopy.js', () => ({
-  carbonCopy: vi.fn((obj) => JSON.parse(JSON.stringify(obj))),
+mock.module('@core/utilities/carbonCopy.js', () => ({
+  carbonCopy: mock((obj) => JSON.parse(JSON.stringify(obj))),
 }));
 
-vi.mock('@converter/styles', () => ({
-  resolveParagraphProperties: vi.fn(() => ({})),
-  resolveRunProperties: vi.fn((params, inline, paragraph) => ({ ...inline, ...paragraph })),
+mock.module('@converter/styles', () => ({
+  resolveParagraphProperties: mock(() => ({})),
+  resolveRunProperties: mock((params, inline, paragraph) => ({ ...inline, ...paragraph })),
 }));
 
-vi.mock('@converter/v3/handlers/w/pPr', () => ({
+mock.module('@converter/v3/handlers/w/pPr', () => ({
   translator: {
-    encode: vi.fn(() => ({})),
+    encode: mock(() => ({})),
   },
 }));
 
-vi.mock('@converter/v3/handlers/w/rpr', () => ({
+mock.module('@converter/v3/handlers/w/rpr', () => ({
   translator: {
-    encode: vi.fn(() => ({})),
+    encode: mock(() => ({})),
   },
 }));
 
-vi.mock('@superdoc/style-engine/ooxml', () => ({
-  resolveDocxFontFamily: vi.fn((fontFamily) => fontFamily?.ascii || 'Arial'),
+mock.module('@superdoc/style-engine/ooxml', () => ({
+  resolveDocxFontFamily: mock((fontFamily) => fontFamily?.ascii || 'Arial'),
 }));
 
-vi.mock('@converter/SuperConverter.js', () => ({
+mock.module('@converter/SuperConverter.js', () => ({
   SuperConverter: {
-    toCssFontFamily: vi.fn((font) => font),
+    toCssFontFamily: mock((font) => font),
   },
 }));
 
 describe('textbox-content-helpers', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   describe('collectTextBoxParagraphs', () => {
     it('should return empty array for non-array input', () => {

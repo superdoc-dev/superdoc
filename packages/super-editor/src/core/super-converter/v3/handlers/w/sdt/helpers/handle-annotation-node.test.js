@@ -1,18 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { handleAnnotationNode, parseAnnotationMarks, getAttrsFromElements } from './handle-annotation-node';
 import { parseTagValueJSON } from './parse-tag-value-json';
 import { parseMarks } from '@converter/v2/importer/markImporter';
 import { generateDocxRandomId } from '@core/helpers/generateDocxRandomId';
 
 // Mock dependencies
-vi.mock('./parse-tag-value-json', () => ({
-  parseTagValueJSON: vi.fn(),
+mock.module('./parse-tag-value-json', () => ({
+  parseTagValueJSON: mock(),
 }));
-vi.mock('@converter/v2/importer/markImporter', () => ({
-  parseMarks: vi.fn(() => []),
+mock.module('@converter/v2/importer/markImporter', () => ({
+  parseMarks: mock(() => []),
 }));
-vi.mock('@core/helpers/generateDocxRandomId', () => ({
-  generateDocxRandomId: vi.fn(() => 'test-hash-1234'),
+mock.module('@core/helpers/generateDocxRandomId', () => ({
+  generateDocxRandomId: mock(() => 'test-hash-1234'),
 }));
 
 describe('handleAnnotationNode', () => {
@@ -79,7 +79,6 @@ describe('handleAnnotationNode', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     parseMarks.mockReturnValue([]);
     generateDocxRandomId.mockReturnValue('test-hash-1234');
   });

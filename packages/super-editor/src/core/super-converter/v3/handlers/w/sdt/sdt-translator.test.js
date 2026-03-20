@@ -1,29 +1,27 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { config, translator } from './sdt-translator.js';
-import { NodeTranslator } from '../../../node-translator/node-translator';
+const { NodeTranslator } = await import('../../../node-translator/node-translator');
 import { sdtNodeTypeStrategy } from './helpers/sdt-node-type-strategy';
 import { translateFieldAnnotation } from './helpers/translate-field-annotation';
 import { translateDocumentSection } from './helpers/translate-document-section';
 import { translateStructuredContent } from './helpers/translate-structured-content';
 
 // Mock the helper modules used by sdt-translator
-vi.mock('./helpers/sdt-node-type-strategy', () => ({
-  sdtNodeTypeStrategy: vi.fn(),
+mock.module('./helpers/sdt-node-type-strategy', () => ({
+  sdtNodeTypeStrategy: mock(),
 }));
-vi.mock('./helpers/translate-field-annotation', () => ({
-  translateFieldAnnotation: vi.fn(() => ({ name: 'w:sdt', elements: [] })),
+mock.module('./helpers/translate-field-annotation', () => ({
+  translateFieldAnnotation: mock(() => ({ name: 'w:sdt', elements: [] })),
 }));
-vi.mock('./helpers/translate-document-section', () => ({
-  translateDocumentSection: vi.fn(() => ({ name: 'w:sdt', elements: [] })),
+mock.module('./helpers/translate-document-section', () => ({
+  translateDocumentSection: mock(() => ({ name: 'w:sdt', elements: [] })),
 }));
-vi.mock('./helpers/translate-structured-content', () => ({
-  translateStructuredContent: vi.fn(() => ({ name: 'w:sdt', elements: [] })),
+mock.module('./helpers/translate-structured-content', () => ({
+  translateStructuredContent: mock(() => ({ name: 'w:sdt', elements: [] })),
 }));
 
 describe('w:sdt translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('w:sdt');
@@ -51,7 +49,7 @@ describe('w:sdt translator', () => {
 
   describe('encode function', () => {
     it('returns result from handler when strategy returns valid handler', () => {
-      const mockHandler = vi.fn(() => ({ type: 'fieldAnnotation', content: [] }));
+      const mockHandler = mock(() => ({ type: 'fieldAnnotation', content: [] }));
       sdtNodeTypeStrategy.mockReturnValue({ type: 'fieldAnnotation', handler: mockHandler });
 
       const params = { nodes: [{ elements: [] }] };
@@ -73,7 +71,7 @@ describe('w:sdt translator', () => {
     });
 
     it('returns undefined when type is unknown', () => {
-      const mockHandler = vi.fn();
+      const mockHandler = mock();
       sdtNodeTypeStrategy.mockReturnValue({ type: 'unknown', handler: mockHandler });
 
       const params = { nodes: [{ elements: [] }] };

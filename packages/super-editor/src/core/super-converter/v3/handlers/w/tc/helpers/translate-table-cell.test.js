@@ -1,17 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // Mock children translation to keep tests focused on this module
-vi.mock('@converter/v2/exporter/helpers/index', () => ({
-  translateChildNodes: vi.fn(() => [{ name: 'w:p', elements: [] }]),
+mock.module('@converter/v2/exporter/helpers/index', () => ({
+  translateChildNodes: mock(() => [{ name: 'w:p', elements: [] }]),
 }));
 
-import { pixelsToTwips, pixelsToEightPoints, twipsToPixels } from '@converter/helpers.js';
-import { translateTableCell, generateTableCellProperties } from './translate-table-cell.js';
+const { pixelsToTwips, pixelsToEightPoints, twipsToPixels } = await import('@converter/helpers.js');
+const { translateTableCell, generateTableCellProperties } = await import('./translate-table-cell.js');
 
 describe('translate-table-cell helpers', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('generateTableCellProperties builds tcPr with width, span, bg, margins, vAlign, vMerge, and borders', () => {
     const node = {

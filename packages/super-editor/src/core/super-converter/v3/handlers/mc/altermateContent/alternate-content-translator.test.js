@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import {
   SUPPORTED_ALTERNATE_CONTENT_REQUIRES,
   config,
@@ -25,7 +25,7 @@ describe('mc:AltermateContent translator', () => {
   describe('encode', () => {
     it('returns null if extraParams.node is missing', () => {
       const params = {
-        nodeListHandler: { handler: vi.fn() },
+        nodeListHandler: { handler: mock() },
         extraParams: {},
       };
       const result = translator.encode(params);
@@ -34,7 +34,7 @@ describe('mc:AltermateContent translator', () => {
 
     it('returns null when no usable choice or fallback elements exist', () => {
       const params = {
-        nodeListHandler: { handler: vi.fn() },
+        nodeListHandler: { handler: mock() },
         extraParams: {
           node: {
             type: 'mc:AlternateContent',
@@ -47,7 +47,7 @@ describe('mc:AltermateContent translator', () => {
     });
 
     it('calls nodeListHandler with the contents of mc:Choice and updated path', () => {
-      const handlerSpy = vi.fn().mockReturnValue(['handled']);
+      const handlerSpy = mock().mockReturnValue(['handled']);
       const params = {
         nodeListHandler: { handler: handlerSpy },
         path: [],
@@ -75,7 +75,7 @@ describe('mc:AltermateContent translator', () => {
     });
 
     it('falls back to mc:Fallback when no supported choice exists', () => {
-      const handlerSpy = vi.fn().mockReturnValue(['fallback']);
+      const handlerSpy = mock().mockReturnValue(['fallback']);
       const fallbackNode = { name: 'mc:Fallback', elements: [{ name: 'w:p' }] };
       const params = {
         nodeListHandler: { handler: handlerSpy },
@@ -101,7 +101,7 @@ describe('mc:AltermateContent translator', () => {
     });
 
     it('falls back to the first choice when neither supported choice nor fallback exists', () => {
-      const handlerSpy = vi.fn().mockReturnValue(['choice']);
+      const handlerSpy = mock().mockReturnValue(['choice']);
       const choiceNode = { name: 'mc:Choice', attributes: { Requires: 'unsupported' }, elements: [{ name: 'w:r' }] };
       const params = {
         nodeListHandler: { handler: handlerSpy },

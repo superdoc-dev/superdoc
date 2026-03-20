@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { handleBookmarkStartNode } from './bookmarkStartImporter.js';
 
 const baseParams = () => ({
@@ -10,7 +10,7 @@ const baseParams = () => ({
     },
   },
   nodeListHandler: {
-    handler: vi.fn(),
+    handler: mock(),
     handlerEntities: [],
   },
   path: [],

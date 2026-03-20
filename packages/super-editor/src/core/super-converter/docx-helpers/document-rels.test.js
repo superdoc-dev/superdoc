@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, spyOn, beforeEach } from 'bun:test';
 import {
   getNewRelationshipId,
   getDocumentRelationshipElements,
@@ -220,9 +220,9 @@ describe('insertNewRelationship', () => {
       },
     };
 
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.spyOn(console, 'info').mockImplementation(() => {});
+    spyOn(console, 'warn').mockImplementation(() => {});
+    spyOn(console, 'error').mockImplementation(() => {});
+    spyOn(console, 'info').mockImplementation(() => {});
   });
 
   it('throws if target is not a non-empty string', () => {
@@ -248,7 +248,7 @@ describe('insertNewRelationship', () => {
   });
 
   it('returns existing relationship if already present', () => {
-    vi.spyOn({ findRelationshipIdFromTarget }, 'findRelationshipIdFromTarget').mockReturnValueOnce('rId42');
+    spyOn({ findRelationshipIdFromTarget }, 'findRelationshipIdFromTarget').mockReturnValueOnce('rId42');
 
     const result = insertNewRelationship('foo', 'hyperlink', mockEditor);
     expect(result).toBe('rId42');

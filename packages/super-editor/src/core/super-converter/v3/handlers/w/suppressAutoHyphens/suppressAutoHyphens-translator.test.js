@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './suppressAutoHyphens-translator.js';
 
 describe('w:suppressAutoHyphens translator', () => {

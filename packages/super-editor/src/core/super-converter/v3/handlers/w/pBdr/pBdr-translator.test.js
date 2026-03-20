@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './pBdr-translator.js';
 
 describe('w:pBdr translator', () => {

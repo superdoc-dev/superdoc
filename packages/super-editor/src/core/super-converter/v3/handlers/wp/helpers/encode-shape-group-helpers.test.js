@@ -1,43 +1,41 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { handleImageNode } from './encode-image-node-helpers.js';
-vi.mock('@converter/helpers.js', async (importOriginal) => {
-  const actual = await importOriginal();
+mock.module('@converter/helpers.js', async (importOriginal) => {
+  const actual = await import(/* original */ '.');
   return {
     ...actual,
-    emuToPixels: vi.fn((emu) => emu / 9525),
-    rotToDegrees: vi.fn((rot) => rot / 60000),
-    polygonToObj: vi.fn(),
-    carbonCopy: vi.fn((obj) => JSON.parse(JSON.stringify(obj))),
+    emuToPixels: mock((emu) => emu / 9525),
+    rotToDegrees: mock((rot) => rot / 60000),
+    polygonToObj: mock(),
+    carbonCopy: mock((obj) => JSON.parse(JSON.stringify(obj))),
   };
 });
 
-vi.mock('./vector-shape-helpers.js', () => ({
-  extractFillColor: vi.fn((spPr) => {
+mock.module('./vector-shape-helpers.js', () => ({
+  extractFillColor: mock((spPr) => {
     const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
     const srgbClr = solidFill?.elements?.find((el) => el.name === 'a:srgbClr');
     return srgbClr ? '#' + srgbClr.attributes?.['val'] : '#5b9bd5';
   }),
-  extractStrokeColor: vi.fn((spPr) => {
+  extractStrokeColor: mock((spPr) => {
     const ln = spPr?.elements?.find((el) => el.name === 'a:ln');
     const solidFill = ln?.elements?.find((el) => el.name === 'a:solidFill');
     const srgbClr = solidFill?.elements?.find((el) => el.name === 'a:srgbClr');
     return srgbClr ? '#' + srgbClr.attributes?.['val'] : '#000000';
   }),
-  extractStrokeWidth: vi.fn(() => 1),
-  extractLineEnds: vi.fn(() => null),
-  extractCustomGeometry: vi.fn(() => null),
+  extractStrokeWidth: mock(() => 1),
+  extractLineEnds: mock(() => null),
+  extractCustomGeometry: mock(() => null),
 }));
 
-vi.mock('@core/utilities/carbonCopy.js', () => ({
-  carbonCopy: vi.fn((obj) => JSON.parse(JSON.stringify(obj))),
+mock.module('@core/utilities/carbonCopy.js', () => ({
+  carbonCopy: mock((obj) => JSON.parse(JSON.stringify(obj))),
 }));
 
 describe('handleImageNode - Shape Group Support', () => {
   const GROUP_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   const createShapeGroupNode = (shapes = []) => {
     return {

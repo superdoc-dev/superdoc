@@ -1,22 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { handleImageNode } from './encode-image-node-helpers.js';
 import { emuToPixels } from '@converter/helpers.js';
 
-vi.mock('@converter/helpers.js', async (importOriginal) => {
-  const actual = await importOriginal();
+mock.module('@converter/helpers.js', async (importOriginal) => {
+  const actual = await import(/* original */ '.');
   return {
     ...actual,
-    emuToPixels: vi.fn(),
-    polygonToObj: vi.fn(),
-    rotToDegrees: vi.fn(),
+    emuToPixels: mock(),
+    polygonToObj: mock(),
+    rotToDegrees: mock(),
   };
 });
 
-vi.mock('./vector-shape-helpers.js', () => ({
-  extractFillColor: vi.fn(),
-  extractStrokeColor: vi.fn(),
-  extractStrokeWidth: vi.fn(),
-  extractCustomGeometry: vi.fn(),
+mock.module('./vector-shape-helpers.js', () => ({
+  extractFillColor: mock(),
+  extractStrokeColor: mock(),
+  extractStrokeWidth: mock(),
+  extractCustomGeometry: mock(),
 }));
 
 /**
@@ -28,7 +28,6 @@ vi.mock('./vector-shape-helpers.js', () => ({
  */
 describe('handleImageNode - Header/Footer Images', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     emuToPixels.mockImplementation((emu) => (emu ? parseInt(emu, 10) / 1000 : 0));
   });
 

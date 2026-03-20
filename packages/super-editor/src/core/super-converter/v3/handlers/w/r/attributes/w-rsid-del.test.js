@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { encode, decode, attrConfig } from './w-rsid-del.js';
 
 describe('w:r w:rsidDel attribute handlers', () => {

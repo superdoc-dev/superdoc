@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 // @ts-check
-import { describe, it, expect } from 'vitest';
 import { preProcessNumPagesInstruction } from './num-pages-preprocessor.js';
 
 describe('preProcessNumPagesInstruction', () => {

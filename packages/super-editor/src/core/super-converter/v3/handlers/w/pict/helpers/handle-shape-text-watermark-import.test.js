@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, spyOn } from 'bun:test';
 import { handleShapeTextWatermarkImport } from './handle-shape-text-watermark-import';
 
 describe('handleShapeTextWatermarkImport', () => {
@@ -126,7 +126,7 @@ describe('handleShapeTextWatermarkImport', () => {
     });
 
     it('should warn and return null if string attribute is empty', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
       const pict = {
         elements: [

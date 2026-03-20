@@ -1,16 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { translateContentBlock, translateVRectContentBlock } from './translate-content-block';
 import { translator as alternateChoiceTranslator } from '@converter/v3/handlers/mc/altermateContent';
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
 import { wrapTextInRun } from '@converter/exporter';
 
-vi.mock('@converter/v3/handlers/mc/altermateContent');
-vi.mock('@helpers/generateDocxRandomId');
-vi.mock('@converter/exporter');
+mock.module('@converter/v3/handlers/mc/altermateContent');
+mock.module('@helpers/generateDocxRandomId');
+mock.module('@converter/exporter');
 
 describe('translateContentBlock', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     wrapTextInRun.mockImplementation((content) => ({ name: 'w:r', elements: [content] }));
   });
 
@@ -67,7 +66,6 @@ describe('translateContentBlock', () => {
 
 describe('translateVRectContentBlock', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     generateRandomSigned32BitIntStrId.mockReturnValue('12345678');
     wrapTextInRun.mockImplementation((content) => ({ name: 'w:r', elements: [content] }));
   });
@@ -207,7 +205,6 @@ describe('translateVRectContentBlock - VML synthesis for new HRs', () => {
   const getRectAttrs = (result) => result.elements[0].elements[0].attributes;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     generateRandomSigned32BitIntStrId.mockReturnValue('12345678');
     wrapTextInRun.mockImplementation((content) => ({ name: 'w:r', elements: [content] }));
   });

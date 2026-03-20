@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './widowControl-translator.js';
 
 describe('w:widowControl translator', () => {

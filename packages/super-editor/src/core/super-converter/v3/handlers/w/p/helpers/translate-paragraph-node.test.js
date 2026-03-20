@@ -1,25 +1,23 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/index.js';
 import { generateParagraphProperties } from './generate-paragraph-properties.js';
 
-vi.mock('@converter/v2/exporter/helpers/index.js', () => ({
-  translateChildNodes: vi.fn(),
+mock.module('@converter/v2/exporter/helpers/index.js', () => ({
+  translateChildNodes: mock(),
 }));
 
-vi.mock('./generate-paragraph-properties.js', () => ({
-  generateParagraphProperties: vi.fn(),
+mock.module('./generate-paragraph-properties.js', () => ({
+  generateParagraphProperties: mock(),
 }));
 
-import { translateParagraphNode } from './translate-paragraph-node.js';
+const { translateParagraphNode } = await import('./translate-paragraph-node.js');
 
 const baseParams = () => ({
   node: { attrs: {} },
 });
 
 describe('translateParagraphNode', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('returns html annotation elements when present', () => {
     const params = baseParams();

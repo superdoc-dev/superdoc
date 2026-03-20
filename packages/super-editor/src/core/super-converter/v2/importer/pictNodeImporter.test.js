@@ -1,17 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const mockHandler = mock();
 
-const mockHandler = vi.fn();
-
-vi.mock('../../v3/handlers/w/pict/helpers/pict-node-type-strategy', () => ({
-  pictNodeTypeStrategy: vi.fn(),
+mock.module('../../v3/handlers/w/pict/helpers/pict-node-type-strategy', () => ({
+  pictNodeTypeStrategy: mock(),
 }));
 
-import { handlePictNode } from './pictNodeImporter.js';
+const { handlePictNode } = await import('./pictNodeImporter.js');
 import { pictNodeTypeStrategy } from '../../v3/handlers/w/pict/helpers/pict-node-type-strategy';
 
 describe('handlePictNode', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     pictNodeTypeStrategy.mockReturnValue({ type: 'unknown', handler: null });
   });
 

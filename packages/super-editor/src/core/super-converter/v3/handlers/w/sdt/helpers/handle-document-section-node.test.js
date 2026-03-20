@@ -1,15 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { handleDocumentSectionNode } from './handle-document-section-node';
 import { parseTagValueJSON } from './parse-tag-value-json';
 
 // Mock dependencies
-vi.mock('./parse-tag-value-json', () => ({
-  parseTagValueJSON: vi.fn(),
+mock.module('./parse-tag-value-json', () => ({
+  parseTagValueJSON: mock(),
 }));
 
 describe('handleDocumentSectionNode', () => {
   const mockNodeListHandler = {
-    handler: vi.fn(() => [{ type: 'paragraph', text: 'test content' }]),
+    handler: mock(() => [{ type: 'paragraph', text: 'test content' }]),
   };
 
   const createNode = (sdtPrElements = [], sdtContentElements = []) => ({
@@ -42,7 +42,6 @@ describe('handleDocumentSectionNode', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     parseTagValueJSON.mockReturnValue({});
   });
 

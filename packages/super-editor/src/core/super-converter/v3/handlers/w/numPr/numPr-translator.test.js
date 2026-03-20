@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { translator } from './numPr-translator.js';
 
-vi.mock('@converter/exporter', () => ({
-  exportSchemaToJson: vi.fn(),
-  createTrackStyleMark: vi.fn(),
+mock.module('@converter/exporter', () => ({
+  exportSchemaToJson: mock(),
+  createTrackStyleMark: mock(),
 }));
 
 describe('w:numPr translator', () => {

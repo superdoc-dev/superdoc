@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 import { HYPERLINK_RELATIONSHIP_TYPE, HEADER_RELATIONSHIP_TYPE, FOOTER_RELATIONSHIP_TYPE } from './constants.js';
 

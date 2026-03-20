@@ -1,33 +1,32 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { config, translator } from './drawing-translator.js';
-import { NodeTranslator } from '../../../node-translator/index.js';
-import { wrapTextInRun } from '../../../../exporter.js';
+const { NodeTranslator } = await import('../../../node-translator/index.js');
+const { wrapTextInRun } = await import('../../../../exporter.js');
 
-const anchorTranslatorMock = vi.hoisted(() => ({
-  encode: vi.fn(),
-  decode: vi.fn(),
-}));
+const anchorTranslatorMock = {
+  encode: mock(),
+  decode: mock(),
+};
 
-const inlineTranslatorMock = vi.hoisted(() => ({
-  encode: vi.fn(),
-  decode: vi.fn(),
-}));
+const inlineTranslatorMock = {
+  encode: mock(),
+  decode: mock(),
+};
 
-vi.mock('@converter/v3/handlers/wp/anchor/anchor-translator.js', () => ({
+mock.module('@converter/v3/handlers/wp/anchor/anchor-translator.js', () => ({
   translator: anchorTranslatorMock,
 }));
 
-vi.mock('@converter/v3/handlers/wp/inline/inline-translator.js', () => ({
+mock.module('@converter/v3/handlers/wp/inline/inline-translator.js', () => ({
   translator: inlineTranslatorMock,
 }));
 
-vi.mock('@converter/exporter.js', () => ({
-  wrapTextInRun: vi.fn((node) => ({ wrapped: node })),
+mock.module('@converter/exporter.js', () => ({
+  wrapTextInRun: mock((node) => ({ wrapped: node })),
 }));
 
 describe('w:drawing translator', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     anchorTranslatorMock.encode.mockReset();
     anchorTranslatorMock.decode.mockReset();
     inlineTranslatorMock.encode.mockReset();

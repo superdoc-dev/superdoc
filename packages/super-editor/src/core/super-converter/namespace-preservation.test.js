@@ -1,3 +1,4 @@
+import { describe, test, expect } from 'bun:test';
 /**
  * IT-268 / SD-1493: Test that namespace declarations are preserved during export
  *
@@ -6,7 +7,6 @@
  * compatibility with Microsoft Word's strict XML parser.
  */
 
-import { describe, test, expect } from 'vitest';
 import { DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
 
 // Mock the mergeMcIgnorable function logic (same as in exporter.js)

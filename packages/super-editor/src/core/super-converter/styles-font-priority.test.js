@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeAll } from 'bun:test';
 /**
  * Test suite for font-size priority and inline property override behavior.
  *
@@ -8,13 +9,12 @@
  * AND inline direct formatting (e.g., w:sz, w:b), the inline formatting must take
  * precedence according to the OOXML specification.
  */
-import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { resolveRunProperties, combineRunProperties } from './styles.js';
 
 beforeAll(() => {
-  vi.stubGlobal('SuperConverter', {
+  globalThis.SuperConverter = {
     toCssFontFamily: (font) => font,
-  });
+  };
 });
 
 const buildTranslatedLinkedStyles = (styles = {}) => ({

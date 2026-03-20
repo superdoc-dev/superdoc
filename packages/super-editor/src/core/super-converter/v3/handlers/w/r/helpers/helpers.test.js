@@ -1,10 +1,8 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { cloneMark, cloneXmlNode, applyRunPropertiesTemplate, resolveFontFamily } from './helpers.js';
 
 describe('w:r helper utilities', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   describe('resolveFontFamily', () => {
     it('uses east Asia font only when node contains East Asian characters', () => {

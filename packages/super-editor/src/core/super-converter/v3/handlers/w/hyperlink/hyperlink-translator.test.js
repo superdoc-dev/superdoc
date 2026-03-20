@@ -1,21 +1,20 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { config, translator } from './hyperlink-translator.js';
+const { config, translator } = await import('./hyperlink-translator.js');
 import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
 import { exportSchemaToJson } from '@core/super-converter/exporter';
 
-vi.mock('@helpers/generateDocxRandomId.js', () => ({
-  generateDocxRandomId: vi.fn(),
+mock.module('@helpers/generateDocxRandomId.js', () => ({
+  generateDocxRandomId: mock(),
 }));
 
-vi.mock('@core/super-converter/exporter', () => ({
-  exportSchemaToJson: vi.fn(),
+mock.module('@core/super-converter/exporter', () => ({
+  exportSchemaToJson: mock(),
 }));
 
 describe('w:hyperlink translator', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(exportSchemaToJson).mockImplementation((p) => ({
+    exportSchemaToJson.mockImplementation((p) => ({
       name: 'w:r',
       elements: [{ name: 'w:t', elements: [{ type: 'text', text: p.node.text || 'link text' }] }],
     }));
@@ -81,7 +80,7 @@ describe('w:hyperlink translator', () => {
 
   describe('config.encode', () => {
     const mockNodeListHandler = {
-      handler: vi.fn(({ nodes }) =>
+      handler: mock(({ nodes }) =>
         nodes.map((node, index) => ({
           type: 'text',
           text: `link text ${index + 1}`,
@@ -215,7 +214,7 @@ describe('w:hyperlink translator', () => {
         relationships: [],
       };
 
-      vi.mocked(exportSchemaToJson).mockImplementation((p) => {
+      exportSchemaToJson.mockImplementation((p) => {
         expect(p.node.marks).toEqual([{ type: 'bold' }]);
         return { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] };
       });
@@ -229,7 +228,7 @@ describe('w:hyperlink translator', () => {
     });
 
     it('should generate a new rId if not present on the mark', () => {
-      vi.mocked(generateDocxRandomId).mockReturnValue('new-random-id');
+      generateDocxRandomId.mockReturnValue('new-random-id');
       const params = {
         node: {
           type: 'text',
@@ -297,7 +296,7 @@ describe('w:hyperlink translator', () => {
         relationships: [],
       };
 
-      vi.mocked(exportSchemaToJson).mockImplementation((p) => ({
+      exportSchemaToJson.mockImplementation((p) => ({
         name: 'w:r',
         elements: [{ name: 'w:t', elements: [{ type: 'text', text: p.node.text }] }],
       }));

@@ -1,22 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // Mock the helper modules used by tc-translator
-vi.mock('./helpers/legacy-handle-table-cell-node', () => ({
-  handleTableCellNode: vi.fn(() => ({ type: 'tableCell', content: [], attrs: { a: 1 } })),
+mock.module('./helpers/legacy-handle-table-cell-node', () => ({
+  handleTableCellNode: mock(() => ({ type: 'tableCell', content: [], attrs: { a: 1 } })),
 }));
-vi.mock('./helpers/translate-table-cell', () => ({
-  translateTableCell: vi.fn(() => ({ name: 'w:tc', elements: [{ name: 'w:tcPr', elements: [] }] })),
+mock.module('./helpers/translate-table-cell', () => ({
+  translateTableCell: mock(() => ({ name: 'w:tc', elements: [{ name: 'w:tcPr', elements: [] }] })),
 }));
 
-import { config, translator } from './tc-translator.js';
-import { NodeTranslator } from '../../../node-translator/node-translator.js';
+const { config, translator } = await import('./tc-translator.js');
+const { NodeTranslator } = await import('../../../node-translator/node-translator.js');
 import { handleTableCellNode } from './helpers/legacy-handle-table-cell-node';
 import { translateTableCell } from './helpers/translate-table-cell';
 
 describe('w:tc translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('w:tc');

@@ -1,14 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { translateInlineNode } from './translate-inline-node.js';
-import { translateImageNode } from '../../helpers/decode-image-node-helpers.js';
+const { translateImageNode } = await import('../../helpers/decode-image-node-helpers.js');
 
-vi.mock('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
-  translateImageNode: vi.fn(),
+mock.module('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
+  translateImageNode: mock(),
 }));
 
 describe('translateInlineNode', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     translateImageNode.mockReturnValue({
       attributes: {},
       elements: [{ name: 'wp:extent' }, { name: 'a:graphic' }],

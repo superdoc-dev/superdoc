@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './insideV-translator.js';
 
 describe('w:insideV border translator', () => {

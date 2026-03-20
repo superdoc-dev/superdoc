@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { defaultNodeListHandler } from '../../../../v2/importer/docxImporter.js';
 import { translator } from './r-translator.js';
 

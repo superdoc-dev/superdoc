@@ -1,57 +1,56 @@
-import { describe, it, expect, vi } from 'vitest';
-
+import { describe, it, expect, mock } from 'bun:test';
 // Mock the individual margin property translators
-vi.mock('../bottom', () => ({
+mock.module('../bottom', () => ({
   marginBottomTranslator: {
     xmlName: 'w:bottom',
     sdNodeOrKeyName: 'marginBottom',
-    encode: vi.fn(() => 'encoded_marginBottom'),
-    decode: vi.fn(() => ({ name: 'w:bottom' })),
+    encode: mock(() => 'encoded_marginBottom'),
+    decode: mock(() => ({ name: 'w:bottom' })),
   },
 }));
-vi.mock('../end', () => ({
+mock.module('../end', () => ({
   marginEndTranslator: {
     xmlName: 'w:end',
     sdNodeOrKeyName: 'marginEnd',
-    encode: vi.fn(() => 'encoded_marginEnd'),
-    decode: vi.fn(() => ({ name: 'w:end' })),
+    encode: mock(() => 'encoded_marginEnd'),
+    decode: mock(() => ({ name: 'w:end' })),
   },
 }));
-vi.mock('../left', () => ({
+mock.module('../left', () => ({
   marginLeftTranslator: {
     xmlName: 'w:left',
     sdNodeOrKeyName: 'marginLeft',
-    encode: vi.fn(() => 'encoded_marginLeft'),
-    decode: vi.fn(() => ({ name: 'w:left' })),
+    encode: mock(() => 'encoded_marginLeft'),
+    decode: mock(() => ({ name: 'w:left' })),
   },
 }));
-vi.mock('../right', () => ({
+mock.module('../right', () => ({
   marginRightTranslator: {
     xmlName: 'w:right',
     sdNodeOrKeyName: 'marginRight',
-    encode: vi.fn(() => 'encoded_marginRight'),
-    decode: vi.fn(() => ({ name: 'w:right' })),
+    encode: mock(() => 'encoded_marginRight'),
+    decode: mock(() => ({ name: 'w:right' })),
   },
 }));
-vi.mock('../start', () => ({
+mock.module('../start', () => ({
   marginStartTranslator: {
     xmlName: 'w:start',
     sdNodeOrKeyName: 'marginStart',
-    encode: vi.fn(() => 'encoded_marginStart'),
-    decode: vi.fn(() => ({ name: 'w:start' })),
+    encode: mock(() => 'encoded_marginStart'),
+    decode: mock(() => ({ name: 'w:start' })),
   },
 }));
-vi.mock('../top', () => ({
+mock.module('../top', () => ({
   marginTopTranslator: {
     xmlName: 'w:top',
     sdNodeOrKeyName: 'marginTop',
-    encode: vi.fn(() => 'encoded_marginTop'),
-    decode: vi.fn(() => ({ name: 'w:top' })),
+    encode: mock(() => 'encoded_marginTop'),
+    decode: mock(() => ({ name: 'w:top' })),
   },
 }));
 
-import { translator } from './tblCellMar-translator.js';
-import { NodeTranslator } from '@translator';
+const { translator } = await import('./tblCellMar-translator.js');
+const { NodeTranslator } = await import('@translator');
 
 describe('w:tblCellMar translator', () => {
   describe('config', () => {

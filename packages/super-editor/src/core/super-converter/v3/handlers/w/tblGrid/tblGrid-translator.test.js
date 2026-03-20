@@ -1,14 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { translator } from './tblGrid-translator.js';
-import { NodeTranslator } from '@translator';
+const { NodeTranslator } = await import('@translator');
 
 // Mock dependencies
-vi.mock('@core/super-converter/helpers.js', () => ({
-  twipsToPixels: vi.fn((val) => (val ? parseInt(val, 10) / 20 : 0)),
-  pixelsToTwips: vi.fn((val) => (val ? Math.round(val * 20) : 0)),
+mock.module('@core/super-converter/helpers.js', () => ({
+  twipsToPixels: mock((val) => (val ? parseInt(val, 10) / 20 : 0)),
+  pixelsToTwips: mock((val) => (val ? Math.round(val * 20) : 0)),
 }));
 
-import { twipsToPixels, pixelsToTwips } from '@converter/helpers.js';
+const { twipsToPixels, pixelsToTwips } = await import('@converter/helpers.js');
 
 describe('w:tblGrid translator', () => {
   describe('config', () => {

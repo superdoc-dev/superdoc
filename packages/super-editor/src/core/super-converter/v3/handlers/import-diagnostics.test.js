@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { startCollection, pushDiagnostic, drainDiagnostics, peekDiagnostics } from './import-diagnostics.js';
 
 describe('import-diagnostics collector', () => {

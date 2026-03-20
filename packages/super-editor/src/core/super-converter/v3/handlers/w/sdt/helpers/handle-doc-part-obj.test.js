@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { normalizeDocPartContent, handleDocPartObj, tableOfContentsHandler } from './handle-doc-part-obj.js';
 
 describe('normalizeDocPartContent', () => {
@@ -32,7 +32,7 @@ describe('normalizeDocPartContent', () => {
 
 describe('handleDocPartObj', () => {
   const mockNodeListHandler = {
-    handler: vi.fn(() => [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Content' }] }]),
+    handler: mock(() => [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Content' }] }]),
   };
 
   const createSdtNode = (docPartGalleryType) => ({
@@ -124,7 +124,7 @@ describe('handleDocPartObj', () => {
 
 describe('tableOfContentsHandler', () => {
   const mockNodeListHandler = {
-    handler: vi.fn(() => [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Content' }] }]),
+    handler: mock(() => [{ type: 'paragraph', content: [{ type: 'text', text: 'TOC Content' }] }]),
   };
 
   it('should process a Table of Contents node correctly', () => {
@@ -196,7 +196,7 @@ describe('tableOfContentsHandler', () => {
         },
       ],
     };
-    const handler = vi.fn(({ nodes }) => {
+    const handler = mock(({ nodes }) => {
       const node = nodes[0];
       if (node.name === 'sd:tableOfContents') {
         return [{ type: 'tableOfContents', attrs: { instruction: node.attributes.instruction }, content: [] }];
@@ -246,7 +246,7 @@ describe('tableOfContentsHandler', () => {
         },
       ],
     };
-    const handler = vi.fn(({ nodes }) => {
+    const handler = mock(({ nodes }) => {
       const node = nodes[0];
       if (node.name === 'sd:tableOfContents') {
         return [{ type: 'tableOfContents', attrs: { instruction: node.attributes.instruction }, content: [] }];
@@ -292,7 +292,7 @@ describe('tableOfContentsHandler', () => {
         },
       ],
     };
-    const handler = vi.fn(({ nodes }) => {
+    const handler = mock(({ nodes }) => {
       const node = nodes[0];
       if (node.name === 'sd:tableOfContents') {
         return [{ type: 'tableOfContents', attrs: { instruction: node.attributes.instruction }, content: [] }];

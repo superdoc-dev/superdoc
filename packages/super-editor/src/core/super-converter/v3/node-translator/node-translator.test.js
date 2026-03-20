@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { NodeTranslator, TranslatorTypes } from './index.js';
 
 describe('NodeTranslator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes TranslatorTypes and static translatorTypes', () => {
     expect(TranslatorTypes).toEqual({ NODE: 'node', ATTRIBUTE: 'attribute' });
@@ -15,8 +13,8 @@ describe('NodeTranslator', () => {
     const cfg = {
       xmlName: 'w:test',
       sdNodeOrKeyName: 'test',
-      encode: vi.fn(() => ({ type: 'x' })),
-      decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+      encode: mock(() => ({ type: 'x' })),
+      decode: mock(() => ({ name: 'w:x', elements: [] })),
       attributes: [],
     };
     const t = NodeTranslator.from(cfg);
@@ -41,8 +39,8 @@ describe('NodeTranslator', () => {
     const cfg = {
       xmlName: 'w:test',
       sdNodeOrKeyName: 'test',
-      encode: vi.fn(() => ({ type: 'x' })),
-      decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+      encode: mock(() => ({ type: 'x' })),
+      decode: mock(() => ({ name: 'w:x', elements: [] })),
     };
     const t = NodeTranslator.from(cfg);
     expect(t.matchesEncode([], {})).toBe(true);
@@ -51,17 +49,17 @@ describe('NodeTranslator', () => {
 
   describe('encodeAttributes', () => {
     it('calls attribute encoders; keeps 0, "", false; drops null/undefined;', () => {
-      const encA = vi.fn(() => 0); // keep
-      const encB = vi.fn(() => ''); // keep
-      const encC = vi.fn(() => false); // keep
-      const encD = vi.fn(() => null); // drop
-      const encE = vi.fn(() => undefined); // drop
+      const encA = mock(() => 0); // keep
+      const encB = mock(() => ''); // keep
+      const encC = mock(() => false); // keep
+      const encD = mock(() => null); // drop
+      const encE = mock(() => undefined); // drop
 
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
-        decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+        encode: mock(() => ({ type: 'x' })),
+        decode: mock(() => ({ name: 'w:x', elements: [] })),
         attributes: [
           { xmlName: 'w:a', sdName: 'a', encode: encA },
           { xmlName: 'w:b', sdName: 'b', encode: encB },
@@ -85,12 +83,12 @@ describe('NodeTranslator', () => {
     });
 
     it('skips attributes without an encode function', () => {
-      const enc = vi.fn(() => 'ok');
+      const enc = mock(() => 'ok');
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
-        decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+        encode: mock(() => ({ type: 'x' })),
+        decode: mock(() => ({ name: 'w:x', elements: [] })),
         attributes: [
           { xmlName: 'w:a', sdName: 'a', encode: enc },
           { xmlName: 'w:b', sdName: 'b' }, // no encode
@@ -103,12 +101,12 @@ describe('NodeTranslator', () => {
     });
 
     it('handles missing params/nodes gracefully', () => {
-      const enc = vi.fn(() => 'x');
+      const enc = mock(() => 'x');
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
-        decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+        encode: mock(() => ({ type: 'x' })),
+        decode: mock(() => ({ name: 'w:x', elements: [] })),
         attributes: [{ xmlName: 'w:a', sdName: 'a', encode: enc }],
       });
 
@@ -119,17 +117,17 @@ describe('NodeTranslator', () => {
 
   describe('decodeAttributes', () => {
     it('calls attribute decoders; keeps 0, "", false; drops null/undefined;', () => {
-      const decA = vi.fn(() => 0); // keep
-      const decB = vi.fn(() => ''); // keep
-      const decC = vi.fn(() => false); // keep
-      const decD = vi.fn(() => null); // drop
-      const decE = vi.fn(() => undefined); // drop
+      const decA = mock(() => 0); // keep
+      const decB = mock(() => ''); // keep
+      const decC = mock(() => false); // keep
+      const decD = mock(() => null); // drop
+      const decE = mock(() => undefined); // drop
 
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
-        decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+        encode: mock(() => ({ type: 'x' })),
+        decode: mock(() => ({ name: 'w:x', elements: [] })),
         attributes: [
           { xmlName: 'w:a', sdName: 'a', decode: decA },
           { xmlName: 'w:b', sdName: 'b', decode: decB },
@@ -153,12 +151,12 @@ describe('NodeTranslator', () => {
     });
 
     it('skips attributes without a decode function', () => {
-      const dec = vi.fn(() => 'ok');
+      const dec = mock(() => 'ok');
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
-        decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+        encode: mock(() => ({ type: 'x' })),
+        decode: mock(() => ({ name: 'w:x', elements: [] })),
         attributes: [
           { xmlName: 'w:a', sdName: 'a', decode: dec },
           { xmlName: 'w:b', sdName: 'b' }, // no decode
@@ -171,12 +169,12 @@ describe('NodeTranslator', () => {
     });
 
     it('handles missing params/node gracefully', () => {
-      const dec = vi.fn(() => 'x');
+      const dec = mock(() => 'x');
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
-        decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+        encode: mock(() => ({ type: 'x' })),
+        decode: mock(() => ({ name: 'w:x', elements: [] })),
         attributes: [{ xmlName: 'w:a', sdName: 'a', decode: dec }],
       });
 
@@ -187,15 +185,15 @@ describe('NodeTranslator', () => {
 
   describe('encode / decode wrappers', () => {
     it('encode() passes cleaned encodedAttrs into encodeFn and returns its result', () => {
-      const encA = vi.fn(() => 0);
-      const encB = vi.fn(() => null); // dropped
-      const encodeFn = vi.fn((_params, encodedAttrs) => ({ type: 'result', attrs: encodedAttrs }));
+      const encA = mock(() => 0);
+      const encB = mock(() => null); // dropped
+      const encodeFn = mock((_params, encodedAttrs) => ({ type: 'result', attrs: encodedAttrs }));
 
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
         encode: encodeFn,
-        decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+        decode: mock(() => ({ name: 'w:x', elements: [] })),
         attributes: [
           { xmlName: 'w:a', sdName: 'a', encode: encA },
           { xmlName: 'w:b', sdName: 'b', encode: encB },
@@ -213,9 +211,9 @@ describe('NodeTranslator', () => {
     });
 
     it('decode() passes cleaned decodedAttrs into decodeFn and returns its result', () => {
-      const decA = vi.fn(() => '');
-      const decB = vi.fn(() => undefined); // dropped
-      const decodeFn = vi.fn((_params, decodedAttrs) => ({
+      const decA = mock(() => '');
+      const decB = mock(() => undefined); // dropped
+      const decodeFn = mock((_params, decodedAttrs) => ({
         name: 'w:out',
         elements: [{ name: 'w:child' }],
         attrs: decodedAttrs,
@@ -224,7 +222,7 @@ describe('NodeTranslator', () => {
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
+        encode: mock(() => ({ type: 'x' })),
         decode: decodeFn,
         attributes: [
           { xmlName: 'w:a', sdName: 'a', decode: decA },
@@ -250,7 +248,7 @@ describe('NodeTranslator', () => {
       const t = NodeTranslator.from({
         xmlName: 'w:test',
         sdNodeOrKeyName: 'test',
-        encode: vi.fn(() => ({ type: 'x' })),
+        encode: mock(() => ({ type: 'x' })),
         // no decode
       });
 
@@ -263,8 +261,8 @@ describe('NodeTranslator', () => {
     const t = NodeTranslator.from({
       xmlName: 'w:test',
       sdNodeOrKeyName: 'test',
-      encode: vi.fn(() => ({ type: 'x' })),
-      decode: vi.fn(() => ({ name: 'w:x', elements: [] })),
+      encode: mock(() => ({ type: 'x' })),
+      decode: mock(() => ({ name: 'w:x', elements: [] })),
       priority: 7,
     });
     expect(t.toString()).toBe('NodeTranslator(w:test, priority=7)');

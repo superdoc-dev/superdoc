@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
 import { SuperConverter } from './SuperConverter.js';
 import { v4 as uuidv4 } from 'uuid';
 
-vi.mock('uuid', () => ({
-  v4: vi.fn(() => 'test-uuid-1234'),
+mock.module('uuid', () => ({
+  v4: mock(() => 'test-uuid-1234'),
 }));
 
 describe('SuperConverter Document GUID', () => {
@@ -12,8 +12,6 @@ describe('SuperConverter Document GUID', () => {
   let mockSettingsXml;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     // These need to match the actual file structure expected by SuperConverter
     mockCustomXml = {
       name: 'docProps/custom.xml',
@@ -455,8 +453,6 @@ describe('SuperConverter Document GUID', () => {
       expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
 
       // Clear the mock to verify promoteToGuid doesn't generate a new one
-      vi.clearAllMocks();
-
       // promoteToGuid should return the existing GUID
       const guid = converter.promoteToGuid();
       expect(guid).toBe('test-uuid-1234');
@@ -584,7 +580,7 @@ describe('SuperConverter Document GUID', () => {
     });
 
     it('returns null when custom.xml is malformed or missing Properties root', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const value = SuperConverter.getStoredCustomProperty(
         [
           {
@@ -813,7 +809,7 @@ describe('SuperConverter Document GUID', () => {
 
     describe('Edge Cases and Error Handling', () => {
       it('returns null for malformed property structure (missing nested elements)', () => {
-        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
         const docx = {
           name: 'docProps/custom.xml',
@@ -831,7 +827,7 @@ describe('SuperConverter Document GUID', () => {
       });
 
       it('returns null for property with empty text', () => {
-        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
         const docx = {
           name: 'docProps/custom.xml',
@@ -850,7 +846,7 @@ describe('SuperConverter Document GUID', () => {
       });
 
       it('handles malformed property structure in setStoredCustomProperty with preserveExisting', () => {
-        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
         const docx = {
           'docProps/custom.xml': {
@@ -880,7 +876,7 @@ describe('SuperConverter Document GUID', () => {
       });
 
       it('recreates property structure when updating malformed property', () => {
-        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
         const docx = {
           'docProps/custom.xml': {
@@ -1001,7 +997,7 @@ describe('SuperConverter Document GUID', () => {
 
   describe('Backward Compatibility', () => {
     it('deprecated methods show warnings', () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
       SuperConverter.updateDocumentVersion(mockDocx, '1.0.0');
       expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -1383,7 +1379,7 @@ describe('SuperConverter comment cleanup on export', () => {
     const converter = new SuperConverter({ docx: makeCommentCleanupDocx() });
     converter.numbering = { abstracts: {}, definitions: {} };
 
-    const exportToXmlJsonSpy = vi.spyOn(converter, 'exportToXmlJson').mockReturnValue({
+    const exportToXmlJsonSpy = spyOn(converter, 'exportToXmlJson').mockReturnValue({
       result: converter.convertedXml['word/document.xml'].elements[0],
       params: {
         relationships: [],

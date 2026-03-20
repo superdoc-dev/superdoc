@@ -1,21 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { config, translator } from './inline-translator.js';
-import { NodeTranslator } from '../../../node-translator/index.js';
-import { translateInlineNode } from './helpers/translate-inline-node.js';
-import { handleInlineNode } from './helpers/handle-inline-node.js';
+const { NodeTranslator } = await import('../../../node-translator/index.js');
+const { translateInlineNode } = await import('./helpers/translate-inline-node.js');
+const { handleInlineNode } = await import('./helpers/handle-inline-node.js');
 
-vi.mock('@converter/v3/handlers/wp/inline/helpers/handle-inline-node.js', () => ({
-  handleInlineNode: vi.fn(),
+mock.module('@converter/v3/handlers/wp/inline/helpers/handle-inline-node.js', () => ({
+  handleInlineNode: mock(),
 }));
 
-vi.mock('@converter/v3/handlers/wp/inline/helpers/translate-inline-node.js', () => ({
-  translateInlineNode: vi.fn(),
+mock.module('@converter/v3/handlers/wp/inline/helpers/translate-inline-node.js', () => ({
+  translateInlineNode: mock(),
 }));
 
 describe('wp:inline translator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('exposes correct config meta', () => {
     expect(config.xmlName).toBe('wp:inline');

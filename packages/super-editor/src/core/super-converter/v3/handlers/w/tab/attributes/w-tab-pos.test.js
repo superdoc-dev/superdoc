@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { encode, decode, attrConfig } from './w-tab-pos.js';
 
 describe('w:tab w:pos (pos) encoder', () => {

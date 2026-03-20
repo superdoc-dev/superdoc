@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 import { getFieldHighlightJson } from './translate-field-annotation';
 
 const extractFill = (result) => result?.elements?.[0]?.attributes?.['w:fill'];
@@ -7,7 +7,7 @@ describe('getFieldHighlightJson (non-throwing)', () => {
   let warnSpy;
 
   beforeEach(() => {
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {

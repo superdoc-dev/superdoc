@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './textboxTightWrap-translator.js';
 
 describe('w:textboxTightWrap translator', () => {

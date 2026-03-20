@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { config } from './index.js';
 
 describe('w:tab translator config', () => {

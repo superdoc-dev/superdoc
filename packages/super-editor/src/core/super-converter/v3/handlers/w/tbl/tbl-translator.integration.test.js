@@ -1,5 +1,5 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi } from 'vitest';
 import { twipsToPixels } from '@core/super-converter/helpers.js';
 
 import { translator as tblTranslator } from './tbl-translator.js';
@@ -17,7 +17,7 @@ const minimalDocx = {
 };
 
 const minimalNodeListHandler = {
-  handler: vi.fn(() => []),
+  handler: mock(() => []),
 };
 
 describe('w:tbl translator integration', () => {

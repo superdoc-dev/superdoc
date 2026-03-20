@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translator } from './szcs-translator.js';
 import { NodeTranslator } from '../../../node-translator/node-translator.js';
 

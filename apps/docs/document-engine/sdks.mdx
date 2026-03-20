@@ -198,7 +198,7 @@ By default the SDK attributes edits to a generic "CLI" user. Set `user` on the c
   </Tab>
 </Tabs>
 
-The `user` is injected into every `doc.open` call. If you pass `userName` or `userEmail` on a specific `doc.open`, those per-call values take precedence.
+The `user` is injected into every `client.open` call. If you pass `userName` or `userEmail` on a specific `client.open`, those per-call values take precedence.
 
 ## Collaboration sessions
 
@@ -206,7 +206,7 @@ Use this when your app already has a live collaboration room (Liveblocks, Hocusp
 
 ### Join an existing room
 
-Pass `collabUrl` and `collabDocumentId` to `doc.open`:
+Pass `collabUrl` and `collabDocumentId` to `client.open`:
 
 <Tabs>
   <Tab title="Node.js">
@@ -363,7 +363,7 @@ The three `onMissing` values:
 {/* SDK_OPERATIONS_START */}
 ## Available operations
 
-The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and session commands. The tables below are grouped by category.
+The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and client commands. `client.open()` returns a bound document handle — all document operations run on that handle.
 
 <Tabs>
   <Tab title="Node.js">
@@ -800,20 +800,20 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
 | `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
 
-#### Session
+#### Lifecycle
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `client.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
 | `doc.save` | `save` | Save the current session to the original file or a new path. |
 | `doc.close` | `close` | Close the active editing session and clean up resources. |
-| `doc.status` | `status` | Show the current session status and document metadata. |
-| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
-| `doc.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
-| `doc.session.list` | `session list` | List all active editing sessions. |
-| `doc.session.save` | `session save` | Persist the current session state. |
-| `doc.session.close` | `session close` | Close a specific editing session by ID. |
-| `doc.session.setDefault` | `session set-default` | Set the default session for subsequent commands. |
+
+#### Client
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `client.describe` | `describe` | List all available CLI operations and contract metadata. |
+| `client.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
 
   </Tab>
   <Tab title="Python">
@@ -1250,20 +1250,20 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
 | `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
 
-#### Session
+#### Lifecycle
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `client.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
 | `doc.save` | `save` | Save the current session to the original file or a new path. |
 | `doc.close` | `close` | Close the active editing session and clean up resources. |
-| `doc.status` | `status` | Show the current session status and document metadata. |
-| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
-| `doc.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
-| `doc.session.list` | `session list` | List all active editing sessions. |
-| `doc.session.save` | `session save` | Persist the current session state. |
-| `doc.session.close` | `session close` | Close a specific editing session by ID. |
-| `doc.session.set_default` | `session set-default` | Set the default session for subsequent commands. |
+
+#### Client
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `client.describe` | `describe` | List all available CLI operations and contract metadata. |
+| `client.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
 
   </Tab>
 </Tabs>
@@ -1277,8 +1277,8 @@ The SDKs are request/response wrappers around the CLI. They do **not** expose br
 - If you are building a browser live counter, use the [SuperEditor events](/core/supereditor/events) or [SuperDoc events](/core/superdoc/events) instead.
 
 ```ts
-const doc = await client.open('./report.docx');
-const info = doc.info();
+const doc = await client.open({ doc: './report.docx' });
+const info = await doc.info();
 console.log(
   `${info.counts.words} words, ` +
     `${info.counts.characters} characters, ` +

@@ -49,16 +49,19 @@ async function ensureInitialized() {
   client = new SuperDocClient({ watchdogTimeoutMs: WATCHDOG_TIMEOUT_MS });
   await client.connect();
 
-  doc = await client.open({
-    doc: DOC_PATH,
-    collaboration: {
-      providerType: COLLAB_PROVIDER,
-      url: COLLAB_URL,
-      documentId: COLLAB_DOCUMENT_ID,
-      tokenEnv: COLLAB_TOKEN_ENV,
-      syncTimeoutMs: COLLAB_SYNC_TIMEOUT_MS,
+  doc = await client.open(
+    {
+      doc: DOC_PATH,
+      collaboration: {
+        providerType: COLLAB_PROVIDER,
+        url: COLLAB_URL,
+        documentId: COLLAB_DOCUMENT_ID,
+        tokenEnv: COLLAB_TOKEN_ENV,
+        syncTimeoutMs: COLLAB_SYNC_TIMEOUT_MS,
+      },
     },
-  });
+    { timeoutMs: OPEN_TIMEOUT_MS },
+  );
   openResult = doc.openResult;
 
   const markdownContent = await readFile(MARKDOWN_PATH, 'utf8');

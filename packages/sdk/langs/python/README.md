@@ -93,7 +93,7 @@ By default the SDK attributes edits to a generic "CLI" user. Set `user` on the c
 client = AsyncSuperDocClient(user={"name": "Review Bot", "email": "bot@example.com"})
 ```
 
-The `user` is injected into every `doc.open` call. If you pass `userName` or `userEmail` on a specific `doc.open`, those per-call values take precedence.
+The `user` is injected into every `client.open` call. If you pass `userName` or `userEmail` on a specific `client.open`, those per-call values take precedence.
 
 ## Client lifecycle
 

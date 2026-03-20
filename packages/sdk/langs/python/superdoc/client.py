@@ -255,7 +255,13 @@ class SuperDocClient:
         """
         self._runtime.connect()
 
-    def open(self, params: Dict[str, Any]) -> SuperDocDocument:
+    def open(
+        self,
+        params: Dict[str, Any],
+        *,
+        timeout_ms: Optional[int] = None,
+        stdin_bytes: Optional[bytes] = None,
+    ) -> SuperDocDocument:
         """Open a document and return a bound document handle.
 
         The returned handle injects its session id into every operation
@@ -270,7 +276,7 @@ class SuperDocClient:
                 details={'sessionId': explicit_session_id},
             )
 
-        result = self._raw_api.open(params)
+        result = self._raw_api.open(params, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)
         context_id = result.get('contextId', '')
 
         bound = _BoundSyncRuntime(self._runtime, context_id)
@@ -278,11 +284,23 @@ class SuperDocClient:
         self._handles[context_id] = handle
         return handle
 
-    def describe(self, params: Dict[str, Any] | None = None) -> Any:
-        return self._raw_api.describe(params)
+    def describe(
+        self,
+        params: Dict[str, Any] | None = None,
+        *,
+        timeout_ms: Optional[int] = None,
+        stdin_bytes: Optional[bytes] = None,
+    ) -> Any:
+        return self._raw_api.describe(params, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)
 
-    def describe_command(self, params: Dict[str, Any] | None = None) -> Any:
-        return self._raw_api.describe_command(params)
+    def describe_command(
+        self,
+        params: Dict[str, Any] | None = None,
+        *,
+        timeout_ms: Optional[int] = None,
+        stdin_bytes: Optional[bytes] = None,
+    ) -> Any:
+        return self._raw_api.describe_command(params, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)
 
     def dispose(self) -> None:
         """Gracefully shut down the host process and invalidate all open handles."""
@@ -341,7 +359,13 @@ class AsyncSuperDocClient:
         """
         await self._runtime.connect()
 
-    async def open(self, params: Dict[str, Any]) -> AsyncSuperDocDocument:
+    async def open(
+        self,
+        params: Dict[str, Any],
+        *,
+        timeout_ms: Optional[int] = None,
+        stdin_bytes: Optional[bytes] = None,
+    ) -> AsyncSuperDocDocument:
         """Open a document and return a bound document handle.
 
         The returned handle injects its session id into every operation
@@ -356,7 +380,7 @@ class AsyncSuperDocClient:
                 details={'sessionId': explicit_session_id},
             )
 
-        result = await self._raw_api.open(params)
+        result = await self._raw_api.open(params, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)
         context_id = result.get('contextId', '')
 
         bound = _BoundAsyncRuntime(self._runtime, context_id)
@@ -364,11 +388,23 @@ class AsyncSuperDocClient:
         self._handles[context_id] = handle
         return handle
 
-    async def describe(self, params: Dict[str, Any] | None = None) -> Any:
-        return await self._raw_api.describe(params)
+    async def describe(
+        self,
+        params: Dict[str, Any] | None = None,
+        *,
+        timeout_ms: Optional[int] = None,
+        stdin_bytes: Optional[bytes] = None,
+    ) -> Any:
+        return await self._raw_api.describe(params, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)
 
-    async def describe_command(self, params: Dict[str, Any] | None = None) -> Any:
-        return await self._raw_api.describe_command(params)
+    async def describe_command(
+        self,
+        params: Dict[str, Any] | None = None,
+        *,
+        timeout_ms: Optional[int] = None,
+        stdin_bytes: Optional[bytes] = None,
+    ) -> Any:
+        return await self._raw_api.describe_command(params, timeout_ms=timeout_ms, stdin_bytes=stdin_bytes)
 
     async def dispose(self) -> None:
         """Gracefully shut down the host process and invalidate all open handles."""

@@ -43,16 +43,19 @@ async def lifespan(app: FastAPI):
     logger.info("collaboration token env: %s", COLLAB_TOKEN_ENV)
 
     async with AsyncSuperDocClient(watchdog_timeout_ms=WATCHDOG_TIMEOUT_MS) as client:
-        doc = await client.open({
-            "doc": str(DOC_PATH),
-            "collaboration": {
-                "providerType": COLLAB_PROVIDER,
-                "url": COLLAB_URL,
-                "documentId": COLLAB_DOCUMENT_ID,
-                "tokenEnv": COLLAB_TOKEN_ENV,
-                "syncTimeoutMs": COLLAB_SYNC_TIMEOUT_MS,
+        doc = await client.open(
+            {
+                "doc": str(DOC_PATH),
+                "collaboration": {
+                    "providerType": COLLAB_PROVIDER,
+                    "url": COLLAB_URL,
+                    "documentId": COLLAB_DOCUMENT_ID,
+                    "tokenEnv": COLLAB_TOKEN_ENV,
+                    "syncTimeoutMs": COLLAB_SYNC_TIMEOUT_MS,
+                },
             },
-        })
+            timeout_ms=OPEN_TIMEOUT_MS,
+        )
         markdown_content = MARKDOWN_PATH.read_text(encoding="utf-8")
         await doc.insert({"value": markdown_content, "type": "markdown"})
 

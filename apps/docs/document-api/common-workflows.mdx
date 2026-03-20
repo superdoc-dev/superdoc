@@ -347,8 +347,8 @@ superdoc.on('editor-update', ({ editor }) => {
 The SDKs do not expose browser event subscriptions. Call `doc.info()` at workflow boundaries — after opening a document, after a batch of mutations, or before saving.
 
 ```ts
-const doc = await client.open('./contract.docx');
-const info = doc.info();
+const doc = await client.open({ doc: './contract.docx' });
+const info = await doc.info();
 console.log(
   `${info.counts.words} words, ${info.counts.characters} characters, ${info.counts.trackedChanges} tracked changes`,
 );

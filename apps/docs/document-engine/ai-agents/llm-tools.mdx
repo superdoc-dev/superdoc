@@ -77,7 +77,7 @@ Install the SDK, create a client, and wire up an agentic loop.
     client.connect()
     doc = client.open({"doc": "./contract.docx"})
 
-    result = choose_tools(provider="openai")
+    result = choose_tools({"provider": "openai"})
     tools = result["tools"]
 
     messages = [
@@ -130,9 +130,7 @@ Install the SDK, create a client, and wire up an agentic loop.
     ```python
     from superdoc import choose_tools
 
-    result = choose_tools(
-        provider="openai",
-    )
+    result = choose_tools({"provider": "openai"})
     tools = result["tools"]
     ```
   </Tab>

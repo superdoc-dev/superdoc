@@ -87,13 +87,13 @@ await doc.close(params)
 |----------|-----------|
 | **Query** | `find`, `query.match`, `getNode`, `getNodeById`, `info` |
 | **Mutation** | `insert`, `replace`, `delete` |
-| **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
+| **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strike` |
 | **Create** | `create.paragraph` |
 | **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.create`, `lists.attach`, `lists.detach`, `lists.indent`, `lists.outdent`, `lists.join`, `lists.separate`, `lists.setLevel`, `lists.setValue`, `lists.continuePrevious`, `lists.setLevelRestart`, `lists.convertToText`, `lists.canJoin`, `lists.canContinuePrevious` |
 | **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
 | **Track Changes** | `trackChanges.list`, `trackChanges.get`, `trackChanges.decide` |
 | **Lifecycle** | `client.open`, `doc.save`, `doc.close` |
-| **Client** | `describe`, `describeCommand` |
+| **Client** | `client.describe`, `client.describeCommand` |
 
 ### AI Tool Integration
 

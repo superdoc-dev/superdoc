@@ -189,7 +189,7 @@ export class SuperDocClient {
    * automatically. The same file can be opened multiple times with
    * different session ids (useful for diff workflows).
    */
-  async open(params: DocOpenParams): Promise<SuperDocDocument> {
+  async open(params: DocOpenParams, options?: InvokeOptions): Promise<SuperDocDocument> {
     const explicitSessionId = params.sessionId;
     if (typeof explicitSessionId === 'string' && this.handles.has(explicitSessionId)) {
       throw new SuperDocCliError(`Session id already open in this client: ${explicitSessionId}`, {
@@ -198,7 +198,7 @@ export class SuperDocClient {
       });
     }
 
-    const result = (await this.rawApi.open(params)) as Record<string, unknown>;
+    const result = (await this.rawApi.open(params, options)) as Record<string, unknown>;
     const contextId = result.contextId as string;
 
     const boundRuntime = new BoundRuntime(this.runtime, contextId);
@@ -207,12 +207,12 @@ export class SuperDocClient {
     return handle;
   }
 
-  async describe(params: Record<string, unknown> = {}): Promise<unknown> {
-    return this.rawApi.describe(params);
+  async describe(params: Record<string, unknown> = {}, options?: InvokeOptions): Promise<unknown> {
+    return this.rawApi.describe(params, options);
   }
 
-  async describeCommand(params: DocDescribeCommandParams): Promise<unknown> {
-    return this.rawApi.describeCommand(params);
+  async describeCommand(params: DocDescribeCommandParams, options?: InvokeOptions): Promise<unknown> {
+    return this.rawApi.describeCommand(params, options);
   }
 
   async dispose(): Promise<void> {

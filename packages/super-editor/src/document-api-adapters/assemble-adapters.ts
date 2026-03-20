@@ -97,6 +97,7 @@ import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { resolveRange } from './helpers/range-resolver.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
+import { initStoryRevisionStore } from './story-runtime/story-revision-store.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 import { registerPartDescriptor } from '../core/parts/registry/part-registry.js';
 import { stylesPartDescriptor } from '../core/parts/adapters/styles-part-descriptor.js';
@@ -333,6 +334,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   registerBuiltInExecutors();
   initRevision(editor);
   trackRevisions(editor);
+  initStoryRevisionStore(editor);
   registerPartDescriptor(stylesPartDescriptor);
   registerPartDescriptor(settingsPartDescriptor);
   registerPartDescriptor(relsPartDescriptor);

@@ -13,40 +13,15 @@
  * - Control selection overlay visibility to prevent double caret rendering
  */
 
+import type { HeaderFooterRegion } from './types.js';
+
+export type { HeaderFooterRegion } from './types.js';
+
 // Styling constants - extracted for maintainability and consistency
 const EDITOR_HOST_Z_INDEX = '10';
 const BORDER_LINE_Z_INDEX = '15';
 const BORDER_LINE_COLOR = '#4472c4';
 const BORDER_LINE_HEIGHT = '1px';
-
-/**
- * Represents a header or footer region with position and dimension data.
- */
-export type HeaderFooterRegion = {
-  /** Type of region: header or footer */
-  kind: 'header' | 'footer';
-  /** Relationship ID of the header/footer content */
-  headerId?: string;
-  /** Section type/variant (default, first, even, odd) */
-  sectionType?: string;
-  /** Zero-based page index */
-  pageIndex: number;
-  /** One-based page number for display */
-  pageNumber: number;
-  /** X coordinate relative to page */
-  localX: number;
-  /** Y coordinate relative to page */
-  localY: number;
-  /** Width of the region in pixels */
-  width: number;
-  /** Height of the region in pixels */
-  height: number;
-  /**
-   * Minimum Y coordinate from layout (can be negative if content extends above y=0).
-   * Used to adjust editor host positioning for content with negative offsets.
-   */
-  minY?: number;
-};
 
 /**
  * Result returned from showEditingOverlay operation.

@@ -1,10 +1,12 @@
 import { defineConfig } from 'vitest/config';
+import vue from '@vitejs/plugin-vue';
 import baseConfig from '../../../vitest.baseConfig';
 
 const includeBench = process.env.VITEST_BENCH === 'true';
 
 export default defineConfig({
   ...baseConfig,
+  plugins: [...(baseConfig.plugins ?? []), vue()],
   test: {
     // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
     environment: process.env.VITEST_DOM || 'happy-dom',

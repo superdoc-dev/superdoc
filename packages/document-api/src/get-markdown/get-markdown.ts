@@ -1,4 +1,9 @@
-export type GetMarkdownInput = Record<string, never>;
+import type { StoryLocator } from '../types/story.types.js';
+
+export interface GetMarkdownInput {
+  /** Restrict the read to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
+}
 
 /**
  * Engine-specific adapter that the getMarkdown API delegates to.

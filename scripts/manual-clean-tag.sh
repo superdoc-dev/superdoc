@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Usage: ./scripts/manual-clean-tag.sh <version>
 # Example: ./scripts/manual-clean-tag.sh v1.2.0-next.2
+#          ./scripts/manual-clean-tag.sh cli-v0.3.0
 
 VERSION="${1:-}"
 
@@ -15,8 +16,9 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-# Ensure version starts with 'v'
-if [[ ! "$VERSION" =~ ^v ]]; then
+# Prepend 'v' only for bare numeric versions (e.g. 1.2.0 → v1.2.0).
+# Prefixed tags like cli-v0.3.0 are left as-is.
+if [[ "$VERSION" =~ ^[0-9] ]]; then
   VERSION="v$VERSION"
 fi
 

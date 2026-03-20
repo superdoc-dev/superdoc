@@ -25,3 +25,4 @@ export * from './fragment.js';
 export * from './placement.js';
 export * from './adapter-result.js';
 export * from './structural-input.js';
+export * from './story.types.js';

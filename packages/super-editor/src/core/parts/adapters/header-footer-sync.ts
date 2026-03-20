@@ -72,9 +72,10 @@ const HEADER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/r
 const FOOTER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
 
 /**
- * Resolve a relationship ID (e.g., 'rId7') to its OOXML part path (e.g., 'word/header1.xml').
+ * Resolve a header/footer relationship ID (e.g., 'rId7') to its OOXML part path
+ * (e.g., 'word/header1.xml').
  */
-export function resolvePartIdFromSectionId(editor: Editor, sectionId: string): PartId | null {
+export function resolvePartIdFromRefId(editor: Editor, headerFooterRefId: string): PartId | null {
   const converter = getConverter(editor);
   const relsPart = converter?.convertedXml?.['word/_rels/document.xml.rels'] as XmlElement | undefined;
   const relsRoot = relsPart?.elements?.find((el) => el.name === 'Relationships');
@@ -82,7 +83,7 @@ export function resolvePartIdFromSectionId(editor: Editor, sectionId: string): P
 
   for (const el of relsRoot.elements) {
     if (el.name !== 'Relationship') continue;
-    if (el.attributes?.Id !== sectionId) continue;
+    if (el.attributes?.Id !== headerFooterRefId) continue;
 
     const type = el.attributes?.Type;
     if (type !== HEADER_REL_TYPE && type !== FOOTER_REL_TYPE) continue;
@@ -96,11 +97,14 @@ export function resolvePartIdFromSectionId(editor: Editor, sectionId: string): P
   return null;
 }
 
+/** @deprecated Use `resolvePartIdFromRefId` — alias kept for backward compatibility. */
+export const resolvePartIdFromSectionId = resolvePartIdFromRefId;
+
 /**
  * Resolve a part path (e.g., 'word/header1.xml') to its relationship ID (e.g., 'rId7')
  * by scanning a rels XML JSON structure.
  *
- * This is the reverse of `resolvePartIdFromSectionId`.
+ * This is the reverse of `resolvePartIdFromRefId`.
  */
 export function resolveRIdFromRelsData(relsData: unknown, partId: string): string | null {
   const target = partId.replace(/^word\//, '');
@@ -157,23 +161,23 @@ export function resolveHeaderFooterRId(partId: string, relsData: unknown | null,
 export function exportSubEditorToPart(
   mainEditor: Editor,
   subEditor: SubEditor,
-  sectionId: string,
+  headerFooterRefId: string,
   type: 'header' | 'footer',
 ): boolean {
   const converter = getConverter(mainEditor);
   if (!converter?.exportToXmlJson) return false;
 
-  const partId = resolvePartIdFromSectionId(mainEditor, sectionId);
+  const partId = resolvePartIdFromRefId(mainEditor, headerFooterRefId);
   if (!partId) return false;
 
   // Ensure descriptor is registered for this dynamic part
-  ensureHeaderFooterDescriptor(partId, sectionId);
+  ensureHeaderFooterDescriptor(partId, headerFooterRefId);
 
   // Get current PM JSON from the sub-editor
   const pmJson =
     typeof subEditor.getUpdatedJson === 'function'
       ? subEditor.getUpdatedJson()
-      : converter[`${type}s` as 'headers' | 'footers']?.[sectionId];
+      : converter[`${type}s` as 'headers' | 'footers']?.[headerFooterRefId];
 
   if (!pmJson) return false;
 
@@ -202,7 +206,7 @@ export function exportSubEditorToPart(
       mutatePart({
         editor: mainEditor,
         partId,
-        sectionId,
+        sectionId: headerFooterRefId,
         operation: 'mutate',
         source: SOURCE_HEADER_FOOTER_LOCAL,
         mutate: ({ part }) => {
@@ -217,7 +221,7 @@ export function exportSubEditorToPart(
       mutatePart({
         editor: mainEditor,
         partId,
-        sectionId,
+        sectionId: headerFooterRefId,
         operation: 'create',
         source: SOURCE_HEADER_FOOTER_LOCAL,
         initial: {

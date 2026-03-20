@@ -1,6 +1,7 @@
 import type { TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
+import type { StoryLocator } from '../types/story.types.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
@@ -38,6 +39,8 @@ export interface MutationOptions extends RevisionGuardOptions {
 export type InsertWriteRequest = {
   kind: 'insert';
   text: string;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 };
 
 /**

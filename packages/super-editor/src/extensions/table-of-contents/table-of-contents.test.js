@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@core/index.js', () => ({
+vi.mock('@core/Node.js', () => ({
   Node: {
     create: (config) => ({ config }),
   },
+}));
+
+vi.mock('@core/Attribute.js', () => ({
   Attribute: {
     mergeAttributes: (...args) => Object.assign({}, ...args),
   },

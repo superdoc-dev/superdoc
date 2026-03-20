@@ -266,6 +266,13 @@ function translateBodyNode(params) {
   sectPr = ensureSectionLayoutDefaults(sectPr, params.converter);
 
   if (params.converter) {
+    // COMPATIBILITY FALLBACK: Synthesizes a default header/footer reference in
+    // the exported sectPr when one was created via the old converter-only path
+    // but never wired as a real section ref. After the parts-backed
+    // materialization fix (ensureExplicitHeaderFooterSlot), new UI-created
+    // slots already have real refs at creation time, so this fallback should
+    // only fire for legacy/import-only paths. Do not remove without verifying
+    // import round-trip coverage.
     const canExportHeaderRef = params.converter.importedBodyHasHeaderRef || params.converter.headerFooterModified;
     const canExportFooterRef = params.converter.importedBodyHasFooterRef || params.converter.headerFooterModified;
     const hasHeader = sectPr.elements?.some((n) => n.name === 'w:headerReference');

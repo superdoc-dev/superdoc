@@ -533,6 +533,49 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
   BlockAddressOrRange: {
     oneOf: [ref('BlockAddress'), ref('BlockRange')],
   },
+
+  // -- Story locator (discriminated union on storyType) --
+  StoryLocator: {
+    oneOf: [
+      objectSchema({ kind: { const: 'story' }, storyType: { const: 'body' } }, ['kind', 'storyType']),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'headerFooterSlot' },
+          section: ref('SectionAddress'),
+          headerFooterKind: { enum: ['header', 'footer'] },
+          variant: { enum: ['default', 'first', 'even'] },
+          resolution: { enum: ['effective', 'explicit'] },
+          onWrite: { enum: ['materializeIfInherited', 'editResolvedPart', 'error'] },
+        },
+        ['kind', 'storyType', 'section', 'headerFooterKind', 'variant'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'headerFooterPart' },
+          refId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'refId'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'footnote' },
+          noteId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'noteId'],
+      ),
+      objectSchema(
+        {
+          kind: { const: 'story' },
+          storyType: { const: 'endnote' },
+          noteId: { type: 'string' },
+        },
+        ['kind', 'storyType', 'noteId'],
+      ),
+    ],
+  } satisfies JsonSchema,
 };
 
 // ---------------------------------------------------------------------------
@@ -574,6 +617,7 @@ const textMutationResolutionSchema = ref('TextMutationResolution');
 const textMutationSuccessSchema = ref('TextMutationSuccess');
 const matchRunSchema = ref('MatchRun');
 const matchBlockSchema = ref('MatchBlock');
+const storyLocatorSchema = ref('StoryLocator');
 
 // Keep these aliases for internal readability
 void positionSchema;
@@ -932,6 +976,7 @@ const sdReadOptionsSchema = objectSchema({
 
 const sdFindInputSchema = objectSchema(
   {
+    in: storyLocatorSchema,
     select: sdSelectorSchema,
     within: blockNodeAddressSchema,
     limit: { type: 'integer' },
@@ -1547,6 +1592,7 @@ const insertInputSchema: JsonSchema = {
   oneOf: [
     optionalTargetLocatorWithPayload(
       {
+        in: storyLocatorSchema,
         value: { type: 'string', description: 'Text content to insert.' },
         type: {
           type: 'string',
@@ -1558,6 +1604,7 @@ const insertInputSchema: JsonSchema = {
     ),
     objectSchema(
       {
+        in: storyLocatorSchema,
         target: {
           ...blockNodeAddressSchema,
           description: "Block address for structural insertion: {kind:'block', nodeType:'...', nodeId:'...'}.",
@@ -2782,15 +2829,20 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: sdNodeResultSchema,
   },
   getText: {
-    input: strictEmptyObjectSchema,
+    input: objectSchema({
+      in: storyLocatorSchema,
+    }),
     output: { type: 'string' },
   },
   getMarkdown: {
-    input: strictEmptyObjectSchema,
+    input: objectSchema({
+      in: storyLocatorSchema,
+    }),
     output: { type: 'string' },
   },
   getHtml: {
     input: objectSchema({
+      in: storyLocatorSchema,
       unflattenLists: {
         type: 'boolean',
         description: 'When true, flattens nested list structures in output. Default: false.',
@@ -2840,13 +2892,20 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       oneOf: [
         // Text replacement: TargetLocator + text
         {
-          ...targetLocatorWithPayload({ text: { type: 'string', description: 'Replacement text content.' } }, ['text']),
+          ...targetLocatorWithPayload(
+            {
+              in: storyLocatorSchema,
+              text: { type: 'string', description: 'Replacement text content.' },
+            },
+            ['text'],
+          ),
         },
         // Structural replacement: exactly one of (target | ref) + content
         {
           oneOf: [
             objectSchema(
               {
+                in: storyLocatorSchema,
                 target: {
                   oneOf: [blockNodeAddressSchema, selectionTargetSchema],
                   description: 'Target block or selection to replace.',
@@ -2861,6 +2920,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             ),
             objectSchema(
               {
+                in: storyLocatorSchema,
                 ref: { type: 'string', description: 'Reference handle from a previous search result.' },
                 content: {
                   ...sdFragmentSchema,
@@ -2881,6 +2941,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   delete: {
     input: {
       ...targetLocatorWithPayload({
+        in: storyLocatorSchema,
         behavior: { ...deleteBehaviorSchema, description: "Delete behavior: 'selection' (default) or 'exact'." },
       }),
     },
@@ -2892,6 +2953,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: {
       ...targetLocatorWithPayload(
         {
+          in: storyLocatorSchema,
           inline: {
             ...buildInlineRunPatchSchema(),
             description:
@@ -3335,6 +3397,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   })(),
   'create.paragraph': {
     input: objectSchema({
+      in: storyLocatorSchema,
       at: {
         description:
           "Position: {kind:'documentEnd'} to append, {kind:'documentStart'} to prepend, or {kind:'before'|'after', target:{kind:'block', nodeType:'...', nodeId:'...'}} for relative placement.",
@@ -3366,6 +3429,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.heading': {
     input: objectSchema(
       {
+        in: storyLocatorSchema,
         level: { ...headingLevelSchema, description: 'Heading level (1-6).' },
         at: {
           description:
@@ -4501,6 +4565,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'query.match': {
     input: objectSchema(
       {
+        in: storyLocatorSchema,
         select: {
           description:
             "Search selector. Use {type:'text', pattern:'...'} for text search or {type:'node', nodeType:'paragraph'|'heading'|...} for node search.",
@@ -4757,6 +4822,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
     const mutationsInputSchema = objectSchema(
       {
+        in: storyLocatorSchema,
         expectedRevision: {
           type: 'string',
           description:
@@ -5903,6 +5969,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   'create.image': {
     input: objectSchema(
       {
+        in: storyLocatorSchema,
         src: { type: 'string' },
         alt: { type: 'string' },
         title: { type: 'string' },

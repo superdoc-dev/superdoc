@@ -173,9 +173,12 @@ export type MutationStep =
 // ---------------------------------------------------------------------------
 
 import type { ChangeMode } from '../write/write.js';
+import type { StoryLocator } from './story.types.js';
 export type { ChangeMode } from '../write/write.js';
 
 export type MutationsApplyInput = {
+  /** Target story for the mutation plan. Omit for body (backward compatible). */
+  in?: StoryLocator;
   expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
@@ -183,6 +186,8 @@ export type MutationsApplyInput = {
 };
 
 export type MutationsPreviewInput = {
+  /** Target story for the mutation preview. Omit for body (backward compatible). */
+  in?: StoryLocator;
   expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;

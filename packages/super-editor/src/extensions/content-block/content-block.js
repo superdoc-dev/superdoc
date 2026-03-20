@@ -1,6 +1,7 @@
 // @ts-nocheck
 
-import { Node, Attribute } from '@core/index.js';
+import { Node } from '@core/Node.js';
+import { Attribute } from '@core/Attribute.js';
 import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 /**

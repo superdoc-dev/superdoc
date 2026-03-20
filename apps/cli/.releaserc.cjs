@@ -5,6 +5,8 @@
  * commits touching any of them. This shared helper patches git-log-parser to
  * expand path coverage. It REPLACES semantic-release-commit-filter — do not
  * use both (the filter restricts to CWD, which undoes the expansion).
+ *
+ * Keep in sync with .github/workflows/release-cli.yml paths: trigger.
  */
 require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'apps/cli',

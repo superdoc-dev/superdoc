@@ -30,6 +30,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `target` | SelectionTarget | yes | SelectionTarget |
 | `target.end` | SelectionPoint | yes | SelectionPoint |
 | `target.kind` | `"selection"` | yes | Constant: `"selection"` |
@@ -40,6 +41,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `ref` | string | yes |  |
 | `text` | string | yes |  |
 
@@ -48,6 +50,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `content` | object \\| object[] | yes | One of: object, object[] |
+| `in` | StoryLocator | no | StoryLocator |
 | `nestingPolicy` | object | no |  |
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
 | `target` | BlockNodeAddress \\| SelectionTarget | yes | One of: BlockNodeAddress, SelectionTarget |
@@ -57,6 +60,7 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `content` | object \\| object[] | yes | One of: object, object[] |
+| `in` | StoryLocator | no | StoryLocator |
 | `nestingPolicy` | object | no |  |
 | `nestingPolicy.tables` | enum | no | `"forbid"`, `"allow"` |
 | `ref` | string | yes |  |
@@ -161,6 +165,11 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
 - `RAW_MODE_REQUIRED`
 - `PRESERVE_ONLY_VIOLATION`
 - `CAPABILITY_UNSUPPORTED`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -188,6 +197,9 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
         {
           "additionalProperties": false,
           "properties": {
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
             "target": {
               "$ref": "#/$defs/SelectionTarget",
               "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
@@ -206,6 +218,9 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
         {
           "additionalProperties": false,
           "properties": {
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
             "ref": {
               "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
               "type": "string"
@@ -241,6 +256,9 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
                   "type": "array"
                 }
               ]
+            },
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
             },
             "nestingPolicy": {
               "additionalProperties": false,
@@ -289,6 +307,9 @@ Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the t
                   "type": "array"
                 }
               ]
+            },
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
             },
             "nestingPolicy": {
               "additionalProperties": false,

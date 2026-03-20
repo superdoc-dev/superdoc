@@ -12,6 +12,7 @@ import type { SelectionTarget, DeleteBehavior, TargetLocator } from './types/add
 import type { TextMutationReceipt } from './types/receipt.js';
 import type { MutationOptions } from './types/mutation-plan.types.js';
 import type { InlineRunPatch } from './format/inline-run-patch.js';
+import type { StoryLocator } from './types/story.types.js';
 
 // ---------------------------------------------------------------------------
 // Adapter request types
@@ -22,6 +23,8 @@ export type SelectionDeleteRequest = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   behavior: DeleteBehavior;
+  /** Story locator threaded from the operation input's `in` field. */
+  in?: StoryLocator;
 };
 
 export type SelectionReplaceRequest = TargetLocator & {
@@ -29,6 +32,8 @@ export type SelectionReplaceRequest = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   text: string;
+  /** Story locator threaded from the operation input's `in` field. */
+  in?: StoryLocator;
 };
 
 export type SelectionInsertRequest = TargetLocator & {
@@ -36,6 +41,8 @@ export type SelectionInsertRequest = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   text: string;
+  /** Story locator threaded from the operation input's `in` field. */
+  in?: StoryLocator;
 };
 
 export type SelectionFormatRequest = TargetLocator & {
@@ -43,6 +50,8 @@ export type SelectionFormatRequest = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   inline: InlineRunPatch;
+  /** Story locator threaded from the operation input's `in` field. */
+  in?: StoryLocator;
 };
 
 export type SelectionMutationRequest =

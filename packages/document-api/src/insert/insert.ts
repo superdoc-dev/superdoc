@@ -2,6 +2,7 @@ import { executeWrite, normalizeMutationOptions, type MutationOptions, type Writ
 import type { SelectionTarget, TargetLocator, SDMutationReceipt } from '../types/index.js';
 import type { SDInsertInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
+import type { StoryLocator } from '../types/story.types.js';
 import { PLACEMENT_VALUES } from '../types/placement.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
@@ -12,6 +13,7 @@ import {
 } from '../validation-primitives.js';
 import { isSelectionTarget } from '../validation/selection-target-validator.js';
 import { validateDocumentFragment } from '../validation/fragment-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
 
@@ -34,6 +36,8 @@ export type TextInsertInput = OptionalInsertLocator & {
   value: string;
   /** Content format. Defaults to `'text'` when omitted. */
   type?: InsertContentType;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 };
 
 /** @deprecated Use {@link TextInsertInput} instead. */
@@ -55,8 +59,8 @@ export type InsertInput = TextInsertInput | SDInsertInput;
 // Allowlists for strict field validation
 // ---------------------------------------------------------------------------
 
-const TEXT_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target', 'ref']);
-const STRUCTURAL_INSERT_ALLOWED_KEYS = new Set(['content', 'target', 'placement', 'nestingPolicy']);
+const TEXT_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target', 'ref', 'in']);
+const STRUCTURAL_INSERT_ALLOWED_KEYS = new Set(['content', 'target', 'placement', 'nestingPolicy', 'in']);
 const VALID_INSERT_TYPES: ReadonlySet<string> = new Set(['text', 'markdown', 'html']);
 
 // ---------------------------------------------------------------------------
@@ -105,6 +109,8 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
       { fields: ['value', 'content'] },
     );
   }
+
+  validateStoryLocator(input.in, 'in');
 
   if (hasContent) {
     validateStructuralInsertInput(input);
@@ -252,16 +258,17 @@ export function executeInsert(
   }
 
   // Text path with target/ref → route through SelectionMutationAdapter
+  const storyIn = input.in;
   if (target || ref) {
     const request = target
-      ? { kind: 'insert' as const, target, text: value }
-      : { kind: 'insert' as const, ref: ref!, text: value };
+      ? { kind: 'insert' as const, target, text: value, ...(storyIn ? { in: storyIn } : {}) }
+      : { kind: 'insert' as const, ref: ref!, text: value, ...(storyIn ? { in: storyIn } : {}) };
     const textReceipt = selectionAdapter.execute(request, normalizeMutationOptions(options));
     return textReceiptToSDReceipt(textReceipt);
   }
 
   // Text path without target/ref → target-less insert at document end
-  const request = { kind: 'insert' as const, text: value };
+  const request = { kind: 'insert' as const, text: value, ...(storyIn ? { in: storyIn } : {}) };
   const textReceipt = executeWrite(writeAdapter, request, options);
   return textReceiptToSDReceipt(textReceipt);
 }

@@ -2,9 +2,9 @@
  * query.match adapter — deterministic matching with cardinality contracts.
  *
  * Emits the canonical `match → blocks → runs` hierarchy (D1).
- * Every text match includes blocks with style-decomposed runs and V3 refs.
+ * Every text match includes blocks with style-decomposed runs and V4 refs.
  * Node matches return empty blocks — stable nodeId ref for block-level
- * nodes, ephemeral V3 ref for inline nodes (D13).
+ * nodes, ephemeral V4 ref for inline nodes (D13).
  *
  * See plans/query-match-blocks-runs-plan.md for design decisions D1–D20.
  */
@@ -24,6 +24,7 @@ import type {
   HighlightRange,
   InlineAnchor,
   PageInfo,
+  StoryLocator,
 } from '@superdoc/document-api';
 import {
   SNIPPET_MAX_LENGTH,
@@ -47,6 +48,8 @@ import {
 } from './match-style-helpers.js';
 import type { OoxmlResolverParams, ParagraphProperties } from '@superdoc/style-engine/ooxml';
 import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
 
 // ---------------------------------------------------------------------------
 // V3 ref encoding (D6)
@@ -67,6 +70,34 @@ export function encodeV3Ref(payload: TextRefV3): string {
 }
 
 // ---------------------------------------------------------------------------
+// V4 ref encoding (story-aware)
+// ---------------------------------------------------------------------------
+
+/**
+ * Encodes a V4 text ref for a story-aware match.
+ */
+function encodeStoryAwareRef(
+  storyKey: string,
+  rev: string,
+  matchId: string,
+  scope: 'match' | 'block' | 'run',
+  segments: Array<{ blockId: string; start: number; end: number }>,
+  blockIndex?: number,
+  runIndex?: number,
+): string {
+  return encodeV4Ref({
+    v: 4,
+    rev,
+    storyKey,
+    scope,
+    matchId,
+    segments,
+    blockIndex,
+    runIndex,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // SelectionTarget builder — mutation-ready target from match blocks
 // ---------------------------------------------------------------------------
 
@@ -75,32 +106,40 @@ export function encodeV3Ref(payload: TextRefV3): string {
  *
  * Uses the first block's start and the last block's end to form a
  * contiguous selection spanning all matched blocks.
+ * When `story` is provided (non-body stories), it is included in the
+ * target so mutations route to the correct editor.
  */
-function buildSelectionTargetFromBlocks(blocks: MatchBlock[]): SelectionTarget {
+function buildSelectionTargetFromBlocks(blocks: MatchBlock[], story?: StoryLocator): SelectionTarget {
   const first = blocks[0]!;
   const last = blocks[blocks.length - 1]!;
 
-  return {
+  const target: SelectionTarget = {
     kind: 'selection',
     start: { kind: 'text', blockId: first.blockId, offset: first.range.start },
     end: { kind: 'text', blockId: last.blockId, offset: last.range.end },
   };
+  if (story) target.story = story;
+  return target;
 }
 
 /**
  * Builds a canonical `SelectionTarget` from raw text ranges.
  *
  * Used by the legacy find adapter which doesn't build match blocks.
+ * When `story` is provided (non-body stories), it is included in the
+ * target so mutations route to the correct editor.
  */
-export function buildSelectionTargetFromTextRanges(textRanges: TextAddress[]): SelectionTarget {
+export function buildSelectionTargetFromTextRanges(textRanges: TextAddress[], story?: StoryLocator): SelectionTarget {
   const first = textRanges[0]!;
   const last = textRanges[textRanges.length - 1]!;
 
-  return {
+  const target: SelectionTarget = {
     kind: 'selection',
     start: { kind: 'text', blockId: first.blockId, offset: first.range.start },
     end: { kind: 'text', blockId: last.blockId, offset: last.range.end },
   };
+  if (story) target.story = story;
+  return target;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +161,7 @@ function buildMatchBlocks(
   textRanges: TextAddress[],
   evaluatedRevision: string,
   matchId: string,
+  storyKey: string,
   resolverParams?: OoxmlResolverParams | null,
 ): MatchBlock[] {
   const index = getBlockIndex(editor);
@@ -186,22 +226,22 @@ function buildMatchBlocks(
     const captured = captureRunsInRange(editor, candidate.pos, from, to);
     const coalesced = coalesceRuns(captured.runs);
 
-    // Project to contract MatchRun[] with V3 refs
+    // Project to contract MatchRun[] with V4 refs
     const blockRange = { start: from, end: to };
     const runs: MatchRun[] = coalesced.map((run, runIdx) => ({
       range: { start: run.from, end: run.to },
       text: blockText.slice(run.from, run.to),
       styleId: extractRunStyleId(run.marks),
       styles: toMatchStyle(run.marks, cascadeContext),
-      ref: encodeV3Ref({
-        v: 3,
-        rev: evaluatedRevision,
+      ref: encodeStoryAwareRef(
+        storyKey,
+        evaluatedRevision,
         matchId,
-        scope: 'run',
-        segments: [{ blockId, start: run.from, end: run.to }],
-        blockIndex: blockIdx,
-        runIndex: runIdx,
-      }),
+        'run',
+        [{ blockId, start: run.from, end: run.to }],
+        blockIdx,
+        runIdx,
+      ),
     }));
 
     // Remove undefined styleId fields to keep output clean
@@ -217,14 +257,14 @@ function buildMatchBlocks(
       nodeType,
       range: blockRange,
       text: matchedText,
-      ref: encodeV3Ref({
-        v: 3,
-        rev: evaluatedRevision,
+      ref: encodeStoryAwareRef(
+        storyKey,
+        evaluatedRevision,
         matchId,
-        scope: 'block',
-        segments: [{ blockId, start: from, end: to }],
-        blockIndex: blockIdx,
-      }),
+        'block',
+        [{ blockId, start: from, end: to }],
+        blockIdx,
+      ),
       runs,
     };
 
@@ -394,15 +434,21 @@ function isZeroWidthMatch(textRanges: TextAddress[]): boolean {
 // ---------------------------------------------------------------------------
 
 export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): QueryMatchOutput {
-  const evaluatedRevision = getRevision(editor);
+  const runtime = resolveStoryRuntime(editor, input.in);
+  const storyEditor = runtime.editor;
+  const storyKey = runtime.storyKey;
+  // Non-body stories need their locator propagated to addresses and targets.
+  const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
+
+  const evaluatedRevision = getRevision(storyEditor);
   const require: CardinalityRequirement = input.require ?? 'any';
 
   // Build style-engine resolver params from converter context (if available).
   // When translatedLinkedStyles.styles exists, resolveRunProperties can perform
   // full cascade resolution for 'clear' properties (defaults → style chain → inline).
-  const translatedLinkedStyles = readTranslatedLinkedStyles(editor);
+  const translatedLinkedStyles = readTranslatedLinkedStyles(storyEditor);
   const converter = (
-    editor as unknown as { converter?: { translatedNumbering?: OoxmlResolverParams['translatedNumbering'] } }
+    storyEditor as unknown as { converter?: { translatedNumbering?: OoxmlResolverParams['translatedNumbering'] } }
   ).converter;
   const hasStyleCascade = translatedLinkedStyles?.styles != null;
   const resolverParams: OoxmlResolverParams | null = hasStyleCascade
@@ -434,7 +480,7 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
     offset: isTextSelector ? undefined : input.offset,
   };
 
-  const result = findLegacyAdapter(editor, query);
+  const result = findLegacyAdapter(storyEditor, query);
 
   // Build raw match entries and apply zero-width filtering (D20)
   const rawMatches: Array<{
@@ -487,7 +533,7 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
 
     if (isTextSelector && raw.textRanges?.length) {
       // Text match → build blocks/runs hierarchy (D1)
-      const blocks = buildMatchBlocks(editor, raw.textRanges, evaluatedRevision, id, resolverParams);
+      const blocks = buildMatchBlocks(storyEditor, raw.textRanges, evaluatedRevision, id, storyKey, resolverParams);
 
       if (blocks.length === 0) {
         // Shouldn't happen after zero-width filtering, but guard
@@ -499,53 +545,63 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
       }
 
       // Build snippet from blocks (D11)
-      const snippetResult = buildBlocksSnippet(editor, blocks);
+      const snippetResult = buildBlocksSnippet(storyEditor, blocks);
 
-      // Build match-level V3 ref (D6)
+      // Build match-level V4 ref (D6)
       const segments = blocks.map((b) => ({ blockId: b.blockId, start: b.range.start, end: b.range.end }));
-      const ref = encodeV3Ref({
-        v: 3,
-        rev: evaluatedRevision,
-        matchId: id,
-        scope: 'match',
-        segments,
-      });
+      const ref = encodeStoryAwareRef(storyKey, evaluatedRevision, id, 'match', segments);
+
+      const address = raw.address as import('@superdoc/document-api').BlockNodeAddress;
+      if (nonBodyStory && !address.story) address.story = nonBodyStory;
 
       return {
         id,
         handle: buildResolvedHandle(ref, 'ephemeral', 'text'),
         matchKind: 'text',
-        // Text matches always resolve to a containing block address.
-        address: raw.address as import('@superdoc/document-api').BlockNodeAddress,
-        target: buildSelectionTargetFromBlocks(blocks),
+        address,
+        target: buildSelectionTargetFromBlocks(blocks, nonBodyStory),
         snippet: snippetResult?.snippet ?? '',
         highlightRange: snippetResult?.highlightRange ?? { start: 0, end: 0 },
         blocks: blocks as [MatchBlock, ...MatchBlock[]],
       } satisfies TextMatchItem;
     } else {
       // Node match → empty blocks (D13)
+      if (nonBodyStory && !raw.address.story) raw.address.story = nonBodyStory;
+
       if (raw.address.kind === 'block') {
-        // Block node → stable nodeId ref
+        // Block node → for non-body stories, encode a V4 ref so ref-only
+        // follow-ups can derive the correct story. Body stories keep the
+        // plain nodeId for backward compatibility.
+        const blockRef = nonBodyStory
+          ? encodeV4Ref({
+              v: 4,
+              rev: evaluatedRevision,
+              storyKey,
+              scope: 'node',
+              node: { kind: 'block', nodeType: raw.address.nodeType, nodeId: raw.address.nodeId },
+            })
+          : raw.address.nodeId;
+
         return {
           id,
-          handle: buildResolvedHandle(raw.address.nodeId, 'stable', 'node'),
+          handle: buildResolvedHandle(blockRef, 'stable', 'node'),
           matchKind: 'node',
           address: raw.address,
           blocks: [],
         } satisfies NodeMatchItem;
       }
 
-      // Inline node → encode anchor as ephemeral V3 ref so it's resolvable
+      // Inline node → encode anchor as ephemeral V4 ref so it's resolvable
       const anchor = raw.address.anchor;
       const segments =
         anchor.start.blockId === anchor.end.blockId
           ? [{ blockId: anchor.start.blockId, start: anchor.start.offset, end: anchor.end.offset }]
-          : buildInlineAnchorSegments(editor, anchor);
+          : buildInlineAnchorSegments(storyEditor, anchor);
 
       return {
         id,
         handle: buildResolvedHandle(
-          encodeV3Ref({ v: 3, rev: evaluatedRevision, matchId: id, scope: 'match', segments }),
+          encodeStoryAwareRef(storyKey, evaluatedRevision, id, 'match', segments),
           'ephemeral',
           'node',
         ),

@@ -31,6 +31,7 @@ import type {
   SelectionEdgeNodeType,
   StepOutcome,
   SelectionStepResolution,
+  StoryLocator,
 } from '@superdoc/document-api';
 import {
   isStructuralInsertInput,
@@ -77,6 +78,10 @@ import {
   type BlockIndex,
 } from '../helpers/node-address-resolver.js';
 import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue } from './inline-property-guards.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { resolveMutationStory } from '../story-runtime/resolve-story-context.js';
+import type { StoryRuntime } from '../story-runtime/story-types.js';
+import { decodeRef } from '../story-runtime/story-ref-codec.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -126,6 +131,43 @@ function insertContentAtWithRetry(
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Resolves a story runtime with write intent.
+ *
+ * Convenience wrapper around {@link resolveStoryRuntime} that always passes
+ * `{ intent: 'write' }`, enabling story-specific resolvers to materialize
+ * parts that do not yet exist (e.g., blank header/footer slots).
+ *
+ * @param editor  - The host (body) editor.
+ * @param locator - Target story. `undefined` defaults to body.
+ */
+export function resolveWriteStoryRuntime(editor: Editor, locator?: StoryLocator): StoryRuntime {
+  return resolveStoryRuntime(editor, locator, { intent: 'write' });
+}
+
+/**
+ * Disposes a story runtime only if it is ephemeral (non-cacheable).
+ *
+ * Cacheable runtimes are managed by the LRU cache and must not be
+ * disposed by the caller. Ephemeral runtimes (e.g., temporary write-only
+ * views) must be cleaned up after use to avoid leaking editor instances.
+ *
+ * @param runtime - The story runtime to conditionally dispose.
+ */
+export function disposeEphemeralWriteRuntime(runtime: StoryRuntime): void {
+  if (runtime.cacheable === false) {
+    runtime.dispose?.();
+  }
+}
+
+function resolveSelectionMutationStory(request: SelectionMutationRequest): StoryLocator | undefined {
+  return resolveMutationStory({
+    in: request.in,
+    target: request.target as { story?: StoryLocator } | undefined,
+    ref: request.ref,
+  });
 }
 
 /**
@@ -331,63 +373,72 @@ function validateWriteRequest(request: WriteRequest, resolved: ResolvedWrite): R
  * path that inserts at the document end.
  */
 export function writeWrapper(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
-  const resolved = resolveWriteTarget(editor, request);
-  if (!resolved) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {});
-  }
+  const runtime = resolveWriteStoryRuntime(editor, request.in);
 
-  const validationFailure = validateWriteRequest(request, resolved);
-  if (validationFailure) {
-    return { success: false, resolution: resolved.resolution, failure: validationFailure };
-  }
+  try {
+    const storyEditor = runtime.editor;
+    const resolved = resolveWriteTarget(storyEditor, request);
+    if (!resolved) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {});
+    }
 
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') ensureTrackedCapability(editor, { operation: 'write' });
+    const validationFailure = validateWriteRequest(request, resolved);
+    if (validationFailure) {
+      return { success: false, resolution: resolved.resolution, failure: validationFailure };
+    }
 
-  if (options?.dryRun) {
-    return { success: true, resolution: resolved.resolution };
-  }
+    const mode = options?.changeMode ?? 'direct';
+    if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: 'write' });
 
-  // Structural-end: the doc ends with non-text blocks. Create a paragraph
-  // containing the text at the structural document end via a domain command,
-  // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
-  if (resolved.structuralEnd) {
-    const insertPos = resolved.range.from;
-    const text = request.text ?? '';
-    const receipt = executeDomainCommand(
-      editor,
-      (): boolean => {
-        const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
-        insertParagraphAtEnd(editor, insertPos, text, meta);
-        return true;
-      },
-      { expectedRevision: options?.expectedRevision },
-    );
+    if (options?.dryRun) {
+      return { success: true, resolution: resolved.resolution };
+    }
+
+    // Structural-end: the doc ends with non-text blocks. Create a paragraph
+    // containing the text at the structural document end via a domain command,
+    // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
+    if (resolved.structuralEnd) {
+      const insertPos = resolved.range.from;
+      const text = request.text ?? '';
+      const receipt = executeDomainCommand(
+        storyEditor,
+        (): boolean => {
+          const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
+          insertParagraphAtEnd(storyEditor, insertPos, text, meta);
+          return true;
+        },
+        { expectedRevision: options?.expectedRevision },
+      );
+      if (runtime.commit) runtime.commit(editor);
+      return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
+    }
+
+    // Build single-step compiled plan with pre-resolved target.
+    const stepId = uuidv4();
+    const step = {
+      id: stepId,
+      op: 'text.insert',
+      where: STUB_WHERE,
+      args: { position: 'before', content: { text: request.text ?? '' } },
+    } as unknown as MutationStep;
+
+    const target = toCompiledTarget(stepId, 'text.insert', resolved);
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [target] }],
+      assertSteps: [],
+      compiledRevision: getRevision(storyEditor),
+    };
+
+    const receipt = executeCompiledPlan(storyEditor, compiled, {
+      changeMode: mode,
+      expectedRevision: options?.expectedRevision,
+    });
+
+    if (runtime.commit) runtime.commit(editor);
     return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  // Build single-step compiled plan with pre-resolved target.
-  const stepId = uuidv4();
-  const step = {
-    id: stepId,
-    op: 'text.insert',
-    where: STUB_WHERE,
-    args: { position: 'before', content: { text: request.text ?? '' } },
-  } as unknown as MutationStep;
-
-  const target = toCompiledTarget(stepId, 'text.insert', resolved);
-  const compiled: CompiledPlan = {
-    mutationSteps: [{ step, targets: [target] }],
-    assertSteps: [],
-    compiledRevision: getRevision(editor),
-  };
-
-  const receipt = executeCompiledPlan(editor, compiled, {
-    changeMode: mode,
-    expectedRevision: options?.expectedRevision,
-  });
-
-  return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
 }
 
 // ---------------------------------------------------------------------------
@@ -574,110 +625,122 @@ export function selectionMutationWrapper(
   request: SelectionMutationRequest,
   options?: MutationOptions,
 ): TextMutationReceipt {
-  const mode = options?.changeMode ?? 'direct';
-  if (mode === 'tracked') ensureTrackedCapability(editor, { operation: request.kind });
+  // Resolve story runtime from the full mutation context:
+  // - explicit input.in
+  // - target.story threaded by discovery APIs
+  // - V4 ref storyKey when the mutation is ref-only
+  const effectiveLocator = resolveSelectionMutationStory(request);
+  const runtime = resolveWriteStoryRuntime(editor, effectiveLocator);
 
-  // Capability checks for format operations.
-  if (request.kind === 'format') {
-    const inlineKeys = Object.keys(request.inline) as InlineRunPatchKey[];
-    ensureInlinePropertyCapabilities(editor, inlineKeys);
-    if (mode === 'tracked') ensureTrackedInlinePropertySupport(inlineKeys);
-  }
+  try {
+    const storyEditor = runtime.editor;
+    const mode = options?.changeMode ?? 'direct';
+    if (mode === 'tracked') ensureTrackedCapability(storyEditor, { operation: request.kind });
 
-  // Text inserts require a position inside a textblock. Node-edge targets
-  // (e.g., "before paragraph/table/image") resolve to block boundaries where
-  // tr.insert() would place a text node at the doc/block level instead of
-  // inside a textblock. Reject them up front before compilation.
-  if (request.kind === 'insert' && request.target) {
-    const hasNodeEdge = request.target.start.kind === 'nodeEdge' || request.target.end.kind === 'nodeEdge';
-    if (hasNodeEdge) {
-      throw new DocumentApiAdapterError(
-        'INVALID_TARGET',
-        'Text inserts do not support nodeEdge targets. Use a text-offset target inside a textblock.',
-      );
+    // Capability checks for format operations.
+    if (request.kind === 'format') {
+      const inlineKeys = Object.keys(request.inline) as InlineRunPatchKey[];
+      ensureInlinePropertyCapabilities(storyEditor, inlineKeys);
+      if (mode === 'tracked') ensureTrackedInlinePropertySupport(inlineKeys);
     }
-  }
 
-  const stepId = uuidv4();
-  const where = buildSelectionWhere(request);
-  const step = buildSelectionStepDef(stepId, request, where);
+    const stepId = uuidv4();
+    const where = buildSelectionWhere(request);
+    const step = buildSelectionStepDef(stepId, request, where);
 
-  // Compile the one-step plan through the real compiler.
-  // Compilation is side-effect-free — it resolves targets against the current
-  // document state without mutating anything.
-  const compiled = compilePlan(editor, [step]);
+    // Compile the one-step plan through the real compiler.
+    // Compilation is side-effect-free — it resolves targets against the current
+    // document state without mutating anything. The story editor is used so that
+    // the compiler resolves against the correct story's document state.
+    const compiled = compilePlan(storyEditor, [step]);
 
-  // Insert validation: reject multi-segment spans and non-textblock targets.
-  // Single-block range refs (absFrom < absTo) are valid — executeTextInsert()
-  // inserts at position: 'before' (absFrom), so the range width is irrelevant.
-  if (request.kind === 'insert') {
-    const compiledStep = compiled.mutationSteps.find((s) => s.step.id === stepId);
-    const target = compiledStep?.targets[0];
-    if (target) {
-      // Multi-segment refs (span) are never valid for point inserts.
-      if (target.kind === 'span') {
-        const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
-        return {
-          success: false,
-          resolution,
-          failure: {
-            code: 'INVALID_TARGET',
-            message: 'Insert operations require a single-block target, not a multi-segment span.',
-          },
-        };
+    // Text inserts require a position inside a textblock. Node-edge targets
+    // (e.g., "before paragraph/table/image") resolve to block boundaries where
+    // tr.insert() would place a text node at the doc/block level instead of
+    // inside a textblock. Reject them up front before compilation.
+    if (request.kind === 'insert' && request.target) {
+      const hasNodeEdge = request.target.start.kind === 'nodeEdge' || request.target.end.kind === 'nodeEdge';
+      if (hasNodeEdge) {
+        throw new DocumentApiAdapterError(
+          'INVALID_TARGET',
+          'Text inserts do not support nodeEdge targets. Use a text-offset target inside a textblock.',
+        );
       }
+    }
 
-      // Verify the resolved position is inside a textblock — refs to
-      // non-text leaf blocks (image, table, sdt) resolve to block
-      // boundaries where a text node cannot be placed.
-      if (target.kind === 'range') {
-        const resolved = editor.state.doc.resolve(target.absFrom);
-        if (!resolved.parent.isTextblock) {
+    // Insert validation: reject multi-segment spans and non-textblock targets.
+    // Single-block range refs (absFrom < absTo) are valid — executeTextInsert()
+    // inserts at position: 'before' (absFrom), so the range width is irrelevant.
+    if (request.kind === 'insert') {
+      const compiledStep = compiled.mutationSteps.find((s) => s.step.id === stepId);
+      const target = compiledStep?.targets[0];
+      if (target) {
+        if (target.kind === 'span') {
           const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
           return {
             success: false,
             resolution,
-            failure: { code: 'INVALID_TARGET', message: 'Text insert target must be inside a textblock.' },
+            failure: {
+              code: 'INVALID_TARGET',
+              message: 'Insert operations require a single-block target, not a multi-segment span.',
+            },
           };
+        }
+
+        if (target.kind === 'range') {
+          const resolved = storyEditor.state.doc.resolve(target.absFrom);
+          if (!resolved.parent.isTextblock) {
+            const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+            return {
+              success: false,
+              resolution,
+              failure: { code: 'INVALID_TARGET', message: 'Text insert target must be inside a textblock.' },
+            };
+          }
         }
       }
     }
-  }
 
-  // Enforce expectedRevision even on dry-run — callers need to know if the
-  // document has drifted since their last query, regardless of execution.
-  checkRevision(editor, options?.expectedRevision);
+    // Enforce expectedRevision even on dry-run — callers need to know if the
+    // document has drifted since their last query, regardless of execution.
+    checkRevision(storyEditor, options?.expectedRevision);
 
-  // Dry-run: compile and resolve, but do NOT execute.
-  // Mirror apply-time validation so callers do not get false-positive previews.
-  if (options?.dryRun) {
-    const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
-    if (request.kind === 'insert' && !request.text) {
-      return { success: false, resolution, failure: { code: 'NO_OP', message: 'Insert text is empty.' } };
+    // Dry-run: compile and resolve, but do NOT execute.
+    if (options?.dryRun) {
+      const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+      if (request.kind === 'insert' && !request.text) {
+        return { success: false, resolution, failure: { code: 'NO_OP', message: 'Insert text is empty.' } };
+      }
+      return { success: true, resolution };
     }
+
+    // Execute through the shared execution engine.
+    const receipt = executeCompiledPlan(storyEditor, compiled, {
+      changeMode: mode,
+      expectedRevision: options?.expectedRevision,
+    });
+
+    // Map PlanReceipt → TextMutationReceipt.
+    const stepOutcome = receipt.steps.find((s) => s.stepId === stepId);
+    const resolution = buildSelectionResolutionFromOutcome(stepOutcome, compiled, stepId);
+
+    const success = stepOutcome?.effect === 'changed';
+    if (!success) {
+      return {
+        success: false,
+        resolution,
+        failure: { code: 'NO_OP', message: `${request.kind} produced no change.` },
+      };
+    }
+
+    if (runtime.commit) {
+      runtime.commit(editor);
+    }
+
     return { success: true, resolution };
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  // Execute through the shared execution engine.
-  const receipt = executeCompiledPlan(editor, compiled, {
-    changeMode: mode,
-    expectedRevision: options?.expectedRevision,
-  });
-
-  // Map PlanReceipt → TextMutationReceipt.
-  const stepOutcome = receipt.steps.find((s) => s.stepId === stepId);
-  const resolution = buildSelectionResolutionFromOutcome(stepOutcome, compiled, stepId);
-
-  const success = stepOutcome?.effect === 'changed';
-  if (!success) {
-    return {
-      success: false,
-      resolution,
-      failure: { code: 'NO_OP', message: `${request.kind} produced no change.` },
-    };
-  }
-
-  return { success: true, resolution };
 }
 
 /**
@@ -843,12 +906,30 @@ export function insertStructuredWrapper(
   input: InsertInput,
   options?: MutationOptions,
 ): SDMutationReceipt {
-  // Structural (SDFragment) inserts with a BlockNodeAddress target produce
-  // a block-level receipt directly, avoiding the synthetic TextAddress bridge.
-  if (isStructuralInsertInput(input) && input.target) {
-    return executeStructuralInsertDirect(editor, input, options);
+  // Resolve story runtime from the input's `in` field.
+  const runtime = resolveWriteStoryRuntime(editor, (input as { in?: StoryLocator }).in);
+
+  try {
+    const storyEditor = runtime.editor;
+    let result: SDMutationReceipt;
+
+    // Structural (SDFragment) inserts with a BlockNodeAddress target produce
+    // a block-level receipt directly, avoiding the synthetic TextAddress bridge.
+    if (isStructuralInsertInput(input) && input.target) {
+      result = executeStructuralInsertDirect(storyEditor, input, options);
+    } else {
+      result = textReceiptToSDReceipt(insertStructuredInner(storyEditor, input, options));
+    }
+
+    // Persist non-body story changes
+    if (result.success !== false && runtime.commit) {
+      runtime.commit(editor);
+    }
+
+    return result;
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-  return textReceiptToSDReceipt(insertStructuredInner(editor, input, options));
 }
 
 /**
@@ -1340,21 +1421,47 @@ export function replaceStructuredWrapper(
     );
   }
 
-  // When the target is a BlockNodeAddress, re-wrap the receipt to preserve
-  // the block-level address instead of the synthetic TextAddress.
-  const blockTarget =
-    input.target && 'kind' in input.target && input.target.kind === 'block'
-      ? (input.target as BlockNodeAddress)
-      : undefined;
+  // Resolve story from the full mutation context:
+  // - explicit input.in
+  // - target.story threaded by discovery APIs
+  // - V4 ref storyKey when the mutation is ref-only
+  const effectiveLocator = resolveMutationStory({
+    in: (input as { in?: StoryLocator }).in,
+    target: input.target as { story?: StoryLocator } | undefined,
+    ref: input.ref,
+  });
+  const runtime = resolveWriteStoryRuntime(editor, effectiveLocator);
 
-  const textReceipt = executeStructuralReplaceWrapper(editor, input, options);
-  if (!blockTarget) return textReceiptToSDReceipt(textReceipt);
+  try {
+    const storyEditor = runtime.editor;
 
-  const sdReceipt = textReceiptToSDReceipt(textReceipt);
-  if (sdReceipt.resolution) {
-    sdReceipt.resolution.target = blockTarget;
+    // When the target is a BlockNodeAddress, re-wrap the receipt to preserve
+    // the block-level address instead of the synthetic TextAddress.
+    const blockTarget =
+      input.target && 'kind' in input.target && input.target.kind === 'block'
+        ? (input.target as BlockNodeAddress)
+        : undefined;
+
+    const textReceipt = executeStructuralReplaceWrapper(storyEditor, input, options);
+
+    // Only persist non-body story changes when the replace actually succeeded.
+    // Committing on failure would write unchanged content back to OOXML,
+    // potentially materializing inherited header/footer slots or emitting
+    // spurious partChanged events.
+    if (textReceipt.success && runtime.commit) {
+      runtime.commit(editor);
+    }
+
+    if (!blockTarget) return textReceiptToSDReceipt(textReceipt);
+
+    const sdReceipt = textReceiptToSDReceipt(textReceipt);
+    if (sdReceipt.resolution) {
+      sdReceipt.resolution.target = blockTarget;
+    }
+    return sdReceipt;
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-  return sdReceipt;
 }
 
 /**
@@ -1427,8 +1534,18 @@ function resolveStructuralLocator(editor: Editor, input: SDReplaceInput): Resolv
   }
 
   if (ref !== undefined) {
-    // V3 text ref — decode payload and resolve blocks.
+    // V3/V4 text ref — decode payload and resolve blocks.
     if (ref.startsWith('text:')) {
+      // V4 node-scope refs (from non-body block matches) carry a node.nodeId
+      // instead of segments. Extract the nodeId and resolve as a single block.
+      const decoded = decodeRef(ref);
+      if (decoded && decoded.v === 4 && decoded.scope === 'node' && decoded.node?.nodeId) {
+        return {
+          textTarget: { kind: 'text', blockId: decoded.node.nodeId, range: { start: 0, end: 0 } },
+          isRefBased: true,
+        };
+      }
+
       const result = resolveTextRefLocator(editor, ref);
       return { ...result, isRefBased: true };
     }
@@ -1443,19 +1560,17 @@ function resolveStructuralLocator(editor: Editor, input: SDReplaceInput): Resolv
 }
 
 /**
- * Decodes a V3 text ref and resolves all segments to a spanning block range.
+ * Decodes a text ref (V3 or V4) and resolves all segments to a spanning block range.
  * Single-segment refs resolve as single-block; multi-segment refs produce
  * a resolvedRange spanning from the first to last segment's block.
  */
 function resolveTextRefLocator(editor: Editor, ref: string): ResolvedStructuralLocator {
-  let payload: { segments?: Array<{ blockId: string }> };
-  try {
-    payload = JSON.parse(atob(ref.slice(5)));
-  } catch {
+  const decoded = decodeRef(ref);
+  if (!decoded) {
     throw new DocumentApiAdapterError('INVALID_TARGET', `Cannot decode text ref for structural replace: ${ref}`);
   }
 
-  const segments = payload?.segments;
+  const segments = decoded.segments;
   if (!Array.isArray(segments) || segments.length === 0) {
     throw new DocumentApiAdapterError(
       'INVALID_TARGET',

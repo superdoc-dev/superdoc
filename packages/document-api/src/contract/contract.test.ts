@@ -103,25 +103,26 @@ describe('document-api contract catalog', () => {
     const [textTargetVariant, textRefVariant, textUntargetedVariant] = textVariant.oneOf!;
 
     expect(textTargetVariant.type).toBe('object');
-    expect(Object.keys(textTargetVariant.properties!).sort()).toEqual(['target', 'type', 'value']);
+    expect(Object.keys(textTargetVariant.properties!).sort()).toEqual(['in', 'target', 'type', 'value']);
     expect(textTargetVariant.required).toEqual(['target', 'value']);
     expect(textTargetVariant.additionalProperties).toBe(false);
     expect((textTargetVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/SelectionTarget');
 
     expect(textRefVariant.type).toBe('object');
-    expect(Object.keys(textRefVariant.properties!).sort()).toEqual(['ref', 'type', 'value']);
+    expect(Object.keys(textRefVariant.properties!).sort()).toEqual(['in', 'ref', 'type', 'value']);
     expect(textRefVariant.required).toEqual(['ref', 'value']);
     expect(textRefVariant.additionalProperties).toBe(false);
     expect((textRefVariant.properties!.ref as { type?: string }).type).toBe('string');
 
     expect(textUntargetedVariant.type).toBe('object');
-    expect(Object.keys(textUntargetedVariant.properties!).sort()).toEqual(['type', 'value']);
+    expect(Object.keys(textUntargetedVariant.properties!).sort()).toEqual(['in', 'type', 'value']);
     expect(textUntargetedVariant.required).toEqual(['value']);
     expect(textUntargetedVariant.additionalProperties).toBe(false);
 
     expect(structuralVariant.type).toBe('object');
     expect(Object.keys(structuralVariant.properties!).sort()).toEqual([
       'content',
+      'in',
       'nestingPolicy',
       'placement',
       'target',

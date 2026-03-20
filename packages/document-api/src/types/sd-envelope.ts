@@ -10,6 +10,7 @@
 import type { BlockNodeAddress, NodeAddress } from './base.js';
 import type { TextSelector, NodeSelector } from './query.js';
 import type { SDContentNode, SDInlineNode } from './sd-nodes.js';
+import type { StoryLocator } from './story.types.js';
 
 // ---------------------------------------------------------------------------
 // Address model
@@ -46,6 +47,8 @@ export interface SDReadOptions {
 // ---------------------------------------------------------------------------
 
 export interface SDGetInput {
+  /** Restrict the read to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   options?: SDReadOptions;
 }
 
@@ -56,6 +59,8 @@ export interface SDGetInput {
 export interface SDFindInput {
   select: TextSelector | NodeSelector;
   within?: BlockNodeAddress;
+  /** Restrict the search to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   limit?: number;
   offset?: number;
   options?: SDReadOptions;

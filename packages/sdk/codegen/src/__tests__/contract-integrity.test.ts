@@ -395,7 +395,7 @@ describe('Tools policy integrity', () => {
 });
 
 describe('agentVisible param annotation integrity', () => {
-  const EXPECTED_HIDDEN = new Set(['out', 'expectedRevision', 'in']);
+  const EXPECTED_HIDDEN = new Set(['out', 'expectedRevision', 'in', 'blockId', 'start', 'end']);
 
   test('expected transport-envelope params are agentVisible: false when present', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);

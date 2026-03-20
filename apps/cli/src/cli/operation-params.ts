@@ -459,10 +459,6 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
   // CLI uses flat flags (--type, --pattern, --mode) or --query-json; `select`
   // is an internal document-api field that the invoker builds from flat flags.
   'doc.find': new Set(['select']),
-  // CLI shortcut params (blockId, start, end) conflict with the `target`/`ref`
-  // objects. LLMs should use `target` or `ref` from search results, not flat params.
-  'doc.comments.create': new Set(['blockId', 'start', 'end']),
-  'doc.comments.patch': new Set(['blockId', 'start', 'end']),
 };
 
 // ---------------------------------------------------------------------------
@@ -481,6 +477,13 @@ const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'start', kind: 'flag', type: 'number', description: 'Start offset within the block (character index).' },
   { name: 'end', kind: 'flag', type: 'number', description: 'End offset within the block (character index).' },
 ];
+
+// Same params but hidden from LLM tool schemas. Used for operations where
+// LLMs should use `target` or `ref` instead (comments, format).
+const TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN: CliOperationParamSpec[] = TEXT_TARGET_FLAT_PARAMS.map((p) => ({
+  ...p,
+  agentVisible: false as const,
+}));
 
 const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string', description: 'Node ID of the target list item.' },
@@ -562,8 +565,8 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
       description: 'Style patch object with run and/or paragraph properties to apply.',
     },
   ],
-  'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN],
+  'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN],
   // List operations: flat flag (--node-id) as shortcut for --target-json, plus --input-json
   'doc.lists.insert': [
     {
@@ -861,9 +864,7 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
 };
 
 for (const operationId of FORMAT_OPERATION_IDS) {
-  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS];
-  // LLMs should use `target` or `ref` from search results, not flat params.
-  PARAM_EXCLUSIONS[`doc.${operationId}`] = new Set(['blockId', 'start', 'end']);
+  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN];
 }
 
 // ---------------------------------------------------------------------------

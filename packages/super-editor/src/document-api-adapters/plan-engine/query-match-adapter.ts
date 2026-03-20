@@ -569,10 +569,22 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
       if (nonBodyStory && !raw.address.story) raw.address.story = nonBodyStory;
 
       if (raw.address.kind === 'block') {
-        // Block node → stable nodeId ref
+        // Block node → for non-body stories, encode a V4 ref so ref-only
+        // follow-ups can derive the correct story. Body stories keep the
+        // plain nodeId for backward compatibility.
+        const blockRef = nonBodyStory
+          ? encodeV4Ref({
+              v: 4,
+              rev: evaluatedRevision,
+              storyKey,
+              scope: 'node',
+              node: { kind: 'block', nodeType: raw.address.nodeType, nodeId: raw.address.nodeId },
+            })
+          : raw.address.nodeId;
+
         return {
           id,
-          handle: buildResolvedHandle(raw.address.nodeId, 'stable', 'node'),
+          handle: buildResolvedHandle(blockRef, 'stable', 'node'),
           matchKind: 'node',
           address: raw.address,
           blocks: [],

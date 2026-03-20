@@ -16,6 +16,7 @@ import type {
   CreateHeadingResult,
   CreateHeadingSuccessResult,
   MutationOptions,
+  StoryLocator,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import { type BlockCandidate } from '../helpers/node-address-resolver.js';
@@ -99,6 +100,7 @@ function resolveCreatedBlock(editor: Editor, nodeType: string, blockId: string):
 function buildParagraphCreateSuccess(
   paragraphNodeId: string,
   trackedChangeRefs?: CreateParagraphSuccessResult['trackedChangeRefs'],
+  story?: StoryLocator,
 ): CreateParagraphSuccessResult {
   return {
     success: true,
@@ -106,11 +108,13 @@ function buildParagraphCreateSuccess(
       kind: 'block',
       nodeType: 'paragraph',
       nodeId: paragraphNodeId,
+      ...(story && { story }),
     },
     insertionPoint: {
       kind: 'text',
       blockId: paragraphNodeId,
       range: { start: 0, end: 0 },
+      ...(story && { story }),
     },
     trackedChangeRefs,
   };
@@ -119,6 +123,7 @@ function buildParagraphCreateSuccess(
 function buildHeadingCreateSuccess(
   headingNodeId: string,
   trackedChangeRefs?: CreateHeadingSuccessResult['trackedChangeRefs'],
+  story?: StoryLocator,
 ): CreateHeadingSuccessResult {
   return {
     success: true,
@@ -126,11 +131,13 @@ function buildHeadingCreateSuccess(
       kind: 'block',
       nodeType: 'heading',
       nodeId: headingNodeId,
+      ...(story && { story }),
     },
     insertionPoint: {
       kind: 'text',
       blockId: headingNodeId,
       range: { start: 0, end: 0 },
+      ...(story && { story }),
     },
     trackedChangeRefs,
   };
@@ -237,7 +244,8 @@ export function createParagraphWrapper(
     }
 
     if (runtime.commit) runtime.commit(editor);
-    return buildParagraphCreateSuccess(canonicalId, trackedChangeRefs);
+    const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
+    return buildParagraphCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory);
   } finally {
     disposeEphemeralWriteRuntime(runtime);
   }
@@ -343,7 +351,8 @@ export function createHeadingWrapper(
     }
 
     if (runtime.commit) runtime.commit(editor);
-    return buildHeadingCreateSuccess(canonicalId, trackedChangeRefs);
+    const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
+    return buildHeadingCreateSuccess(canonicalId, trackedChangeRefs, nonBodyStory);
   } finally {
     disposeEphemeralWriteRuntime(runtime);
   }

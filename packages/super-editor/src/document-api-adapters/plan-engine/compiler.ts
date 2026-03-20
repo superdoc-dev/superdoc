@@ -674,6 +674,14 @@ function resolveV4TextRef(
   step: MutationStep,
   refData: StoryRefV4,
 ): CompiledTarget[] {
+  // Node-scope V4 refs (from non-body block matches) carry the block
+  // identity in the `node` field instead of text segments. These refs are
+  // stable (nodeId-based) and skip revision checking — same semantics as
+  // raw nodeId block refs.
+  if (refData.scope === 'node' && refData.node?.nodeId) {
+    return resolveBlockRef(editor, index, step, refData.node.nodeId);
+  }
+
   const currentRevision = getRevision(editor);
   if (refData.rev !== currentRevision) {
     throw planError(

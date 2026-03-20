@@ -1443,8 +1443,18 @@ function resolveStructuralLocator(editor: Editor, input: SDReplaceInput): Resolv
   }
 
   if (ref !== undefined) {
-    // V3 text ref — decode payload and resolve blocks.
+    // V3/V4 text ref — decode payload and resolve blocks.
     if (ref.startsWith('text:')) {
+      // V4 node-scope refs (from non-body block matches) carry a node.nodeId
+      // instead of segments. Extract the nodeId and resolve as a single block.
+      const decoded = decodeRef(ref);
+      if (decoded && decoded.v === 4 && decoded.scope === 'node' && decoded.node?.nodeId) {
+        return {
+          textTarget: { kind: 'text', blockId: decoded.node.nodeId, range: { start: 0, end: 0 } },
+          isRefBased: true,
+        };
+      }
+
       const result = resolveTextRefLocator(editor, ref);
       return { ...result, isRefBased: true };
     }

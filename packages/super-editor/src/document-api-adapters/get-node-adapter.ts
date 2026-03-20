@@ -71,7 +71,12 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResu
 
     return {
       node: projectContentNode(candidate.node),
-      address: { kind: 'block', nodeType: candidate.nodeType, nodeId: candidate.nodeId } as NodeAddress,
+      address: {
+        kind: 'block',
+        nodeType: candidate.nodeType,
+        nodeId: candidate.nodeId,
+        ...(address.story && { story: address.story }),
+      } as NodeAddress,
     };
   }
 

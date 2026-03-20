@@ -349,13 +349,21 @@ function createHeadlessHeaderFooterEditor(
   });
 }
 
+/**
+ * Creates an owned header/footer runtime for a headless editor.
+ *
+ * Owned runtimes are always non-cacheable (`cacheable: false`) because their
+ * `dispose()` destroys the editor. If they were cached, a `commit()` that
+ * emits `partChanged` would trigger cache invalidation, which would destroy
+ * the editor mid-commit — before `exportAndSyncCache` finishes reading the
+ * editor's PM JSON. Callers manage the lifecycle via `disposeEphemeralWriteRuntime`.
+ */
 function createOwnedHeaderFooterRuntime(
   locator: HeaderFooterSlotStoryLocator | HeaderFooterPartStoryLocator,
   storyKey: string,
   editor: Editor,
   options: {
     commit: (hostEditor: Editor) => void;
-    cacheable?: boolean;
   },
 ): StoryRuntime {
   return {
@@ -363,7 +371,7 @@ function createOwnedHeaderFooterRuntime(
     storyKey,
     editor,
     kind: 'headerFooter',
-    cacheable: options.cacheable,
+    cacheable: false,
     dispose: () => editor.destroy(),
     commit: options.commit,
   };
@@ -399,7 +407,6 @@ function createMissingSlotWriteRuntime(
   );
 
   return createOwnedHeaderFooterRuntime(locator, storyKey, pendingEditor, {
-    cacheable: false,
     commit: buildSlotCommit(locator, pendingEditor, null, true),
   });
 }

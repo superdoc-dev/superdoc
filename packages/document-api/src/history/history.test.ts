@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 import type { HistoryAdapter } from './history.js';
 import { executeHistoryGet, executeHistoryUndo, executeHistoryRedo } from './history.js';
 import type { HistoryState, HistoryActionResult } from './history.types.js';
@@ -27,9 +27,9 @@ function makeHistoryAdapter(
   };
 
   return {
-    get: vi.fn(() => state),
-    undo: vi.fn(() => undoResult),
-    redo: vi.fn(() => redoResult),
+    get: mock(() => state),
+    undo: mock(() => undoResult),
+    redo: mock(() => redoResult),
   };
 }
 

@@ -12,7 +12,7 @@ export default defineConfig({
     // Use package directories; Vitest will pick up each package's vite.config.js
     projects: [
       './packages/super-editor',
-      './packages/document-api',
+      // document-api migrated to bun test (run via: pnpm --filter @superdoc/document-api test)
       './packages/superdoc',
       './packages/ai',
       './packages/collaboration-yjs',

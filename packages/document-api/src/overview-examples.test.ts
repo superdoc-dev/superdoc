@@ -6,7 +6,7 @@
  * If any of these tests break, the corresponding documentation example is wrong
  * and must be updated to match.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 import { createDocumentApi } from './index.js';
 import type { DocumentApiCapabilities } from './capabilities/capabilities.js';
 import type { SelectionTarget } from './types/index.js';
@@ -35,7 +35,7 @@ function makeTextMutationReceipt() {
 
 function makeFindAdapter() {
   return {
-    find: vi.fn(() => ({
+    find: mock(() => ({
       evaluatedRevision: '',
       total: 1,
       items: [
@@ -79,18 +79,18 @@ function makeFindAdapter() {
 
 function makeGetNodeAdapter() {
   return {
-    getNode: vi.fn(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
-    getNodeById: vi.fn(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
+    getNode: mock(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
+    getNodeById: mock(() => ({ nodeType: 'paragraph', kind: 'block', properties: {} })),
   };
 }
 
 function makeGetTextAdapter() {
-  return { getText: vi.fn(() => 'hello') };
+  return { getText: mock(() => 'hello') };
 }
 
 function makeInfoAdapter() {
   return {
-    info: vi.fn(() => ({
+    info: mock(() => ({
       counts: {
         words: 0,
         characters: 0,
@@ -125,15 +125,15 @@ function makeSDMutationReceipt() {
 
 function makeWriteAdapter() {
   return {
-    write: vi.fn(() => makeTextMutationReceipt()),
-    insertStructured: vi.fn(() => makeSDMutationReceipt()),
-    replaceStructured: vi.fn(() => makeSDMutationReceipt()),
+    write: mock(() => makeTextMutationReceipt()),
+    insertStructured: mock(() => makeSDMutationReceipt()),
+    replaceStructured: mock(() => makeSDMutationReceipt()),
   };
 }
 
 function makeSelectionMutationAdapter() {
   return {
-    execute: vi.fn(() => makeTextMutationReceipt()),
+    execute: mock(() => makeTextMutationReceipt()),
   };
 }
 
@@ -145,46 +145,46 @@ function makeParagraphsAdapter() {
   });
 
   return {
-    setStyle: vi.fn(ok),
-    clearStyle: vi.fn(ok),
-    resetDirectFormatting: vi.fn(ok),
-    setAlignment: vi.fn(ok),
-    clearAlignment: vi.fn(ok),
-    setIndentation: vi.fn(ok),
-    clearIndentation: vi.fn(ok),
-    setSpacing: vi.fn(ok),
-    clearSpacing: vi.fn(ok),
-    setKeepOptions: vi.fn(ok),
-    setOutlineLevel: vi.fn(ok),
-    setFlowOptions: vi.fn(ok),
-    setTabStop: vi.fn(ok),
-    clearTabStop: vi.fn(ok),
-    clearAllTabStops: vi.fn(ok),
-    setBorder: vi.fn(ok),
-    clearBorder: vi.fn(ok),
-    setShading: vi.fn(ok),
-    clearShading: vi.fn(ok),
+    setStyle: mock(ok),
+    clearStyle: mock(ok),
+    resetDirectFormatting: mock(ok),
+    setAlignment: mock(ok),
+    clearAlignment: mock(ok),
+    setIndentation: mock(ok),
+    clearIndentation: mock(ok),
+    setSpacing: mock(ok),
+    clearSpacing: mock(ok),
+    setKeepOptions: mock(ok),
+    setOutlineLevel: mock(ok),
+    setFlowOptions: mock(ok),
+    setTabStop: mock(ok),
+    clearTabStop: mock(ok),
+    clearAllTabStops: mock(ok),
+    setBorder: mock(ok),
+    clearBorder: mock(ok),
+    setShading: mock(ok),
+    clearShading: mock(ok),
   };
 }
 
 function makeCommentsAdapter() {
   return {
-    add: vi.fn(() => ({ success: true as const })),
-    edit: vi.fn(() => ({ success: true as const })),
-    reply: vi.fn(() => ({ success: true as const })),
-    move: vi.fn(() => ({ success: true as const })),
-    resolve: vi.fn(() => ({ success: true as const })),
-    remove: vi.fn(() => ({ success: true as const })),
-    setInternal: vi.fn(() => ({ success: true as const })),
-    setActive: vi.fn(() => ({ success: true as const })),
-    goTo: vi.fn(() => ({ success: true as const })),
-    get: vi.fn(() => ({
+    add: mock(() => ({ success: true as const })),
+    edit: mock(() => ({ success: true as const })),
+    reply: mock(() => ({ success: true as const })),
+    move: mock(() => ({ success: true as const })),
+    resolve: mock(() => ({ success: true as const })),
+    remove: mock(() => ({ success: true as const })),
+    setInternal: mock(() => ({ success: true as const })),
+    setActive: mock(() => ({ success: true as const })),
+    goTo: mock(() => ({ success: true as const })),
+    get: mock(() => ({
       address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: 'c1' },
       commentId: 'c1',
       status: 'open' as const,
       text: 'Review this section.',
     })),
-    list: vi.fn(() => ({
+    list: mock(() => ({
       evaluatedRevision: 'r1',
       total: 1,
       items: [
@@ -204,27 +204,27 @@ function makeCommentsAdapter() {
 
 function makeTrackChangesAdapter() {
   return {
-    list: vi.fn(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
-    get: vi.fn((input: { id: string }) => ({
+    list: mock(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
+    get: mock((input: { id: string }) => ({
       address: { kind: 'entity' as const, entityType: 'trackedChange' as const, entityId: input.id },
       id: input.id,
       type: 'insert' as const,
     })),
-    accept: vi.fn(() => ({ success: true as const })),
-    reject: vi.fn(() => ({ success: true as const })),
-    acceptAll: vi.fn(() => ({ success: true as const })),
-    rejectAll: vi.fn(() => ({ success: true as const })),
+    accept: mock(() => ({ success: true as const })),
+    reject: mock(() => ({ success: true as const })),
+    acceptAll: mock(() => ({ success: true as const })),
+    rejectAll: mock(() => ({ success: true as const })),
   };
 }
 
 function makeCreateAdapter() {
   return {
-    paragraph: vi.fn(() => ({
+    paragraph: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'new-p' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-p', range: { start: 0, end: 0 } },
     })),
-    heading: vi.fn(() => ({
+    heading: mock(() => ({
       success: true as const,
       heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
@@ -239,7 +239,7 @@ function makeListsAdapter() {
   });
 
   return {
-    list: vi.fn(() => ({
+    list: mock(() => ({
       evaluatedRevision: 'r1',
       total: 1,
       items: [
@@ -254,60 +254,60 @@ function makeListsAdapter() {
       ],
       page: { limit: 1, offset: 0, returned: 1 },
     })),
-    get: vi.fn(() => ({
+    get: mock(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
       listId: 'list-1',
       kind: 'ordered' as const,
       level: 0,
       text: 'List item',
     })),
-    insert: vi.fn(() => ({
+    insert: mock(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    indent: vi.fn(mutateResult),
-    outdent: vi.fn(mutateResult),
-    create: vi.fn(() => ({
+    indent: mock(mutateResult),
+    outdent: mock(mutateResult),
+    create: mock(() => ({
       success: true as const,
       listId: 'list-new',
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-new' },
     })),
-    attach: vi.fn(mutateResult),
-    detach: vi.fn(() => ({
+    attach: mock(mutateResult),
+    detach: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
-    join: vi.fn(() => ({ success: true as const, listId: 'list-1' })),
-    canJoin: vi.fn(() => ({ canJoin: true })),
-    separate: vi.fn(() => ({ success: true as const, listId: 'list-new', numId: 2 })),
-    setLevel: vi.fn(mutateResult),
-    setValue: vi.fn(mutateResult),
-    continuePrevious: vi.fn(mutateResult),
-    canContinuePrevious: vi.fn(() => ({ canContinue: true })),
-    setLevelRestart: vi.fn(mutateResult),
-    convertToText: vi.fn(() => ({
+    join: mock(() => ({ success: true as const, listId: 'list-1' })),
+    canJoin: mock(() => ({ canJoin: true })),
+    separate: mock(() => ({ success: true as const, listId: 'list-new', numId: 2 })),
+    setLevel: mock(mutateResult),
+    setValue: mock(mutateResult),
+    continuePrevious: mock(mutateResult),
+    canContinuePrevious: mock(() => ({ canContinue: true })),
+    setLevelRestart: mock(mutateResult),
+    convertToText: mock(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
-    applyTemplate: vi.fn(mutateResult),
-    applyPreset: vi.fn(mutateResult),
-    captureTemplate: vi.fn(() => ({
+    applyTemplate: mock(mutateResult),
+    applyPreset: mock(mutateResult),
+    captureTemplate: mock(() => ({
       success: true as const,
       template: { version: 1, levels: [] },
     })),
-    setLevelNumbering: vi.fn(mutateResult),
-    setLevelBullet: vi.fn(mutateResult),
-    setLevelPictureBullet: vi.fn(mutateResult),
-    setLevelAlignment: vi.fn(mutateResult),
-    setLevelIndents: vi.fn(mutateResult),
-    setLevelTrailingCharacter: vi.fn(mutateResult),
-    setLevelMarkerFont: vi.fn(mutateResult),
-    clearLevelOverrides: vi.fn(mutateResult),
+    setLevelNumbering: mock(mutateResult),
+    setLevelBullet: mock(mutateResult),
+    setLevelPictureBullet: mock(mutateResult),
+    setLevelAlignment: mock(mutateResult),
+    setLevelIndents: mock(mutateResult),
+    setLevelTrailingCharacter: mock(mutateResult),
+    setLevelMarkerFont: mock(mutateResult),
+    clearLevelOverrides: mock(mutateResult),
   };
 }
 
-function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
+function makeCapabilitiesAdapter(): { get: ReturnType<typeof mock> } {
   const caps: DocumentApiCapabilities = {
     global: {
       trackChanges: { enabled: true },
@@ -358,7 +358,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       regex: { maxPatternLength: 1024, maxExecutionMs: 100 },
     },
   };
-  return { get: vi.fn(() => caps) };
+  return { get: mock(() => caps) };
 }
 
 function makeApi() {
@@ -376,7 +376,7 @@ function makeApi() {
     create: makeCreateAdapter(),
     lists: makeListsAdapter(),
     query: {
-      match: vi.fn(() => ({
+      match: mock(() => ({
         evaluatedRevision: 'r1',
         total: 1,
         items: [
@@ -424,8 +424,8 @@ function makeApi() {
       })),
     },
     mutations: {
-      preview: vi.fn(() => ({ evaluatedRevision: 'r1', steps: [], valid: true })),
-      apply: vi.fn(() => ({
+      preview: mock(() => ({ evaluatedRevision: 'r1', steps: [], valid: true })),
+      apply: mock(() => ({
         success: true as const,
         revision: { before: 'r1', after: 'r2' },
         steps: [],

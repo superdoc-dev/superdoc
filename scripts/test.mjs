@@ -21,6 +21,12 @@ if (vitestExitCode !== 0) {
 }
 
 if (args.length === 0) {
+  // Run bun test for migrated packages
+  const bunTestExitCode = run(pnpmCommand, ['--filter', '@superdoc/document-api', 'test']);
+  if (bunTestExitCode !== 0) {
+    process.exit(bunTestExitCode);
+  }
+
   const sdkScriptsExitCode = run(pnpmCommand, ['--prefix', 'packages/sdk', 'run', 'test:scripts']);
   if (sdkScriptsExitCode !== 0) {
     process.exit(sdkScriptsExitCode);

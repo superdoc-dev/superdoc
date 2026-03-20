@@ -1,27 +1,26 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('@helpers/list-numbering-helpers.js', () => ({
+mock.module('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
-    hasListDefinition: vi.fn().mockReturnValue(true),
+    hasListDefinition: mock().mockReturnValue(true),
   },
 }));
 
-vi.mock(import('@helpers/index.js'), async (importOriginal) => {
+mock.module(import('@helpers/index.js'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    findParentNode: vi.fn(),
+    findParentNode: mock(),
   };
 });
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node.attrs.paragraphProperties || {}),
-  calculateResolvedParagraphProperties: vi.fn((_, node, __) => node.attrs.paragraphProperties || {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
+  calculateResolvedParagraphProperties: mock((_, node, __) => node.attrs.paragraphProperties || {}),
 }));
 
-import { changeListLevel } from './changeListLevel.js';
-import { findParentNode } from '@helpers/index.js';
+const { changeListLevel } = await import('./changeListLevel.js');
+const { findParentNode } = await import('@helpers/index.js');
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 
 const createResolvedPos = ({ pos = 0, before = pos, parent } = {}) => {
@@ -51,9 +50,9 @@ const createSelection = (fromConfig = {}, toConfig = {}) => {
 describe('changeListLevel', () => {
   /** @type {{ state: any, converter: { convertedXml: any, numbering: { definitions: any, abstracts: any } } }} */
   let editor;
-  /** @type {{ setNodeMarkup: ReturnType<typeof vi.fn> }} */
+  /** @type {{ setNodeMarkup: ReturnType<typeof mock> }} */
   let tr;
-  /** @type {{ nodesBetween: ReturnType<typeof vi.fn> }} */
+  /** @type {{ nodesBetween: ReturnType<typeof mock> }} */
   let rootNode;
   /** @type<Array<{ node: any, pos: number }>> */
   let nodesBetweenSequence;
@@ -61,11 +60,9 @@ describe('changeListLevel', () => {
   let selection;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     nodesBetweenSequence = [];
     rootNode = {
-      nodesBetween: vi.fn((_from, _to, callback) => {
+      nodesBetween: mock((_from, _to, callback) => {
         nodesBetweenSequence.forEach(({ node, pos }) => callback(node, pos));
       }),
     };
@@ -82,7 +79,7 @@ describe('changeListLevel', () => {
         numbering: { definitions: {}, abstracts: {} },
       },
     };
-    tr = { setNodeMarkup: vi.fn() };
+    tr = { setNodeMarkup: mock() };
 
     findParentNode.mockReturnValue(() => null);
     ListHelpers.hasListDefinition.mockReturnValue(true);

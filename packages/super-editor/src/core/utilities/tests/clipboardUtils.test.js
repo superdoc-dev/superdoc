@@ -1,5 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-
+import { describe, it, expect, mock, afterEach } from 'bun:test';
 import { ensureClipboardPermission, readClipboardRaw, readFromClipboard } from '../clipboardUtils.js';
 
 // Helper to restore globals after each test
@@ -22,7 +21,6 @@ function restoreGlobals() {
 
 afterEach(() => {
   restoreGlobals();
-  vi.restoreAllMocks();
 });
 
 describe('clipboardUtils', () => {
@@ -51,14 +49,14 @@ describe('clipboardUtils', () => {
     });
 
     it('read() fails so fallback readText() is used', async () => {
-      const readTextMock = vi.fn().mockResolvedValue('plain');
+      const readTextMock = mock().mockResolvedValue('plain');
       global.navigator = {
         clipboard: {
-          read: vi.fn().mockRejectedValue(new Error('fail')),
+          read: mock().mockRejectedValue(new Error('fail')),
           readText: readTextMock,
         },
         permissions: {
-          query: vi.fn().mockResolvedValue({ state: 'granted' }),
+          query: mock().mockResolvedValue({ state: 'granted' }),
         },
       };
 
@@ -77,7 +75,7 @@ describe('clipboardUtils', () => {
 
       const clipboardItem = {
         types: ['text/html', 'text/plain'],
-        getType: vi.fn((type) => {
+        getType: mock((type) => {
           if (type === 'text/html') return Promise.resolve(htmlBlob);
           if (type === 'text/plain') return Promise.resolve(textBlob);
           return Promise.reject(new Error('unsupported type'));
@@ -86,11 +84,11 @@ describe('clipboardUtils', () => {
 
       global.navigator = {
         clipboard: {
-          read: vi.fn().mockResolvedValue([clipboardItem]),
-          readText: vi.fn().mockResolvedValue('rich'),
+          read: mock().mockResolvedValue([clipboardItem]),
+          readText: mock().mockResolvedValue('rich'),
         },
         permissions: {
-          query: vi.fn().mockResolvedValue({ state: 'granted' }),
+          query: mock().mockResolvedValue({ state: 'granted' }),
         },
       };
 
@@ -100,13 +98,13 @@ describe('clipboardUtils', () => {
     });
 
     it('falls back to readText when permission query throws', async () => {
-      const readTextMock = vi.fn().mockResolvedValue('plain fallback text');
+      const readTextMock = mock().mockResolvedValue('plain fallback text');
       global.navigator = {
         clipboard: {
           readText: readTextMock,
         },
         permissions: {
-          query: vi.fn().mockRejectedValue(new Error('unsupported permission name')),
+          query: mock().mockRejectedValue(new Error('unsupported permission name')),
         },
       };
 

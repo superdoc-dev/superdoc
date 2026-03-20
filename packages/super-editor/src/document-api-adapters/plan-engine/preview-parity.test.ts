@@ -1,3 +1,4 @@
+import { describe, it, expect, mock, beforeEach, beforeAll } from 'bun:test';
 /**
  * T6: Preview non-mutating parity tests (§13.17)
  *
@@ -7,58 +8,57 @@
  * 3. Collects assert failures instead of throwing.
  */
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { TextRewriteStep, StyleApplyStep, AssertStep } from '@superdoc/document-api';
 import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget } from './executor-registry.types.js';
-import { previewPlan } from './preview.js';
-import { registerBuiltInExecutors } from './register-executors.js';
-import { PlanError } from './errors.js';
+const { previewPlan } = await import('./preview.js');
+const { registerBuiltInExecutors } = await import('./register-executors.js');
+const { PlanError } = await import('./errors.js');
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-const mockedDeps = vi.hoisted(() => ({
-  getBlockIndex: vi.fn(),
-  resolveTextRangeInBlock: vi.fn(),
-  getRevision: vi.fn(() => '0'),
-  checkRevision: vi.fn(),
-  incrementRevision: vi.fn(() => '1'),
-  captureRunsInRange: vi.fn(),
-  resolveInlineStyle: vi.fn(() => []),
-  applyDirectMutationMeta: vi.fn(),
-  applyTrackedMutationMeta: vi.fn(),
-  mapBlockNodeType: vi.fn(),
-  compilePlan: vi.fn(),
-}));
+const mockedDeps = {
+  getBlockIndex: mock(),
+  resolveTextRangeInBlock: mock(),
+  getRevision: mock(() => '0'),
+  checkRevision: mock(),
+  incrementRevision: mock(() => '1'),
+  captureRunsInRange: mock(),
+  resolveInlineStyle: mock(() => []),
+  applyDirectMutationMeta: mock(),
+  applyTrackedMutationMeta: mock(),
+  mapBlockNodeType: mock(),
+  compilePlan: mock(),
+};
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-vi.mock('../helpers/text-offset-resolver.js', () => ({
+mock.module('../helpers/text-offset-resolver.js', () => ({
   resolveTextRangeInBlock: mockedDeps.resolveTextRangeInBlock,
 }));
 
-vi.mock('./revision-tracker.js', () => ({
+mock.module('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
   checkRevision: mockedDeps.checkRevision,
   incrementRevision: mockedDeps.incrementRevision,
 }));
 
-vi.mock('./style-resolver.js', () => ({
+mock.module('./style-resolver.js', () => ({
   captureRunsInRange: mockedDeps.captureRunsInRange,
   resolveInlineStyle: mockedDeps.resolveInlineStyle,
 }));
 
-vi.mock('../helpers/transaction-meta.js', () => ({
+mock.module('../helpers/transaction-meta.js', () => ({
   applyDirectMutationMeta: mockedDeps.applyDirectMutationMeta,
   applyTrackedMutationMeta: mockedDeps.applyTrackedMutationMeta,
 }));
 
-vi.mock('../helpers/node-address-resolver.js', () => ({
+mock.module('../helpers/node-address-resolver.js', () => ({
   mapBlockNodeType: mockedDeps.mapBlockNodeType,
   findBlockById: (index: any, address: { nodeType: string; nodeId: string }) =>
     index.byId.get(`${address.nodeType}:${address.nodeId}`),
@@ -70,7 +70,7 @@ vi.mock('../helpers/node-address-resolver.js', () => ({
 }));
 
 // Mock compilePlan so preview tests don't need a fully wired editor with commands
-vi.mock('./compiler.js', () => ({
+mock.module('./compiler.js', () => ({
   compilePlan: mockedDeps.compilePlan,
 }));
 
@@ -79,7 +79,6 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  vi.clearAllMocks();
   mockedDeps.getRevision.mockReturnValue('0');
   mockedDeps.incrementRevision.mockReturnValue('1');
   mockedDeps.mapBlockNodeType.mockReturnValue(undefined);
@@ -99,23 +98,23 @@ function mockMark(name: string) {
 
 function makeEditor(text = 'Hello'): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
 } {
   const boldMark = mockMark('bold');
   const tr = {
-    replaceWith: vi.fn(),
-    delete: vi.fn(),
-    insert: vi.fn(),
-    addMark: vi.fn(),
-    removeMark: vi.fn(),
-    setMeta: vi.fn(),
+    replaceWith: mock(),
+    delete: mock(),
+    insert: mock(),
+    addMark: mock(),
+    removeMark: mock(),
+    setMeta: mock(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc: {
       resolve: () => ({ marks: () => [] }),
       textContent: text,
-      descendants: vi.fn(),
-      textBetween: vi.fn(() => text),
+      descendants: mock(),
+      textBetween: mock(() => text),
     },
   };
   tr.replaceWith.mockReturnValue(tr);
@@ -125,25 +124,25 @@ function makeEditor(text = 'Hello'): {
   tr.removeMark.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
       doc: {
         textContent: text,
-        textBetween: vi.fn(() => text),
-        nodesBetween: vi.fn(),
-        descendants: vi.fn(),
+        textBetween: mock(() => text),
+        nodesBetween: mock(),
+        descendants: mock(),
       },
       tr,
       schema: {
         marks: {
-          bold: { create: vi.fn(() => boldMark) },
-          italic: { create: vi.fn(() => mockMark('italic')) },
-          underline: { create: vi.fn(() => mockMark('underline')) },
-          strike: { create: vi.fn(() => mockMark('strike')) },
+          bold: { create: mock(() => boldMark) },
+          italic: { create: mock(() => mockMark('italic')) },
+          underline: { create: mock(() => mockMark('underline')) },
+          strike: { create: mock(() => mockMark('strike')) },
         },
-        text: vi.fn((t: string, m?: unknown[]) => ({
+        text: mock((t: string, m?: unknown[]) => ({
           type: { name: 'text' },
           text: t,
           marks: m ?? [],
@@ -190,17 +189,17 @@ function makeCompiledPlan(overrides: Partial<CompiledPlan> = {}): CompiledPlan {
 
 function makeTextStyleEditor(textStyleAttrNames: string[]): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
   tr: {
-    addMark: ReturnType<typeof vi.fn>;
-    removeMark: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof mock>;
+    removeMark: ReturnType<typeof mock>;
   };
 } {
   const textStyleAttrs = Object.fromEntries(textStyleAttrNames.map((name) => [name, { default: null }]));
   const textStyle = {
     spec: { attrs: textStyleAttrs },
     attrs: textStyleAttrs,
-    create: vi.fn((input: Record<string, unknown> = {}) => ({
+    create: mock((input: Record<string, unknown> = {}) => ({
       type: { name: 'textStyle' },
       attrs: Object.fromEntries(
         Object.entries(input).filter(([key]) => Object.prototype.hasOwnProperty.call(textStyleAttrs, key)),
@@ -212,27 +211,27 @@ function makeTextStyleEditor(textStyleAttrNames: string[]): {
   const textNode = { isText: true, nodeSize: 5, marks: [] as unknown[] };
   const doc = {
     textContent: 'Hello',
-    textBetween: vi.fn(() => 'Hello'),
-    nodesBetween: vi.fn((_from: number, _to: number, callback: (node: typeof textNode, pos: number) => void) => {
+    textBetween: mock(() => 'Hello'),
+    nodesBetween: mock((_from: number, _to: number, callback: (node: typeof textNode, pos: number) => void) => {
       callback(textNode, 1);
     }),
-    descendants: vi.fn(),
-    nodeAt: vi.fn(() => null),
+    descendants: mock(),
+    nodeAt: mock(() => null),
   };
   const tr = {
-    replaceWith: vi.fn(),
-    delete: vi.fn(),
-    insert: vi.fn(),
-    addMark: vi.fn(),
-    removeMark: vi.fn(),
-    setMeta: vi.fn(),
+    replaceWith: mock(),
+    delete: mock(),
+    insert: mock(),
+    addMark: mock(),
+    removeMark: mock(),
+    setMeta: mock(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc: {
       resolve: () => ({ marks: () => [] }),
       textContent: 'Hello',
-      descendants: vi.fn(),
-      textBetween: vi.fn(() => 'Hello'),
+      descendants: mock(),
+      textBetween: mock(() => 'Hello'),
       nodesBetween: doc.nodesBetween,
       nodeAt: doc.nodeAt,
     },
@@ -244,7 +243,7 @@ function makeTextStyleEditor(textStyleAttrNames: string[]): {
   tr.removeMark.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {

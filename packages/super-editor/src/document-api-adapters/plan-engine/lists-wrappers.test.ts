@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt } from '@superdoc/document-api';
 import type { ListItemProjection } from '../helpers/list-item-resolver.js';
@@ -7,8 +7,8 @@ import type { ListItemProjection } from '../helpers/list-item-resolver.js';
 // Module mocks — hoisted before any imports of the module under test
 // ---------------------------------------------------------------------------
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean): PlanReceipt => {
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
       success: true,
@@ -27,64 +27,64 @@ vi.mock('./plan-wrappers.js', () => ({
   }),
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
-  getBlockIndex: vi.fn(),
-  clearIndexCache: vi.fn(),
+mock.module('../helpers/index-cache.js', () => ({
+  getBlockIndex: mock(),
+  clearIndexCache: mock(),
 }));
 
-vi.mock('../helpers/list-item-resolver.js', () => ({
-  listItemProjectionToInfo: vi.fn((proj: ListItemProjection, listId: string) => ({
+mock.module('../helpers/list-item-resolver.js', () => ({
+  listItemProjectionToInfo: mock((proj: ListItemProjection, listId: string) => ({
     address: proj.address,
     listId,
     level: proj.level,
   })),
-  listListItems: vi.fn(() => ({ items: [], total: 0 })),
-  resolveListItem: vi.fn(),
+  listListItems: mock(() => ({ items: [], total: 0 })),
+  resolveListItem: mock(),
 }));
 
-vi.mock('../helpers/list-sequence-helpers.js', () => ({
-  resolveBlock: vi.fn(),
-  resolveBlocksInRange: vi.fn(),
-  getAbstractNumId: vi.fn(),
-  getAllListItemProjections: vi.fn(),
-  getContiguousSequence: vi.fn(),
-  getSequenceFromTarget: vi.fn(),
-  isFirstInSequence: vi.fn(),
-  computeSequenceId: vi.fn(() => '1:p1'),
-  findAdjacentSequence: vi.fn(),
-  findPreviousCompatibleSequence: vi.fn(),
-  evaluateCanJoin: vi.fn(),
-  evaluateCanContinuePrevious: vi.fn(),
+mock.module('../helpers/list-sequence-helpers.js', () => ({
+  resolveBlock: mock(),
+  resolveBlocksInRange: mock(),
+  getAbstractNumId: mock(),
+  getAllListItemProjections: mock(),
+  getContiguousSequence: mock(),
+  getSequenceFromTarget: mock(),
+  isFirstInSequence: mock(),
+  computeSequenceId: mock(() => '1:p1'),
+  findAdjacentSequence: mock(),
+  findPreviousCompatibleSequence: mock(),
+  evaluateCanJoin: mock(),
+  evaluateCanContinuePrevious: mock(),
 }));
 
-vi.mock('../../core/helpers/list-numbering-helpers.js', () => ({
+mock.module('../../core/helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
-    hasListDefinition: vi.fn(() => true),
-    getNewListId: vi.fn(() => 42),
-    generateNewListDefinition: vi.fn(),
-    createNumDefinition: vi.fn(() => ({ numId: 43 })),
-    setLvlOverride: vi.fn(),
-    removeLvlOverride: vi.fn(),
-    setLvlRestartOnAbstract: vi.fn(),
+    hasListDefinition: mock(() => true),
+    getNewListId: mock(() => 42),
+    generateNewListDefinition: mock(),
+    createNumDefinition: mock(() => ({ numId: 43 })),
+    setLvlOverride: mock(),
+    removeLvlOverride: mock(),
+    setLvlRestartOnAbstract: mock(),
   },
 }));
 
-vi.mock('../../core/commands/changeListLevel.js', () => ({
-  updateNumberingProperties: vi.fn(),
+mock.module('../../core/commands/changeListLevel.js', () => ({
+  updateNumberingProperties: mock(),
 }));
 
-vi.mock('../helpers/mutation-helpers.js', () => ({
-  requireEditorCommand: vi.fn((cmd: unknown) => cmd),
-  ensureTrackedCapability: vi.fn(),
-  rejectTrackedMode: vi.fn(),
+mock.module('../helpers/mutation-helpers.js', () => ({
+  requireEditorCommand: mock((cmd: unknown) => cmd),
+  ensureTrackedCapability: mock(),
+  rejectTrackedMode: mock(),
 }));
 
-vi.mock('../helpers/tracked-change-refs.js', () => ({
-  collectTrackInsertRefsInRange: vi.fn(() => []),
+mock.module('../helpers/tracked-change-refs.js', () => ({
+  collectTrackInsertRefsInRange: mock(() => []),
 }));
 
-vi.mock('uuid', () => ({
-  v4: vi.fn(() => 'test-uuid'),
+mock.module('uuid', () => ({
+  v4: mock(() => 'test-uuid'),
 }));
 
 // ---------------------------------------------------------------------------
@@ -137,10 +137,10 @@ function makeEditor(overrides: Record<string, unknown> = {}): Editor {
   return {
     state: {
       doc: { content: { size: 100 } },
-      tr: { setNodeMarkup: vi.fn().mockReturnThis(), insertText: vi.fn().mockReturnThis() },
+      tr: { setNodeMarkup: mock().mockReturnThis(), insertText: mock().mockReturnThis() },
     },
-    view: { dispatch: vi.fn() },
-    commands: { insertListItemAt: vi.fn(() => true) },
+    view: { dispatch: mock() },
+    commands: { insertListItemAt: mock(() => true) },
     converter: {
       numbering: { definitions: {}, abstracts: {} },
       translatedNumbering: { definitions: {} },
@@ -186,7 +186,6 @@ describe('lists-wrappers', () => {
   let editor: Editor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     editor = makeEditor();
   });
 
@@ -203,7 +202,7 @@ describe('lists-wrappers', () => {
 
     it('returns result from listListItems', () => {
       const mockResult = { items: [{ address: { nodeId: 'p1' } }], total: 1 };
-      vi.mocked(listListItems).mockReturnValueOnce(mockResult as any);
+      (listListItems as any).mockReturnValueOnce(mockResult as any);
       expect(listsListWrapper(editor)).toEqual(mockResult);
     });
   });
@@ -211,7 +210,7 @@ describe('lists-wrappers', () => {
   describe('listsGetWrapper', () => {
     it('resolves target and converts to info', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
       const result = listsGetWrapper(editor, { address: proj.address });
       expect(resolveListItem).toHaveBeenCalledWith(editor, proj.address);
       expect(result).toHaveProperty('address', proj.address);
@@ -221,8 +220,8 @@ describe('lists-wrappers', () => {
   describe('listsCanJoinWrapper', () => {
     it('delegates to evaluateCanJoin', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanJoin).mockReturnValueOnce({ canJoin: true });
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanJoin as any).mockReturnValueOnce({ canJoin: true });
 
       const result = listsCanJoinWrapper(editor, { target: proj.address, direction: 'withNext' });
       expect(evaluateCanJoin).toHaveBeenCalledWith(editor, proj, 'withNext');
@@ -233,8 +232,8 @@ describe('lists-wrappers', () => {
   describe('listsCanContinuePreviousWrapper', () => {
     it('delegates to evaluateCanContinuePrevious', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanContinuePrevious).mockReturnValueOnce({ canContinue: false, reason: 'NO_PREVIOUS_LIST' });
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanContinuePrevious as any).mockReturnValueOnce({ canContinue: false, reason: 'NO_PREVIOUS_LIST' });
 
       const result = listsCanContinuePreviousWrapper(editor, { target: proj.address });
       expect(result.canContinue).toBe(false);
@@ -249,7 +248,7 @@ describe('lists-wrappers', () => {
   describe('listsCreateWrapper', () => {
     it('creates a list in empty mode', () => {
       const block = makeBlockCandidate('p1', 'paragraph');
-      vi.mocked(resolveBlock).mockReturnValueOnce(block as any);
+      (resolveBlock as any).mockReturnValueOnce(block as any);
 
       const result = listsCreateWrapper(editor, {
         mode: 'empty',
@@ -262,7 +261,7 @@ describe('lists-wrappers', () => {
 
     it('fails in empty mode when target is already a list item', () => {
       const block = makeBlockCandidate('p1', 'listItem');
-      vi.mocked(resolveBlock).mockReturnValueOnce(block as any);
+      (resolveBlock as any).mockReturnValueOnce(block as any);
 
       const result = listsCreateWrapper(editor, {
         mode: 'empty',
@@ -275,7 +274,7 @@ describe('lists-wrappers', () => {
 
     it('creates a list in fromParagraphs mode', () => {
       const blocks = [makeBlockCandidate('p1'), makeBlockCandidate('p2')];
-      vi.mocked(resolveBlocksInRange).mockReturnValueOnce(blocks as any);
+      (resolveBlocksInRange as any).mockReturnValueOnce(blocks as any);
 
       const result = listsCreateWrapper(editor, {
         mode: 'fromParagraphs',
@@ -290,7 +289,7 @@ describe('lists-wrappers', () => {
 
     it('fails in fromParagraphs mode when any target is already a list item', () => {
       const blocks = [makeBlockCandidate('p1'), makeBlockCandidate('p2', 'listItem')];
-      vi.mocked(resolveBlocksInRange).mockReturnValueOnce(blocks as any);
+      (resolveBlocksInRange as any).mockReturnValueOnce(blocks as any);
 
       const result = listsCreateWrapper(editor, {
         mode: 'fromParagraphs',
@@ -306,7 +305,7 @@ describe('lists-wrappers', () => {
 
     it('returns dry-run result without mutations', () => {
       const block = makeBlockCandidate('p1', 'paragraph');
-      vi.mocked(resolveBlock).mockReturnValueOnce(block as any);
+      (resolveBlock as any).mockReturnValueOnce(block as any);
 
       const result = listsCreateWrapper(
         editor,
@@ -344,8 +343,8 @@ describe('lists-wrappers', () => {
         address: { kind: 'block', nodeType: 'listItem', nodeId: 'prev-item' },
       });
 
-      vi.mocked(resolveBlock).mockReturnValueOnce(block as any);
-      vi.mocked(getAllListItemProjections).mockReturnValueOnce([previous] as any);
+      (resolveBlock as any).mockReturnValueOnce(block as any);
+      (getAllListItemProjections as any).mockReturnValueOnce([previous] as any);
 
       const result = listsCreateWrapper(editor, {
         mode: 'empty',
@@ -371,9 +370,9 @@ describe('lists-wrappers', () => {
   describe('listsAttachWrapper', () => {
     it('attaches paragraphs to an existing list', () => {
       const attachTo = makeProjection({ numId: 5, level: 2 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(attachTo);
+      (resolveListItem as any).mockReturnValueOnce(attachTo);
       const block = makeBlockCandidate('p2', 'paragraph');
-      vi.mocked(resolveBlock).mockReturnValueOnce(block as any);
+      (resolveBlock as any).mockReturnValueOnce(block as any);
 
       const result = listsAttachWrapper(editor, {
         target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
@@ -384,9 +383,9 @@ describe('lists-wrappers', () => {
 
     it('fails when target paragraphs are already list items', () => {
       const attachTo = makeProjection({ numId: 5 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(attachTo);
+      (resolveListItem as any).mockReturnValueOnce(attachTo);
       const block = makeBlockCandidate('p2', 'listItem');
-      vi.mocked(resolveBlock).mockReturnValueOnce(block as any);
+      (resolveBlock as any).mockReturnValueOnce(block as any);
 
       const result = listsAttachWrapper(editor, {
         target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
@@ -398,7 +397,7 @@ describe('lists-wrappers', () => {
 
     it('fails when attachTo has no numId', () => {
       const attachTo = makeProjection({ numId: undefined as any });
-      vi.mocked(resolveListItem).mockReturnValueOnce(attachTo);
+      (resolveListItem as any).mockReturnValueOnce(attachTo);
 
       const result = listsAttachWrapper(editor, {
         target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
@@ -416,7 +415,7 @@ describe('lists-wrappers', () => {
   describe('listsDetachWrapper', () => {
     it('detaches a list item to a plain paragraph', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsDetachWrapper(editor, { target: proj.address });
       expect(result.success).toBe(true);
@@ -425,7 +424,7 @@ describe('lists-wrappers', () => {
 
     it('returns dry-run result without mutations', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsDetachWrapper(editor, { target: proj.address }, { dryRun: true });
       expect(result.success).toBe(true);
@@ -434,7 +433,7 @@ describe('lists-wrappers', () => {
 
     it('rejects tracked mode', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
       listsDetachWrapper(editor, { target: proj.address });
       expect(rejectTrackedMode).toHaveBeenCalledWith('lists.detach', undefined);
     });
@@ -451,14 +450,14 @@ describe('lists-wrappers', () => {
         numId: 1,
         address: { kind: 'block', nodeType: 'listItem', nodeId: 'adj-first' },
       });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanJoin).mockReturnValueOnce({ canJoin: true });
-      vi.mocked(findAdjacentSequence).mockReturnValueOnce({
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanJoin as any).mockReturnValueOnce({ canJoin: true });
+      (findAdjacentSequence as any).mockReturnValueOnce({
         sequence: [adjAnchor],
         numId: 1,
         abstractNumId: 10,
       } as any);
-      vi.mocked(getContiguousSequence).mockReturnValueOnce([proj]);
+      (getContiguousSequence as any).mockReturnValueOnce([proj]);
 
       const result = listsJoinWrapper(editor, { target: proj.address, direction: 'withPrevious' });
       expect(result.success).toBe(true);
@@ -471,17 +470,17 @@ describe('lists-wrappers', () => {
         numId: 1,
         address: { kind: 'block', nodeType: 'listItem', nodeId: 'target-first' },
       });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanJoin).mockReturnValueOnce({ canJoin: true });
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanJoin as any).mockReturnValueOnce({ canJoin: true });
       const nextItems = [
         makeProjection({ numId: 2, address: { kind: 'block', nodeType: 'listItem', nodeId: 'next' } }),
       ];
-      vi.mocked(findAdjacentSequence).mockReturnValueOnce({
+      (findAdjacentSequence as any).mockReturnValueOnce({
         sequence: nextItems,
         numId: 2,
         abstractNumId: 10,
       } as any);
-      vi.mocked(getContiguousSequence).mockReturnValueOnce([targetAnchor, proj]);
+      (getContiguousSequence as any).mockReturnValueOnce([targetAnchor, proj]);
 
       const result = listsJoinWrapper(editor, { target: proj.address, direction: 'withNext' });
       expect(result.success).toBe(true);
@@ -490,8 +489,8 @@ describe('lists-wrappers', () => {
 
     it('fails when canJoin is false', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanJoin).mockReturnValueOnce({ canJoin: false, reason: 'NO_ADJACENT_SEQUENCE' });
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanJoin as any).mockReturnValueOnce({ canJoin: false, reason: 'NO_ADJACENT_SEQUENCE' });
 
       const result = listsJoinWrapper(editor, { target: proj.address, direction: 'withNext' });
       expect(result.success).toBe(false);
@@ -504,14 +503,14 @@ describe('lists-wrappers', () => {
         numId: 1,
         address: { kind: 'block', nodeType: 'listItem', nodeId: 'adj-first' },
       });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanJoin).mockReturnValueOnce({ canJoin: true });
-      vi.mocked(findAdjacentSequence).mockReturnValueOnce({
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanJoin as any).mockReturnValueOnce({ canJoin: true });
+      (findAdjacentSequence as any).mockReturnValueOnce({
         sequence: [adjAnchor],
         numId: 1,
         abstractNumId: 10,
       } as any);
-      vi.mocked(getContiguousSequence).mockReturnValueOnce([proj]);
+      (getContiguousSequence as any).mockReturnValueOnce([proj]);
 
       const result = listsJoinWrapper(editor, { target: proj.address, direction: 'withPrevious' }, { dryRun: true });
       expect(result.success).toBe(true);
@@ -527,10 +526,10 @@ describe('lists-wrappers', () => {
   describe('listsSeparateWrapper', () => {
     it('separates a sequence at the target', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(isFirstInSequence).mockReturnValueOnce(false);
-      vi.mocked(getAbstractNumId).mockReturnValueOnce(10);
-      vi.mocked(getSequenceFromTarget).mockReturnValueOnce([proj]);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (isFirstInSequence as any).mockReturnValueOnce(false);
+      (getAbstractNumId as any).mockReturnValueOnce(10);
+      (getSequenceFromTarget as any).mockReturnValueOnce([proj]);
 
       const result = listsSeparateWrapper(editor, { target: proj.address });
       expect(result.success).toBe(true);
@@ -540,8 +539,8 @@ describe('lists-wrappers', () => {
 
     it('returns NO_OP when target is first in sequence', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(isFirstInSequence).mockReturnValueOnce(true);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (isFirstInSequence as any).mockReturnValueOnce(true);
 
       const result = listsSeparateWrapper(editor, { target: proj.address });
       expect(result.success).toBe(false);
@@ -550,10 +549,10 @@ describe('lists-wrappers', () => {
 
     it('returns dry-run result', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(isFirstInSequence).mockReturnValueOnce(false);
-      vi.mocked(getAbstractNumId).mockReturnValueOnce(10);
-      vi.mocked(getSequenceFromTarget).mockReturnValueOnce([proj]);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (isFirstInSequence as any).mockReturnValueOnce(false);
+      (getAbstractNumId as any).mockReturnValueOnce(10);
+      (getSequenceFromTarget as any).mockReturnValueOnce([proj]);
 
       const result = listsSeparateWrapper(editor, { target: proj.address }, { dryRun: true });
       expect(result.success).toBe(true);
@@ -568,7 +567,7 @@ describe('lists-wrappers', () => {
   describe('listsSetLevelWrapper', () => {
     it('sets the level successfully', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetLevelWrapper(editor, { target: proj.address, level: 2 });
       expect(result.success).toBe(true);
@@ -576,7 +575,7 @@ describe('lists-wrappers', () => {
 
     it('returns NO_OP when already at requested level', () => {
       const proj = makeProjection({ numId: 1, level: 3 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetLevelWrapper(editor, { target: proj.address, level: 3 });
       expect(result.success).toBe(false);
@@ -585,7 +584,7 @@ describe('lists-wrappers', () => {
 
     it('returns LEVEL_OUT_OF_RANGE for invalid level', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetLevelWrapper(editor, { target: proj.address, level: 9 });
       expect(result.success).toBe(false);
@@ -594,8 +593,8 @@ describe('lists-wrappers', () => {
 
     it('returns LEVEL_OUT_OF_RANGE when definition missing', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(ListHelpers.hasListDefinition).mockReturnValueOnce(false);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (ListHelpers.hasListDefinition as any).mockReturnValueOnce(false);
 
       const result = listsSetLevelWrapper(editor, { target: proj.address, level: 5 });
       expect(result.success).toBe(false);
@@ -610,7 +609,7 @@ describe('lists-wrappers', () => {
   describe('listsIndentWrapper', () => {
     it('increments level by 1', () => {
       const proj = makeProjection({ numId: 1, level: 2 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsIndentWrapper(editor, { target: proj.address });
       expect(result.success).toBe(true);
@@ -618,7 +617,7 @@ describe('lists-wrappers', () => {
 
     it('rejects tracked mode', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
       listsIndentWrapper(editor, { target: proj.address });
       expect(rejectTrackedMode).toHaveBeenCalledWith('lists.indent', undefined);
     });
@@ -627,7 +626,7 @@ describe('lists-wrappers', () => {
   describe('listsOutdentWrapper', () => {
     it('decrements level by 1', () => {
       const proj = makeProjection({ numId: 1, level: 2 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsOutdentWrapper(editor, { target: proj.address });
       expect(result.success).toBe(true);
@@ -635,7 +634,7 @@ describe('lists-wrappers', () => {
 
     it('returns NO_OP at level 0', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsOutdentWrapper(editor, { target: proj.address });
       expect(result.success).toBe(false);
@@ -650,8 +649,8 @@ describe('lists-wrappers', () => {
   describe('listsSetValueWrapper', () => {
     it('sets value on first-in-sequence item', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(isFirstInSequence).mockReturnValueOnce(true);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (isFirstInSequence as any).mockReturnValueOnce(true);
 
       const result = listsSetValueWrapper(editor, { target: proj.address, value: 5 });
       expect(result.success).toBe(true);
@@ -660,10 +659,10 @@ describe('lists-wrappers', () => {
 
     it('separates then sets value for mid-sequence item', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(isFirstInSequence).mockReturnValueOnce(false);
-      vi.mocked(getAbstractNumId).mockReturnValueOnce(10);
-      vi.mocked(getSequenceFromTarget).mockReturnValueOnce([proj]);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (isFirstInSequence as any).mockReturnValueOnce(false);
+      (getAbstractNumId as any).mockReturnValueOnce(10);
+      (getSequenceFromTarget as any).mockReturnValueOnce([proj]);
 
       const result = listsSetValueWrapper(editor, { target: proj.address, value: 3 });
       expect(result.success).toBe(true);
@@ -673,7 +672,7 @@ describe('lists-wrappers', () => {
 
     it('removes override when value is null', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
       editor.converter.numbering.definitions[1] = {
         elements: [{ name: 'w:lvlOverride', attributes: { 'w:ilvl': '0' } }],
       };
@@ -685,7 +684,7 @@ describe('lists-wrappers', () => {
 
     it('returns NO_OP when removing an absent override', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
       editor.converter.numbering.definitions[1] = {
         elements: [{ name: 'w:abstractNumId', attributes: { 'w:val': '10' } }],
       };
@@ -698,7 +697,7 @@ describe('lists-wrappers', () => {
 
     it('returns dry-run result', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetValueWrapper(editor, { target: proj.address, value: 5 }, { dryRun: true });
       expect(result.success).toBe(true);
@@ -707,7 +706,7 @@ describe('lists-wrappers', () => {
 
     it('fails when target has no numId', () => {
       const proj = makeProjection({ numId: undefined as any });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetValueWrapper(editor, { target: proj.address, value: 1 });
       expect(result.success).toBe(false);
@@ -722,13 +721,13 @@ describe('lists-wrappers', () => {
   describe('listsContinuePreviousWrapper', () => {
     it('continues from previous compatible sequence', () => {
       const proj = makeProjection({ numId: 2, level: 0 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanContinuePrevious).mockReturnValueOnce({ canContinue: true });
-      vi.mocked(findPreviousCompatibleSequence).mockReturnValueOnce({
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanContinuePrevious as any).mockReturnValueOnce({ canContinue: true });
+      (findPreviousCompatibleSequence as any).mockReturnValueOnce({
         sequence: [makeProjection({ numId: 1 })],
         numId: 1,
       } as any);
-      vi.mocked(getContiguousSequence).mockReturnValueOnce([proj]);
+      (getContiguousSequence as any).mockReturnValueOnce([proj]);
 
       const result = listsContinuePreviousWrapper(editor, { target: proj.address });
       expect(result.success).toBe(true);
@@ -737,8 +736,8 @@ describe('lists-wrappers', () => {
 
     it('fails with NO_COMPATIBLE_PREVIOUS when no match', () => {
       const proj = makeProjection({ numId: 2 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanContinuePrevious).mockReturnValueOnce({ canContinue: false, reason: 'NO_PREVIOUS_LIST' });
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanContinuePrevious as any).mockReturnValueOnce({ canContinue: false, reason: 'NO_PREVIOUS_LIST' });
 
       const result = listsContinuePreviousWrapper(editor, { target: proj.address });
       expect(result.success).toBe(false);
@@ -747,8 +746,8 @@ describe('lists-wrappers', () => {
 
     it('fails with ALREADY_CONTINUOUS when already continuous', () => {
       const proj = makeProjection({ numId: 2 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanContinuePrevious).mockReturnValueOnce({ canContinue: false, reason: 'ALREADY_CONTINUOUS' });
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanContinuePrevious as any).mockReturnValueOnce({ canContinue: false, reason: 'ALREADY_CONTINUOUS' });
 
       const result = listsContinuePreviousWrapper(editor, { target: proj.address });
       expect(result.success).toBe(false);
@@ -757,9 +756,9 @@ describe('lists-wrappers', () => {
 
     it('returns dry-run result', () => {
       const proj = makeProjection({ numId: 2 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(evaluateCanContinuePrevious).mockReturnValueOnce({ canContinue: true });
-      vi.mocked(findPreviousCompatibleSequence).mockReturnValueOnce({ sequence: [], numId: 1 } as any);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (evaluateCanContinuePrevious as any).mockReturnValueOnce({ canContinue: true });
+      (findPreviousCompatibleSequence as any).mockReturnValueOnce({ sequence: [], numId: 1 } as any);
 
       const result = listsContinuePreviousWrapper(editor, { target: proj.address }, { dryRun: true });
       expect(result.success).toBe(true);
@@ -774,8 +773,8 @@ describe('lists-wrappers', () => {
   describe('listsSetLevelRestartWrapper', () => {
     it('sets lvlRestart at definition scope', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(getAbstractNumId).mockReturnValueOnce(10);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (getAbstractNumId as any).mockReturnValueOnce(10);
 
       const result = listsSetLevelRestartWrapper(editor, {
         target: proj.address,
@@ -789,7 +788,7 @@ describe('lists-wrappers', () => {
 
     it('sets lvlRestart at instance scope', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetLevelRestartWrapper(editor, {
         target: proj.address,
@@ -803,8 +802,8 @@ describe('lists-wrappers', () => {
 
     it('defaults to definition scope', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
-      vi.mocked(getAbstractNumId).mockReturnValueOnce(10);
+      (resolveListItem as any).mockReturnValueOnce(proj);
+      (getAbstractNumId as any).mockReturnValueOnce(10);
 
       listsSetLevelRestartWrapper(editor, { target: proj.address, level: 0, restartAfterLevel: null });
       expect(ListHelpers.setLvlRestartOnAbstract).toHaveBeenCalled();
@@ -812,7 +811,7 @@ describe('lists-wrappers', () => {
 
     it('fails with LEVEL_OUT_OF_RANGE for invalid level', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetLevelRestartWrapper(editor, { target: proj.address, level: 99, restartAfterLevel: 0 });
       expect(result.success).toBe(false);
@@ -821,7 +820,7 @@ describe('lists-wrappers', () => {
 
     it('returns dry-run result', () => {
       const proj = makeProjection({ numId: 1 });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsSetLevelRestartWrapper(
         editor,
@@ -844,7 +843,7 @@ describe('lists-wrappers', () => {
   describe('listsConvertToTextWrapper', () => {
     it('converts a list item to plain text', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsConvertToTextWrapper(editor, { target: proj.address });
       expect(result.success).toBe(true);
@@ -853,7 +852,7 @@ describe('lists-wrappers', () => {
 
     it('prepends marker text when includeMarker is true', () => {
       const proj = makeProjection({ marker: '1.' });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsConvertToTextWrapper(editor, { target: proj.address, includeMarker: true });
       expect(result.success).toBe(true);
@@ -862,7 +861,7 @@ describe('lists-wrappers', () => {
 
     it('does not prepend marker text when includeMarker is false', () => {
       const proj = makeProjection({ marker: '1.' });
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       listsConvertToTextWrapper(editor, { target: proj.address, includeMarker: false });
       expect(editor.state.tr.insertText).not.toHaveBeenCalled();
@@ -870,7 +869,7 @@ describe('lists-wrappers', () => {
 
     it('returns dry-run result without mutations', () => {
       const proj = makeProjection();
-      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      (resolveListItem as any).mockReturnValueOnce(proj);
 
       const result = listsConvertToTextWrapper(editor, { target: proj.address }, { dryRun: true });
       expect(result.success).toBe(true);

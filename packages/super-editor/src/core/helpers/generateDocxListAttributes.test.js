@@ -1,13 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
-
+import { describe, it, expect, mock } from 'bun:test';
 const ids = ['a1', 'b2', 'c3', 'd4', 'e5'];
-const generateDocxRandomIdMock = vi.hoisted(() => vi.fn(() => ids.shift() || 'ffff'));
+const generateDocxRandomIdMock = mock(() => ids.shift() || 'ffff');
 
-vi.mock('./generateDocxRandomId', () => ({
+mock.module('./generateDocxRandomId', () => ({
   generateDocxRandomId: generateDocxRandomIdMock,
 }));
 
-import { generateDocxListAttributes } from './generateDocxListAttributes.js';
+const { generateDocxListAttributes } = await import('./generateDocxListAttributes.js');
 
 describe('generateDocxListAttributes', () => {
   it('creates paragraph properties for the requested list type', () => {

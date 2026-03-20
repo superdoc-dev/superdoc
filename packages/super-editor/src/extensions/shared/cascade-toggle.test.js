@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { createCascadeToggleCommands } from './cascade-toggle.js';
 
 const invoke = (command, commands) => command()({ commands });
@@ -10,9 +10,9 @@ describe('createCascadeToggleCommands', () => {
 
   it('provides default set/unset/toggle command names', () => {
     const commands = {
-      setMark: vi.fn(),
-      unsetMark: vi.fn(),
-      toggleMarkCascade: vi.fn(),
+      setMark: mock(),
+      unsetMark: mock(),
+      toggleMarkCascade: mock(),
     };
 
     const { setFoo, unsetFoo, toggleFoo } = createCascadeToggleCommands({ markName: 'foo' });
@@ -28,9 +28,9 @@ describe('createCascadeToggleCommands', () => {
 
   it('supports custom command names', () => {
     const commands = {
-      setMark: vi.fn(),
-      unsetMark: vi.fn(),
-      toggleMarkCascade: vi.fn(),
+      setMark: mock(),
+      unsetMark: mock(),
+      toggleMarkCascade: mock(),
     };
 
     const cmds = createCascadeToggleCommands({
@@ -51,11 +51,11 @@ describe('createCascadeToggleCommands', () => {
 
   it('passes through cascade options only when provided', () => {
     const commands = {
-      setMark: vi.fn(),
-      unsetMark: vi.fn(),
-      toggleMarkCascade: vi.fn(),
+      setMark: mock(),
+      unsetMark: mock(),
+      toggleMarkCascade: mock(),
     };
-    const isNegation = vi.fn();
+    const isNegation = mock();
 
     const { toggleFoo } = createCascadeToggleCommands({
       markName: 'foo',
@@ -74,7 +74,7 @@ describe('createCascadeToggleCommands', () => {
   });
 
   it('omits undefined cascade options', () => {
-    const commands = { toggleMarkCascade: vi.fn(), setMark: vi.fn(), unsetMark: vi.fn() };
+    const commands = { toggleMarkCascade: mock(), setMark: mock(), unsetMark: mock() };
 
     const { toggleFoo } = createCascadeToggleCommands({
       markName: 'foo',

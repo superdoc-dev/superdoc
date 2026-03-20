@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ensureSectionLayoutDefaults } from '@converter/exporter.js';
 
 const DEFAULT_WIDTH = '12240';

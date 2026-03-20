@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { backspaceSkipEmptyRun } from './backspaceSkipEmptyRun.js';
@@ -66,7 +66,7 @@ describe('backspaceSkipEmptyRun', () => {
     ]);
 
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 2) }); // inside first run
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const ok = backspaceSkipEmptyRun()({ state, dispatch });
 
     expect(ok).toBe(false);

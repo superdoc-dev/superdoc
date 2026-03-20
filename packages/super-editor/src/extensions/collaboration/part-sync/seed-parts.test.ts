@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as Y from 'yjs';
 import { seedPartsFromEditor } from './seed-parts.js';
 import { decodeYjsToEnvelope } from './json-crdt.js';

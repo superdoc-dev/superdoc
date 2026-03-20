@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-vi.mock('./helpers/chainableEditorState.js', () => ({
-  chainableEditorState: vi.fn(() => 'mocked-chain-state'),
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+mock.module('./helpers/chainableEditorState.js', () => ({
+  chainableEditorState: mock(() => 'mocked-chain-state'),
 }));
 
 import { chainableEditorState } from './helpers/chainableEditorState.js';
-import { CommandService } from './CommandService.js';
+const { CommandService } = await import('./CommandService.js');
 
 describe('CommandService', () => {
   let editor;
@@ -14,12 +13,12 @@ describe('CommandService', () => {
 
   beforeEach(() => {
     tr = {
-      getMeta: vi.fn(() => false),
-      setMeta: vi.fn(),
+      getMeta: mock(() => false),
+      setMeta: mock(),
     };
 
     view = {
-      dispatch: vi.fn(),
+      dispatch: mock(),
     };
 
     editor = {
@@ -29,13 +28,11 @@ describe('CommandService', () => {
     };
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  afterEach(() => {});
 
   it('executes a command and dispatches when dispatch is allowed', () => {
     const commandResult = 'expected-result';
-    const rawCommand = vi.fn((arg) => {
+    const rawCommand = mock((arg) => {
       expect(arg).toBe('payload');
       return (props) => {
         expect(props.editor).toBe(editor);
@@ -60,9 +57,9 @@ describe('CommandService', () => {
   });
 
   it('skips dispatch when preventDispatch meta is set', () => {
-    tr.getMeta = vi.fn((key) => (key === 'preventDispatch' ? true : undefined));
+    tr.getMeta = mock((key) => (key === 'preventDispatch' ? true : undefined));
 
-    const rawCommand = vi.fn(() => {
+    const rawCommand = mock(() => {
       return () => true;
     });
 
@@ -77,7 +74,7 @@ describe('CommandService', () => {
   });
 
   it('creates chainable commands that dispatch once and return aggregated result', () => {
-    const rawCommand = vi.fn(() => {
+    const rawCommand = mock(() => {
       return () => true;
     });
 
@@ -97,7 +94,7 @@ describe('CommandService', () => {
   });
 
   it('chain created within can() does not dispatch', () => {
-    const rawCommand = vi.fn(() => {
+    const rawCommand = mock(() => {
       return (props) => {
         expect(props.dispatch).toBeUndefined();
         return true;
@@ -136,11 +133,11 @@ describe('CommandService', () => {
    */
   describe('Headless mode dispatch behavior', () => {
     it('falls back to editor.dispatch when view is null (headless mode)', () => {
-      const editorDispatch = vi.fn();
+      const editorDispatch = mock();
       editor.view = null;
       editor.dispatch = editorDispatch;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -155,11 +152,11 @@ describe('CommandService', () => {
     });
 
     it('falls back to editor.dispatch when view is undefined (headless mode)', () => {
-      const editorDispatch = vi.fn();
+      const editorDispatch = mock();
       editor.view = undefined;
       editor.dispatch = editorDispatch;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -174,11 +171,11 @@ describe('CommandService', () => {
     });
 
     it('falls back to editor.dispatch when view.dispatch is not a function', () => {
-      const editorDispatch = vi.fn();
+      const editorDispatch = mock();
       editor.view = {}; // view exists but has no dispatch method
       editor.dispatch = editorDispatch;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -197,7 +194,7 @@ describe('CommandService', () => {
     let consoleWarnSpy;
 
     beforeEach(() => {
-      consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -207,7 +204,7 @@ describe('CommandService', () => {
     it('skips dispatch when editor.isDestroyed is true', () => {
       editor.isDestroyed = true;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -225,7 +222,7 @@ describe('CommandService', () => {
     it('skips chain dispatch when editor.isDestroyed is true', () => {
       editor.isDestroyed = true;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -244,9 +241,9 @@ describe('CommandService', () => {
 
     it('returns false when editor is destroyed with preventDispatch', () => {
       editor.isDestroyed = true;
-      tr.getMeta = vi.fn((key) => (key === 'preventDispatch' ? true : undefined));
+      tr.getMeta = mock((key) => (key === 'preventDispatch' ? true : undefined));
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -262,14 +259,14 @@ describe('CommandService', () => {
     });
 
     it('handles editor becoming destroyed during chain execution', () => {
-      const rawCommand1 = vi.fn(() => {
+      const rawCommand1 = mock(() => {
         return () => {
           editor.isDestroyed = true;
           return true;
         };
       });
 
-      const rawCommand2 = vi.fn(() => {
+      const rawCommand2 = mock(() => {
         return () => true;
       });
 
@@ -295,7 +292,7 @@ describe('CommandService', () => {
     let consoleWarnSpy;
 
     beforeEach(() => {
-      consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -306,7 +303,7 @@ describe('CommandService', () => {
       editor.view = null;
       editor.dispatch = undefined;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -326,7 +323,7 @@ describe('CommandService', () => {
       editor.view = null;
       editor.dispatch = undefined;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -348,11 +345,11 @@ describe('CommandService', () => {
   describe('Error handling during dispatch', () => {
     it('wraps errors that occur during view.dispatch with context', () => {
       const dispatchError = new Error('Dispatch failed');
-      view.dispatch = vi.fn(() => {
+      view.dispatch = mock(() => {
         throw dispatchError;
       });
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -368,11 +365,11 @@ describe('CommandService', () => {
     it('wraps errors that occur during editor.dispatch in headless mode', () => {
       const dispatchError = new Error('Headless dispatch failed');
       editor.view = null;
-      editor.dispatch = vi.fn(() => {
+      editor.dispatch = mock(() => {
         throw dispatchError;
       });
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -387,11 +384,11 @@ describe('CommandService', () => {
 
     it('wraps errors that occur during chain dispatch', () => {
       const dispatchError = new Error('Chain dispatch failed');
-      view.dispatch = vi.fn(() => {
+      view.dispatch = mock(() => {
         throw dispatchError;
       });
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -410,11 +407,11 @@ describe('CommandService', () => {
     it('wraps errors that occur during chain dispatch in headless mode', () => {
       const dispatchError = new Error('Headless chain dispatch failed');
       editor.view = null;
-      editor.dispatch = vi.fn(() => {
+      editor.dispatch = mock(() => {
         throw dispatchError;
       });
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -433,15 +430,15 @@ describe('CommandService', () => {
 
   describe('Chain dispatch in headless mode', () => {
     it('successfully dispatches chain using editor.dispatch when view is null', () => {
-      const editorDispatch = vi.fn();
+      const editorDispatch = mock();
       editor.view = null;
       editor.dispatch = editorDispatch;
 
-      const rawCommand1 = vi.fn(() => {
+      const rawCommand1 = mock(() => {
         return () => true;
       });
 
-      const rawCommand2 = vi.fn(() => {
+      const rawCommand2 = mock(() => {
         return () => true;
       });
 
@@ -464,11 +461,11 @@ describe('CommandService', () => {
     });
 
     it('successfully dispatches chain using editor.dispatch when view.dispatch is not a function', () => {
-      const editorDispatch = vi.fn();
+      const editorDispatch = mock();
       editor.view = { someOtherProperty: 'value' };
       editor.dispatch = editorDispatch;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -485,11 +482,11 @@ describe('CommandService', () => {
     });
 
     it('respects shouldDispatch=false in chain even in headless mode', () => {
-      const editorDispatch = vi.fn();
+      const editorDispatch = mock();
       editor.view = null;
       editor.dispatch = editorDispatch;
 
-      const rawCommand = vi.fn(() => {
+      const rawCommand = mock(() => {
         return () => true;
       });
 
@@ -506,27 +503,27 @@ describe('CommandService', () => {
     });
 
     it('handles concurrent command execution in headless mode', () => {
-      const editorDispatch = vi.fn();
+      const editorDispatch = mock();
       editor.view = null;
       editor.dispatch = editorDispatch;
 
       const tr1 = {
-        getMeta: vi.fn(() => false),
-        setMeta: vi.fn(),
+        getMeta: mock(() => false),
+        setMeta: mock(),
       };
 
       const tr2 = {
-        getMeta: vi.fn(() => false),
-        setMeta: vi.fn(),
+        getMeta: mock(() => false),
+        setMeta: mock(),
       };
 
       editor.state = { tr: tr1 };
 
-      const rawCommand1 = vi.fn(() => {
+      const rawCommand1 = mock(() => {
         return () => true;
       });
 
-      const rawCommand2 = vi.fn(() => {
+      const rawCommand2 = mock(() => {
         return () => true;
       });
 

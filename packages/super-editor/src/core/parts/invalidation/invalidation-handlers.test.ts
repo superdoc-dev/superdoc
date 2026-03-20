@@ -1,13 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { registerStaticInvalidationHandlers, registerHeaderFooterInvalidation } from './invalidation-handlers.js';
 import { applyPartInvalidation, clearInvalidationHandlers } from './part-invalidation-registry.js';
 import type { PartChangedEvent } from '../types.js';
 
 function createMockEditor() {
-  const tr = { setMeta: vi.fn() };
+  const tr = { setMeta: mock() };
   return {
     state: { tr },
-    view: { dispatch: vi.fn() },
+    view: { dispatch: mock() },
   };
 }
 

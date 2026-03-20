@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean) => {
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean) => {
     const changed = handler();
     return {
       success: true,
@@ -21,7 +21,7 @@ vi.mock('./plan-wrappers.js', () => ({
   }),
 }));
 
-import { paragraphsSetIndentationWrapper, paragraphsSetStyleWrapper } from './paragraphs-wrappers.js';
+const { paragraphsSetIndentationWrapper, paragraphsSetStyleWrapper } = await import('./paragraphs-wrappers.js');
 
 type MockNode = {
   type: { name: 'paragraph' | 'text' };
@@ -59,10 +59,10 @@ function makeEditor(
   textMarks: MockMark[] = [],
 ): {
   editor: Editor;
-  setNodeMarkup: ReturnType<typeof vi.fn>;
-  removeMark: ReturnType<typeof vi.fn>;
-  addMark: ReturnType<typeof vi.fn>;
-  dispatch: ReturnType<typeof vi.fn>;
+  setNodeMarkup: ReturnType<typeof mock>;
+  removeMark: ReturnType<typeof mock>;
+  addMark: ReturnType<typeof mock>;
+  dispatch: ReturnType<typeof mock>;
 } {
   const paragraphNode = createParagraphNode({
     paraId: 'p1',
@@ -79,9 +79,9 @@ function makeEditor(
     marks: textMarks,
   };
 
-  const setNodeMarkup = vi.fn().mockReturnThis();
-  const removeMark = vi.fn().mockReturnThis();
-  const addMark = vi.fn().mockReturnThis();
+  const setNodeMarkup = mock().mockReturnThis();
+  const removeMark = mock().mockReturnThis();
+  const addMark = mock().mockReturnThis();
   const tr = {
     setNodeMarkup,
     removeMark,
@@ -111,11 +111,11 @@ function makeEditor(
 
   const editor = {
     state: { doc, tr },
-    dispatch: vi.fn(),
+    dispatch: mock(),
     commands: {},
   } as unknown as Editor;
 
-  return { editor, setNodeMarkup, removeMark, addMark, dispatch: editor.dispatch as ReturnType<typeof vi.fn> };
+  return { editor, setNodeMarkup, removeMark, addMark, dispatch: editor.dispatch as ReturnType<typeof mock> };
 }
 
 describe('paragraphsSetIndentationWrapper', () => {

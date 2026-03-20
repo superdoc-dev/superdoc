@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 // @ts-check
-import { describe, it, expect } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { EditorState, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';

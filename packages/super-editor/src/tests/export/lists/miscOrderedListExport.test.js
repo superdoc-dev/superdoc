@@ -1,5 +1,5 @@
+import { describe, it, expect, beforeAll } from 'bun:test';
 // prettier-ignore
-import { expect } from 'vitest';
 import { getTextFromNode, getExportedResult, testListNodes } from '../export-helpers/index';
 
 describe('[orderedlist_interrupted1.docx] interrupted ordered list tests', async () => {

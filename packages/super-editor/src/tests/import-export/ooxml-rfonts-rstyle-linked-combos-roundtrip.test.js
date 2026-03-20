@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import { getTestDataByFileName } from '../helpers/helpers.js';
 import { getExportedResult } from '../export/export-helpers/index.js';
 

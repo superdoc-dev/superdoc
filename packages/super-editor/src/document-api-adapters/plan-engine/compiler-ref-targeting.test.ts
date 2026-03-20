@@ -1,28 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { MutationStep } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
-import { compilePlan, STEP_INTERACTION_MATRIX, MATRIX_EXEMPT_OPS } from './compiler.js';
-import { PlanError } from './errors.js';
+const { compilePlan, STEP_INTERACTION_MATRIX, MATRIX_EXEMPT_OPS } = await import('./compiler.js');
+const { PlanError } = await import('./errors.js');
 
-const mockedDeps = vi.hoisted(() => ({
-  getBlockIndex: vi.fn(),
-  resolveTextRangeInBlock: vi.fn(),
-  captureRunsInRange: vi.fn(() => ({ runs: [], isUniform: true })),
-  getRevision: vi.fn(() => '0'),
-  executeTextSelector: vi.fn(() => ({ matches: [], context: [], total: 0 })),
-  executeBlockSelector: vi.fn(() => ({ matches: [], context: [], total: 0 })),
-  hasStepExecutor: vi.fn(() => true),
-}));
+const mockedDeps = {
+  getBlockIndex: mock(),
+  resolveTextRangeInBlock: mock(),
+  captureRunsInRange: mock(() => ({ runs: [], isUniform: true })),
+  getRevision: mock(() => '0'),
+  executeTextSelector: mock(() => ({ matches: [], context: [], total: 0 })),
+  executeBlockSelector: mock(() => ({ matches: [], context: [], total: 0 })),
+  hasStepExecutor: mock(() => true),
+};
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-vi.mock('../helpers/text-offset-resolver.js', () => ({
+mock.module('../helpers/text-offset-resolver.js', () => ({
   resolveTextRangeInBlock: mockedDeps.resolveTextRangeInBlock,
 }));
 
-vi.mock('./style-resolver.js', async (importOriginal) => {
+mock.module('./style-resolver.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./style-resolver.js')>();
   return {
     ...original,
@@ -30,19 +30,19 @@ vi.mock('./style-resolver.js', async (importOriginal) => {
   };
 });
 
-vi.mock('./revision-tracker.js', () => ({
+mock.module('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
 }));
 
-vi.mock('../find/text-strategy.js', () => ({
+mock.module('../find/text-strategy.js', () => ({
   executeTextSelector: mockedDeps.executeTextSelector,
 }));
 
-vi.mock('../find/block-strategy.js', () => ({
+mock.module('../find/block-strategy.js', () => ({
   executeBlockSelector: mockedDeps.executeBlockSelector,
 }));
 
-vi.mock('./executor-registry.js', () => ({
+mock.module('./executor-registry.js', () => ({
   hasStepExecutor: mockedDeps.hasStepExecutor,
 }));
 
@@ -50,7 +50,7 @@ function makeEditor(): Editor {
   return {
     state: {
       doc: {
-        textBetween: vi.fn(() => 'abcdefghij'),
+        textBetween: mock(() => 'abcdefghij'),
       },
     },
   } as unknown as Editor;
@@ -62,7 +62,6 @@ function encodeTextRefPayload(payload: Record<string, unknown>): string {
 
 describe('compilePlan ref-targeting semantics', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('0');
     mockedDeps.resolveTextRangeInBlock.mockImplementation(
       (_node: unknown, pos: number, range: { start: number; end: number }) => ({
@@ -99,7 +98,6 @@ describe('compilePlan ref-targeting semantics', () => {
 
 describe('compilePlan step-op allowlist', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('0');
     mockedDeps.getBlockIndex.mockReturnValue({ candidates: [] });
   });
@@ -161,7 +159,6 @@ describe('compilePlan step-op allowlist', () => {
 
 describe('compilePlan V3 ref resolution', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('0');
     mockedDeps.resolveTextRangeInBlock.mockImplementation(
       (_node: unknown, pos: number, range: { start: number; end: number }) => ({
@@ -436,7 +433,6 @@ describe('compilePlan V3 ref resolution', () => {
 
 describe('compilePlan entity ref rejection', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('0');
     mockedDeps.getBlockIndex.mockReturnValue({ candidates: [] });
   });
@@ -496,7 +492,6 @@ describe('compilePlan entity ref rejection', () => {
 
 describe('compilePlan create-step position validation', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('0');
     mockedDeps.getBlockIndex.mockReturnValue({
       candidates: [{ nodeId: 'p1', pos: 0, end: 12, node: {} }],
@@ -595,7 +590,6 @@ describe('compilePlan create-step position validation', () => {
 
 describe('compilePlan block identity pre-check', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('0');
     mockedDeps.resolveTextRangeInBlock.mockImplementation(
       (_node: unknown, pos: number, range: { start: number; end: number }) => ({
@@ -667,7 +661,6 @@ describe('compilePlan block identity pre-check', () => {
 
 describe('step interaction matrix', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('0');
     mockedDeps.resolveTextRangeInBlock.mockImplementation(
       (_node: unknown, pos: number, range: { start: number; end: number }) => ({
@@ -848,8 +841,8 @@ describe('compilePlan: INVALID_INSERTION_CONTEXT for create ops', () => {
     return {
       state: {
         doc: {
-          textBetween: vi.fn(() => 'abcdefghij'),
-          resolve: vi.fn(() => ({
+          textBetween: mock(() => 'abcdefghij'),
+          resolve: mock(() => ({
             parent: {
               type: {
                 name: parentTypeName,
@@ -1009,8 +1002,8 @@ describe('compilePlan: INVALID_INSERTION_CONTEXT for create ops', () => {
     const editor = {
       state: {
         doc: {
-          textBetween: vi.fn(() => 'abcdefghij'),
-          resolve: vi.fn(() => ({
+          textBetween: mock(() => 'abcdefghij'),
+          resolve: mock(() => ({
             parent: {
               type: {
                 name: 'ordered_container',

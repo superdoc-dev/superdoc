@@ -1,23 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
-import { resolveBlockInsertionPos, resolveCreateAnchor } from './create-insertion.js';
-import { PlanError } from './errors.js';
-import { DocumentApiAdapterError } from '../errors.js';
+const { resolveBlockInsertionPos, resolveCreateAnchor } = await import('./create-insertion.js');
+const { PlanError } = await import('./errors.js');
+const { DocumentApiAdapterError } = await import('../errors.js');
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-const mockedDeps = vi.hoisted(() => ({
-  getBlockIndex: vi.fn(),
-  findBlockByNodeIdOnly: vi.fn(),
-}));
+const mockedDeps = {
+  getBlockIndex: mock(),
+  findBlockByNodeIdOnly: mock(),
+};
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-vi.mock('../helpers/node-address-resolver.js', async (importOriginal) => {
+mock.module('../helpers/node-address-resolver.js', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
@@ -49,9 +49,7 @@ function makeCandidate(overrides: Partial<{ nodeType: string; nodeId: string; po
 // ---------------------------------------------------------------------------
 
 describe('resolveBlockInsertionPos', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('returns candidate.pos for position "before"', () => {
     mockedDeps.getBlockIndex.mockReturnValue({
@@ -111,7 +109,6 @@ describe('resolveBlockInsertionPos', () => {
 
 describe('resolveCreateAnchor', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getBlockIndex.mockReturnValue({ candidates: [], byId: new Map() });
   });
 

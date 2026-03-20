@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { TrackChanges } from './track-changes.js';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { TrackChanges } = await import('./track-changes.js');
 
-vi.mock('../comment/comments-plugin.js', () => ({
+mock.module('../comment/comments-plugin.js', () => ({
   CommentsPluginKey: {
-    getState: vi.fn(),
+    getState: mock(),
   },
 }));
 
-vi.mock('./permission-helpers.js', () => ({
-  collectTrackedChanges: vi.fn(),
+mock.module('./permission-helpers.js', () => ({
+  collectTrackedChanges: mock(),
 }));
 
-vi.mock('./trackChangesHelpers/getTrackChanges.js', () => ({
-  getTrackChanges: vi.fn(),
+mock.module('./trackChangesHelpers/getTrackChanges.js', () => ({
+  getTrackChanges: mock(),
 }));
 
 describe('Track Changes Shared Resolution Commands', () => {
@@ -24,8 +24,6 @@ describe('Track Changes Shared Resolution Commands', () => {
   let mockGetTrackChanges;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
-
     const { CommentsPluginKey } = await import('../comment/comments-plugin.js');
     const { collectTrackedChanges } = await import('./permission-helpers.js');
     const { getTrackChanges } = await import('./trackChangesHelpers/getTrackChanges.js');
@@ -36,12 +34,12 @@ describe('Track Changes Shared Resolution Commands', () => {
     commands = TrackChanges.config.addCommands();
 
     mockCommands = {
-      acceptTrackedChangesBetween: vi.fn().mockReturnValue(true),
-      acceptTrackedChangeById: vi.fn().mockReturnValue(true),
-      acceptTrackedChangeBySelection: vi.fn().mockReturnValue(true),
-      rejectTrackedChangesBetween: vi.fn().mockReturnValue(true),
-      rejectTrackedChangeById: vi.fn().mockReturnValue(true),
-      rejectTrackedChangeOnSelection: vi.fn().mockReturnValue(true),
+      acceptTrackedChangesBetween: mock().mockReturnValue(true),
+      acceptTrackedChangeById: mock().mockReturnValue(true),
+      acceptTrackedChangeBySelection: mock().mockReturnValue(true),
+      rejectTrackedChangesBetween: mock().mockReturnValue(true),
+      rejectTrackedChangeById: mock().mockReturnValue(true),
+      rejectTrackedChangeOnSelection: mock().mockReturnValue(true),
     };
 
     mockState = {

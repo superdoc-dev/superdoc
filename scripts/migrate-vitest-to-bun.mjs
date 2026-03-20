@@ -2,23 +2,9 @@
 /**
  * Migrate super-editor test files from vitest to bun:test.
  *
- * Handles:
- * - Import replacement (vitest → bun:test)
- * - vi.fn() → mock()
- * - vi.spyOn → spyOn
- * - vi.mock() → mock.module() with dynamic import for subject
- * - vi.hoisted(() => ...) → unwrap to plain declaration
- * - vi.mocked(fn) → fn (cast removed)
- * - vi.clearAllMocks() → mock.restore() or remove
- * - vi.restoreAllMocks() → remove
- * - vi.useFakeTimers/runAllTimers → jest.* equivalents
- * - vi.importActual → direct dynamic import
- * - vi.stubGlobal → globalThis assignment
- *
- * Skips files that:
- * - Already use bun:test
- * - Use vi.waitFor, vi.runAllTimersAsync (no bun equivalent, keep on vitest)
- * - Use DOM globals (document, window) without self-contained setup
+ * Two-pass approach:
+ * 1. Simple regex replacements (imports, vi.fn, vi.spyOn, etc.)
+ * 2. Function-call unwrapping for vi.hoisted and vi.stubGlobal using paren matching
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -55,23 +41,9 @@ async function main() {
   for (const file of files) {
     let code = await readFile(file, 'utf8');
 
-    // Already migrated
-    if (code.includes("from 'bun:test'")) {
-      skippedBun++;
-      continue;
-    }
-
-    // Skip files with unsupported patterns
-    if (SKIP_PATTERNS.some((p) => code.includes(p))) {
-      skippedUnsupported++;
-      continue;
-    }
-
-    // Skip DOM-dependent files
-    if (DOM_INDICATORS.some((p) => code.includes(p))) {
-      skippedDom++;
-      continue;
-    }
+    if (code.includes("from 'bun:test'")) { skippedBun++; continue; }
+    if (SKIP_PATTERNS.some(p => code.includes(p))) { skippedUnsupported++; continue; }
+    if (DOM_INDICATORS.some(p => code.includes(p))) { skippedDom++; continue; }
 
     code = migrateFile(code, file);
     await writeFile(file, code);
@@ -85,8 +57,117 @@ async function main() {
   console.log(`Total files: ${files.length}`);
 }
 
+/**
+ * Find the matching closing paren for an opening paren at `start`.
+ * Returns the index of the closing paren, or -1 if not found.
+ */
+function findMatchingParen(code, start) {
+  let depth = 0;
+  let inString = false;
+  let stringChar = '';
+  let inTemplate = false;
+  let templateDepth = 0;
+
+  for (let i = start; i < code.length; i++) {
+    const ch = code[i];
+    const prev = i > 0 ? code[i - 1] : '';
+
+    // Handle string escapes
+    if (prev === '\\' && (inString || inTemplate)) continue;
+
+    if (inString) {
+      if (ch === stringChar) inString = false;
+      continue;
+    }
+
+    if (ch === "'" || ch === '"') {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+
+    if (ch === '`') {
+      inTemplate = !inTemplate;
+      continue;
+    }
+
+    if (inTemplate) continue;
+
+    if (ch === '(') depth++;
+    if (ch === ')') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Unwrap vi.hoisted(() => EXPR) → EXPR
+ * Handles both arrow expressions and arrow blocks.
+ */
+function unwrapViHoisted(code) {
+  const pattern = /vi\.hoisted\(/g;
+  let match;
+  while ((match = pattern.exec(code)) !== null) {
+    const callStart = match.index;
+    const openParen = callStart + 'vi.hoisted'.length;
+    const closeParen = findMatchingParen(code, openParen);
+    if (closeParen === -1) continue;
+
+    // Extract inner content: the argument to vi.hoisted(...)
+    let inner = code.slice(openParen + 1, closeParen).trim();
+
+    // It's always () => EXPR or () => { ... }
+    const arrowMatch = inner.match(/^\(\)\s*=>\s*/);
+    if (arrowMatch) {
+      inner = inner.slice(arrowMatch[0].length).trim();
+      // If it's a block: () => { return X; } — extract X
+      // If it's an expression: () => X — use X directly
+    }
+
+    // Replace vi.hoisted(...) with the unwrapped content
+    code = code.slice(0, callStart) + inner + code.slice(closeParen + 1);
+    // Reset regex position
+    pattern.lastIndex = callStart;
+  }
+  return code;
+}
+
+/**
+ * Rewrite vi.stubGlobal('name', EXPR) → globalThis.name = EXPR
+ */
+function rewriteStubGlobal(code) {
+  const pattern = /vi\.stubGlobal\(/g;
+  let match;
+  while ((match = pattern.exec(code)) !== null) {
+    const callStart = match.index;
+    const openParen = callStart + 'vi.stubGlobal'.length;
+    const closeParen = findMatchingParen(code, openParen);
+    if (closeParen === -1) continue;
+
+    const inner = code.slice(openParen + 1, closeParen).trim();
+    // Parse: 'name', EXPR
+    const nameMatch = inner.match(/^['"](\w+)['"]\s*,\s*/);
+    if (!nameMatch) continue;
+
+    const name = nameMatch[1];
+    const expr = inner.slice(nameMatch[0].length);
+
+    code = code.slice(0, callStart) + `globalThis.${name} = ${expr}` + code.slice(closeParen + 1);
+    pattern.lastIndex = callStart;
+  }
+  return code;
+}
+
 function migrateFile(code, filePath) {
   const isJS = filePath.endsWith('.js') || filePath.endsWith('.jsx');
+
+  // --- Phase 1: Unwrap complex patterns BEFORE other replacements ---
+  code = unwrapViHoisted(code);
+  code = rewriteStubGlobal(code);
+
+  // --- Phase 2: Simple replacements ---
 
   // Track what bun:test exports we need
   const needs = {
@@ -94,20 +175,58 @@ function migrateFile(code, filePath) {
     it: /\bit\s*\(/.test(code),
     expect: /\bexpect\s*\(/.test(code),
     test: /\btest\s*\(/.test(code) && !/\btestTimeout\b/.test(code),
-    mock: /vi\.fn\b|vi\.mock\b|vi\.hoisted\b/.test(code),
+    mock: /vi\.fn\b|vi\.mock\b/.test(code),
     spyOn: /vi\.spyOn\b/.test(code),
     beforeEach: /\bbeforeEach\s*\(/.test(code),
     afterEach: /\bafterEach\s*\(/.test(code),
     beforeAll: /\bbeforeAll\s*\(/.test(code),
     afterAll: /\bafterAll\s*\(/.test(code),
-    jest: /vi\.useFakeTimers|vi\.useRealTimers|vi\.runAllTimers|vi\.advanceTimersByTime/.test(code),
+    jest: /vi\.useFakeTimers|vi\.useRealTimers|vi\.runAllTimers\b|vi\.advanceTimersByTime/.test(code),
   };
 
-  // Remove vitest import line(s)
+  // Remove vitest imports
   code = code.replace(/^import\s*\{[^}]*\}\s*from\s*'vitest';\s*\n/gm, '');
   code = code.replace(/^import\s+type\s*\{[^}]*\}\s*from\s*'vitest';\s*\n/gm, '');
 
-  // Build bun:test import
+  // Module mocking
+  code = code.replace(/vi\.mock\(/g, 'mock.module(');
+  code = code.replace(/vi\.doMock\(/g, 'mock.module(');
+  code = code.replace(/vi\.mock\(import\('([^']+)'\)/g, "mock.module('$1'");
+  code = code.replace(/vi\.doUnmock\([^)]*\)\s*;?/g, '');
+  code = code.replace(/vi\.unmock\([^)]*\)\s*;?/g, '');
+  code = code.replace(/vi\.resetModules\(\)\s*;?/g, '');
+
+  // Function mocks
+  code = code.replace(/vi\.fn\(/g, 'mock(');
+  code = code.replace(/vi\.spyOn\b/g, 'spyOn');
+  if (isJS) {
+    code = code.replace(/vi\.mocked\(([^)]+)\)/g, '$1');
+  } else {
+    code = code.replace(/vi\.mocked\(([^)]+)\)/g, '($1 as any)');
+  }
+
+  // Timer APIs
+  code = code.replace(/vi\.useFakeTimers\(\)/g, 'jest.useFakeTimers()');
+  code = code.replace(/vi\.useRealTimers\(\)/g, 'jest.useRealTimers()');
+  code = code.replace(/vi\.runAllTimers\(\)/g, 'jest.runAllTimers()');
+  code = code.replace(/vi\.advanceTimersByTime\(/g, 'jest.advanceTimersByTime(');
+
+  // Cleanup APIs (remove — bun handles mock lifecycle)
+  code = code.replace(/vi\.clearAllMocks\(\)\s*;?\s*/g, '');
+  code = code.replace(/vi\.restoreAllMocks\(\)\s*;?\s*/g, '');
+  code = code.replace(/vi\.unstubAllGlobals\(\)\s*;?\s*/g, '');
+
+  // importActual → dynamic import
+  code = code.replace(/vi\.importActual\('([^']+)'\)/g, "import('$1')");
+
+  // Type references
+  code = code.replace(/typeof vi\.fn\b/g, 'typeof mock');
+  code = code.replace(/typeof vi\.spyOn\b/g, 'typeof spyOn');
+
+  // Re-check mock need after replacements
+  if (code.includes('mock(') || code.includes('mock.module(')) needs.mock = true;
+
+  // Build import line
   const imports = [];
   if (needs.describe) imports.push('describe');
   if (needs.it) imports.push('it');
@@ -120,121 +239,46 @@ function migrateFile(code, filePath) {
   if (needs.beforeAll) imports.push('beforeAll');
   if (needs.afterAll) imports.push('afterAll');
   if (needs.jest) imports.push('jest');
+  if (imports.length === 0) return code;
 
   const importLine = `import { ${imports.join(', ')} } from 'bun:test';\n`;
 
-  // Handle vi.hoisted(() => expr) → expr
-  // Single-line: const x = vi.hoisted(() => vi.fn())
-  code = code.replace(/vi\.hoisted\(\(\)\s*=>\s*\n?\s*/g, '');
-  // Remove trailing );  that closed vi.hoisted
-  // This is tricky — we'll handle it by replacing vi.hoisted(() => { ... }) patterns
-  // For the simpler form: vi.hoisted(() => vi.fn(...)) → vi.fn(...)
-  // The closing ); from hoisted needs to be handled contextually
-
-  // Handle vi.mock() → mock.module()
-  // Simple form: vi.mock('./path', () => ({...}))
-  code = code.replace(/vi\.mock\(/g, 'mock.module(');
-
-  // Handle vi.mock(import('path'), ...) → mock.module('path', ...)
-  code = code.replace(/mock\.module\(import\('([^']+)'\)/g, "mock.module('$1'");
-
-  // Handle vi.importActual('path') → import('path')
-  code = code.replace(/vi\.importActual\('([^']+)'\)/g, "import('$1')");
-  code = code.replace(/await importOriginal\(\)/g, "await import(/* original */ '.')");
-
-  // Handle vi.fn() → mock()
-  code = code.replace(/vi\.fn\(/g, 'mock(');
-
-  // Handle vi.spyOn → spyOn
-  code = code.replace(/vi\.spyOn\b/g, 'spyOn');
-
-  // Handle vi.mocked(fn) → fn (JS files) or (fn as any) (TS files)
-  if (isJS) {
-    code = code.replace(/vi\.mocked\(([^)]+)\)/g, '$1');
-  } else {
-    code = code.replace(/vi\.mocked\(([^)]+)\)/g, '($1 as any)');
-  }
-
-  // Handle timer APIs
-  code = code.replace(/vi\.useFakeTimers\(\)/g, 'jest.useFakeTimers()');
-  code = code.replace(/vi\.useRealTimers\(\)/g, 'jest.useRealTimers()');
-  code = code.replace(/vi\.runAllTimers\(\)/g, 'jest.runAllTimers()');
-  code = code.replace(/vi\.advanceTimersByTime\(/g, 'jest.advanceTimersByTime(');
-
-  // Handle cleanup APIs
-  code = code.replace(/vi\.clearAllMocks\(\);?\s*/g, '');
-  code = code.replace(/vi\.restoreAllMocks\(\);?\s*/g, '');
-
-  // Handle vi.stubGlobal('name', value) → globalThis.name = value
-  code = code.replace(/vi\.stubGlobal\('([^']+)',\s*/g, 'globalThis.$1 = ');
-  code = code.replace(/vi\.unstubAllGlobals\(\);?\s*/g, '');
-
-  // Handle vi.doMock → mock.module
-  code = code.replace(/vi\.doMock\(/g, 'mock.module(');
-  code = code.replace(/vi\.doUnmock\([^)]*\);?\s*/g, '');
-  code = code.replace(/vi\.unmock\([^)]*\);?\s*/g, '');
-  code = code.replace(/vi\.resetModules\(\);?\s*/g, '');
-
-  // Now handle the key pattern: static imports of mocked modules need to become dynamic.
-  // If mock.module() is used, any static import of the SUBJECT module (the module that
-  // imports the mocked dependency) should become a dynamic import.
-  // This is the trickiest part — we need to identify which imports are subjects vs mocks.
-  //
-  // For now, if mock.module is present AND there are static imports after it,
-  // convert them to dynamic imports.
+  // --- Phase 3: Convert static imports to dynamic for mock.module files ---
   if (code.includes('mock.module(')) {
-    // Find all mock.module paths
     const mockPaths = new Set();
-    const mockModuleRegex = /mock\.module\(['"]([^'"]+)['"]/g;
+    const re = /mock\.module\(['"]([^'"]+)['"]/g;
     let m;
-    while ((m = mockModuleRegex.exec(code)) !== null) {
-      mockPaths.add(m[1]);
-    }
+    while ((m = re.exec(code)) !== null) mockPaths.add(m[1]);
 
-    // Convert static imports that come AFTER mock.module calls to dynamic imports
-    // Only convert imports of the subject module (not the mocked modules themselves)
-    // The subject is imported statically but depends on mocked modules
     const lines = code.split('\n');
-    const mockModuleLineIndex = lines.findIndex((l) => l.includes('mock.module('));
-
-    if (mockModuleLineIndex >= 0) {
-      // Find the last mock.module line
-      let lastMockLine = mockModuleLineIndex;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (lines[i].includes('mock.module(')) {
-          lastMockLine = i;
-          break;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Static named import
+      const namedMatch = line.match(/^import\s+(\{[^}]+\})\s+from\s+'([^']+)';$/);
+      if (namedMatch && !line.includes('bun:test')) {
+        const [, bindings, path] = namedMatch;
+        if (!mockPaths.has(path)) {
+          const cleanBindings = bindings.replace(/\btype\s+/g, '');
+          lines[i] = `const ${cleanBindings} = await import('${path}');`;
         }
       }
-
-      // Find static imports after the bun:test import that are NOT mock paths
-      // and convert them to dynamic imports if they appear after mock.module
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const importMatch = line.match(/^import\s+(\{[^}]+\})\s+from\s+'([^']+)';/);
-        const importStarMatch = line.match(/^import\s+\*\s+as\s+(\w+)\s+from\s+'([^']+)';/);
-
-        if (importMatch && !line.includes('bun:test')) {
-          const [, bindings, path] = importMatch;
-          if (!mockPaths.has(path) && i > 0) {
-            // This is a subject import — needs dynamic import
-            lines[i] = `const ${bindings.replace(/\btype\s+/g, '')} = await import('${path}');`;
-          }
-        } else if (importStarMatch && !line.includes('bun:test')) {
-          const [, name, path] = importStarMatch;
-          if (!mockPaths.has(path) && i > 0) {
-            lines[i] = `const ${name} = await import('${path}');`;
-          }
+      // Static star import
+      const starMatch = line.match(/^import\s+\*\s+as\s+(\w+)\s+from\s+'([^']+)';$/);
+      if (starMatch && !line.includes('bun:test')) {
+        const [, name, path] = starMatch;
+        if (!mockPaths.has(path)) {
+          lines[i] = `const ${name} = await import('${path}');`;
         }
       }
-      code = lines.join('\n');
     }
+    code = lines.join('\n');
   }
 
-  // Add bun:test import at top
-  code = importLine + code;
+  // Clean up empty callbacks from removed vi.clearAllMocks
+  code = code.replace(/beforeEach\(\(\) =>\s*\{\s*\}\)/g, 'beforeEach(() => {})');
+  code = code.replace(/afterEach\(\(\) =>\s*\{\s*\}\)/g, 'afterEach(() => {})');
 
-  return code;
+  return importLine + code;
 }
 
 main().catch(console.error);

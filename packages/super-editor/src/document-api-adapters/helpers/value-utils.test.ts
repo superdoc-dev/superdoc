@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { toNonEmptyString, toFiniteNumber, toId, resolveCommentIdFromAttrs, normalizeExcerpt } from './value-utils.js';
 
 describe('toNonEmptyString', () => {

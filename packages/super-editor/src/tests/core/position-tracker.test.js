@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { createDocxTestEditor } from '../helpers/editor-test-utils.js';
 import { EditorState } from 'prosemirror-state';
 import { positionTrackerKey } from '@core/PositionTracker.js';
@@ -768,7 +768,7 @@ describe('PositionTracker', () => {
         expect(worldTo).toBeTypeOf('number');
         const id = tracker.track(worldFrom, worldTo, { type: 'search' });
 
-        const scrollToPosition = vi.fn(() => true);
+        const scrollToPosition = mock(() => true);
         editor.presentationEditor = {
           scrollToPosition,
         };

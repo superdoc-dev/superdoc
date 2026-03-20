@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { isOffValue, isNegatedMark, negationChecks } from '../../components/toolbar/format-negation.js';
 
 describe('formatting negation helpers', () => {

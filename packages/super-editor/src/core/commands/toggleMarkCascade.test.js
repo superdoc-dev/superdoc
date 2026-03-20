@@ -1,7 +1,6 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('../helpers/getMarksFromSelection.js', () => ({
-  getSelectionFormattingState: vi.fn(),
+import { describe, it, expect, mock, beforeEach, beforeAll } from 'bun:test';
+mock.module('../helpers/getMarksFromSelection.js', () => ({
+  getSelectionFormattingState: mock(),
 }));
 
 let toggleMarkCascade;
@@ -14,7 +13,6 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  vi.clearAllMocks();
   getSelectionFormattingState.mockReturnValue({
     resolvedMarks: [],
     inlineMarks: [],
@@ -28,11 +26,11 @@ const makeInlineMark = (attrs = {}) => ({ type: { name: 'bold' }, attrs });
 
 const createChain = () => {
   const chainApi = {
-    unsetMark: vi.fn(() => chainApi),
-    setMark: vi.fn(() => chainApi),
-    run: vi.fn(() => true),
+    unsetMark: mock(() => chainApi),
+    setMark: mock(() => chainApi),
+    run: mock(() => true),
   };
-  return { chainFn: vi.fn(() => chainApi), chainApi };
+  return { chainFn: mock(() => chainApi), chainApi };
 };
 
 describe('toggleMarkCascade', () => {

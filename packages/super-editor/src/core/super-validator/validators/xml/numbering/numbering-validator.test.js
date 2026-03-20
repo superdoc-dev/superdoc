@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { createNumberingValidator } from './numbering-validator.js';
 
 function makeEditorWithNumbering(numberingXmlLike) {
@@ -12,7 +12,7 @@ function makeEditorWithNumbering(numberingXmlLike) {
 }
 
 function makeLogger() {
-  return { debug: vi.fn(), withPrefix: vi.fn(() => ({ debug: vi.fn() })) };
+  return { debug: mock(), withPrefix: mock(() => ({ debug: mock() })) };
 }
 
 describe('numbering-validator', () => {

@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
 import { deleteSelection as pmDeleteSelection } from 'prosemirror-commands';
-import { Schema } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { deleteSelection } from './deleteSelection.js';
+const { Schema } = await import('prosemirror-model');
+const { EditorState, TextSelection } = await import('prosemirror-state');
+const { deleteSelection } = await import('./deleteSelection.js');
 
-vi.mock('prosemirror-commands', () => ({
-  deleteSelection: vi.fn(),
+mock.module('prosemirror-commands', () => ({
+  deleteSelection: mock(),
 }));
 
 function makeSchema() {
@@ -52,7 +52,6 @@ describe('deleteSelection', () => {
   let schema;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     schema = makeSchema();
   });
 
@@ -64,7 +63,7 @@ describe('deleteSelection', () => {
     pmDeleteSelection.mockReturnValueOnce('delegated');
 
     const cmd = deleteSelection();
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const res = cmd({ state, tr: state.tr, dispatch });
 
     expect(pmDeleteSelection).toHaveBeenCalledTimes(1);
@@ -92,7 +91,7 @@ describe('deleteSelection', () => {
     const state = EditorState.create({ schema, doc, selection: sel });
 
     const tr = state.tr;
-    const deleteSpy = vi.spyOn(tr, 'deleteRange');
+    const deleteSpy = spyOn(tr, 'deleteRange');
 
     const cmd = deleteSelection();
     let dispatched = null;
@@ -113,7 +112,7 @@ describe('deleteSelection', () => {
     pmDeleteSelection.mockReturnValueOnce('delegated-non-empty');
 
     const cmd = deleteSelection();
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const res = cmd({ state, tr: state.tr, dispatch });
 
     expect(pmDeleteSelection).toHaveBeenCalledTimes(1);
@@ -122,7 +121,7 @@ describe('deleteSelection', () => {
 
   it('returns true when dispatch is omitted (list content case)', () => {
     // Ensure DOM selection is empty so the single-char guard does not short-circuit
-    vi.spyOn(document, 'getSelection').mockReturnValue({
+    spyOn(document, 'getSelection').mockReturnValue({
       toString: () => '',
       isCollapsed: true,
     });
@@ -154,7 +153,7 @@ describe('deleteSelection', () => {
     const sel = TextSelection.create(doc, 2, 2);
     const state = EditorState.create({ schema, doc, selection: sel });
 
-    vi.spyOn(document, 'getSelection').mockReturnValue({
+    spyOn(document, 'getSelection').mockReturnValue({
       baseNode: {
         data: 'a',
       },
@@ -170,7 +169,7 @@ describe('deleteSelection', () => {
     const sel = TextSelection.create(doc, 2, 5);
     const state = EditorState.create({ schema, doc, selection: sel });
 
-    vi.spyOn(document, 'getSelection').mockReturnValue({
+    spyOn(document, 'getSelection').mockReturnValue({
       baseNode: {
         data: 'a',
       },
@@ -179,7 +178,7 @@ describe('deleteSelection', () => {
     pmDeleteSelection.mockReturnValueOnce('delegated-single-char-node');
 
     const cmd = deleteSelection();
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const res = cmd({ state, tr: state.tr, dispatch });
 
     expect(pmDeleteSelection).toHaveBeenCalledTimes(1);
@@ -202,7 +201,7 @@ describe('deleteSelection', () => {
       pmDeleteSelection.mockReturnValueOnce('delegated-ssr');
 
       const cmd = deleteSelection();
-      const dispatch = vi.fn();
+      const dispatch = mock();
       const res = cmd({ state, tr: state.tr, dispatch });
 
       // Should delegate to original deleteSelection without error
@@ -220,12 +219,12 @@ describe('deleteSelection', () => {
     const state = EditorState.create({ schema, doc, selection: sel });
 
     // Mock getSelection to return null (can happen in some browsers/contexts)
-    vi.spyOn(document, 'getSelection').mockReturnValue(null);
+    spyOn(document, 'getSelection').mockReturnValue(null);
 
     pmDeleteSelection.mockReturnValueOnce('delegated-null-selection');
 
     const cmd = deleteSelection();
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const res = cmd({ state, tr: state.tr, dispatch });
 
     // Should delegate to original deleteSelection without error
@@ -239,7 +238,7 @@ describe('deleteSelection', () => {
     const state = EditorState.create({ schema, doc, selection: sel });
 
     // Mock getSelection with a multi-character baseNode
-    vi.spyOn(document, 'getSelection').mockReturnValue({
+    spyOn(document, 'getSelection').mockReturnValue({
       baseNode: {
         data: 'abc def ghi', // Multi-character node
       },
@@ -248,7 +247,7 @@ describe('deleteSelection', () => {
     pmDeleteSelection.mockReturnValueOnce('delegated-multi-char-node');
 
     const cmd = deleteSelection();
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const res = cmd({ state, tr: state.tr, dispatch });
 
     // Should delegate to original deleteSelection (not trigger SD-1013 workaround)

@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 // @ts-check
-import { describe, it, expect } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { resetAttributes } from './resetAttributes.js';

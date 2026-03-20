@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Editor } from './Editor.js';
 
 function makeCoords(left: number, top: number) {
@@ -18,10 +18,10 @@ describe('Editor.coordsAtPos', () => {
     const pmCoords = makeCoords(1, 2);
 
     const presentationEditor = {
-      coordsAtPos: vi.fn(() => presentationCoords),
+      coordsAtPos: mock(() => presentationCoords),
     };
     const view = {
-      coordsAtPos: vi.fn(() => pmCoords),
+      coordsAtPos: mock(() => pmCoords),
     };
 
     const editor = { presentationEditor, view } as unknown as Editor;
@@ -35,7 +35,7 @@ describe('Editor.coordsAtPos', () => {
   it('falls back to ProseMirror view coordinates when presentation editor is absent', () => {
     const pmCoords = makeCoords(3, 4);
     const view = {
-      coordsAtPos: vi.fn(() => pmCoords),
+      coordsAtPos: mock(() => pmCoords),
     };
 
     const editor = { presentationEditor: null, view } as unknown as Editor;

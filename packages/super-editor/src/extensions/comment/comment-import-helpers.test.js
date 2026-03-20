@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ensureFallbackComment, resolveCommentMeta } from './comment-import-helpers.js';
 
 describe('comment-import-helpers', () => {

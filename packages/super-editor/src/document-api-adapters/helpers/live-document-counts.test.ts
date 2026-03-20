@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { BlockIndex, BlockCandidate } from './node-address-resolver.js';
 import type { InlineIndex, InlineCandidate } from './inline-address-resolver.js';
@@ -19,29 +19,29 @@ import {
   countPages,
 } from './live-document-counts.js';
 
-vi.mock('./index-cache.js', () => ({
-  getBlockIndex: vi.fn(),
-  getInlineIndex: vi.fn(),
+mock.module('./index-cache.js', () => ({
+  getBlockIndex: mock(),
+  getInlineIndex: mock(),
 }));
 
-vi.mock('../get-text-adapter.js', () => ({
-  getTextAdapter: vi.fn(),
+mock.module('../get-text-adapter.js', () => ({
+  getTextAdapter: mock(),
 }));
 
-vi.mock('./tracked-change-resolver.js', () => ({
-  groupTrackedChanges: vi.fn(),
+mock.module('./tracked-change-resolver.js', () => ({
+  groupTrackedChanges: mock(),
 }));
 
-vi.mock('./content-controls/index.js', () => ({
-  findAllSdtNodes: vi.fn(),
+mock.module('./content-controls/index.js', () => ({
+  findAllSdtNodes: mock(),
   resolveControlType: (attrs: Record<string, unknown>) => attrs.controlType ?? attrs.type ?? 'unknown',
 }));
 
-const getBlockIndexMock = vi.mocked(getBlockIndex);
-const getInlineIndexMock = vi.mocked(getInlineIndex);
-const getTextAdapterMock = vi.mocked(getTextAdapter);
-const groupTrackedChangesMock = vi.mocked(groupTrackedChanges);
-const findAllSdtNodesMock = vi.mocked(findAllSdtNodes);
+const getBlockIndexMock = getBlockIndex as any;
+const getInlineIndexMock = getInlineIndex as any;
+const getTextAdapterMock = getTextAdapter as any;
+const groupTrackedChangesMock = groupTrackedChanges as any;
+const findAllSdtNodesMock = findAllSdtNodes as any;
 
 function makeBlockCandidate(nodeType: BlockCandidate['nodeType'], attrs?: Record<string, unknown>): BlockCandidate {
   return {

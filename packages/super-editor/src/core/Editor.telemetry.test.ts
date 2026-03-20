@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 // Mock the Telemetry class to verify it's called correctly
-vi.mock('@superdoc/common', () => ({
-  Telemetry: vi.fn().mockImplementation(() => ({
-    trackDocumentOpen: vi.fn(),
+mock.module('@superdoc/common', () => ({
+  Telemetry: mock().mockImplementation(() => ({
+    trackDocumentOpen: mock(),
   })),
   COMMUNITY_LICENSE_KEY: 'community-and-eval-agplv3',
 }));
@@ -52,9 +52,7 @@ function initTelemetry(options: {
 }
 
 describe('Editor Telemetry Integration', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   describe('telemetry disabled', () => {
     it('does not create Telemetry instance when disabled', () => {

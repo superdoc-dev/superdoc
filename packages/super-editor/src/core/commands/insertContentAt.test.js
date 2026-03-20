@@ -1,24 +1,23 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-vi.mock('../helpers/createNodeFromContent', () => ({
-  createNodeFromContent: vi.fn(),
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+mock.module('../helpers/createNodeFromContent', () => ({
+  createNodeFromContent: mock(),
 }));
 
-vi.mock('../helpers/selectionToInsertionEnd', () => ({
-  selectionToInsertionEnd: vi.fn(),
+mock.module('../helpers/selectionToInsertionEnd', () => ({
+  selectionToInsertionEnd: mock(),
 }));
 
 import { createNodeFromContent } from '../helpers/createNodeFromContent';
 import { selectionToInsertionEnd } from '../helpers/selectionToInsertionEnd';
-import { insertContentAt } from './insertContentAt';
+const { insertContentAt } = await import('./insertContentAt');
 
 const makeTr = (overrides = {}) => ({
-  insertText: vi.fn(),
-  replaceWith: vi.fn(),
-  setMeta: vi.fn(),
+  insertText: mock(),
+  replaceWith: mock(),
+  setMeta: mock(),
   steps: [1],
   doc: {
-    resolve: vi.fn().mockReturnValue({
+    resolve: mock().mockReturnValue({
       parent: {
         isTextblock: true,
         type: { spec: {} },
@@ -32,18 +31,14 @@ const makeTr = (overrides = {}) => ({
 const makeEditor = (overrides = {}) => ({
   schema: {},
   options: { enableContentCheck: true },
-  emit: vi.fn(),
+  emit: mock(),
   ...overrides,
 });
 
 describe('insertContentAt', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('inserts plain text via tr.insertText when given a simple string (fast path, no DOM)', () => {
     const value = 'Hello world';
@@ -72,7 +67,7 @@ describe('insertContentAt', () => {
       isText: false,
       isBlock: true,
       marks: [],
-      check: vi.fn(),
+      check: mock(),
     };
 
     createNodeFromContent.mockImplementation(() => node);
@@ -94,7 +89,7 @@ describe('insertContentAt', () => {
       isText: true,
       isBlock: false,
       marks: [],
-      check: vi.fn(),
+      check: mock(),
     }));
 
     const tr = makeTr();
@@ -117,13 +112,13 @@ describe('insertContentAt', () => {
       isText: false,
       isBlock: true,
       marks: [],
-      check: vi.fn(),
+      check: mock(),
     };
     createNodeFromContent.mockImplementation(() => blockNode);
 
     const tr = makeTr({
       doc: {
-        resolve: vi.fn().mockReturnValue({
+        resolve: mock().mockReturnValue({
           parent: {
             isTextblock: true,
             type: { spec: {} },
@@ -147,9 +142,9 @@ describe('insertContentAt', () => {
 
     // Simulate a Fragment (array, no `type` on container) so isFragment(...) === true
     const fragment = [
-      { isText: true, isBlock: false, marks: [], check: vi.fn() }, // "Line 1"
-      { isText: false, isBlock: false, marks: [], check: vi.fn() }, // <hardBreak>
-      { isText: true, isBlock: false, marks: [], check: vi.fn() }, // "Line 2"
+      { isText: true, isBlock: false, marks: [], check: mock() }, // "Line 1"
+      { isText: false, isBlock: false, marks: [], check: mock() }, // <hardBreak>
+      { isText: true, isBlock: false, marks: [], check: mock() }, // "Line 2"
     ];
     createNodeFromContent.mockImplementation(() => fragment);
 
@@ -173,9 +168,9 @@ describe('insertContentAt', () => {
     // force text for newline strings, the parsed result is irrelevant.
     createNodeFromContent.mockImplementation(() => [
       // simulate what parser might return; won't be used due to forceTextInsert
-      { isText: true, isBlock: false, marks: [], check: vi.fn() },
-      { isText: false, isBlock: false, marks: [], check: vi.fn() }, // <hardBreak>
-      { isText: true, isBlock: false, marks: [], check: vi.fn() },
+      { isText: true, isBlock: false, marks: [], check: mock() },
+      { isText: false, isBlock: false, marks: [], check: mock() }, // <hardBreak>
+      { isText: true, isBlock: false, marks: [], check: mock() },
     ]);
 
     const tr = makeTr();
@@ -194,9 +189,9 @@ describe('insertContentAt', () => {
     const value = 'A\nB';
 
     createNodeFromContent.mockImplementation(() => [
-      { isText: true, isBlock: false, marks: [], check: vi.fn() },
-      { isText: false, isBlock: false, marks: [], check: vi.fn() },
-      { isText: true, isBlock: false, marks: [], check: vi.fn() },
+      { isText: true, isBlock: false, marks: [], check: mock() },
+      { isText: false, isBlock: false, marks: [], check: mock() },
+      { isText: true, isBlock: false, marks: [], check: mock() },
     ]);
 
     const tr = makeTr();
@@ -219,13 +214,13 @@ describe('insertContentAt', () => {
       isText: false,
       isBlock: true,
       marks: [],
-      check: vi.fn(),
+      check: mock(),
     };
     createNodeFromContent.mockImplementation(() => blockNode);
 
     const tr = makeTr({
       doc: {
-        resolve: vi.fn().mockReturnValue({
+        resolve: mock().mockReturnValue({
           parent: { isTextblock: true, type: { spec: {} }, childCount: 0 },
         }),
       },

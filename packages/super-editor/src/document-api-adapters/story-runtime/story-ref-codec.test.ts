@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { encodeV4Ref, decodeRef, isV4Ref, type StoryRefV4, type StoryRefV3 } from './story-ref-codec.js';
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { addDefaultStylesIfMissing, createDocumentJson } from '@core/super-converter/v2/importer/docxImporter';
 import { DEFAULT_LINKED_STYLES } from '../../core/super-converter/exporter-docx-defs';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
@@ -72,7 +72,7 @@ describe('createDocumentJson', () => {
       docHiglightColors: new Set(),
     };
 
-    const editor = { options: {}, emit: vi.fn() };
+    const editor = { options: {}, emit: mock() };
 
     const result = createDocumentJson(docx, converter, editor);
 
@@ -104,7 +104,7 @@ describe('createDocumentJson', () => {
       footerIds: {},
     };
 
-    const editor = { options: {}, emit: vi.fn() };
+    const editor = { options: {}, emit: mock() };
 
     const result = createDocumentJson(docx, converter, editor);
 
@@ -122,7 +122,7 @@ describe('createDocumentJson', () => {
 
     const editor = {
       options: {},
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const result = createDocumentJson(docx, converter, editor);
@@ -165,7 +165,7 @@ describe('createDocumentJson', () => {
 
     const editor = {
       options: {},
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const result = createDocumentJson(docx, converter, editor);
@@ -204,7 +204,7 @@ describe('createDocumentJson', () => {
 
     const editor = {
       options: {},
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const result = createDocumentJson(docx, converter, editor);
@@ -232,7 +232,7 @@ describe('createDocumentJson', () => {
 
     const editor = {
       options: {},
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const result = createDocumentJson(docx, converter, editor);
@@ -282,7 +282,7 @@ describe('createDocumentJson', () => {
       docHiglightColors: new Set(),
     };
 
-    const editor = { options: {}, emit: vi.fn() };
+    const editor = { options: {}, emit: mock() };
 
     const result = createDocumentJson(docx, converter, editor);
 

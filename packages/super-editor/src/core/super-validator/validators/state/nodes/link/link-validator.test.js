@@ -1,22 +1,20 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import { createLinkMarkValidator } from './link-validator.js';
 import * as rules from './rules/index.js';
 
 describe('createLinkMarkValidator', () => {
   const mockEditor = {};
-  const mockLogger = { debug: vi.fn() };
+  const mockLogger = { debug: mock() };
   const mockTransaction = {};
 
   beforeEach(() => {
-    vi.spyOn(rules, 'ensureValidLinkRID').mockImplementation(() => ({
+    spyOn(rules, 'ensureValidLinkRID').mockImplementation(() => ({
       modified: false,
       results: [],
     }));
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('should define requiredElements with link mark', () => {
     const validator = createLinkMarkValidator({ editor: mockEditor, logger: mockLogger });

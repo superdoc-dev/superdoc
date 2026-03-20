@@ -1,10 +1,10 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt } from '@superdoc/document-api';
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean): PlanReceipt => {
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
       success: true,
@@ -30,7 +30,7 @@ import {
   tocRemoveWrapper,
   tocUpdateWrapper,
 } from './toc-wrappers.js';
-import { DocumentApiAdapterError } from '../errors.js';
+const { DocumentApiAdapterError } = await import('../errors.js');
 
 type NodeOptions = {
   attrs?: Record<string, unknown>;
@@ -118,10 +118,10 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
 function makeTocEditor(commandOverrides: Record<string, unknown> = {}): {
   editor: Editor;
   commands: {
-    insertTableOfContentsAt: ReturnType<typeof vi.fn>;
-    setTableOfContentsInstructionById: ReturnType<typeof vi.fn>;
-    replaceTableOfContentsContentById: ReturnType<typeof vi.fn>;
-    deleteTableOfContentsById: ReturnType<typeof vi.fn>;
+    insertTableOfContentsAt: ReturnType<typeof mock>;
+    setTableOfContentsInstructionById: ReturnType<typeof mock>;
+    replaceTableOfContentsContentById: ReturnType<typeof mock>;
+    deleteTableOfContentsById: ReturnType<typeof mock>;
   };
 } {
   const tocParagraph = createNode('paragraph', [createNode('text', [], { text: 'TOC entry' })], {
@@ -143,14 +143,14 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): {
   });
   const doc = createNode('doc', [tocNode, heading], { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     steps: [{}],
@@ -158,15 +158,15 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): {
   };
 
   const commands = {
-    insertTableOfContentsAt: vi.fn(() => true),
-    setTableOfContentsInstructionById: vi.fn(() => true),
-    replaceTableOfContentsContentById: vi.fn(() => true),
-    deleteTableOfContentsById: vi.fn(() => true),
+    insertTableOfContentsAt: mock(() => true),
+    setTableOfContentsInstructionById: mock(() => true),
+    replaceTableOfContentsContentById: mock(() => true),
+    deleteTableOfContentsById: mock(() => true),
     ...commandOverrides,
   };
 
   const editor = {
-    state: { doc, tr, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+    state: { doc, tr, schema: { nodes: { paragraph: { create: mock() }, tableOfContents: {} } } },
     dispatch,
     commands,
     schema: { marks: {} },
@@ -192,9 +192,7 @@ function expectTrackedModeUnsupported(run: () => unknown): void {
 }
 
 describe('toc wrappers', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
+  beforeEach(() => {});
 
   it('uses toc.list nodeId as a valid before/after target for create.tableOfContents', () => {
     const { editor, commands } = makeTocEditor();
@@ -282,10 +280,10 @@ describe('toc wrappers', () => {
       const doc = createNode('doc', [tocNode, heading], { isBlock: false });
 
       const commands = {
-        insertTableOfContentsAt: vi.fn(() => true),
-        setTableOfContentsInstructionById: vi.fn(() => true),
-        replaceTableOfContentsContentById: vi.fn(() => true),
-        deleteTableOfContentsById: vi.fn(() => true),
+        insertTableOfContentsAt: mock(() => true),
+        setTableOfContentsInstructionById: mock(() => true),
+        replaceTableOfContentsContentById: mock(() => true),
+        deleteTableOfContentsById: mock(() => true),
       };
 
       const storage: Record<string, unknown> = {};
@@ -297,7 +295,7 @@ describe('toc wrappers', () => {
       }
 
       const editor = {
-        state: { doc, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+        state: { doc, schema: { nodes: { paragraph: { create: mock() }, tableOfContents: {} } } },
         commands,
         schema: { marks: {} },
         options: {},
@@ -385,12 +383,12 @@ describe('toc wrappers', () => {
       const doc = createNode('doc', [tocNode, heading], { isBlock: false });
 
       const editor = {
-        state: { doc, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+        state: { doc, schema: { nodes: { paragraph: { create: mock() }, tableOfContents: {} } } },
         commands: {
-          insertTableOfContentsAt: vi.fn(() => true),
-          setTableOfContentsInstructionById: vi.fn(() => true),
-          replaceTableOfContentsContentById: vi.fn(() => true),
-          deleteTableOfContentsById: vi.fn(() => true),
+          insertTableOfContentsAt: mock(() => true),
+          setTableOfContentsInstructionById: mock(() => true),
+          replaceTableOfContentsContentById: mock(() => true),
+          deleteTableOfContentsById: mock(() => true),
         },
         schema: { marks: {} },
         options: {},

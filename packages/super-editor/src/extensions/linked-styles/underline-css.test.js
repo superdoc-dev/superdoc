@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { getUnderlineCssString } from './underline-css.js';
 
 const normalize = (str) =>

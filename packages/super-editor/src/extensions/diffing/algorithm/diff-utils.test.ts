@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { getInsertionPos } from './diff-utils.ts';
 
 const createNodeInfo = ({ pos = 0, depth = 0, nodeSize = 1 } = {}) => ({

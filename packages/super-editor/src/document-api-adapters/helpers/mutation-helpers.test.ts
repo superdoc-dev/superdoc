@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { DocumentApiAdapterError } from '../errors.js';
 import {
   requireEditorCommand,

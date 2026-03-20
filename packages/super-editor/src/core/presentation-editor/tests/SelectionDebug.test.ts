@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   getSelectionDebugConfig,
   type SelectionDebugConfig,

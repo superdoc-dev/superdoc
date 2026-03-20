@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { createHiddenHost } from '../dom/HiddenHost.js';
 
 /**

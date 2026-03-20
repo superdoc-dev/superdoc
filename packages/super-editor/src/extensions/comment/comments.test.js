@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, mock, spyOn, afterEach } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { DecorationSet } from 'prosemirror-view';
@@ -22,9 +22,7 @@ const {
   applyAlphaToHex,
 } = CommentHelpers;
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+afterEach(() => {});
 
 const createCommentSchema = () => {
   const nodes = {
@@ -124,8 +122,8 @@ describe('comment helpers', () => {
     const schema = createCommentSchema();
     const state = createStateWithComment(schema, 'comment-123');
     const tr = state.tr;
-    const dispatch = vi.fn();
-    const removeSpy = vi.spyOn(tr, 'removeMark');
+    const dispatch = mock();
+    const removeSpy = spyOn(tr, 'removeMark');
 
     removeCommentsById({ commentId: 'comment-123', state, tr, dispatch });
 
@@ -340,7 +338,7 @@ describe('comment helpers', () => {
       options: { isInternal: false },
       state: {},
     };
-    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+    spyOn(CommentsPluginKey, 'getState').mockReturnValue({
       internalColor: '#123456',
       externalColor: '#abcdef',
     });
@@ -373,7 +371,7 @@ describe('comment helpers', () => {
       },
       state: {},
     };
-    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+    spyOn(CommentsPluginKey, 'getState').mockReturnValue({
       internalColor: '#123456',
       externalColor: '#abcdef',
     });
@@ -392,7 +390,7 @@ describe('comment helpers', () => {
       },
       state: {},
     };
-    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+    spyOn(CommentsPluginKey, 'getState').mockReturnValue({
       internalColor: '#123456',
       externalColor: '#abcdef',
     });
@@ -411,7 +409,7 @@ describe('comment helpers', () => {
       },
       state: {},
     };
-    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+    spyOn(CommentsPluginKey, 'getState').mockReturnValue({
       internalColor: '#123456',
       externalColor: '#abcdef',
     });
@@ -483,7 +481,7 @@ describe('comments plugin commands', () => {
   const setup = () => {
     const schema = createCommentSchema();
     const state = createStateWithComment(schema, 'comment-1');
-    const view = { state, dispatch: vi.fn(), focus: vi.fn() };
+    const view = { state, dispatch: mock(), focus: mock() };
     const editor = {
       schema,
       view,
@@ -494,7 +492,7 @@ describe('comments plugin commands', () => {
         documentId: 'doc-1',
       },
       storage: { image: { media: {} } },
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const context = { editor, options: {} };
@@ -506,7 +504,7 @@ describe('comments plugin commands', () => {
   it('inserts a comment mark across selection', () => {
     const { schema, state, commands, editor } = setup();
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = commands.insertComment({ commentId: 'c-10', isInternal: true, text: '<p>Hey</p>' })({
       tr,
@@ -540,7 +538,7 @@ describe('comments plugin commands', () => {
   it('removes comments via helper function', () => {
     const { commands, state } = setup();
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     commands.removeComment({ commentId: 'comment-1' })({ tr, dispatch, state });
 
@@ -555,7 +553,7 @@ describe('comments plugin commands', () => {
   it('resolves a comment by replacing the mark with range nodes', () => {
     const { commands, state, schema } = setup();
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = commands.resolveComment({ commentId: 'comment-1' })({ tr, dispatch, state });
 
@@ -584,7 +582,7 @@ describe('comments plugin commands', () => {
 
   it('sets active comment meta', () => {
     const { commands } = setup();
-    const tr = { setMeta: vi.fn() };
+    const tr = { setMeta: mock() };
     const result = commands.setActiveComment({ commentId: 'focus' })({ tr });
     expect(result).toBe(true);
     expect(tr.setMeta).toHaveBeenCalledWith(CommentsPluginKey, {
@@ -597,7 +595,7 @@ describe('comments plugin commands', () => {
   it('updates comment internal flag across the range', () => {
     const { state, commands, schema } = setup();
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = commands.setCommentInternal({ commentId: 'comment-1', isInternal: false })({ tr, dispatch, state });
 
@@ -629,7 +627,7 @@ describe('comments plugin commands', () => {
     it('adds a comment with string content', () => {
       const { schema, state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       const result = commands.addComment('This needs review')({ tr, dispatch, editor });
 
@@ -662,7 +660,7 @@ describe('comments plugin commands', () => {
     it('adds a comment with options object', () => {
       const { schema, state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       const result = commands.addComment({
         content: 'Please clarify this section',
@@ -700,7 +698,7 @@ describe('comments plugin commands', () => {
 
     it('returns false and warns when there is no text selection', () => {
       const { schema, commands, editor } = setup();
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
       // Create state with cursor (no selection)
       const paragraph = schema.nodes.paragraph.create(null, schema.text('Hello'));
@@ -712,7 +710,7 @@ describe('comments plugin commands', () => {
       });
 
       const tr = cursorState.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       const result = commands.addComment('Test comment')({ tr, dispatch, editor });
 
@@ -729,7 +727,7 @@ describe('comments plugin commands', () => {
     it('uses config user as default when author not provided', () => {
       const { state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       commands.addComment({ content: 'Comment without author' })({ tr, dispatch, editor });
 
@@ -747,7 +745,7 @@ describe('comments plugin commands', () => {
     it('overrides config user when author is provided', () => {
       const { state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       commands.addComment({
         content: 'Comment with custom author',
@@ -769,7 +767,7 @@ describe('comments plugin commands', () => {
     it('sets isInternal to false by default', () => {
       const { schema, state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       commands.addComment('Comment without isInternal')({ tr, dispatch, editor });
 
@@ -790,7 +788,7 @@ describe('comments plugin commands', () => {
     it('adds comment with empty content', () => {
       const { state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       const result = commands.addComment('')({ tr, dispatch, editor });
 
@@ -809,7 +807,7 @@ describe('comments plugin commands', () => {
     it('adds comment with no arguments', () => {
       const { state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
 
       const result = commands.addComment()({ tr, dispatch, editor });
 
@@ -828,7 +826,7 @@ describe('comments plugin commands', () => {
     it('includes createdTime in the comment payload', () => {
       const { state, commands, editor } = setup();
       const tr = state.tr;
-      const dispatch = vi.fn();
+      const dispatch = mock();
       const beforeTime = Date.now();
 
       commands.addComment('Timed comment')({ tr, dispatch, editor });
@@ -857,8 +855,8 @@ describe('comments plugin pm plugin', () => {
     const context = {
       editor: {
         options: { isHeadless: false, isInternal: false },
-        view: { state, dispatch: vi.fn() },
-        emit: vi.fn(),
+        view: { state, dispatch: mock() },
+        emit: mock(),
         storage: { image: { media: {} } },
       },
       options: {},

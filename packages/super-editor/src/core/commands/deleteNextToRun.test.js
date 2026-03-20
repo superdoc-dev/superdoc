@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { deleteNextToRun } from './deleteNextToRun.js';
@@ -61,7 +61,7 @@ describe('deleteNextToRun', () => {
     expect(boundary).not.toBeNull();
 
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, boundary ?? 1) });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = deleteNextToRun()({ state, tr: state.tr, dispatch });
 
@@ -73,7 +73,7 @@ describe('deleteNextToRun', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [schema.node('paragraph', null, schema.text('ABC'))]);
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 2) }); // inside plain text
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = deleteNextToRun()({ state, tr: state.tr, dispatch });
 

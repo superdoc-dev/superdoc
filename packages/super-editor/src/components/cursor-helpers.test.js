@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { schema, doc, p, blockquote } from 'prosemirror-test-builder';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { EditorState, TextSelection } = await import('prosemirror-state');
+const { schema, doc, p, blockquote } = await import('prosemirror-test-builder');
 import {
   selectionHasNodeOrMark,
   moveCursorToMouseEvent,
@@ -9,8 +9,8 @@ import {
 } from './cursor-helpers.js';
 import LinkInput from './toolbar/LinkInput.vue';
 
-vi.mock('../core/helpers/editorSurface.js', () => ({
-  getEditorSurfaceElement: vi.fn(),
+mock.module('../core/helpers/editorSurface.js', () => ({
+  getEditorSurfaceElement: mock(),
 }));
 
 const createStateWithSelection = (docNode, selection) => {
@@ -59,14 +59,14 @@ describe('cursor-helpers', () => {
     beforeEach(() => {
       const docNode = doc(p('Hello world'));
       const state = EditorState.create({ schema, doc: docNode });
-      const dispatch = vi.fn((tr) => {
+      const dispatch = mock((tr) => {
         editor.state = editor.state.apply(tr);
       });
       editor = {
         state,
         dispatch,
-        focus: vi.fn(),
-        posAtCoords: vi.fn(() => ({ pos: 3 })),
+        focus: mock(),
+        posAtCoords: mock(() => ({ pos: 3 })),
       };
     });
 
@@ -89,9 +89,9 @@ describe('cursor-helpers', () => {
       const state = EditorState.create({ schema, doc: docNode });
       const view = {
         state,
-        dispatch: vi.fn(),
-        focus: vi.fn(),
-        posAtCoords: vi.fn(() => ({ pos: 5 })),
+        dispatch: mock(),
+        focus: mock(),
+        posAtCoords: mock(() => ({ pos: 5 })),
         dom: {
           getBoundingClientRect: () => ({ left: 0, right: 100, width: 100 }),
         },
@@ -118,7 +118,7 @@ describe('cursor-helpers', () => {
       getEditorSurfaceElement = module.getEditorSurfaceElement;
 
       mockSurface = {
-        getBoundingClientRect: vi.fn(() => ({
+        getBoundingClientRect: mock(() => ({
           left: 100,
           top: 200,
           right: 500,

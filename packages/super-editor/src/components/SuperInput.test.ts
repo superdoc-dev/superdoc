@@ -1,22 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick } from 'vue';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { mount } = await import('@vue/test-utils');
+const { defineComponent, h, nextTick } = await import('vue');
 
-const EditorConstructor = vi.hoisted(() => {
-  return vi.fn(function (options) {
-    this.options = options;
-    this.view = { focus: vi.fn() };
-    this.state = { doc: { content: { size: 5 } } };
-    this.commands = { setTextSelection: vi.fn() };
-    this.destroy = vi.fn();
-  });
+const EditorConstructor = mock(function (options: any) {
+  this.options = options;
+  this.view = { focus: mock() };
+  this.state = { doc: { content: { size: 5 } } };
+  this.commands = { setTextSelection: mock() };
+  this.destroy = mock();
 });
 
-vi.mock('@superdoc/super-editor', () => ({
+mock.module('@superdoc/super-editor', () => ({
   Editor: EditorConstructor,
 }));
 
-vi.mock('@extensions/index.js', () => ({
+mock.module('@extensions/index.js', () => ({
   getRichTextExtensions: () => [],
   Placeholder: { options: { placeholder: '' } },
 }));
@@ -32,9 +30,7 @@ const Wrapper = defineComponent({
 });
 
 describe('SuperInput.vue', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('uses the local content element for each instance', async () => {
     mount(Wrapper);

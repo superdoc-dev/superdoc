@@ -1,35 +1,35 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SuperToolbar } from '../../components/toolbar/super-toolbar.js';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+const { SuperToolbar } = await import('../../components/toolbar/super-toolbar.js');
 
 // Mock the dependencies
-vi.mock('@core/helpers/getActiveFormatting.js', () => ({
-  getActiveFormatting: vi.fn(),
+mock.module('@core/helpers/getActiveFormatting.js', () => ({
+  getActiveFormatting: mock(),
 }));
 
-vi.mock('prosemirror-history', () => ({
-  undoDepth: vi.fn(),
-  redoDepth: vi.fn(),
+mock.module('prosemirror-history', () => ({
+  undoDepth: mock(),
+  redoDepth: mock(),
 }));
 
-vi.mock('@helpers/isInTable.js', () => ({
-  isInTable: vi.fn().mockImplementation(() => false),
+mock.module('@helpers/isInTable.js', () => ({
+  isInTable: mock().mockImplementation(() => false),
 }));
 
-vi.mock('@extensions/linked-styles/linked-styles.js', () => ({
-  getQuickFormatList: vi.fn(),
+mock.module('@extensions/linked-styles/linked-styles.js', () => ({
+  getQuickFormatList: mock(),
 }));
 
-vi.mock(import('@helpers/index.js'), async (importOriginal) => {
+mock.module(import('@helpers/index.js'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    findParentNode: vi.fn().mockImplementation(() => vi.fn().mockReturnValue(null)),
+    findParentNode: mock().mockImplementation(() => mock().mockReturnValue(null)),
   };
 });
 
-vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
-  collectTrackedChanges: vi.fn(() => []),
-  isTrackedChangeActionAllowed: vi.fn(() => true),
+mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+  collectTrackedChanges: mock(() => []),
+  isTrackedChangeActionAllowed: mock(() => true),
 }));
 
 describe('updateToolbarState', () => {
@@ -44,25 +44,23 @@ describe('updateToolbarState', () => {
   let mockCalculateResolvedParagraphProperties;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
-
     mockEditor = {
       state: {
         selection: { from: 1, to: 1, empty: true },
         doc: {
-          resolve: vi.fn().mockReturnValue({}),
+          resolve: mock().mockReturnValue({}),
         },
       },
       commands: {
-        setFieldAnnotationsFontSize: vi.fn(),
-        setFieldAnnotationsFontFamily: vi.fn(),
-        setFieldAnnotationsTextColor: vi.fn(),
-        setFieldAnnotationsTextHighlight: vi.fn(),
-        setCellBackground: vi.fn(),
-        toggleFieldAnnotationsFormat: vi.fn(),
+        setFieldAnnotationsFontSize: mock(),
+        setFieldAnnotationsFontFamily: mock(),
+        setFieldAnnotationsTextColor: mock(),
+        setFieldAnnotationsTextHighlight: mock(),
+        setCellBackground: mock(),
+        toggleFieldAnnotationsFormat: mock(),
       },
       converter: {
-        getDocumentDefaultStyles: vi.fn(() => ({ typeface: 'Arial', fontSizePt: 12 })),
+        getDocumentDefaultStyles: mock(() => ({ typeface: 'Arial', fontSizePt: 12 })),
         linkedStyles: [],
         docHiglightColors: new Set(['#ff0000', '#00ff00']),
         convertedXml: {},
@@ -71,13 +69,13 @@ describe('updateToolbarState', () => {
         mode: 'docx',
         isHeaderOrFooter: false,
       },
-      focus: vi.fn(),
-      on: vi.fn(),
+      focus: mock(),
+      on: mock(),
     };
 
-    mockGetActiveFormatting = vi.fn();
-    mockIsInTable = vi.fn();
-    mockGetQuickFormatList = vi.fn().mockReturnValue([]);
+    mockGetActiveFormatting = mock();
+    mockIsInTable = mock();
+    mockGetQuickFormatList = mock().mockReturnValue([]);
 
     const { getActiveFormatting } = await import('@core/helpers/getActiveFormatting.js');
     const { isInTable } = await import('@helpers/isInTable.js');
@@ -87,7 +85,7 @@ describe('updateToolbarState', () => {
     );
     const helpersModule = await import('@helpers/index.js');
     mockFindParentNode = helpersModule.findParentNode;
-    mockFindParentNode.mockImplementation(() => vi.fn().mockReturnValue(null));
+    mockFindParentNode.mockImplementation(() => mock().mockReturnValue(null));
     const resolvedPropsModule = await import('@extensions/paragraph/resolvedPropertiesCache.js');
     mockCalculateResolvedParagraphProperties = vi
       .spyOn(resolvedPropsModule, 'calculateResolvedParagraphProperties')
@@ -111,96 +109,96 @@ describe('updateToolbarState', () => {
     toolbar.toolbarItems = [
       {
         name: { value: 'bold' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'italic' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'underline' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'linkedStyles' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'tableActions' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         disabled: { value: false },
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'fontSize' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         defaultLabel: { value: '' },
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'fontFamily' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         defaultLabel: { value: '' },
         allowWithoutEditor: { value: false },
         active: { value: false },
       },
       {
         name: { value: 'lineHeight' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         selectedValue: { value: '' },
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'highlight' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         nestedOptions: { value: [] },
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'acceptTrackedChangeBySelection' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       },
       {
         name: { value: 'rejectTrackedChangeOnSelection' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       },
     ];
@@ -223,7 +221,7 @@ describe('updateToolbarState', () => {
         defaultLabel: { value: 'Editing' },
         icon: { value: null },
         allowWithoutEditor: { value: true },
-        setDisabled: vi.fn(),
+        setDisabled: mock(),
       };
       toolbar.toolbarItems = [documentModeItem];
       toolbar.activeEditor = null;
@@ -627,10 +625,10 @@ describe('updateToolbarState', () => {
 
       const undoItem = {
         name: { value: 'undo' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       };
 
@@ -650,10 +648,10 @@ describe('updateToolbarState', () => {
 
       const undoItem = {
         name: { value: 'undo' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       };
 
@@ -673,10 +671,10 @@ describe('updateToolbarState', () => {
 
       const redoItem = {
         name: { value: 'redo' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       };
 
@@ -696,10 +694,10 @@ describe('updateToolbarState', () => {
 
       const redoItem = {
         name: { value: 'redo' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       };
 
@@ -719,19 +717,19 @@ describe('updateToolbarState', () => {
 
       const undoItem = {
         name: { value: 'undo' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       };
 
       const redoItem = {
         name: { value: 'redo' },
-        resetDisabled: vi.fn(),
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-        setDisabled: vi.fn(),
+        resetDisabled: mock(),
+        activate: mock(),
+        deactivate: mock(),
+        setDisabled: mock(),
         allowWithoutEditor: { value: false },
       };
 

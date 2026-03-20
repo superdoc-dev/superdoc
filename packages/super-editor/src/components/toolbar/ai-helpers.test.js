@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
 import { writeStreaming, write, rewriteStreaming, rewrite, formatDocument } from './ai-helpers.js';
@@ -15,28 +15,25 @@ const createMockStream = (chunks = []) => ({
         }
         return { value: undefined, done: true };
       },
-      releaseLock: vi.fn(),
+      releaseLock: mock(),
     };
   },
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
+afterEach(() => {});
 
 describe('ai-helpers', () => {
   it('streams chunks while writing and respects custom config', async () => {
     const stream = createMockStream(['chunk-1', 'chunk-2']);
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = mock(async () => ({
       ok: true,
       body: stream,
       text: async () => '',
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    globalThis.fetch = fetchMock;
 
-    const onChunk = vi.fn();
-    const onDone = vi.fn();
+    const onChunk = mock();
+    const onDone = mock();
 
     const result = await writeStreaming(
       'Generate summary',
@@ -63,11 +60,11 @@ describe('ai-helpers', () => {
   });
 
   it('returns generated text for non-streaming write', async () => {
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = mock(async () => ({
       ok: true,
       json: async () => ({ custom_prompt: [{ value: 'Generated text' }] }),
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    globalThis.fetch = fetchMock;
 
     const result = await write('Outline the document', { config: { apiKey: 'abc' } });
 
@@ -77,12 +74,12 @@ describe('ai-helpers', () => {
 
   it('rewrites with streaming and throws without text', async () => {
     const stream = createMockStream(['rewrite']);
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = mock(async () => ({
       ok: true,
       body: stream,
       text: async () => '',
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    globalThis.fetch = fetchMock;
 
     const rewritten = await rewriteStreaming('Original', 'shorter', { config: {} });
     expect(rewritten).toBe('');
@@ -91,11 +88,11 @@ describe('ai-helpers', () => {
   });
 
   it('rewrites without streaming using prompt context', async () => {
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = mock(async () => ({
       ok: true,
       json: async () => ({ custom_prompt: [{ value: 'Adjusted text' }] }),
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    globalThis.fetch = fetchMock;
 
     const result = await rewrite('Original', 'keep tone', { config: {} });
     expect(result).toBe('Adjusted text');

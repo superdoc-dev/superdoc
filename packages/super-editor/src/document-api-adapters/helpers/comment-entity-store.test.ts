@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { TextTarget } from '@superdoc/document-api';
 import {

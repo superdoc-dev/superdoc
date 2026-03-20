@@ -1,5 +1,5 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi } from 'vitest';
 import { parseLevel, resolveParentList } from './list-indent-helpers.js';
 
 describe('parseLevel', () => {
@@ -23,7 +23,7 @@ describe('resolveParentList', () => {
   const makePos = (nodes) => {
     return {
       depth: nodes.length - 1,
-      node: vi.fn((depth) => nodes[depth]),
+      node: mock((depth) => nodes[depth]),
     };
   };
 

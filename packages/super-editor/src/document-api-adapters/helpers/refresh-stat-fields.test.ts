@@ -1,24 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('./word-statistics.js', async (importOriginal) => {
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+mock.module('./word-statistics.js', async (importOriginal) => {
   const original = (await importOriginal()) as typeof import('./word-statistics.js');
   return {
     ...original,
-    getWordStatistics: vi.fn(),
-    resolveMainBodyEditor: vi.fn((editor) => editor),
+    getWordStatistics: mock(),
+    resolveMainBodyEditor: mock((editor) => editor),
   };
 });
 
-import { refreshAllStatFields } from './refresh-stat-fields.js';
+const { refreshAllStatFields } = await import('./refresh-stat-fields.js');
 import { getWordStatistics, resolveMainBodyEditor } from './word-statistics.js';
 
 describe('refreshAllStatFields', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('maps NUMCHARS to characters excluding spaces', () => {
-    vi.mocked(getWordStatistics).mockReturnValue({
+    (getWordStatistics as any).mockReturnValue({
       words: 11,
       characters: 19,
       charactersWithSpaces: 22,
@@ -35,7 +32,7 @@ describe('refreshAllStatFields', () => {
   });
 
   it('omits NUMPAGES when pagination is unavailable', () => {
-    vi.mocked(getWordStatistics).mockReturnValue({
+    (getWordStatistics as any).mockReturnValue({
       words: 11,
       characters: 19,
       charactersWithSpaces: 22,

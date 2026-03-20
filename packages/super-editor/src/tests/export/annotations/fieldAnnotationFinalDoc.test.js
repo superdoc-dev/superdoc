@@ -1,7 +1,8 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { getExportedResultForAnnotations, getTextFromNode } from '../export-helpers/index.js';
 
 describe('AnnotationNodeExporter for final doc', async () => {
-  window.URL.createObjectURL = vi.fn().mockImplementation((file) => {
+  window.URL.createObjectURL = mock().mockImplementation((file) => {
     return file.name;
   });
 

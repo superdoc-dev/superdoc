@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 
 // ---------------------------------------------------------------------------
@@ -6,37 +6,37 @@ import type { Editor } from '../../core/Editor.js';
 // executeDomainCommand/executeOutOfBandMutation. We mock the parts system.
 // ---------------------------------------------------------------------------
 
-vi.mock('./revision-tracker.js', async (importOriginal) => {
+mock.module('./revision-tracker.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./revision-tracker.js')>();
   return {
     ...actual,
-    getRevision: vi.fn(() => 'rev-1'),
-    checkRevision: vi.fn(),
-    incrementRevision: vi.fn(),
-    restoreRevision: vi.fn(),
+    getRevision: mock(() => 'rev-1'),
+    checkRevision: mock(),
+    incrementRevision: mock(),
+    restoreRevision: mock(),
   };
 });
 
-vi.mock('../helpers/adapter-utils.js', () => ({
-  paginate: vi.fn((items: unknown[], offset = 0, limit?: number) => {
+mock.module('../helpers/adapter-utils.js', () => ({
+  paginate: mock((items: unknown[], offset = 0, limit?: number) => {
     const total = items.length;
     const sliced = items.slice(offset, limit ? offset + limit : undefined);
     return { total, items: sliced };
   }),
-  resolveInlineInsertPosition: vi.fn(() => ({ from: 5, to: 5 })),
+  resolveInlineInsertPosition: mock(() => ({ from: 5, to: 5 })),
 }));
 
-vi.mock('../helpers/mutation-helpers.js', () => ({
-  rejectTrackedMode: vi.fn(),
+mock.module('../helpers/mutation-helpers.js', () => ({
+  rejectTrackedMode: mock(),
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
-  clearIndexCache: vi.fn(),
+mock.module('../helpers/index-cache.js', () => ({
+  clearIndexCache: mock(),
 }));
 
 // Mock mutatePart to execute the mutation callback directly against the part
-vi.mock('../../core/parts/mutation/mutate-part.js', () => ({
-  mutatePart: vi.fn(
+mock.module('../../core/parts/mutation/mutate-part.js', () => ({
+  mutatePart: mock(
     (request: { mutate?: (ctx: { part: unknown; dryRun: boolean }) => unknown; editor: Editor; partId: string }) => {
       const converter = (
         request.editor as unknown as {
@@ -59,8 +59,8 @@ vi.mock('../../core/parts/mutation/mutate-part.js', () => ({
 }));
 
 // Mock compoundMutation to execute immediately
-vi.mock('../../core/parts/mutation/compound-mutation.js', () => ({
-  compoundMutation: vi.fn((request: { execute: () => boolean }) => {
+mock.module('../../core/parts/mutation/compound-mutation.js', () => ({
+  compoundMutation: mock((request: { execute: () => boolean }) => {
     const success = request.execute();
     return { success };
   }),
@@ -87,7 +87,7 @@ function makeDocWithFootnoteRefs(ids: string[] = []) {
       });
       return true;
     },
-    nodeAt: vi.fn(() => ({ nodeSize: 1 })),
+    nodeAt: mock(() => ({ nodeSize: 1 })),
   };
 }
 
@@ -144,8 +144,8 @@ function makeEditor(
   }));
 
   const tr = {
-    insert: vi.fn(),
-    delete: vi.fn(),
+    insert: mock(),
+    delete: mock(),
     doc: makeDocWithFootnoteRefs(refs),
   };
 
@@ -156,11 +156,11 @@ function makeEditor(
     },
     schema: {
       nodes: {
-        footnoteReference: { create: vi.fn((attrs: Record<string, unknown>) => ({ attrs })) },
-        endnoteReference: { create: vi.fn((attrs: Record<string, unknown>) => ({ attrs })) },
+        footnoteReference: { create: mock((attrs: Record<string, unknown>) => ({ attrs })) },
+        endnoteReference: { create: mock((attrs: Record<string, unknown>) => ({ attrs })) },
       },
     },
-    dispatch: vi.fn(() => {
+    dispatch: mock(() => {
       if (opts?.refsAfterDispatch !== undefined) {
         editor.state.doc = makeDocWithFootnoteRefs(opts.refsAfterDispatch) as typeof editor.state.doc;
       }
@@ -176,8 +176,8 @@ function makeEditor(
       footnotes: opts?.omitFootnotesPart ? [] : footnotes,
     },
     options: {},
-    safeEmit: vi.fn(() => []),
-    emit: vi.fn(),
+    safeEmit: mock(() => []),
+    emit: mock(),
   } as unknown as Editor;
 
   return editor;
@@ -197,9 +197,7 @@ function getFootnoteElements(editor: Editor): Array<{ name: string; attributes: 
 // Tests
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+beforeEach(() => {});
 
 describe('footnote-wrappers', () => {
   it('inserts a new footnote element into the canonical OOXML part', () => {

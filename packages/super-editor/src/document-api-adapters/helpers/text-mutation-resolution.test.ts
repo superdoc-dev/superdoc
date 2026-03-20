@@ -1,3 +1,4 @@
+import { describe, it, expect, mock } from 'bun:test';
 import type { TextAddress } from '@superdoc/document-api';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mutation-resolution.js';
 import type { Editor } from '../../core/Editor.js';
@@ -6,7 +7,7 @@ function makeEditor(text: string): Editor {
   return {
     state: {
       doc: {
-        textBetween: vi.fn((_from: number, _to: number, _blockSep: string, _leafChar: string) => text),
+        textBetween: mock((_from: number, _to: number, _blockSep: string, _leafChar: string) => text),
       },
     },
   } as unknown as Editor;

@@ -1,5 +1,4 @@
-import { describe, it, expect } from 'vitest';
-
+import { describe, it, expect } from 'bun:test';
 import { getStarterExtensions } from '@extensions/index.js';
 import { createMinimalTestEditor } from '@tests/helpers/editor-test-utils.js';
 

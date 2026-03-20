@@ -1,5 +1,5 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt, HyperlinkTarget, InlineAnchor } from '@superdoc/document-api';
 import type { InlineCandidate, InlineIndex } from '../helpers/inline-address-resolver.js';
@@ -9,8 +9,8 @@ import type { BlockIndex } from '../helpers/node-address-resolver.js';
 // Module mocks — must come before imports of the module under test
 // ---------------------------------------------------------------------------
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean): PlanReceipt => {
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
       success: true,
@@ -29,17 +29,17 @@ vi.mock('./plan-wrappers.js', () => ({
   }),
 }));
 
-vi.mock('./revision-tracker.js', () => ({
-  getRevision: vi.fn(() => '42'),
+mock.module('./revision-tracker.js', () => ({
+  getRevision: mock(() => '42'),
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
-  getBlockIndex: vi.fn((): BlockIndex => ({ candidates: [] }) as unknown as BlockIndex),
-  clearIndexCache: vi.fn(),
+mock.module('../helpers/index-cache.js', () => ({
+  getBlockIndex: mock((): BlockIndex => ({ candidates: [] }) as unknown as BlockIndex),
+  clearIndexCache: mock(),
 }));
 
-vi.mock('../helpers/mutation-helpers.js', () => ({
-  rejectTrackedMode: vi.fn((opName: string, options?: { changeMode?: string }) => {
+mock.module('../helpers/mutation-helpers.js', () => ({
+  rejectTrackedMode: mock((opName: string, options?: { changeMode?: string }) => {
     if (options?.changeMode === 'tracked') {
       const err = new Error(`${opName} does not support tracked mode`);
       (err as unknown as { code: string; details: Record<string, unknown> }).code = 'CAPABILITY_UNAVAILABLE';
@@ -51,13 +51,13 @@ vi.mock('../helpers/mutation-helpers.js', () => ({
   }),
 }));
 
-vi.mock('../helpers/hyperlink-mutation-helper.js', () => ({
-  wrapWithLink: vi.fn(() => true),
-  insertLinkedText: vi.fn(() => true),
-  patchLinkMark: vi.fn(() => true),
-  unwrapLink: vi.fn(() => true),
-  deleteLinkedText: vi.fn(() => true),
-  sanitizeHrefOrThrow: vi.fn((href: string) => {
+mock.module('../helpers/hyperlink-mutation-helper.js', () => ({
+  wrapWithLink: mock(() => true),
+  insertLinkedText: mock(() => true),
+  patchLinkMark: mock(() => true),
+  unwrapLink: mock(() => true),
+  deleteLinkedText: mock(() => true),
+  sanitizeHrefOrThrow: mock((href: string) => {
     if (href.startsWith('javascript:')) {
       throw Object.assign(new Error('Blocked href'), { code: 'INVALID_INPUT' });
     }
@@ -68,16 +68,16 @@ vi.mock('../helpers/hyperlink-mutation-helper.js', () => ({
 // Store a reference we can control per-test
 let mockCandidates: InlineCandidate[] = [];
 
-vi.mock('../helpers/inline-address-resolver.js', () => ({
-  buildInlineIndex: vi.fn(
+mock.module('../helpers/inline-address-resolver.js', () => ({
+  buildInlineIndex: mock(
     (): InlineIndex => ({
       candidates: mockCandidates,
       byType: new Map([['hyperlink', mockCandidates]]),
       byKey: new Map(),
     }),
   ),
-  findInlineByType: vi.fn((_index: InlineIndex, _type: string) => mockCandidates),
-  findInlineByAnchor: vi.fn((_index: InlineIndex, target: HyperlinkTarget) => {
+  findInlineByType: mock((_index: InlineIndex, _type: string) => mockCandidates),
+  findInlineByAnchor: mock((_index: InlineIndex, target: HyperlinkTarget) => {
     return (
       mockCandidates.find(
         (c) =>
@@ -89,24 +89,24 @@ vi.mock('../helpers/inline-address-resolver.js', () => ({
   }),
 }));
 
-vi.mock('../helpers/adapter-utils.js', () => ({
-  paginate: vi.fn((items: unknown[], offset = 0, limit?: number) => {
+mock.module('../helpers/adapter-utils.js', () => ({
+  paginate: mock((items: unknown[], offset = 0, limit?: number) => {
     const total = items.length;
     const sliced = items.slice(offset, limit ? offset + limit : undefined);
     return { total, items: sliced };
   }),
-  resolveTextTarget: vi.fn((_editor: Editor, target: { blockId: string; range: { start: number; end: number } }) => {
+  resolveTextTarget: mock((_editor: Editor, target: { blockId: string; range: { start: number; end: number } }) => {
     // Return a mock resolved range that maps offset to absolute positions
     return { from: target.range.start + 1, to: target.range.end + 1 };
   }),
-  resolveDefaultInsertTarget: vi.fn(() => ({
+  resolveDefaultInsertTarget: mock(() => ({
     kind: 'text-block' as const,
     target: { kind: 'text' as const, blockId: 'last-p', range: { start: 10, end: 10 } },
     range: { from: 50, to: 50 },
   })),
-  insertParagraphAtEnd: vi.fn(),
-  resolveWithinScope: vi.fn(() => ({ ok: true, range: undefined })),
-  scopeByRange: vi.fn((candidates: InlineCandidate[]) => candidates),
+  insertParagraphAtEnd: mock(),
+  resolveWithinScope: mock(() => ({ ok: true, range: undefined })),
+  scopeByRange: mock((candidates: InlineCandidate[]) => candidates),
 }));
 
 import {
@@ -117,7 +117,7 @@ import {
   hyperlinksPatchWrapper,
   hyperlinksRemoveWrapper,
 } from './hyperlinks-wrappers.js';
-import { DocumentApiAdapterError } from '../errors.js';
+const { DocumentApiAdapterError } = await import('../errors.js');
 import {
   wrapWithLink,
   insertLinkedText,
@@ -162,8 +162,8 @@ function makeEditor(): Editor {
   return {
     state: {
       doc: {
-        textBetween: vi.fn((_from: number, _to: number) => 'link text'),
-        resolve: vi.fn(() => ({
+        textBetween: mock((_from: number, _to: number) => 'link text'),
+        resolve: mock(() => ({
           depth: 1,
           node: () => ({ type: { name: 'paragraph' } }),
         })),
@@ -187,7 +187,6 @@ function makeHyperlinkTarget(blockId: string, start: number, end: number): Hyper
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  vi.restoreAllMocks();
   mockCandidates = [];
 });
 
@@ -471,7 +470,7 @@ describe('hyperlinksPatchWrapper', () => {
     );
 
     expect(result.success).toBe(true);
-    const call = (patchLinkMark as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const call = (patchLinkMark as ReturnType<typeof mock>).mock.calls[0]!;
     expect(call[1]).toBe(1);
     expect(call[2]).toBe(6);
   });
@@ -591,7 +590,7 @@ describe('hyperlinksRemoveWrapper', () => {
     );
 
     expect(result.success).toBe(true);
-    const call = (unwrapLink as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const call = (unwrapLink as ReturnType<typeof mock>).mock.calls[0]!;
     expect(call[1]).toBe(1);
     expect(call[2]).toBe(6);
   });

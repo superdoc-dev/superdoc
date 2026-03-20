@@ -1,26 +1,25 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('./changeListLevel.js', () => ({
-  updateNumberingProperties: vi.fn(),
+mock.module('./changeListLevel.js', () => ({
+  updateNumberingProperties: mock(),
 }));
 
-vi.mock('@helpers/list-numbering-helpers.js', () => ({
+mock.module('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
-    getNewListId: vi.fn(),
-    generateNewListDefinition: vi.fn(),
+    getNewListId: mock(),
+    generateNewListDefinition: mock(),
   },
 }));
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node.attrs.paragraphProperties || {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
 }));
 
-vi.mock('./removeNumberingProperties.js', () => ({
-  isVisuallyEmptyParagraph: vi.fn(() => false),
+mock.module('./removeNumberingProperties.js', () => ({
+  isVisuallyEmptyParagraph: mock(() => false),
 }));
 
-import { toggleList } from './toggleList.js';
+const { toggleList } = await import('./toggleList.js');
 import { updateNumberingProperties } from './changeListLevel.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 
@@ -34,17 +33,17 @@ const createParagraph = (attrs, pos) => ({
 
 const createState = (paragraphs, { from = 1, to = 10, beforeNode = null, parentIndex = 0 } = {}) => {
   const parent = {
-    child: vi.fn(() => beforeNode),
+    child: mock(() => beforeNode),
   };
 
   return {
     doc: {
-      nodesBetween: vi.fn((_from, _to, callback) => {
+      nodesBetween: mock((_from, _to, callback) => {
         for (const { node, pos } of paragraphs) {
           callback(node, pos);
         }
       }),
-      resolve: vi.fn(() => ({
+      resolve: mock(() => ({
         index: () => parentIndex,
         node: () => parent,
       })),
@@ -59,20 +58,19 @@ describe('toggleList', () => {
   let dispatch;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     editor = { converter: {} };
     tr = {
       docChanged: false,
       mapping: {
-        map: vi.fn((pos) => pos),
+        map: mock((pos) => pos),
       },
       doc: {
         content: { size: 1000 },
-        resolve: vi.fn(() => ({})),
+        resolve: mock(() => ({})),
       },
-      setSelection: vi.fn(),
+      setSelection: mock(),
     };
-    dispatch = vi.fn();
+    dispatch = mock();
   });
 
   it('returns false for unsupported list type', () => {

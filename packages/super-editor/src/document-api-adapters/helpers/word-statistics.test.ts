@@ -1,20 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // Mock dependencies before importing the module under test
-vi.mock('../get-text-adapter.js', () => ({
-  getTextAdapter: vi.fn(() => ''),
+mock.module('../get-text-adapter.js', () => ({
+  getTextAdapter: mock(() => ''),
 }));
 
-vi.mock('./live-document-counts.js', async (importOriginal) => {
+mock.module('./live-document-counts.js', async (importOriginal) => {
   const original = (await importOriginal()) as any;
   return {
     ...original,
     countWordsFromText: original.countWordsFromText,
-    countPages: vi.fn(() => undefined),
+    countPages: mock(() => undefined),
   };
 });
 
-import { getWordStatistics, resolveDocumentStatFieldValue } from './word-statistics.js';
+const { getWordStatistics, resolveDocumentStatFieldValue } = await import('./word-statistics.js');
 import { getTextAdapter } from '../get-text-adapter.js';
 import { countPages } from './live-document-counts.js';
 
@@ -23,46 +22,44 @@ function mockEditor(): any {
 }
 
 describe('word-statistics', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('computes words from the text projection', () => {
-    vi.mocked(getTextAdapter).mockReturnValue('Hello world test');
+    (getTextAdapter as any).mockReturnValue('Hello world test');
     const stats = getWordStatistics(mockEditor());
     expect(stats.words).toBe(3);
   });
 
   it('computes characters excluding spaces', () => {
-    vi.mocked(getTextAdapter).mockReturnValue('Hello world');
+    (getTextAdapter as any).mockReturnValue('Hello world');
     const stats = getWordStatistics(mockEditor());
     // "Helloworld" = 10 (no spaces)
     expect(stats.characters).toBe(10);
   });
 
   it('computes characters with spaces (excluding newlines)', () => {
-    vi.mocked(getTextAdapter).mockReturnValue('Hello world\nTest');
+    (getTextAdapter as any).mockReturnValue('Hello world\nTest');
     const stats = getWordStatistics(mockEditor());
     // "Hello worldTest" = 15 (newline excluded, space included)
     expect(stats.charactersWithSpaces).toBe(15);
   });
 
   it('returns pages from the layout engine', () => {
-    vi.mocked(getTextAdapter).mockReturnValue('text');
-    vi.mocked(countPages).mockReturnValue(5);
+    (getTextAdapter as any).mockReturnValue('text');
+    (countPages as any).mockReturnValue(5);
     const stats = getWordStatistics(mockEditor());
     expect(stats.pages).toBe(5);
   });
 
   it('returns undefined pages when pagination is inactive', () => {
-    vi.mocked(getTextAdapter).mockReturnValue('text');
-    vi.mocked(countPages).mockReturnValue(undefined);
+    (getTextAdapter as any).mockReturnValue('text');
+    (countPages as any).mockReturnValue(undefined);
     const stats = getWordStatistics(mockEditor());
     expect(stats.pages).toBeUndefined();
   });
 
   it('handles empty documents', () => {
-    vi.mocked(getTextAdapter).mockReturnValue('');
+    (getTextAdapter as any).mockReturnValue('');
     const stats = getWordStatistics(mockEditor());
     expect(stats.words).toBe(0);
     expect(stats.characters).toBe(0);
@@ -71,7 +68,7 @@ describe('word-statistics', () => {
 
   it('handles multi-paragraph text with block separators', () => {
     // Text projection uses '\n' as block separator
-    vi.mocked(getTextAdapter).mockReturnValue('First paragraph\nSecond paragraph\nThird');
+    (getTextAdapter as any).mockReturnValue('First paragraph\nSecond paragraph\nThird');
     const stats = getWordStatistics(mockEditor());
     expect(stats.words).toBe(5);
     // Characters excluding all whitespace

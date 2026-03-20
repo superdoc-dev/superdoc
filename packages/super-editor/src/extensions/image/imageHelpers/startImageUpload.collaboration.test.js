@@ -1,27 +1,26 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
 // Controllable mock implementations — configure per test
-let mockFindPlaceholder = vi.fn(() => 0);
-let mockRemoveImagePlaceholder = vi.fn((_state, tr) => tr);
-let mockFindOrCreateRelationship = vi.fn(() => 'rId100');
-let mockDefaultUpload = vi.fn();
-let mockGenerateDocxRandomId = vi.fn();
+let mockFindPlaceholder = mock(() => 0);
+let mockRemoveImagePlaceholder = mock((_state, tr) => tr);
+let mockFindOrCreateRelationship = mock(() => 'rId100');
+let mockDefaultUpload = mock();
+let mockGenerateDocxRandomId = mock();
 
-vi.mock('./imageRegistrationPlugin.js', () => ({
+mock.module('./imageRegistrationPlugin.js', () => ({
   findPlaceholder: (...args) => mockFindPlaceholder(...args),
   removeImagePlaceholder: (...args) => mockRemoveImagePlaceholder(...args),
-  addImagePlaceholder: vi.fn(),
+  addImagePlaceholder: mock(),
 }));
 
-vi.mock('@core/parts/adapters/relationships-mutation.js', () => ({
+mock.module('@core/parts/adapters/relationships-mutation.js', () => ({
   findOrCreateRelationship: (...args) => mockFindOrCreateRelationship(...args),
 }));
 
-vi.mock('./handleImageUpload.js', () => ({
+mock.module('./handleImageUpload.js', () => ({
   handleImageUpload: (...args) => mockDefaultUpload(...args),
 }));
 
-vi.mock('@core/helpers/index.js', () => ({
+mock.module('@core/helpers/index.js', () => ({
   generateDocxRandomId: (...args) => mockGenerateDocxRandomId(...args),
 }));
 
@@ -30,19 +29,19 @@ const { uploadAndInsertImage } = await import('./startImageUpload.js');
 
 describe('uploadAndInsertImage collaboration branch (isolated)', () => {
   beforeEach(() => {
-    mockFindPlaceholder = vi.fn(() => 0);
-    mockRemoveImagePlaceholder = vi.fn((_state, tr) => tr);
-    mockFindOrCreateRelationship = vi.fn(() => 'rId100');
-    mockDefaultUpload = vi.fn();
-    mockGenerateDocxRandomId = vi.fn();
+    mockFindPlaceholder = mock(() => 0);
+    mockRemoveImagePlaceholder = mock((_state, tr) => tr);
+    mockFindOrCreateRelationship = mock(() => 'rId100');
+    mockDefaultUpload = mock();
+    mockGenerateDocxRandomId = mock();
   });
 
   it('calls addImageToCollaboration when ydoc is provided', async () => {
-    const collabSpy = vi.fn();
+    const collabSpy = mock();
 
     const editor = {
       options: {
-        handleImageUpload: vi.fn().mockResolvedValue('http://example.com/image.png'),
+        handleImageUpload: mock().mockResolvedValue('http://example.com/image.png'),
         mode: 'docx',
         ydoc: {},
       },
@@ -55,7 +54,7 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
     };
 
     const tr = {
-      replaceWith: vi.fn(() => tr),
+      replaceWith: mock(() => tr),
     };
 
     const view = {
@@ -64,12 +63,12 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
         schema: {
           nodes: {
             image: {
-              create: vi.fn(() => ({ attrs: {} })),
+              create: mock(() => ({ attrs: {} })),
             },
           },
         },
       },
-      dispatch: vi.fn(),
+      dispatch: mock(),
     };
 
     const file = new File([new Uint8Array([1])], 'collab.png', { type: 'image/png' });
@@ -89,10 +88,10 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
   });
 
   it('falls back when media is unset and file lacks lastModified', async () => {
-    mockFindOrCreateRelationship = vi.fn(() => 'rId200');
+    mockFindOrCreateRelationship = mock(() => 'rId200');
 
     const OriginalFile = globalThis.File;
-    const fileCtorSpy = vi.fn();
+    const fileCtorSpy = mock();
 
     class MockFile {
       constructor(parts, name, options = {}) {
@@ -103,15 +102,15 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
     }
 
     globalThis.File = MockFile;
-    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(123456);
+    const nowSpy = spyOn(Date, 'now').mockReturnValue(123456);
 
     const editor = {
       options: {
-        handleImageUpload: vi.fn().mockResolvedValue('data:image/png;base64,CCC'),
+        handleImageUpload: mock().mockResolvedValue('data:image/png;base64,CCC'),
         mode: 'docx',
       },
       commands: {
-        addImageToCollaboration: vi.fn(),
+        addImageToCollaboration: mock(),
       },
       storage: {
         image: {},
@@ -140,7 +139,7 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
     });
 
     const tr = {
-      replaceWith: vi.fn(() => tr),
+      replaceWith: mock(() => tr),
     };
 
     const view = {
@@ -149,12 +148,12 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
         schema: {
           nodes: {
             image: {
-              create: vi.fn(() => ({ attrs: {} })),
+              create: mock(() => ({ attrs: {} })),
             },
           },
         },
       },
-      dispatch: vi.fn(),
+      dispatch: mock(),
     };
 
     const sourceFile = { name: 'Screenshot 2025.png', type: 'image/png', size: 10 };
@@ -187,18 +186,18 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
 
   it('uses default upload handler and skips duplicate docPr ids', async () => {
     mockDefaultUpload.mockResolvedValue('data:image/png;base64,DDD');
-    const relationshipSpy = vi.fn(() => 'rId500');
+    const relationshipSpy = mock(() => 'rId500');
     mockFindOrCreateRelationship = relationshipSpy;
     mockGenerateDocxRandomId.mockReturnValueOnce('0000007b').mockReturnValueOnce('0000007c');
 
-    const imageCreateSpy = vi.fn(() => ({ attrs: {} }));
+    const imageCreateSpy = mock(() => ({ attrs: {} }));
 
     const editor = {
       options: {
         mode: 'docx',
       },
       commands: {
-        addImageToCollaboration: vi.fn(),
+        addImageToCollaboration: mock(),
       },
       storage: {
         image: { media: {} },
@@ -216,7 +215,7 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
     };
 
     const tr = {
-      replaceWith: vi.fn(() => tr),
+      replaceWith: mock(() => tr),
     };
 
     const view = {
@@ -230,7 +229,7 @@ describe('uploadAndInsertImage collaboration branch (isolated)', () => {
           },
         },
       },
-      dispatch: vi.fn(),
+      dispatch: mock(),
     };
 
     const basicFile = new File([new Uint8Array([1])], 'image.png', { type: 'image/png' });

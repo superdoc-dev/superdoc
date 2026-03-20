@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { StoryRuntimeCache } from './runtime-cache.js';
 import type { StoryRuntime } from './story-types.js';
 import { BODY_STORY_KEY } from './story-key.js';
@@ -97,7 +97,7 @@ describe('StoryRuntimeCache — delete', () => {
   });
 
   it('does not call dispose on explicit delete', () => {
-    const dispose = vi.fn();
+    const dispose = mock();
     const cache = new StoryRuntimeCache();
     cache.set('fn:1', makeRuntime('fn:1', { dispose }));
     cache.delete('fn:1');
@@ -121,8 +121,8 @@ describe('StoryRuntimeCache — clear', () => {
   });
 
   it('calls dispose on every entry', () => {
-    const dispose1 = vi.fn();
-    const dispose2 = vi.fn();
+    const dispose1 = mock();
+    const dispose2 = mock();
     const cache = new StoryRuntimeCache();
     cache.set('fn:1', makeRuntime('fn:1', { dispose: dispose1 }));
     cache.set('fn:2', makeRuntime('fn:2', { dispose: dispose2 }));
@@ -161,7 +161,7 @@ describe('StoryRuntimeCache — LRU eviction', () => {
   });
 
   it('calls dispose on the evicted runtime', () => {
-    const dispose = vi.fn();
+    const dispose = mock();
     const cache = new StoryRuntimeCache(2);
 
     cache.set('a', makeRuntime('a', { dispose }));
@@ -199,7 +199,7 @@ describe('StoryRuntimeCache — LRU eviction', () => {
 
 describe('StoryRuntimeCache — body protection', () => {
   it('never evicts the body runtime', () => {
-    const bodyDispose = vi.fn();
+    const bodyDispose = mock();
     const cache = new StoryRuntimeCache(3);
 
     cache.set(BODY_STORY_KEY, makeRuntime(BODY_STORY_KEY, { dispose: bodyDispose }));
@@ -236,7 +236,7 @@ describe('StoryRuntimeCache — body protection', () => {
 
 describe('StoryRuntimeCache — invalidate', () => {
   it('removes and disposes an existing entry', () => {
-    const dispose = vi.fn();
+    const dispose = mock();
     const cache = new StoryRuntimeCache();
     cache.set('fn:1', makeRuntime('fn:1', { dispose }));
 
@@ -264,9 +264,9 @@ describe('StoryRuntimeCache — invalidate', () => {
 
 describe('StoryRuntimeCache — invalidateByPrefix', () => {
   it('invalidates all entries matching the prefix', () => {
-    const disposeFn1 = vi.fn();
-    const disposeFn2 = vi.fn();
-    const disposeEn1 = vi.fn();
+    const disposeFn1 = mock();
+    const disposeFn2 = mock();
+    const disposeEn1 = mock();
     const cache = new StoryRuntimeCache();
     cache.set('fn:1', makeRuntime('fn:1', { dispose: disposeFn1 }));
     cache.set('fn:2', makeRuntime('fn:2', { dispose: disposeFn2 }));

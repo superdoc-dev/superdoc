@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { mutatePart, mutateParts } from './mutate-part.js';
 import { createTestEditor, withPart, withDescriptor, cleanupParts } from '../testing/test-helpers.js';
 import { registerPartDescriptor, clearPartDescriptors } from '../registry/part-registry.js';
@@ -181,7 +181,7 @@ describe('mutatePart', () => {
     it('runs onDelete hook before removal', () => {
       withPart(editor, 'word/header1.xml', { elements: [] });
 
-      const onDelete = vi.fn();
+      const onDelete = mock();
       registerPartDescriptor({
         id: 'word/header1.xml',
         ensurePart: () => ({ elements: [] }),
@@ -239,7 +239,7 @@ describe('mutatePart', () => {
 
     it('does not emit partChanged on dry-run', () => {
       withPart(editor, 'word/styles.xml', { value: 1 });
-      const handler = vi.fn();
+      const handler = mock();
       editor.on('partChanged', handler);
 
       mutatePart({
@@ -366,7 +366,7 @@ describe('mutatePart', () => {
   describe('events', () => {
     it('emits exactly one partChanged event per mutation', () => {
       withPart(editor, 'word/styles.xml', { value: 1 });
-      const handler = vi.fn();
+      const handler = mock();
       editor.on('partChanged', handler);
 
       mutatePart({
@@ -389,7 +389,7 @@ describe('mutatePart', () => {
 
     it('does not emit on no-op', () => {
       withPart(editor, 'word/styles.xml', { value: 1 });
-      const handler = vi.fn();
+      const handler = mock();
       editor.on('partChanged', handler);
 
       mutatePart({
@@ -410,7 +410,7 @@ describe('mutatePart', () => {
 
   describe('descriptor hooks', () => {
     it('runs afterCommit on changed mutation', () => {
-      const afterCommit = vi.fn();
+      const afterCommit = mock();
       registerPartDescriptor({
         id: 'word/styles.xml',
         ensurePart: () => ({ elements: [] }),
@@ -433,7 +433,7 @@ describe('mutatePart', () => {
     });
 
     it('does not run afterCommit on no-op', () => {
-      const afterCommit = vi.fn();
+      const afterCommit = mock();
       registerPartDescriptor({
         id: 'word/styles.xml',
         ensurePart: () => ({ elements: [] }),
@@ -538,7 +538,7 @@ describe('mutatePart', () => {
   describe('invalidation', () => {
     it('runs invalidation handler after event emission', () => {
       withPart(editor, 'word/styles.xml', { value: 1 });
-      const handler = vi.fn();
+      const handler = mock();
       registerInvalidationHandler('word/styles.xml', handler);
 
       mutatePart({
@@ -556,7 +556,7 @@ describe('mutatePart', () => {
 
     it('does not run invalidation on no-op', () => {
       withPart(editor, 'word/styles.xml', { value: 1 });
-      const handler = vi.fn();
+      const handler = mock();
       registerInvalidationHandler('word/styles.xml', handler);
 
       mutatePart({
@@ -622,7 +622,7 @@ describe('mutateParts', () => {
 
   it('emits exactly one event for multi-part transaction', () => {
     withPart(editor, 'word/styles.xml', { value: 1 });
-    const handler = vi.fn();
+    const handler = mock();
     editor.on('partChanged', handler);
 
     mutateParts({
@@ -737,7 +737,7 @@ describe('mutateParts', () => {
   });
 
   it('preserves input order in result and event', () => {
-    const handler = vi.fn();
+    const handler = mock();
     editor.on('partChanged', handler);
 
     mutateParts({
@@ -996,7 +996,7 @@ describe('listener isolation', () => {
     editor.on('partChanged', () => {
       throw new Error('first listener exploded');
     });
-    const secondListener = vi.fn();
+    const secondListener = mock();
     editor.on('partChanged', secondListener);
 
     mutatePart({
@@ -1017,7 +1017,7 @@ describe('listener isolation', () => {
     editor.on('partChanged', () => {
       throw new Error('listener exploded');
     });
-    const invalidationHandler = vi.fn();
+    const invalidationHandler = mock();
     registerInvalidationHandler('word/styles.xml', invalidationHandler);
 
     mutatePart({

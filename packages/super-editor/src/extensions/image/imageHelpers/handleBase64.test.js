@@ -1,16 +1,14 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { base64ToFile, getBase64FileMeta } from './handleBase64.js';
 
 const base64ForPayload = (payload, mime = 'image/png') =>
   `data:${mime};base64,${Buffer.from(payload).toString('base64')}`;
 
 describe('handleBase64', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  afterEach(() => {});
 
   it('converts base64 data into a File with hashed filename using atob', () => {
-    vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
+    globalThis.atob = (encoded) => Buffer.from(encoded, 'base64').toString('binary');
 
     const payload = 'fake-image-payload';
     const base64 = base64ForPayload(payload, 'image/png');
@@ -25,7 +23,7 @@ describe('handleBase64', () => {
 
   it('falls back to Buffer decoding when atob is unavailable', () => {
     // Ensure atob is not defined so Buffer path is used
-    vi.stubGlobal('atob', undefined);
+    globalThis.atob = undefined;
 
     const payload = 'buffer-only-payload';
     const base64 = base64ForPayload(payload, 'image/jpeg');
@@ -40,14 +38,14 @@ describe('handleBase64', () => {
   it('throws when neither atob nor Buffer are available', () => {
     const base64 = base64ForPayload('missing-decoders', 'image/png');
 
-    vi.stubGlobal('atob', undefined);
-    vi.stubGlobal('Buffer', undefined);
+    globalThis.atob = undefined;
+    globalThis.Buffer = undefined;
 
     expect(() => base64ToFile(base64)).toThrow('Unable to decode base64 payload in the current environment.');
   });
 
   it('returns matching metadata for base64 payloads', () => {
-    vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
+    globalThis.atob = (encoded) => Buffer.from(encoded, 'base64').toString('binary');
 
     const payload = 'another-fake-image';
     const base64 = base64ForPayload(payload, 'image/jpeg');
@@ -60,7 +58,7 @@ describe('handleBase64', () => {
   });
 
   it('defaults metadata when mime data is missing', () => {
-    vi.stubGlobal('atob', (encoded) => Buffer.from(encoded, 'base64').toString('binary'));
+    globalThis.atob = (encoded) => Buffer.from(encoded, 'base64').toString('binary');
 
     const payload = 'no-mime-data';
     const base64 = `data:;base64,${Buffer.from(payload).toString('base64')}`;

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, spyOn } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import { writeAdapter } from './write-adapter.js';
@@ -54,14 +54,14 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
 
 function makeEditor(text = 'Hello'): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
-  insertTrackedChange: ReturnType<typeof vi.fn>;
-  textBetween: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
+  insertTrackedChange: ReturnType<typeof mock>;
+  textBetween: ReturnType<typeof mock>;
   tr: {
-    insertText: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
   };
 } {
   const textNode = createNode('text', [], { text });
@@ -73,19 +73,19 @@ function makeEditor(text = 'Hello'): {
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn(),
-    delete: vi.fn(),
-    setMeta: vi.fn(),
-    addMark: vi.fn(),
+    insertText: mock(),
+    delete: mock(),
+    setMeta: mock(),
+    addMark: mock(),
   };
   tr.insertText.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
-  const insertTrackedChange = vi.fn(() => true);
-  const textBetween = vi.fn((from: number, to: number) => {
+  const dispatch = mock();
+  const insertTrackedChange = mock(() => true);
+  const textBetween = mock((from: number, to: number) => {
     const start = Math.max(0, from - 1);
     const end = Math.max(start, to - 1);
     return text.slice(start, end);
@@ -113,12 +113,12 @@ function makeEditor(text = 'Hello'): {
 
 function makeEditorWithDuplicateBlockIds(): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
   tr: {
-    insertText: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
   };
 } {
   const firstTextNode = createNode('text', [], { text: 'Hello' });
@@ -136,23 +136,23 @@ function makeEditorWithDuplicateBlockIds(): {
   const doc = createNode('doc', [firstParagraph, secondParagraph], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn(),
-    delete: vi.fn(),
-    setMeta: vi.fn(),
-    addMark: vi.fn(),
+    insertText: mock(),
+    delete: mock(),
+    setMeta: mock(),
+    addMark: mock(),
   };
   tr.insertText.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
       doc: {
         ...doc,
-        textBetween: vi.fn((from: number, to: number) => {
+        textBetween: mock((from: number, to: number) => {
           const docText = 'Hello\nWorld';
           const start = Math.max(0, from - 1);
           const end = Math.max(start, to - 1);
@@ -162,7 +162,7 @@ function makeEditorWithDuplicateBlockIds(): {
       tr,
     },
     commands: {
-      insertTrackedChange: vi.fn(() => true),
+      insertTrackedChange: mock(() => true),
     },
     options: {
       user: { name: 'Test User' },
@@ -186,13 +186,13 @@ function makeEditorWithDuplicateBlockIds(): {
  */
 function makeEditorWithoutEditableTextBlock(): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
   tr: {
-    insertText: ReturnType<typeof vi.fn>;
-    insert: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof mock>;
+    insert: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
   };
 } {
   const table = createNode('table', [], {
@@ -203,11 +203,11 @@ function makeEditorWithoutEditableTextBlock(): {
   const doc = createNode('doc', [table], { isBlock: false, inlineContent: false });
 
   const tr = {
-    insertText: vi.fn(),
-    insert: vi.fn(),
-    delete: vi.fn(),
-    setMeta: vi.fn(),
-    addMark: vi.fn(),
+    insertText: mock(),
+    insert: mock(),
+    delete: mock(),
+    setMeta: mock(),
+    addMark: mock(),
   };
   tr.insertText.mockReturnValue(tr);
   tr.insert.mockReturnValue(tr);
@@ -218,27 +218,27 @@ function makeEditorWithoutEditableTextBlock(): {
   const mockTextNode = { isText: true, text: 'X' };
   const mockParagraph = { type: { name: 'paragraph' }, content: [mockTextNode] };
   const schema = {
-    text: vi.fn(() => mockTextNode),
+    text: mock(() => mockTextNode),
     nodes: {
       paragraph: {
-        create: vi.fn(() => mockParagraph),
+        create: mock(() => mockParagraph),
       },
     },
   };
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
       doc: {
         ...doc,
-        textBetween: vi.fn(() => ''),
+        textBetween: mock(() => ''),
       },
       tr,
       schema,
     },
     commands: {
-      insertTrackedChange: vi.fn(() => true),
+      insertTrackedChange: mock(() => true),
     },
     options: {
       user: { name: 'Test User' },
@@ -251,13 +251,13 @@ function makeEditorWithoutEditableTextBlock(): {
 
 function makeEditorWithBlankParagraph(): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
-  insertTrackedChange: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
+  insertTrackedChange: ReturnType<typeof mock>;
   tr: {
-    insertText: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
   };
 } {
   const paragraph = createNode('paragraph', [], {
@@ -268,24 +268,24 @@ function makeEditorWithBlankParagraph(): {
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn(),
-    delete: vi.fn(),
-    setMeta: vi.fn(),
-    addMark: vi.fn(),
+    insertText: mock(),
+    delete: mock(),
+    setMeta: mock(),
+    addMark: mock(),
   };
   tr.insertText.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
-  const insertTrackedChange = vi.fn(() => true);
+  const dispatch = mock();
+  const insertTrackedChange = mock(() => true);
 
   const editor = {
     state: {
       doc: {
         ...doc,
-        textBetween: vi.fn(() => ''),
+        textBetween: mock(() => ''),
       },
       tr,
     },
@@ -308,12 +308,12 @@ function makeEditorWithBlankParagraph(): {
  */
 function makeEditorWithTwoParagraphs(): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
   tr: {
-    insertText: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
   };
 } {
   const firstTextNode = createNode('text', [], { text: 'Hello' });
@@ -331,23 +331,23 @@ function makeEditorWithTwoParagraphs(): {
   const doc = createNode('doc', [firstParagraph, secondParagraph], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn(),
-    delete: vi.fn(),
-    setMeta: vi.fn(),
-    addMark: vi.fn(),
+    insertText: mock(),
+    delete: mock(),
+    setMeta: mock(),
+    addMark: mock(),
   };
   tr.insertText.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
       doc: {
         ...doc,
-        textBetween: vi.fn((from: number, to: number) => {
+        textBetween: mock((from: number, to: number) => {
           const fullText = 'Hello\nWorld';
           const start = Math.max(0, from - 1);
           const end = Math.max(start, to - 1);
@@ -357,7 +357,7 @@ function makeEditorWithTwoParagraphs(): {
       tr,
     },
     commands: {
-      insertTrackedChange: vi.fn(() => true),
+      insertTrackedChange: mock(() => true),
     },
     options: {
       user: { name: 'Test User' },
@@ -384,12 +384,12 @@ function makeEditorWithTwoParagraphs(): {
  */
 function makeEditorWithTrailingTable(): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
   tr: {
-    insertText: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
   };
 } {
   const textNode = createNode('text', [], { text: 'Hello' });
@@ -424,23 +424,23 @@ function makeEditorWithTrailingTable(): {
   const doc = createNode('doc', [paragraph, table], { isBlock: false, inlineContent: false });
 
   const tr = {
-    insertText: vi.fn(),
-    delete: vi.fn(),
-    setMeta: vi.fn(),
-    addMark: vi.fn(),
+    insertText: mock(),
+    delete: mock(),
+    setMeta: mock(),
+    addMark: mock(),
   };
   tr.insertText.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
       doc: {
         ...doc,
-        textBetween: vi.fn((from: number, to: number) => {
+        textBetween: mock((from: number, to: number) => {
           // p1 content at 1..6 = "Hello", cell content at 11..15 = "Cell"
           const text = 'Hello';
           const start = Math.max(0, from - 1);
@@ -451,7 +451,7 @@ function makeEditorWithTrailingTable(): {
       tr,
     },
     commands: {
-      insertTrackedChange: vi.fn(() => true),
+      insertTrackedChange: mock(() => true),
     },
     options: {
       user: { name: 'Test User' },
@@ -553,7 +553,7 @@ describe('writeAdapter', () => {
   });
 
   it('returns degraded success without inserted ref when canonical resolution fails', () => {
-    const resolverSpy = vi.spyOn(trackedChangeResolver, 'toCanonicalTrackedChangeId').mockReturnValue(null);
+    const resolverSpy = spyOn(trackedChangeResolver, 'toCanonicalTrackedChangeId').mockReturnValue(null);
     const { editor } = makeEditor('Hello');
 
     const receipt = writeAdapter(
@@ -844,7 +844,7 @@ describe('writeAdapter', () => {
 
   it('returns NO_OP when tracked write command does not apply', () => {
     const { editor } = makeEditor('Hello');
-    (editor.commands as { insertTrackedChange?: ReturnType<typeof vi.fn> }).insertTrackedChange = vi.fn(() => false);
+    (editor.commands as { insertTrackedChange?: ReturnType<typeof mock> }).insertTrackedChange = mock(() => false);
 
     const receipt = writeAdapter(
       editor,

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Editor } from '@core/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
 
@@ -6,10 +6,10 @@ describe('Run node', () => {
   it('is present in the starter schema', () => {
     const originalMatchMedia = window.matchMedia;
     if (!originalMatchMedia) {
-      window.matchMedia = vi.fn().mockReturnValue({
+      window.matchMedia = mock().mockReturnValue({
         matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
+        addEventListener: mock(),
+        removeEventListener: mock(),
       });
     }
 

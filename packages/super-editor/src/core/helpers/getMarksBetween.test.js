@@ -1,18 +1,16 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { doc, p, em, schema } from 'prosemirror-test-builder';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
+const { doc, p, em, schema } = await import('prosemirror-test-builder');
 
-const getMarkRangeMock = vi.hoisted(() => vi.fn(() => ({ from: 0, to: 2 })));
+const getMarkRangeMock = mock(() => ({ from: 0, to: 2 }));
 
-vi.mock('./getMarkRange.js', () => ({
+mock.module('./getMarkRange.js', () => ({
   getMarkRange: getMarkRangeMock,
 }));
 
-import { getMarksBetween } from './getMarksBetween.js';
+const { getMarksBetween } = await import('./getMarksBetween.js');
 
 describe('getMarksBetween', () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  afterEach(() => {});
 
   it('collects marks for collapsed selections using getMarkRange', () => {
     const testDoc = doc(p(em('Hi')));

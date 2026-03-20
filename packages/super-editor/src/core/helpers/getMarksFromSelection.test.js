@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { Schema } from 'prosemirror-model';
 import { schema, doc, p, em, strong } from 'prosemirror-test-builder';

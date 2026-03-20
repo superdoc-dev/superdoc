@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 /**
  * Headless Y.js Collaboration Integration Test
  *
@@ -6,7 +7,6 @@
  * tested end-to-end with a real collaboration server.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Doc as YDoc } from 'yjs';
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';

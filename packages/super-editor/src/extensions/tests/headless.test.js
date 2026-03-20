@@ -1,3 +1,4 @@
+import { describe, it, expect, mock, spyOn } from 'bun:test';
 /**
  * Headless Mode Node View Tests
  *
@@ -5,7 +6,6 @@
  * while maintaining full document functionality.
  */
 
-import { describe, it, expect, vi } from 'vitest';
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsFileBuffer } from '@tests/helpers/helpers.js';
@@ -83,8 +83,8 @@ describe('Headless static Editor.open()', () => {
 describe('Headless Mode Optimization', () => {
   it('opens real DOCX fixtures headlessly without paragraph RangeErrors', async () => {
     const { buffer } = await loadHeadlessOpenFixtureBuffer();
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const onException = vi.fn();
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    const onException = mock();
 
     let editor;
     try {
@@ -168,7 +168,7 @@ describe('Headless Mode Optimization', () => {
 
   it('does not sync paragraph runProperties for first runs nested in inline wrappers in headless mode', async () => {
     const buffer = await getTestDataAsFileBuffer('blank-doc.docx');
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
 
     let editor;
     try {

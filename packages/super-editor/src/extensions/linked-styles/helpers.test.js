@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { Schema, Slice, Fragment } from 'prosemirror-model';
 import {
   getLinkedStyle,

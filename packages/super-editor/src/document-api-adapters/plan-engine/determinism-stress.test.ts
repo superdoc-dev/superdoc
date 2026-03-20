@@ -1,3 +1,4 @@
+import { describe, it, test, expect, mock, beforeAll } from 'bun:test';
 /**
  * T5: Determinism stress test (§13.16)
  *
@@ -6,56 +7,55 @@
  * identical across all runs — no flaky ordering, no volatile state leaks.
  */
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { TextRewriteStep, StyleApplyStep, PlanReceipt } from '@superdoc/document-api';
 import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget, CompiledRangeTarget } from './executor-registry.types.js';
-import { executeCompiledPlan } from './executor.js';
-import { registerBuiltInExecutors } from './register-executors.js';
+const { executeCompiledPlan } = await import('./executor.js');
+const { registerBuiltInExecutors } = await import('./register-executors.js');
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-const mockedDeps = vi.hoisted(() => ({
-  getBlockIndex: vi.fn(),
-  resolveTextRangeInBlock: vi.fn(),
-  getRevision: vi.fn(() => '0'),
-  checkRevision: vi.fn(),
-  incrementRevision: vi.fn(() => '1'),
-  captureRunsInRange: vi.fn(),
-  resolveInlineStyle: vi.fn(() => []),
-  applyDirectMutationMeta: vi.fn(),
-  applyTrackedMutationMeta: vi.fn(),
-  mapBlockNodeType: vi.fn(),
-}));
+const mockedDeps = {
+  getBlockIndex: mock(),
+  resolveTextRangeInBlock: mock(),
+  getRevision: mock(() => '0'),
+  checkRevision: mock(),
+  incrementRevision: mock(() => '1'),
+  captureRunsInRange: mock(),
+  resolveInlineStyle: mock(() => []),
+  applyDirectMutationMeta: mock(),
+  applyTrackedMutationMeta: mock(),
+  mapBlockNodeType: mock(),
+};
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-vi.mock('../helpers/text-offset-resolver.js', () => ({
+mock.module('../helpers/text-offset-resolver.js', () => ({
   resolveTextRangeInBlock: mockedDeps.resolveTextRangeInBlock,
 }));
 
-vi.mock('./revision-tracker.js', () => ({
+mock.module('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
   checkRevision: mockedDeps.checkRevision,
   incrementRevision: mockedDeps.incrementRevision,
 }));
 
-vi.mock('./style-resolver.js', () => ({
+mock.module('./style-resolver.js', () => ({
   captureRunsInRange: mockedDeps.captureRunsInRange,
   resolveInlineStyle: mockedDeps.resolveInlineStyle,
 }));
 
-vi.mock('../helpers/transaction-meta.js', () => ({
+mock.module('../helpers/transaction-meta.js', () => ({
   applyDirectMutationMeta: mockedDeps.applyDirectMutationMeta,
   applyTrackedMutationMeta: mockedDeps.applyTrackedMutationMeta,
 }));
 
-vi.mock('../helpers/node-address-resolver.js', () => ({
+mock.module('../helpers/node-address-resolver.js', () => ({
   mapBlockNodeType: mockedDeps.mapBlockNodeType,
   findBlockById: (index: any, address: { nodeType: string; nodeId: string }) =>
     index.byId.get(`${address.nodeType}:${address.nodeId}`),
@@ -83,15 +83,15 @@ function mockMark(name: string) {
 }
 
 /** Create a fresh editor instance for each run — no shared state between runs. */
-function makeFreshEditor(): { editor: Editor; dispatch: ReturnType<typeof vi.fn> } {
+function makeFreshEditor(): { editor: Editor; dispatch: ReturnType<typeof mock> } {
   const boldMark = mockMark('bold');
   const tr = {
-    replaceWith: vi.fn(),
-    delete: vi.fn(),
-    insert: vi.fn(),
-    addMark: vi.fn(),
-    removeMark: vi.fn(),
-    setMeta: vi.fn(),
+    replaceWith: mock(),
+    delete: mock(),
+    insert: mock(),
+    addMark: mock(),
+    removeMark: mock(),
+    setMeta: mock(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc: {
@@ -106,24 +106,24 @@ function makeFreshEditor(): { editor: Editor; dispatch: ReturnType<typeof vi.fn>
   tr.removeMark.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
       doc: {
         textContent: 'Hello world',
-        textBetween: vi.fn(() => 'Hello world'),
-        nodesBetween: vi.fn(),
+        textBetween: mock(() => 'Hello world'),
+        nodesBetween: mock(),
       },
       tr,
       schema: {
         marks: {
-          bold: { create: vi.fn(() => boldMark) },
-          italic: { create: vi.fn(() => mockMark('italic')) },
-          underline: { create: vi.fn(() => mockMark('underline')) },
-          strike: { create: vi.fn(() => mockMark('strike')) },
+          bold: { create: mock(() => boldMark) },
+          italic: { create: mock(() => mockMark('italic')) },
+          underline: { create: mock(() => mockMark('underline')) },
+          strike: { create: mock(() => mockMark('strike')) },
         },
-        text: vi.fn((t: string, m?: unknown[]) => ({
+        text: mock((t: string, m?: unknown[]) => ({
           type: { name: 'text' },
           text: t,
           marks: m ?? [],
@@ -219,7 +219,6 @@ describe('determinism stress test: 100-run consistency', () => {
 
     for (let i = 0; i < 100; i++) {
       // Reset mocks for each run to avoid cross-run state leakage
-      vi.clearAllMocks();
       mockedDeps.getRevision.mockReturnValue('0');
       mockedDeps.incrementRevision.mockReturnValue('1');
       mockedDeps.resolveInlineStyle.mockReturnValue([]);

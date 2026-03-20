@@ -1,20 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { Mark, MarkType } from 'prosemirror-model';
 
-vi.mock('@superdoc/url-validation', () => ({
-  sanitizeHref: vi.fn((href: string) => {
+mock.module('@superdoc/url-validation', () => ({
+  sanitizeHref: mock((href: string) => {
     if (href.startsWith('javascript:')) return null;
     return { href };
   }),
 }));
 
-vi.mock('../../core/parts/adapters/relationships-mutation.js', () => ({
-  findOrCreateRelationship: vi.fn(() => 'rId-mock'),
+mock.module('../../core/parts/adapters/relationships-mutation.js', () => ({
+  findOrCreateRelationship: mock(() => 'rId-mock'),
 }));
 
-vi.mock('./transaction-meta.js', () => ({
-  applyDirectMutationMeta: vi.fn(),
+mock.module('./transaction-meta.js', () => ({
+  applyDirectMutationMeta: mock(),
 }));
 
 import {
@@ -34,18 +34,18 @@ import {
 function makeMockTr() {
   const tr = {
     docChanged: true,
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
   };
   return tr;
 }
 
 function makeMockMarkType(): MarkType {
   return {
-    create: vi.fn((attrs: Record<string, unknown>) => ({ type: { name: 'link' }, attrs })),
+    create: mock((attrs: Record<string, unknown>) => ({ type: { name: 'link' }, attrs })),
   } as unknown as MarkType;
 }
 
@@ -56,7 +56,7 @@ function makeMockEditor(opts: { mode?: string } = {}): {
 } {
   const tr = makeMockTr();
   const markType = makeMockMarkType();
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: { tr },
@@ -77,7 +77,7 @@ function makeMark(attrs: Record<string, unknown>): Mark {
 // ---------------------------------------------------------------------------
 
 describe('sanitizeHrefOrThrow', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('returns sanitized href for valid URLs', () => {
     expect(sanitizeHrefOrThrow('https://example.com')).toBe('https://example.com');
@@ -99,7 +99,7 @@ describe('sanitizeHrefOrThrow', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildMarkAttrs', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('builds attrs with href', () => {
     const { editor } = makeMockEditor();
@@ -149,7 +149,7 @@ describe('buildMarkAttrs', () => {
 // ---------------------------------------------------------------------------
 
 describe('wrapWithLink', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('calls tr.addMark with correct range and mark', () => {
     const { editor, tr, markType } = makeMockEditor();
@@ -173,7 +173,7 @@ describe('wrapWithLink', () => {
 // ---------------------------------------------------------------------------
 
 describe('insertLinkedText', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('inserts text then applies mark over the inserted range', () => {
     const { editor, tr } = makeMockEditor();
@@ -191,7 +191,7 @@ describe('insertLinkedText', () => {
 // ---------------------------------------------------------------------------
 
 describe('patchLinkMark', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('merges patch onto existing attrs', () => {
     const { editor, tr, markType } = makeMockEditor();
@@ -201,7 +201,7 @@ describe('patchLinkMark', () => {
 
     expect(tr.removeMark).toHaveBeenCalledWith(0, 5, existing);
     expect(markType.create).toHaveBeenCalledTimes(1);
-    const newAttrs = (markType.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const newAttrs = (markType.create as ReturnType<typeof mock>).mock.calls[0]![0];
     expect(newAttrs.href).toBe('https://old.com');
     expect(newAttrs.tooltip).toBe('New tip');
   });
@@ -212,7 +212,7 @@ describe('patchLinkMark', () => {
 
     patchLinkMark(editor, 0, 5, existing, { tooltip: null });
 
-    const newAttrs = (markType.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const newAttrs = (markType.create as ReturnType<typeof mock>).mock.calls[0]![0];
     expect(newAttrs.tooltip).toBeNull();
   });
 
@@ -222,7 +222,7 @@ describe('patchLinkMark', () => {
 
     patchLinkMark(editor, 0, 5, existing, { tooltip: undefined });
 
-    const newAttrs = (markType.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const newAttrs = (markType.create as ReturnType<typeof mock>).mock.calls[0]![0];
     expect(newAttrs.tooltip).toBe('Tip');
   });
 
@@ -232,7 +232,7 @@ describe('patchLinkMark', () => {
 
     patchLinkMark(editor, 0, 5, existing, { anchor: 'newBookmark' });
 
-    const newAttrs = (markType.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const newAttrs = (markType.create as ReturnType<typeof mock>).mock.calls[0]![0];
     expect(newAttrs.anchor).toBe('newBookmark');
     expect(newAttrs.href).toBe('#newBookmark');
   });
@@ -243,7 +243,7 @@ describe('patchLinkMark', () => {
 
     patchLinkMark(editor, 0, 5, existing, { anchor: 'newBookmark' });
 
-    const newAttrs = (markType.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const newAttrs = (markType.create as ReturnType<typeof mock>).mock.calls[0]![0];
     expect(newAttrs.anchor).toBe('newBookmark');
     expect(newAttrs.href).toBe('https://example.com');
   });
@@ -254,7 +254,7 @@ describe('patchLinkMark', () => {
 
     patchLinkMark(editor, 0, 5, existing, { href: null });
 
-    const newAttrs = (markType.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const newAttrs = (markType.create as ReturnType<typeof mock>).mock.calls[0]![0];
     expect(newAttrs.href).toBe('#bm1');
     expect(newAttrs.rId).toBeNull();
   });
@@ -276,7 +276,7 @@ describe('patchLinkMark', () => {
 // ---------------------------------------------------------------------------
 
 describe('unwrapLink', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('removes the link mark type from the range', () => {
     const { editor, tr } = makeMockEditor();
@@ -299,7 +299,7 @@ describe('unwrapLink', () => {
 });
 
 describe('deleteLinkedText', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('deletes the text range', () => {
     const { editor, tr } = makeMockEditor();

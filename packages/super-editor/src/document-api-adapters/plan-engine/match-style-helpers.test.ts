@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import type { CapturedRun } from './style-resolver.js';
 import {
   marksEqual,
@@ -13,8 +13,8 @@ import {
 import type { MatchRun } from '@superdoc/document-api';
 
 // Mock style-engine resolveRunProperties for cascade context tests
-const resolveRunPropertiesMock = vi.hoisted(() => vi.fn(() => ({})));
-vi.mock('@superdoc/style-engine/ooxml', async (importOriginal) => {
+const resolveRunPropertiesMock = mock(() => ({}));
+mock.module('@superdoc/style-engine/ooxml', async (importOriginal) => {
   const orig = await importOriginal<typeof import('@superdoc/style-engine/ooxml')>();
   return {
     ...orig,

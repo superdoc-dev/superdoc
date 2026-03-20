@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { EditorState } from 'prosemirror-state';
 import { createDocxTestEditor } from '../../helpers/editor-test-utils.js';
 

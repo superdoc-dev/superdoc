@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { backspaceNextToRun } from './backspaceNextToRun.js';
@@ -63,7 +63,7 @@ describe('backspaceNextToRun', () => {
     expect(boundary).not.toBeNull();
 
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, boundary ?? 1) });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = backspaceNextToRun()({ state, tr: state.tr, dispatch });
 
@@ -75,7 +75,7 @@ describe('backspaceNextToRun', () => {
     const schema = makeSchema();
     const doc = schema.node('doc', null, [schema.node('paragraph', null, schema.text('AB'))]);
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 2) }); // inside plain text
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = backspaceNextToRun()({ state, tr: state.tr, dispatch });
 
@@ -124,7 +124,7 @@ describe('backspaceNextToRun', () => {
     expect(boundary).not.toBeNull();
 
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, boundary ?? 1) });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = backspaceNextToRun()({ state, tr: state.tr, dispatch });
 

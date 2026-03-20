@@ -1,3 +1,4 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 /**
  * Regression tests for create.paragraph and create.heading story routing.
  *
@@ -5,55 +6,54 @@
  * resolving a story runtime and executing on the correct editor.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StoryLocator } from '@superdoc/document-api';
-import { createParagraphWrapper, createHeadingWrapper } from './create-wrappers.js';
+const { createParagraphWrapper, createHeadingWrapper } = await import('./create-wrappers.js');
 import type { Editor } from '../../core/Editor.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mocks = vi.hoisted(() => ({
-  resolveStoryRuntime: vi.fn(),
-  executeDomainCommand: vi.fn(),
-  resolveCreateAnchor: vi.fn(),
-  clearIndexCache: vi.fn(),
-  getBlockIndex: vi.fn(),
-  collectTrackInsertRefsInRange: vi.fn(),
-  requireEditorCommand: vi.fn((cmd: unknown) => cmd),
-  ensureTrackedCapability: vi.fn(),
-}));
+const mocks = {
+  resolveStoryRuntime: mock(),
+  executeDomainCommand: mock(),
+  resolveCreateAnchor: mock(),
+  clearIndexCache: mock(),
+  getBlockIndex: mock(),
+  collectTrackInsertRefsInRange: mock(),
+  requireEditorCommand: mock((cmd: unknown) => cmd),
+  ensureTrackedCapability: mock(),
+};
 
-vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
+mock.module('../story-runtime/resolve-story-runtime.js', () => ({
   resolveStoryRuntime: mocks.resolveStoryRuntime,
 }));
 
-vi.mock('./plan-wrappers.js', async (importOriginal) => {
+mock.module('./plan-wrappers.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./plan-wrappers.js')>();
   return {
     ...original,
     resolveWriteStoryRuntime: (editor: Editor, locator?: StoryLocator) =>
       mocks.resolveStoryRuntime(editor, locator, { intent: 'write' }),
     executeDomainCommand: mocks.executeDomainCommand,
-    disposeEphemeralWriteRuntime: vi.fn(),
+    disposeEphemeralWriteRuntime: mock(),
   };
 });
 
-vi.mock('./create-insertion.js', () => ({
+mock.module('./create-insertion.js', () => ({
   resolveCreateAnchor: mocks.resolveCreateAnchor,
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   clearIndexCache: mocks.clearIndexCache,
   getBlockIndex: mocks.getBlockIndex,
 }));
 
-vi.mock('../helpers/tracked-change-refs.js', () => ({
+mock.module('../helpers/tracked-change-refs.js', () => ({
   collectTrackInsertRefsInRange: mocks.collectTrackInsertRefsInRange,
 }));
 
-vi.mock('../helpers/mutation-helpers.js', () => ({
+mock.module('../helpers/mutation-helpers.js', () => ({
   requireEditorCommand: mocks.requireEditorCommand,
   ensureTrackedCapability: mocks.ensureTrackedCapability,
 }));
@@ -71,12 +71,12 @@ const footnoteLocator: StoryLocator = {
 function makeStoryEditor(): Editor {
   return {
     commands: {
-      insertParagraphAt: vi.fn(() => true),
-      insertHeadingAt: vi.fn(() => true),
+      insertParagraphAt: mock(() => true),
+      insertHeadingAt: mock(() => true),
     },
     can: () => ({
-      insertParagraphAt: vi.fn(() => true),
-      insertHeadingAt: vi.fn(() => true),
+      insertParagraphAt: mock(() => true),
+      insertHeadingAt: mock(() => true),
     }),
     state: {
       doc: {
@@ -89,12 +89,12 @@ function makeStoryEditor(): Editor {
 function makeHostEditor(): Editor {
   return {
     commands: {
-      insertParagraphAt: vi.fn(() => true),
-      insertHeadingAt: vi.fn(() => true),
+      insertParagraphAt: mock(() => true),
+      insertHeadingAt: mock(() => true),
     },
     can: () => ({
-      insertParagraphAt: vi.fn(() => true),
-      insertHeadingAt: vi.fn(() => true),
+      insertParagraphAt: mock(() => true),
+      insertHeadingAt: mock(() => true),
     }),
     state: {
       doc: {
@@ -109,8 +109,6 @@ function makeHostEditor(): Editor {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  vi.clearAllMocks();
-
   mocks.executeDomainCommand.mockReturnValue({
     steps: [{ effect: 'changed' }],
   });
@@ -124,7 +122,7 @@ describe('createParagraphWrapper — story routing', () => {
   it('resolves the story runtime from input.in and executes on the story editor', () => {
     const hostEditor = makeHostEditor();
     const storyEditor = makeStoryEditor();
-    const commitSpy = vi.fn();
+    const commitSpy = mock();
 
     mocks.resolveStoryRuntime.mockReturnValue({
       locator: footnoteLocator,
@@ -171,7 +169,7 @@ describe('createHeadingWrapper — story routing', () => {
   it('resolves the story runtime from input.in and executes on the story editor', () => {
     const hostEditor = makeHostEditor();
     const storyEditor = makeStoryEditor();
-    const commitSpy = vi.fn();
+    const commitSpy = mock();
 
     mocks.resolveStoryRuntime.mockReturnValue({
       locator: footnoteLocator,

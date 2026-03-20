@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { alternateChoiceHandler } from '@converter/v2/importer/alternateChoiceImporter.js';
 
 const callHandler = (nodes, extra = {}) => {
-  const handlerSpy = vi.fn(({ nodes: innerNodes }) => innerNodes);
+  const handlerSpy = mock(({ nodes: innerNodes }) => innerNodes);
   const result = alternateChoiceHandler.handler({
     nodes,
     nodeListHandler: { handler: handlerSpy },

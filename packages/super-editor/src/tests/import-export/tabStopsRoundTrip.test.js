@@ -1,4 +1,4 @@
-import { expect } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter.js';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { translator as wPTranslator } from '@converter/v3/handlers/w/p';
@@ -7,7 +7,7 @@ describe('Tab Stops Round Trip Tests', () => {
   // Create a minimal editor mock that has the required extensions property
   const createMockEditor = () => ({
     extensions: {
-      find: vi.fn(() => null),
+      find: mock(() => null),
     },
     schema: {
       marks: {},

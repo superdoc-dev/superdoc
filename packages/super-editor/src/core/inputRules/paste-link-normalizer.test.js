@@ -1,27 +1,23 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { describe, it, test, expect, mock, beforeEach } from 'bun:test';
 /** Lightweight stand-in so `selection instanceof TextSelection` works in tests. */
-const { MockTextSelection } = vi.hoisted(() => {
-  class MockTextSelection {
-    constructor({ from = 0, to = 0 } = {}) {
-      this.from = from;
-      this.to = to;
-      this.empty = from === to;
-    }
+class MockTextSelection {
+  constructor({ from = 0, to = 0 } = {}) {
+    this.from = from;
+    this.to = to;
+    this.empty = from === to;
   }
-  return { MockTextSelection };
-});
+}
 
-vi.mock('prosemirror-state', () => ({
+mock.module('prosemirror-state', () => ({
   TextSelection: MockTextSelection,
 }));
 
-vi.mock('@superdoc/url-validation', () => {
+mock.module('@superdoc/url-validation', () => {
   const DEFAULT_ALLOWED_PROTOCOLS = ['http', 'https', 'mailto', 'tel', 'sms'];
 
   return {
     UrlValidationConstants: { DEFAULT_ALLOWED_PROTOCOLS },
-    sanitizeHref: vi.fn((raw, config) => {
+    sanitizeHref: mock((raw, config) => {
       if (!raw || typeof raw !== 'string') return null;
 
       const trimmed = raw.trim();
@@ -43,12 +39,12 @@ vi.mock('@superdoc/url-validation', () => {
   };
 });
 
-vi.mock('@core/parts/adapters/relationships-mutation.js', () => ({
-  findOrCreateRelationship: vi.fn(),
+mock.module('@core/parts/adapters/relationships-mutation.js', () => ({
+  findOrCreateRelationship: mock(),
 }));
 
-vi.mock('../../utils/rangeUtils.js', () => ({
-  mergeRanges: vi.fn((ranges, _docSize) => {
+mock.module('../../utils/rangeUtils.js', () => ({
+  mergeRanges: mock((ranges, _docSize) => {
     if (!ranges.length) return [];
     const sorted = [...ranges].sort((a, b) => a.from - b.from);
     const merged = [];
@@ -125,16 +121,16 @@ function createMockTransaction() {
     mapping: {
       maps: [],
     },
-    insertText: vi.fn(function () {
+    insertText: mock(function () {
       return this;
     }),
-    addMark: vi.fn(function () {
+    addMark: mock(function () {
       return this;
     }),
-    removeMark: vi.fn(function () {
+    removeMark: mock(function () {
       return this;
     }),
-    scrollIntoView: vi.fn(function () {
+    scrollIntoView: mock(function () {
       return this;
     }),
   };
@@ -173,9 +169,7 @@ describe('maybeAddProtocol', () => {
 // ---------------------------------------------------------------------------
 
 describe('detectPasteUrl', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('detects https URL', () => {
     const result = detectPasteUrl('https://example.com');
@@ -268,9 +262,7 @@ describe('canAllocateRels', () => {
 // ---------------------------------------------------------------------------
 
 describe('handlePlainTextUrlPaste', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('inserts URL text and applies link + underline marks on collapsed selection', () => {
     const editor = createMockEditor({ mode: 'html' });
@@ -349,15 +341,13 @@ describe('handlePlainTextUrlPaste', () => {
 // ---------------------------------------------------------------------------
 
 describe('normalizePastedLinks', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   function createTransactionWithLinks(linkSpans = []) {
     const tr = {
       doc: {
         content: { size: 100 },
-        nodesBetween: vi.fn((from, to, callback) => {
+        nodesBetween: mock((from, to, callback) => {
           for (const span of linkSpans) {
             if (span.from >= from && span.from < to) {
               const linkMark = { type: LINK_MARK_TYPE, attrs: { ...span.attrs } };
@@ -385,8 +375,8 @@ describe('normalizePastedLinks', () => {
           },
         ],
       },
-      removeMark: vi.fn(),
-      addMark: vi.fn(),
+      removeMark: mock(),
+      addMark: mock(),
     };
 
     return { tr, linkMarkType: LINK_MARK_TYPE };

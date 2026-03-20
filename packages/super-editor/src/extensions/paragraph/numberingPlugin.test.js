@@ -1,12 +1,12 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createNumberingPlugin } from './numberingPlugin.js';
+const { createNumberingPlugin } = await import('./numberingPlugin.js');
 import { createNumberingManager } from './NumberingManager.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
 import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
 
-vi.mock('prosemirror-state', () => ({
+mock.module('prosemirror-state', () => ({
   Plugin: class {
     constructor(spec) {
       this.spec = spec;
@@ -19,29 +19,29 @@ vi.mock('prosemirror-state', () => ({
   },
 }));
 
-vi.mock('./NumberingManager.js', () => ({
-  createNumberingManager: vi.fn(),
+mock.module('./NumberingManager.js', () => ({
+  createNumberingManager: mock(),
 }));
 
-vi.mock('@helpers/list-numbering-helpers.js', () => ({
+mock.module('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
-    getAllListDefinitions: vi.fn(),
-    getListDefinitionDetails: vi.fn(),
+    getAllListDefinitions: mock(),
+    getListDefinitionDetails: mock(),
   },
 }));
 
-vi.mock('@helpers/orderedListUtils.js', () => ({
-  generateOrderedListIndex: vi.fn(),
+mock.module('@helpers/orderedListUtils.js', () => ({
+  generateOrderedListIndex: mock(),
 }));
 
-vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
+mock.module('@core/super-converter/v2/importer/listImporter.js', () => ({
   docxNumberingHelpers: {
-    normalizeLvlTextChar: vi.fn(),
+    normalizeLvlTextChar: mock(),
   },
 }));
 
 describe('numberingPlugin', () => {
-  /** @type {{ setStartSettings: ReturnType<typeof vi.fn>, enableCache: ReturnType<typeof vi.fn>, disableCache: ReturnType<typeof vi.fn>, calculateCounter: ReturnType<typeof vi.fn>, setCounter: ReturnType<typeof vi.fn>, calculatePath: ReturnType<typeof vi.fn> }} */
+  /** @type {{ setStartSettings: ReturnType<typeof mock>, enableCache: ReturnType<typeof mock>, disableCache: ReturnType<typeof mock>, calculateCounter: ReturnType<typeof mock>, setCounter: ReturnType<typeof mock>, calculatePath: ReturnType<typeof mock> }} */
   let numberingManager;
 
   const createEditor = () => ({
@@ -56,15 +56,15 @@ describe('numberingPlugin', () => {
         },
       },
     },
-    on: vi.fn(),
-    off: vi.fn(),
+    on: mock(),
+    off: mock(),
   });
 
   const createTransaction = () => {
     const tr = {
       docChanged: false,
-      setMeta: vi.fn(),
-      setNodeAttribute: vi.fn(() => {
+      setMeta: mock(),
+      setNodeAttribute: mock(() => {
         tr.docChanged = true;
         return tr;
       }),
@@ -78,7 +78,7 @@ describe('numberingPlugin', () => {
         cb(node, pos);
       });
     },
-    resolve: vi.fn((pos) => {
+    resolve: mock((pos) => {
       const match = nodes.find((entry) => entry.pos === pos);
       const targetNode = match?.node || { type: { name: 'paragraph' }, attrs: { paragraphProperties: {} } };
       return {
@@ -91,14 +91,13 @@ describe('numberingPlugin', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     numberingManager = {
-      setStartSettings: vi.fn(),
-      enableCache: vi.fn(),
-      disableCache: vi.fn(),
-      calculateCounter: vi.fn().mockReturnValue(1),
-      setCounter: vi.fn(),
-      calculatePath: vi.fn().mockReturnValue([1]),
+      setStartSettings: mock(),
+      enableCache: mock(),
+      disableCache: mock(),
+      calculateCounter: mock().mockReturnValue(1),
+      setCounter: mock(),
+      calculatePath: mock().mockReturnValue([1]),
     };
     createNumberingManager.mockReturnValue(numberingManager);
     ListHelpers.getAllListDefinitions.mockReturnValue({});
@@ -177,7 +176,7 @@ describe('numberingPlugin', () => {
     ]);
 
     const tr = createTransaction();
-    const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+    const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
     const newState = { doc, tr };
 
     numberingManager.calculateCounter.mockReturnValue(4);
@@ -232,7 +231,7 @@ describe('numberingPlugin', () => {
 
     const doc = makeDoc([{ node: bulletParagraph, pos: 12 }]);
     const tr = createTransaction();
-    const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+    const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
     numberingManager.calculateCounter.mockReturnValue(1);
     numberingManager.calculatePath.mockReturnValue([1, 1, 1]);
@@ -275,7 +274,7 @@ describe('numberingPlugin', () => {
 
     const doc = makeDoc([{ node: paragraph, pos: 7 }]);
     const tr = createTransaction();
-    const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+    const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
     ListHelpers.getListDefinitionDetails.mockReturnValue(null);
 
@@ -293,7 +292,7 @@ describe('numberingPlugin', () => {
     const plugin = createNumberingPlugin(editor);
     const { appendTransaction } = plugin.spec;
 
-    const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(true) }];
+    const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(true) }];
     const doc = makeDoc([]);
     const tr = createTransaction();
 
@@ -322,7 +321,7 @@ describe('numberingPlugin', () => {
 
       const doc = makeDoc([{ node: paragraph, pos: 3 }]);
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       numberingManager.calculateCounter.mockReturnValue(1);
       numberingManager.calculatePath.mockReturnValue([1]);
@@ -358,7 +357,7 @@ describe('numberingPlugin', () => {
 
       const doc = makeDoc([{ node: paragraph, pos: 5 }]);
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       ListHelpers.getListDefinitionDetails.mockReturnValue(null);
 
@@ -386,7 +385,7 @@ describe('numberingPlugin', () => {
 
       const doc = makeDoc([{ node: paragraph, pos: 2 }]);
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       numberingManager.calculateCounter.mockReturnValue(1);
       numberingManager.calculatePath.mockReturnValue([1]);
@@ -430,7 +429,7 @@ describe('numberingPlugin', () => {
 
       const doc = makeDoc([{ node: paragraph, pos: 4 }]);
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       numberingManager.calculateCounter.mockReturnValue(1);
       numberingManager.calculatePath.mockReturnValue([1]);
@@ -467,7 +466,7 @@ describe('numberingPlugin', () => {
 
       const doc = makeDoc([{ node: paragraph, pos: 6 }]);
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       numberingManager.calculateCounter.mockReturnValue(1);
       numberingManager.calculatePath.mockReturnValue([1]);
@@ -506,7 +505,7 @@ describe('numberingPlugin', () => {
 
       const doc = makeDoc([{ node: paragraph, pos: 5 }]);
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       numberingManager.calculateCounter.mockReturnValue(1);
       numberingManager.calculatePath.mockReturnValue([1]);
@@ -549,7 +548,7 @@ describe('numberingPlugin', () => {
 
       const doc = makeDoc([{ node: paragraph, pos: 5 }]);
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       numberingManager.calculateCounter.mockReturnValue(1);
       numberingManager.calculatePath.mockReturnValue([1]);
@@ -581,13 +580,13 @@ describe('numberingPlugin', () => {
       const { appendTransaction } = plugin.spec;
 
       const doc = {
-        descendants: vi.fn(() => {
+        descendants: mock(() => {
           throw new Error('simulated crash');
         }),
-        resolve: vi.fn(),
+        resolve: mock(),
       };
       const tr = createTransaction();
-      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+      const transactions = [{ docChanged: true, getMeta: mock().mockReturnValue(false) }];
 
       expect(() => appendTransaction(transactions, {}, { doc, tr })).toThrow('simulated crash');
       expect(numberingManager.enableCache).toHaveBeenCalled();

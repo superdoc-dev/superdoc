@@ -1,3 +1,4 @@
+import { describe, it, expect, mock } from 'bun:test';
 /**
  * Setter/Getter parity tests for table adapters.
  *
@@ -7,7 +8,6 @@
  * 3. The getProperties getter reads from tableProperties (not top-level)
  * 4. Set→get round-trips produce correct output
  */
-import { describe, it, expect, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import {
@@ -184,25 +184,25 @@ function makeTableEditorWithProps(tableProperties: Record<string, unknown> = {})
   });
   const doc = createNode('doc', [table], { isBlock: false });
 
-  const setNodeMarkupFn = vi.fn().mockReturnThis();
-  const dispatch = vi.fn();
+  const setNodeMarkupFn = mock().mockReturnThis();
+  const dispatch = mock();
 
   const tr = {
     setNodeMarkup: setNodeMarkupFn,
-    setMeta: vi.fn().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { maps: [], map: (p: number) => p, slice: () => ({ map: (p: number) => p }) },
-    doc: { ...doc, textBetween: vi.fn(() => '') },
+    doc: { ...doc, textBetween: mock(() => '') },
   };
 
   const editor = {
     state: {
-      doc: { ...doc, textBetween: vi.fn(() => '') },
+      doc: { ...doc, textBetween: mock(() => '') },
       tr,
       schema: { nodes: {}, text: (t: string) => createNode('text', [], { text: t }) },
     },
     dispatch,
     commands: {},
-    can: vi.fn(() => ({})),
+    can: mock(() => ({})),
     schema: { marks: {}, nodes: {} },
     options: {},
   } as unknown as Editor;

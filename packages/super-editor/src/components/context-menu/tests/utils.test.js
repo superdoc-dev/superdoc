@@ -1,44 +1,44 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createMockEditor, createBeforeEachSetup } from './testHelpers.js';
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+const { createMockEditor, createBeforeEachSetup } = await import('./testHelpers.js');
 
 // Mock the modules first
-vi.mock('../../../core/utilities/clipboardUtils.js');
-vi.mock('../../cursor-helpers.js', async () => {
-  const actual = await vi.importActual('../../cursor-helpers.js');
+mock.module('../../../core/utilities/clipboardUtils.js');
+mock.module('../../cursor-helpers.js', async () => {
+  const actual = await import('../../cursor-helpers.js');
   return {
     ...actual,
-    selectionHasNodeOrMark: vi.fn(),
+    selectionHasNodeOrMark: mock(),
   };
 });
-vi.mock('../constants.js', () => ({
+mock.module('../constants.js', () => ({
   tableActionsOptions: [{ label: 'Add Row', command: 'addRow', icon: '<svg>add-row</svg>' }],
 }));
-vi.mock('prosemirror-history', () => ({
-  undoDepth: vi.fn(() => 0),
-  redoDepth: vi.fn(() => 0),
+mock.module('prosemirror-history', () => ({
+  undoDepth: mock(() => 0),
+  redoDepth: mock(() => 0),
 }));
-vi.mock('y-prosemirror', () => ({
+mock.module('y-prosemirror', () => ({
   yUndoPluginKey: {
-    getState: vi.fn(() => ({ undoManager: { undoStack: [], redoStack: [] } })),
+    getState: mock(() => ({ undoManager: { undoStack: [], redoStack: [] } })),
   },
 }));
 
-vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
-  collectTrackedChanges: vi.fn(() => []),
-  collectTrackedChangesForContext: vi.fn(() => []),
-  isTrackedChangeActionAllowed: vi.fn(() => true),
+mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+  collectTrackedChanges: mock(() => []),
+  collectTrackedChangesForContext: mock(() => []),
+  isTrackedChangeActionAllowed: mock(() => true),
 }));
 
-vi.mock('@core/commands/list-helpers', () => ({
-  isList: vi.fn(() => false),
+mock.module('@core/commands/list-helpers', () => ({
+  isList: mock(() => false),
 }));
 
-vi.mock('@extensions/table/tableHelpers/isCellSelection.js', () => ({
-  isCellSelection: vi.fn(() => false),
+mock.module('@extensions/table/tableHelpers/isCellSelection.js', () => ({
+  isCellSelection: mock(() => false),
 }));
 
-vi.mock('prosemirror-tables', () => ({
-  selectedRect: vi.fn(() => ({
+mock.module('prosemirror-tables', () => ({
+  selectedRect: mock(() => ({
     top: 0,
     bottom: 2,
     left: 0,
@@ -67,13 +67,13 @@ import {
 } from '@extensions/track-changes/permission-helpers.js';
 
 // Get the mocked functions
-const mockReadFromClipboard = vi.mocked(readFromClipboard);
-const mockSelectionHasNodeOrMark = vi.mocked(selectionHasNodeOrMark);
-const mockUndoDepth = vi.mocked(undoDepth);
-const mockRedoDepth = vi.mocked(redoDepth);
-const mockYUndoPluginKeyGetState = vi.mocked(yUndoPluginKey.getState);
-const mockCollectTrackedChanges = vi.mocked(collectTrackedChanges);
-const mockCollectTrackedChangesForContext = vi.mocked(collectTrackedChangesForContext);
+const mockReadFromClipboard = readFromClipboard;
+const mockSelectionHasNodeOrMark = selectionHasNodeOrMark;
+const mockUndoDepth = undoDepth;
+const mockRedoDepth = redoDepth;
+const mockYUndoPluginKeyGetState = yUndoPluginKey.getState;
+const mockCollectTrackedChanges = collectTrackedChanges;
+const mockCollectTrackedChangesForContext = collectTrackedChangesForContext;
 
 describe('utils.js', () => {
   let mockEditor;
@@ -208,7 +208,7 @@ describe('utils.js', () => {
       mockEditor.view.posAtCoords.mockReturnValue({ pos: 20 });
       mockEditor.view.state.doc.nodeAt.mockReturnValue({ type: { name: 'text' } });
       mockEditor.view.state.doc.content = { size: 100 }; // Add missing content.size mock
-      mockEditor.view.state.doc.nodesBetween = vi.fn((from, to, callback) => {
+      mockEditor.view.state.doc.nodesBetween = mock((from, to, callback) => {
         // Mock nodesBetween to call the callback with a node that has the expected mark
         const mockNode = {
           marks: [{ type: { name: 'trackDelete' }, attrs: { id: 'track-1' } }],
@@ -239,7 +239,7 @@ describe('utils.js', () => {
           };
           return map[depth] || { type: { name: 'doc' }, marks: [] };
         },
-        marks: vi.fn(() => []),
+        marks: mock(() => []),
         // In ProseMirror, marks are on inline nodes, not block nodes
         nodeBefore: {
           type: { name: 'text' },
@@ -277,7 +277,7 @@ describe('utils.js', () => {
       mockEditor.view.state.doc.nodeAt.mockReturnValue({ type: { name: 'text' } });
       mockEditor.view.state.doc.textBetween.mockReturnValue('selected text');
       mockEditor.view.state.doc.resolve.mockReturnValue({
-        marks: vi.fn(() => []),
+        marks: mock(() => []),
         nodeBefore: null,
         nodeAfter: null,
       });
@@ -301,7 +301,7 @@ describe('utils.js', () => {
       mockEditor.view.state.doc.nodeAt.mockReturnValue({ type: { name: 'text' } });
       mockEditor.view.state.doc.textBetween.mockReturnValue('selected text');
       mockEditor.view.state.doc.resolve.mockReturnValue({
-        marks: vi.fn(() => []),
+        marks: mock(() => []),
         nodeBefore: null,
         nodeAfter: null,
       });
@@ -389,7 +389,7 @@ describe('utils.js', () => {
     it('should derive canUndo/canRedo from editor command availability', async () => {
       delete mockEditor.view.state.history;
 
-      mockEditor.can = vi.fn(() => ({
+      mockEditor.can = mock(() => ({
         undo: () => true,
         redo: () => false,
       }));
@@ -524,7 +524,7 @@ describe('utils.js', () => {
       isList.mockReturnValue(false);
       mockProps = {
         editor: mockEditor,
-        closePopover: vi.fn(),
+        closePopover: mock(),
       };
     });
 
@@ -555,7 +555,7 @@ describe('utils.js', () => {
 
     it('should handle table insertion through onSelect', () => {
       mockEditor.commands = {
-        insertTable: vi.fn(),
+        insertTable: mock(),
       };
 
       const props = getPropsByItemId('insert-table', mockProps);
@@ -577,7 +577,7 @@ describe('utils.js', () => {
 
     it('should handle table action execution through onSelect', () => {
       mockEditor.commands = {
-        addRow: vi.fn(),
+        addRow: mock(),
       };
 
       const props = getPropsByItemId('edit-table', mockProps);
@@ -683,7 +683,7 @@ describe('utils.js', () => {
       selectedRectMock.mockImplementation(() => {
         throw new Error('no cell selection');
       });
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
       const result = __getCellSelectionInfoForTest(mockEditor.state);
 
@@ -700,7 +700,7 @@ describe('utils.js', () => {
     it('should detect structure from resolved position', () => {
       const state = {
         doc: {
-          resolve: vi.fn(() => ({
+          resolve: mock(() => ({
             depth: 4,
             node: (depth) => {
               const map = {
@@ -722,10 +722,10 @@ describe('utils.js', () => {
     });
 
     it('should return null when position resolution fails', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const state = {
         doc: {
-          resolve: vi.fn(() => {
+          resolve: mock(() => {
             throw new Error('boom');
           }),
         },

@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { schema, doc, p } from 'prosemirror-test-builder';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { EditorState, TextSelection } = await import('prosemirror-state');
+const { schema, doc, p } = await import('prosemirror-test-builder');
 
-const handleDocxPasteMock = vi.hoisted(() => vi.fn(() => true));
-const handleGoogleDocsHtmlMock = vi.hoisted(() => vi.fn(() => true));
-const flattenListsInHtmlMock = vi.hoisted(() => vi.fn((html) => html));
+const handleDocxPasteMock = mock(() => true);
+const handleGoogleDocsHtmlMock = mock(() => true);
+const flattenListsInHtmlMock = mock((html) => html);
 
-vi.mock('./inputRules/docx-paste/docx-paste.js', async (importOriginal) => {
+mock.module('./inputRules/docx-paste/docx-paste.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
@@ -14,11 +14,11 @@ vi.mock('./inputRules/docx-paste/docx-paste.js', async (importOriginal) => {
   };
 });
 
-vi.mock('./inputRules/google-docs-paste/google-docs-paste.js', () => ({
+mock.module('./inputRules/google-docs-paste/google-docs-paste.js', () => ({
   handleGoogleDocsHtml: handleGoogleDocsHtmlMock,
 }));
 
-vi.mock('./inputRules/html/html-helpers.js', () => ({
+mock.module('./inputRules/html/html-helpers.js', () => ({
   flattenListsInHtml: flattenListsInHtmlMock,
 }));
 
@@ -56,7 +56,7 @@ describe('InputRule helpers', () => {
   });
 
   it('stores matcher configuration in InputRule instances', () => {
-    const handler = vi.fn();
+    const handler = mock();
     const rule = new InputRule({ match: /::/, handler });
 
     expect(rule.match).toEqual(/::/);

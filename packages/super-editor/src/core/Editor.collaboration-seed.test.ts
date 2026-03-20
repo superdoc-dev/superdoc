@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import { Doc as YDoc } from 'yjs';
 import { Editor } from './Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';

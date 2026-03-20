@@ -1,15 +1,16 @@
-import { Schema } from 'prosemirror-model';
-import { prepareCommentsForImport } from './comments-helpers.js';
+import { describe, it, expect, mock } from 'bun:test';
+const { Schema } = await import('prosemirror-model');
+const { prepareCommentsForImport } = await import('./comments-helpers.js');
 
-vi.mock('./comment-import-helpers.js', () => {
+mock.module('./comment-import-helpers.js', () => {
   return {
-    resolveCommentMeta: vi.fn().mockReturnValue({
+    resolveCommentMeta: mock().mockReturnValue({
       importedId: 'import-1',
       resolvedCommentId: 'comment-1',
       internal: false,
       matchingImportedComment: { isDone: true },
     }),
-    ensureFallbackComment: vi.fn(),
+    ensureFallbackComment: mock(),
   };
 });
 
@@ -35,9 +36,9 @@ describe('prepareCommentsForImport', () => {
       }),
     ]);
 
-    const addMarkFn = vi.fn();
-    const deleteFn = vi.fn();
-    const setNodeMarkupFn = vi.fn();
+    const addMarkFn = mock();
+    const deleteFn = mock();
+    const setNodeMarkupFn = mock();
     const tr = {
       addMark: addMarkFn,
       delete: deleteFn,

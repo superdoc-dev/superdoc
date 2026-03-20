@@ -1,18 +1,16 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Schema } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { DecorationSet } from 'prosemirror-view';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
+const { Schema } = await import('prosemirror-model');
+const { EditorState, TextSelection } = await import('prosemirror-state');
+const { DecorationSet } = await import('prosemirror-view');
 
-vi.mock('@superdoc/common/icons/dots-loader.svg', () => ({ default: 'dots-loader.svg' }));
+mock.module('@superdoc/common/icons/dots-loader.svg', () => ({ default: 'dots-loader.svg' }));
 
-import { AiMarkName, AiAnimationMarkName, AiLoaderNodeName } from './ai-constants.js';
-import { AiMark, AiAnimationMark } from './ai-marks.js';
-import { AiLoaderNode } from './ai-nodes.js';
-import { AiPlugin, AiPluginKey } from './ai-plugin.js';
+const { AiMarkName, AiAnimationMarkName, AiLoaderNodeName } = await import('./ai-constants.js');
+const { AiMark, AiAnimationMark } = await import('./ai-marks.js');
+const { AiLoaderNode } = await import('./ai-nodes.js');
+const { AiPlugin, AiPluginKey } = await import('./ai-plugin.js');
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+afterEach(() => {});
 
 const createAiSchema = () => {
   const nodes = {
@@ -94,7 +92,7 @@ describe('ai plugin commands', () => {
   it('inserts AI mark when selection is non-empty', () => {
     const { state, commands, schema } = setup();
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = commands.insertAiMark()({ tr, dispatch });
     expect(result).toBe(true);
@@ -109,7 +107,7 @@ describe('ai plugin commands', () => {
     const doc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, [schema.text('Hello')])]);
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 1, 1) });
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
     expect(commands.insertAiMark()({ tr, dispatch })).toBe(false);
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -117,7 +115,7 @@ describe('ai plugin commands', () => {
   it('collapses selection after AI pulse', () => {
     const { state, commands } = setup();
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const result = commands.removeSelectionAfterAiPulse()({ tr, dispatch, state });
     expect(result).toBe(true);
     expect(tr.selection.from).toBe(tr.selection.to);
@@ -126,7 +124,7 @@ describe('ai plugin commands', () => {
   it('updates and clears highlight styling through meta transactions', () => {
     const { state, commands } = setup();
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     commands.updateAiHighlightStyle('pulse')({ tr, dispatch });
     expect(tr.getMeta(AiPluginKey)).toEqual({ type: 'updateStyle', className: 'pulse' });
@@ -144,7 +142,7 @@ describe('ai plugin commands', () => {
     ]);
     const animState = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 1, 9) });
     const animTr = animState.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const removed = commands.removeAiMark(AiAnimationMarkName)({ tr: animTr, dispatch, state: animState });
     expect(removed).toBe(true);
@@ -154,7 +152,7 @@ describe('ai plugin commands', () => {
     expect(remainingMarks).toHaveLength(0);
 
     const removeTr = state.tr;
-    const removeDispatch = vi.fn();
+    const removeDispatch = mock();
     commands.removeAiMark()({ tr: removeTr, dispatch: removeDispatch, state });
     expect(removeDispatch).toHaveBeenCalledWith(removeTr);
   });
@@ -171,7 +169,7 @@ describe('ai plugin commands', () => {
     const commands = AiPlugin.config.addCommands.call({ editor });
 
     const tr = state.tr;
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const removed = commands.removeAiNode()({ tr, dispatch, state });
 
     expect(removed).toBe(true);

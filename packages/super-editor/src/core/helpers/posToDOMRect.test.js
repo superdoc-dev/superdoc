@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { posToDOMRect } from './posToDOMRect.js';
 
 describe('posToDOMRect', () => {
   it('clamps positions and returns a DOMRect-like object', () => {
-    const coordsAtPos = vi.fn((pos) => {
+    const coordsAtPos = mock((pos) => {
       return {
         top: pos,
         bottom: pos + 10,

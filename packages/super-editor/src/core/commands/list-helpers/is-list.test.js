@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
-import { isList } from './is-list.js';
+import { describe, it, expect, mock } from 'bun:test';
+const { isList } = await import('./is-list.js');
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node?.attrs?.paragraphProperties || {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node?.attrs?.paragraphProperties || {}),
 }));
 
 describe('isList', () => {

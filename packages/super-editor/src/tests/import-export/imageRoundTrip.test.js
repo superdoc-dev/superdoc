@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'bun:test';
 import { handleDrawingNode, handleImageImport } from '../../core/super-converter/v2/importer/imageImporter.js';
 import { exportSchemaToJson } from '@converter/exporter';
 import { emuToPixels, rotToDegrees, pixelsToEmu, degreesToRot } from '@converter/helpers';

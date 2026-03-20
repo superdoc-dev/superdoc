@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
 import { createChartImmutabilityPlugin } from './chart-immutability-plugin.js';

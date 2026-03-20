@@ -1,6 +1,6 @@
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 /* @vitest-environment node */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';

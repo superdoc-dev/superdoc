@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { config } from '../../core/super-converter/v3/handlers/w/br/br-translator.js';
 import {
   encode as lineBreakTypeEncode,

@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest';
-
+import { describe, it, expect } from 'bun:test';
 import type { FlowBlock, ListBlock, ParagraphBlock, TableBlock, TextRun, ImageRun } from '@superdoc/contracts';
 import { splitRunsAtDecorationBoundaries, type DecorationRange } from './SplitRunsAtDecorationBoundaries.js';
 

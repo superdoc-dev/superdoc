@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { skipTab } from './skipTab.js';
@@ -92,7 +92,7 @@ describe('skipTab', () => {
     const schema = makeSchema({ includeRun: false });
     const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('A\tB')])]);
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 2) });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = skipTab(1)({ state, dispatch });
     expect(ok).toBe(false);

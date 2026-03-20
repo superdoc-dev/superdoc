@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, spyOn, afterEach } from 'bun:test';
 import { Fragment } from 'prosemirror-model';
 import { schema as testSchema } from 'prosemirror-test-builder';
 import { createNodeFromContent } from './createNodeFromContent.js';
@@ -14,9 +14,7 @@ const createMockEditor = (schema = testSchema) => ({
 });
 
 describe('createNodeFromContent', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('creates a node from JSON content', () => {
     const editor = createMockEditor();
@@ -32,7 +30,7 @@ describe('createNodeFromContent', () => {
   });
 
   it('falls back gracefully when invalid JSON is provided', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     const editor = createMockEditor();
     expect(() => createNodeFromContent({ type: 'unknown' }, editor)).not.toThrow();
     expect(warnSpy).toHaveBeenCalled();

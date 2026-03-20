@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('../../../../../../parts/adapters/relationships-mutation.js', () => ({
-  findOrCreateRelationship: vi.fn(),
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+mock.module('../../../../../../parts/adapters/relationships-mutation.js', () => ({
+  findOrCreateRelationship: mock(),
 }));
 
 import { findOrCreateRelationship } from '../../../../../../parts/adapters/relationships-mutation.js';
-import { ensureValidImageRID } from './image-rid.js';
+const { ensureValidImageRID } = await import('./image-rid.js');
 
 describe('ensureValidImageRID', () => {
   let mockEditor;
@@ -13,14 +12,12 @@ describe('ensureValidImageRID', () => {
   let mockLogger;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     mockTransaction = {
-      setNodeMarkup: vi.fn(),
+      setNodeMarkup: mock(),
     };
 
     mockLogger = {
-      debug: vi.fn(),
+      debug: mock(),
     };
 
     mockEditor = {};

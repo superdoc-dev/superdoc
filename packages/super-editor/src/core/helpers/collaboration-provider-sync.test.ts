@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { isCollaborationProviderSynced, onCollaborationProviderSynced } from './collaboration-provider-sync.js';
 
 type SyncHandler = (synced?: boolean) => void;
@@ -12,10 +12,10 @@ function createProvider(overrides: Record<string, unknown> = {}) {
   const provider = {
     synced: false,
     isSynced: false,
-    on: vi.fn((event: 'sync' | 'synced', handler: SyncHandler) => {
+    on: mock((event: 'sync' | 'synced', handler: SyncHandler) => {
       listeners[event]?.add(handler);
     }),
-    off: vi.fn((event: 'sync' | 'synced', handler: SyncHandler) => {
+    off: mock((event: 'sync' | 'synced', handler: SyncHandler) => {
       listeners[event]?.delete(handler);
     }),
     emit(event: 'sync' | 'synced', value?: boolean) {
@@ -38,7 +38,7 @@ describe('collaboration-provider-sync helper', () => {
 
   it('runs immediately when provider is already synced', () => {
     const provider = createProvider({ synced: true });
-    const onSynced = vi.fn();
+    const onSynced = mock();
 
     const cleanup = onCollaborationProviderSynced(provider, onSynced);
 
@@ -49,7 +49,7 @@ describe('collaboration-provider-sync helper', () => {
 
   it('waits for sync(true) and ignores sync(false)', () => {
     const provider = createProvider();
-    const onSynced = vi.fn();
+    const onSynced = mock();
 
     onCollaborationProviderSynced(provider, onSynced);
 
@@ -64,7 +64,7 @@ describe('collaboration-provider-sync helper', () => {
 
   it('runs when synced event fires', () => {
     const provider = createProvider();
-    const onSynced = vi.fn();
+    const onSynced = mock();
 
     onCollaborationProviderSynced(provider, onSynced);
     provider.emit('synced');
@@ -74,7 +74,7 @@ describe('collaboration-provider-sync helper', () => {
 
   it('cleanup removes listeners and prevents callback', () => {
     const provider = createProvider();
-    const onSynced = vi.fn();
+    const onSynced = mock();
 
     const cleanup = onCollaborationProviderSynced(provider, onSynced);
     cleanup();
@@ -85,7 +85,7 @@ describe('collaboration-provider-sync helper', () => {
   });
 
   it('proceeds immediately if provider has no event API', () => {
-    const onSynced = vi.fn();
+    const onSynced = mock();
 
     onCollaborationProviderSynced({ synced: false, isSynced: false }, onSynced);
 
@@ -94,7 +94,7 @@ describe('collaboration-provider-sync helper', () => {
 
   it('only calls onSynced once when both synced and sync events fire', () => {
     const provider = createProvider();
-    const onSynced = vi.fn();
+    const onSynced = mock();
 
     onCollaborationProviderSynced(provider, onSynced);
 
@@ -106,11 +106,11 @@ describe('collaboration-provider-sync helper', () => {
 
   it('catches race where provider syncs during listener registration', () => {
     const provider = createProvider();
-    const onSynced = vi.fn();
+    const onSynced = mock();
 
     // Simulate: provider state changes while on() registers listeners
     const originalOn = provider.on.getMockImplementation()!;
-    provider.on = vi.fn((event: 'sync' | 'synced', handler: SyncHandler) => {
+    provider.on = mock((event: 'sync' | 'synced', handler: SyncHandler) => {
       originalOn(event, handler);
       provider.synced = true;
     });

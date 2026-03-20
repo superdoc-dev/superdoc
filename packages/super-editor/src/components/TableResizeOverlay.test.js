@@ -1,17 +1,17 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+const { mount, flushPromises } = await import('@vue/test-utils');
+const { nextTick } = await import('vue');
 import TableResizeOverlay from './TableResizeOverlay.vue';
 
 // Mock dependencies
-vi.mock('@core/super-converter/helpers.js', () => ({
-  pixelsToTwips: vi.fn((px) => Math.round(px * 15)), // 1px ≈ 15 twips
-  twipsToPixels: vi.fn((twips) => Math.round(twips / 15)),
+mock.module('@core/super-converter/helpers.js', () => ({
+  pixelsToTwips: mock((px) => Math.round(px * 15)), // 1px ≈ 15 twips
+  twipsToPixels: mock((twips) => Math.round(twips / 15)),
 }));
 
-vi.mock('@superdoc/layout-bridge', () => ({
+mock.module('@superdoc/layout-bridge', () => ({
   measureCache: {
-    invalidate: vi.fn(),
+    invalidate: mock(),
   },
 }));
 
@@ -24,17 +24,17 @@ vi.mock('@superdoc/layout-bridge', () => ({
  */
 function createMockEditor(overrides = {}) {
   const mockTr = {
-    setNodeMarkup: vi.fn().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
   };
 
   const mockState = {
     tr: mockTr,
     doc: {
-      nodeAt: vi.fn(() => ({
+      nodeAt: mock(() => ({
         type: { name: 'table' },
         attrs: { grid: [], tableWidth: 1000 },
         nodeSize: 100,
-        descendants: vi.fn((callback) => {
+        descendants: mock((callback) => {
           // Simulate table structure: tableRow -> tableCell
           callback({ type: { name: 'tableRow' } }, 0, null);
           callback(
@@ -47,7 +47,7 @@ function createMockEditor(overrides = {}) {
           );
         }),
       })),
-      descendants: vi.fn((callback) => {
+      descendants: mock((callback) => {
         callback(
           {
             type: { name: 'table' },
@@ -67,7 +67,7 @@ function createMockEditor(overrides = {}) {
         style: { pointerEvents: 'auto' },
       },
       state: mockState,
-      dispatch: vi.fn(),
+      dispatch: mock(),
     },
     ...overrides,
   };
@@ -99,15 +99,15 @@ function createMockTableElement(metadata = undefined, overrides = {}) {
   }
 
   const element = {
-    getAttribute: vi.fn((attr) => {
+    getAttribute: mock((attr) => {
       if (attr === 'data-table-boundaries') return boundariesAttr;
       if (attr === 'data-sd-block-id') return 'test-block-id';
       return null;
     }),
-    querySelector: vi.fn(() => ({
-      getAttribute: vi.fn(() => '15'), // data-pm-start
+    querySelector: mock(() => ({
+      getAttribute: mock(() => '15'), // data-pm-start
     })),
-    closest: vi.fn(() => ({
+    closest: mock(() => ({
       getBoundingClientRect: () => ({
         left: 0,
         right: 800,
@@ -115,7 +115,7 @@ function createMockTableElement(metadata = undefined, overrides = {}) {
         bottom: 600,
       }),
     })),
-    getBoundingClientRect: vi.fn(() => ({
+    getBoundingClientRect: mock(() => ({
       left: 50,
       right: 400,
       top: 100,
@@ -149,19 +149,17 @@ describe('TableResizeOverlay', () => {
   let originalCancelRaf;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     // Mock requestAnimationFrame
     rafCallbacks = [];
     originalRaf = global.requestAnimationFrame;
     originalCancelRaf = global.cancelAnimationFrame;
 
-    global.requestAnimationFrame = vi.fn((cb) => {
+    global.requestAnimationFrame = mock((cb) => {
       const id = rafCallbacks.length;
       rafCallbacks.push(cb);
       return id;
     });
-    global.cancelAnimationFrame = vi.fn((id) => {
+    global.cancelAnimationFrame = mock((id) => {
       rafCallbacks[id] = null;
     });
   });
@@ -240,7 +238,7 @@ describe('TableResizeOverlay', () => {
     });
 
     it('should remove event listeners on unmount', async () => {
-      const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+      const removeEventListenerSpy = spyOn(window, 'removeEventListener');
       const tableElement = createMockTableElement();
 
       const wrapper = mount(TableResizeOverlay, {
@@ -299,7 +297,7 @@ describe('TableResizeOverlay', () => {
 
     it('should emit error for invalid JSON', async () => {
       const tableElement = createMockTableElement();
-      tableElement.getAttribute = vi.fn(() => 'not valid json');
+      tableElement.getAttribute = mock(() => 'not valid json');
 
       const wrapper = mount(TableResizeOverlay, {
         props: {
@@ -622,8 +620,8 @@ describe('TableResizeOverlay', () => {
         clientX: 100,
         bubbles: true,
       });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
 
       wrapper.vm.onHandleMouseDown(event, 0);
 
@@ -635,7 +633,7 @@ describe('TableResizeOverlay', () => {
     });
 
     it('should add global listeners on drag start', async () => {
-      const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
+      const addEventListenerSpy = spyOn(document, 'addEventListener');
       const tableElement = createMockTableElement();
 
       const wrapper = mount(TableResizeOverlay, {
@@ -649,8 +647,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
 
       wrapper.vm.onHandleMouseDown(event, 0);
 
@@ -676,8 +674,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
 
       wrapper.vm.onHandleMouseDown(event, 0);
 
@@ -699,8 +697,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
 
       wrapper.vm.onHandleMouseDown(event, 0);
 
@@ -727,8 +725,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
 
       wrapper.vm.onHandleMouseDown(event, 0);
 
@@ -759,8 +757,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientX: 100, clientY: 50 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
 
       wrapper.vm.onHandleMouseDown(event, 0);
 
@@ -793,8 +791,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientX: 100, clientY: 50 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
 
       wrapper.vm.onRowHandleMouseDown(event, 0);
 
@@ -812,7 +810,7 @@ describe('TableResizeOverlay', () => {
   describe('updateOverlayRect', () => {
     it('should set overlayRect to null for zero-size table', async () => {
       const tableElement = createMockTableElement();
-      tableElement.getBoundingClientRect = vi.fn(() => ({
+      tableElement.getBoundingClientRect = mock(() => ({
         left: 0,
         right: 0,
         top: 0,
@@ -933,8 +931,8 @@ describe('TableResizeOverlay', () => {
 
       // Start drag
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
       wrapper.vm.onHandleMouseDown(event, 0);
 
       expect(wrapper.vm.dragState).not.toBeNull();
@@ -1073,8 +1071,8 @@ describe('TableResizeOverlay', () => {
 
       // Start a column drag
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
       wrapper.vm.onHandleMouseDown(event, 0);
 
       await nextTick();
@@ -1101,8 +1099,8 @@ describe('TableResizeOverlay', () => {
 
       // Start a row drag
       const event = new MouseEvent('mousedown', { clientY: 50 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
       wrapper.vm.onRowHandleMouseDown(event, 0);
 
       await nextTick();
@@ -1171,8 +1169,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
       wrapper.vm.onHandleMouseDown(event, 0);
 
       await nextTick();
@@ -1196,8 +1194,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const event = new MouseEvent('mousedown', { clientY: 50 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
       wrapper.vm.onRowHandleMouseDown(event, 0);
 
       await nextTick();
@@ -1227,8 +1225,8 @@ describe('TableResizeOverlay', () => {
 
       // Start a column drag
       const event = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
       wrapper.vm.onHandleMouseDown(event, 0);
 
       await nextTick();
@@ -1261,8 +1259,8 @@ describe('TableResizeOverlay', () => {
 
       // Start a row drag
       const event = new MouseEvent('mousedown', { clientY: 50 });
-      Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(event, 'preventDefault', { value: mock() });
+      Object.defineProperty(event, 'stopPropagation', { value: mock() });
       wrapper.vm.onRowHandleMouseDown(event, 0);
 
       await nextTick();
@@ -1290,8 +1288,8 @@ describe('TableResizeOverlay', () => {
 
       // Start drag
       const downEvent = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(downEvent, 'preventDefault', { value: mock() });
+      Object.defineProperty(downEvent, 'stopPropagation', { value: mock() });
       wrapper.vm.onHandleMouseDown(downEvent, 0);
 
       expect(wrapper.vm.dragState).not.toBeNull();
@@ -1323,8 +1321,8 @@ describe('TableResizeOverlay', () => {
       await nextTick();
 
       const downEvent = new MouseEvent('mousedown', { clientX: 100 });
-      Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
-      Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+      Object.defineProperty(downEvent, 'preventDefault', { value: mock() });
+      Object.defineProperty(downEvent, 'stopPropagation', { value: mock() });
       wrapper.vm.onHandleMouseDown(downEvent, 0);
 
       expect(wrapper.vm.dragState).not.toBeNull();
@@ -1371,8 +1369,8 @@ describe('TableResizeOverlay', () => {
         await nextTick();
 
         const downEvent = new MouseEvent('mousedown', { clientY: 50 });
-        Object.defineProperty(downEvent, 'preventDefault', { value: vi.fn() });
-        Object.defineProperty(downEvent, 'stopPropagation', { value: vi.fn() });
+        Object.defineProperty(downEvent, 'preventDefault', { value: mock() });
+        Object.defineProperty(downEvent, 'stopPropagation', { value: mock() });
         wrapper.vm.onRowHandleMouseDown(downEvent, 0);
 
         expect(wrapper.vm.rowDragState).not.toBeNull();

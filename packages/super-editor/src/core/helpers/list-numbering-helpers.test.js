@@ -1,21 +1,21 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Schema } from '@core/Schema.js';
-import { EditorState, TextSelection, NodeSelection } from 'prosemirror-state';
-import * as listHelpers from './list-numbering-helpers.js';
-import { Paragraph } from '@extensions/paragraph/paragraph.js';
-import { Document } from '@extensions/document/document.js';
-import { Text } from '@extensions/text/text.js';
-import { OxmlNode, Attribute } from '@core/index.js';
-import { registerPartDescriptor, clearPartDescriptors } from '@core/parts/registry/part-registry.js';
-import { clearInvalidationHandlers } from '@core/parts/invalidation/part-invalidation-registry.js';
-import { numberingPartDescriptor } from '@core/parts/adapters/numbering-part-descriptor.js';
-import { patchMockForParts } from '@core/parts/testing/test-helpers.js';
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+const { Schema } = await import('@core/Schema.js');
+const { EditorState, TextSelection, NodeSelection } = await import('prosemirror-state');
+const listHelpers = await import('./list-numbering-helpers.js');
+const { Paragraph } = await import('@extensions/paragraph/paragraph.js');
+const { Document } = await import('@extensions/document/document.js');
+const { Text } = await import('@extensions/text/text.js');
+const { OxmlNode, Attribute } = await import('@core/index.js');
+const { registerPartDescriptor, clearPartDescriptors } = await import('@core/parts/registry/part-registry.js');
+const { clearInvalidationHandlers } = await import('@core/parts/invalidation/part-invalidation-registry.js');
+const { numberingPartDescriptor } = await import('@core/parts/adapters/numbering-part-descriptor.js');
+const { patchMockForParts } = await import('@core/parts/testing/test-helpers.js');
 
 // Mock the external dependencies
-vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
-  getStyleTagFromStyleId: vi.fn(),
-  getAbstractDefinition: vi.fn(),
-  getDefinitionForLevel: vi.fn(),
+mock.module('@core/super-converter/v2/importer/listImporter.js', () => ({
+  getStyleTagFromStyleId: mock(),
+  getAbstractDefinition: mock(),
+  getDefinitionForLevel: mock(),
 }));
 
 import { getStyleTagFromStyleId } from '@core/super-converter/v2/importer/listImporter.js';
@@ -39,10 +39,8 @@ describe('getListDefinitionDetails', () => {
   let generateNewListDefinitionSpy;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     // Create spies on the ListHelpers object methods
-    generateNewListDefinitionSpy = vi.spyOn(ListHelpers, 'generateNewListDefinition').mockImplementation(() => {});
+    generateNewListDefinitionSpy = spyOn(ListHelpers, 'generateNewListDefinition').mockImplementation(() => {});
 
     mockDefinitions = {};
     mockAbstracts = {};
@@ -61,17 +59,15 @@ describe('getListDefinitionDetails', () => {
         documentModified: false,
         documentGuid: null,
       },
-      emit: vi.fn(),
-      safeEmit: vi.fn().mockReturnValue([]),
+      emit: mock(),
+      safeEmit: mock().mockReturnValue([]),
     };
     patchMockForParts(mockEditor);
 
     mockEditor.schema = Schema.createSchemaByExtensions([Document, Paragraph, Text], mockEditor);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   describe('Basic functionality', () => {
     it('should return list definition details for valid numId and level', () => {
@@ -908,7 +904,7 @@ describe('getListDefinitionDetails', () => {
             abstracts: {},
           },
         },
-        emit: vi.fn(),
+        emit: mock(),
       };
       patchMockForParts(editor);
 
@@ -1018,7 +1014,6 @@ describe('setLvlOverride', () => {
   let mockEditor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     mockEditor = {
       converter: {
         numbering: {
@@ -1048,14 +1043,12 @@ describe('setLvlOverride', () => {
         },
         translatedNumbering: { definitions: {}, abstracts: {} },
       },
-      emit: vi.fn(),
+      emit: mock(),
     };
     patchMockForParts(mockEditor);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('should add a startOverride to a w:num that has no lvlOverrides', () => {
     listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 3 });
@@ -1127,7 +1120,6 @@ describe('removeLvlOverride', () => {
   let mockEditor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     mockEditor = {
       converter: {
         numbering: {
@@ -1162,14 +1154,12 @@ describe('removeLvlOverride', () => {
         },
         translatedNumbering: { definitions: {}, abstracts: {} },
       },
-      emit: vi.fn(),
+      emit: mock(),
     };
     patchMockForParts(mockEditor);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('should remove the specified lvlOverride element', () => {
     listHelpers.removeLvlOverride(mockEditor, 5, 0);
@@ -1225,7 +1215,6 @@ describe('lvlOverride → getAllListDefinitions roundtrip', () => {
   let mockEditor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     mockEditor = {
       converter: {
         numbering: {
@@ -1265,14 +1254,12 @@ describe('lvlOverride → getAllListDefinitions roundtrip', () => {
         },
         translatedNumbering: { definitions: {}, abstracts: {} },
       },
-      emit: vi.fn(),
+      emit: mock(),
     };
     patchMockForParts(mockEditor);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('getAllListDefinitions reflects startOverride set via setLvlOverride', () => {
     // Before: no override
@@ -1361,10 +1348,10 @@ describe('lvlOverride → getAllListDefinitions roundtrip', () => {
   });
 });
 
-vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
-  getStyleTagFromStyleId: vi.fn(),
-  getAbstractDefinition: vi.fn(),
-  getDefinitionForLevel: vi.fn(),
+mock.module('@core/super-converter/v2/importer/listImporter.js', () => ({
+  getStyleTagFromStyleId: mock(),
+  getAbstractDefinition: mock(),
+  getDefinitionForLevel: mock(),
 }));
 
 describe('createSchemaOrderedListNode', () => {
@@ -1373,8 +1360,6 @@ describe('createSchemaOrderedListNode', () => {
   let editor;
 
   beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.clearAllMocks();
     editor = {
       converter: {
         numbering: {
@@ -1423,9 +1408,7 @@ describe('createSchemaOrderedListNode', () => {
     editor.schema = schema;
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
   const makeContentJSON = (text) => schema.text(text).toJSON();
 
   it('correctly creates a list', () => {
@@ -1469,10 +1452,8 @@ describe('createNewList', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     editor = {
-      emit: vi.fn(),
+      emit: mock(),
       converter: {
         numbering: { definitions: {}, abstracts: {} },
         convertedXml: '<mock/>',
@@ -1489,8 +1470,8 @@ describe('createNewList', () => {
     editor.schema = schema;
 
     // Keep list ID/definition logic mocked (unit test scope)
-    getNewListIdSpy = vi.spyOn(ListHelpers, 'getNewListId').mockReturnValue(1);
-    generateNewListDefinitionSpy = vi.spyOn(ListHelpers, 'generateNewListDefinition').mockImplementation(() => {});
+    getNewListIdSpy = spyOn(ListHelpers, 'getNewListId').mockReturnValue(1);
+    generateNewListDefinitionSpy = spyOn(ListHelpers, 'generateNewListDefinition').mockImplementation(() => {});
 
     // Return a real PM node for insertion
     createSchemaOrderedListNodeSpy = vi
@@ -1502,9 +1483,7 @@ describe('createNewList', () => {
       });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   describe('Basic behavior', () => {
     it('creates a new list by modifying the paragraph', () => {

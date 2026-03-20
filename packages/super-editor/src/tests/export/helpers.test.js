@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { getTextIndentExportValue } from '../../core/super-converter/helpers.js';
 
 describe('Export helpers', () => {

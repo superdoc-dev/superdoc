@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { deleteSkipEmptyRun } from './deleteSkipEmptyRun.js';
@@ -91,7 +91,7 @@ describe('deleteSkipEmptyRun', () => {
     const selection = TextSelection.create(doc, 2); // inside the run, but no empty sibling
     const state = EditorState.create({ schema, doc, selection });
 
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const ok = deleteSkipEmptyRun()({ state, dispatch });
 
     expect(ok).toBe(false);

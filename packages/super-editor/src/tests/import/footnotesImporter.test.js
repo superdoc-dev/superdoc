@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { createDocumentJson } from '@core/super-converter/v2/importer/docxImporter';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 

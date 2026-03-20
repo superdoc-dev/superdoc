@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { Editor } from '@core/Editor.js';
 
 const SAMPLE_JSON = {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { assembleDocumentApiAdapters } from './assemble-adapters.js';
 import type { Editor } from '../core/Editor.js';
 

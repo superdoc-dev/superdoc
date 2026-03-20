@@ -1,17 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt } from '@superdoc/document-api';
 import type { ListItemProjection } from '../helpers/list-item-resolver.js';
-import { registerPartDescriptor, clearPartDescriptors } from '../../core/parts/registry/part-registry.js';
-import { numberingPartDescriptor } from '../../core/parts/adapters/numbering-part-descriptor.js';
-import { clearInvalidationHandlers } from '../../core/parts/invalidation/part-invalidation-registry.js';
+const { registerPartDescriptor, clearPartDescriptors } = await import('../../core/parts/registry/part-registry.js');
+const { numberingPartDescriptor } = await import('../../core/parts/adapters/numbering-part-descriptor.js');
+const { clearInvalidationHandlers } = await import('../../core/parts/invalidation/part-invalidation-registry.js');
 
 // ---------------------------------------------------------------------------
 // Module mocks — hoisted before any imports of the module under test
 // ---------------------------------------------------------------------------
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean): PlanReceipt => {
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
       success: true,
@@ -30,61 +30,61 @@ vi.mock('./plan-wrappers.js', () => ({
   }),
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
-  getBlockIndex: vi.fn(),
-  clearIndexCache: vi.fn(),
+mock.module('../helpers/index-cache.js', () => ({
+  getBlockIndex: mock(),
+  clearIndexCache: mock(),
 }));
 
-vi.mock('../helpers/list-item-resolver.js', () => ({
-  resolveListItem: vi.fn(),
+mock.module('../helpers/list-item-resolver.js', () => ({
+  resolveListItem: mock(),
 }));
 
-vi.mock('../helpers/list-sequence-helpers.js', () => ({
-  getAbstractNumId: vi.fn(),
-  getAllListItemProjections: vi.fn(() => []),
-  getContiguousSequence: vi.fn(() => []),
-  findAdjacentSequence: vi.fn(() => null),
+mock.module('../helpers/list-sequence-helpers.js', () => ({
+  getAbstractNumId: mock(),
+  getAllListItemProjections: mock(() => []),
+  getContiguousSequence: mock(() => []),
+  findAdjacentSequence: mock(() => null),
 }));
 
-vi.mock('../../core/helpers/list-numbering-helpers.js', () => ({
+mock.module('../../core/helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
-    removeLvlOverride: vi.fn(),
+    removeLvlOverride: mock(),
   },
 }));
 
-vi.mock('../../core/commands/changeListLevel.js', () => ({
-  updateNumberingProperties: vi.fn(),
+mock.module('../../core/commands/changeListLevel.js', () => ({
+  updateNumberingProperties: mock(),
 }));
 
-vi.mock('../helpers/mutation-helpers.js', () => ({
-  rejectTrackedMode: vi.fn(),
+mock.module('../helpers/mutation-helpers.js', () => ({
+  rejectTrackedMode: mock(),
 }));
 
-vi.mock('../../core/helpers/list-level-formatting-helpers.js', () => ({
+mock.module('../../core/helpers/list-level-formatting-helpers.js', () => ({
   LevelFormattingHelpers: {
-    getPresetTemplate: vi.fn(),
-    applyTemplateToAbstract: vi.fn(),
-    captureEffectiveStyle: vi.fn(),
-    hasLevel: vi.fn(() => true),
-    hasLevelOverride: vi.fn(() => false),
-    clearLevelOverride: vi.fn(),
-    materializeLevelFormattingOverride: vi.fn(() => false),
-    copySequenceStateOverrides: vi.fn(() => false),
-    captureTemplate: vi.fn(),
-    isAbstractShared: vi.fn(() => false),
-    cloneAbstractIntoNum: vi.fn(() => ({ newAbstractNumId: 98 })),
-    cloneAbstractAndNum: vi.fn(() => ({ newAbstractNumId: 99, newNumId: 199 })),
-    setLevelNumberingFormat: vi.fn(() => true),
-    setLevelNumberStyle: vi.fn(() => true),
-    setLevelText: vi.fn(() => true),
-    setLevelStart: vi.fn(() => true),
-    setLevelBulletMarker: vi.fn(() => true),
-    setLevelPictureBullet: vi.fn(() => true),
-    setLevelAlignment: vi.fn(() => true),
-    setLevelIndents: vi.fn(() => true),
-    setLevelTrailingCharacter: vi.fn(() => true),
-    setLevelMarkerFont: vi.fn(() => true),
-    setLevelLayout: vi.fn(() => ({ changed: true })),
+    getPresetTemplate: mock(),
+    applyTemplateToAbstract: mock(),
+    captureEffectiveStyle: mock(),
+    hasLevel: mock(() => true),
+    hasLevelOverride: mock(() => false),
+    clearLevelOverride: mock(),
+    materializeLevelFormattingOverride: mock(() => false),
+    copySequenceStateOverrides: mock(() => false),
+    captureTemplate: mock(),
+    isAbstractShared: mock(() => false),
+    cloneAbstractIntoNum: mock(() => ({ newAbstractNumId: 98 })),
+    cloneAbstractAndNum: mock(() => ({ newAbstractNumId: 99, newNumId: 199 })),
+    setLevelNumberingFormat: mock(() => true),
+    setLevelNumberStyle: mock(() => true),
+    setLevelText: mock(() => true),
+    setLevelStart: mock(() => true),
+    setLevelBulletMarker: mock(() => true),
+    setLevelPictureBullet: mock(() => true),
+    setLevelAlignment: mock(() => true),
+    setLevelIndents: mock(() => true),
+    setLevelTrailingCharacter: mock(() => true),
+    setLevelMarkerFont: mock(() => true),
+    setLevelLayout: mock(() => ({ changed: true })),
   },
 }));
 
@@ -92,7 +92,9 @@ vi.mock('../../core/helpers/list-level-formatting-helpers.js', () => ({
 // Now import wrappers and mocked modules
 // ---------------------------------------------------------------------------
 
-import { listsApplyStyleWrapper, listsSetLevelTextWrapper, listsSetTypeWrapper } from './lists-formatting-wrappers.js';
+const { listsApplyStyleWrapper, listsSetLevelTextWrapper, listsSetTypeWrapper } = await import(
+  './lists-formatting-wrappers.js'
+);
 import { resolveListItem } from '../helpers/list-item-resolver.js';
 import {
   getAbstractNumId,
@@ -134,12 +136,12 @@ function makeEditor(): Editor {
     state: {
       doc: { content: { size: 100 } },
       get tr() {
-        return { setNodeMarkup: vi.fn().mockReturnThis(), _id: Math.random() };
+        return { setNodeMarkup: mock().mockReturnThis(), _id: Math.random() };
       },
     },
-    view: { dispatch: vi.fn() },
-    dispatch: vi.fn(),
-    emit: vi.fn(),
+    view: { dispatch: mock() },
+    dispatch: mock(),
+    emit: mock(),
     converter: {
       convertedXml: {
         'word/numbering.xml': makeBaseNumberingXml(),
@@ -179,7 +181,7 @@ const MOCK_TEMPLATE = { version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlT
  * detect a real change via `syncNumberingToXmlTree`.
  */
 function mockApplyTemplateChanged(editorRef: Editor): void {
-  vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockImplementation((_editor, abstractNumId) => {
+  (LevelFormattingHelpers.applyTemplateToAbstract as any).mockImplementation((_editor, abstractNumId) => {
     const conv = (editorRef as unknown as { converter: { numbering: { abstracts: Record<number, unknown> } } })
       .converter;
     conv.numbering.abstracts[abstractNumId] = {
@@ -193,7 +195,7 @@ function mockApplyTemplateChanged(editorRef: Editor): void {
 }
 
 function mockSetLevelTextChanged(editorRef: Editor): void {
-  vi.mocked(LevelFormattingHelpers.setLevelText).mockImplementation((_editor, abstractNumId, ilvl, text) => {
+  (LevelFormattingHelpers.setLevelText as any).mockImplementation((_editor, abstractNumId, ilvl, text) => {
     const conv = (editorRef as unknown as { converter: { numbering: { abstracts: Record<number, any> } } }).converter;
     if (!conv.numbering.abstracts[abstractNumId]) {
       conv.numbering.abstracts[abstractNumId] = {
@@ -224,14 +226,13 @@ function mockSetLevelTextChanged(editorRef: Editor): void {
 let editor: ReturnType<typeof makeEditor>;
 
 beforeEach(() => {
-  vi.restoreAllMocks();
   registerPartDescriptor(numberingPartDescriptor);
   editor = makeEditor();
   // Default: getPresetTemplate returns a valid template
-  vi.mocked(LevelFormattingHelpers.getPresetTemplate).mockReturnValue(MOCK_TEMPLATE);
+  (LevelFormattingHelpers.getPresetTemplate as any).mockReturnValue(MOCK_TEMPLATE);
   // Default: no adjacent sequences
-  vi.mocked(findAdjacentSequence).mockReturnValue(null);
-  vi.mocked(getContiguousSequence).mockReturnValue([]);
+  (findAdjacentSequence as any).mockReturnValue(null);
+  (getContiguousSequence as any).mockReturnValue([]);
 });
 
 afterEach(() => {
@@ -246,10 +247,10 @@ describe('listsSetTypeWrapper', () => {
 
   it('applies preset and succeeds when no adjacent sequences exist', () => {
     const target = makeProjection({ numId: 1, kind: 'bullet' });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
-    vi.mocked(findAdjacentSequence).mockReturnValue(null);
+    (findAdjacentSequence as any).mockReturnValue(null);
 
     const result = listsSetTypeWrapper(editor, {
       target: target.address,
@@ -263,8 +264,8 @@ describe('listsSetTypeWrapper', () => {
 
   it('maps bullet kind to disc preset', () => {
     const target = makeProjection({ numId: 1, kind: 'ordered' });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
 
     listsSetTypeWrapper(editor, { target: target.address, kind: 'bullet' });
@@ -288,18 +289,18 @@ describe('listsSetTypeWrapper', () => {
       address: { kind: 'block', nodeType: 'listItem', nodeId: 'item-1' },
     });
 
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
 
     // After applying preset, findAdjacentSequence finds a compatible previous
-    vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
+    (findAdjacentSequence as any).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withPrevious') {
         return { sequence: [prevItem], numId: 1, abstractNumId: 10 };
       }
       return null;
     });
-    vi.mocked(getContiguousSequence).mockReturnValue([target]);
+    (getContiguousSequence as any).mockReturnValue([target]);
 
     const result = listsSetTypeWrapper(editor, {
       target: target.address,
@@ -329,11 +330,11 @@ describe('listsSetTypeWrapper', () => {
       address: { kind: 'block', nodeType: 'listItem', nodeId: 'item-2' },
     });
 
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
 
-    vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
+    (findAdjacentSequence as any).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withNext') {
         return { sequence: [nextItem], numId: 2, abstractNumId: 10 };
       }
@@ -360,11 +361,11 @@ describe('listsSetTypeWrapper', () => {
     const target = makeProjection({ numId: 1, kind: 'ordered' });
     const nextItem = makeProjection({ numId: 2, kind: 'ordered' });
 
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
 
-    vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
+    (findAdjacentSequence as any).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withNext') {
         return { sequence: [nextItem], numId: 2, abstractNumId: 99 }; // different abstract
       }
@@ -385,11 +386,11 @@ describe('listsSetTypeWrapper', () => {
     const target = makeProjection({ numId: 1, kind: 'ordered' });
     const nextItem = makeProjection({ numId: 2, kind: 'bullet' });
 
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
 
-    vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
+    (findAdjacentSequence as any).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withNext') {
         return { sequence: [nextItem], numId: 2, abstractNumId: 10 };
       }
@@ -418,16 +419,16 @@ describe('listsSetTypeWrapper', () => {
       address: { kind: 'block', nodeType: 'listItem', nodeId: 'item-1' },
     });
 
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
-    vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
+    (findAdjacentSequence as any).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withPrevious') {
         return { sequence: [prevItem], numId: 1, abstractNumId: 10 };
       }
       return null;
     });
-    vi.mocked(getContiguousSequence).mockReturnValue([target]);
+    (getContiguousSequence as any).mockReturnValue([target]);
 
     listsSetTypeWrapper(editor, { target: target.address, kind: 'ordered' });
 
@@ -448,16 +449,16 @@ describe('listsSetTypeWrapper', () => {
       address: { kind: 'block', nodeType: 'listItem', nodeId: 'item-1' },
     });
 
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
-    vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
+    (findAdjacentSequence as any).mockImplementation((_ed, _tgt, direction) => {
       if (direction === 'withPrevious') {
         return { sequence: [prevItem], numId: 1, abstractNumId: 10 };
       }
       return null;
     });
-    vi.mocked(getContiguousSequence).mockReturnValue([target]);
+    (getContiguousSequence as any).mockReturnValue([target]);
 
     listsSetTypeWrapper(editor, { target: target.address, kind: 'ordered' });
 
@@ -465,8 +466,8 @@ describe('listsSetTypeWrapper', () => {
     // dispatchEditorTransaction passes it to editor.dispatch.
     // Because state.tr is a getter returning a fresh object on each access,
     // this test fails if the implementation grabs multiple transactions.
-    const mergeTr = vi.mocked(updateNumberingProperties).mock.calls[0]?.[4];
-    const dispatchedTr = vi.mocked(editor.dispatch).mock.calls[0]?.[0];
+    const mergeTr = (updateNumberingProperties as any).mock.calls[0]?.[4];
+    const dispatchedTr = (editor.dispatch as any).mock.calls[0]?.[0];
     expect(mergeTr).toBeDefined();
     expect(dispatchedTr).toBeDefined();
     expect(mergeTr).toBe(dispatchedTr);
@@ -478,8 +479,8 @@ describe('listsSetTypeWrapper', () => {
 
   it('does not merge when continuity is none', () => {
     const target = makeProjection({ numId: 1, kind: 'ordered' });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
 
     const result = listsSetTypeWrapper(editor, {
@@ -499,8 +500,8 @@ describe('listsSetTypeWrapper', () => {
 
   it('returns success on dry-run without applying changes', () => {
     const target = makeProjection({ numId: 1 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
 
     const result = listsSetTypeWrapper(editor, { target: target.address, kind: 'ordered' }, { dryRun: true });
 
@@ -525,7 +526,7 @@ describe('listsSetTypeWrapper', () => {
 
   it('fails with INVALID_TARGET when target has no numId', () => {
     const target = makeProjection({ numId: undefined as any });
-    vi.mocked(resolveListItem).mockReturnValue(target);
+    (resolveListItem as any).mockReturnValue(target);
 
     const result = listsSetTypeWrapper(editor, {
       target: target.address,
@@ -538,8 +539,8 @@ describe('listsSetTypeWrapper', () => {
 
   it('fails with INVALID_TARGET when abstractNumId cannot be resolved', () => {
     const target = makeProjection({ numId: 1 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(undefined);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(undefined);
 
     const result = listsSetTypeWrapper(editor, {
       target: target.address,
@@ -552,9 +553,9 @@ describe('listsSetTypeWrapper', () => {
 
   it('propagates applyTemplateToAbstract errors as proper failure codes', () => {
     const target = makeProjection({ numId: 1 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
+    (LevelFormattingHelpers.applyTemplateToAbstract as any).mockReturnValue({
       changed: false,
       error: 'ABSTRACT_NOT_FOUND',
     });
@@ -570,9 +571,9 @@ describe('listsSetTypeWrapper', () => {
 
   it('returns NO_OP when preset application reports no changes', () => {
     const target = makeProjection({ numId: 1 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: false });
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
+    (LevelFormattingHelpers.applyTemplateToAbstract as any).mockReturnValue({ changed: false });
 
     const result = listsSetTypeWrapper(editor, {
       target: target.address,
@@ -588,14 +589,14 @@ describe('listsSetTypeWrapper', () => {
   // =========================================================================
 
   it('rejects tracked change mode', () => {
-    vi.mocked(rejectTrackedMode).mockImplementation((op, opts) => {
+    (rejectTrackedMode as any).mockImplementation((op, opts) => {
       if (opts?.changeMode === 'tracked') {
         throw new Error('tracked mode not supported');
       }
     });
 
     const target = makeProjection({ numId: 1 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
+    (resolveListItem as any).mockReturnValue(target);
 
     expect(() =>
       listsSetTypeWrapper(editor, { target: target.address, kind: 'ordered' }, { changeMode: 'tracked' }),
@@ -606,8 +607,8 @@ describe('listsSetTypeWrapper', () => {
 describe('SD-2025 style wrappers', () => {
   it('materializes formatting overrides instead of clearing the whole lvlOverride during applyStyle', () => {
     const target = makeProjection({ numId: 1, level: 0 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockApplyTemplateChanged(editor);
 
     const result = listsApplyStyleWrapper(editor, {
@@ -622,11 +623,11 @@ describe('SD-2025 style wrappers', () => {
 
   it('retargets the existing num when the target sequence already owns its numId', () => {
     const target = makeProjection({ numId: 10, level: 0 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(getContiguousSequence).mockReturnValue([target]);
-    vi.mocked(getAllListItemProjections).mockReturnValue([target]);
-    vi.mocked(LevelFormattingHelpers.isAbstractShared).mockReturnValue(true);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
+    (getContiguousSequence as any).mockReturnValue([target]);
+    (getAllListItemProjections as any).mockReturnValue([target]);
+    (LevelFormattingHelpers.isAbstractShared as any).mockReturnValue(true);
     mockApplyTemplateChanged(editor);
 
     const result = listsApplyStyleWrapper(editor, {
@@ -654,11 +655,11 @@ describe('SD-2025 style wrappers', () => {
       },
     });
 
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
-    vi.mocked(getContiguousSequence).mockReturnValue([target]);
-    vi.mocked(getAllListItemProjections).mockReturnValue([target, other]);
-    vi.mocked(LevelFormattingHelpers.isAbstractShared).mockReturnValue(true);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
+    (getContiguousSequence as any).mockReturnValue([target]);
+    (getAllListItemProjections as any).mockReturnValue([target, other]);
+    (LevelFormattingHelpers.isAbstractShared as any).mockReturnValue(true);
     mockApplyTemplateChanged(editor);
 
     const result = listsApplyStyleWrapper(editor, {
@@ -673,8 +674,8 @@ describe('SD-2025 style wrappers', () => {
 
   it('materializes formatting overrides before sequence-local level edits', () => {
     const target = makeProjection({ numId: 1, level: 0 });
-    vi.mocked(resolveListItem).mockReturnValue(target);
-    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    (resolveListItem as any).mockReturnValue(target);
+    (getAbstractNumId as any).mockReturnValue(10);
     mockSetLevelTextChanged(editor);
 
     const result = listsSetLevelTextWrapper(editor, {
@@ -686,8 +687,8 @@ describe('SD-2025 style wrappers', () => {
     expect(result.success).toBe(true);
     expect(LevelFormattingHelpers.materializeLevelFormattingOverride).toHaveBeenCalledWith(editor, 10, 1, 0);
     expect(LevelFormattingHelpers.setLevelText).toHaveBeenCalledWith(editor, 10, 0, '(%1)');
-    expect(
-      vi.mocked(LevelFormattingHelpers.materializeLevelFormattingOverride).mock.invocationCallOrder[0],
-    ).toBeLessThan(vi.mocked(LevelFormattingHelpers.setLevelText).mock.invocationCallOrder[0]);
+    expect((LevelFormattingHelpers.materializeLevelFormattingOverride as any).mock.invocationCallOrder[0]).toBeLessThan(
+      (LevelFormattingHelpers.setLevelText as any).mock.invocationCallOrder[0],
+    );
   });
 });

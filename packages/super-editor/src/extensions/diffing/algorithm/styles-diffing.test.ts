@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import { diffStyles } from './styles-diffing';
 

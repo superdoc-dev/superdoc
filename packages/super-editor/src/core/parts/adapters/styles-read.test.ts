@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { readTranslatedLinkedStyles } from './styles-read.js';
 import type { Editor } from '../../Editor.js';
 

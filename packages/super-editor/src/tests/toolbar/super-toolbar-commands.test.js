@@ -1,29 +1,29 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SuperToolbar } from '../../components/toolbar/super-toolbar.js';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { SuperToolbar } = await import('../../components/toolbar/super-toolbar.js');
 
-vi.mock('prosemirror-history', () => ({
+mock.module('prosemirror-history', () => ({
   undoDepth: () => 0,
   redoDepth: () => 0,
 }));
 
-vi.mock('@core/helpers/getActiveFormatting.js', () => ({
-  getActiveFormatting: vi.fn(() => []),
+mock.module('@core/helpers/getActiveFormatting.js', () => ({
+  getActiveFormatting: mock(() => []),
 }));
 
-vi.mock('@helpers/isInTable.js', () => ({
-  isInTable: vi.fn(() => false),
+mock.module('@helpers/isInTable.js', () => ({
+  isInTable: mock(() => false),
 }));
 
-vi.mock('@extensions/linked-styles/index.js', () => ({
-  getQuickFormatList: vi.fn(() => []),
+mock.module('@extensions/linked-styles/index.js', () => ({
+  getQuickFormatList: mock(() => []),
 }));
 
-vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
-  collectTrackedChanges: vi.fn(() => []),
-  isTrackedChangeActionAllowed: vi.fn(() => true),
+mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+  collectTrackedChanges: mock(() => []),
+  isTrackedChangeActionAllowed: mock(() => true),
 }));
 
-vi.mock('../../components/toolbar/defaultItems.js', () => ({
+mock.module('../../components/toolbar/defaultItems.js', () => ({
   makeDefaultItems: () => ({ defaultItems: [], overflowItems: [] }),
 }));
 
@@ -61,28 +61,28 @@ describe('SuperToolbar intercepted color commands', () => {
     };
 
     mockEditor = {
-      focus: vi.fn(),
+      focus: mock(),
       options: { isHeaderOrFooter: false, mode: 'docx' },
       state: {
         selection: { from: 1, to: 1, $from: mockResolvedPos },
         doc: {
           content: { size: 10 },
-          resolve: vi.fn(() => mockResolvedPos),
-          nodeAt: vi.fn(() => ({ marks: [] })),
-          nodesBetween: vi.fn(() => {}),
+          resolve: mock(() => mockResolvedPos),
+          nodeAt: mock(() => ({ marks: [] })),
+          nodesBetween: mock(() => {}),
         },
       },
       commands: {
-        setColor: vi.fn(),
-        setFieldAnnotationsTextColor: vi.fn(),
-        setHighlight: vi.fn(),
-        setFieldAnnotationsTextHighlight: vi.fn(),
-        setCellBackground: vi.fn(),
+        setColor: mock(),
+        setFieldAnnotationsTextColor: mock(),
+        setHighlight: mock(),
+        setFieldAnnotationsTextHighlight: mock(),
+        setCellBackground: mock(),
       },
     };
 
     toolbar = new SuperToolbar({ editor: mockEditor, hideButtons: false });
-    toolbar.updateToolbarState = vi.fn();
+    toolbar.updateToolbarState = mock();
   });
 
   const emitCommand = (command, argument) => {
@@ -190,14 +190,14 @@ describe('SuperToolbar sticky mark persistence', () => {
     ensureDomApis();
 
     mockTransaction = {
-      setStoredMarks: vi.fn(() => ({ storedMarksSet: true })),
+      setStoredMarks: mock(() => ({ storedMarksSet: true })),
     };
 
     mockEditor = {
-      focus: vi.fn(),
+      focus: mock(),
       view: {
-        hasFocus: vi.fn(() => false),
-        dispatch: vi.fn(),
+        hasFocus: mock(() => false),
+        dispatch: mock(),
       },
       options: { isHeaderOrFooter: false, mode: 'docx' },
       state: {
@@ -206,20 +206,20 @@ describe('SuperToolbar sticky mark persistence', () => {
         tr: mockTransaction,
       },
       commands: {
-        toggleBold: vi.fn(() => {
+        toggleBold: mock(() => {
           mockEditor.state.storedMarks = [{ type: 'bold' }];
         }),
-        toggleFieldAnnotationsFormat: vi.fn(),
+        toggleFieldAnnotationsFormat: mock(),
       },
     };
 
     toolbar = new SuperToolbar({ hideButtons: false });
     toolbar.activeEditor = mockEditor;
-    toolbar.updateToolbarState = vi.fn();
+    toolbar.updateToolbarState = mock();
   });
 
   it('restores sticky stored marks when selection updates to empty position with no formatting after pending mark commands execute', () => {
-    const item = { command: 'toggleBold', name: { value: 'bold' }, activate: vi.fn() };
+    const item = { command: 'toggleBold', name: { value: 'bold' }, activate: mock() };
 
     toolbar.emitCommand({ item });
 
@@ -241,8 +241,8 @@ describe('SuperToolbar sticky mark persistence', () => {
   });
 
   it('clears sticky stored marks and does not restore them when user toggles formatting off on empty selection', () => {
-    mockEditor.view.hasFocus = vi.fn(() => true);
-    const item = { command: 'toggleBold', name: { value: 'bold' }, activate: vi.fn() };
+    mockEditor.view.hasFocus = mock(() => true);
+    const item = { command: 'toggleBold', name: { value: 'bold' }, activate: mock() };
 
     // Toggle on and capture sticky marks
     toolbar.emitCommand({ item });
@@ -261,15 +261,15 @@ describe('SuperToolbar sticky mark persistence', () => {
   });
 
   it('uses intercepted command implementation (setFontSize) instead of direct editor command when replaying pending mark commands', () => {
-    const throwingSetFontSize = vi.fn(() => {
+    const throwingSetFontSize = mock(() => {
       throw new Error('should not be called directly');
     });
 
     mockEditor.commands.setFontSize = throwingSetFontSize;
-    mockEditor.commands.setFieldAnnotationsFontSize = vi.fn();
-    mockEditor.view.hasFocus = vi.fn(() => false);
+    mockEditor.commands.setFieldAnnotationsFontSize = mock();
+    mockEditor.view.hasFocus = mock(() => false);
 
-    const item = { command: 'setFontSize', name: { value: 'fontSize' }, activate: vi.fn() };
+    const item = { command: 'setFontSize', name: { value: 'fontSize' }, activate: mock() };
 
     toolbar.emitCommand({ item });
 
@@ -298,28 +298,28 @@ describe('SuperToolbar error handling for command failures', () => {
     };
 
     mockEditor = {
-      focus: vi.fn(),
+      focus: mock(),
       options: { isHeaderOrFooter: false, mode: 'docx' },
       state: {
         selection: { from: 1, to: 1, $from: mockResolvedPos },
         doc: {
           content: { size: 10 },
-          resolve: vi.fn(() => mockResolvedPos),
-          nodeAt: vi.fn(() => ({ marks: [] })),
-          nodesBetween: vi.fn(() => {}),
+          resolve: mock(() => mockResolvedPos),
+          nodeAt: mock(() => ({ marks: [] })),
+          nodesBetween: mock(() => {}),
         },
       },
       commands: {
-        someCommand: vi.fn(),
+        someCommand: mock(),
       },
     };
 
     toolbar = new SuperToolbar({ editor: mockEditor, hideButtons: false });
-    toolbar.updateToolbarState = vi.fn();
+    toolbar.updateToolbarState = mock();
   });
 
   it('emits exception event when command is not found in editor.commands or interceptedCommands', () => {
-    const exceptionListener = vi.fn();
+    const exceptionListener = mock();
     toolbar.on('exception', exceptionListener);
 
     const item = { command: 'nonExistentCommand' };
@@ -336,17 +336,17 @@ describe('SuperToolbar error handling for command failures', () => {
   });
 
   it('emits exception event when pending mark command execution fails', () => {
-    const exceptionListener = vi.fn();
+    const exceptionListener = mock();
     toolbar.on('exception', exceptionListener);
 
     // Setup: Make the command throw an error
-    mockEditor.commands.toggleBold = vi.fn(() => {
+    mockEditor.commands.toggleBold = mock(() => {
       throw new Error('Test error during command execution');
     });
     mockEditor.view = { hasFocus: () => false };
 
     // Queue a pending command (when editor not focused)
-    const item = { command: 'toggleBold', name: { value: 'bold' }, activate: vi.fn() };
+    const item = { command: 'toggleBold', name: { value: 'bold' }, activate: mock() };
     toolbar.emitCommand({ item });
 
     expect(toolbar.pendingMarkCommands).toHaveLength(1);

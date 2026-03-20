@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { backspaceAcrossRuns } from './backspaceAcrossRuns.js';
@@ -108,7 +108,7 @@ describe('backspaceAcrossRuns', () => {
 
     const cursorPos = posInsideRun(doc, 'B', 0);
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, cursorPos) });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = backspaceAcrossRuns()({ state, tr: state.tr, dispatch });
 
@@ -121,7 +121,7 @@ describe('backspaceAcrossRuns', () => {
     const doc = schema.node('doc', null, [schema.node('paragraph', null, schema.text('AB'))]);
 
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 2) });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = backspaceAcrossRuns()({ state, tr: state.tr, dispatch });
 
@@ -140,7 +140,7 @@ describe('backspaceAcrossRuns', () => {
       doc,
       selection: TextSelection.create(doc, 3, 5), // "BC" selected
     });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = backspaceAcrossRuns()({ state, tr: state.tr, dispatch });
 
@@ -161,7 +161,7 @@ describe('backspaceAcrossRuns', () => {
     // Cursor at start of second paragraph's second run
     const cursorPos = posInsideRun(doc, 'Second', 0);
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, cursorPos) });
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const ok = backspaceAcrossRuns()({ state, tr: state.tr, dispatch });
 

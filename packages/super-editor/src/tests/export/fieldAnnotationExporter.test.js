@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { exportSchemaToJson } from '@converter/exporter.js';
 
 describe('fieldAnnotation image export', () => {

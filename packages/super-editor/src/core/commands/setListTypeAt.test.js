@@ -1,22 +1,21 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('@helpers/list-numbering-helpers.js', () => ({
+mock.module('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
-    getNewListId: vi.fn(() => '42'),
-    generateNewListDefinition: vi.fn(),
+    getNewListId: mock(() => '42'),
+    generateNewListDefinition: mock(),
   },
 }));
 
-vi.mock('./changeListLevel.js', () => ({
-  updateNumberingProperties: vi.fn(),
+mock.module('./changeListLevel.js', () => ({
+  updateNumberingProperties: mock(),
 }));
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node.attrs?.paragraphProperties ?? {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node.attrs?.paragraphProperties ?? {}),
 }));
 
-import { setListTypeAt } from './setListTypeAt.js';
+const { setListTypeAt } = await import('./setListTypeAt.js');
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { updateNumberingProperties } from './changeListLevel.js';
 
@@ -37,18 +36,17 @@ function createMockProps(nodeAtResult = createListParagraph()) {
     state: {
       doc: {
         content: { size: 100 },
-        nodeAt: vi.fn(() => nodeAtResult),
+        nodeAt: mock(() => nodeAtResult),
       },
     },
     tr: {},
     editor: {},
-    dispatch: vi.fn(),
+    dispatch: mock(),
   };
 }
 
 describe('setListTypeAt', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     ListHelpers.getNewListId.mockReturnValue('42');
     ListHelpers.generateNewListDefinition.mockReturnValue(undefined);
   });

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { reconcileDocumentRelationships, MANAGED_DOCUMENT_PARTS } from './reconcile-document-relationships.js';
 import { getRelationships } from './test-helpers.js';
 

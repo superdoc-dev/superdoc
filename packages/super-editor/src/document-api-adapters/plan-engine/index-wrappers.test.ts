@@ -1,47 +1,47 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean) => ({
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean) => ({
     steps: [{ effect: handler() ? 'changed' : 'noop' }],
   })),
 }));
 
-vi.mock('./revision-tracker.js', () => ({
-  getRevision: vi.fn(() => 'rev-1'),
+mock.module('./revision-tracker.js', () => ({
+  getRevision: mock(() => 'rev-1'),
 }));
 
-vi.mock('../helpers/adapter-utils.js', () => ({
-  paginate: vi.fn((items: unknown[], offset = 0, limit?: number) => {
+mock.module('../helpers/adapter-utils.js', () => ({
+  paginate: mock((items: unknown[], offset = 0, limit?: number) => {
     const total = items.length;
     const sliced = items.slice(offset, limit ? offset + limit : undefined);
     return { total, items: sliced };
   }),
-  resolveInlineInsertPosition: vi.fn(() => ({ from: 10, to: 10 })),
-  resolveBlockCreatePosition: vi.fn(() => 0),
+  resolveInlineInsertPosition: mock(() => ({ from: 10, to: 10 })),
+  resolveBlockCreatePosition: mock(() => 0),
 }));
 
-vi.mock('../helpers/mutation-helpers.js', () => ({
-  rejectTrackedMode: vi.fn(),
+mock.module('../helpers/mutation-helpers.js', () => ({
+  rejectTrackedMode: mock(),
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
-  clearIndexCache: vi.fn(),
+mock.module('../helpers/index-cache.js', () => ({
+  clearIndexCache: mock(),
 }));
 
-vi.mock('../helpers/index-resolver.js', () => ({
-  findAllIndexNodes: vi.fn(() => []),
-  resolveIndexTarget: vi.fn(),
-  extractIndexInfo: vi.fn(),
-  buildIndexDiscoveryItem: vi.fn(),
-  findAllIndexEntries: vi.fn(() => []),
-  resolveIndexEntryTarget: vi.fn(),
-  extractIndexEntryInfo: vi.fn(),
-  buildIndexEntryDiscoveryItem: vi.fn(),
-  parseIndexInstruction: vi.fn(() => ({})),
+mock.module('../helpers/index-resolver.js', () => ({
+  findAllIndexNodes: mock(() => []),
+  resolveIndexTarget: mock(),
+  extractIndexInfo: mock(),
+  buildIndexDiscoveryItem: mock(),
+  findAllIndexEntries: mock(() => []),
+  resolveIndexEntryTarget: mock(),
+  extractIndexEntryInfo: mock(),
+  buildIndexEntryDiscoveryItem: mock(),
+  parseIndexInstruction: mock(() => ({})),
 }));
 
-import { indexEntriesInsertWrapper } from './index-wrappers.js';
+const { indexEntriesInsertWrapper } = await import('./index-wrappers.js');
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
 import { resolveIndexEntryTarget } from '../helpers/index-resolver.js';
 
@@ -59,9 +59,9 @@ function makeEditor(options: {
   instruction: string;
 }): {
   editor: Editor;
-  tr: { insert: ReturnType<typeof vi.fn> };
-  dispatch: ReturnType<typeof vi.fn>;
-  createIndexEntry: ReturnType<typeof vi.fn>;
+  tr: { insert: ReturnType<typeof mock> };
+  dispatch: ReturnType<typeof mock>;
+  createIndexEntry: ReturnType<typeof mock>;
 } {
   const preferredPos = options.preferredPos ?? 10;
   const blockStart = options.blockStart ?? 1;
@@ -74,29 +74,29 @@ function makeEditor(options: {
   };
 
   const doc = {
-    nodeAt: vi.fn((pos: number) => (pos === options.insertedPos ? insertedNode : null)),
-    resolve: vi.fn((_pos: number) => ({
+    nodeAt: mock((pos: number) => (pos === options.insertedPos ? insertedNode : null)),
+    resolve: mock((_pos: number) => ({
       depth: 1,
       start: (depth: number) => (depth === 1 ? blockStart : 0),
       node: (depth: number) => (depth === 1 ? { attrs: { sdBlockId: blockId } } : { attrs: {} }),
     })),
-    descendants: vi.fn((cb: (node: MockPmNode, pos: number) => boolean | void) => {
+    descendants: mock((cb: (node: MockPmNode, pos: number) => boolean | void) => {
       cb(insertedNode, options.insertedPos);
       return true;
     }),
   };
 
   const tr = {
-    insert: vi.fn((_pos: number, _node: unknown) => tr),
+    insert: mock((_pos: number, _node: unknown) => tr),
   };
 
-  const createIndexEntry = vi.fn((attrs: Record<string, unknown>) => ({
+  const createIndexEntry = mock((attrs: Record<string, unknown>) => ({
     type: { name: 'indexEntry' },
     attrs,
     nodeSize: 2,
   }));
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
@@ -111,14 +111,12 @@ function makeEditor(options: {
     dispatch,
   } as unknown as Editor;
 
-  vi.mocked(resolveInlineInsertPosition).mockReturnValueOnce({ from: preferredPos, to: preferredPos });
+  (resolveInlineInsertPosition as any).mockReturnValueOnce({ from: preferredPos, to: preferredPos });
 
   return { editor, tr, dispatch, createIndexEntry };
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+beforeEach(() => {});
 
 describe('indexEntriesInsertWrapper', () => {
   it('returns an address for the actual inserted indexEntry position when final position differs from requested position', () => {
@@ -175,7 +173,7 @@ describe('indexEntriesUpdateWrapper', () => {
     };
 
     const tr = {
-      setNodeMarkup: vi.fn((_pos: number, _type: unknown, _attrs: Record<string, unknown>) => tr),
+      setNodeMarkup: mock((_pos: number, _type: unknown, _attrs: Record<string, unknown>) => tr),
     };
 
     const editor = {
@@ -183,10 +181,10 @@ describe('indexEntriesUpdateWrapper', () => {
         doc: {},
         tr,
       },
-      dispatch: vi.fn(),
+      dispatch: mock(),
     } as unknown as Editor;
 
-    vi.mocked(resolveIndexEntryTarget).mockReturnValueOnce({
+    (resolveIndexEntryTarget as any).mockReturnValueOnce({
       pos: 7,
       node: resolvedNode as never,
       instruction: 'XE "Primary Entry:Sub Entry"',
@@ -194,7 +192,7 @@ describe('indexEntriesUpdateWrapper', () => {
     });
 
     const { extractIndexEntryInfo } = await import('../helpers/index-resolver.js');
-    vi.mocked(extractIndexEntryInfo).mockReturnValueOnce({
+    (extractIndexEntryInfo as any).mockReturnValueOnce({
       address: {
         kind: 'inline',
         nodeType: 'indexEntry',

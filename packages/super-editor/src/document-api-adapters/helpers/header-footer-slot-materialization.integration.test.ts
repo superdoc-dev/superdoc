@@ -1,3 +1,4 @@
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 /**
  * Integration tests for header/footer slot materialization.
  *
@@ -12,35 +13,36 @@
  * - A degraded commit (afterCommit hook failure) is detected and propagated
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ensureExplicitHeaderFooterSlot } from './header-footer-slot-materialization.js';
-import { createHeaderFooterPart } from './header-footer-parts.js';
-import { createTestEditor, withPart, cleanupParts, withDescriptor } from '../../core/parts/testing/test-helpers.js';
-import { initRevision, getRevision } from '../plan-engine/revision-tracker.js';
-import { relsPartDescriptor } from '../../core/parts/adapters/rels-part-descriptor.js';
+const { ensureExplicitHeaderFooterSlot } = await import('./header-footer-slot-materialization.js');
+const { createHeaderFooterPart } = await import('./header-footer-parts.js');
+const { createTestEditor, withPart, cleanupParts, withDescriptor } = await import(
+  '../../core/parts/testing/test-helpers.js'
+);
+const { initRevision, getRevision } = await import('../plan-engine/revision-tracker.js');
+const { relsPartDescriptor } = await import('../../core/parts/adapters/rels-part-descriptor.js');
 import type { Editor } from '../../core/Editor.js';
 
 // ---------------------------------------------------------------------------
 // Mocks — only section/projection helpers (need real PM doc)
 // ---------------------------------------------------------------------------
 
-const mockSectionProjections = vi.fn();
-vi.mock('./sections-resolver.js', () => ({
+const mockSectionProjections = mock();
+mock.module('./sections-resolver.js', () => ({
   resolveSectionProjections: (...args: unknown[]) => mockSectionProjections(...args),
 }));
 
-const mockReadTargetSectPr = vi.fn();
-vi.mock('./section-projection-access.js', () => ({
+const mockReadTargetSectPr = mock();
+mock.module('./section-projection-access.js', () => ({
   readTargetSectPr: (...args: unknown[]) => mockReadTargetSectPr(...args),
 }));
 
-const mockApplySectPrToProjection = vi.fn();
-vi.mock('./section-mutation-wrapper.js', () => ({
+const mockApplySectPrToProjection = mock();
+mock.module('./section-mutation-wrapper.js', () => ({
   applySectPrToProjection: (...args: unknown[]) => mockApplySectPrToProjection(...args),
 }));
 
 // resolveEffectiveRef — returns null (no inherited ref to clone from)
-vi.mock('./header-footer-refs-mutation.js', () => ({
+mock.module('./header-footer-refs-mutation.js', () => ({
   resolveEffectiveRef: () => null,
 }));
 
@@ -90,8 +92,6 @@ describe('ensureExplicitHeaderFooterSlot (integration)', () => {
   let editor: ReturnType<typeof createTestEditor>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     editor = createTestEditor();
 
     // Extend converter with header/footer caches

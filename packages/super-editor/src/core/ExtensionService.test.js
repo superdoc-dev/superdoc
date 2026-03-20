@@ -1,39 +1,38 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-vi.mock('prosemirror-keymap', () => ({
-  keymap: vi.fn((bindings) => ({ type: 'keymap', bindings })),
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+mock.module('prosemirror-keymap', () => ({
+  keymap: mock((bindings) => ({ type: 'keymap', bindings })),
 }));
 
-vi.mock('./Schema.js', () => ({
+mock.module('./Schema.js', () => ({
   Schema: {
-    createSchemaByExtensions: vi.fn(() => 'mock-schema'),
+    createSchemaByExtensions: mock(() => 'mock-schema'),
   },
 }));
 
-vi.mock('./Attribute.js', () => ({
+mock.module('./Attribute.js', () => ({
   Attribute: {
-    getAttributesFromExtensions: vi.fn(() => []),
-    getAttributesToRender: vi.fn(() => ({})),
+    getAttributesFromExtensions: mock(() => []),
+    getAttributesToRender: mock(() => ({})),
   },
 }));
 
-vi.mock('./helpers/getNodeType.js', () => ({
-  getNodeType: vi.fn(() => 'node-type'),
+mock.module('./helpers/getNodeType.js', () => ({
+  getNodeType: mock(() => 'node-type'),
 }));
 
-vi.mock('./helpers/getSchemaTypeByName.js', () => ({
-  getSchemaTypeByName: vi.fn(() => 'schema-type'),
+mock.module('./helpers/getSchemaTypeByName.js', () => ({
+  getSchemaTypeByName: mock(() => 'schema-type'),
 }));
 
-vi.mock('./utilities/callOrGet.js', () => ({
-  callOrGet: vi.fn((value) => {
+mock.module('./utilities/callOrGet.js', () => ({
+  callOrGet: mock((value) => {
     if (typeof value === 'function') return value();
     return value;
   }),
 }));
 
-vi.mock('./InputRule.js', () => ({
-  inputRulesPlugin: vi.fn(({ rules }) => ({ type: 'input-rules', rules })),
+mock.module('./InputRule.js', () => ({
+  inputRulesPlugin: mock(({ rules }) => ({ type: 'input-rules', rules })),
 }));
 
 import { keymap } from 'prosemirror-keymap';
@@ -41,7 +40,7 @@ import { Schema } from './Schema.js';
 import { Attribute } from './Attribute.js';
 import { callOrGet } from './utilities/callOrGet.js';
 import { inputRulesPlugin } from './InputRule.js';
-import { ExtensionService } from './ExtensionService.js';
+const { ExtensionService } = await import('./ExtensionService.js');
 
 const createExtension = (name, overrides = {}) => {
   const { type = 'extension', storage = {}, options = {}, config = {} } = overrides;
@@ -61,17 +60,13 @@ const createExtension = (name, overrides = {}) => {
 const createEditor = () => ({
   options: { enableInputRules: true },
   extensionStorage: {},
-  on: vi.fn(),
+  on: mock(),
 });
 
 describe('ExtensionService', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  afterEach(() => {});
 
   it('merges core and external extensions by priority', () => {
     const editor = createEditor();
@@ -88,7 +83,7 @@ describe('ExtensionService', () => {
 
   it('aggregates commands with bound extension context', () => {
     const editor = createEditor();
-    const commandFn = vi.fn();
+    const commandFn = mock();
 
     const extension = createExtension('commandExt', {
       config: {
@@ -108,7 +103,7 @@ describe('ExtensionService', () => {
 
   it('aggregates helpers per extension namespace', () => {
     const editor = createEditor();
-    const helpersFn = { helper: vi.fn() };
+    const helpersFn = { helper: mock() };
 
     const extension = createExtension('helperExt', {
       config: {
@@ -127,7 +122,7 @@ describe('ExtensionService', () => {
 
   it('builds plugins with shortcuts, input rules, and pm plugins', () => {
     const editor = createEditor();
-    const shortcutHandler = vi.fn(() => 'shortcut');
+    const shortcutHandler = mock(() => 'shortcut');
     const pmPlugin = { name: 'pmPlugin' };
     const inputRule = { name: 'rule' };
 
@@ -167,8 +162,8 @@ describe('ExtensionService', () => {
 
   it('creates node views with rendered attributes', () => {
     const editor = createEditor();
-    const renderNodeView = vi.fn(() => 'node-view-result');
-    const addNodeView = vi.fn(() => renderNodeView);
+    const renderNodeView = mock(() => 'node-view-result');
+    const addNodeView = mock(() => renderNodeView);
 
     Attribute.getAttributesFromExtensions.mockReturnValue([{ type: 'nodeExt', attrs: 'attrs' }]);
     Attribute.getAttributesToRender.mockReturnValue({ 'data-test': 'value' });
@@ -208,14 +203,14 @@ describe('ExtensionService', () => {
   it('stores extension storage, attaches events, and tracks splittable marks', () => {
     const editor = createEditor();
     const eventHandlers = {
-      onBeforeCreate: vi.fn(),
-      onCreate: vi.fn(),
-      onUpdate: vi.fn(),
-      onSelectionUpdate: vi.fn(),
-      onTransaction: vi.fn(),
-      onFocus: vi.fn(),
-      onBlur: vi.fn(),
-      onDestroy: vi.fn(),
+      onBeforeCreate: mock(),
+      onCreate: mock(),
+      onUpdate: mock(),
+      onSelectionUpdate: mock(),
+      onTransaction: mock(),
+      onFocus: mock(),
+      onBlur: mock(),
+      onDestroy: mock(),
     };
 
     const extension = createExtension('markExt', {

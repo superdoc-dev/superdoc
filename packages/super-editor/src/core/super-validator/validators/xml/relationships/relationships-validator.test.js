@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { createRelationshipsValidator } from './relationships-validator.js';
 
 function makeEditorWithRelationships(relsXmlLike, documentXmlLike = null, contentTypesXmlLike = null) {
@@ -22,7 +22,7 @@ function makeEditorWithRelationships(relsXmlLike, documentXmlLike = null, conten
 }
 
 function makeLogger() {
-  return { debug: vi.fn(), withPrefix: vi.fn(() => ({ debug: vi.fn() })) };
+  return { debug: mock(), withPrefix: mock(() => ({ debug: mock() })) };
 }
 
 function createValidRelationship(id, type, target, targetMode = null) {

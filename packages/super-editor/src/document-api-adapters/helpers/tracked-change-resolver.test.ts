@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import {
   TrackDeleteMarkName,
@@ -14,8 +14,8 @@ import {
   toCanonicalTrackedChangeId,
 } from './tracked-change-resolver.js';
 
-vi.mock('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
-  getTrackChanges: vi.fn(),
+mock.module('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
+  getTrackChanges: mock(),
 }));
 
 function makeEditor(): Editor {
@@ -23,7 +23,7 @@ function makeEditor(): Editor {
     state: {
       doc: {
         content: { size: 100 },
-        textBetween: vi.fn((_from: number, _to: number) => 'excerpt'),
+        textBetween: mock((_from: number, _to: number) => 'excerpt'),
       },
     },
   } as unknown as Editor;
@@ -61,12 +61,10 @@ describe('resolveTrackedChangeType', () => {
 });
 
 describe('groupTrackedChanges', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('groups marks by raw id', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
       { ...makeTrackMark(TrackDeleteMarkName, 'tc-1'), from: 5, to: 10 },
     ] as never);
@@ -83,7 +81,7 @@ describe('groupTrackedChanges', () => {
   });
 
   it('keeps separate entries for different raw ids', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
       { ...makeTrackMark(TrackDeleteMarkName, 'tc-2'), from: 6, to: 10 },
     ] as never);
@@ -93,7 +91,7 @@ describe('groupTrackedChanges', () => {
   });
 
   it('generates deterministic stable ids', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1', { author: 'Ada' }), from: 2, to: 5 },
     ] as never);
 
@@ -102,7 +100,7 @@ describe('groupTrackedChanges', () => {
     // Force cache invalidation by changing doc reference
     (editor.state as { doc: unknown }).doc = {
       ...editor.state.doc,
-      textBetween: vi.fn(() => 'excerpt'),
+      textBetween: mock(() => 'excerpt'),
     };
     const second = groupTrackedChanges(editor);
 
@@ -110,7 +108,7 @@ describe('groupTrackedChanges', () => {
   });
 
   it('caches results by document reference', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
 
@@ -119,16 +117,16 @@ describe('groupTrackedChanges', () => {
     const second = groupTrackedChanges(editor);
 
     expect(first).toBe(second);
-    expect(vi.mocked(getTrackChanges)).toHaveBeenCalledTimes(1);
+    expect(getTrackChanges as any).toHaveBeenCalledTimes(1);
   });
 
   it('returns empty array when no tracked marks exist', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([] as never);
+    (getTrackChanges as any).mockReturnValue([] as never);
     expect(groupTrackedChanges(makeEditor())).toEqual([]);
   });
 
   it('skips marks without an id', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { mark: { type: { name: TrackInsertMarkName }, attrs: {} }, from: 1, to: 5 },
     ] as never);
 
@@ -136,7 +134,7 @@ describe('groupTrackedChanges', () => {
   });
 
   it('detects format marks', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackFormatMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
 
@@ -147,7 +145,7 @@ describe('groupTrackedChanges', () => {
   });
 
   it('sorts results by from position', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-2'), from: 10, to: 15 },
       { ...makeTrackMark(TrackDeleteMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
@@ -158,12 +156,10 @@ describe('groupTrackedChanges', () => {
 });
 
 describe('resolveTrackedChange', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('finds a grouped change by derived id', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
 
@@ -177,18 +173,16 @@ describe('resolveTrackedChange', () => {
   });
 
   it('returns null for unknown ids', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([] as never);
+    (getTrackChanges as any).mockReturnValue([] as never);
     expect(resolveTrackedChange(makeEditor(), 'unknown')).toBeNull();
   });
 });
 
 describe('toCanonicalTrackedChangeId', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('maps a raw id to its canonical derived id', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
 
@@ -199,18 +193,16 @@ describe('toCanonicalTrackedChangeId', () => {
   });
 
   it('returns null for unknown raw ids', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([] as never);
+    (getTrackChanges as any).mockReturnValue([] as never);
     expect(toCanonicalTrackedChangeId(makeEditor(), 'missing')).toBeNull();
   });
 });
 
 describe('buildTrackedChangeCanonicalIdMap', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('maps both raw id and canonical id to canonical id', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([
+    (getTrackChanges as any).mockReturnValue([
       { ...makeTrackMark(TrackInsertMarkName, 'tc-1'), from: 1, to: 5 },
     ] as never);
 
@@ -224,7 +216,7 @@ describe('buildTrackedChangeCanonicalIdMap', () => {
   });
 
   it('returns empty map when no tracked changes exist', () => {
-    vi.mocked(getTrackChanges).mockReturnValue([] as never);
+    (getTrackChanges as any).mockReturnValue([] as never);
     expect(buildTrackedChangeCanonicalIdMap(makeEditor()).size).toBe(0);
   });
 });

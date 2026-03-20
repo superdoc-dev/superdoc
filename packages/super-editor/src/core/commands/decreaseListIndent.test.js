@@ -1,6 +1,5 @@
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
 import { decreaseListIndent } from './decreaseListIndent.js';
 import * as changeListLevelModule from './changeListLevel.js';
 
@@ -9,18 +8,16 @@ describe('decreaseListIndent', () => {
   let editor;
   /** @type {{ docChanged?: boolean }} */
   let tr;
-  /** @type<ReturnType<typeof vi.spyOn>> */
+  /** @type<ReturnType<typeof spyOn>> */
   let changeListLevelSpy;
 
   beforeEach(() => {
     editor = { state: { selection: {} } };
     tr = {};
-    changeListLevelSpy = vi.spyOn(changeListLevelModule, 'changeListLevel');
+    changeListLevelSpy = spyOn(changeListLevelModule, 'changeListLevel');
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('returns false when changeListLevel does not handle the command', () => {
     changeListLevelSpy.mockReturnValue(false);
@@ -33,7 +30,7 @@ describe('decreaseListIndent', () => {
 
   it('dispatches when changeListLevel handles the interaction', () => {
     changeListLevelSpy.mockReturnValue(true);
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = decreaseListIndent()({ editor, tr, dispatch });
 

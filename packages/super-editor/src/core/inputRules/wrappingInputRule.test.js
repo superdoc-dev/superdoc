@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-vi.mock('prosemirror-transform', () => ({
-  canJoin: vi.fn(),
-  findWrapping: vi.fn(),
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+mock.module('prosemirror-transform', () => ({
+  canJoin: mock(),
+  findWrapping: mock(),
 }));
 
-vi.mock('../InputRule.js', () => {
+mock.module('../InputRule.js', () => {
   return {
     InputRule: class {
       constructor(config) {
@@ -16,32 +15,28 @@ vi.mock('../InputRule.js', () => {
   };
 });
 
-vi.mock('../utilities/callOrGet.js', () => ({
-  callOrGet: vi.fn((value, _context, ...args) => {
+mock.module('../utilities/callOrGet.js', () => ({
+  callOrGet: mock((value, _context, ...args) => {
     return typeof value === 'function' ? value(...args) : value;
   }),
 }));
 
 import { canJoin, findWrapping } from 'prosemirror-transform';
 import { callOrGet } from '../utilities/callOrGet.js';
-import { wrappingInputRule } from './wrappingInputRule.js';
+const { wrappingInputRule } = await import('./wrappingInputRule.js');
 
 describe('wrappingInputRule', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   const createHandlerContext = ({ marks = [], storedMarks = null, beforeNode } = {}) => {
     const blockRange = { id: 'range' };
-    const resolvedStart = { blockRange: vi.fn(() => blockRange) };
+    const resolvedStart = { blockRange: mock(() => blockRange) };
     const resolvedBefore = { nodeBefore: beforeNode };
 
     const doc = {
-      resolve: vi.fn((pos) => {
+      resolve: mock((pos) => {
         if (pos === 10) return resolvedStart;
         return resolvedBefore;
       }),
@@ -49,12 +44,12 @@ describe('wrappingInputRule', () => {
 
     const transaction = {
       doc,
-      wrap: vi.fn(),
-      ensureMarks: vi.fn(),
-      join: vi.fn(),
+      wrap: mock(),
+      ensureMarks: mock(),
+      join: mock(),
     };
 
-    const deleteSpy = vi.fn(() => transaction);
+    const deleteSpy = mock(() => transaction);
 
     const state = {
       tr: { delete: deleteSpy },
@@ -99,7 +94,7 @@ describe('wrappingInputRule', () => {
           splittableMarks: ['bold'],
         },
       },
-      joinPredicate: vi.fn(() => true),
+      joinPredicate: mock(() => true),
     };
 
     const { state, transaction, blockRange } = createHandlerContext({
@@ -110,9 +105,9 @@ describe('wrappingInputRule', () => {
     findWrapping.mockReturnValue(['wrap-step']);
     canJoin.mockReturnValue(true);
 
-    const runSpy = vi.fn();
-    const updateAttributesSpy = vi.fn(() => ({ run: runSpy }));
-    const chainMock = vi.fn(() => ({ updateAttributes: updateAttributesSpy }));
+    const runSpy = mock();
+    const updateAttributesSpy = mock(() => ({ run: runSpy }));
+    const chainMock = mock(() => ({ updateAttributes: updateAttributesSpy }));
 
     const rule = wrappingInputRule(config);
     rule.handler({ state, range: { from: 10, to: 12 }, match: ['-'], chain: chainMock });

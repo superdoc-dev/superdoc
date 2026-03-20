@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { diffSequences } from './sequence-diffing.ts';
 
 const buildAdded = (item) => ({ action: 'added', id: item.id });

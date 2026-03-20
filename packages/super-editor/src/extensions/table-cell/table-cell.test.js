@@ -1,5 +1,4 @@
-import { describe, it, expect } from 'vitest';
-
+import { describe, it, expect } from 'bun:test';
 import { TableCell } from './table-cell.js';
 
 describe('TableCell verticalAlign renderDOM', () => {

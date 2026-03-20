@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { convertSdtContentToRuns } from '@converter/v3/handlers/w/sdt/helpers/convert-sdt-content-to-runs.js';
 
 describe('convertSdtContentToRuns', () => {

@@ -1,5 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
-
+import { describe, it, expect, mock } from 'bun:test';
 import { replayComments } from './replay-comments.ts';
 
 /**
@@ -231,7 +230,7 @@ const testAggregatesMultipleDiffs = () => {
  */
 const testEmitsCommentsUpdateEvents = () => {
   const comments = [];
-  const editor = { emit: vi.fn() };
+  const editor = { emit: mock() };
   const diffs = [
     {
       action: 'added',
@@ -295,7 +294,7 @@ const testEmitsCommentsUpdateEvents = () => {
  */
 const testDerivesCommentTextFromElements = () => {
   const comments = [];
-  const editor = { emit: vi.fn() };
+  const editor = { emit: mock() };
   const diffs = [
     {
       action: 'added',
@@ -339,7 +338,7 @@ const testDerivesCommentTextFromElements = () => {
 const testIncludesDocumentIdentityFromEditor = () => {
   const comments = [];
   const editor = {
-    emit: vi.fn(),
+    emit: mock(),
     options: { documentId: 'doc-2' },
   };
   const diffs = [
@@ -375,7 +374,7 @@ const testIncludesDocumentIdentityFromEditor = () => {
 const testRebindsDocumentIdentityToActiveEditor = () => {
   const comments = [];
   const editor = {
-    emit: vi.fn(),
+    emit: mock(),
     options: { documentId: 'doc-2' },
   };
   const diffs = [

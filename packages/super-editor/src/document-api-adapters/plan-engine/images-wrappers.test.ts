@@ -1,5 +1,5 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import { registerBuiltInExecutors } from './register-executors.js';
 import { imagesScaleWrapper, imagesReplaceSourceWrapper, imagesSetAltTextWrapper } from './images-wrappers.js';
@@ -90,8 +90,8 @@ function createImageNode(attrs: Record<string, unknown> = {}): ProseMirrorNode {
 
 function makeImageEditor(imageAttrs: Record<string, unknown> = {}): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
-  setNodeMarkup: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
+  setNodeMarkup: ReturnType<typeof mock>;
   capturedAttrs: () => Record<string, unknown> | undefined;
 } {
   const imageNode = createImageNode(imageAttrs);
@@ -102,10 +102,10 @@ function makeImageEditor(imageAttrs: Record<string, unknown> = {}): {
   });
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
-  const setNodeMarkup = vi.fn();
+  const setNodeMarkup = mock();
   let lastAttrs: Record<string, unknown> | undefined;
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
     setNodeMarkup: (...args: unknown[]) => {
       setNodeMarkup(...args);
@@ -113,9 +113,9 @@ function makeImageEditor(imageAttrs: Record<string, unknown> = {}): {
       (tr as any).docChanged = true;
       return tr;
     },
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
   };
@@ -146,7 +146,7 @@ function makeImageEditor(imageAttrs: Record<string, unknown> = {}): {
 // ---------------------------------------------------------------------------
 
 describe('imagesScaleWrapper', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('floors dimensions to 1px when a very small factor would round to zero', () => {
     const { editor } = makeImageEditor({ size: { width: 3, height: 2 } });
@@ -182,7 +182,7 @@ describe('imagesScaleWrapper', () => {
 // ---------------------------------------------------------------------------
 
 describe('imagesReplaceSourceWrapper', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('clears originalSrc and originalExtension so export uses the new source', () => {
     const { editor, capturedAttrs } = makeImageEditor({
@@ -224,7 +224,7 @@ describe('imagesReplaceSourceWrapper', () => {
 // ---------------------------------------------------------------------------
 
 describe('imagesSetAltTextWrapper', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {});
 
   it('clears decorative flag even when title already matches the description', () => {
     // Image is decorative with title = '' (empty). Setting alt text to '' should

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import { TextSelection } from 'prosemirror-state';
 
 import { Editor } from '@core/index.js';
@@ -85,8 +85,8 @@ describe('PermissionRanges extension', () => {
     originalMatchMedia = window.matchMedia;
     window.matchMedia =
       window.matchMedia ||
-      vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() });
-    debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      mock().mockReturnValue({ matches: false, addEventListener: mock(), removeEventListener: mock() });
+    debugSpy = spyOn(console, 'debug').mockImplementation(() => {});
   });
 
   afterEach(() => {

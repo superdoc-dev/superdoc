@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { tableNodeHandlerEntity } from '@converter/v2/importer/tableImporter.js';

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import LinkInput from './LinkInput.vue';
@@ -27,16 +27,16 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
           nodeAfter: null,
           nodeBefore: null,
           parent: {
-            childAfter: vi.fn(() => ({ offset: 0, node: null })),
-            childBefore: vi.fn(() => ({ offset: 0, node: null })),
+            childAfter: mock(() => ({ offset: 0, node: null })),
+            childBefore: mock(() => ({ offset: 0, node: null })),
           },
           parentOffset: 0,
         },
         $to: {
           marks: () => [],
           parent: {
-            childAfter: vi.fn(() => ({ offset: 0, node: null })),
-            childBefore: vi.fn(() => ({ offset: 0, node: null })),
+            childAfter: mock(() => ({ offset: 0, node: null })),
+            childBefore: mock(() => ({ offset: 0, node: null })),
           },
           parentOffset: 0,
         },
@@ -48,45 +48,45 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
         },
       },
       doc: {
-        textBetween: vi.fn(() => 'test'),
-        nodesBetween: vi.fn(),
+        textBetween: mock(() => 'test'),
+        nodesBetween: mock(),
       },
     };
 
     return {
       state: { ...defaultState, ...stateOverrides },
       commands: {
-        toggleLink: vi.fn(),
-        unsetLink: vi.fn(),
+        toggleLink: mock(),
+        unsetLink: mock(),
       },
       view: {
         state: {
           selection: { $to: { pos: 10 } },
           tr: {
-            setSelection: vi.fn(function () {
+            setSelection: mock(function () {
               return this;
             }),
           },
           doc: {
-            resolve: vi.fn(() => ({
+            resolve: mock(() => ({
               parent: { inlineContent: true },
-              min: vi.fn(function (other) {
+              min: mock(function (other) {
                 return this;
               }),
-              max: vi.fn(function (other) {
+              max: mock(function (other) {
                 return this;
               }),
             })),
           },
         },
-        dispatch: vi.fn(),
-        focus: vi.fn(),
+        dispatch: mock(),
+        focus: mock(),
       },
     };
   };
 
   beforeEach(() => {
-    mockClosePopover = vi.fn();
+    mockClosePopover = mock();
   });
 
   describe('Type safety - Array.isArray() validation for marks', () => {
@@ -899,7 +899,7 @@ describe('LinkInput - getLinkHrefAtSelection type safety and boundary checking',
     it('blocks unsafe schemes in both submit and open-link flows', async () => {
       const mockEditor = createMockEditor();
       mockEditor.options = { documentMode: 'editing' };
-      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const openSpy = spyOn(window, 'open').mockImplementation(() => null);
 
       const wrapper = mount(LinkInput, {
         props: {

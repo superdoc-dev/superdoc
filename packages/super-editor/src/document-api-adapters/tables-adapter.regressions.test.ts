@@ -1,5 +1,5 @@
+import { describe, it, expect, mock } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { describe, expect, it, vi } from 'vitest';
 import { TableMap } from 'prosemirror-tables';
 import type { Editor } from '../core/Editor.js';
 import {
@@ -16,17 +16,17 @@ import {
   tablesUnmergeCellsAdapter,
 } from './tables-adapter.js';
 
-vi.mock('prosemirror-tables', () => ({
+mock.module('prosemirror-tables', () => ({
   TableMap: {
-    get: vi.fn(() => ({
+    get: mock(() => ({
       width: 2,
       height: 2,
       // Positions of cells within table content tree:
       // Row 0: cell-1 at pos 1, cell-2 at pos 10
       // Row 1: cell-3 at pos 21, cell-4 at pos 29
       map: [1, 10, 21, 29],
-      positionAt: vi.fn((row: number, col: number) => [1, 10, 21, 29][row * 2 + col] ?? 1),
-      colCount: vi.fn((pos: number) => (pos === 10 || pos === 29 ? 1 : 0)),
+      positionAt: mock((row: number, col: number) => [1, 10, 21, 29][row * 2 + col] ?? 1),
+      colCount: mock((pos: number) => (pos === 10 || pos === 29 ? 1 : 0)),
     })),
   },
 }));
@@ -220,13 +220,13 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
   });
 
   const tr = {
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    setSelection: vi.fn().mockReturnThis(),
-    setStoredMarks: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    setSelection: mock().mockReturnThis(),
+    setStoredMarks: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: {
       maps: [] as unknown[],
       map: (p: number) => p,
@@ -243,7 +243,7 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
         text: (text: string) => createNode('text', [], { text }),
         nodes: {
           paragraph: {
-            createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+            createAndFill: mock((attrs: Record<string, unknown> = {}, content?: unknown) => {
               const children = Array.isArray(content)
                 ? (content as ProseMirrorNode[])
                 : content
@@ -257,7 +257,7 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
             }),
           },
           tableCell: {
-            createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+            createAndFill: mock((attrs: Record<string, unknown> = {}, content?: unknown) => {
               const children = Array.isArray(content)
                 ? (content as ProseMirrorNode[])
                 : content
@@ -271,7 +271,7 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
             }),
           },
           tableRow: {
-            createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+            createAndFill: mock((attrs: Record<string, unknown> = {}, content?: unknown) => {
               const children = Array.isArray(content)
                 ? (content as ProseMirrorNode[])
                 : content
@@ -283,7 +283,7 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
                 inlineContent: false,
               });
             }),
-            create: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+            create: mock((attrs: Record<string, unknown> = {}, content?: unknown) => {
               const children = Array.isArray(content)
                 ? (content as ProseMirrorNode[])
                 : content
@@ -297,7 +297,7 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
             }),
           },
           table: {
-            create: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+            create: mock((attrs: Record<string, unknown> = {}, content?: unknown) => {
               const children = Array.isArray(content)
                 ? (content as ProseMirrorNode[])
                 : content
@@ -313,15 +313,15 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
         },
       },
     },
-    dispatch: vi.fn(),
+    dispatch: mock(),
     commands: {},
-    can: vi.fn(() => ({})),
+    can: mock(() => ({})),
     schema: { marks: {}, nodes: {} },
     options: {},
   } as unknown as Editor;
 }
 
-function getTableGridUpdateAttrs(tr: { setNodeMarkup: ReturnType<typeof vi.fn> }): Record<string, unknown> | undefined {
+function getTableGridUpdateAttrs(tr: { setNodeMarkup: ReturnType<typeof mock> }): Record<string, unknown> | undefined {
   const tableUpdateCall = tr.setNodeMarkup.mock.calls.find(
     (call) => call[0] === 0 && typeof call[2] === 'object' && call[2] != null && 'grid' in call[2],
   );
@@ -332,8 +332,8 @@ describe('tables-adapter regressions', () => {
   it('preserves shiftRight data by rebuilding the table instead of deleting the row tail cell', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as {
-      delete: ReturnType<typeof vi.fn>;
-      replaceWith: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof mock>;
+      replaceWith: ReturnType<typeof mock>;
     };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
 
@@ -346,7 +346,7 @@ describe('tables-adapter regressions', () => {
 
   it('inserts shiftDown cells in the same column of the next row', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof mock> };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     const map = TableMap.get(tableNode);
 
@@ -360,7 +360,7 @@ describe('tables-adapter regressions', () => {
 
   it('inserts shiftUp replacement cells at the same column in the last row', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof mock> };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     const map = TableMap.get(tableNode);
 
@@ -375,7 +375,7 @@ describe('tables-adapter regressions', () => {
 
   it('inserts a separator paragraph before the split-off table', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof mock> };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     const expectedInsertPos = tableNode.nodeSize;
 
@@ -396,7 +396,7 @@ describe('tables-adapter regressions', () => {
 
   it('SD-2127: inserts a new cell in every row when appending a column to the right of the last column', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof mock> };
 
     const result = tablesInsertColumnAdapter(
       editor,
@@ -410,7 +410,7 @@ describe('tables-adapter regressions', () => {
 
   it('SD-2127: appending right of a header edge inserts body cells, not cloned header cells', () => {
     const editor = makeTableEditor({ lastColumnAsHeaders: true });
-    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof mock> };
 
     const result = tablesInsertColumnAdapter(
       editor,
@@ -428,9 +428,9 @@ describe('tables-adapter regressions', () => {
   it('deletes shiftLeft cells without appending a trailing replacement cell', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as {
-      delete: ReturnType<typeof vi.fn>;
-      insert: ReturnType<typeof vi.fn>;
-      setNodeMarkup: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof mock>;
+      insert: ReturnType<typeof mock>;
+      setNodeMarkup: ReturnType<typeof mock>;
     };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     const targetCellOffset = TableMap.get(tableNode).map[0]!;
@@ -454,9 +454,9 @@ describe('tables-adapter regressions', () => {
   it('deletes the row trailing cell for shiftLeft without appending a replacement cell', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as {
-      delete: ReturnType<typeof vi.fn>;
-      insert: ReturnType<typeof vi.fn>;
-      setNodeMarkup: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof mock>;
+      insert: ReturnType<typeof mock>;
+      setNodeMarkup: ReturnType<typeof mock>;
     };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     const targetCellOffset = TableMap.get(tableNode).map[1]!;
@@ -480,9 +480,9 @@ describe('tables-adapter regressions', () => {
   it('falls back to trailing replacement cell when shiftLeft would widen a vertically merged trailing cell', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as {
-      delete: ReturnType<typeof vi.fn>;
-      insert: ReturnType<typeof vi.fn>;
-      setNodeMarkup: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof mock>;
+      insert: ReturnType<typeof mock>;
+      setNodeMarkup: ReturnType<typeof mock>;
     };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     const firstRow = tableNode.child(0) as ProseMirrorNode;
@@ -525,14 +525,14 @@ describe('tables-adapter regressions', () => {
     const postDeleteDoc = createNode('doc', [postDeleteTable], { isBlock: false });
 
     const trObj = editor.state.tr as unknown as {
-      delete: ReturnType<typeof vi.fn>;
-      insert: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof mock>;
+      insert: ReturnType<typeof mock>;
       mapping: { map: (p: number) => number; maps: unknown[]; slice: () => { map: (p: number) => number } };
       doc: ProseMirrorNode;
     };
 
     // Swap tr.doc to the post-delete document when delete is called.
-    trObj.delete = vi.fn(() => {
+    trObj.delete = mock(() => {
       trObj.doc = postDeleteDoc;
       return trObj;
     });
@@ -558,7 +558,7 @@ describe('tables-adapter regressions', () => {
 
   it('keeps table grid widths in sync when distributing columns', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof mock> };
 
     const result = tablesDistributeColumnsAdapter(editor, {
       nodeId: 'table-1',
@@ -575,7 +575,7 @@ describe('tables-adapter regressions', () => {
 
   it('updates object-shaped grid colWidths when distributing columns', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof mock> };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
     (tableNode.attrs as Record<string, unknown>).grid = {
       source: 'ooxml',
@@ -599,7 +599,7 @@ describe('tables-adapter regressions', () => {
 
   it('only updates grid columns inside the requested range', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof mock> };
 
     const result = tablesDistributeColumnsAdapter(editor, {
       nodeId: 'table-1',
@@ -616,9 +616,9 @@ describe('tables-adapter regressions', () => {
   it('splits a cell by structural row/column expansion without deleting neighboring cells', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as {
-      delete: ReturnType<typeof vi.fn>;
-      insert: ReturnType<typeof vi.fn>;
-      setNodeMarkup: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof mock>;
+      insert: ReturnType<typeof mock>;
+      setNodeMarkup: ReturnType<typeof mock>;
     };
 
     const result = tablesSplitCellAdapter(editor, {
@@ -638,7 +638,7 @@ describe('tables-adapter regressions', () => {
 
   it('does not copy header-only null borders when split inserts a body row from a header source row', () => {
     const editor = makeTableEditor({ firstRowAsHeaders: true, firstRowBorders: null });
-    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof mock> };
 
     const result = tablesSplitCellAdapter(editor, {
       nodeId: 'cell-1',
@@ -664,7 +664,7 @@ describe('tables-adapter regressions', () => {
 
   it('preserves non-target rows when split inserts columns by widening adjacent cells', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof mock> };
 
     const result = tablesSplitCellAdapter(editor, {
       nodeId: 'cell-1',
@@ -684,7 +684,7 @@ describe('tables-adapter regressions', () => {
 
   it('rejects table nodeId unmerge requests with null coordinates before mutating cell (0,0)', () => {
     const editor = makeTableEditor();
-    const dispatch = editor.dispatch as unknown as ReturnType<typeof vi.fn>;
+    const dispatch = editor.dispatch as unknown as ReturnType<typeof mock>;
     const leadCell = (editor.state.doc.nodeAt(0)?.child(0).child(0) as unknown as { attrs: Record<string, unknown> })!;
     leadCell.attrs.colspan = 2;
 
@@ -696,7 +696,7 @@ describe('tables-adapter regressions', () => {
 
   it('rejects table target unmerge requests with null coordinates before mutating cell (0,0)', () => {
     const editor = makeTableEditor();
-    const dispatch = editor.dispatch as unknown as ReturnType<typeof vi.fn>;
+    const dispatch = editor.dispatch as unknown as ReturnType<typeof mock>;
     const leadCell = (editor.state.doc.nodeAt(0)?.child(0).child(0) as unknown as { attrs: Record<string, unknown> })!;
     leadCell.attrs.colspan = 2;
 
@@ -773,7 +773,7 @@ describe('tables-adapter regressions', () => {
 
   it('applies table shading to all cells when target is a table', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof mock> };
 
     const result = tablesSetShadingAdapter(editor, {
       nodeId: 'table-1',
@@ -798,7 +798,7 @@ describe('tables-adapter regressions', () => {
 
   it('does not write cell background when table shading color is auto', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof mock> };
 
     const result = tablesSetShadingAdapter(editor, {
       nodeId: 'table-1',

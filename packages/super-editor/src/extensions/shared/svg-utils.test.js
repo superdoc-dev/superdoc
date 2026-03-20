@@ -1,7 +1,7 @@
+import { describe, it, expect } from 'bun:test';
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach } from 'vitest';
 import { createTextElement, createGradient, generateTransforms } from './svg-utils.js';
 
 describe('svg-utils', () => {

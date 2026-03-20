@@ -1,5 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
-
+import { describe, it, expect, spyOn } from 'bun:test';
 import { Editor } from '@core/Editor.js';
 import { BLANK_DOCX_BASE64 } from '@core/blank-docx.js';
 import { getStarterExtensions } from '@extensions/index.js';
@@ -157,7 +156,7 @@ const expectReplayCanHasNoSideEffects = async (beforeName, afterName) => {
   try {
     const originalDocJSON = beforeEditor.state.doc.toJSON();
     const originalCommentsJSON = JSON.parse(JSON.stringify(beforeEditor.converter?.comments ?? []));
-    const emitSpy = vi.spyOn(beforeEditor, 'emit');
+    const emitSpy = spyOn(beforeEditor, 'emit');
 
     const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
     const canReplay = beforeEditor.can().replayDifferences(diff);
@@ -406,7 +405,7 @@ describe('compareDocuments defaults', () => {
     const afterEditor = await getEditorFromFixture('diff_after8.docx');
 
     try {
-      const emitSpy = vi.spyOn(beforeEditor, 'emit');
+      const emitSpy = spyOn(beforeEditor, 'emit');
       const omittedCommentsDiff = beforeEditor.commands.compareDocuments(afterEditor.state.doc);
       expect(omittedCommentsDiff.commentDiffs).toHaveLength(0);
       expect(emitSpy).not.toHaveBeenCalledWith('transaction', expect.anything());

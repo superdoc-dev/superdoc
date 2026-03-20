@@ -1,6 +1,6 @@
+import { describe, it, expect } from 'bun:test';
 /* @vitest-environment node */
 
-import { describe, it, expect } from 'vitest';
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { getTestDataAsFileBuffer } from '@tests/helpers/helpers.js';

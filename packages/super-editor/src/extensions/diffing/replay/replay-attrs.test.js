@@ -1,5 +1,4 @@
-import { describe, it, expect } from 'vitest';
-
+import { describe, it, expect } from 'bun:test';
 import { applyAttrsDiff } from './replay-attrs.js';
 
 /**

@@ -1,27 +1,25 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Schema } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { Schema } = await import('prosemirror-model');
+const { EditorState, TextSelection } = await import('prosemirror-state');
 
-const decodeRPrFromMarksMock = vi.hoisted(() =>
-  vi.fn((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') })),
-);
-const encodeMarksFromRPrMock = vi.hoisted(() => vi.fn(() => []));
-const resolveRunPropertiesMock = vi.hoisted(() => vi.fn(() => ({ bold: false })));
-const calculateResolvedParagraphPropertiesMock = vi.hoisted(() => vi.fn(() => ({ paragraph: 'calculated' })));
-const getResolvedParagraphPropertiesMock = vi.hoisted(() => vi.fn(() => null));
+const decodeRPrFromMarksMock = mock((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') }));
+const encodeMarksFromRPrMock = mock(() => []);
+const resolveRunPropertiesMock = mock(() => ({ bold: false }));
+const calculateResolvedParagraphPropertiesMock = mock(() => ({ paragraph: 'calculated' }));
+const getResolvedParagraphPropertiesMock = mock(() => null);
 
-vi.mock('@converter/styles.js', () => ({
+mock.module('@converter/styles.js', () => ({
   decodeRPrFromMarks: decodeRPrFromMarksMock,
   encodeMarksFromRPr: encodeMarksFromRPrMock,
   resolveRunProperties: resolveRunPropertiesMock,
 }));
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   calculateResolvedParagraphProperties: calculateResolvedParagraphPropertiesMock,
   getResolvedParagraphProperties: getResolvedParagraphPropertiesMock,
 }));
 
-import { calculateInlineRunPropertiesPlugin } from './calculateInlineRunPropertiesPlugin.js';
+const { calculateInlineRunPropertiesPlugin } = await import('./calculateInlineRunPropertiesPlugin.js');
 
 const makeSchema = () =>
   new Schema({
@@ -158,7 +156,6 @@ const createState = (schema, doc) =>
 
 describe('calculateInlineRunPropertiesPlugin', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     decodeRPrFromMarksMock.mockImplementation((marks) => ({ bold: marks.some((mark) => mark.type.name === 'bold') }));
     encodeMarksFromRPrMock.mockImplementation(() => []);
     resolveRunPropertiesMock.mockImplementation(() => ({ bold: false }));

@@ -1,21 +1,18 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
 import { urlToFile, validateUrlAccessibility } from './handleUrl.js';
 
 describe('handleUrl helpers', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('fetches a remote image and converts it into a File', async () => {
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = mock(async () => ({
       ok: true,
       blob: async () => new Blob(['binary'], { type: 'image/png' }),
       headers: {
         get: (key) => (key === 'content-type' ? 'image/png' : null),
       },
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    globalThis.fetch = fetchMock;
 
     const file = await urlToFile('https://example.com/path/photo.png');
 
@@ -29,20 +26,17 @@ describe('handleUrl helpers', () => {
   });
 
   it('returns null when a CORS error occurs', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw Object.assign(new Error('Failed to fetch'), { name: 'TypeError' });
-      }),
-    );
+    globalThis.fetch = mock(async () => {
+      throw Object.assign(new Error('Failed to fetch'), { name: 'TypeError' });
+    });
 
     const file = await urlToFile('https://blocked.example.com/image');
     expect(file).toBeNull();
   });
 
   it('validates URL accessibility using HEAD requests', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true }).mockRejectedValueOnce(new Error('Network error'));
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = mock().mockResolvedValueOnce({ ok: true }).mockRejectedValueOnce(new Error('Network error'));
+    globalThis.fetch = fetchMock;
 
     await expect(validateUrlAccessibility('https://ok.example.com')).resolves.toBe(true);
     await expect(validateUrlAccessibility('https://error.example.com')).resolves.toBe(false);

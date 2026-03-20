@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const handlerMock = vi.fn(({ nodes }) =>
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const handlerMock = mock(({ nodes }) =>
   nodes.map((node) => ({
     type: 'paragraph',
     attrs: { 'w14:paraId': node.fakeParaId ?? 'PARA-DEFAULT' },
@@ -10,21 +9,21 @@ const handlerMock = vi.fn(({ nodes }) =>
 
 let uuidCounter = 0;
 
-vi.mock('@converter/v2/importer/docxImporter.js', () => ({
+mock.module('@converter/v2/importer/docxImporter.js', () => ({
   defaultNodeListHandler: () => ({
     handler: handlerMock,
     handlerEntities: [],
   }),
 }));
 
-vi.mock('uuid', () => ({
-  v4: vi.fn(() => {
+mock.module('uuid', () => ({
+  v4: mock(() => {
     uuidCounter += 1;
     return `00000000-0000-4000-8000-00000000000${uuidCounter}`;
   }),
 }));
 
-import { importCommentData } from '@converter/v2/importer/documentCommentsImporter.js';
+const { importCommentData } = await import('@converter/v2/importer/documentCommentsImporter.js');
 import { v4 as uuidv4 } from 'uuid';
 
 const buildDocx = ({ comments = [], extended = [], documentRanges = [] } = {}) => {

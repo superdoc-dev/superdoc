@@ -1,21 +1,20 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-
-const readFileMock = vi.fn();
-const loadXmlDataMock = vi.fn();
-const exportSchemaToJsonMock = vi.fn();
-const exportToDocxMock = vi.fn();
-const getCommentDefinitionMock = vi.fn();
-const getStarterExtensionsMock = vi.fn(() => ['starter-extension']);
-const getRichTextExtensionsMock = vi.fn(() => ['rich-extension']);
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const readFileMock = mock();
+const loadXmlDataMock = mock();
+const exportSchemaToJsonMock = mock();
+const exportToDocxMock = mock();
+const getCommentDefinitionMock = mock();
+const getStarterExtensionsMock = mock(() => ['starter-extension']);
+const getRichTextExtensionsMock = mock(() => ['rich-extension']);
 
 const editorInstances = [];
 
-vi.mock('fs/promises', () => ({
+mock.module('fs/promises', () => ({
   readFile: readFileMock,
   default: { readFile: readFileMock },
 }));
 
-vi.mock('@core/Editor.js', () => {
+mock.module('@core/Editor.js', () => {
   class EditorMock {
     static loadXmlData = loadXmlDataMock;
 
@@ -24,35 +23,35 @@ vi.mock('@core/Editor.js', () => {
       this.options = options;
       this.schema = { type: 'schema' };
       this.converter = {
-        getSchema: vi.fn(() => ({ type: 'doc', content: [] })),
+        getSchema: mock(() => ({ type: 'doc', content: [] })),
         savedTagsToRestore: [{ name: 'w:body' }],
         pageStyles: { margins: true },
         exportToDocx: exportToDocxMock,
         addedMedia: { items: ['media1.png'] },
       };
       this.storage = { image: { media: { existing: true } } };
-      this.getUpdatedJson = vi.fn(() => ({ updated: true }));
-      this.getJSON = vi.fn(() => ({ content: [{ type: 'paragraph', text: 'converted text' }] }));
-      this.destroy = vi.fn();
+      this.getUpdatedJson = mock(() => ({ updated: true }));
+      this.getJSON = mock(() => ({ content: [{ type: 'paragraph', text: 'converted text' }] }));
+      this.destroy = mock();
     }
   }
 
   return { Editor: EditorMock };
 });
 
-vi.mock('../../../index.js', () => ({
+mock.module('../../../index.js', () => ({
   getRichTextExtensions: getRichTextExtensionsMock,
 }));
 
-vi.mock('@extensions/index.js', () => ({
+mock.module('@extensions/index.js', () => ({
   getStarterExtensions: getStarterExtensionsMock,
 }));
 
-vi.mock('@converter/exporter', () => ({
+mock.module('@converter/exporter', () => ({
   exportSchemaToJson: exportSchemaToJsonMock,
 }));
 
-vi.mock('@converter/v2/exporter/commentsExporter.js', () => ({
+mock.module('@converter/v2/exporter/commentsExporter.js', () => ({
   getCommentDefinition: getCommentDefinitionMock,
 }));
 
@@ -68,7 +67,6 @@ const {
 
 describe('export-helpers', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     editorInstances.length = 0;
   });
 

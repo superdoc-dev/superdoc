@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { replayNumbering } from './replay-numbering';
 
 describe('replayNumbering', () => {
@@ -30,9 +30,9 @@ describe('replayNumbering', () => {
         definitions: {},
       },
       documentModified: false,
-      promoteToGuid: vi.fn(),
+      promoteToGuid: mock(),
     };
-    const emit = vi.fn();
+    const emit = mock();
 
     const result = replayNumbering({
       numberingDiff: {

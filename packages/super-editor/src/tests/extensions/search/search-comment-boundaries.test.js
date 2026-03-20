@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { createDocxTestEditor } from '../../helpers/editor-test-utils.js';
 import { __searchTextContent } from '@extensions/search/prosemirror-search-patched.js';
 import { prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';

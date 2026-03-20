@@ -1,17 +1,19 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Schema } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { increaseTextIndent, decreaseTextIndent, setTextIndentation, unsetTextIndentation } from './textIndent.js';
+const { Schema } = await import('prosemirror-model');
+const { EditorState, TextSelection } = await import('prosemirror-state');
+const { increaseTextIndent, decreaseTextIndent, setTextIndentation, unsetTextIndentation } = await import(
+  './textIndent.js'
+);
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { ptToTwips } from '@converter/helpers';
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node.attrs.paragraphProperties || {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
 }));
 
-vi.mock('@converter/helpers', () => ({
-  ptToTwips: vi.fn((pt) => pt * 20),
+mock.module('@converter/helpers', () => ({
+  ptToTwips: mock((pt) => pt * 20),
 }));
 
 const schema = new Schema({
@@ -50,9 +52,7 @@ const runCommand = (command, state) => {
 };
 
 describe('text indent commands', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('increaseTextIndent adds a default increment when indent is missing', () => {
     const state = createState({ paragraphProperties: {} });

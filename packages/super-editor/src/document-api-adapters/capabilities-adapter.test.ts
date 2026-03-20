@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import type { Editor } from '../core/Editor.js';
 import { INLINE_PROPERTY_REGISTRY, OPERATION_IDS, PUBLIC_MUTATION_STEP_OP_IDS } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
@@ -6,32 +6,32 @@ import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 
 function makeEditor(overrides: Partial<Editor> = {}): Editor {
   const defaultCommands = {
-    insertParagraphAt: vi.fn(() => true),
-    insertHeadingAt: vi.fn(() => true),
-    insertListItemAt: vi.fn(() => true),
-    setTextSelection: vi.fn(() => true),
-    addComment: vi.fn(() => true),
-    editComment: vi.fn(() => true),
-    addCommentReply: vi.fn(() => true),
-    moveComment: vi.fn(() => true),
-    resolveComment: vi.fn(() => true),
-    removeComment: vi.fn(() => true),
-    setCommentInternal: vi.fn(() => true),
-    setActiveComment: vi.fn(() => true),
-    setCursorById: vi.fn(() => true),
-    insertTrackedChange: vi.fn(() => true),
-    acceptTrackedChangeById: vi.fn(() => true),
-    rejectTrackedChangeById: vi.fn(() => true),
-    acceptAllTrackedChanges: vi.fn(() => true),
-    rejectAllTrackedChanges: vi.fn(() => true),
+    insertParagraphAt: mock(() => true),
+    insertHeadingAt: mock(() => true),
+    insertListItemAt: mock(() => true),
+    setTextSelection: mock(() => true),
+    addComment: mock(() => true),
+    editComment: mock(() => true),
+    addCommentReply: mock(() => true),
+    moveComment: mock(() => true),
+    resolveComment: mock(() => true),
+    removeComment: mock(() => true),
+    setCommentInternal: mock(() => true),
+    setActiveComment: mock(() => true),
+    setCursorById: mock(() => true),
+    insertTrackedChange: mock(() => true),
+    acceptTrackedChangeById: mock(() => true),
+    rejectTrackedChangeById: mock(() => true),
+    acceptAllTrackedChanges: mock(() => true),
+    rejectAllTrackedChanges: mock(() => true),
   };
 
   const defaultMarks = {
     bold: {
-      create: vi.fn(() => ({ type: 'bold' })),
+      create: mock(() => ({ type: 'bold' })),
     },
     [TrackFormatMarkName]: {
-      create: vi.fn(() => ({ type: TrackFormatMarkName })),
+      create: mock(() => ({ type: TrackFormatMarkName })),
     },
   };
 
@@ -114,8 +114,8 @@ describe('getDocumentApiCapabilities', () => {
     const fullCapabilities = getDocumentApiCapabilities(
       makeEditor({
         commands: {
-          undo: vi.fn(() => true),
-          redo: vi.fn(() => true),
+          undo: mock(() => true),
+          redo: mock(() => true),
         } as unknown as Editor['commands'],
       }),
     );
@@ -247,7 +247,7 @@ describe('getDocumentApiCapabilities', () => {
     const capabilities = getDocumentApiCapabilities(
       makeEditor({
         commands: {
-          insertTrackedChange: vi.fn(() => true),
+          insertTrackedChange: mock(() => true),
           insertParagraphAt: undefined,
         } as unknown as Editor['commands'],
       }),
@@ -301,7 +301,7 @@ describe('getDocumentApiCapabilities', () => {
   it('marks blocks.delete as unavailable when blockNode helper is missing', () => {
     const editor = makeEditor({
       commands: {
-        deleteBlockNodeById: vi.fn(() => true),
+        deleteBlockNodeById: mock(() => true),
       } as unknown as Editor['commands'],
     });
     // editor has the command but no helpers.blockNode.getBlockNodeById
@@ -316,12 +316,12 @@ describe('getDocumentApiCapabilities', () => {
   it('marks blocks.delete as available when both command and helper are present', () => {
     const editor = makeEditor({
       commands: {
-        deleteBlockNodeById: vi.fn(() => true),
+        deleteBlockNodeById: mock(() => true),
       } as unknown as Editor['commands'],
     });
     // Add the required helper
     (editor as any).helpers = {
-      blockNode: { getBlockNodeById: vi.fn(() => []) },
+      blockNode: { getBlockNodeById: mock(() => []) },
     };
     const capabilities = getDocumentApiCapabilities(editor);
 
@@ -365,13 +365,13 @@ describe('getDocumentApiCapabilities', () => {
         } as unknown as Editor['commands'],
         schema: {
           marks: {
-            bold: { create: vi.fn(() => ({ type: 'bold' })) },
-            italic: { create: vi.fn(() => ({ type: 'italic' })) },
-            underline: { create: vi.fn(() => ({ type: 'underline' })) },
-            strike: { create: vi.fn(() => ({ type: 'strike' })) },
-            highlight: { create: vi.fn(() => ({ type: 'highlight' })) },
+            bold: { create: mock(() => ({ type: 'bold' })) },
+            italic: { create: mock(() => ({ type: 'italic' })) },
+            underline: { create: mock(() => ({ type: 'underline' })) },
+            strike: { create: mock(() => ({ type: 'strike' })) },
+            highlight: { create: mock(() => ({ type: 'highlight' })) },
             textStyle: {
-              create: vi.fn(() => ({ type: 'textStyle' })),
+              create: mock(() => ({ type: 'textStyle' })),
               attrs: {
                 color: { default: null },
                 fontSize: { default: null },
@@ -382,7 +382,7 @@ describe('getDocumentApiCapabilities', () => {
                 textTransform: { default: null },
               },
             },
-            [TrackFormatMarkName]: { create: vi.fn(() => ({ type: TrackFormatMarkName })) },
+            [TrackFormatMarkName]: { create: mock(() => ({ type: TrackFormatMarkName })) },
             ...overrides.marks,
           },
           nodes: {
@@ -417,7 +417,7 @@ describe('getDocumentApiCapabilities', () => {
         makeFormatEditor({
           marks: {
             textStyle: {
-              create: vi.fn(() => ({ type: 'textStyle' })),
+              create: mock(() => ({ type: 'textStyle' })),
               attrs: {
                 color: { default: null },
                 fontSize: { default: null },
@@ -537,10 +537,10 @@ describe('getDocumentApiCapabilities', () => {
     function makeTocEditor(overrides: { commands?: Record<string, unknown> } = {}) {
       return makeEditor({
         commands: {
-          insertTableOfContentsAt: vi.fn(() => true),
-          setTableOfContentsInstructionById: vi.fn(() => true),
-          replaceTableOfContentsContentById: vi.fn(() => true),
-          deleteTableOfContentsById: vi.fn(() => true),
+          insertTableOfContentsAt: mock(() => true),
+          setTableOfContentsInstructionById: mock(() => true),
+          replaceTableOfContentsContentById: mock(() => true),
+          deleteTableOfContentsById: mock(() => true),
           ...overrides.commands,
         } as unknown as Editor['commands'],
       });

@@ -1,11 +1,10 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi } from 'vitest';
-
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node.attrs?.paragraphProperties ?? {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node.attrs?.paragraphProperties ?? {}),
 }));
 
-import { insertListItemAt } from './insertListItemAt.js';
+const { insertListItemAt } = await import('./insertListItemAt.js');
 
 const numberingProperties = { numId: 1, ilvl: 0 };
 
@@ -22,29 +21,29 @@ function createListParagraph(text = 'Hello') {
 
 function createMockState(targetNode = createListParagraph()) {
   const paragraphType = {
-    createAndFill: vi.fn(() => ({ type: { name: 'paragraph' }, nodeSize: 2 })),
-    create: vi.fn(() => ({ type: { name: 'paragraph' }, nodeSize: 2 })),
+    createAndFill: mock(() => ({ type: { name: 'paragraph' }, nodeSize: 2 })),
+    create: mock(() => ({ type: { name: 'paragraph' }, nodeSize: 2 })),
   };
 
   const mockTr = {
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
   };
 
   return {
     state: {
       doc: {
         content: { size: 100 },
-        nodeAt: vi.fn((pos) => (pos === 0 ? targetNode : null)),
+        nodeAt: mock((pos) => (pos === 0 ? targetNode : null)),
       },
       schema: {
         nodes: { paragraph: paragraphType },
-        text: vi.fn((text) => ({ type: { name: 'text' }, text, nodeSize: text.length })),
+        text: mock((text) => ({ type: { name: 'text' }, text, nodeSize: text.length })),
       },
       tr: mockTr,
     },
     paragraphType,
-    dispatch: vi.fn(),
+    dispatch: mock(),
   };
 }
 

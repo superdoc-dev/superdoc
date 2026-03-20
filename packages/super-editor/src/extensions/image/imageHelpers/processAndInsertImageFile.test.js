@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, spyOn, beforeEach } from 'bun:test';
 import { processAndInsertImageFile } from './processAndInsertImageFile.js';
 import * as startImageUpload from './startImageUpload.js';
 
@@ -18,9 +18,9 @@ describe('processAndInsertImageFile', () => {
   });
 
   beforeEach(() => {
-    checkAndProcessImageSpy = vi.spyOn(startImageUpload, 'checkAndProcessImage');
-    replaceSelectionWithImagePlaceholderSpy = vi.spyOn(startImageUpload, 'replaceSelectionWithImagePlaceholder');
-    uploadAndInsertImageSpy = vi.spyOn(startImageUpload, 'uploadAndInsertImage');
+    checkAndProcessImageSpy = spyOn(startImageUpload, 'checkAndProcessImage');
+    replaceSelectionWithImagePlaceholderSpy = spyOn(startImageUpload, 'replaceSelectionWithImagePlaceholder');
+    uploadAndInsertImageSpy = spyOn(startImageUpload, 'uploadAndInsertImage');
 
     replaceSelectionWithImagePlaceholderSpy.mockImplementation(() => {});
     uploadAndInsertImageSpy.mockResolvedValue(undefined);

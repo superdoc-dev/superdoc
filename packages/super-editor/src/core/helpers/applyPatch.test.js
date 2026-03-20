@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { applyPatch, _testInternals } from './applyPatch.js';
 
 const {
@@ -124,11 +124,11 @@ const createMockTransaction = (doc) => {
   return {
     doc,
     steps,
-    delete: vi.fn(function (from, to) {
+    delete: mock(function (from, to) {
       steps.push({ type: 'delete', from, to });
       return this;
     }),
-    replaceWith: vi.fn(function (from, to, content) {
+    replaceWith: mock(function (from, to, content) {
       steps.push({ type: 'replaceWith', from, to, content });
       return this;
     }),

@@ -1,26 +1,26 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { FindOutput, FindItemDomain } from '@superdoc/document-api';
-import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+const { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } = await import('@superdoc/document-api');
 import type { Editor } from '../core/Editor.js';
 import { findLegacyAdapter } from './find-adapter.js';
 import { getLiveDocumentCounts } from './helpers/live-document-counts.js';
 import type { LiveDocumentCounts } from './helpers/live-document-counts.js';
-import { infoAdapter } from './info-adapter.js';
+const { infoAdapter } = await import('./info-adapter.js');
 
-vi.mock('./find-adapter.js', () => ({
-  findLegacyAdapter: vi.fn(),
+mock.module('./find-adapter.js', () => ({
+  findLegacyAdapter: mock(),
 }));
 
-vi.mock('./helpers/live-document-counts.js', () => ({
-  getLiveDocumentCounts: vi.fn(),
+mock.module('./helpers/live-document-counts.js', () => ({
+  getLiveDocumentCounts: mock(),
 }));
 
-vi.mock('./plan-engine/revision-tracker.js', () => ({
-  getRevision: vi.fn(() => '42'),
+mock.module('./plan-engine/revision-tracker.js', () => ({
+  getRevision: mock(() => '42'),
 }));
 
-const findLegacyAdapterMock = vi.mocked(findLegacyAdapter);
-const getLiveDocumentCountsMock = vi.mocked(getLiveDocumentCounts);
+const findLegacyAdapterMock = findLegacyAdapter as any;
+const getLiveDocumentCountsMock = getLiveDocumentCounts as any;
 
 function makeFindOutput(
   overrides: {

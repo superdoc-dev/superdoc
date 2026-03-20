@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { replayStyles } from './replay-styles';
 
 describe('replayStyles', () => {
@@ -45,12 +45,12 @@ describe('replayStyles', () => {
           ],
         },
       },
-      promoteToGuid: vi.fn(() => 'guid-1'),
+      promoteToGuid: mock(() => 'guid-1'),
       documentModified: false,
     };
     const editor = {
       converter,
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const result = replayStyles({

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { applyDirectiveToMarks, deriveToggleState } from './mark-directives.js';
 
 function mockMark(name: string, attrs: Record<string, unknown> = {}) {

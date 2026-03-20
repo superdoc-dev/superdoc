@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { compoundMutation } from './compound-mutation.js';
 import { mutatePart } from './mutate-part.js';
 import { createTestEditor, withPart, cleanupParts } from '../testing/test-helpers.js';

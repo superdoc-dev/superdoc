@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { shallowMount } from '@vue/test-utils';
 import { h, ref } from 'vue';
 import ButtonGroup from './ButtonGroup.vue';

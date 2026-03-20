@@ -1,4 +1,4 @@
-import { expect, it, describe, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { handlePictNode } from '../../core/super-converter/v2/importer/pictNodeImporter.js';
 import { handleVRectImport, parsePointsToPixels } from '@converter/v3/handlers/w/pict/helpers/handle-v-rect-import.js';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';

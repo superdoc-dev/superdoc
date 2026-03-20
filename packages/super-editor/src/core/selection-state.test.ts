@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'bun:test';
 /**
  * Tests for the tracked selection handle system in selection-state.ts.
  *
@@ -6,7 +7,6 @@
  * and stay bound to their owning editor instance.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { Schema } from 'prosemirror-model';
 

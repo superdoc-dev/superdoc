@@ -1,15 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { mount } = await import('@vue/test-utils');
 
-vi.mock('@extensions/table/tableHelpers/isCellSelection.js', () => ({
-  isCellSelection: vi.fn(() => false),
+mock.module('@extensions/table/tableHelpers/isCellSelection.js', () => ({
+  isCellSelection: mock(() => false),
 }));
 
-vi.mock('@extensions/table/tableHelpers/cellAround.js', () => ({
-  cellAround: vi.fn(() => null),
+mock.module('@extensions/table/tableHelpers/cellAround.js', () => ({
+  cellAround: mock(() => null),
 }));
 
-vi.mock('../../toolbar/IconGrid.vue', () => ({
+mock.module('../../toolbar/IconGrid.vue', () => ({
   default: {
     props: ['icons', 'customIcons', 'activeColor', 'hasNoneIcon'],
     emits: ['select'],
@@ -17,7 +17,7 @@ vi.mock('../../toolbar/IconGrid.vue', () => ({
   },
 }));
 
-vi.mock('../../toolbar/color-dropdown-helpers.js', () => ({
+mock.module('../../toolbar/color-dropdown-helpers.js', () => ({
   icons: [[{ label: 'black', value: '#000000', icon: '<svg/>', style: {} }]],
 }));
 
@@ -30,9 +30,7 @@ describe('CellBackgroundPicker', () => {
   let closePopover;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
-    closePopover = vi.fn();
+    closePopover = mock();
     mockEditor = {
       state: {
         selection: {
@@ -40,9 +38,9 @@ describe('CellBackgroundPicker', () => {
         },
       },
       commands: {
-        setCellSelection: vi.fn(),
-        setCellBackground: vi.fn(),
-        setCellAttr: vi.fn(),
+        setCellSelection: mock(),
+        setCellBackground: mock(),
+        setCellAttr: mock(),
       },
     };
   });

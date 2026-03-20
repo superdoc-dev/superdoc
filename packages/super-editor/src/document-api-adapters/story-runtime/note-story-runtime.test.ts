@@ -1,3 +1,4 @@
+import { describe, it, expect, mock } from 'bun:test';
 /**
  * Regression tests for note story runtime resolution.
  *
@@ -5,39 +6,38 @@
  * empty or blank notes to be misclassified as missing.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { DocumentApiAdapterError } from '../errors.js';
+const { DocumentApiAdapterError } = await import('../errors.js');
 
 // ---------------------------------------------------------------------------
 // Module mocks — isolate extractNotePmJson from editor/converter internals
 // ---------------------------------------------------------------------------
 
-const mockCreateStoryEditor = vi.fn(() => ({
+const mockCreateStoryEditor = mock(() => ({
   state: { doc: { content: { size: 2 }, textBetween: () => '' } },
   schema: {},
   getJSON: () => ({ type: 'doc', content: [] }),
   getUpdatedJson: () => ({ type: 'doc', content: [] }),
-  destroy: vi.fn(),
-  on: vi.fn(),
+  destroy: mock(),
+  on: mock(),
 }));
 
-vi.mock('../../core/story-editor-factory.js', () => ({
+mock.module('../../core/story-editor-factory.js', () => ({
   createStoryEditor: (...args: unknown[]) => mockCreateStoryEditor(...args),
 }));
 
-vi.mock('../../core/parts/mutation/mutate-part.js', () => ({
-  mutatePart: vi.fn(),
+mock.module('../../core/parts/mutation/mutate-part.js', () => ({
+  mutatePart: mock(),
 }));
 
-vi.mock('../../core/parts/adapters/notes-part-descriptor.js', () => ({
-  getNotesConfig: vi.fn(() => ({ partId: 'notes', childElementName: 'w:footnote' })),
-  getNoteElements: vi.fn(() => []),
-  ensureFootnoteRefRun: vi.fn(),
-  updateNoteElement: vi.fn(),
+mock.module('../../core/parts/adapters/notes-part-descriptor.js', () => ({
+  getNotesConfig: mock(() => ({ partId: 'notes', childElementName: 'w:footnote' })),
+  getNoteElements: mock(() => []),
+  ensureFootnoteRefRun: mock(),
+  updateNoteElement: mock(),
 }));
 
 // Import after mocks are set up
-import { resolveNoteRuntime } from './note-story-runtime.js';
+const { resolveNoteRuntime } = await import('./note-story-runtime.js');
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -46,7 +46,7 @@ import { resolveNoteRuntime } from './note-story-runtime.js';
 function makeHostEditor(footnotes: unknown[], endnotes: unknown[] = []) {
   return {
     converter: { footnotes, endnotes },
-    on: vi.fn(),
+    on: mock(),
   } as any;
 }
 

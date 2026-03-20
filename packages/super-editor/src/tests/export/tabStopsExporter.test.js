@@ -1,11 +1,11 @@
-import { expect } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { translator as wPTranslator } from '@converter/v3/handlers/w/p';
 
 describe('Tab Stops Export Tests', () => {
   // Create a minimal editor mock that has the required extensions property
   const createMockEditor = () => ({
     extensions: {
-      find: vi.fn(() => null),
+      find: mock(() => null),
     },
     schema: {
       marks: {},

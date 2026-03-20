@@ -1,11 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { TableOfContentsEntry } from './table-of-contents-entry.js';
 
 describe('TableOfContentsEntry commands', () => {
   it('updateTableOfContentsEntryAt clears stale instructionTokens', () => {
     const commands = TableOfContentsEntry.config.addCommands();
-    const setNodeMarkup = vi.fn();
-    const dispatch = vi.fn();
+    const setNodeMarkup = mock();
+    const dispatch = mock();
     const node = {
       type: { name: 'tableOfContentsEntry' },
       attrs: {
@@ -18,7 +18,7 @@ describe('TableOfContentsEntry commands', () => {
     const result = commands.updateTableOfContentsEntryAt({ pos: 5, instruction: 'TC "New" \\l "2"' })({
       tr: { setNodeMarkup },
       dispatch,
-      state: { doc: { nodeAt: vi.fn().mockReturnValue(node) } },
+      state: { doc: { nodeAt: mock().mockReturnValue(node) } },
     });
 
     expect(result).toBe(true);

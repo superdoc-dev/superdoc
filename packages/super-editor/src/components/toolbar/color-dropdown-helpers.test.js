@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { makeColorOption, icons, getAvailableColorOptions, renderColorOptions } from './color-dropdown-helpers.js';
 
 describe('color-dropdown-helpers', () => {
@@ -30,7 +30,7 @@ describe('color-dropdown-helpers', () => {
   });
 
   it('emits the selected color and closes the dropdown', () => {
-    const emitCommand = vi.fn();
+    const emitCommand = mock();
     const button = {
       iconColor: { value: null },
       expand: { value: true },

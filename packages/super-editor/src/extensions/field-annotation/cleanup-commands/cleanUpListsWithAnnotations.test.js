@@ -1,21 +1,21 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanUpListsWithAnnotations } from './cleanUpListsWithAnnotations.js';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
+const { cleanUpListsWithAnnotations } = await import('./cleanUpListsWithAnnotations.js');
 import * as fieldHelpers from '../fieldAnnotationHelpers/index.js';
 import * as coreHelpers from '@core/helpers/index.js';
 
-vi.mock('../fieldAnnotationHelpers/index.js', async () => {
-  const actual = await vi.importActual('../fieldAnnotationHelpers/index.js');
+mock.module('../fieldAnnotationHelpers/index.js', async () => {
+  const actual = await import('../fieldAnnotationHelpers/index.js');
   return {
     ...actual,
-    getAllFieldAnnotations: vi.fn(),
+    getAllFieldAnnotations: mock(),
   };
 });
 
-vi.mock('@core/helpers/index.js', async () => {
-  const actual = await vi.importActual('@core/helpers/index.js');
+mock.module('@core/helpers/index.js', async () => {
+  const actual = await import('@core/helpers/index.js');
   return {
     ...actual,
-    findParentNodeClosestToPos: vi.fn(),
+    findParentNodeClosestToPos: mock(),
   };
 });
 
@@ -47,9 +47,7 @@ const createAnnotation = (fieldId, pos = 10) => ({
 });
 
 describe('cleanUpListsWithAnnotations', () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  afterEach(() => {});
 
   it('deletes paragraph-based list entries when only targeted fields remain', () => {
     fieldHelpers.getAllFieldAnnotations.mockReturnValue([createAnnotation('field-1')]);
@@ -59,10 +57,10 @@ describe('cleanUpListsWithAnnotations', () => {
       node: createListNode(),
     });
 
-    const tr = { delete: vi.fn(), setMeta: vi.fn() };
-    const state = { doc: { resolve: vi.fn(() => ({})) } };
+    const tr = { delete: mock(), setMeta: mock() };
+    const state = { doc: { resolve: mock(() => ({})) } };
 
-    const result = cleanUpListsWithAnnotations(['field-1'])({ dispatch: vi.fn(), tr, state });
+    const result = cleanUpListsWithAnnotations(['field-1'])({ dispatch: mock(), tr, state });
 
     expect(result).toBe(true);
     expect(tr.delete).toHaveBeenCalledWith(40, 46);
@@ -79,10 +77,10 @@ describe('cleanUpListsWithAnnotations', () => {
       }),
     });
 
-    const tr = { delete: vi.fn(), setMeta: vi.fn() };
-    const state = { doc: { resolve: vi.fn(() => ({})) } };
+    const tr = { delete: mock(), setMeta: mock() };
+    const state = { doc: { resolve: mock(() => ({})) } };
 
-    const result = cleanUpListsWithAnnotations(['field-1'])({ dispatch: vi.fn(), tr, state });
+    const result = cleanUpListsWithAnnotations(['field-1'])({ dispatch: mock(), tr, state });
 
     expect(result).toBe(true);
     expect(tr.delete).not.toHaveBeenCalled();

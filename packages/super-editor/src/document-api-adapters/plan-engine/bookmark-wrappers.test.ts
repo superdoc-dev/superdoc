@@ -1,42 +1,42 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { BookmarkInsertInput } from '@superdoc/document-api';
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean) => ({
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean) => ({
     steps: [{ effect: handler() ? 'changed' : 'noop' }],
   })),
 }));
 
-vi.mock('./revision-tracker.js', () => ({
-  getRevision: vi.fn(() => 'rev-1'),
+mock.module('./revision-tracker.js', () => ({
+  getRevision: mock(() => 'rev-1'),
 }));
 
-vi.mock('../helpers/adapter-utils.js', () => ({
-  paginate: vi.fn((items: unknown[], offset = 0, limit?: number) => {
+mock.module('../helpers/adapter-utils.js', () => ({
+  paginate: mock((items: unknown[], offset = 0, limit?: number) => {
     const total = items.length;
     const sliced = items.slice(offset, limit ? offset + limit : undefined);
     return { total, items: sliced };
   }),
-  resolveInlineInsertPosition: vi.fn(() => ({ from: 5, to: 8 })),
+  resolveInlineInsertPosition: mock(() => ({ from: 5, to: 8 })),
 }));
 
-vi.mock('../helpers/mutation-helpers.js', () => ({
-  rejectTrackedMode: vi.fn(),
+mock.module('../helpers/mutation-helpers.js', () => ({
+  rejectTrackedMode: mock(),
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
-  clearIndexCache: vi.fn(),
+mock.module('../helpers/index-cache.js', () => ({
+  clearIndexCache: mock(),
 }));
 
-vi.mock('../helpers/bookmark-resolver.js', () => ({
-  findAllBookmarks: vi.fn(() => []),
-  resolveBookmarkTarget: vi.fn(),
-  extractBookmarkInfo: vi.fn(),
-  buildBookmarkDiscoveryItem: vi.fn(),
+mock.module('../helpers/bookmark-resolver.js', () => ({
+  findAllBookmarks: mock(() => []),
+  resolveBookmarkTarget: mock(),
+  extractBookmarkInfo: mock(),
+  buildBookmarkDiscoveryItem: mock(),
 }));
 
-import { bookmarksInsertWrapper } from './bookmark-wrappers.js';
+const { bookmarksInsertWrapper } = await import('./bookmark-wrappers.js');
 import { resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { findAllBookmarks } from '../helpers/bookmark-resolver.js';
@@ -48,11 +48,11 @@ type BookmarkNode = {
 
 function makeEditor(existingNodes: BookmarkNode[] = []): {
   editor: Editor;
-  tr: { insert: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
-  startCreate: ReturnType<typeof vi.fn>;
-  endCreate: ReturnType<typeof vi.fn>;
-  dispatch: ReturnType<typeof vi.fn>;
-  insertBookmark: ReturnType<typeof vi.fn>;
+  tr: { insert: ReturnType<typeof mock>; delete: ReturnType<typeof mock> };
+  startCreate: ReturnType<typeof mock>;
+  endCreate: ReturnType<typeof mock>;
+  dispatch: ReturnType<typeof mock>;
+  insertBookmark: ReturnType<typeof mock>;
 } {
   const stateDoc = {
     descendants: (cb: (node: BookmarkNode, pos: number) => boolean | void) => {
@@ -62,14 +62,14 @@ function makeEditor(existingNodes: BookmarkNode[] = []): {
   };
 
   const tr = {
-    insert: vi.fn((_pos: number, _node: unknown) => tr),
-    delete: vi.fn((_from: number, _to: number) => tr),
+    insert: mock((_pos: number, _node: unknown) => tr),
+    delete: mock((_from: number, _to: number) => tr),
   };
 
-  const startCreate = vi.fn((attrs: Record<string, unknown>) => ({ type: 'bookmarkStart', attrs, nodeSize: 1 }));
-  const endCreate = vi.fn((attrs: Record<string, unknown>) => ({ type: 'bookmarkEnd', attrs, nodeSize: 1 }));
-  const dispatch = vi.fn();
-  const insertBookmark = vi.fn(() => true);
+  const startCreate = mock((attrs: Record<string, unknown>) => ({ type: 'bookmarkStart', attrs, nodeSize: 1 }));
+  const endCreate = mock((attrs: Record<string, unknown>) => ({ type: 'bookmarkEnd', attrs, nodeSize: 1 }));
+  const dispatch = mock();
+  const insertBookmark = mock(() => true);
 
   const editor = {
     state: {
@@ -98,9 +98,7 @@ function makeInput(name = 'bm1'): BookmarkInsertInput {
   };
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+beforeEach(() => {});
 
 describe('bookmarksInsertWrapper', () => {
   it('inserts bookmarkEnd then bookmarkStart with a shared next numeric id', () => {
@@ -131,7 +129,7 @@ describe('bookmarksInsertWrapper', () => {
   });
 
   it('supports collapsed targets and carries table-column attrs on bookmarkStart', () => {
-    vi.mocked(resolveInlineInsertPosition).mockReturnValueOnce({ from: 7, to: 7 });
+    (resolveInlineInsertPosition as any).mockReturnValueOnce({ from: 7, to: 7 });
     const { editor, tr } = makeEditor();
 
     const result = bookmarksInsertWrapper(editor, {
@@ -149,7 +147,7 @@ describe('bookmarksInsertWrapper', () => {
   });
 
   it('returns NO_OP when a bookmark with the same name already exists', () => {
-    vi.mocked(findAllBookmarks).mockReturnValueOnce([
+    (findAllBookmarks as any).mockReturnValueOnce([
       { name: 'bm1', pos: 1, bookmarkId: '0', endPos: 2, node: {} as never },
     ]);
     const { editor, tr, dispatch } = makeEditor();

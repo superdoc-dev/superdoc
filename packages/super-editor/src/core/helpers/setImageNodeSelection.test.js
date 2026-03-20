@@ -1,20 +1,18 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, mock, spyOn, afterEach } from 'bun:test';
 import { NodeSelection } from 'prosemirror-state';
 import { setImageNodeSelection } from './setImageNodeSelection.js';
 
 describe('setImageNodeSelection', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('selects the image node at the target position', () => {
-    const doc = { nodeAt: vi.fn(() => ({ type: { name: 'image' } })) };
-    const tr = { setSelection: vi.fn(() => 'updated-tr') };
+    const doc = { nodeAt: mock(() => ({ type: { name: 'image' } })) };
+    const tr = { setSelection: mock(() => 'updated-tr') };
     const state = { doc, tr };
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const view = { state, dispatch };
 
-    const createSpy = vi.spyOn(NodeSelection, 'create').mockReturnValue('node-selection');
+    const createSpy = spyOn(NodeSelection, 'create').mockReturnValue('node-selection');
 
     const result = setImageNodeSelection(view, 5);
 
@@ -28,10 +26,10 @@ describe('setImageNodeSelection', () => {
   it('returns false when the node is missing or not an image', () => {
     const makeView = (node) => ({
       state: {
-        doc: { nodeAt: vi.fn(() => node) },
-        tr: { setSelection: vi.fn(() => 'noop') },
+        doc: { nodeAt: mock(() => node) },
+        tr: { setSelection: mock(() => 'noop') },
       },
-      dispatch: vi.fn(),
+      dispatch: mock(),
     });
 
     // Non-image node

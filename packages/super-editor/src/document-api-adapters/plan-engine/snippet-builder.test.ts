@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildSnippet } from './snippet-builder.js';
 import { SNIPPET_MAX_LENGTH, SNIPPET_CONTEXT_CHARS } from '@superdoc/document-api';
 

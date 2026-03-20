@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { Image } from './image.js';
 
 describe('Image extension defaults', () => {

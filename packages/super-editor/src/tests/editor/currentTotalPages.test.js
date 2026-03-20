@@ -1,6 +1,6 @@
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 /* @vitest-environment node */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -60,7 +60,7 @@ describe('Editor.currentTotalPages', () => {
 
     // Simulate a presentationEditor with empty pages (before first layout)
     editor.presentationEditor = /** @type {any} */ ({
-      getPages: vi.fn(() => []),
+      getPages: mock(() => []),
     });
 
     expect(editor.currentTotalPages).toBeUndefined();
@@ -84,7 +84,7 @@ describe('Editor.currentTotalPages', () => {
 
     // Simulate a presentationEditor after layout completes
     editor.presentationEditor = /** @type {any} */ ({
-      getPages: vi.fn(() => [
+      getPages: mock(() => [
         { number: 1, size: { w: 612, h: 792 } },
         { number: 2, size: { w: 612, h: 792 } },
         { number: 3, size: { w: 612, h: 792 } },

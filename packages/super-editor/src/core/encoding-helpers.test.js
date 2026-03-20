@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { isXmlLike, hex, sniffEncoding, stripBOM, ensureXmlString } from './encoding-helpers.js';
 
 function utf16leWithBOM(str) {

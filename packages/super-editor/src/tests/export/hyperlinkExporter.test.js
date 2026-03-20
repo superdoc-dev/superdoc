@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { getExportedResult } from './export-helpers/index';
 
 const getHyperlinkNodeFromParagraph = (paragraph) => {

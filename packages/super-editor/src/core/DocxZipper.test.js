@@ -1,6 +1,6 @@
+import { describe, it, expect, beforeEach } from 'bun:test';
 import path from 'path';
 import fs from 'fs';
-import { describe, it, expect, beforeEach } from 'vitest';
 import DocxZipper from './DocxZipper';
 import JSZip from 'jszip';
 

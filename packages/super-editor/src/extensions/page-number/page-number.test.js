@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach, afterEach, jest } from 'bun:test';
 import { PageNumber, TotalPageCount, AutoPageNumberNodeView } from './page-number.js';
 
 describe('PageNumber commands', () => {
@@ -14,12 +14,12 @@ describe('PageNumber commands', () => {
 
   it('addAutoPageNumber inserts node', () => {
     const commands = PageNumber.config.addCommands();
-    const replaceSelectionWith = vi.fn();
-    const setMeta = vi.fn();
+    const replaceSelectionWith = mock();
+    const setMeta = mock();
     const pageNode = { type: 'page-number' };
     const schema = {
       nodes: { 'page-number': {} },
-      nodeFromJSON: vi.fn().mockReturnValue(pageNode),
+      nodeFromJSON: mock().mockReturnValue(pageNode),
     };
 
     const tr = { replaceSelectionWith, setMeta };
@@ -29,7 +29,7 @@ describe('PageNumber commands', () => {
     const result = commands.addAutoPageNumber()({
       editor: { options: { isHeaderOrFooter: true } },
       tr,
-      dispatch: vi.fn(),
+      dispatch: mock(),
       state: { schema },
     });
 
@@ -41,13 +41,13 @@ describe('PageNumber commands', () => {
 
   it('addTotalPageCount inserts total pages when enabled', () => {
     const commands = TotalPageCount.config.addCommands();
-    const replaceSelectionWith = vi.fn();
+    const replaceSelectionWith = mock();
     const schema = {
       nodes: { 'total-page-number': {} },
-      nodeFromJSON: vi.fn().mockImplementation((json) => json),
+      nodeFromJSON: mock().mockImplementation((json) => json),
     };
     const editor = { options: { isHeaderOrFooter: true, totalPageCount: 7, parentEditor: { currentTotalPages: 7 } } };
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = commands.addTotalPageCount()({
       editor,
@@ -73,11 +73,11 @@ describe('PageNumber commands', () => {
 
 describe('AutoPageNumberNodeView', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
   });
 
   it('renders page number node and syncs marks from neighbors', () => {
@@ -88,13 +88,13 @@ describe('AutoPageNumberNodeView', () => {
     const marksAfter = [{ type: { name: 'underline' }, attrs: {} }];
     const state = {};
     const doc = {
-      resolve: vi.fn().mockReturnValue({ nodeBefore: { marks: marksBefore }, nodeAfter: { marks: marksAfter } }),
-      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+      resolve: mock().mockReturnValue({ nodeBefore: { marks: marksBefore }, nodeAfter: { marks: marksAfter } }),
+      nodeAt: mock().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
     };
-    const tr = { setNodeMarkup: vi.fn() };
+    const tr = { setNodeMarkup: mock() };
     tr.setNodeMarkup.mockImplementation(() => tr);
 
-    const dispatch = vi.fn();
+    const dispatch = mock();
     state.doc = doc;
     state.tr = tr;
     const editor = {
@@ -115,7 +115,7 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.dom.style['font-size']).toBe('16px');
     expect(nodeView.dom.style['text-decoration']).toContain('underline');
 
-    vi.runAllTimers();
+    jest.runAllTimers();
 
     expect(doc.nodeAt).toHaveBeenCalledWith(5);
     expect(tr.setNodeMarkup).toHaveBeenCalledWith(5, undefined, {
@@ -132,12 +132,12 @@ describe('AutoPageNumberNodeView', () => {
     const marks = [{ type: { name: 'bold' }, attrs: {} }];
     const existingMarks = [{ type: 'bold', attrs: {} }];
     const doc = {
-      resolve: vi.fn().mockReturnValue({ nodeBefore: { marks }, nodeAfter: null }),
-      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: existingMarks } }),
+      resolve: mock().mockReturnValue({ nodeBefore: { marks }, nodeAfter: null }),
+      nodeAt: mock().mockReturnValue({ isText: false, attrs: { marksAsAttrs: existingMarks } }),
     };
-    const tr = { setNodeMarkup: vi.fn().mockReturnValue({ setMeta: vi.fn() }) };
+    const tr = { setNodeMarkup: mock().mockReturnValue({ setMeta: mock() }) };
     const state = { doc, tr };
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const editor = {
       options: { currentPageNumber: 4 },
       state,
@@ -151,7 +151,7 @@ describe('AutoPageNumberNodeView', () => {
       editor,
     );
 
-    vi.runAllTimers();
+    jest.runAllTimers();
 
     expect(tr.setNodeMarkup).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
@@ -159,15 +159,15 @@ describe('AutoPageNumberNodeView', () => {
 
   it('updates node reference through update()', () => {
     const doc = {
-      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
-      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+      resolve: mock().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: mock().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
     };
-    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const tr = { setNodeMarkup: mock().mockReturnValue({}) };
     const state = { doc, tr };
     const editor = {
       options: { currentPageNumber: 1 },
       state,
-      view: { state, dispatch: vi.fn() },
+      view: { state, dispatch: mock() },
     };
 
     const nodeView = new AutoPageNumberNodeView({ type: { name: 'page-number' }, attrs: {} }, () => 1, [], editor);
@@ -178,15 +178,15 @@ describe('AutoPageNumberNodeView', () => {
 
   it('renders total page count node with parent editor value', () => {
     const doc = {
-      resolve: vi.fn().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
-      nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
+      resolve: mock().mockReturnValue({ nodeBefore: null, nodeAfter: null }),
+      nodeAt: mock().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
     };
-    const tr = { setNodeMarkup: vi.fn().mockReturnValue({}) };
+    const tr = { setNodeMarkup: mock().mockReturnValue({}) };
     const state = { doc, tr };
     const editor = {
       options: { totalPageCount: 12, parentEditor: { currentTotalPages: 12 } },
       state,
-      view: { state, dispatch: vi.fn() },
+      view: { state, dispatch: mock() },
     };
 
     const node = { type: { name: 'total-page-number' }, attrs: {} };

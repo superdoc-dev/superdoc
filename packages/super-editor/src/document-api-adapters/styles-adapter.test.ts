@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import type { StylesApplyInput, NormalizedStylesApplyOptions, ValueSchema } from '@superdoc/document-api';
 import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import { stylesApplyAdapter } from './styles-adapter.js';
@@ -51,7 +51,7 @@ function createMockEditor(opts: MockEditorOptions = {}) {
         convertedXml,
         documentModified: false,
         documentGuid: 'existing-guid',
-        promoteToGuid: vi.fn(() => 'new-guid'),
+        promoteToGuid: mock(() => 'new-guid'),
         translatedLinkedStyles: opts.translatedLinkedStyles ?? {},
       };
 
@@ -60,9 +60,9 @@ function createMockEditor(opts: MockEditorOptions = {}) {
     options: {
       collaborationProvider: opts.collaborationProvider ?? null,
     },
-    on: vi.fn(),
-    emit: vi.fn(),
-    safeEmit: vi.fn(() => []),
+    on: mock(),
+    emit: mock(),
+    safeEmit: mock(() => []),
   } as unknown as Parameters<typeof stylesApplyAdapter>[0];
 
   initRevision(editor);
@@ -263,7 +263,7 @@ describe('styles adapter: no-op semantics', () => {
       translatedLinkedStyles: { docDefaults: { runProperties: { bold: true } } },
     });
     stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
-    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).not.toHaveBeenCalledWith(
+    expect((editor as unknown as { emit: ReturnType<typeof mock> }).emit).not.toHaveBeenCalledWith(
       'stylesDefaultsChanged',
     );
   });
@@ -294,7 +294,7 @@ describe('styles adapter: dryRun', () => {
   it('does not emit stylesDefaultsChanged on dryRun', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
     stylesApplyAdapter(editor, runInput({ bold: true }), DRY_RUN_OPTIONS);
-    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).not.toHaveBeenCalledWith(
+    expect((editor as unknown as { emit: ReturnType<typeof mock> }).emit).not.toHaveBeenCalledWith(
       'stylesDefaultsChanged',
     );
   });
@@ -315,14 +315,14 @@ describe('styles adapter: re-render trigger', () => {
   it('emits stylesDefaultsChanged after successful non-dry mutation', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
     stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
-    const emitSpy = (editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit;
+    const emitSpy = (editor as unknown as { emit: ReturnType<typeof mock> }).emit;
     expect(emitSpy).toHaveBeenCalledWith('stylesDefaultsChanged');
   });
 
   it('emits partChanged event via mutation pipeline', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
     stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
-    const safeEmitSpy = (editor as unknown as { safeEmit: ReturnType<typeof vi.fn> }).safeEmit;
+    const safeEmitSpy = (editor as unknown as { safeEmit: ReturnType<typeof mock> }).safeEmit;
     expect(safeEmitSpy).toHaveBeenCalledWith(
       'partChanged',
       expect.objectContaining({

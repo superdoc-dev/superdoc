@@ -1,10 +1,10 @@
+import { describe, it, expect } from 'bun:test';
 /**
  * Integration test: normalizeFixedWidthTables → remark-gfm AST parsing.
  *
  * Verifies that the normalizer's GFM output is correctly parsed into mdast
  * table nodes by the same remark pipeline used in production.
  */
-import { describe, expect, it } from 'vitest';
 import { normalizeFixedWidthTables } from './normalizeFixedWidthTables.js';
 import { parseMarkdownToAst } from './parseMarkdownAst.js';
 import type { Root, Table, TableRow, TableCell } from 'mdast';

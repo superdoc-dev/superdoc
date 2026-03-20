@@ -1,9 +1,8 @@
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+const getResolvedParagraphPropertiesMock = mock((node) => node.attrs.paragraphProperties || {});
 
-const getResolvedParagraphPropertiesMock = vi.hoisted(() => vi.fn((node) => node.attrs.paragraphProperties || {}));
-
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: getResolvedParagraphPropertiesMock,
 }));
 
@@ -20,12 +19,12 @@ import {
   calculateIndentFallback,
   getTabDecorations,
 } from './tabDecorations.js';
-import { pixelsToTwips } from '@converter/helpers';
+const { pixelsToTwips } = await import('@converter/helpers');
 
 describe('findParagraphContext', () => {
   const mockHelpers = {
     linkedStyles: {
-      getStyleById: vi.fn(),
+      getStyleById: mock(),
     },
   };
 
@@ -144,17 +143,17 @@ describe('getTabDecorations', () => {
     const getMeasurement = (pos, key) => measurements[pos]?.[key];
 
     return {
-      coordsAtPos: vi.fn((pos) => {
+      coordsAtPos: mock((pos) => {
         const coords = getMeasurement(pos, 'coords');
         if (coords) return coords;
         return { left: pos * 10, top: 0, right: pos * 10, bottom: 20 };
       }),
-      domAtPos: vi.fn((pos) => {
+      domAtPos: mock((pos) => {
         const dom = getMeasurement(pos, 'dom');
         if (dom) return dom;
         return { node: document.createTextNode(''), offset: 0 };
       }),
-      nodeDOM: vi.fn((pos) => {
+      nodeDOM: mock((pos) => {
         const nodeDom = getMeasurement(pos, 'nodeDOM');
         if (nodeDom) return nodeDom;
         return {};
@@ -238,7 +237,7 @@ describe('getTabDecorations', () => {
 
   const mockHelpers = {
     linkedStyles: {
-      getStyleById: vi.fn(),
+      getStyleById: mock(),
     },
   };
 
@@ -806,13 +805,13 @@ describe('getTabDecorations', () => {
       // Create a view that will throw during width calculation
       // Inner functions have fallbacks, so this tests graceful degradation
       const view = {
-        coordsAtPos: vi.fn(() => {
+        coordsAtPos: mock(() => {
           throw new Error('coordsAtPos error');
         }),
-        domAtPos: vi.fn(() => {
+        domAtPos: mock(() => {
           throw new Error('domAtPos error');
         }),
-        nodeDOM: vi.fn(() => ({})),
+        nodeDOM: mock(() => ({})),
       };
 
       // Should not crash even with errors
@@ -854,7 +853,7 @@ describe('getTabDecorations', () => {
         { pos: 5, node: tabNode, paragraph, paragraphStart: 0 },
       ]);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = spyOn(console, 'error').mockImplementation(() => {});
 
       // Pass null view
       const decorations = getTabDecorations(doc, null, mockHelpers, 0, 100);

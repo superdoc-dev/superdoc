@@ -1,22 +1,21 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { increaseListIndent } from './increaseListIndent.js';
+const { increaseListIndent } = await import('./increaseListIndent.js');
 import { changeListLevel } from './changeListLevel.js';
 
-vi.mock('./changeListLevel.js', () => ({
-  changeListLevel: vi.fn(),
+mock.module('./changeListLevel.js', () => ({
+  changeListLevel: mock(),
 }));
 
 describe('increaseListIndent', () => {
   /** @type {{ state?: any }} */
   let editor;
-  /** @type {{ setNodeMarkup?: ReturnType<typeof vi.fn> }} */
+  /** @type {{ setNodeMarkup?: ReturnType<typeof mock> }} */
   let tr;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     editor = { state: { selection: {} } };
-    tr = { setNodeMarkup: vi.fn() };
+    tr = { setNodeMarkup: mock() };
   });
 
   it('delegates to changeListLevel with a delta of 1', () => {
@@ -39,7 +38,7 @@ describe('increaseListIndent', () => {
 
   it('dispatches the transaction when changeListLevel succeeds', () => {
     changeListLevel.mockReturnValue(true);
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = increaseListIndent()({ editor, tr, dispatch });
 
@@ -50,7 +49,7 @@ describe('increaseListIndent', () => {
 
   it('does not dispatch when changeListLevel fails', () => {
     changeListLevel.mockReturnValue(false);
-    const dispatch = vi.fn();
+    const dispatch = mock();
 
     const result = increaseListIndent()({ editor, tr, dispatch });
 

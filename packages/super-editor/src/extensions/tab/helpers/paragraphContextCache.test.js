@@ -1,5 +1,5 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi } from 'vitest';
 import { getParagraphContext, clearParagraphContext, clearAllParagraphContexts } from './paragraphContextCache.js';
 
 describe('paragraphContextCache', () => {
@@ -9,7 +9,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = { someHelper: 'value' };
       const revision = 1;
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       const result = getParagraphContext(paragraph, startPos, helpers, revision, computeFn);
 
@@ -23,7 +23,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = { someHelper: 'value' };
       const revision = 1;
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       // First call - computes and caches
       const result1 = getParagraphContext(paragraph, startPos, helpers, revision, computeFn);
@@ -41,7 +41,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = { someHelper: 'value' };
       let revision = 1;
-      const computeFn = vi.fn((para) => ({ data: `computed-rev-${revision}` }));
+      const computeFn = mock((para) => ({ data: `computed-rev-${revision}` }));
 
       // First call with revision 1
       const result1 = getParagraphContext(paragraph, startPos, helpers, revision, computeFn);
@@ -64,8 +64,8 @@ describe('paragraphContextCache', () => {
       const helpers = { someHelper: 'value' };
       const revision = 1;
 
-      const computeFn1 = vi.fn(() => ({ data: 'para1' }));
-      const computeFn2 = vi.fn(() => ({ data: 'para2' }));
+      const computeFn1 = mock(() => ({ data: 'para1' }));
+      const computeFn2 = mock(() => ({ data: 'para2' }));
 
       const result1 = getParagraphContext(paragraph1, startPos, helpers, revision, computeFn1);
       const result2 = getParagraphContext(paragraph2, startPos, helpers, revision, computeFn2);
@@ -79,7 +79,7 @@ describe('paragraphContextCache', () => {
     it('should handle different startPos and helpers parameters', () => {
       const paragraph = { type: { name: 'paragraph' } };
       const revision = 1;
-      const computeFn = vi.fn((para, pos, help) => ({ pos, help }));
+      const computeFn = mock((para, pos, help) => ({ pos, help }));
 
       // Cache only depends on paragraph node and revision, not startPos/helpers
       const result1 = getParagraphContext(paragraph, 0, { a: 1 }, revision, computeFn);
@@ -97,19 +97,19 @@ describe('paragraphContextCache', () => {
       const revision = 1;
 
       // Test with object
-      const computeObj = vi.fn(() => ({ key: 'value' }));
+      const computeObj = mock(() => ({ key: 'value' }));
       const resultObj = getParagraphContext(paragraph, startPos, helpers, revision, computeObj);
       expect(resultObj).toEqual({ key: 'value' });
 
       // Clear and test with array
       clearParagraphContext(paragraph);
-      const computeArr = vi.fn(() => [1, 2, 3]);
+      const computeArr = mock(() => [1, 2, 3]);
       const resultArr = getParagraphContext(paragraph, startPos, helpers, revision, computeArr);
       expect(resultArr).toEqual([1, 2, 3]);
 
       // Clear and test with primitive
       clearParagraphContext(paragraph);
-      const computePrim = vi.fn(() => 'string');
+      const computePrim = mock(() => 'string');
       const resultPrim = getParagraphContext(paragraph, startPos, helpers, revision, computePrim);
       expect(resultPrim).toBe('string');
     });
@@ -121,7 +121,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = {};
       const revision = 1;
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       // Cache the context
       getParagraphContext(paragraph, startPos, helpers, revision, computeFn);
@@ -142,8 +142,8 @@ describe('paragraphContextCache', () => {
       const helpers = {};
       const revision = 1;
 
-      const computeFn1 = vi.fn(() => ({ data: 'para1' }));
-      const computeFn2 = vi.fn(() => ({ data: 'para2' }));
+      const computeFn1 = mock(() => ({ data: 'para1' }));
+      const computeFn2 = mock(() => ({ data: 'para2' }));
 
       // Cache both
       getParagraphContext(paragraph1, startPos, helpers, revision, computeFn1);
@@ -173,7 +173,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = {};
       const revision = 1;
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       getParagraphContext(paragraph, startPos, helpers, revision, computeFn);
 
@@ -196,9 +196,9 @@ describe('paragraphContextCache', () => {
       const helpers = {};
       const revision = 1;
 
-      const computeFn1 = vi.fn(() => ({ data: 'para1' }));
-      const computeFn2 = vi.fn(() => ({ data: 'para2' }));
-      const computeFn3 = vi.fn(() => ({ data: 'para3' }));
+      const computeFn1 = mock(() => ({ data: 'para1' }));
+      const computeFn2 = mock(() => ({ data: 'para2' }));
+      const computeFn3 = mock(() => ({ data: 'para3' }));
 
       // Cache all three
       getParagraphContext(paragraph1, startPos, helpers, revision, computeFn1);
@@ -227,7 +227,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = {};
       const revision = 1;
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       clearAllParagraphContexts();
 
@@ -248,7 +248,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = {};
       const revision = 1;
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       getParagraphContext(paragraph, startPos, helpers, revision, computeFn);
 
@@ -268,8 +268,8 @@ describe('paragraphContextCache', () => {
       const helpers = {};
       const revision = 1;
 
-      const computeFn1 = vi.fn(() => ({ data: 'para1' }));
-      const computeFn2 = vi.fn(() => ({ data: 'para2' }));
+      const computeFn1 = mock(() => ({ data: 'para1' }));
+      const computeFn2 = mock(() => ({ data: 'para2' }));
 
       // Cache first paragraph
       getParagraphContext(paragraph1, startPos, helpers, revision, computeFn1);
@@ -293,7 +293,7 @@ describe('paragraphContextCache', () => {
       const paragraph = { type: { name: 'paragraph' } };
       const startPos = 0;
       const helpers = {};
-      const computeFn = vi.fn((para) => ({ timestamp: Date.now() }));
+      const computeFn = mock((para) => ({ timestamp: Date.now() }));
 
       // Simulate document changes by incrementing revision
       const result1 = getParagraphContext(paragraph, startPos, helpers, 1, computeFn);
@@ -310,7 +310,7 @@ describe('paragraphContextCache', () => {
       const paragraph = { type: { name: 'paragraph' } };
       const startPos = 0;
       const helpers = {};
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       // Simulate many document changes
       for (let revision = 0; revision < 100; revision++) {
@@ -325,7 +325,7 @@ describe('paragraphContextCache', () => {
       const startPos = 0;
       const helpers = {};
       const revision = 5;
-      const computeFn = vi.fn(() => ({ data: 'computed' }));
+      const computeFn = mock(() => ({ data: 'computed' }));
 
       // Multiple accesses with same revision
       for (let i = 0; i < 10; i++) {

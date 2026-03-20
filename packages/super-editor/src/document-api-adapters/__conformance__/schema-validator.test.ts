@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { validateJsonSchema } from './schema-validator.js';
 
 describe('schema-validator $ref resolution', () => {

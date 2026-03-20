@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { getExportedResultWithDocContent } from './export-helpers/index';
 
 // Mapping of SuperDoc paragraph attrs -> OOXML attribute names for <w:p>

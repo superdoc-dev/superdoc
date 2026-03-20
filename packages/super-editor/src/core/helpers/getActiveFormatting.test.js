@@ -1,28 +1,23 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, mock, afterEach } from 'bun:test';
+const getMarksFromSelectionMock = mock(() => [
+  { type: { name: 'bold' }, attrs: {} },
+  { type: { name: 'textStyle' }, attrs: { textColor: '#f00' } },
+]);
 
-const getMarksFromSelectionMock = vi.hoisted(() =>
-  vi.fn(() => [
-    { type: { name: 'bold' }, attrs: {} },
-    { type: { name: 'textStyle' }, attrs: { textColor: '#f00' } },
-  ]),
-);
+const findMarkMock = mock(() => ({ from: 0, to: 10, attrs: { href: 'https://example.com' } }));
 
-const findMarkMock = vi.hoisted(() => vi.fn(() => ({ from: 0, to: 10, attrs: { href: 'https://example.com' } })));
-
-vi.mock('./getMarksFromSelection.js', () => ({
+mock.module('./getMarksFromSelection.js', () => ({
   getMarksFromSelection: getMarksFromSelectionMock,
 }));
 
-vi.mock('./findMark.js', () => ({
+mock.module('./findMark.js', () => ({
   findMark: findMarkMock,
 }));
 
-import { getActiveFormatting } from './getActiveFormatting.js';
+const { getActiveFormatting } = await import('./getActiveFormatting.js');
 
 describe('getActiveFormatting', () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  afterEach(() => {});
 
   it('aggregates marks, mark attributes, link information, and stored formatting', () => {
     const selection = {

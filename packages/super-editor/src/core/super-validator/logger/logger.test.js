@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 import { createLogger } from './logger.js';
 
 describe('createLogger', () => {
   let consoleDebugSpy;
 
   beforeEach(() => {
-    consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    consoleDebugSpy = spyOn(console, 'debug').mockImplementation(() => {});
   });
 
   afterEach(() => {

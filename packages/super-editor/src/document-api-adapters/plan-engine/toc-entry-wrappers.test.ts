@@ -1,10 +1,10 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt } from '@superdoc/document-api';
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean): PlanReceipt => {
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
       success: true,
@@ -30,8 +30,8 @@ import {
   tocUnmarkEntryWrapper,
   tocEditEntryWrapper,
 } from './toc-entry-wrappers.js';
-import { DocumentApiAdapterError } from '../errors.js';
-import { DocumentApiValidationError } from '@superdoc/document-api';
+const { DocumentApiAdapterError } = await import('../errors.js');
+const { DocumentApiValidationError } = await import('@superdoc/document-api');
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -113,14 +113,14 @@ function makeEntryEditor(commandOverrides: Record<string, unknown> = {}) {
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
   const commands = {
-    insertTableOfContentsEntryAt: vi.fn(() => true),
-    deleteTableOfContentsEntryAt: vi.fn(() => true),
-    updateTableOfContentsEntryAt: vi.fn(() => true),
+    insertTableOfContentsEntryAt: mock(() => true),
+    deleteTableOfContentsEntryAt: mock(() => true),
+    updateTableOfContentsEntryAt: mock(() => true),
     ...commandOverrides,
   };
 
   const editor = {
-    state: { doc, schema: { nodes: { paragraph: { create: vi.fn() } } } },
+    state: { doc, schema: { nodes: { paragraph: { create: mock() } } } },
     commands,
     schema: { marks: {} },
     options: {},
@@ -135,9 +135,7 @@ function makeEntryEditor(commandOverrides: Record<string, unknown> = {}) {
 // ---------------------------------------------------------------------------
 
 describe('toc entry wrappers', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
+  beforeEach(() => {});
 
   describe('tocListEntriesWrapper', () => {
     it('lists TC entry nodes in the document', () => {

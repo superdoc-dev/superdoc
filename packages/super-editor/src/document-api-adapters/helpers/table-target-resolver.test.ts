@@ -1,20 +1,22 @@
+import { describe, it, expect, mock, afterEach } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
-import { resolveRowLocator, resolveCellLocator, resolveTableScopedCellLocator } from './table-target-resolver.js';
+const { resolveRowLocator, resolveCellLocator, resolveTableScopedCellLocator } = await import(
+  './table-target-resolver.js'
+);
 
 let tableMapOverride: { width: number; height: number; map: number[] } | null = null;
 
-vi.mock('prosemirror-tables', () => ({
+mock.module('prosemirror-tables', () => ({
   TableMap: {
-    get: vi.fn(() => {
-      if (tableMapOverride) return { ...tableMapOverride, positionAt: vi.fn(() => 0), colCount: vi.fn(() => 0) };
+    get: mock(() => {
+      if (tableMapOverride) return { ...tableMapOverride, positionAt: mock(() => 0), colCount: mock(() => 0) };
       return {
         width: 1,
         height: 1,
         map: [1],
-        positionAt: vi.fn(() => 1),
-        colCount: vi.fn(() => 0),
+        positionAt: mock(() => 1),
+        colCount: mock(() => 0),
       };
     }),
   },
@@ -172,10 +174,10 @@ function makeNestedTableEditor(): Editor {
   const doc = createNode('doc', [outerTable], { isBlock: false });
 
   const tr = {
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { maps: [] as unknown[], map: (p: number) => p, slice: () => ({ map: (p: number) => p }) },
     doc,
   };
@@ -184,11 +186,11 @@ function makeNestedTableEditor(): Editor {
     state: {
       doc,
       tr,
-      schema: { nodes: { tableCell: { createAndFill: vi.fn() } } },
+      schema: { nodes: { tableCell: { createAndFill: mock() } } },
     },
-    dispatch: vi.fn(),
+    dispatch: mock(),
     commands: {},
-    can: vi.fn(() => ({})),
+    can: mock(() => ({})),
     schema: { marks: {}, nodes: {} },
     options: {},
   } as unknown as Editor;
@@ -286,10 +288,10 @@ function makeMergedCellTableEditor(): Editor {
   };
 
   const tr = {
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { maps: [] as unknown[], map: (p: number) => p, slice: () => ({ map: (p: number) => p }) },
     doc,
   };
@@ -298,11 +300,11 @@ function makeMergedCellTableEditor(): Editor {
     state: {
       doc,
       tr,
-      schema: { nodes: { tableCell: { createAndFill: vi.fn() } } },
+      schema: { nodes: { tableCell: { createAndFill: mock() } } },
     },
-    dispatch: vi.fn(),
+    dispatch: mock(),
     commands: {},
-    can: vi.fn(() => ({})),
+    can: mock(() => ({})),
     schema: { marks: {}, nodes: {} },
     options: {},
   } as unknown as Editor;

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { numberingPartDescriptor, syncNumberingToXmlTree } from './numbering-part-descriptor.js';
 
 describe('numberingPartDescriptor.ensurePart', () => {

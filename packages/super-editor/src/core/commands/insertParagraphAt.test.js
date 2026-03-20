@@ -1,5 +1,5 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi } from 'vitest';
 import { insertParagraphAt } from './insertParagraphAt.js';
 
 /**
@@ -9,18 +9,18 @@ function createMockState(options = {}) {
   const { size = 100 } = options;
 
   const paragraphType = {
-    createAndFill: vi.fn(),
-    create: vi.fn(),
+    createAndFill: mock(),
+    create: mock(),
   };
 
   const schema = {
     nodes: { paragraph: paragraphType },
-    text: vi.fn((text) => ({ type: { name: 'text' }, text, nodeSize: text.length })),
+    text: mock((text) => ({ type: { name: 'text' }, text, nodeSize: text.length })),
   };
 
   const mockTr = {
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
   };
 
   return {
@@ -31,7 +31,7 @@ function createMockState(options = {}) {
     },
     tr: mockTr,
     paragraphType,
-    dispatch: vi.fn(),
+    dispatch: mock(),
   };
 }
 

@@ -1,10 +1,10 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi } from 'vitest';
-import { setLineHeight, unsetLineHeight } from './lineHeight.js';
+const { setLineHeight, unsetLineHeight } = await import('./lineHeight.js');
 import { linesToTwips } from '@converter/helpers';
 
-vi.mock('@converter/helpers', () => ({
-  linesToTwips: vi.fn((value) => value * 240),
+mock.module('@converter/helpers', () => ({
+  linesToTwips: mock((value) => value * 240),
 }));
 
 describe('lineHeight commands', () => {
@@ -14,7 +14,7 @@ describe('lineHeight commands', () => {
   });
 
   it('setLineHeight delegates to updateAttributes with converted values', () => {
-    const updateAttributes = vi.fn().mockReturnValue(true);
+    const updateAttributes = mock().mockReturnValue(true);
     const lineHeight = 1.5;
 
     const dispatched = setLineHeight(lineHeight)({ commands: { updateAttributes } });
@@ -28,7 +28,7 @@ describe('lineHeight commands', () => {
   });
 
   it('unsetLineHeight delegates to resetAttributes for spacing keys', () => {
-    const resetAttributes = vi.fn().mockReturnValue(true);
+    const resetAttributes = mock().mockReturnValue(true);
 
     const dispatched = unsetLineHeight()({ commands: { resetAttributes } });
 

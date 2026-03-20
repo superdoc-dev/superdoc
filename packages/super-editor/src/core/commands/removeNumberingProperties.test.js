@@ -1,42 +1,42 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findParentNode } from '../helpers/findParentNode.js';
-import { removeNumberingProperties } from './removeNumberingProperties.js';
+const { findParentNode } = await import('../helpers/findParentNode.js');
+const { removeNumberingProperties } = await import('./removeNumberingProperties.js');
 import { decreaseListIndent } from './decreaseListIndent.js';
 import { updateNumberingProperties } from './changeListLevel.js';
 
-vi.mock(import('../helpers/findParentNode.js'), async (importOriginal) => {
+mock.module(import('../helpers/findParentNode.js'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    findParentNode: vi.fn(),
+    findParentNode: mock(),
   };
 });
 
-vi.mock('@core/commands/list-helpers', () => ({
-  isList: vi.fn(),
+mock.module('@core/commands/list-helpers', () => ({
+  isList: mock(),
 }));
 
-vi.mock('./decreaseListIndent.js', () => ({
-  decreaseListIndent: vi.fn(),
+mock.module('./decreaseListIndent.js', () => ({
+  decreaseListIndent: mock(),
 }));
 
-vi.mock('./changeListLevel.js', () => ({
-  updateNumberingProperties: vi.fn(),
+mock.module('./changeListLevel.js', () => ({
+  updateNumberingProperties: mock(),
 }));
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node.attrs.paragraphProperties || {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
 }));
 
 describe('removeNumberingProperties', () => {
-  /** @type {ReturnType<typeof vi.fn>} */
+  /** @type {ReturnType<typeof mock>} */
   let resolveParent;
-  /** @type {{ scrollIntoView: ReturnType<typeof vi.fn> }} */
+  /** @type {{ scrollIntoView: ReturnType<typeof mock> }} */
   let tr;
   /** @type {{ selection: { empty: boolean, $from: { parentOffset: number } } }} */
   let state;
-  /** @type {ReturnType<typeof vi.fn>} */
+  /** @type {ReturnType<typeof mock>} */
   let dispatch;
   /** @type {Record<string, unknown>} */
   let editor;
@@ -65,13 +65,12 @@ describe('removeNumberingProperties', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    resolveParent = vi.fn();
+    resolveParent = mock();
     findParentNode.mockReturnValue(resolveParent);
-    tr = { scrollIntoView: vi.fn() };
+    tr = { scrollIntoView: mock() };
     editor = {};
     state = { selection: { empty: true, $from: { parentOffset: 0 } } };
-    dispatch = vi.fn();
+    dispatch = mock();
   });
 
   it('returns false when the selection is not inside a list', () => {
@@ -112,7 +111,7 @@ describe('removeNumberingProperties', () => {
     const paragraph = createParagraph({ text: '', ilvl: 2 });
     resolveParent.mockReturnValue({ node: paragraph, pos: 7 });
 
-    const decreaseHandler = vi.fn().mockReturnValue(true);
+    const decreaseHandler = mock().mockReturnValue(true);
     decreaseListIndent.mockReturnValue(decreaseHandler);
 
     const result = removeNumberingProperties()({ tr, state, editor, dispatch });

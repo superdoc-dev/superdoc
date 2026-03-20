@@ -1,11 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
-vi.mock('./myers-diff.ts', async () => {
-  const actual = await vi.importActual('./myers-diff.ts');
+import { describe, it, expect, mock } from 'bun:test';
+mock.module('./myers-diff.ts', async () => {
+  const actual = await import('./myers-diff.ts');
   return {
-    myersDiff: vi.fn(actual.myersDiff),
+    myersDiff: mock(actual.myersDiff),
   };
 });
-import { getInlineDiff, tokenizeInlineContent } from './inline-diffing.ts';
+const { getInlineDiff, tokenizeInlineContent } = await import('./inline-diffing.ts');
 
 /**
  * Builds text tokens with offsets for inline diff tests.

@@ -1,3 +1,4 @@
+import { describe, it, expect, mock, beforeEach, beforeAll } from 'bun:test';
 /**
  * T4: Remap correctness tests for rewrite→format length deltas (§13.14)
  *
@@ -6,7 +7,6 @@
  * steps are propagated.
  */
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { TextRewriteStep, TextDeleteStep, StyleApplyStep, TextInsertStep } from '@superdoc/document-api';
 import type { CompiledRangeTarget, CompiledSpanTarget } from './executor-registry.types.js';
@@ -17,50 +17,50 @@ import {
   executeTextInsert,
   executeSpanTextRewrite,
 } from './executor.js';
-import { registerBuiltInExecutors } from './register-executors.js';
+const { registerBuiltInExecutors } = await import('./register-executors.js');
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-const mockedDeps = vi.hoisted(() => ({
-  getBlockIndex: vi.fn(),
-  resolveTextRangeInBlock: vi.fn(),
-  getRevision: vi.fn(() => '0'),
-  checkRevision: vi.fn(),
-  incrementRevision: vi.fn(() => '1'),
-  captureRunsInRange: vi.fn(),
-  resolveInlineStyle: vi.fn(() => []),
-  applyDirectMutationMeta: vi.fn(),
-  applyTrackedMutationMeta: vi.fn(),
-  mapBlockNodeType: vi.fn(),
-}));
+const mockedDeps = {
+  getBlockIndex: mock(),
+  resolveTextRangeInBlock: mock(),
+  getRevision: mock(() => '0'),
+  checkRevision: mock(),
+  incrementRevision: mock(() => '1'),
+  captureRunsInRange: mock(),
+  resolveInlineStyle: mock(() => []),
+  applyDirectMutationMeta: mock(),
+  applyTrackedMutationMeta: mock(),
+  mapBlockNodeType: mock(),
+};
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-vi.mock('../helpers/text-offset-resolver.js', () => ({
+mock.module('../helpers/text-offset-resolver.js', () => ({
   resolveTextRangeInBlock: mockedDeps.resolveTextRangeInBlock,
 }));
 
-vi.mock('./revision-tracker.js', () => ({
+mock.module('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
   checkRevision: mockedDeps.checkRevision,
   incrementRevision: mockedDeps.incrementRevision,
 }));
 
-vi.mock('./style-resolver.js', () => ({
+mock.module('./style-resolver.js', () => ({
   captureRunsInRange: mockedDeps.captureRunsInRange,
   resolveInlineStyle: mockedDeps.resolveInlineStyle,
 }));
 
-vi.mock('../helpers/transaction-meta.js', () => ({
+mock.module('../helpers/transaction-meta.js', () => ({
   applyDirectMutationMeta: mockedDeps.applyDirectMutationMeta,
   applyTrackedMutationMeta: mockedDeps.applyTrackedMutationMeta,
 }));
 
-vi.mock('../helpers/node-address-resolver.js', () => ({
+mock.module('../helpers/node-address-resolver.js', () => ({
   mapBlockNodeType: mockedDeps.mapBlockNodeType,
   findBlockById: (index: any, address: { nodeType: string; nodeId: string }) =>
     index.byId.get(`${address.nodeType}:${address.nodeId}`),
@@ -76,7 +76,6 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  vi.clearAllMocks();
   mockedDeps.getRevision.mockReturnValue('0');
   mockedDeps.mapBlockNodeType.mockReturnValue(undefined);
 });
@@ -91,17 +90,17 @@ function makeEditor(): Editor {
     state: {
       doc: {
         textContent: 'Hello',
-        textBetween: vi.fn(() => 'Hello'),
-        nodesBetween: vi.fn(),
+        textBetween: mock(() => 'Hello'),
+        nodesBetween: mock(),
       },
       schema: {
         marks: {
-          bold: { create: vi.fn(() => boldMark) },
-          italic: { create: vi.fn(() => ({ type: { name: 'italic' }, attrs: {} })) },
-          underline: { create: vi.fn() },
-          strike: { create: vi.fn() },
+          bold: { create: mock(() => boldMark) },
+          italic: { create: mock(() => ({ type: { name: 'italic' }, attrs: {} })) },
+          underline: { create: mock() },
+          strike: { create: mock() },
         },
-        text: vi.fn((t: string, m?: unknown[]) => ({
+        text: mock((t: string, m?: unknown[]) => ({
           type: { name: 'text' },
           text: t,
           marks: m ?? [],
@@ -113,13 +112,13 @@ function makeEditor(): Editor {
 
 function makeTr() {
   const tr = {
-    replaceWith: vi.fn(),
-    delete: vi.fn(),
-    insert: vi.fn(),
-    addMark: vi.fn(),
-    removeMark: vi.fn(),
-    setMeta: vi.fn(),
-    mapping: { map: vi.fn((pos: number) => pos) },
+    replaceWith: mock(),
+    delete: mock(),
+    insert: mock(),
+    addMark: mock(),
+    removeMark: mock(),
+    setMeta: mock(),
+    mapping: { map: mock((pos: number) => pos) },
     docChanged: true,
     doc: {
       resolve: () => ({ marks: () => [] }),

@@ -1,19 +1,19 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../core/Editor.js';
-import { createHistoryAdapter } from './history-adapter.js';
+const { createHistoryAdapter } = await import('./history-adapter.js');
 
-const { undoDepthMock, redoDepthMock, yGetStateMock } = vi.hoisted(() => ({
-  undoDepthMock: vi.fn(() => 0),
-  redoDepthMock: vi.fn(() => 0),
-  yGetStateMock: vi.fn(() => undefined),
-}));
+const { undoDepthMock, redoDepthMock, yGetStateMock } = {
+  undoDepthMock: mock(() => 0),
+  redoDepthMock: mock(() => 0),
+  yGetStateMock: mock(() => undefined),
+};
 
-vi.mock('prosemirror-history', () => ({
+mock.module('prosemirror-history', () => ({
   undoDepth: undoDepthMock,
   redoDepth: redoDepthMock,
 }));
 
-vi.mock('y-prosemirror', () => ({
+mock.module('y-prosemirror', () => ({
   yUndoPluginKey: {
     getState: yGetStateMock,
   },
@@ -24,8 +24,8 @@ function makeEditor(overrides: Partial<Editor> = {}): Editor {
     options: {},
     state: { tr: {} } as Editor['state'],
     commands: {
-      undo: vi.fn(() => true),
-      redo: vi.fn(() => true),
+      undo: mock(() => true),
+      redo: mock(() => true),
     } as unknown as Editor['commands'],
     ...overrides,
   } as unknown as Editor;
@@ -33,7 +33,6 @@ function makeEditor(overrides: Partial<Editor> = {}): Editor {
 
 describe('createHistoryAdapter', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     undoDepthMock.mockReturnValue(0);
     redoDepthMock.mockReturnValue(0);
     yGetStateMock.mockReturnValue(undefined);
@@ -86,7 +85,7 @@ describe('createHistoryAdapter', () => {
       makeEditor({
         commands: {
           undo: undefined,
-          redo: vi.fn(() => true),
+          redo: mock(() => true),
         } as unknown as Editor['commands'],
       }),
     );
@@ -103,7 +102,7 @@ describe('createHistoryAdapter', () => {
     const adapter = createHistoryAdapter(
       makeEditor({
         commands: {
-          undo: vi.fn(() => true),
+          undo: mock(() => true),
           redo: undefined,
         } as unknown as Editor['commands'],
       }),
@@ -160,8 +159,8 @@ describe('createHistoryAdapter', () => {
     const adapter = createHistoryAdapter(
       makeEditor({
         commands: {
-          undo: vi.fn(() => false),
-          redo: vi.fn(() => true),
+          undo: mock(() => false),
+          redo: mock(() => true),
         } as unknown as Editor['commands'],
       }),
     );

@@ -1,42 +1,42 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { ResolveRangeInput } from '@superdoc/document-api';
 import type { BlockCandidate, BlockIndex } from './node-address-resolver.js';
-import { resolveRange } from './range-resolver.js';
-import { PlanError } from '../plan-engine/errors.js';
+const { resolveRange } = await import('./range-resolver.js');
+const { PlanError } = await import('../plan-engine/errors.js');
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-const mocks = vi.hoisted(() => ({
-  getBlockIndex: vi.fn(),
-  resolveSelectionPointPosition: vi.fn(),
-  encodeV3Ref: vi.fn(() => 'text:mock-encoded'),
-  getRevision: vi.fn(() => '0'),
-  checkRevision: vi.fn(),
-  resolveStoryRuntime: vi.fn(),
-}));
+const mocks = {
+  getBlockIndex: mock(),
+  resolveSelectionPointPosition: mock(),
+  encodeV3Ref: mock(() => 'text:mock-encoded'),
+  getRevision: mock(() => '0'),
+  checkRevision: mock(),
+  resolveStoryRuntime: mock(),
+};
 
-vi.mock('./index-cache.js', () => ({
+mock.module('./index-cache.js', () => ({
   getBlockIndex: mocks.getBlockIndex,
 }));
 
-vi.mock('./selection-target-resolver.js', () => ({
+mock.module('./selection-target-resolver.js', () => ({
   resolveSelectionPointPosition: mocks.resolveSelectionPointPosition,
 }));
 
-vi.mock('../plan-engine/query-match-adapter.js', () => ({
+mock.module('../plan-engine/query-match-adapter.js', () => ({
   encodeV3Ref: mocks.encodeV3Ref,
 }));
 
-vi.mock('../plan-engine/revision-tracker.js', () => ({
+mock.module('../plan-engine/revision-tracker.js', () => ({
   getRevision: mocks.getRevision,
   checkRevision: mocks.checkRevision,
 }));
 
 // Provide isTextBlockCandidate — the only value import from this module.
-vi.mock('./node-address-resolver.js', () => ({
+mock.module('./node-address-resolver.js', () => ({
   isTextBlockCandidate: (candidate: { node: { inlineContent?: boolean; isTextblock?: boolean } }) =>
     Boolean(candidate.node?.inlineContent || candidate.node?.isTextblock),
 }));
@@ -44,7 +44,7 @@ vi.mock('./node-address-resolver.js', () => ({
 // Story runtime resolution: return a passthrough body runtime wrapping the
 // editor that was passed in. Tests that exercise non-body story targeting
 // should override this mock as needed.
-vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
+mock.module('../story-runtime/resolve-story-runtime.js', () => ({
   resolveStoryRuntime: mocks.resolveStoryRuntime,
 }));
 
@@ -175,7 +175,6 @@ function twoParagraphs() {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  vi.clearAllMocks();
   mocks.getRevision.mockReturnValue('0');
   mocks.encodeV3Ref.mockReturnValue('text:mock-encoded');
 

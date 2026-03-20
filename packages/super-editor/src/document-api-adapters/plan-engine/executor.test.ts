@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach, beforeAll } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { TextRewriteStep, TextInsertStep, StyleApplyStep, AssertStep } from '@superdoc/document-api';
 import type { CompiledTarget } from './executor-registry.types.js';
@@ -13,52 +13,52 @@ import {
   executeSpanStyleApply,
   runMutationsOnTransaction,
 } from './executor.js';
-import { registerBuiltInExecutors } from './register-executors.js';
-import { PlanError } from './errors.js';
-import { Schema } from 'prosemirror-model';
+const { registerBuiltInExecutors } = await import('./register-executors.js');
+const { PlanError } = await import('./errors.js');
+const { Schema } = await import('prosemirror-model');
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-const mockedDeps = vi.hoisted(() => ({
-  getBlockIndex: vi.fn(),
-  resolveTextRangeInBlock: vi.fn(),
-  getRevision: vi.fn(() => '0'),
-  checkRevision: vi.fn(),
-  incrementRevision: vi.fn(() => '1'),
-  captureRunsInRange: vi.fn(),
-  resolveInlineStyle: vi.fn(() => []),
-  applyDirectMutationMeta: vi.fn(),
-  applyTrackedMutationMeta: vi.fn(),
-  mapBlockNodeType: vi.fn(),
-}));
+const mockedDeps = {
+  getBlockIndex: mock(),
+  resolveTextRangeInBlock: mock(),
+  getRevision: mock(() => '0'),
+  checkRevision: mock(),
+  incrementRevision: mock(() => '1'),
+  captureRunsInRange: mock(),
+  resolveInlineStyle: mock(() => []),
+  applyDirectMutationMeta: mock(),
+  applyTrackedMutationMeta: mock(),
+  mapBlockNodeType: mock(),
+};
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-vi.mock('../helpers/text-offset-resolver.js', () => ({
+mock.module('../helpers/text-offset-resolver.js', () => ({
   resolveTextRangeInBlock: mockedDeps.resolveTextRangeInBlock,
 }));
 
-vi.mock('./revision-tracker.js', () => ({
+mock.module('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
   checkRevision: mockedDeps.checkRevision,
   incrementRevision: mockedDeps.incrementRevision,
 }));
 
-vi.mock('./style-resolver.js', () => ({
+mock.module('./style-resolver.js', () => ({
   captureRunsInRange: mockedDeps.captureRunsInRange,
   resolveInlineStyle: mockedDeps.resolveInlineStyle,
 }));
 
-vi.mock('../helpers/transaction-meta.js', () => ({
+mock.module('../helpers/transaction-meta.js', () => ({
   applyDirectMutationMeta: mockedDeps.applyDirectMutationMeta,
   applyTrackedMutationMeta: mockedDeps.applyTrackedMutationMeta,
 }));
 
-vi.mock('../helpers/node-address-resolver.js', () => ({
+mock.module('../helpers/node-address-resolver.js', () => ({
   mapBlockNodeType: mockedDeps.mapBlockNodeType,
   findBlockById: (index: any, address: { nodeType: string; nodeId: string }) =>
     index.byId.get(`${address.nodeType}:${address.nodeId}`),
@@ -75,7 +75,6 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  vi.clearAllMocks();
   mockedDeps.getRevision.mockReturnValue('0');
   mockedDeps.incrementRevision.mockReturnValue('1');
   mockedDeps.mapBlockNodeType.mockReturnValue(undefined);
@@ -96,22 +95,22 @@ function mockMark(name: string) {
 function makeEditor(text = 'Hello'): {
   editor: Editor;
   tr: {
-    replaceWith: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    insert: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
-    removeMark: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
+    replaceWith: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    insert: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
+    removeMark: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
   };
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
 } {
   const tr = {
-    replaceWith: vi.fn(),
-    delete: vi.fn(),
-    insert: vi.fn(),
-    addMark: vi.fn(),
-    removeMark: vi.fn(),
-    setMeta: vi.fn(),
+    replaceWith: mock(),
+    delete: mock(),
+    insert: mock(),
+    addMark: mock(),
+    removeMark: mock(),
+    setMeta: mock(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc: {
@@ -129,28 +128,28 @@ function makeEditor(text = 'Hello'): {
   const boldMark = mockMark('bold');
   const italicMark = mockMark('italic');
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
       doc: {
         textContent: text,
-        textBetween: vi.fn((from: number, to: number) => {
+        textBetween: mock((from: number, to: number) => {
           const start = Math.max(0, from - 1);
           const end = Math.max(start, to - 1);
           return text.slice(start, end);
         }),
-        nodesBetween: vi.fn(),
+        nodesBetween: mock(),
       },
       tr,
       schema: {
         marks: {
-          bold: { create: vi.fn(() => boldMark) },
-          italic: { create: vi.fn(() => italicMark) },
-          underline: { create: vi.fn(() => mockMark('underline')) },
-          strike: { create: vi.fn(() => mockMark('strike')) },
+          bold: { create: mock(() => boldMark) },
+          italic: { create: mock(() => italicMark) },
+          underline: { create: mock(() => mockMark('underline')) },
+          strike: { create: mock(() => mockMark('strike')) },
         },
-        text: vi.fn((t: string, m?: unknown[]) => ({
+        text: mock((t: string, m?: unknown[]) => ({
           type: { name: 'text' },
           text: t,
           marks: m ?? [],
@@ -202,26 +201,26 @@ function createTestMark(name: string, attrs: Record<string, unknown> = {}) {
 function makeTextStylePlanEditor(textStyleAttrNames: string[]): {
   editor: Editor;
   tr: {
-    addMark: ReturnType<typeof vi.fn>;
-    removeMark: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
-    replaceWith: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    insert: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof mock>;
+    removeMark: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
+    replaceWith: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    insert: ReturnType<typeof mock>;
     mapping: { map: (pos: number) => number };
     docChanged: boolean;
     doc: {
-      nodesBetween: ReturnType<typeof vi.fn>;
-      nodeAt: ReturnType<typeof vi.fn>;
-      textBetween: ReturnType<typeof vi.fn>;
+      nodesBetween: ReturnType<typeof mock>;
+      nodeAt: ReturnType<typeof mock>;
+      textBetween: ReturnType<typeof mock>;
       textContent: string;
-      resolve: ReturnType<typeof vi.fn>;
+      resolve: ReturnType<typeof mock>;
     };
   };
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
 } {
   const textStyleAttrs = Object.fromEntries(textStyleAttrNames.map((name) => [name, { default: null }]));
-  const textStyleCreate = vi.fn((input: Record<string, unknown> = {}) =>
+  const textStyleCreate = mock((input: Record<string, unknown> = {}) =>
     createTestMark(
       'textStyle',
       Object.fromEntries(
@@ -232,22 +231,22 @@ function makeTextStylePlanEditor(textStyleAttrNames: string[]): {
 
   const textNode = { isText: true, nodeSize: 5, marks: [] as unknown[] };
   const doc = {
-    nodesBetween: vi.fn((_from: number, _to: number, callback: (node: typeof textNode, pos: number) => void) => {
+    nodesBetween: mock((_from: number, _to: number, callback: (node: typeof textNode, pos: number) => void) => {
       callback(textNode, 1);
     }),
-    nodeAt: vi.fn(() => null),
-    textBetween: vi.fn(() => 'Hello'),
+    nodeAt: mock(() => null),
+    textBetween: mock(() => 'Hello'),
     textContent: 'Hello',
-    resolve: vi.fn(() => ({ marks: () => [] })),
+    resolve: mock(() => ({ marks: () => [] })),
   };
 
   const tr = {
-    replaceWith: vi.fn(),
-    delete: vi.fn(),
-    insert: vi.fn(),
-    addMark: vi.fn(),
-    removeMark: vi.fn(),
-    setMeta: vi.fn(),
+    replaceWith: mock(),
+    delete: mock(),
+    insert: mock(),
+    addMark: mock(),
+    removeMark: mock(),
+    setMeta: mock(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc,
@@ -259,7 +258,7 @@ function makeTextStylePlanEditor(textStyleAttrNames: string[]): {
   tr.removeMark.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const textStyle = {
     spec: { attrs: textStyleAttrs },
     attrs: textStyleAttrs,
@@ -287,20 +286,20 @@ function makeTextStylePlanEditor(textStyleAttrNames: string[]): {
 
 describe('executeTextInsert: setMarks tri-state directives', () => {
   it('maps on/off/clear to canonical mark emission', () => {
-    const boldCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+    const boldCreate = mock((attrs?: Record<string, unknown> | null) =>
       createTestMark('bold', (attrs ?? {}) as Record<string, unknown>),
     );
-    const italicCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+    const italicCreate = mock((attrs?: Record<string, unknown> | null) =>
       createTestMark('italic', (attrs ?? {}) as Record<string, unknown>),
     );
-    const underlineCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+    const underlineCreate = mock((attrs?: Record<string, unknown> | null) =>
       createTestMark('underline', (attrs ?? {}) as Record<string, unknown>),
     );
-    const strikeCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+    const strikeCreate = mock((attrs?: Record<string, unknown> | null) =>
       createTestMark('strike', (attrs ?? {}) as Record<string, unknown>),
     );
 
-    const text = vi.fn((value: string, marks?: unknown[]) => ({
+    const text = mock((value: string, marks?: unknown[]) => ({
       type: { name: 'text' },
       text: value,
       marks: marks ?? [],
@@ -322,9 +321,9 @@ describe('executeTextInsert: setMarks tri-state directives', () => {
 
     const tr = {
       doc: {
-        resolve: vi.fn(() => ({ marks: () => [] })),
+        resolve: mock(() => ({ marks: () => [] })),
       },
-      insert: vi.fn(),
+      insert: mock(),
     };
 
     const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
@@ -635,7 +634,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     return {
       mapping: { map: (pos: number) => pos },
       docChanged: false,
-      setMeta: vi.fn().mockReturnThis(),
+      setMeta: mock().mockReturnThis(),
       doc: {
         resolve: () => ({ marks: () => [] }),
         textContent: '',
@@ -1332,15 +1331,15 @@ describe('executeCreateStep: block-anchor position resolution', () => {
     };
 
     const paragraphType = {
-      createAndFill: vi.fn(() => insertedNode),
-      create: vi.fn(() => insertedNode),
+      createAndFill: mock(() => insertedNode),
+      create: mock(() => insertedNode),
     };
 
     const tr = {
-      insert: vi.fn(),
+      insert: mock(),
       mapping: { map: (pos: number) => pos },
       doc: {
-        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+        descendants: mock((fn: (node: any) => boolean | void) => {
           fn({ isTextblock: true, attrs: { paraId: 'p1' } });
           fn({ isTextblock: true, attrs: {} });
         }),
@@ -1351,7 +1350,7 @@ describe('executeCreateStep: block-anchor position resolution', () => {
       state: {
         schema: {
           nodes: { paragraph: paragraphType },
-          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+          text: mock((t: string) => ({ type: { name: 'text' }, text: t })),
         },
       },
     } as unknown as Editor;
@@ -1432,15 +1431,15 @@ describe('executeCreateStep: post-insert duplicate ID detection', () => {
     };
 
     const paragraphType = {
-      createAndFill: vi.fn(() => insertedNode),
-      create: vi.fn(() => insertedNode),
+      createAndFill: mock(() => insertedNode),
+      create: mock(() => insertedNode),
     };
 
     const tr = {
-      insert: vi.fn(),
+      insert: mock(),
       mapping: { map: (pos: number) => pos },
       doc: {
-        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+        descendants: mock((fn: (node: any) => boolean | void) => {
           // Simulate two textblocks with the same paraId after insertion
           fn({ isTextblock: true, attrs: { paraId: 'dup-id' } });
           fn({ isTextblock: true, attrs: { paraId: 'dup-id' } });
@@ -1452,7 +1451,7 @@ describe('executeCreateStep: post-insert duplicate ID detection', () => {
       state: {
         schema: {
           nodes: { paragraph: paragraphType },
-          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+          text: mock((t: string) => ({ type: { name: 'text' }, text: t })),
         },
       },
     } as unknown as Editor;
@@ -1487,15 +1486,15 @@ describe('executeCreateStep: post-insert duplicate ID detection', () => {
     };
 
     const paragraphType = {
-      createAndFill: vi.fn(() => insertedNode),
-      create: vi.fn(() => insertedNode),
+      createAndFill: mock(() => insertedNode),
+      create: mock(() => insertedNode),
     };
 
     const tr = {
-      insert: vi.fn(),
+      insert: mock(),
       mapping: { map: (pos: number) => pos },
       doc: {
-        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+        descendants: mock((fn: (node: any) => boolean | void) => {
           fn({ isTextblock: true, attrs: { paraId: 'id-a' } });
           fn({ isTextblock: true, attrs: { paraId: 'id-b' } });
           fn({ isTextblock: true, attrs: { sdBlockId: 'id-c' } });
@@ -1507,7 +1506,7 @@ describe('executeCreateStep: post-insert duplicate ID detection', () => {
       state: {
         schema: {
           nodes: { paragraph: paragraphType },
-          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+          text: mock((t: string) => ({ type: { name: 'text' }, text: t })),
         },
       },
     } as unknown as Editor;
@@ -1531,15 +1530,15 @@ describe('executeCreateStep: post-insert duplicate ID detection', () => {
     };
 
     const paragraphType = {
-      createAndFill: vi.fn(() => insertedNode),
-      create: vi.fn(() => insertedNode),
+      createAndFill: mock(() => insertedNode),
+      create: mock(() => insertedNode),
     };
 
     const tr = {
-      insert: vi.fn(),
+      insert: mock(),
       mapping: { map: (pos: number) => pos },
       doc: {
-        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+        descendants: mock((fn: (node: any) => boolean | void) => {
           // Two container blocks with same ID — should not trigger the check
           fn({ isTextblock: false, attrs: { nodeId: 'container-1' } });
           fn({ isTextblock: false, attrs: { nodeId: 'container-1' } });
@@ -1553,7 +1552,7 @@ describe('executeCreateStep: post-insert duplicate ID detection', () => {
       state: {
         schema: {
           nodes: { paragraph: paragraphType },
-          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+          text: mock((t: string) => ({ type: { name: 'text' }, text: t })),
         },
       },
     } as unknown as Editor;
@@ -1584,15 +1583,15 @@ describe('executeCreateStep: span target (multi-block create ref)', () => {
     };
 
     const paragraphType = {
-      createAndFill: vi.fn(() => insertedNode),
-      create: vi.fn(() => insertedNode),
+      createAndFill: mock(() => insertedNode),
+      create: mock(() => insertedNode),
     };
 
     const tr = {
-      insert: vi.fn(),
+      insert: mock(),
       mapping: { map: (pos: number) => pos },
       doc: {
-        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+        descendants: mock((fn: (node: any) => boolean | void) => {
           // All unique IDs — no duplicate-ID failures
           for (let i = 0; i < candidates.length + 1; i++) {
             fn({ isTextblock: true, attrs: { paraId: `unique-${i}` } });
@@ -1605,7 +1604,7 @@ describe('executeCreateStep: span target (multi-block create ref)', () => {
       state: {
         schema: {
           nodes: { paragraph: paragraphType },
-          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+          text: mock((t: string) => ({ type: { name: 'text' }, text: t })),
         },
       },
     } as unknown as Editor;
@@ -1724,7 +1723,7 @@ describe('executeCreateStep: span target (multi-block create ref)', () => {
 describe('span target contiguity checks', () => {
   it('throws SPAN_FRAGMENTED when mapping changes the gap between segments', () => {
     const tr = {
-      delete: vi.fn(),
+      delete: mock(),
     };
 
     const target = {
@@ -1765,7 +1764,7 @@ describe('span target contiguity checks', () => {
 
   it('accepts span execution when mapping preserves inter-segment gaps', () => {
     const tr = {
-      delete: vi.fn(),
+      delete: mock(),
     };
 
     const target = {
@@ -1830,8 +1829,8 @@ describe('span target contiguity checks', () => {
     });
 
     const tr = {
-      replace: vi.fn(),
-      replaceWith: vi.fn(),
+      replace: mock(),
+      replaceWith: mock(),
     };
 
     const target = {
@@ -1900,8 +1899,8 @@ describe('executeCompiledPlan: atomic rollback on failure', () => {
 
     // Patch tr.doc with descendants so buildAssertIndex can run
     const tr = editor.state.tr as any;
-    tr.doc.descendants = vi.fn();
-    tr.doc.textBetween = vi.fn(() => '');
+    tr.doc.descendants = mock();
+    tr.doc.textBetween = mock(() => '');
 
     const mutationStep: TextRewriteStep = {
       id: 'step-1',

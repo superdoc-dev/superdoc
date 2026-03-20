@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './transaction-meta.js';
 
 function makeFakeTransaction() {
   const meta = new Map<string, unknown>();
   return {
-    setMeta: vi.fn((key: string, value: unknown) => meta.set(key, value)),
+    setMeta: mock((key: string, value: unknown) => meta.set(key, value)),
     getMeta: (key: string) => meta.get(key),
     _meta: meta,
   };

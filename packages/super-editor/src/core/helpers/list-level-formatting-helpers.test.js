@@ -1,5 +1,5 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, expect, it, vi } from 'vitest';
 import { LevelFormattingHelpers } from './list-level-formatting-helpers.js';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ function makeEditor(abstractNumId = 1, numId = 10) {
       },
       translatedNumbering: { abstracts: {}, definitions: {} },
     },
-    emit: vi.fn(),
+    emit: mock(),
   };
 }
 

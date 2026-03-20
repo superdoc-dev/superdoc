@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import * as Y from 'yjs';
 import { encodeEnvelopeToYjs, decodeYjsToEnvelope, readEnvelopeVersion } from './json-crdt.js';
 import type { PartEnvelope } from './types.js';

@@ -1,31 +1,31 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { StoryLocator, MutationStep } from '@superdoc/document-api';
-import { selectionMutationWrapper } from './plan-wrappers.js';
-import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
-import { buildStoryKey } from '../story-runtime/story-key.js';
-import { DocumentApiAdapterError } from '../errors.js';
+const { selectionMutationWrapper } = await import('./plan-wrappers.js');
+const { encodeV4Ref } = await import('../story-runtime/story-ref-codec.js');
+const { buildStoryKey } = await import('../story-runtime/story-key.js');
+const { DocumentApiAdapterError } = await import('../errors.js');
 
-const mockedDeps = vi.hoisted(() => ({
-  resolveStoryRuntime: vi.fn(),
-  compilePlan: vi.fn(),
-  executeCompiledPlan: vi.fn(),
-  checkRevision: vi.fn(),
-  getRevision: vi.fn(() => 'rev-1'),
-}));
+const mockedDeps = {
+  resolveStoryRuntime: mock(),
+  compilePlan: mock(),
+  executeCompiledPlan: mock(),
+  checkRevision: mock(),
+  getRevision: mock(() => 'rev-1'),
+};
 
-vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
+mock.module('../story-runtime/resolve-story-runtime.js', () => ({
   resolveStoryRuntime: mockedDeps.resolveStoryRuntime,
 }));
 
-vi.mock('./compiler.js', () => ({
+mock.module('./compiler.js', () => ({
   compilePlan: mockedDeps.compilePlan,
 }));
 
-vi.mock('./executor.js', () => ({
+mock.module('./executor.js', () => ({
   executeCompiledPlan: mockedDeps.executeCompiledPlan,
 }));
 
-vi.mock('./revision-tracker.js', async (importOriginal) => {
+mock.module('./revision-tracker.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./revision-tracker.js')>();
   return {
     ...original,
@@ -83,8 +83,6 @@ function makeCompiledPlan(step: MutationStep) {
 
 describe('selectionMutationWrapper', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-
     mockedDeps.resolveStoryRuntime.mockReturnValue({
       locator: headerStory,
       storyKey: buildStoryKey(headerStory),

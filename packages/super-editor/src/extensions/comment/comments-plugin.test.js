@@ -1,20 +1,19 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-
-vi.mock('uuid', () => ({
-  v4: vi.fn(() => 'generated-id'),
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+mock.module('uuid', () => ({
+  v4: mock(() => 'generated-id'),
 }));
-import { Schema } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { DecorationSet } from 'prosemirror-view';
+const { Schema } = await import('prosemirror-model');
+const { EditorState, TextSelection } = await import('prosemirror-state');
+const { DecorationSet } = await import('prosemirror-view');
 
-import { Extension } from '@core/Extension.js';
-import { CommentsPlugin, CommentsPluginKey, __test__ } from './comments-plugin.js';
-import { CommentMarkName } from './comments-constants.js';
-import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
-import { comments_module_events } from '@superdoc/common';
-import * as CommentHelpers from './comments-helpers.js';
-import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
-import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../track-changes/constants.js';
+const { Extension } = await import('@core/Extension.js');
+const { CommentsPlugin, CommentsPluginKey, __test__ } = await import('./comments-plugin.js');
+const { CommentMarkName } = await import('./comments-constants.js');
+const { TrackChangesBasePluginKey } = await import('../track-changes/plugins/index.js');
+const { comments_module_events } = await import('@superdoc/common');
+const CommentHelpers = await import('./comments-helpers.js');
+const { normalizeCommentEventPayload, updatePosition } = await import('./helpers/index.js');
+const { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } = await import('../track-changes/constants.js');
 
 const {
   getActiveCommentId,
@@ -107,22 +106,22 @@ const createEditorEnvironment = (schema, doc) => {
 
   const view = {
     state: baseState,
-    dispatch: vi.fn((tr) => {
+    dispatch: mock((tr) => {
       view.state = view.state.apply(tr);
     }),
-    focus: vi.fn(),
+    focus: mock(),
   };
 
   const editor = {
     schema,
     view,
-    emit: vi.fn(),
+    emit: mock(),
     options: {
       user: { name: 'Test User', email: 'test.user@example.com', image: 'https://example.com/avatar.png' },
       documentId: 'doc-1',
       isInternal: true,
     },
-    setOptions: vi.fn(),
+    setOptions: mock(),
   };
 
   Object.defineProperty(editor, 'state', {
@@ -140,9 +139,7 @@ const createEditorEnvironment = (schema, doc) => {
 };
 
 describe('CommentsPlugin commands', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('inserts new comment marks with metadata', () => {
     const schema = createCommentSchema();
@@ -151,7 +148,7 @@ describe('CommentsPlugin commands', () => {
     const { editor, commands, view } = createEditorEnvironment(schema, doc);
 
     let currentState = editor.state;
-    const dispatch = vi.fn((tr) => {
+    const dispatch = mock((tr) => {
       currentState = currentState.apply(tr);
       view.state = currentState;
     });
@@ -194,7 +191,7 @@ describe('CommentsPlugin commands', () => {
     const { editor, commands, view } = createEditorEnvironment(schema, doc);
 
     let currentState = editor.state;
-    const dispatch = vi.fn((tr) => {
+    const dispatch = mock((tr) => {
       currentState = currentState.apply(tr);
       view.state = currentState;
     });
@@ -218,7 +215,7 @@ describe('CommentsPlugin commands', () => {
     const { editor, commands, view } = createEditorEnvironment(schema, doc);
 
     let currentState = editor.state;
-    const dispatch = vi.fn((tr) => {
+    const dispatch = mock((tr) => {
       currentState = currentState.apply(tr);
       view.state = currentState;
     });
@@ -244,12 +241,12 @@ describe('CommentsPlugin commands', () => {
     const { commands, view } = createEditorEnvironment(schema, doc);
 
     let currentState = view.state;
-    const dispatch = vi.fn((tr) => {
+    const dispatch = mock((tr) => {
       currentState = currentState.apply(tr);
       view.state = currentState;
     });
 
-    const spy = vi.spyOn(CommentHelpers, 'removeCommentsById');
+    const spy = spyOn(CommentHelpers, 'removeCommentsById');
 
     const command = commands.removeComment({ commentId: 'c-3' });
     const tr = currentState.tr;
@@ -269,12 +266,12 @@ describe('CommentsPlugin commands', () => {
     const { commands, view } = createEditorEnvironment(schema, doc);
 
     let currentState = view.state;
-    const dispatch = vi.fn((tr) => {
+    const dispatch = mock((tr) => {
       currentState = currentState.apply(tr);
       view.state = currentState;
     });
 
-    const spy = vi.spyOn(CommentHelpers, 'resolveCommentById');
+    const spy = spyOn(CommentHelpers, 'resolveCommentById');
 
     const command = commands.resolveComment({ commentId: 'c-4' });
     const tr = currentState.tr;
@@ -292,7 +289,7 @@ describe('CommentsPlugin commands', () => {
     const doc = schema.node('doc', null, [paragraph]);
     const { commands } = createEditorEnvironment(schema, doc);
 
-    const tr = { setMeta: vi.fn() };
+    const tr = { setMeta: mock() };
     const command = commands.setActiveComment({ commentId: 'focus-id' });
     const result = command({ tr });
 
@@ -312,7 +309,7 @@ describe('CommentsPlugin commands', () => {
     const { editor, commands, view } = createEditorEnvironment(schema, doc);
 
     let currentState = editor.state;
-    const dispatch = vi.fn((tr) => {
+    const dispatch = mock((tr) => {
       currentState = currentState.apply(tr);
       view.state = currentState;
     });
@@ -354,7 +351,7 @@ describe('CommentsPlugin commands', () => {
     const { editor, commands, view } = createEditorEnvironment(schema, doc);
 
     let currentState = editor.state;
-    const dispatch = vi.fn((tr) => {
+    const dispatch = mock((tr) => {
       currentState = currentState.apply(tr);
       view.state = currentState;
     });
@@ -406,11 +403,11 @@ describe('CommentsPlugin commands', () => {
     const { commands } = createEditorEnvironment(schema, doc);
 
     const tr = {
-      setSelection: vi.fn(),
-      setMeta: vi.fn(),
+      setSelection: mock(),
+      setMeta: mock(),
     };
     const editor = {
-      view: { focus: vi.fn() },
+      view: { focus: mock() },
     };
 
     const result = commands.setCursorById('c-10', { activeCommentId: 'thread-1' })({ state: { doc, tr }, editor });
@@ -494,7 +491,7 @@ describe('CommentsPlugin commands', () => {
       const doc = schema.node('doc', null, [paragraph]);
       const { editor, commands } = createEditorEnvironment(schema, doc);
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
       const command = commands.addCommentReply({ content: 'No parent' });
       const result = command({ editor });
@@ -609,7 +606,7 @@ const createPluginStateEnvironment = ({ schema: providedSchema, doc: providedDoc
 
   const editor = {
     options: { documentId: 'doc-1' },
-    emit: vi.fn(),
+    emit: mock(),
     view: null,
   };
 
@@ -623,11 +620,11 @@ const createPluginStateEnvironment = ({ schema: providedSchema, doc: providedDoc
 
   const view = {
     state,
-    dispatch: vi.fn((tr) => {
+    dispatch: mock((tr) => {
       state = state.apply(tr);
       view.state = state;
     }),
-    focus: vi.fn(),
+    focus: mock(),
   };
 
   editor.view = view;
@@ -637,9 +634,7 @@ const createPluginStateEnvironment = ({ schema: providedSchema, doc: providedDoc
 };
 
 describe('CommentsPlugin state', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('updates active thread and emits events when setActiveComment meta is applied', () => {
     const { view, editor } = createPluginStateEnvironment();
@@ -708,7 +703,7 @@ describe('CommentsPlugin state', () => {
     const forceTr = view.state.tr.setMeta(CommentsPluginKey, { type: 'force' });
     view.dispatch(forceTr);
 
-    view.coordsAtPos = vi.fn(() => ({ top: 10, left: 20 }));
+    view.coordsAtPos = mock(() => ({ top: 10, left: 20 }));
 
     pluginView.update(view);
 
@@ -745,12 +740,10 @@ describe('CommentsPlugin state', () => {
 });
 
 describe('normalizeCommentEventPayload', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('fills missing fields from editor options and fallback values', () => {
-    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1234);
+    const nowSpy = spyOn(Date, 'now').mockReturnValue(1234);
 
     const payload = normalizeCommentEventPayload({
       conversation: { text: '<p>Body</p>', skipEmit: true },
@@ -937,7 +930,7 @@ describe('internal helper functions', () => {
     const paragraph = schema.node('paragraph', null, [textNode]);
     const doc = schema.node('doc', null, [paragraph]);
     const state = EditorState.create({ schema, doc });
-    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+    const editor = { options: { documentId: 'doc-1' }, emit: mock() };
 
     const meta = {
       insertedMark: insertMark,
@@ -975,7 +968,7 @@ describe('internal helper functions', () => {
     const paragraph = schema.node('paragraph', null, [deletedNode]);
     const doc = schema.node('doc', null, [paragraph]);
     const state = EditorState.create({ schema, doc });
-    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+    const editor = { options: { documentId: 'doc-1' }, emit: mock() };
 
     const meta = {
       insertedMark: null,
@@ -998,7 +991,7 @@ describe('internal helper functions', () => {
     const schema = createCommentSchema();
     const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Text')])]);
     const state = EditorState.create({ schema, doc });
-    const editor = { options: { documentId: 'doc-1' }, emit: vi.fn() };
+    const editor = { options: { documentId: 'doc-1' }, emit: mock() };
 
     const result = handleTrackedChangeTransaction({ deletionNodes: [] }, { existing: 'value' }, state, editor);
     expect(result).toBeUndefined();
@@ -1441,7 +1434,7 @@ describe('SD-1940: no recursive dispatch from apply() on selection change', () =
     view.state = initialState;
 
     // Track dispatch calls
-    const dispatchSpy = vi.fn((tr) => {
+    const dispatchSpy = mock((tr) => {
       view.state = view.state.apply(tr);
     });
     view.dispatch = dispatchSpy;
@@ -1481,7 +1474,7 @@ describe('SD-1940: no recursive dispatch from apply() on selection change', () =
     view.state = initialState;
 
     let dispatchCount = 0;
-    view.dispatch = vi.fn((tr) => {
+    view.dispatch = mock((tr) => {
       dispatchCount++;
       if (dispatchCount > 10) throw new Error('Dispatch loop detected — exceeded 10 dispatches');
       view.state = view.state.apply(tr);
@@ -1505,7 +1498,7 @@ describe('Headless mode plugin behavior', () => {
   it('creates a state-only plugin in headless mode (no props or view)', () => {
     const editor = {
       options: { isHeadless: true, comments: {} },
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const extension = Extension.create(CommentsPlugin.config);
@@ -1524,7 +1517,7 @@ describe('Headless mode plugin behavior', () => {
   it('creates a full plugin in browser mode (with props and view)', () => {
     const editor = {
       options: { isHeadless: false, comments: {} },
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const extension = Extension.create(CommentsPlugin.config);
@@ -1540,7 +1533,7 @@ describe('Headless mode plugin behavior', () => {
     const schema = createCommentSchema();
     const editor = {
       options: { isHeadless: true, comments: { highlightColors: { external: '#aaa', internal: '#bbb' } } },
-      emit: vi.fn(),
+      emit: mock(),
     };
 
     const extension = Extension.create(CommentsPlugin.config);

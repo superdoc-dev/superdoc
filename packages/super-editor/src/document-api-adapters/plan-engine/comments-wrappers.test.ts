@@ -1,25 +1,25 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Editor } from '../../core/Editor.js';
 import type { CommentAnchor } from '../helpers/comment-target-resolver.js';
 import type { CommentEntityRecord } from '../helpers/comment-entity-store.js';
-import { createCommentsWrapper } from './comments-wrappers.js';
+const { createCommentsWrapper } = await import('./comments-wrappers.js');
 
-vi.mock('../helpers/comment-target-resolver.js', () => ({
-  listCommentAnchors: vi.fn(() => []),
-  resolveCommentAnchorsById: vi.fn(() => []),
+mock.module('../helpers/comment-target-resolver.js', () => ({
+  listCommentAnchors: mock(() => []),
+  resolveCommentAnchorsById: mock(() => []),
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
-  getInlineIndex: vi.fn(() => ({ byType: new Map() })),
-  clearIndexCache: vi.fn(),
+mock.module('../helpers/index-cache.js', () => ({
+  getInlineIndex: mock(() => ({ byType: new Map() })),
+  clearIndexCache: mock(),
 }));
 
-vi.mock('./revision-tracker.js', () => ({
-  getRevision: vi.fn(() => 'rev-1'),
+mock.module('./revision-tracker.js', () => ({
+  getRevision: mock(() => 'rev-1'),
 }));
 
-vi.mock('./plan-wrappers.js', () => ({
-  executeDomainCommand: vi.fn(),
+mock.module('./plan-wrappers.js', () => ({
+  executeDomainCommand: mock(),
 }));
 
 import { listCommentAnchors } from '../helpers/comment-target-resolver.js';
@@ -42,7 +42,7 @@ function makeEditor(comments: CommentEntityRecord[] = [], textContent = 'hello w
     state: {
       doc: {
         content: { size: 100 },
-        textBetween: vi.fn(() => textContent),
+        textBetween: mock(() => textContent),
       },
     },
     converter: { comments },
@@ -56,17 +56,15 @@ function makeEditor(comments: CommentEntityRecord[] = [], textContent = 'hello w
  */
 function mockTextBetweenSequence(editor: Editor, ...values: string[]): void {
   let i = 0;
-  (editor.state!.doc as { textBetween: ReturnType<typeof vi.fn> }).textBetween = vi.fn(() => values[i++] ?? '');
+  (editor.state!.doc as { textBetween: ReturnType<typeof mock> }).textBetween = mock(() => values[i++] ?? '');
 }
 
 describe('comments-wrappers: anchoredText', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('populates anchoredText for a root comment with an anchor', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'My comment' }], 'selected text');
-    vi.mocked(listCommentAnchors).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 10, end: 23 })]);
+    (listCommentAnchors as any).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 10, end: 23 })]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list();
@@ -76,7 +74,7 @@ describe('comments-wrappers: anchoredText', () => {
 
   it('returns anchoredText as undefined when comment has no anchor', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'My comment' }]);
-    vi.mocked(listCommentAnchors).mockReturnValue([]);
+    (listCommentAnchors as any).mockReturnValue([]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list();
@@ -92,7 +90,7 @@ describe('comments-wrappers: anchoredText', () => {
       ],
       'anchored excerpt',
     );
-    vi.mocked(listCommentAnchors).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 5, end: 20 })]);
+    (listCommentAnchors as any).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 5, end: 20 })]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list();
@@ -105,7 +103,7 @@ describe('comments-wrappers: anchoredText', () => {
 
   it('returns anchoredText on comments.get as well', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'My comment' }], 'get excerpt');
-    vi.mocked(listCommentAnchors).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 0, end: 11 })]);
+    (listCommentAnchors as any).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 0, end: 11 })]);
 
     const wrapper = createCommentsWrapper(editor);
     const info = wrapper.get({ commentId: 'c1' });
@@ -114,10 +112,10 @@ describe('comments-wrappers: anchoredText', () => {
 
   it('handles textBetween throwing gracefully', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'My comment' }]);
-    (editor.state!.doc as { textBetween: ReturnType<typeof vi.fn> }).textBetween = vi.fn(() => {
+    (editor.state!.doc as { textBetween: ReturnType<typeof mock> }).textBetween = mock(() => {
       throw new Error('out of range');
     });
-    vi.mocked(listCommentAnchors).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 999, end: 1000 })]);
+    (listCommentAnchors as any).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 999, end: 1000 })]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list();
@@ -133,7 +131,7 @@ describe('comments-wrappers: anchoredText', () => {
       ],
       'deep excerpt',
     );
-    vi.mocked(listCommentAnchors).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 0, end: 12 })]);
+    (listCommentAnchors as any).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 0, end: 12 })]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list();
@@ -148,7 +146,7 @@ describe('comments-wrappers: anchoredText', () => {
 
   it('strips object-replacement characters from range-node atoms', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'My comment' }], '\ufffchello world\ufffc');
-    vi.mocked(listCommentAnchors).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 0, end: 15 })]);
+    (listCommentAnchors as any).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 0, end: 15 })]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list();
@@ -157,9 +155,7 @@ describe('comments-wrappers: anchoredText', () => {
 
   it('populates anchoredText for resolved comments', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Resolved note', isDone: true }], 'resolved text');
-    vi.mocked(listCommentAnchors).mockReturnValue([
-      makeAnchor({ commentId: 'c1', pos: 0, end: 13, status: 'resolved' }),
-    ]);
+    (listCommentAnchors as any).mockReturnValue([makeAnchor({ commentId: 'c1', pos: 0, end: 13, status: 'resolved' })]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list({ includeResolved: true });
@@ -168,13 +164,11 @@ describe('comments-wrappers: anchoredText', () => {
 });
 
 describe('comments-wrappers: multi-segment TextTarget', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('returns a single-segment target for a comment with one anchor', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }], 'abc');
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 0,
@@ -195,7 +189,7 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }]);
     mockTextBetweenSequence(editor, 'abc', 'def');
 
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 0,
@@ -229,7 +223,7 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
     mockTextBetweenSequence(editor, 'first', 'second');
 
     // Anchors provided out of document order — sorted internally by pos
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 50,
@@ -255,7 +249,7 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
 
   it('returns target as undefined when comment has no anchors', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }]);
-    vi.mocked(listCommentAnchors).mockReturnValue([]);
+    (listCommentAnchors as any).mockReturnValue([]);
 
     const wrapper = createCommentsWrapper(editor);
     const result = wrapper.list();
@@ -266,7 +260,7 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }]);
     mockTextBetweenSequence(editor, 'hello', 'world');
 
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 0,
@@ -294,7 +288,7 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
     ]);
     mockTextBetweenSequence(editor, 'abc', 'def');
 
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 0,
@@ -326,13 +320,13 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
   it('handles multi-segment with one failing textBetween gracefully', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }]);
     let callCount = 0;
-    (editor.state!.doc as { textBetween: ReturnType<typeof vi.fn> }).textBetween = vi.fn(() => {
+    (editor.state!.doc as { textBetween: ReturnType<typeof mock> }).textBetween = mock(() => {
       callCount++;
       if (callCount === 1) throw new Error('bad range');
       return 'second segment';
     });
 
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 999,
@@ -359,7 +353,7 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }]);
     mockTextBetweenSequence(editor, '\ufffcabc\ufffc', '\ufffcdef\ufffc');
 
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 0,
@@ -381,14 +375,12 @@ describe('comments-wrappers: multi-segment TextTarget', () => {
 });
 
 describe('comments-wrappers: same-block segment canonicalization', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => {});
 
   it('merges adjacent same-block anchors into one segment', () => {
     // Two adjacent ranges in block p1: [0,5] and [5,10] → merged [0,10]
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }], 'abcdefghij');
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 1,
@@ -417,7 +409,7 @@ describe('comments-wrappers: same-block segment canonicalization', () => {
   it('merges overlapping same-block anchors into one segment', () => {
     // Two overlapping ranges in block p1: [0,5] and [3,8] → merged [0,8]
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }], 'abcdefgh');
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 1,
@@ -447,7 +439,7 @@ describe('comments-wrappers: same-block segment canonicalization', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }]);
     mockTextBetweenSequence(editor, 'abc', 'ghij');
 
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 1,
@@ -481,7 +473,7 @@ describe('comments-wrappers: same-block segment canonicalization', () => {
     const editor = makeEditor([{ commentId: 'c1', commentText: 'Comment' }]);
     mockTextBetweenSequence(editor, 'abcdefghij', 'xyz');
 
-    vi.mocked(listCommentAnchors).mockReturnValue([
+    (listCommentAnchors as any).mockReturnValue([
       makeAnchor({
         commentId: 'c1',
         pos: 1,

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import * as Y from 'yjs';
 import { createPartConsumer, isApplyingRemotePartChanges } from './consumer.js';
 import { encodeEnvelopeToYjs } from './json-crdt.js';
@@ -21,12 +21,12 @@ function createMockEditor() {
       documentGuid: null,
       promoteToGuid: () => 'test-guid',
     },
-    state: { tr: { setMeta: vi.fn() } },
+    state: { tr: { setMeta: mock() } },
     view: undefined,
-    safeEmit: vi.fn().mockReturnValue([]),
-    emit: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
+    safeEmit: mock().mockReturnValue([]),
+    emit: mock(),
+    on: mock(),
+    off: mock(),
   } as unknown as import('../../../core/Editor.js').Editor;
 }
 

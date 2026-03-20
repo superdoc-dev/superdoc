@@ -1,15 +1,14 @@
+import { describe, it, expect, mock } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi } from 'vitest';
-
-vi.mock('./changeListLevel.js', () => ({
-  updateNumberingProperties: vi.fn(),
+mock.module('./changeListLevel.js', () => ({
+  updateNumberingProperties: mock(),
 }));
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => node.attrs?.paragraphProperties ?? {}),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => node.attrs?.paragraphProperties ?? {}),
 }));
 
-import { exitListItemAt } from './exitListItemAt.js';
+const { exitListItemAt } = await import('./exitListItemAt.js');
 import { updateNumberingProperties } from './changeListLevel.js';
 
 function createListParagraph(numId = 1, ilvl = 0) {
@@ -29,12 +28,12 @@ function createMockState(nodeAtResult = createListParagraph()) {
     state: {
       doc: {
         content: { size: 100 },
-        nodeAt: vi.fn(() => nodeAtResult),
+        nodeAt: mock(() => nodeAtResult),
       },
     },
     tr: {},
     editor: {},
-    dispatch: vi.fn(),
+    dispatch: mock(),
   };
 }
 

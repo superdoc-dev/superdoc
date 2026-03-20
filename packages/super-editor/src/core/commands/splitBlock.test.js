@@ -1,14 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { splitBlock } from './splitBlock.js';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { splitBlock } = await import('./splitBlock.js');
 
-vi.mock('../Attribute.js', () => ({
+mock.module('../Attribute.js', () => ({
   Attribute: {
-    getSplittedAttributes: vi.fn((extensionAttrs, nodeName, nodeAttrs) => ({ ...nodeAttrs })),
+    getSplittedAttributes: mock((extensionAttrs, nodeName, nodeAttrs) => ({ ...nodeAttrs })),
   },
 }));
 
-vi.mock('prosemirror-transform', () => ({
-  canSplit: vi.fn(() => true),
+mock.module('prosemirror-transform', () => ({
+  canSplit: mock(() => true),
 }));
 
 /**
@@ -22,15 +22,15 @@ function createMockResolvedPos(options = {}) {
     parent: parent || { isBlock: true, content: { size: 10 }, type: { name: 'paragraph' }, inlineContent: true },
     parentOffset,
     depth,
-    marks: vi.fn(() => marks),
-    node: node || vi.fn(() => ({ type: { name: 'paragraph' }, attrs: {} })),
-    before: vi.fn(() => 0),
-    indexAfter: vi.fn(() => 0),
+    marks: mock(() => marks),
+    node: node || mock(() => ({ type: { name: 'paragraph' }, attrs: {} })),
+    before: mock(() => 0),
+    indexAfter: mock(() => 0),
     // Required for Selection constructor
-    min: vi.fn(function (other) {
+    min: mock(function (other) {
       return this.pos < other.pos ? this : other;
     }),
-    max: vi.fn(function (other) {
+    max: mock(function (other) {
       return this.pos > other.pos ? this : other;
     }),
   };
@@ -42,22 +42,20 @@ describe('splitBlock', () => {
   let mockEditor, mockState, mockTr, mockDispatch, mockSchema;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
     // Setup mock schema with mark types
     mockSchema = {
       marks: {
         bold: {
-          create: vi.fn((attrs) => ({ type: { name: 'bold' }, attrs })),
+          create: mock((attrs) => ({ type: { name: 'bold' }, attrs })),
         },
         italic: {
-          create: vi.fn((attrs) => ({ type: { name: 'italic' }, attrs })),
+          create: mock((attrs) => ({ type: { name: 'italic' }, attrs })),
         },
         textStyle: {
-          create: vi.fn((attrs) => ({ type: { name: 'textStyle' }, attrs })),
+          create: mock((attrs) => ({ type: { name: 'textStyle' }, attrs })),
         },
         underline: {
-          create: vi.fn((attrs) => ({ type: { name: 'underline' }, attrs })),
+          create: mock((attrs) => ({ type: { name: 'underline' }, attrs })),
         },
       },
       nodes: {
@@ -79,16 +77,16 @@ describe('splitBlock', () => {
     mockTr = {
       selection: null,
       doc: {
-        resolve: vi.fn(),
+        resolve: mock(),
       },
       mapping: {
-        map: vi.fn((pos) => pos),
+        map: mock((pos) => pos),
       },
-      deleteSelection: vi.fn(),
-      split: vi.fn().mockReturnThis(),
-      setNodeMarkup: vi.fn().mockReturnThis(),
-      ensureMarks: vi.fn().mockReturnThis(),
-      scrollIntoView: vi.fn().mockReturnThis(),
+      deleteSelection: mock(),
+      split: mock().mockReturnThis(),
+      setNodeMarkup: mock().mockReturnThis(),
+      ensureMarks: mock().mockReturnThis(),
+      scrollIntoView: mock().mockReturnThis(),
     };
 
     mockState.tr = mockTr;
@@ -102,7 +100,7 @@ describe('splitBlock', () => {
       converter: null,
     };
 
-    mockDispatch = vi.fn();
+    mockDispatch = mock();
   });
 
   describe('basic split functionality', () => {
@@ -130,7 +128,7 @@ describe('splitBlock', () => {
       mockState.selection = mockTr.selection;
 
       mockTr.doc = {
-        resolve: vi.fn(() => $from),
+        resolve: mock(() => $from),
       };
 
       const command = splitBlock();
@@ -153,7 +151,7 @@ describe('splitBlock', () => {
 
       const $from = createMockResolvedPos({
         marks: [boldMark, linkMark],
-        node: vi.fn(() => ({
+        node: mock(() => ({
           type: { name: 'paragraph' },
           attrs: {},
         })),
@@ -165,7 +163,7 @@ describe('splitBlock', () => {
       mockState.selection = mockTr.selection;
 
       mockTr.doc = {
-        resolve: vi.fn(() => $from),
+        resolve: mock(() => $from),
       };
 
       const command = splitBlock();
@@ -183,7 +181,7 @@ describe('splitBlock', () => {
       mockState.storedMarks = [storedBoldMark];
 
       const $from = createMockResolvedPos({
-        node: vi.fn(() => ({
+        node: mock(() => ({
           type: { name: 'paragraph' },
           attrs: {},
         })),
@@ -195,7 +193,7 @@ describe('splitBlock', () => {
       mockState.selection = mockTr.selection;
 
       mockTr.doc = {
-        resolve: vi.fn(() => $from),
+        resolve: mock(() => $from),
       };
 
       const command = splitBlock();
@@ -212,7 +210,7 @@ describe('splitBlock', () => {
     it('does not call ensureMarks when keepMarks is false', () => {
       const $from = createMockResolvedPos({
         marks: [{ type: { name: 'bold' }, attrs: { value: true } }],
-        node: vi.fn(() => ({
+        node: mock(() => ({
           type: { name: 'paragraph' },
           attrs: {},
         })),
@@ -224,7 +222,7 @@ describe('splitBlock', () => {
       mockState.selection = mockTr.selection;
 
       mockTr.doc = {
-        resolve: vi.fn(() => $from),
+        resolve: mock(() => $from),
       };
 
       const command = splitBlock({ keepMarks: false });
@@ -235,12 +233,12 @@ describe('splitBlock', () => {
     });
 
     it('clears heading style on leading block when splitting at start of heading paragraph', () => {
-      const canReplaceWith = vi.fn(() => true);
-      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const canReplaceWith = mock(() => true);
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: mock(() => false) };
       const parentNode = {
-        contentMatchAt: vi.fn(() => ({
+        contentMatchAt: mock(() => ({
           edgeCount: 1,
-          edge: vi.fn(() => ({ type: paragraphType })),
+          edge: mock(() => ({ type: paragraphType })),
         })),
         canReplaceWith,
       };
@@ -255,7 +253,7 @@ describe('splitBlock', () => {
           attrs: headingAttrs,
         },
         parentOffset: 0,
-        node: vi.fn((depth) => {
+        node: mock((depth) => {
           if (depth === -1) return parentNode;
           return { type: { name: 'paragraph' }, attrs: headingAttrs };
         }),
@@ -269,7 +267,7 @@ describe('splitBlock', () => {
       mockTr.selection = { $from, $to };
       mockState.selection = mockTr.selection;
       mockTr.doc = {
-        resolve: vi.fn(() => ({ index: vi.fn(() => 0) })),
+        resolve: mock(() => ({ index: mock(() => 0) })),
       };
 
       const command = splitBlock();
@@ -288,11 +286,11 @@ describe('splitBlock', () => {
           },
         },
       };
-      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: mock(() => false) };
       const parentNode = {
-        contentMatchAt: vi.fn(() => ({
+        contentMatchAt: mock(() => ({
           edgeCount: 1,
-          edge: vi.fn(() => ({ type: paragraphType })),
+          edge: mock(() => ({ type: paragraphType })),
         })),
       };
 
@@ -309,7 +307,7 @@ describe('splitBlock', () => {
           attrs: sourceAttrs,
         },
         parentOffset: 5,
-        node: vi.fn((depth) => {
+        node: mock((depth) => {
           if (depth === -1) return parentNode;
           return { type: { name: 'paragraph' }, attrs: sourceAttrs };
         }),
@@ -323,7 +321,7 @@ describe('splitBlock', () => {
       mockTr.selection = { $from, $to };
       mockState.selection = mockTr.selection;
       mockTr.doc = {
-        resolve: vi.fn(() => $from),
+        resolve: mock(() => $from),
       };
 
       const command = splitBlock();
@@ -343,11 +341,11 @@ describe('splitBlock', () => {
           },
         },
       };
-      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: mock(() => false) };
       const parentNode = {
-        contentMatchAt: vi.fn(() => ({
+        contentMatchAt: mock(() => ({
           edgeCount: 1,
-          edge: vi.fn(() => ({ type: paragraphType })),
+          edge: mock(() => ({ type: paragraphType })),
         })),
       };
 
@@ -364,7 +362,7 @@ describe('splitBlock', () => {
           attrs: sourceAttrs,
         },
         parentOffset: 5,
-        node: vi.fn((depth) => {
+        node: mock((depth) => {
           if (depth === -1) return parentNode;
           return { type: { name: 'paragraph' }, attrs: sourceAttrs };
         }),
@@ -378,7 +376,7 @@ describe('splitBlock', () => {
       mockTr.selection = { $from, $to };
       mockState.selection = mockTr.selection;
       mockTr.doc = {
-        resolve: vi.fn(() => $from),
+        resolve: mock(() => $from),
       };
 
       const command = splitBlock();
@@ -396,11 +394,11 @@ describe('splitBlock', () => {
           },
         },
       };
-      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: mock(() => false) };
       const parentNode = {
-        contentMatchAt: vi.fn(() => ({
+        contentMatchAt: mock(() => ({
           edgeCount: 1,
-          edge: vi.fn(() => ({ type: paragraphType })),
+          edge: mock(() => ({ type: paragraphType })),
         })),
       };
 
@@ -417,7 +415,7 @@ describe('splitBlock', () => {
           attrs: sourceAttrs,
         },
         parentOffset: 5,
-        node: vi.fn((depth) => {
+        node: mock((depth) => {
           if (depth === -1) return parentNode;
           return { type: { name: 'paragraph' }, attrs: sourceAttrs };
         }),
@@ -431,7 +429,7 @@ describe('splitBlock', () => {
       mockTr.selection = { $from, $to };
       mockState.selection = mockTr.selection;
       mockTr.doc = {
-        resolve: vi.fn(() => $from),
+        resolve: mock(() => $from),
       };
 
       const command = splitBlock();
@@ -442,11 +440,11 @@ describe('splitBlock', () => {
     });
 
     it('does not mutate source attrs when removing nested override attributes', () => {
-      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: vi.fn(() => false) };
+      const paragraphType = { name: 'paragraph', isTextblock: true, hasRequiredAttrs: mock(() => false) };
       const parentNode = {
-        contentMatchAt: vi.fn(() => ({
+        contentMatchAt: mock(() => ({
           edgeCount: 1,
-          edge: vi.fn(() => ({ type: paragraphType })),
+          edge: mock(() => ({ type: paragraphType })),
         })),
       };
       const sourceAttrs = {
@@ -463,7 +461,7 @@ describe('splitBlock', () => {
           attrs: sourceAttrs,
         },
         parentOffset: 0,
-        node: vi.fn((depth) => {
+        node: mock((depth) => {
           if (depth === -1) return parentNode;
           return { type: { name: 'paragraph' }, attrs: sourceAttrs };
         }),
@@ -477,7 +475,7 @@ describe('splitBlock', () => {
       mockTr.selection = { $from, $to };
       mockState.selection = mockTr.selection;
       mockTr.doc = {
-        resolve: vi.fn(() => ({ index: vi.fn(() => 0) })),
+        resolve: mock(() => ({ index: mock(() => 0) })),
       };
 
       const command = splitBlock({ attrsToRemoveOverride: ['paragraphProperties.styleId'] });

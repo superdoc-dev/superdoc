@@ -1,36 +1,36 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 // @ts-check
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { restartNumbering } from './restartNumbering.js';
-import { findParentNode } from '@helpers/index.js';
+const { restartNumbering } = await import('./restartNumbering.js');
+const { findParentNode } = await import('@helpers/index.js');
 import { isList } from '@core/commands/list-helpers';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 
-vi.mock(import('@helpers/index.js'), async (importOriginal) => {
+mock.module(import('@helpers/index.js'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    findParentNode: vi.fn(),
+    findParentNode: mock(),
   };
 });
 
-vi.mock('@core/commands/list-helpers', () => ({
-  isList: vi.fn(),
+mock.module('@core/commands/list-helpers', () => ({
+  isList: mock(),
 }));
 
-vi.mock('@helpers/list-numbering-helpers.js', () => ({
+mock.module('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
-    setLvlOverride: vi.fn(),
+    setLvlOverride: mock(),
   },
 }));
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  getResolvedParagraphProperties: vi.fn((node) => {
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  getResolvedParagraphProperties: mock((node) => {
     return node?.attrs?.paragraphProperties || { numberingProperties: null };
   }),
 }));
 
 describe('restartNumbering', () => {
-  /** @type {ReturnType<typeof vi.fn>} */
+  /** @type {ReturnType<typeof mock>} */
   let resolveParent;
   /** @type {any} */
   let state;
@@ -38,7 +38,7 @@ describe('restartNumbering', () => {
   let tr;
   /** @type {any} */
   let editor;
-  /** @type {ReturnType<typeof vi.fn>} */
+  /** @type {ReturnType<typeof mock>} */
   let dispatch;
 
   const createParagraph = ({ numId, ilvl = 0 }) => ({
@@ -50,15 +50,13 @@ describe('restartNumbering', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
-    resolveParent = vi.fn();
+    resolveParent = mock();
     findParentNode.mockReturnValue(resolveParent);
 
     state = { selection: {} };
     tr = {};
     editor = {};
-    dispatch = vi.fn();
+    dispatch = mock();
 
     isList.mockReturnValue(true);
   });

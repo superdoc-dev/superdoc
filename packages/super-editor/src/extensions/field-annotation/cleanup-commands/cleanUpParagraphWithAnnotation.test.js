@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EditorState } from 'prosemirror-state';
-import { Node as PMNode } from 'prosemirror-model';
-import { schema as basic } from 'prosemirror-schema-basic';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+const { EditorState } = await import('prosemirror-state');
+const { Node: PMNode } = await import('prosemirror-model');
+const { schema: basic } = await import('prosemirror-schema-basic');
 
 if (!Object.getOwnPropertyDescriptor(PMNode.prototype, 'children')) {
   Object.defineProperty(PMNode.prototype, 'children', {
@@ -15,8 +15,8 @@ if (!Object.getOwnPropertyDescriptor(PMNode.prototype, 'children')) {
 // Controllable mock — set mockAnnotations before each test to control return value
 let mockAnnotations = [];
 
-vi.mock('../fieldAnnotationHelpers/index.js', () => ({
-  findFieldAnnotationsByFieldId: vi.fn(() => mockAnnotations),
+mock.module('../fieldAnnotationHelpers/index.js', () => ({
+  findFieldAnnotationsByFieldId: mock(() => mockAnnotations),
 }));
 
 // Import AFTER vi.mock so the command picks up the hoisted mock

@@ -1,5 +1,5 @@
+import { describe, it, expect, mock, spyOn, beforeEach, beforeAll, afterAll } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
@@ -16,12 +16,12 @@ import {
   TrackFormatMarkName,
   TrackInsertMarkName,
 } from '../../extensions/track-changes/constants.js';
-import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
-import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
-import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
-import { blocksDeleteWrapper, blocksDeleteRangeWrapper } from '../plan-engine/blocks-wrappers.js';
-import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
-import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
+const { ListHelpers } = await import('../../core/helpers/list-numbering-helpers.js');
+const { createCommentsWrapper } = await import('../plan-engine/comments-wrappers.js');
+const { createParagraphWrapper, createHeadingWrapper } = await import('../plan-engine/create-wrappers.js');
+const { blocksDeleteWrapper, blocksDeleteRangeWrapper } = await import('../plan-engine/blocks-wrappers.js');
+const { clearContentWrapper } = await import('../plan-engine/clear-content-wrapper.js');
+const { styleApplyWrapper } = await import('../plan-engine/plan-wrappers.js');
 import {
   paragraphsSetStyleWrapper,
   paragraphsClearStyleWrapper,
@@ -45,8 +45,8 @@ import {
   paragraphsSetDirectionWrapper,
   paragraphsClearDirectionWrapper,
 } from '../plan-engine/paragraphs-wrappers.js';
-import { stylesApplyAdapter } from '../styles-adapter.js';
-import { createTableWrapper } from '../plan-engine/create-table-wrapper.js';
+const { stylesApplyAdapter } = await import('../styles-adapter.js');
+const { createTableWrapper } = await import('../plan-engine/create-table-wrapper.js');
 import {
   tablesDeleteWrapper,
   tablesClearContentsWrapper,
@@ -88,7 +88,7 @@ import {
   tablesSetBordersWrapper,
   tablesSetTableOptionsWrapper,
 } from '../plan-engine/tables-wrappers.js';
-import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
+const { getDocumentApiCapabilities } = await import('../capabilities-adapter.js');
 import {
   tocConfigureWrapper,
   tocUpdateWrapper,
@@ -135,7 +135,7 @@ import {
   hyperlinksPatchWrapper,
   hyperlinksRemoveWrapper,
 } from '../plan-engine/hyperlinks-wrappers.js';
-import { createContentControlsAdapter } from '../plan-engine/content-controls-wrappers.js';
+const { createContentControlsAdapter } = await import('../plan-engine/content-controls-wrappers.js');
 import {
   headerFootersRefsSetAdapter,
   headerFootersRefsClearAdapter,
@@ -180,12 +180,14 @@ import {
   listsSetLevelLayoutWrapper,
   registerSetValueDelegate,
 } from '../plan-engine/lists-formatting-wrappers.js';
-import * as listSequenceHelpers from '../helpers/list-sequence-helpers.js';
-import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
-import * as planWrappers from '../plan-engine/plan-wrappers.js';
-import { trackChangesAcceptWrapper, trackChangesRejectWrapper } from '../plan-engine/track-changes-wrappers.js';
-import * as hyperlinkMutationHelper from '../helpers/hyperlink-mutation-helper.js';
-import * as adapterUtils from '../helpers/adapter-utils.js';
+const listSequenceHelpers = await import('../helpers/list-sequence-helpers.js');
+const { LevelFormattingHelpers } = await import('../../core/helpers/list-level-formatting-helpers.js');
+const planWrappers = await import('../plan-engine/plan-wrappers.js');
+const { trackChangesAcceptWrapper, trackChangesRejectWrapper } = await import(
+  '../plan-engine/track-changes-wrappers.js'
+);
+const hyperlinkMutationHelper = await import('../helpers/hyperlink-mutation-helper.js');
+const adapterUtils = await import('../helpers/adapter-utils.js');
 import {
   bookmarksInsertWrapper,
   bookmarksRenameWrapper,
@@ -218,7 +220,9 @@ import {
   captionsRemoveWrapper,
   captionsConfigureWrapper,
 } from '../plan-engine/caption-wrappers.js';
-import { fieldsInsertWrapper, fieldsRebuildWrapper, fieldsRemoveWrapper } from '../plan-engine/field-wrappers.js';
+const { fieldsInsertWrapper, fieldsRebuildWrapper, fieldsRemoveWrapper } = await import(
+  '../plan-engine/field-wrappers.js'
+);
 import {
   citationsInsertWrapper,
   citationsUpdateWrapper,
@@ -240,16 +244,16 @@ import {
   authorityEntriesUpdateWrapper,
   authorityEntriesRemoveWrapper,
 } from '../plan-engine/authority-wrappers.js';
-import { registerBuiltInExecutors } from '../plan-engine/register-executors.js';
-import { getRevision, initRevision } from '../plan-engine/revision-tracker.js';
-import { registerPartDescriptor, clearPartDescriptors } from '../../core/parts/registry/part-registry.js';
-import { numberingPartDescriptor } from '../../core/parts/adapters/numbering-part-descriptor.js';
-import { settingsPartDescriptor } from '../../core/parts/adapters/settings-part-descriptor.js';
-import { stylesPartDescriptor } from '../../core/parts/adapters/styles-part-descriptor.js';
-import { clearInvalidationHandlers } from '../../core/parts/invalidation/part-invalidation-registry.js';
-import { executePlan } from '../plan-engine/executor.js';
-import { toCanonicalTrackedChangeId } from '../helpers/tracked-change-resolver.js';
-import { writeAdapter } from '../write-adapter.js';
+const { registerBuiltInExecutors } = await import('../plan-engine/register-executors.js');
+const { getRevision, initRevision } = await import('../plan-engine/revision-tracker.js');
+const { registerPartDescriptor, clearPartDescriptors } = await import('../../core/parts/registry/part-registry.js');
+const { numberingPartDescriptor } = await import('../../core/parts/adapters/numbering-part-descriptor.js');
+const { settingsPartDescriptor } = await import('../../core/parts/adapters/settings-part-descriptor.js');
+const { stylesPartDescriptor } = await import('../../core/parts/adapters/styles-part-descriptor.js');
+const { clearInvalidationHandlers } = await import('../../core/parts/invalidation/part-invalidation-registry.js');
+const { executePlan } = await import('../plan-engine/executor.js');
+const { toCanonicalTrackedChangeId } = await import('../helpers/tracked-change-resolver.js');
+const { writeAdapter } = await import('../write-adapter.js');
 import {
   tablesGetCellsAdapter,
   tablesGetPropertiesAdapter,
@@ -276,48 +280,48 @@ import {
   sectionsSetPageBordersAdapter,
   sectionsClearPageBordersAdapter,
 } from '../sections-adapter.js';
-import { validateJsonSchema } from './schema-validator.js';
+const { validateJsonSchema } = await import('./schema-validator.js');
 
-const mockedDeps = vi.hoisted(() => ({
-  resolveCommentAnchorsById: vi.fn(() => []),
-  listCommentAnchors: vi.fn(() => []),
-  getTrackChanges: vi.fn(() => []),
-  insertRowAtIndex: vi.fn(() => {}),
-}));
+const mockedDeps = {
+  resolveCommentAnchorsById: mock(() => []),
+  listCommentAnchors: mock(() => []),
+  getTrackChanges: mock(() => []),
+  insertRowAtIndex: mock(() => {}),
+};
 
-vi.mock('../helpers/comment-target-resolver.js', () => ({
+mock.module('../helpers/comment-target-resolver.js', () => ({
   resolveCommentAnchorsById: mockedDeps.resolveCommentAnchorsById,
   listCommentAnchors: mockedDeps.listCommentAnchors,
 }));
 
-vi.mock('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
+mock.module('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
   getTrackChanges: mockedDeps.getTrackChanges,
 }));
 
-vi.mock('../../extensions/table/tableHelpers/appendRows.js', () => ({
+mock.module('../../extensions/table/tableHelpers/appendRows.js', () => ({
   insertRowAtIndex: mockedDeps.insertRowAtIndex,
 }));
 
-vi.mock('prosemirror-tables', () => ({
+mock.module('prosemirror-tables', () => ({
   TableMap: {
-    get: vi.fn(() => ({
+    get: mock(() => ({
       width: 2,
       height: 2,
       // Positions of cells within table content tree (matches nodeAt traversal):
       // Row 0: cell-1 at pos 1, cell-2 at pos 10
       // Row 1: cell-3 at pos 21, cell-4 at pos 29
       map: [1, 10, 21, 29],
-      positionAt: vi.fn(() => 1),
-      colCount: vi.fn(() => 0),
+      positionAt: mock(() => 1),
+      colCount: mock(() => 0),
     })),
   },
 }));
 
-vi.mock('prosemirror-model', async (importOriginal) => {
+mock.module('prosemirror-model', async (importOriginal) => {
   const original = await importOriginal<typeof import('prosemirror-model')>();
   return {
     ...original,
-    Fragment: { from: vi.fn((node: unknown) => node) },
+    Fragment: { from: mock((node: unknown) => node) },
   };
 });
 
@@ -325,90 +329,90 @@ vi.mock('prosemirror-model', async (importOriginal) => {
 // Reference namespace resolver mocks
 // ---------------------------------------------------------------------------
 
-const refResolverMocks = vi.hoisted(() => ({
+const refResolverMocks = {
   // Bookmark
-  findAllBookmarks: vi.fn(() => []),
-  resolveBookmarkTarget: vi.fn(),
-  extractBookmarkInfo: vi.fn(),
-  buildBookmarkDiscoveryItem: vi.fn(),
+  findAllBookmarks: mock(() => []),
+  resolveBookmarkTarget: mock(),
+  extractBookmarkInfo: mock(),
+  buildBookmarkDiscoveryItem: mock(),
   // Link
-  findAllLinks: vi.fn(() => []),
-  resolveLinkTarget: vi.fn(),
-  extractLinkInfo: vi.fn(),
-  buildLinkDiscoveryItem: vi.fn(),
+  findAllLinks: mock(() => []),
+  resolveLinkTarget: mock(),
+  extractLinkInfo: mock(),
+  buildLinkDiscoveryItem: mock(),
   // Footnote
-  findAllFootnotes: vi.fn(() => []),
-  resolveFootnoteTarget: vi.fn(),
-  extractFootnoteInfo: vi.fn(),
-  buildFootnoteDiscoveryItem: vi.fn(),
+  findAllFootnotes: mock(() => []),
+  resolveFootnoteTarget: mock(),
+  extractFootnoteInfo: mock(),
+  buildFootnoteDiscoveryItem: mock(),
   // Cross-ref
-  findAllCrossRefs: vi.fn(() => []),
-  resolveCrossRefTarget: vi.fn(),
-  extractCrossRefInfo: vi.fn(),
-  buildCrossRefDiscoveryItem: vi.fn(),
+  findAllCrossRefs: mock(() => []),
+  resolveCrossRefTarget: mock(),
+  extractCrossRefInfo: mock(),
+  buildCrossRefDiscoveryItem: mock(),
   // Index (block + entry)
-  findAllIndexNodes: vi.fn(() => []),
-  resolveIndexTarget: vi.fn(),
-  extractIndexInfo: vi.fn(),
-  buildIndexDiscoveryItem: vi.fn(),
-  findAllIndexEntries: vi.fn(() => []),
-  resolveIndexEntryTarget: vi.fn(),
-  extractIndexEntryInfo: vi.fn(),
-  buildIndexEntryDiscoveryItem: vi.fn(),
+  findAllIndexNodes: mock(() => []),
+  resolveIndexTarget: mock(),
+  extractIndexInfo: mock(),
+  buildIndexDiscoveryItem: mock(),
+  findAllIndexEntries: mock(() => []),
+  resolveIndexEntryTarget: mock(),
+  extractIndexEntryInfo: mock(),
+  buildIndexEntryDiscoveryItem: mock(),
   // Caption
-  findAllCaptions: vi.fn(() => []),
-  resolveCaptionTarget: vi.fn(),
-  extractCaptionInfo: vi.fn(),
-  buildCaptionDiscoveryItem: vi.fn(),
+  findAllCaptions: mock(() => []),
+  resolveCaptionTarget: mock(),
+  extractCaptionInfo: mock(),
+  buildCaptionDiscoveryItem: mock(),
   // Field
-  findAllFields: vi.fn(() => []),
-  resolveFieldTarget: vi.fn(),
-  extractFieldInfo: vi.fn(),
-  buildFieldDiscoveryItem: vi.fn(),
+  findAllFields: mock(() => []),
+  resolveFieldTarget: mock(),
+  extractFieldInfo: mock(),
+  buildFieldDiscoveryItem: mock(),
   // Citation (inline + bibliography + source)
-  findAllCitations: vi.fn(() => []),
-  resolveCitationTarget: vi.fn(),
-  extractCitationInfo: vi.fn(),
-  buildCitationDiscoveryItem: vi.fn(),
-  findAllBibliographies: vi.fn(() => []),
-  resolveBibliographyTarget: vi.fn(),
-  extractBibliographyInfo: vi.fn(),
-  buildBibliographyDiscoveryItem: vi.fn(),
-  getSourcesFromConverter: vi.fn(() => []),
-  resolveSourceTarget: vi.fn(),
+  findAllCitations: mock(() => []),
+  resolveCitationTarget: mock(),
+  extractCitationInfo: mock(),
+  buildCitationDiscoveryItem: mock(),
+  findAllBibliographies: mock(() => []),
+  resolveBibliographyTarget: mock(),
+  extractBibliographyInfo: mock(),
+  buildBibliographyDiscoveryItem: mock(),
+  getSourcesFromConverter: mock(() => []),
+  resolveSourceTarget: mock(),
   // Authority (block + entry)
-  findAllAuthorities: vi.fn(() => []),
-  resolveAuthorityTarget: vi.fn(),
-  extractAuthorityInfo: vi.fn(),
-  buildAuthorityDiscoveryItem: vi.fn(),
-  findAllAuthorityEntries: vi.fn(() => []),
-  resolveAuthorityEntryTarget: vi.fn(),
-  extractAuthorityEntryInfo: vi.fn(),
-  buildAuthorityEntryDiscoveryItem: vi.fn(),
-}));
+  findAllAuthorities: mock(() => []),
+  resolveAuthorityTarget: mock(),
+  extractAuthorityInfo: mock(),
+  buildAuthorityDiscoveryItem: mock(),
+  findAllAuthorityEntries: mock(() => []),
+  resolveAuthorityEntryTarget: mock(),
+  extractAuthorityEntryInfo: mock(),
+  buildAuthorityEntryDiscoveryItem: mock(),
+};
 
-vi.mock('../helpers/bookmark-resolver.js', () => ({
+mock.module('../helpers/bookmark-resolver.js', () => ({
   findAllBookmarks: refResolverMocks.findAllBookmarks,
   resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
   extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
   buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
 }));
 
-vi.mock('../helpers/footnote-resolver.js', () => ({
+mock.module('../helpers/footnote-resolver.js', () => ({
   findAllFootnotes: refResolverMocks.findAllFootnotes,
   resolveFootnoteTarget: refResolverMocks.resolveFootnoteTarget,
   extractFootnoteInfo: refResolverMocks.extractFootnoteInfo,
   buildFootnoteDiscoveryItem: refResolverMocks.buildFootnoteDiscoveryItem,
 }));
 
-vi.mock('../helpers/crossref-resolver.js', () => ({
+mock.module('../helpers/crossref-resolver.js', () => ({
   findAllCrossRefs: refResolverMocks.findAllCrossRefs,
   resolveCrossRefTarget: refResolverMocks.resolveCrossRefTarget,
   extractCrossRefInfo: refResolverMocks.extractCrossRefInfo,
   buildCrossRefDiscoveryItem: refResolverMocks.buildCrossRefDiscoveryItem,
 }));
 
-vi.mock('../helpers/index-resolver.js', async (importOriginal) => {
+mock.module('../helpers/index-resolver.js', async (importOriginal) => {
   const orig = await importOriginal<Record<string, unknown>>();
   return {
     findAllIndexNodes: refResolverMocks.findAllIndexNodes,
@@ -423,21 +427,21 @@ vi.mock('../helpers/index-resolver.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../helpers/caption-resolver.js', () => ({
+mock.module('../helpers/caption-resolver.js', () => ({
   findAllCaptions: refResolverMocks.findAllCaptions,
   resolveCaptionTarget: refResolverMocks.resolveCaptionTarget,
   extractCaptionInfo: refResolverMocks.extractCaptionInfo,
   buildCaptionDiscoveryItem: refResolverMocks.buildCaptionDiscoveryItem,
 }));
 
-vi.mock('../helpers/field-resolver.js', () => ({
+mock.module('../helpers/field-resolver.js', () => ({
   findAllFields: refResolverMocks.findAllFields,
   resolveFieldTarget: refResolverMocks.resolveFieldTarget,
   extractFieldInfo: refResolverMocks.extractFieldInfo,
   buildFieldDiscoveryItem: refResolverMocks.buildFieldDiscoveryItem,
 }));
 
-vi.mock('../helpers/citation-resolver.js', () => ({
+mock.module('../helpers/citation-resolver.js', () => ({
   findAllCitations: refResolverMocks.findAllCitations,
   resolveCitationTarget: refResolverMocks.resolveCitationTarget,
   extractCitationInfo: refResolverMocks.extractCitationInfo,
@@ -450,7 +454,7 @@ vi.mock('../helpers/citation-resolver.js', () => ({
   resolveSourceTarget: refResolverMocks.resolveSourceTarget,
 }));
 
-vi.mock('../helpers/authority-resolver.js', async (importOriginal) => {
+mock.module('../helpers/authority-resolver.js', async (importOriginal) => {
   const orig = await importOriginal<Record<string, unknown>>();
   return {
     findAllAuthorities: refResolverMocks.findAllAuthorities,
@@ -582,15 +586,15 @@ function makeTextEditor(
   } = {},
 ): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
   tr: {
-    insertText: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    addMark: ReturnType<typeof vi.fn>;
-    removeMark: ReturnType<typeof vi.fn>;
-    replaceWith: ReturnType<typeof vi.fn>;
-    insert: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
+    insertText: ReturnType<typeof mock>;
+    delete: ReturnType<typeof mock>;
+    addMark: ReturnType<typeof mock>;
+    removeMark: ReturnType<typeof mock>;
+    replaceWith: ReturnType<typeof mock>;
+    insert: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
   };
 } {
   const textNode = createNode('text', [], { text });
@@ -602,13 +606,13 @@ function makeTextEditor(
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn(),
-    delete: vi.fn(),
-    addMark: vi.fn(),
-    removeMark: vi.fn(),
-    replaceWith: vi.fn(),
-    insert: vi.fn(),
-    setMeta: vi.fn(),
+    insertText: mock(),
+    delete: mock(),
+    addMark: mock(),
+    removeMark: mock(),
+    replaceWith: mock(),
+    insert: mock(),
+    setMeta: mock(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
     doc: {
@@ -623,60 +627,60 @@ function makeTextEditor(
   tr.insert.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const baseCommands = {
-    insertTrackedChange: vi.fn(() => true),
-    setTextSelection: vi.fn(() => true),
-    addComment: vi.fn(() => true),
-    editComment: vi.fn(() => true),
-    addCommentReply: vi.fn(() => true),
-    moveComment: vi.fn(() => true),
-    resolveComment: vi.fn(() => true),
-    removeComment: vi.fn(() => true),
-    setCommentInternal: vi.fn(() => true),
-    setActiveComment: vi.fn(() => true),
-    setCursorById: vi.fn(() => true),
-    acceptTrackedChangeById: vi.fn(() => true),
-    rejectTrackedChangeById: vi.fn(() => true),
-    acceptAllTrackedChanges: vi.fn(() => true),
-    rejectAllTrackedChanges: vi.fn(() => true),
-    insertParagraphAt: vi.fn(() => true),
-    insertHeadingAt: vi.fn(() => true),
-    insertListItemAt: vi.fn(() => true),
-    setListTypeAt: vi.fn(() => true),
-    increaseListIndent: vi.fn(() => true),
-    decreaseListIndent: vi.fn(() => true),
-    restartNumbering: vi.fn(() => true),
-    exitListItemAt: vi.fn(() => true),
-    setFontSize: vi.fn(() => true),
-    unsetFontSize: vi.fn(() => true),
-    setFontFamily: vi.fn(() => true),
-    unsetFontFamily: vi.fn(() => true),
-    setColor: vi.fn(() => true),
-    unsetColor: vi.fn(() => true),
-    setTextAlign: vi.fn(() => true),
-    unsetTextAlign: vi.fn(() => true),
+    insertTrackedChange: mock(() => true),
+    setTextSelection: mock(() => true),
+    addComment: mock(() => true),
+    editComment: mock(() => true),
+    addCommentReply: mock(() => true),
+    moveComment: mock(() => true),
+    resolveComment: mock(() => true),
+    removeComment: mock(() => true),
+    setCommentInternal: mock(() => true),
+    setActiveComment: mock(() => true),
+    setCursorById: mock(() => true),
+    acceptTrackedChangeById: mock(() => true),
+    rejectTrackedChangeById: mock(() => true),
+    acceptAllTrackedChanges: mock(() => true),
+    rejectAllTrackedChanges: mock(() => true),
+    insertParagraphAt: mock(() => true),
+    insertHeadingAt: mock(() => true),
+    insertListItemAt: mock(() => true),
+    setListTypeAt: mock(() => true),
+    increaseListIndent: mock(() => true),
+    decreaseListIndent: mock(() => true),
+    restartNumbering: mock(() => true),
+    exitListItemAt: mock(() => true),
+    setFontSize: mock(() => true),
+    unsetFontSize: mock(() => true),
+    setFontFamily: mock(() => true),
+    unsetFontFamily: mock(() => true),
+    setColor: mock(() => true),
+    unsetColor: mock(() => true),
+    setTextAlign: mock(() => true),
+    unsetTextAlign: mock(() => true),
   };
 
   const baseMarks = {
     bold: {
-      create: vi.fn(() => ({ type: 'bold' })),
+      create: mock(() => ({ type: 'bold' })),
     },
     italic: {
-      create: vi.fn(() => ({ type: 'italic' })),
+      create: mock(() => ({ type: 'italic' })),
     },
     underline: {
-      create: vi.fn(() => ({ type: 'underline' })),
+      create: mock(() => ({ type: 'underline' })),
     },
     strike: {
-      create: vi.fn(() => ({ type: 'strike' })),
+      create: mock(() => ({ type: 'strike' })),
     },
     textStyle: {
-      create: vi.fn(() => ({ type: 'textStyle' })),
+      create: mock(() => ({ type: 'textStyle' })),
     },
     [TrackFormatMarkName]: {
-      create: vi.fn(() => ({ type: TrackFormatMarkName })),
+      create: mock(() => ({ type: TrackFormatMarkName })),
     },
   };
 
@@ -685,13 +689,13 @@ function makeTextEditor(
     text: (t: string, m?: unknown[]) => ({ type: { name: 'text' }, text: t, marks: m ?? [] }),
     nodes: {
       paragraph: {
-        createAndFill: vi.fn((attrs?: unknown, content?: unknown) => ({
+        createAndFill: mock((attrs?: unknown, content?: unknown) => ({
           type: { name: 'paragraph' },
           attrs,
           content,
           nodeSize: 2,
         })),
-        create: vi.fn((attrs?: unknown, content?: unknown) => ({
+        create: mock((attrs?: unknown, content?: unknown) => ({
           type: { name: 'paragraph' },
           attrs,
           content,
@@ -705,17 +709,17 @@ function makeTextEditor(
     state: {
       doc: {
         ...doc,
-        nodeAt: vi.fn((pos: number) => {
+        nodeAt: mock((pos: number) => {
           if (pos === 0) return paragraph;
           if (pos === 1) return textNode;
           return null;
         }),
-        textBetween: vi.fn((from: number, to: number) => {
+        textBetween: mock((from: number, to: number) => {
           const start = Math.max(0, from - 1);
           const end = Math.max(start, to - 1);
           return text.slice(start, end);
         }),
-        nodesBetween: vi.fn((_from: number, _to: number, callback: (node: any, pos: number) => boolean | void) => {
+        nodesBetween: mock((_from: number, _to: number, callback: (node: any, pos: number) => boolean | void) => {
           // Visit paragraph at pos 0, then text child at pos 1
           if (callback({ ...paragraph, marks: [] }, 0) !== false) {
             callback({ ...textNode, marks: [] }, 1);
@@ -725,15 +729,15 @@ function makeTextEditor(
       tr,
       schema: stateSchema,
     },
-    can: vi.fn(() => ({
-      insertParagraphAt: vi.fn(() => true),
-      insertHeadingAt: vi.fn(() => true),
-      insertListItemAt: vi.fn(() => true),
-      setListTypeAt: vi.fn(() => true),
-      increaseListIndent: vi.fn(() => true),
-      decreaseListIndent: vi.fn(() => true),
-      restartNumbering: vi.fn(() => true),
-      exitListItemAt: vi.fn(() => true),
+    can: mock(() => ({
+      insertParagraphAt: mock(() => true),
+      insertHeadingAt: mock(() => true),
+      insertListItemAt: mock(() => true),
+      setListTypeAt: mock(() => true),
+      increaseListIndent: mock(() => true),
+      decreaseListIndent: mock(() => true),
+      restartNumbering: mock(() => true),
+      exitListItemAt: mock(() => true),
     })),
     dispatch,
     ...overrides,
@@ -813,16 +817,16 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
   };
 
   const baseCommands = {
-    insertListItemAt: vi.fn(() => true),
-    setTextSelection: vi.fn(() => true),
-    insertTrackedChange: vi.fn(() => true),
+    insertListItemAt: mock(() => true),
+    setTextSelection: mock(() => true),
+    insertTrackedChange: mock(() => true),
   };
 
   const tr = {
-    setMeta: vi.fn().mockReturnThis(),
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
     mapping: {
       maps: [] as unknown[],
       map: (p: number) => p,
@@ -833,9 +837,9 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
 
   return {
     state: { doc, tr },
-    dispatch: vi.fn(),
-    emit: vi.fn(),
-    view: { dispatch: vi.fn() },
+    dispatch: mock(),
+    emit: mock(),
+    view: { dispatch: mock() },
     commands: {
       ...baseCommands,
       ...commandOverrides,
@@ -887,9 +891,9 @@ function makeBlockDeleteEditor(
     : null;
   const doc = createNode('doc', paragraph ? [paragraph] : [], { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    setMeta: vi.fn().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
   };
@@ -898,13 +902,13 @@ function makeBlockDeleteEditor(
     state: { doc, tr },
     dispatch,
     commands: {
-      deleteBlockNodeById: overrides.deleteBlockNodeById ?? vi.fn(() => true),
+      deleteBlockNodeById: overrides.deleteBlockNodeById ?? mock(() => true),
     },
     helpers: {
       blockNode: {
         getBlockNodeById:
           overrides.getBlockNodeById ??
-          vi.fn((id: string) => (id === 'p1' && hasParagraph ? [{ node: paragraph, pos: 0 }] : [])),
+          mock((id: string) => (id === 'p1' && hasParagraph ? [{ node: paragraph, pos: 0 }] : [])),
       },
     },
   } as unknown as Editor;
@@ -924,12 +928,12 @@ function makeBlockRangeDeleteEditor(): Editor {
   const children = [p1, p2];
   const doc = createNode('doc', children, { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    setMeta: vi.fn().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
-    delete: vi.fn().mockImplementation(function (this: { docChanged: boolean }) {
+    delete: mock().mockImplementation(function (this: { docChanged: boolean }) {
       this.docChanged = true;
     }),
   };
@@ -938,11 +942,11 @@ function makeBlockRangeDeleteEditor(): Editor {
     state: { doc, tr },
     dispatch,
     commands: {
-      deleteBlockNodeById: vi.fn(() => true),
+      deleteBlockNodeById: mock(() => true),
     },
     helpers: {
       blockNode: {
-        getBlockNodeById: vi.fn((id: string) => {
+        getBlockNodeById: mock((id: string) => {
           const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
           return match ? [{ node: match, pos: 0 }] : [];
         }),
@@ -974,9 +978,9 @@ function makeBlockRangeDeleteEditorWithSectionBreak(): Editor {
   const children = [p1, sectBreakPara, p3];
   const doc = createNode('doc', children, { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    setMeta: vi.fn().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
   };
@@ -985,11 +989,11 @@ function makeBlockRangeDeleteEditorWithSectionBreak(): Editor {
     state: { doc, tr },
     dispatch,
     commands: {
-      deleteBlockNodeById: vi.fn(() => true),
+      deleteBlockNodeById: mock(() => true),
     },
     helpers: {
       blockNode: {
-        getBlockNodeById: vi.fn((id: string) => {
+        getBlockNodeById: mock((id: string) => {
           const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
           return match ? [{ node: match, pos: 0 }] : [];
         }),
@@ -1079,7 +1083,7 @@ function makeStylesEditor(
         convertedXml: hasStylesPart ? { 'word/styles.xml': stylesXml } : {},
         documentModified: false,
         documentGuid: 'test-guid',
-        promoteToGuid: vi.fn(() => 'promoted-guid'),
+        promoteToGuid: mock(() => 'promoted-guid'),
         translatedLinkedStyles: {},
       }
     : undefined;
@@ -1087,8 +1091,8 @@ function makeStylesEditor(
   return {
     converter,
     options: {},
-    on: vi.fn(),
-    emit: vi.fn(),
+    on: mock(),
+    emit: mock(),
   } as unknown as Editor;
 }
 
@@ -1187,15 +1191,15 @@ function makeTableEditor(
   const doc = createNode('doc', [table], { isBlock: false });
 
   const dispatch = options?.throwOnDispatch
-    ? vi.fn(() => {
+    ? mock(() => {
         throw new Error('dispatch failed');
       })
-    : vi.fn();
-  const insertTableAt = vi.fn(() => true);
+    : mock();
+  const insertTableAt = mock(() => true);
 
   const baseCommands = {
     insertTableAt,
-    insertTrackedChange: vi.fn(() => true),
+    insertTrackedChange: mock(() => true),
     ...commandOverrides,
   };
 
@@ -1221,7 +1225,7 @@ function makeTableEditor(
   });
   const schemaNodes = {
     paragraph: {
-      createAndFill: vi.fn((_attrs?: unknown, content?: unknown) => {
+      createAndFill: mock((_attrs?: unknown, content?: unknown) => {
         const children = content ? [content] : [];
         return createNode('paragraph', children as ProseMirrorNode[], {
           attrs: { paragraphProperties: {} },
@@ -1231,8 +1235,8 @@ function makeTableEditor(
       }),
     },
     table: {
-      createAndFill: vi.fn(() => mockTable),
-      create: vi.fn((_attrs?: unknown, content?: unknown) => {
+      createAndFill: mock(() => mockTable),
+      create: mock((_attrs?: unknown, content?: unknown) => {
         const children =
           content && typeof (content as { forEach?: unknown }).forEach === 'function' ? [] : content ? [content] : [];
         return createNode('table', children as ProseMirrorNode[], {
@@ -1243,7 +1247,7 @@ function makeTableEditor(
       }),
     },
     tableRow: {
-      createAndFill: vi.fn((_attrs?: unknown, content?: unknown) => {
+      createAndFill: mock((_attrs?: unknown, content?: unknown) => {
         const children = Array.isArray(content) ? content : content ? [content] : [];
         return createNode('tableRow', children as ProseMirrorNode[], {
           attrs: { sdBlockId: 'new-row' },
@@ -1253,7 +1257,7 @@ function makeTableEditor(
       }),
     },
     tableCell: {
-      createAndFill: vi.fn((_attrs?: unknown, content?: unknown) => {
+      createAndFill: mock((_attrs?: unknown, content?: unknown) => {
         const children = content ? [content] : [mockParagraph];
         return createNode('tableCell', children as ProseMirrorNode[], {
           attrs: { colspan: 1, rowspan: 1 },
@@ -1266,16 +1270,16 @@ function makeTableEditor(
 
   const docWithMethods = {
     ...doc,
-    textBetween: vi.fn(() => ''),
+    textBetween: mock(() => ''),
   };
 
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: {
       maps: [] as unknown[],
       map: (p: number) => p,
@@ -1295,8 +1299,8 @@ function makeTableEditor(
     },
     dispatch,
     commands: baseCommands,
-    can: vi.fn(() => ({
-      insertTableAt: vi.fn(() => true),
+    can: mock(() => ({
+      insertTableAt: mock(() => true),
     })),
     schema: {
       marks: {},
@@ -1450,15 +1454,15 @@ function makeSectionsEditor(options: SectionEditorOptions = {}): Editor {
   doc.toJSON = () => clone(docJson);
 
   const tr = {
-    insert: vi.fn(function insert() {
+    insert: mock(function insert() {
       if (throwOnInsert) {
         throw new Error('insert failed');
       }
       return tr;
     }),
-    setNodeMarkup: vi.fn(() => tr),
-    setDocAttribute: vi.fn(() => tr),
-    setMeta: vi.fn(() => tr),
+    setNodeMarkup: mock(() => tr),
+    setDocAttribute: mock(() => tr),
+    setMeta: mock(() => tr),
     mapping: {
       maps: [] as unknown[],
       map: (position: number) => position,
@@ -1470,10 +1474,10 @@ function makeSectionsEditor(options: SectionEditorOptions = {}): Editor {
   const schemaNodes = includeParagraphNodeType
     ? {
         paragraph: {
-          createAndFill: vi.fn((attrs?: Record<string, unknown>) =>
+          createAndFill: mock((attrs?: Record<string, unknown>) =>
             createNode('paragraph', [], { attrs: attrs ?? {}, isBlock: true, inlineContent: true }),
           ),
-          create: vi.fn((attrs?: Record<string, unknown>) =>
+          create: mock((attrs?: Record<string, unknown>) =>
             createNode('paragraph', [], { attrs: attrs ?? {}, isBlock: true, inlineContent: true }),
           ),
         },
@@ -1488,7 +1492,7 @@ function makeSectionsEditor(options: SectionEditorOptions = {}): Editor {
         nodes: schemaNodes,
       },
     },
-    dispatch: vi.fn(),
+    dispatch: mock(),
     commands: {},
     schema: { marks: {}, nodes: schemaNodes },
     options: {},
@@ -1766,8 +1770,8 @@ const MISSING_PARAGRAPH_TARGET = { kind: 'block', nodeType: 'paragraph', nodeId:
 
 function makeParagraphEditor(paragraphProperties: Record<string, unknown> = {}) {
   const { editor, dispatch, tr } = makeTextEditor();
-  const transaction = tr as unknown as { setNodeMarkup?: ReturnType<typeof vi.fn> };
-  transaction.setNodeMarkup = vi.fn().mockReturnValue(tr);
+  const transaction = tr as unknown as { setNodeMarkup?: ReturnType<typeof mock> };
+  transaction.setNodeMarkup = mock().mockReturnValue(tr);
 
   const paragraphNode = {
     attrs: {
@@ -1778,9 +1782,9 @@ function makeParagraphEditor(paragraphProperties: Record<string, unknown> = {}) 
 
   (
     editor.state.doc as unknown as {
-      nodeAt: ReturnType<typeof vi.fn>;
+      nodeAt: ReturnType<typeof mock>;
     }
-  ).nodeAt = vi.fn((pos: number) => (pos === 0 ? paragraphNode : null));
+  ).nodeAt = mock((pos: number) => (pos === 0 ? paragraphNode : null));
 
   return { editor, dispatch };
 }
@@ -2333,14 +2337,14 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
   });
   const doc = createNode('doc', [tocNode, heading, sourceParagraph], { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     steps: [{}],
@@ -2348,16 +2352,16 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
   };
 
   return {
-    state: { doc, tr, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+    state: { doc, tr, schema: { nodes: { paragraph: { create: mock() }, tableOfContents: {} } } },
     dispatch,
     commands: {
-      insertTableOfContentsAt: vi.fn(() => true),
-      setTableOfContentsInstructionById: vi.fn(() => true),
-      replaceTableOfContentsContentById: vi.fn(() => true),
-      deleteTableOfContentsById: vi.fn(() => true),
-      insertTableOfContentsEntryAt: vi.fn(() => true),
-      deleteTableOfContentsEntryAt: vi.fn(() => true),
-      updateTableOfContentsEntryAt: vi.fn(() => true),
+      insertTableOfContentsAt: mock(() => true),
+      setTableOfContentsInstructionById: mock(() => true),
+      replaceTableOfContentsContentById: mock(() => true),
+      deleteTableOfContentsById: mock(() => true),
+      insertTableOfContentsEntryAt: mock(() => true),
+      deleteTableOfContentsEntryAt: mock(() => true),
+      updateTableOfContentsEntryAt: mock(() => true),
       ...commandOverrides,
     },
     schema: { marks: {} },
@@ -2405,14 +2409,14 @@ function makeImageEditor(): Editor {
   });
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     steps: [{}],
@@ -2426,7 +2430,7 @@ function makeImageEditor(): Editor {
       schema: {
         nodes: {
           image: {
-            create: vi.fn((attrs: Record<string, unknown>) =>
+            create: mock((attrs: Record<string, unknown>) =>
               createNode('image', [], { attrs, isInline: true, isLeaf: true }),
             ),
           },
@@ -2435,7 +2439,7 @@ function makeImageEditor(): Editor {
     },
     dispatch,
     commands: {
-      setImage: vi.fn(() => true),
+      setImage: mock(() => true),
     },
     schema: { marks: {} },
     options: {},
@@ -2479,14 +2483,14 @@ function makeMultiBlockImageEditor(): Editor {
   const doc = createNode('doc', [p1, p2], { isBlock: false });
   // doc.content.size = 10
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     steps: [{}],
@@ -2500,7 +2504,7 @@ function makeMultiBlockImageEditor(): Editor {
       schema: {
         nodes: {
           image: {
-            create: vi.fn((attrs: Record<string, unknown>) =>
+            create: mock((attrs: Record<string, unknown>) =>
               createNode('image', [], { attrs, isInline: true, isLeaf: true }),
             ),
           },
@@ -2509,8 +2513,8 @@ function makeMultiBlockImageEditor(): Editor {
     },
     dispatch,
     commands: {
-      setImage: vi.fn(() => true),
-      insertContentAt: vi.fn(() => true),
+      setImage: mock(() => true),
+      insertContentAt: mock(() => true),
     },
     schema: { marks: {} },
     options: {},
@@ -2562,13 +2566,13 @@ function makeHyperlinkEditor(
     node: (_depth: number) => paragraph,
   });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     steps: [{}],
@@ -2576,7 +2580,7 @@ function makeHyperlinkEditor(
   };
 
   const linkMarkType = {
-    create: vi.fn((attrs: Record<string, unknown>) => ({
+    create: mock((attrs: Record<string, unknown>) => ({
       type: { name: 'link' },
       attrs,
     })),
@@ -2602,19 +2606,19 @@ const RS_TARGET = { kind: 'block' as const, nodeType: 'sdt' as const, nodeId: 'r
 /** Create an SDT editor whose commands return false — triggers NO_OP failure. */
 function makeNoOpSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent = 'SDT content'): Editor {
   const editor = makeSdtEditor(overrideAttrs, textContent);
-  (editor.commands as any).updateStructuredContentById = vi.fn(() => false);
-  (editor.commands as any).deleteStructuredContentById = vi.fn(() => false);
-  (editor.commands as any).insertStructuredContentBlock = vi.fn(() => false);
-  (editor.commands as any).insertStructuredContentInline = vi.fn(() => false);
+  (editor.commands as any).updateStructuredContentById = mock(() => false);
+  (editor.commands as any).deleteStructuredContentById = mock(() => false);
+  (editor.commands as any).insertStructuredContentBlock = mock(() => false);
+  (editor.commands as any).insertStructuredContentInline = mock(() => false);
   return editor;
 }
 
 function makeNoOpSdtEditorWithRepeatingSectionItems(): Editor {
   const editor = makeSdtEditorWithRepeatingSectionItems();
-  (editor.commands as any).updateStructuredContentById = vi.fn(() => false);
-  (editor.commands as any).deleteStructuredContentById = vi.fn(() => false);
-  (editor.commands as any).insertStructuredContentBlock = vi.fn(() => false);
-  (editor.commands as any).insertStructuredContentInline = vi.fn(() => false);
+  (editor.commands as any).updateStructuredContentById = mock(() => false);
+  (editor.commands as any).deleteStructuredContentById = mock(() => false);
+  (editor.commands as any).insertStructuredContentBlock = mock(() => false);
+  (editor.commands as any).insertStructuredContentInline = mock(() => false);
   return editor;
 }
 
@@ -2643,20 +2647,20 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent 
   const doc = createNode('doc', [sdtNode], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc,
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
@@ -2667,11 +2671,11 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent 
         text: (t: string) => createNode('text', [], { text: t }),
         nodes: {
           paragraph: {
-            create: vi.fn(() => innerParagraph),
-            createAndFill: vi.fn(() => innerParagraph),
+            create: mock(() => innerParagraph),
+            createAndFill: mock(() => innerParagraph),
           },
           structuredContentBlock: {
-            create: vi.fn((attrs: unknown, content: unknown) =>
+            create: mock((attrs: unknown, content: unknown) =>
               createNode('structuredContentBlock', [], { attrs: attrs as Record<string, unknown>, isBlock: true }),
             ),
           },
@@ -2684,11 +2688,11 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent 
       text: (t: string) => createNode('text', [], { text: t }),
       nodes: {
         paragraph: {
-          create: vi.fn(() => innerParagraph),
-          createAndFill: vi.fn(() => innerParagraph),
+          create: mock(() => innerParagraph),
+          createAndFill: mock(() => innerParagraph),
         },
         structuredContentBlock: {
-          create: vi.fn((attrs: unknown, content: unknown) =>
+          create: mock((attrs: unknown, content: unknown) =>
             createNode('structuredContentBlock', [], { attrs: attrs as Record<string, unknown>, isBlock: true }),
           ),
         },
@@ -2697,10 +2701,10 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent 
     dispatch,
     view: { dispatch },
     commands: {
-      updateStructuredContentById: vi.fn(() => true),
-      deleteStructuredContentById: vi.fn(() => true),
-      insertStructuredContentBlock: vi.fn(() => true),
-      insertStructuredContentInline: vi.fn(() => true),
+      updateStructuredContentById: mock(() => true),
+      deleteStructuredContentById: mock(() => true),
+      insertStructuredContentBlock: mock(() => true),
+      insertStructuredContentInline: mock(() => true),
     },
   } as unknown as Editor;
 
@@ -2737,20 +2741,20 @@ function makeSdtEditorWithRepeatingSectionItems(): Editor {
   const doc = createNode('doc', [rsNode], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc,
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const itemParagraphNode = createNode('paragraph', [], { isBlock: true, inlineContent: true });
 
   return {
@@ -2761,9 +2765,9 @@ function makeSdtEditorWithRepeatingSectionItems(): Editor {
         marks: {},
         text: (t: string) => createNode('text', [], { text: t }),
         nodes: {
-          paragraph: { create: vi.fn(() => itemParagraphNode), createAndFill: vi.fn(() => itemParagraphNode) },
+          paragraph: { create: mock(() => itemParagraphNode), createAndFill: mock(() => itemParagraphNode) },
           structuredContentBlock: {
-            create: vi.fn((attrs: unknown, content: unknown) =>
+            create: mock((attrs: unknown, content: unknown) =>
               createNode('structuredContentBlock', [content as ProseMirrorNode].flat().filter(Boolean), {
                 attrs: attrs as Record<string, unknown>,
                 isBlock: true,
@@ -2778,9 +2782,9 @@ function makeSdtEditorWithRepeatingSectionItems(): Editor {
       marks: {},
       text: (t: string) => createNode('text', [], { text: t }),
       nodes: {
-        paragraph: { create: vi.fn(() => itemParagraphNode), createAndFill: vi.fn(() => itemParagraphNode) },
+        paragraph: { create: mock(() => itemParagraphNode), createAndFill: mock(() => itemParagraphNode) },
         structuredContentBlock: {
-          create: vi.fn((attrs: unknown, content: unknown) =>
+          create: mock((attrs: unknown, content: unknown) =>
             createNode('structuredContentBlock', [content as ProseMirrorNode].flat().filter(Boolean), {
               attrs: attrs as Record<string, unknown>,
               isBlock: true,
@@ -2792,10 +2796,10 @@ function makeSdtEditorWithRepeatingSectionItems(): Editor {
     dispatch,
     view: { dispatch },
     commands: {
-      updateStructuredContentById: vi.fn(() => true),
-      deleteStructuredContentById: vi.fn(() => true),
-      insertStructuredContentBlock: vi.fn(() => true),
-      insertStructuredContentInline: vi.fn(() => true),
+      updateStructuredContentById: mock(() => true),
+      deleteStructuredContentById: mock(() => true),
+      insertStructuredContentBlock: mock(() => true),
+      insertStructuredContentInline: mock(() => true),
     },
   } as unknown as Editor;
 }
@@ -2855,14 +2859,14 @@ function makeCaptionImageEditor(
     node: (d: number) => (d === 2 ? imgParagraph : doc),
   });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const docChanged = opts.docChanged ?? true;
   const tr = {
-    insert: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged,
     steps: docChanged ? [{}] : [],
@@ -2876,7 +2880,7 @@ function makeCaptionImageEditor(
       schema: {
         nodes: {
           paragraph: {
-            create: vi.fn((attrs: Record<string, unknown>, content: unknown) =>
+            create: mock((attrs: Record<string, unknown>, content: unknown) =>
               createNode('paragraph', content ? [content as ProseMirrorNode] : [], {
                 attrs,
                 isBlock: true,
@@ -2885,11 +2889,11 @@ function makeCaptionImageEditor(
             ),
           },
         },
-        text: vi.fn((t: string) => createNode('text', [], { text: t })),
+        text: mock((t: string) => createNode('text', [], { text: t })),
       },
     },
     dispatch,
-    commands: { setImage: vi.fn(() => true) },
+    commands: { setImage: mock(() => true) },
     schema: { marks: {} },
     options: {},
     on: () => {},
@@ -2919,16 +2923,16 @@ function makeRefEditor(
   });
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
-    setNodeMarkup: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
+    setNodeMarkup: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     steps: [{}],
@@ -2936,8 +2940,8 @@ function makeRefEditor(
   };
 
   const nodeType = (name: string) => ({
-    create: vi.fn((_attrs?: Record<string, unknown>, _content?: unknown) => createNode(name, [])),
-    createAndFill: vi.fn(() => createNode(name, [])),
+    create: mock((_attrs?: Record<string, unknown>, _content?: unknown) => createNode(name, [])),
+    createAndFill: mock(() => createNode(name, [])),
   });
 
   return {
@@ -2945,8 +2949,8 @@ function makeRefEditor(
     view: { dispatch },
     dispatch,
     commands: {
-      insertContent: vi.fn(() => true),
-      insertBookmark: vi.fn(() => true),
+      insertContent: mock(() => true),
+      insertBookmark: mock(() => true),
       ...overrides.commands,
     },
     schema: {
@@ -3024,8 +3028,8 @@ function makeRefEditor(
     },
     options: {},
     on: () => {},
-    safeEmit: vi.fn(() => []),
-    emit: vi.fn(),
+    safeEmit: mock(() => []),
+    emit: mock(),
   } as unknown as Editor;
 }
 
@@ -3051,7 +3055,7 @@ function mockResolvedNode(pos: number, nodeId: string, typeName: string, attrs: 
 
 /** Spies on executeDomainCommand to return an applied receipt, then calls `fn`, then restores. */
 function withAppliedReceipt<T>(fn: () => T): T {
-  const spy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(REF_APPLIED_RECEIPT as any);
+  const spy = spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(REF_APPLIED_RECEIPT as any);
   try {
     return fn();
   } finally {
@@ -3073,7 +3077,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      const spy = spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
       try {
         return withAppliedReceipt(() =>
           bookmarksInsertWrapper(
@@ -3141,7 +3145,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      const spy = spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
       try {
         return withAppliedReceipt(() =>
           footnotesInsertWrapper(
@@ -3229,7 +3233,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      const spy = spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
       try {
         return withAppliedReceipt(() =>
           crossRefsInsertWrapper(
@@ -3390,7 +3394,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      const spy = spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
       try {
         return withAppliedReceipt(() =>
           indexEntriesInsertWrapper(
@@ -3493,7 +3497,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveBlockCreatePosition').mockReturnValueOnce(10);
+      const spy = spyOn(adapterUtils, 'resolveBlockCreatePosition').mockReturnValueOnce(10);
       try {
         return withAppliedReceipt(() =>
           captionsInsertWrapper(
@@ -3565,7 +3569,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      const spy = spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
       try {
         return withAppliedReceipt(() =>
           fieldsInsertWrapper(
@@ -3639,7 +3643,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      const spy = spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
       try {
         return withAppliedReceipt(() =>
           citationsInsertWrapper(
@@ -3905,7 +3909,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
-      const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+      const spy = spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
       try {
         return withAppliedReceipt(() =>
           authorityEntriesInsertWrapper(
@@ -4192,11 +4196,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return createParagraphWrapper(editor, { at: { kind: 'documentEnd' }, text: 'X' }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt: vi.fn(() => false) } });
+      const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt: mock(() => false) } });
       return createParagraphWrapper(editor, { at: { kind: 'documentEnd' }, text: 'X' }, { changeMode: 'direct' });
     },
     applyCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt: vi.fn(() => true) } });
+      const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt: mock(() => true) } });
       return createParagraphWrapper(editor, { at: { kind: 'documentEnd' }, text: 'X' }, { changeMode: 'direct' });
     },
   },
@@ -4210,7 +4214,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt: vi.fn(() => false) } });
+      const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt: mock(() => false) } });
       return createHeadingWrapper(
         editor,
         { level: 1, at: { kind: 'documentEnd' }, text: 'X' },
@@ -4218,7 +4222,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     applyCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt: vi.fn(() => true) } });
+      const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt: mock(() => true) } });
       return createHeadingWrapper(
         editor,
         { level: 2, at: { kind: 'documentEnd' }, text: 'X' },
@@ -4722,7 +4726,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     failureCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'decimal' })], {
-        insertListItemAt: vi.fn(() => false),
+        insertListItemAt: mock(() => false),
       });
       return listsInsertWrapper(
         editor,
@@ -4749,14 +4753,14 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(false);
+      const hasDefinitionSpy = spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(false);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsIndentWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
       hasDefinitionSpy.mockRestore();
       return result;
     },
     applyCase: () => {
-      const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+      const hasDefinitionSpy = spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsIndentWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
       hasDefinitionSpy.mockRestore();
@@ -4777,7 +4781,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return listsOutdentWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
     },
     applyCase: () => {
-      const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+      const hasDefinitionSpy = spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 1, numberingType: 'decimal' })]);
       const result = listsOutdentWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
       hasDefinitionSpy.mockRestore();
@@ -4802,8 +4806,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const getNewListIdSpy = vi.spyOn(ListHelpers, 'getNewListId').mockReturnValue(99);
-      const generateSpy = vi.spyOn(ListHelpers, 'generateNewListDefinition').mockImplementation(() => {});
+      const getNewListIdSpy = spyOn(ListHelpers, 'getNewListId').mockReturnValue(99);
+      const generateSpy = spyOn(ListHelpers, 'generateNewListDefinition').mockImplementation(() => {});
       const editor = makeListEditor([makeListParagraph({ id: 'p-1' })]);
       const result = listsCreateWrapper(editor, {
         mode: 'empty',
@@ -4859,7 +4863,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     failureCase: () => {
       const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
-      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const execSpy = spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsDetachWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
       execSpy.mockRestore();
@@ -4880,7 +4884,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
+      const canJoinSpy = spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
         canJoin: false,
         reason: 'NO_ADJACENT_SEQUENCE',
       });
@@ -4893,11 +4897,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
     applyCase: () => {
-      const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
+      const canJoinSpy = spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
         canJoin: true,
         adjacentListId: '2',
       });
-      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+      const adjacentSpy = spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
         numId: 2,
         sequence: [
           {
@@ -4914,7 +4918,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
           } as any,
         ],
       });
-      const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
+      const sequenceSpy = spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsJoinWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -4936,7 +4940,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const firstInSeqSpy = spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsSeparateWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -4945,9 +4949,9 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
     applyCase: () => {
-      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+      const firstInSeqSpy = spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const seqSpy = spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
       const createNumSpy = vi
         .spyOn(ListHelpers, 'createNumDefinition')
         .mockReturnValue({ numId: 99, numDef: {} } as any);
@@ -4979,7 +4983,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+      const hasDefinitionSpy = spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsSetLevelWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -5001,7 +5005,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     failureCase: () => {
       // value: null with noop receipt → NO_OP
       const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
-      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const execSpy = spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsSetValueWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -5011,8 +5015,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
     applyCase: () => {
-      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
-      const overrideSpy = vi.spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
+      const firstInSeqSpy = spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const overrideSpy = spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsSetValueWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -5033,7 +5037,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const canContSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
+      const canContSpy = spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
         canContinue: false,
         reason: 'NO_PREVIOUS_LIST',
       });
@@ -5045,16 +5049,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
     applyCase: () => {
-      const canContSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
+      const canContSpy = spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
         canContinue: true,
         previousListId: '2',
       });
-      const prevSpy = vi.spyOn(listSequenceHelpers, 'findPreviousCompatibleSequence').mockReturnValue({
+      const prevSpy = spyOn(listSequenceHelpers, 'findPreviousCompatibleSequence').mockReturnValue({
         numId: 2,
         sequence: [],
       });
-      const seqSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
-      const removeSpy = vi.spyOn(ListHelpers, 'removeLvlOverride').mockImplementation(() => {});
+      const seqSpy = spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
+      const removeSpy = spyOn(ListHelpers, 'removeLvlOverride').mockImplementation(() => {});
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsContinuePreviousWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -5084,7 +5088,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const overrideSpy = vi.spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
+      const overrideSpy = spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsSetLevelRestartWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -5107,7 +5111,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     failureCase: () => {
       const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
-      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const execSpy = spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsConvertToTextWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
@@ -5143,7 +5147,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const applySpy = vi
         .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
@@ -5177,7 +5181,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const presetSpy = vi
         .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
         .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
@@ -5215,7 +5219,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const presetSpy = vi
         .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
         .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
@@ -5260,10 +5264,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberingFormat').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelNumberingFormat').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5297,10 +5301,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelBulletMarker').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelBulletMarker').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5333,10 +5337,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelPictureBulletId').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelPictureBulletId').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5369,10 +5373,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelAlignment').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelAlignment').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5406,10 +5410,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       } as any);
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelIndents').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelIndents').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5443,8 +5447,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const setSpy = vi
         .spyOn(LevelFormattingHelpers, 'setLevelTrailingCharacter')
@@ -5481,10 +5485,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelMarkerFont').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelMarkerFont').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5516,9 +5520,9 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const hasSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevelOverride').mockReturnValue(true);
+      const hasSpy = spyOn(LevelFormattingHelpers, 'hasLevelOverride').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const clearSpy = vi.spyOn(LevelFormattingHelpers, 'clearLevelOverride').mockImplementation((_ed: unknown) => {
+      const clearSpy = spyOn(LevelFormattingHelpers, 'clearLevelOverride').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
       });
       const result = listsClearLevelOverridesWrapper(editor, {
@@ -5551,7 +5555,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const applySpy = vi
         .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
@@ -5585,8 +5589,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
-      const overrideSpy = vi.spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
+      const firstInSeqSpy = spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const overrideSpy = spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
       registerSetValueDelegate((ed, input, options) => listsSetValueWrapper(ed, input, options));
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsRestartAtWrapper(editor, {
@@ -5616,10 +5620,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberStyle').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelNumberStyle').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5652,10 +5656,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelText').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelText').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5688,14 +5692,14 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const readSpy = vi
         .spyOn(LevelFormattingHelpers, 'readLevelProperties')
         .mockReturnValue({ numFmt: 'decimal' } as any);
-      const findSpy = vi.spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
+      const findSpy = spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelStart').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelStart').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return true;
       });
@@ -5730,10 +5734,10 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
     applyCase: () => {
-      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelLayout').mockImplementation((_ed: unknown) => {
+      const setSpy = spyOn(LevelFormattingHelpers, 'setLevelLayout').mockImplementation((_ed: unknown) => {
         injectNumberingChange(_ed);
         return { changed: true };
       });
@@ -5805,11 +5809,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
             ]
           : [],
       );
-      const editor = makeCommentsEditor([], { removeComment: vi.fn(() => false) });
+      const editor = makeCommentsEditor([], { removeComment: mock(() => false) });
       return createCommentsWrapper(editor).remove({ commentId: 'c1' });
     },
     applyCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1')], { removeComment: vi.fn(() => true) });
+      const editor = makeCommentsEditor([makeCommentRecord('c1')], { removeComment: mock(() => true) });
       return createCommentsWrapper(editor).remove({ commentId: 'c1' });
     },
   },
@@ -5821,12 +5825,12 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     failureCase: () => {
       setTrackChanges([makeTrackedChange('tc-1')]);
-      const { editor } = makeTextEditor('Hello', { commands: { acceptTrackedChangeById: vi.fn(() => false) } });
+      const { editor } = makeTextEditor('Hello', { commands: { acceptTrackedChangeById: mock(() => false) } });
       return trackChangesAcceptWrapper(editor, { id: requireCanonicalTrackChangeId(editor, 'tc-1') });
     },
     applyCase: () => {
       setTrackChanges([makeTrackedChange('tc-1')]);
-      const { editor } = makeTextEditor('Hello', { commands: { acceptTrackedChangeById: vi.fn(() => true) } });
+      const { editor } = makeTextEditor('Hello', { commands: { acceptTrackedChangeById: mock(() => true) } });
       return trackChangesAcceptWrapper(editor, { id: requireCanonicalTrackChangeId(editor, 'tc-1') });
     },
   },
@@ -5839,11 +5843,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return createTableWrapper(editor, { rows: 2, columns: 2 }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { insertTableAt: vi.fn(() => false) } });
+      const { editor } = makeTextEditor('Hello', { commands: { insertTableAt: mock(() => false) } });
       return createTableWrapper(editor, { rows: 2, columns: 2 }, { changeMode: 'direct' });
     },
     applyCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { insertTableAt: vi.fn(() => true) } });
+      const { editor } = makeTextEditor('Hello', { commands: { insertTableAt: mock(() => true) } });
       return createTableWrapper(editor, { rows: 2, columns: 2 }, { changeMode: 'direct' });
     },
   },
@@ -6716,7 +6720,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const editor = makeTocEditor({ insertTableOfContentsAt: vi.fn(() => false) });
+      const editor = makeTocEditor({ insertTableOfContentsAt: mock(() => false) });
       return createTableOfContentsWrapper(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -6762,7 +6766,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     failureCase: () => {
       // Update with no heading sources and command returns false
-      const editor = makeTocEditor({ replaceTableOfContentsContentById: vi.fn(() => false) });
+      const editor = makeTocEditor({ replaceTableOfContentsContentById: mock(() => false) });
       return tocUpdateWrapper(
         editor,
         { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
@@ -6788,7 +6792,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const editor = makeTocEditor({ deleteTableOfContentsById: vi.fn(() => false) });
+      const editor = makeTocEditor({ deleteTableOfContentsById: mock(() => false) });
       return tocRemoveWrapper(
         editor,
         { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
@@ -6814,7 +6818,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const editor = makeTocEditor({ insertTableOfContentsEntryAt: vi.fn(() => false) });
+      const editor = makeTocEditor({ insertTableOfContentsEntryAt: mock(() => false) });
       return tocMarkEntryWrapper(
         editor,
         { target: { kind: 'inline-insert', anchor: { nodeType: 'paragraph', nodeId: 'p-1' } }, text: 'Marked' },
@@ -6840,7 +6844,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
     failureCase: () => {
-      const editor = makeTocEditor({ deleteTableOfContentsEntryAt: vi.fn(() => false) });
+      const editor = makeTocEditor({ deleteTableOfContentsEntryAt: mock(() => false) });
       return tocUnmarkEntryWrapper(editor, { target: getFirstTocEntryAddress(editor) }, { changeMode: 'direct' });
     },
     applyCase: () => {
@@ -6964,8 +6968,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const doc = createNode('doc', [p], { isBlock: false });
       const editor = {
         state: { doc, tr: {}, schema: { nodes: {} } },
-        dispatch: vi.fn(),
-        commands: { setImage: vi.fn(() => true) },
+        dispatch: mock(),
+        commands: { setImage: mock(() => true) },
         schema: { marks: {} },
         options: {},
         on: () => {},
@@ -7003,8 +7007,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
       const doc = createNode('doc', [p], { isBlock: false });
       const tr = {
-        setNodeMarkup: vi.fn().mockReturnThis(),
-        setMeta: vi.fn().mockReturnThis(),
+        setNodeMarkup: mock().mockReturnThis(),
+        setMeta: mock().mockReturnThis(),
         mapping: { map: (pos: number) => pos },
         docChanged: true,
         steps: [{}],
@@ -7012,8 +7016,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       };
       const editor = {
         state: { doc, tr, schema: { nodes: {} } },
-        dispatch: vi.fn(),
-        commands: { setImage: vi.fn(() => true) },
+        dispatch: mock(),
+        commands: { setImage: mock(() => true) },
         schema: { marks: {} },
         options: {},
         on: () => {},
@@ -7186,7 +7190,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
     failureCase: () => {
-      const wrapSpy = vi.spyOn(hyperlinkMutationHelper, 'wrapWithLink').mockReturnValueOnce(false);
+      const wrapSpy = spyOn(hyperlinkMutationHelper, 'wrapWithLink').mockReturnValueOnce(false);
       try {
         return hyperlinksWrapWrapper(
           makeHyperlinkEditor({ withLink: false }),
@@ -7222,7 +7226,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
     failureCase: () => {
-      const insertSpy = vi.spyOn(hyperlinkMutationHelper, 'insertLinkedText').mockReturnValueOnce(false);
+      const insertSpy = spyOn(hyperlinkMutationHelper, 'insertLinkedText').mockReturnValueOnce(false);
       try {
         return hyperlinksInsertWrapper(
           makeHyperlinkEditor({ withLink: false }),
@@ -7285,7 +7289,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
     failureCase: () => {
-      const unwrapSpy = vi.spyOn(hyperlinkMutationHelper, 'unwrapLink').mockReturnValueOnce(false);
+      const unwrapSpy = spyOn(hyperlinkMutationHelper, 'unwrapLink').mockReturnValueOnce(false);
       try {
         return hyperlinksRemoveWrapper(
           makeHyperlinkEditor({ withLink: true }),
@@ -8461,7 +8465,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'blocks.delete': () => {
-    const deleteBlockNodeById = vi.fn(() => true);
+    const deleteBlockNodeById = mock(() => true);
     const editor = makeBlockDeleteEditor({ deleteBlockNodeById });
     const result = blocksDeleteWrapper(
       editor,
@@ -8473,7 +8477,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'blocks.deleteRange': () => {
     const editor = makeBlockRangeDeleteEditor();
-    const deleteCmd = editor.commands?.deleteBlockNodeById as ReturnType<typeof vi.fn>;
+    const deleteCmd = editor.commands?.deleteBlockNodeById as ReturnType<typeof mock>;
     const result = blocksDeleteRangeWrapper(
       editor,
       {
@@ -8536,7 +8540,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   ...formatInlineDryRunVectors,
   ...paragraphDryRunVectors,
   'create.paragraph': () => {
-    const insertParagraphAt = vi.fn(() => true);
+    const insertParagraphAt = mock(() => true);
     const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt } });
     const result = createParagraphWrapper(
       editor,
@@ -8547,7 +8551,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'create.heading': () => {
-    const insertHeadingAt = vi.fn(() => true);
+    const insertHeadingAt = mock(() => true);
     const { editor } = makeTextEditor('Hello', { commands: { insertHeadingAt } });
     const result = createHeadingWrapper(
       editor,
@@ -8559,7 +8563,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'create.sectionBreak': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = createSectionBreakAdapter(
       editor,
       { at: { kind: 'documentEnd' }, breakType: 'nextPage' },
@@ -8570,7 +8574,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setBreakType': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetBreakTypeAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, breakType: 'nextPage' },
@@ -8581,7 +8585,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setPageMargins': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetPageMarginsAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, top: 1.25 },
@@ -8592,7 +8596,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setHeaderFooterMargins': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetHeaderFooterMarginsAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, header: 0.75 },
@@ -8603,7 +8607,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setPageSetup': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetPageSetupAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, orientation: 'landscape' },
@@ -8614,7 +8618,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setColumns': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetColumnsAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, count: 2 },
@@ -8625,7 +8629,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setLineNumbering': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetLineNumberingAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, enabled: false },
@@ -8636,7 +8640,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setPageNumbering': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetPageNumberingAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, start: 2 },
@@ -8647,7 +8651,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setTitlePage': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetTitlePageAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, enabled: false },
@@ -8658,7 +8662,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setOddEvenHeadersFooters': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetOddEvenHeadersFootersAdapter(
       editor,
       { enabled: true },
@@ -8669,7 +8673,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setVerticalAlign': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetVerticalAlignAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, value: 'center' },
@@ -8680,7 +8684,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setSectionDirection': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetSectionDirectionAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, direction: 'rtl' },
@@ -8691,7 +8695,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setHeaderFooterRef': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetHeaderFooterRefAdapter(
       editor,
       {
@@ -8707,7 +8711,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.clearHeaderFooterRef': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsClearHeaderFooterRefAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' }, kind: 'header', variant: 'default' },
@@ -8725,7 +8729,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
       bodySectPr: bodyWithoutRefs,
     });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetLinkToPreviousAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-1' }, kind: 'header', variant: 'default', linked: false },
@@ -8736,7 +8740,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.setPageBorders': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsSetPageBordersAdapter(
       editor,
       {
@@ -8755,7 +8759,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'sections.clearPageBorders': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = sectionsClearPageBordersAdapter(
       editor,
       { target: { kind: 'section', sectionId: 'section-0' } },
@@ -8766,7 +8770,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'headerFooters.refs.set': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = headerFootersRefsSetAdapter(
       editor,
       {
@@ -8785,7 +8789,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'headerFooters.refs.clear': () => {
     const editor = makeSectionsEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = headerFootersRefsClearAdapter(
       editor,
       {
@@ -8810,7 +8814,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
       bodySectPr: bodyWithoutRefs,
     });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = headerFootersRefsSetLinkedToPreviousAdapter(
       editor,
       {
@@ -8843,7 +8847,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'lists.insert': () => {
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'decimal' })]);
-    const insertListItemAt = editor.commands!.insertListItemAt as ReturnType<typeof vi.fn>;
+    const insertListItemAt = editor.commands!.insertListItemAt as ReturnType<typeof mock>;
     const result = listsInsertWrapper(
       editor,
       { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, position: 'after', text: 'X' },
@@ -8853,7 +8857,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.indent': () => {
-    const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    const hasDefinitionSpy = spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsIndentWrapper(
       editor,
@@ -8864,7 +8868,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.outdent': () => {
-    const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    const hasDefinitionSpy = spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 1, numberingType: 'decimal' })]);
     const result = listsOutdentWrapper(
       editor,
@@ -8905,15 +8909,15 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
   },
   'lists.join': () => {
-    const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
+    const canJoinSpy = spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
       canJoin: true,
       adjacentListId: '2',
     });
-    const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+    const adjacentSpy = spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
       numId: 2,
       sequence: [],
     });
-    const seqSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
+    const seqSpy = spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsJoinWrapper(
       editor,
@@ -8926,9 +8930,9 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.separate': () => {
-    const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+    const firstInSeqSpy = spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const seqSpy = spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSeparateWrapper(
       editor,
@@ -8941,7 +8945,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevel': () => {
-    const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    const hasDefinitionSpy = spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelWrapper(
       editor,
@@ -8960,11 +8964,11 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
   },
   'lists.continuePrevious': () => {
-    const canContSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
+    const canContSpy = spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
       canContinue: true,
       previousListId: '2',
     });
-    const prevSpy = vi.spyOn(listSequenceHelpers, 'findPreviousCompatibleSequence').mockReturnValue({
+    const prevSpy = spyOn(listSequenceHelpers, 'findPreviousCompatibleSequence').mockReturnValue({
       numId: 2,
       sequence: [],
     });
@@ -9010,7 +9014,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // SD-1973 list formatting — dryRun vectors
   // -------------------------------------------------------------------------
   'lists.applyTemplate': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsApplyTemplateWrapper(
       editor,
@@ -9024,7 +9028,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.applyPreset': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
     const presetSpy = vi
       .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
       .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
@@ -9039,7 +9043,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setType': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
     const presetSpy = vi
       .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
       .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
@@ -9054,8 +9058,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelNumbering': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelNumberingWrapper(
       editor,
@@ -9072,8 +9076,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelBullet': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelBulletWrapper(
       editor,
@@ -9085,8 +9089,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelPictureBullet': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelPictureBulletWrapper(
       editor,
@@ -9098,8 +9102,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelAlignment': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelAlignmentWrapper(
       editor,
@@ -9111,8 +9115,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelIndents': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelIndentsWrapper(
       editor,
@@ -9124,8 +9128,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelTrailingCharacter': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelTrailingCharacterWrapper(
       editor,
@@ -9137,8 +9141,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelMarkerFont': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelMarkerFontWrapper(
       editor,
@@ -9159,7 +9163,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   // SD-2025 user-centric list formatting — dryRun vectors
   'lists.applyStyle': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsApplyStyleWrapper(
       editor,
@@ -9182,8 +9186,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
   },
   'lists.setLevelNumberStyle': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelNumberStyleWrapper(
       editor,
@@ -9195,8 +9199,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelText': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelTextWrapper(
       editor,
@@ -9208,12 +9212,12 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelStart': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const readSpy = vi
       .spyOn(LevelFormattingHelpers, 'readLevelProperties')
       .mockReturnValue({ numFmt: 'decimal' } as any);
-    const findSpy = vi.spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
+    const findSpy = spyOn(LevelFormattingHelpers, 'findLevelElement').mockReturnValue({} as any);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelStartWrapper(
       editor,
@@ -9227,8 +9231,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'lists.setLevelLayout': () => {
-    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
-    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const abstractSpy = spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSetLevelLayoutWrapper(
       editor,
@@ -9244,10 +9248,10 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // Table operations — dryRun vectors
   // -------------------------------------------------------------------------
   'create.table': () => {
-    const insertTableAt = vi.fn(() => true);
+    const insertTableAt = mock(() => true);
     const { editor } = makeTextEditor('Hello', {
       commands: { insertTableAt },
-      can: vi.fn(() => ({ insertTableAt: vi.fn(() => true) })),
+      can: mock(() => ({ insertTableAt: mock(() => true) })),
     } as any);
     const result = createTableWrapper(editor, { rows: 2, columns: 2 }, { changeMode: 'direct', dryRun: true });
     expect(insertTableAt).not.toHaveBeenCalled();
@@ -9255,21 +9259,21 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.delete': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesDeleteWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'tables.clearContents': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesClearContentsWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'tables.move': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesMoveWrapper(
       editor,
       { nodeId: 'table-1', destination: { kind: 'documentEnd' } },
@@ -9280,7 +9284,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setLayout': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetLayoutWrapper(
       editor,
       { nodeId: 'table-1', alignment: 'center' },
@@ -9291,7 +9295,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setAltText': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetAltTextWrapper(
       editor,
       { nodeId: 'table-1', title: 'T' },
@@ -9302,7 +9306,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.insertRow': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesInsertRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0, position: 'below' } as any, {
       changeMode: 'direct',
       dryRun: true,
@@ -9312,7 +9316,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.deleteRow': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesDeleteRowWrapper(editor, { nodeId: 'table-1', rowIndex: 0 } as any, {
       changeMode: 'direct',
       dryRun: true,
@@ -9322,7 +9326,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setRowHeight': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetRowHeightWrapper(
       editor,
       { nodeId: 'table-1', rowIndex: 0, heightPt: 20, rule: 'atLeast' } as any,
@@ -9333,14 +9337,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.distributeRows': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesDistributeRowsWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'tables.setRowOptions': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetRowOptionsWrapper(
       editor,
       { nodeId: 'table-1', rowIndex: 0, allowBreakAcrossPages: true } as any,
@@ -9351,7 +9355,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.insertColumn': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesInsertColumnWrapper(
       editor,
       { nodeId: 'table-1', columnIndex: 0, position: 'right' },
@@ -9362,7 +9366,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.deleteColumn': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesDeleteColumnWrapper(
       editor,
       { nodeId: 'table-1', columnIndex: 0 },
@@ -9373,7 +9377,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setColumnWidth': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetColumnWidthWrapper(
       editor,
       { nodeId: 'table-1', columnIndex: 0, widthPt: 100 },
@@ -9384,7 +9388,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.distributeColumns': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesDistributeColumnsWrapper(editor, { nodeId: 'table-1' } as any, {
       changeMode: 'direct',
       dryRun: true,
@@ -9394,7 +9398,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.insertCell': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesInsertCellWrapper(
       editor,
       { nodeId: 'cell-1', mode: 'shiftRight' },
@@ -9405,7 +9409,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.deleteCell': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesDeleteCellWrapper(
       editor,
       { nodeId: 'cell-1', mode: 'shiftLeft' },
@@ -9416,7 +9420,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.mergeCells': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesMergeCellsWrapper(
       editor,
       { nodeId: 'table-1', start: { rowIndex: 0, columnIndex: 0 }, end: { rowIndex: 1, columnIndex: 1 } },
@@ -9427,14 +9431,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.unmergeCells': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesUnmergeCellsWrapper(editor, { nodeId: 'cell-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'tables.splitCell': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSplitCellWrapper(
       editor,
       { nodeId: 'cell-1', rows: 2, columns: 2 },
@@ -9445,7 +9449,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setCellProperties': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetCellPropertiesWrapper(
       editor,
       { nodeId: 'cell-1', verticalAlign: 'center' },
@@ -9456,7 +9460,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.convertFromText': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesConvertFromTextWrapper(editor, { nodeId: 'p1' } as any, {
       changeMode: 'direct',
       dryRun: true,
@@ -9466,7 +9470,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.split': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSplitWrapper(
       editor,
       { nodeId: 'table-1', rowIndex: 1 },
@@ -9477,14 +9481,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.convertToText': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesConvertToTextWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'tables.sort': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSortWrapper(
       editor,
       { nodeId: 'table-1', keys: [{ columnIndex: 0, direction: 'ascending', type: 'text' }] },
@@ -9496,7 +9500,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // --- Batch 6: Style operations ---
   'tables.setStyle': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetStyleWrapper(
       editor,
       { nodeId: 'table-1', styleId: 'TableGrid' },
@@ -9507,14 +9511,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.clearStyle': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesClearStyleWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'tables.setStyleOption': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetStyleOptionWrapper(
       editor,
       { nodeId: 'table-1', flag: 'headerRow', enabled: true },
@@ -9526,7 +9530,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // --- Batch 7: Border + shading operations ---
   'tables.setBorder': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetBorderWrapper(
       editor,
       { nodeId: 'table-1', edge: 'top', lineStyle: 'single', lineWeightPt: 0.5, color: '000000' },
@@ -9537,7 +9541,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.clearBorder': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesClearBorderWrapper(
       editor,
       { nodeId: 'table-1', edge: 'top' },
@@ -9548,7 +9552,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.applyBorderPreset': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesApplyBorderPresetWrapper(
       editor,
       { nodeId: 'table-1', preset: 'box' },
@@ -9559,7 +9563,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setShading': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetShadingWrapper(
       editor,
       { nodeId: 'table-1', color: 'FF0000' },
@@ -9570,7 +9574,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.clearShading': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesClearShadingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
@@ -9578,7 +9582,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // --- Batch 8: Padding + spacing operations ---
   'tables.setTablePadding': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetTablePaddingWrapper(
       editor,
       { nodeId: 'table-1', topPt: 5, rightPt: 5, bottomPt: 5, leftPt: 5 },
@@ -9589,7 +9593,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setCellPadding': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetCellPaddingWrapper(
       editor,
       { nodeId: 'cell-1', topPt: 5, rightPt: 5, bottomPt: 5, leftPt: 5 } as any,
@@ -9600,7 +9604,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setCellSpacing': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetCellSpacingWrapper(
       editor,
       { nodeId: 'table-1', spacingPt: 2 },
@@ -9611,14 +9615,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.clearCellSpacing': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'tables.applyStyle': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesApplyStyleWrapper(
       editor,
       { nodeId: 'table-1', styleId: 'TableGrid' },
@@ -9629,7 +9633,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setBorders': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetBordersWrapper(
       editor,
       {
@@ -9645,7 +9649,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'tables.setTableOptions': () => {
     const editor = makeTableEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetTableOptionsWrapper(
       editor,
       { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
@@ -9662,7 +9666,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       docDefaults: {},
       latentStyles: {},
     };
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesSetDefaultStyleAdapter(
       editor,
       { styleId: 'TableGrid' },
@@ -9689,7 +9693,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
         elements: [],
       });
     }
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
@@ -9699,7 +9703,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // TOC operations — dryRun vectors
   // -------------------------------------------------------------------------
   'create.tableOfContents': () => {
-    const insertTableOfContentsAt = vi.fn(() => true);
+    const insertTableOfContentsAt = mock(() => true);
     const editor = makeTocEditor({ insertTableOfContentsAt });
     const result = createTableOfContentsWrapper(
       editor,
@@ -9710,7 +9714,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'toc.configure': () => {
-    const setInstr = vi.fn(() => true);
+    const setInstr = mock(() => true);
     const editor = makeTocEditor({ setTableOfContentsInstructionById: setInstr });
     const result = tocConfigureWrapper(
       editor,
@@ -9721,7 +9725,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'toc.update': () => {
-    const replaceContent = vi.fn(() => true);
+    const replaceContent = mock(() => true);
     const editor = makeTocEditor({ replaceTableOfContentsContentById: replaceContent });
     const result = tocUpdateWrapper(
       editor,
@@ -9732,7 +9736,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'toc.remove': () => {
-    const deleteById = vi.fn(() => true);
+    const deleteById = mock(() => true);
     const editor = makeTocEditor({ deleteTableOfContentsById: deleteById });
     const result = tocRemoveWrapper(
       editor,
@@ -9743,7 +9747,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'toc.markEntry': () => {
-    const insertEntry = vi.fn(() => true);
+    const insertEntry = mock(() => true);
     const editor = makeTocEditor({ insertTableOfContentsEntryAt: insertEntry });
     const result = tocMarkEntryWrapper(
       editor,
@@ -9754,7 +9758,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'toc.unmarkEntry': () => {
-    const deleteEntry = vi.fn(() => true);
+    const deleteEntry = mock(() => true);
     const editor = makeTocEditor({ deleteTableOfContentsEntryAt: deleteEntry });
     const result = tocUnmarkEntryWrapper(
       editor,
@@ -9765,7 +9769,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     return result;
   },
   'toc.editEntry': () => {
-    const updateEntry = vi.fn(() => true);
+    const updateEntry = mock(() => true);
     const editor = makeTocEditor({ updateTableOfContentsEntryAt: updateEntry });
     const result = tocEditEntryWrapper(
       editor,
@@ -9780,7 +9784,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // Image operations — dryRun vectors
   // -------------------------------------------------------------------------
   'create.image': () => {
-    const setImage = vi.fn(() => true);
+    const setImage = mock(() => true);
     const { editor } = makeTextEditor('Hello', { commands: { setImage } });
     const result = createImageWrapper(
       editor,
@@ -9792,14 +9796,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.delete': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesDeleteWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'images.move': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesMoveWrapper(
       editor,
       { imageId: 'img-1', to: { kind: 'documentEnd' } },
@@ -9810,7 +9814,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.convertToInline': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesConvertToInlineWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
@@ -9837,10 +9841,10 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       inlineContent: true,
     });
     const doc = createNode('doc', [paragraph], { isBlock: false });
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const tr = {
-      setNodeMarkup: vi.fn().mockReturnThis(),
-      setMeta: vi.fn().mockReturnThis(),
+      setNodeMarkup: mock().mockReturnThis(),
+      setMeta: mock().mockReturnThis(),
       mapping: { map: (pos: number) => pos },
       docChanged: true,
       steps: [{}],
@@ -9849,7 +9853,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const editor = {
       state: { doc, tr, schema: { nodes: {} } },
       dispatch,
-      commands: { setImage: vi.fn(() => true) },
+      commands: { setImage: mock(() => true) },
       schema: { marks: {} },
       options: {},
       on: () => {},
@@ -9864,7 +9868,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setSize': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetSizeWrapper(
       editor,
       { imageId: 'img-1', size: { width: 220, height: 140 } },
@@ -9875,7 +9879,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setWrapType': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetWrapTypeWrapper(
       editor,
       { imageId: 'img-1', type: 'Tight' },
@@ -9886,7 +9890,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setWrapSide': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetWrapSideWrapper(
       editor,
       { imageId: 'img-1', side: 'left' },
@@ -9897,7 +9901,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setWrapDistances': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetWrapDistancesWrapper(
       editor,
       { imageId: 'img-1', distances: { distTop: 100, distBottom: 100 } },
@@ -9908,7 +9912,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setPosition': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetPositionWrapper(
       editor,
       { imageId: 'img-1', position: { hRelativeFrom: 'page' } },
@@ -9919,7 +9923,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setAnchorOptions': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetAnchorOptionsWrapper(
       editor,
       { imageId: 'img-1', options: { behindDoc: true } },
@@ -9930,7 +9934,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setZOrder': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetZOrderWrapper(
       editor,
       { imageId: 'img-1', zOrder: { relativeHeight: 999999999 } },
@@ -9945,7 +9949,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // -------------------------------------------------------------------------
   'hyperlinks.wrap': () => {
     const editor = makeHyperlinkEditor({ withLink: false });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = hyperlinksWrapWrapper(
       editor,
       {
@@ -9959,7 +9963,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'hyperlinks.insert': () => {
     const editor = makeHyperlinkEditor({ withLink: false });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = hyperlinksInsertWrapper(
       editor,
       {
@@ -9974,7 +9978,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'hyperlinks.patch': () => {
     const editor = makeHyperlinkEditor({ withLink: true, linkAttrs: { href: 'https://example.com' } });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = hyperlinksPatchWrapper(
       editor,
       {
@@ -9988,7 +9992,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'hyperlinks.remove': () => {
     const editor = makeHyperlinkEditor({ withLink: true });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = hyperlinksRemoveWrapper(
       editor,
       { target: makeHyperlinkTarget('p1', 0, 5) },
@@ -10243,7 +10247,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   // -------------------------------------------------------------------------
   'images.scale': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesScaleWrapper(
       editor,
       { imageId: 'img-1', factor: 1.5 },
@@ -10254,7 +10258,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setLockAspectRatio': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetLockAspectRatioWrapper(
       editor,
       { imageId: 'img-1', locked: false },
@@ -10265,14 +10269,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.rotate': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesRotateWrapper(editor, { imageId: 'img-1', angle: 90 }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'images.flip': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesFlipWrapper(
       editor,
       { imageId: 'img-1', horizontal: true },
@@ -10283,7 +10287,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.crop': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesCropWrapper(
       editor,
       { imageId: 'img-1', crop: { left: 10, top: 5, right: 10, bottom: 5 } },
@@ -10300,7 +10304,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
         rawSrcRect: { l: '10000', t: '5000', r: '10000', b: '5000' },
       },
     });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesResetCropWrapper(
       editor,
       { imageId: 'img-cropped-dr' },
@@ -10311,7 +10315,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.replaceSource': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesReplaceSourceWrapper(
       editor,
       { imageId: 'img-1', src: 'data:image/png;base64,abc' },
@@ -10322,7 +10326,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setAltText': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetAltTextWrapper(
       editor,
       { imageId: 'img-1', description: 'New alt text' },
@@ -10333,7 +10337,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setDecorative': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetDecorativeWrapper(
       editor,
       { imageId: 'img-1', decorative: true },
@@ -10344,7 +10348,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setName': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetNameWrapper(
       editor,
       { imageId: 'img-1', name: 'NewName' },
@@ -10355,7 +10359,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.setHyperlink': () => {
     const editor = makeImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesSetHyperlinkWrapper(
       editor,
       { imageId: 'img-1', url: 'https://example.com' },
@@ -10366,7 +10370,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.insertCaption': () => {
     const editor = makeCaptionImageEditor();
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesInsertCaptionWrapper(
       editor,
       { imageId: 'img-1', text: 'Caption' },
@@ -10377,7 +10381,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.updateCaption': () => {
     const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesUpdateCaptionWrapper(
       editor,
       { imageId: 'img-cap', text: 'New caption' },
@@ -10388,7 +10392,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   'images.removeCaption': () => {
     const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
-    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof mock> }).dispatch;
     const result = imagesRemoveCaptionWrapper(editor, { imageId: 'img-cap' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
@@ -10408,7 +10412,6 @@ afterAll(() => {
 });
 
 const resetMocks = () => {
-  vi.restoreAllMocks();
   mockedDeps.resolveCommentAnchorsById.mockReset();
   mockedDeps.resolveCommentAnchorsById.mockImplementation(() => []);
   mockedDeps.listCommentAnchors.mockReset();
@@ -10577,10 +10580,10 @@ describe('document-api adapter conformance', () => {
     expect(tableDryRun.success).toBe(true);
     expect(getRevision(tableEditor)).toBe(tableBefore);
 
-    const insertTableAt = vi.fn(() => true);
+    const insertTableAt = mock(() => true);
     const { editor: createEditor } = makeTextEditor('Hello', {
       commands: { insertTableAt },
-      can: vi.fn(() => ({ insertTableAt: vi.fn(() => true) })),
+      can: mock(() => ({ insertTableAt: mock(() => true) })),
     } as any);
     initRevision(createEditor);
     const createBefore = getRevision(createEditor);
@@ -10627,10 +10630,10 @@ describe('document-api adapter conformance', () => {
     const noTrackedEditor = makeTextEditor('Hello', {
       commands: {
         insertTrackedChange: undefined,
-        acceptTrackedChangeById: vi.fn(() => true),
-        rejectTrackedChangeById: vi.fn(() => true),
-        acceptAllTrackedChanges: vi.fn(() => true),
-        rejectAllTrackedChanges: vi.fn(() => true),
+        acceptTrackedChangeById: mock(() => true),
+        rejectTrackedChangeById: mock(() => true),
+        acceptAllTrackedChanges: mock(() => true),
+        rejectAllTrackedChanges: mock(() => true),
       },
     }).editor;
     const noTrackedCapabilities = getDocumentApiCapabilities(noTrackedEditor);
@@ -10792,7 +10795,7 @@ describe('document-api adapter conformance', () => {
   it('verifies tracked-eligible table ops accept changeMode=tracked without throwing CAPABILITY_UNAVAILABLE', () => {
     // These ops support tracked mode at the contract level and have ensureTrackedCapability in the adapter.
     // The tracked path requires insertTrackedChange command and a user on the editor.
-    const editor = makeTableEditor({ insertTrackedChange: vi.fn(() => true) });
+    const editor = makeTableEditor({ insertTrackedChange: mock(() => true) });
     (editor as any).options = { user: { name: 'Agent', email: 'agent@test.com' } };
     initRevision(editor);
 
@@ -11199,14 +11202,14 @@ describe('document-api adapter conformance', () => {
       const doc = createNode('doc', [p1, p2], { isBlock: false });
       // doc.content.size = 10
 
-      const dispatch = vi.fn();
+      const dispatch = mock();
       const tr = {
-        insertText: vi.fn().mockReturnThis(),
-        delete: vi.fn().mockReturnThis(),
-        insert: vi.fn().mockReturnThis(),
-        setNodeMarkup: vi.fn().mockReturnThis(),
-        replaceWith: vi.fn().mockReturnThis(),
-        setMeta: vi.fn().mockReturnThis(),
+        insertText: mock().mockReturnThis(),
+        delete: mock().mockReturnThis(),
+        insert: mock().mockReturnThis(),
+        setNodeMarkup: mock().mockReturnThis(),
+        replaceWith: mock().mockReturnThis(),
+        setMeta: mock().mockReturnThis(),
         mapping: { map: (pos: number) => pos },
         docChanged: true,
         steps: [{}],
@@ -11220,7 +11223,7 @@ describe('document-api adapter conformance', () => {
           schema: {
             nodes: {
               image: {
-                create: vi.fn((attrs: Record<string, unknown>) =>
+                create: mock((attrs: Record<string, unknown>) =>
                   createNode('image', [], { attrs, isInline: true, isLeaf: true }),
                 ),
               },
@@ -11229,8 +11232,8 @@ describe('document-api adapter conformance', () => {
         },
         dispatch,
         commands: {
-          setImage: vi.fn(() => true),
-          insertContentAt: vi.fn(() => true),
+          setImage: mock(() => true),
+          insertContentAt: mock(() => true),
         },
         schema: { marks: {} },
         options: {},
@@ -11343,7 +11346,7 @@ describe('document-api adapter conformance', () => {
         { changeMode: 'direct' },
       );
       expect(result.success).toBe(true);
-      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof mock> } }).tr;
       expect(tr.insert).toHaveBeenCalledWith(0, expect.anything());
     });
 
@@ -11358,7 +11361,7 @@ describe('document-api adapter conformance', () => {
         { changeMode: 'direct' },
       );
       expect(result.success).toBe(true);
-      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof mock> } }).tr;
       // p-text starts at pos 3, mapping.map(3) → 3
       expect(tr.insert).toHaveBeenCalledWith(3, expect.anything());
     });
@@ -11371,7 +11374,7 @@ describe('document-api adapter conformance', () => {
         { changeMode: 'direct' },
       );
       expect(result.success).toBe(true);
-      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof mock> } }).tr;
       // p-text ends at pos 10, mapping.map(10) → 10
       expect(tr.insert).toHaveBeenCalledWith(10, expect.anything());
     });

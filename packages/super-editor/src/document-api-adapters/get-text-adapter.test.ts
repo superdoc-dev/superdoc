@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import type { Editor } from '../core/Editor.js';
 import { getTextAdapter } from './get-text-adapter.js';
 
@@ -26,7 +26,7 @@ describe('getTextAdapter', () => {
   });
 
   it('preserves block separators when reading full document text', () => {
-    const textBetween = vi.fn(() => 'Hello\nworld');
+    const textBetween = mock(() => 'Hello\nworld');
     const editor = {
       state: {
         doc: {

@@ -1,5 +1,5 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { BlocksDeleteInput, MutationOptions } from '@superdoc/document-api';
 import { blocksDeleteWrapper, blocksDeleteRangeWrapper, blocksListWrapper } from './blocks-wrappers.js';
@@ -88,17 +88,17 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
 // ---------------------------------------------------------------------------
 
 type BlockDeleteEditorOptions = {
-  /** Pass a mock fn, or `null` to simulate a missing command. Defaults to `vi.fn(() => true)`. */
-  deleteBlockNodeById?: ReturnType<typeof vi.fn> | null;
+  /** Pass a mock fn, or `null` to simulate a missing command. Defaults to `mock(() => true)`. */
+  deleteBlockNodeById?: ReturnType<typeof mock> | null;
   /** Pass a mock fn, or `null` to simulate a missing helper. Defaults to an auto-matching mock. */
-  getBlockNodeById?: ReturnType<typeof vi.fn> | null;
+  getBlockNodeById?: ReturnType<typeof mock> | null;
   children?: ProseMirrorNode[];
 };
 
 function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
-  deleteBlockNodeById: ReturnType<typeof vi.fn> | undefined;
+  dispatch: ReturnType<typeof mock>;
+  deleteBlockNodeById: ReturnType<typeof mock> | undefined;
 } {
   const paragraph = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
     attrs: { paraId: 'p1', sdBlockId: 'p1' },
@@ -108,21 +108,21 @@ function makeBlockDeleteEditor(options: BlockDeleteEditorOptions = {}): {
   const children = options.children ?? [paragraph];
   const doc = createNode('doc', children, { isBlock: false });
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
   const tr = {
-    setMeta: vi.fn().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: false,
   };
 
   // null = explicitly missing; undefined = use default mock
   const deleteBlockNodeById =
-    options.deleteBlockNodeById === null ? undefined : (options.deleteBlockNodeById ?? vi.fn(() => true));
+    options.deleteBlockNodeById === null ? undefined : (options.deleteBlockNodeById ?? mock(() => true));
   const getBlockNodeById =
     options.getBlockNodeById === null
       ? undefined
       : (options.getBlockNodeById ??
-        vi.fn((id: string) => {
+        mock((id: string) => {
           const matches = children.filter((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
           return matches.map((node, i) => ({ node, pos: i }));
         }));
@@ -156,9 +156,7 @@ function makeInput(nodeType: string, nodeId: string): BlocksDeleteInput {
 // ---------------------------------------------------------------------------
 
 describe('blocksDeleteWrapper', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
+  beforeEach(() => {});
 
   // -------------------------------------------------------------------------
   // Successful deletion cases
@@ -367,7 +365,7 @@ describe('blocksDeleteWrapper', () => {
 
   describe('dry run', () => {
     it('returns success without executing the command', () => {
-      const deleteBlockNodeById = vi.fn(() => true);
+      const deleteBlockNodeById = mock(() => true);
       const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById });
       const result = blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), {
         changeMode: 'direct',
@@ -432,7 +430,7 @@ describe('blocksDeleteWrapper', () => {
 
   describe('cache invalidation', () => {
     it('calls deleteBlockNodeById with the resolved sdBlockId', () => {
-      const deleteBlockNodeById = vi.fn(() => true);
+      const deleteBlockNodeById = mock(() => true);
       const { editor } = makeBlockDeleteEditor({ deleteBlockNodeById });
       blocksDeleteWrapper(editor, makeInput('paragraph', 'p1'), { changeMode: 'direct' });
       expect(deleteBlockNodeById).toHaveBeenCalledWith('p1');
@@ -457,9 +455,7 @@ describe('blocksDeleteWrapper', () => {
 // ---------------------------------------------------------------------------
 
 describe('blocksListWrapper', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
+  beforeEach(() => {});
 
   it('emits canonical blockId (not sdBlockId) for non-paragraph block types', () => {
     // SDT nodes: resolveBlockNodeId prefers blockId over sdBlockId.
@@ -547,18 +543,16 @@ describe('blocksListWrapper', () => {
 // ---------------------------------------------------------------------------
 
 describe('blocksDeleteRangeWrapper', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
+  beforeEach(() => {});
 
   function makeRangeDeleteEditor(children: ProseMirrorNode[]) {
     const doc = createNode('doc', children, { isBlock: false });
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const tr = {
-      setMeta: vi.fn().mockReturnThis(),
+      setMeta: mock().mockReturnThis(),
       mapping: { map: (pos: number) => pos },
       docChanged: false,
-      delete: vi.fn().mockImplementation(function (this: { docChanged: boolean }) {
+      delete: mock().mockImplementation(function (this: { docChanged: boolean }) {
         this.docChanged = true;
       }),
     };
@@ -566,11 +560,11 @@ describe('blocksDeleteRangeWrapper', () => {
       state: { doc, tr },
       dispatch,
       commands: {
-        deleteBlockNodeById: vi.fn(() => true),
+        deleteBlockNodeById: mock(() => true),
       },
       helpers: {
         blockNode: {
-          getBlockNodeById: vi.fn((id: string) => {
+          getBlockNodeById: mock((id: string) => {
             const match = children.find((c) => c.attrs?.sdBlockId === id || c.attrs?.paraId === id);
             return match ? [{ node: match, pos: 0 }] : [];
           }),

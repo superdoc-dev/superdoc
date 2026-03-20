@@ -1,4 +1,4 @@
-import { expect, it, describe, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { getExportedResult } from './export-helpers/index';
 
 describe('RectNodeExporter', async () => {

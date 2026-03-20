@@ -1,16 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Ruler from './Ruler.vue';
 
 const createMockEditor = (overrides = {}) => ({
   options: { mode: 'docx' },
-  getPageStyles: vi.fn(() => ({
+  getPageStyles: mock(() => ({
     pageSize: { width: 8.5, height: 11 },
     pageMargins: { left: 1, right: 1, top: 1, bottom: 1 },
   })),
-  on: vi.fn(),
-  off: vi.fn(),
+  on: mock(),
+  off: mock(),
   ...overrides,
 });
 
@@ -20,11 +20,11 @@ const createMockEditor = (overrides = {}) => ({
 const createEmitter = () => {
   const listeners = new Map<string, Set<(payload?: unknown) => void>>();
   return {
-    on: vi.fn((event: string, handler: (payload?: unknown) => void) => {
+    on: mock((event: string, handler: (payload?: unknown) => void) => {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event)!.add(handler);
     }),
-    off: vi.fn((event: string, handler: (payload?: unknown) => void) => {
+    off: mock((event: string, handler: (payload?: unknown) => void) => {
       listeners.get(event)?.delete(handler);
     }),
     emit: (event: string, payload?: unknown) => {
@@ -431,9 +431,9 @@ describe('Ruler zoom functionality', () => {
     it('should detect editor that IS a PresentationEditor', () => {
       const presentationEditor = {
         zoom: 1.5,
-        setZoom: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
+        setZoom: mock(),
+        on: mock(),
+        off: mock(),
       };
 
       const result = getPresentationEditor(presentationEditor);
@@ -444,9 +444,9 @@ describe('Ruler zoom functionality', () => {
     it('should find presentationEditor reference on inner editor', () => {
       const presentationEditor = {
         zoom: 1.5,
-        setZoom: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
+        setZoom: mock(),
+        on: mock(),
+        off: mock(),
       };
 
       const innerEditor = {
@@ -474,8 +474,8 @@ describe('Ruler zoom functionality', () => {
       // If the editor itself has zoom/setZoom, treat it as PresentationEditor
       const directEditor = {
         zoom: 2,
-        setZoom: vi.fn(),
-        presentationEditor: { zoom: 1, setZoom: vi.fn() }, // This should be ignored
+        setZoom: mock(),
+        presentationEditor: { zoom: 1, setZoom: mock() }, // This should be ignored
       };
 
       const result = getPresentationEditor(directEditor);
@@ -490,12 +490,12 @@ describe('Ruler zoom functionality', () => {
       const emitter = createEmitter();
       const presentationEditor = {
         zoom: 1,
-        setZoom: vi.fn(),
+        setZoom: mock(),
         on: emitter.on,
         off: emitter.off,
       };
 
-      const zoomChangeHandler = vi.fn();
+      const zoomChangeHandler = mock();
 
       // Simulate component setup
       presentationEditor.on('zoomChange', zoomChangeHandler);
@@ -523,12 +523,12 @@ describe('Ruler zoom functionality', () => {
       const emitter = createEmitter();
       const presentationEditor = {
         zoom: 1,
-        setZoom: vi.fn(),
+        setZoom: mock(),
         on: emitter.on,
         off: emitter.off,
       };
 
-      const zoomChangeHandler = vi.fn();
+      const zoomChangeHandler = mock();
 
       // Simulate component setup
       presentationEditor.on('zoomChange', zoomChangeHandler);
@@ -542,9 +542,9 @@ describe('Ruler zoom functionality', () => {
     it('should initialize zoom from editor state on mount', () => {
       const presentationEditor = {
         zoom: 1.75,
-        setZoom: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
+        setZoom: mock(),
+        on: mock(),
+        off: mock(),
       };
 
       // Simulate initializeZoom
@@ -558,8 +558,8 @@ describe('Ruler zoom functionality', () => {
 
     it('should default to zoom 1 if editor has no zoom property', () => {
       const editorWithoutZoom = {
-        on: vi.fn(),
-        off: vi.fn(),
+        on: mock(),
+        off: mock(),
       };
 
       // Simulate initializeZoom

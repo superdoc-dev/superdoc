@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import * as Y from 'yjs';
 import { createPartPublisher } from './publisher.js';
 import { PARTS_MAP_KEY } from './constants.js';
@@ -21,7 +21,7 @@ function createMockEditor(ydoc: Y.Doc) {
     options: { user: { name: 'test' }, ydoc },
     converter,
     _compoundDepth: 0,
-    emit: vi.fn(),
+    emit: mock(),
   } as unknown as import('../../../core/Editor.js').Editor;
 }
 

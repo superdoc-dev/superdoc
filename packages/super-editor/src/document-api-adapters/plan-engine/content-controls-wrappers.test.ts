@@ -1,5 +1,5 @@
+import { describe, it, expect, mock } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import { registerBuiltInExecutors } from './register-executors.js';
 import { createContentControlsAdapter } from './content-controls-wrappers.js';
@@ -187,20 +187,20 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChildren?
   const doc = createNode('doc', [sdtNode], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc,
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   const editor = {
     state: {
@@ -211,11 +211,11 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChildren?
         text: (t: string) => createNode('text', [], { text: t }),
         nodes: {
           paragraph: {
-            create: vi.fn(() => createParagraphNode('')),
-            createAndFill: vi.fn(() => createParagraphNode('')),
+            create: mock(() => createParagraphNode('')),
+            createAndFill: mock(() => createParagraphNode('')),
           },
           structuredContentBlock: {
-            create: vi.fn((attrs: unknown, content: unknown) =>
+            create: mock((attrs: unknown, content: unknown) =>
               createNode('structuredContentBlock', toChildArray(content), {
                 attrs: attrs as Record<string, unknown>,
                 isBlock: true,
@@ -231,11 +231,11 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChildren?
       text: (t: string) => createNode('text', [], { text: t }),
       nodes: {
         paragraph: {
-          create: vi.fn(() => createParagraphNode('')),
-          createAndFill: vi.fn(() => createParagraphNode('')),
+          create: mock(() => createParagraphNode('')),
+          createAndFill: mock(() => createParagraphNode('')),
         },
         structuredContentBlock: {
-          create: vi.fn((attrs: unknown, content: unknown) =>
+          create: mock((attrs: unknown, content: unknown) =>
             createNode('structuredContentBlock', toChildArray(content), {
               attrs: attrs as Record<string, unknown>,
               isBlock: true,
@@ -247,10 +247,10 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChildren?
     dispatch,
     view: { dispatch },
     commands: {
-      updateStructuredContentById: vi.fn(() => true),
-      deleteStructuredContentById: vi.fn(() => true),
-      insertStructuredContentBlock: vi.fn(() => true),
-      insertStructuredContentInline: vi.fn(() => true),
+      updateStructuredContentById: mock(() => true),
+      deleteStructuredContentById: mock(() => true),
+      insertStructuredContentBlock: mock(() => true),
+      insertStructuredContentInline: mock(() => true),
     },
   } as unknown as Editor;
 
@@ -284,20 +284,20 @@ function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChi
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc,
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   return {
     state: {
@@ -308,11 +308,11 @@ function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChi
         text: (t: string) => createNode('text', [], { text: t }),
         nodes: {
           paragraph: {
-            create: vi.fn(() => paragraph),
-            createAndFill: vi.fn(() => paragraph),
+            create: mock(() => paragraph),
+            createAndFill: mock(() => paragraph),
           },
           structuredContent: {
-            create: vi.fn((attrs: unknown, content: unknown) =>
+            create: mock((attrs: unknown, content: unknown) =>
               createNode('structuredContent', toChildArray(content), {
                 attrs: attrs as Record<string, unknown>,
                 isInline: true,
@@ -330,11 +330,11 @@ function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChi
       text: (t: string) => createNode('text', [], { text: t }),
       nodes: {
         paragraph: {
-          create: vi.fn(() => paragraph),
-          createAndFill: vi.fn(() => paragraph),
+          create: mock(() => paragraph),
+          createAndFill: mock(() => paragraph),
         },
         structuredContent: {
-          create: vi.fn((attrs: unknown, content: unknown) =>
+          create: mock((attrs: unknown, content: unknown) =>
             createNode('structuredContent', toChildArray(content), {
               attrs: attrs as Record<string, unknown>,
               isInline: true,
@@ -348,10 +348,10 @@ function makeInlineSdtEditor(overrideAttrs: Record<string, unknown> = {}, sdtChi
     dispatch,
     view: { dispatch },
     commands: {
-      updateStructuredContentById: vi.fn(() => true),
-      deleteStructuredContentById: vi.fn(() => true),
-      insertStructuredContentBlock: vi.fn(() => true),
-      insertStructuredContentInline: vi.fn(() => true),
+      updateStructuredContentById: mock(() => true),
+      deleteStructuredContentById: mock(() => true),
+      insertStructuredContentBlock: mock(() => true),
+      insertStructuredContentInline: mock(() => true),
     },
   } as unknown as Editor;
 }
@@ -396,20 +396,20 @@ function makeSdtEditorWithBlockRange(): Editor {
   const doc = createNode('doc', [paragraph, sdtNode, paragraph2], { isBlock: false });
 
   const tr = {
-    insertText: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    addMark: vi.fn().mockReturnThis(),
-    removeMark: vi.fn().mockReturnThis(),
-    replaceWith: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    setMeta: vi.fn().mockReturnThis(),
+    insertText: mock().mockReturnThis(),
+    delete: mock().mockReturnThis(),
+    addMark: mock().mockReturnThis(),
+    removeMark: mock().mockReturnThis(),
+    replaceWith: mock().mockReturnThis(),
+    insert: mock().mockReturnThis(),
+    setMeta: mock().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
     doc,
     steps: [{ type: 'replaceStep' }],
   };
 
-  const dispatch = vi.fn();
+  const dispatch = mock();
 
   return {
     state: {
@@ -422,10 +422,10 @@ function makeSdtEditorWithBlockRange(): Editor {
     dispatch,
     view: { dispatch },
     commands: {
-      updateStructuredContentById: vi.fn(() => true),
-      deleteStructuredContentById: vi.fn(() => true),
-      insertStructuredContentBlock: vi.fn(() => true),
-      insertStructuredContentInline: vi.fn(() => true),
+      updateStructuredContentById: mock(() => true),
+      deleteStructuredContentById: mock(() => true),
+      insertStructuredContentBlock: mock(() => true),
+      insertStructuredContentInline: mock(() => true),
     },
   } as unknown as Editor;
 }
@@ -468,7 +468,7 @@ describe('contentControls.wrap', () => {
 
     adapter.wrap({ target: SDT_TARGET, kind: 'block' }, { changeMode: 'direct' });
 
-    const createFn = editor.schema.nodes.structuredContentBlock.create as ReturnType<typeof vi.fn>;
+    const createFn = editor.schema.nodes.structuredContentBlock.create as ReturnType<typeof mock>;
     expect(createFn).toHaveBeenCalledTimes(1);
     const [attrs] = createFn.mock.calls[0];
     expect(attrs.tag).toBeUndefined();
@@ -635,7 +635,7 @@ describe('contentControls.setType OOXML element transitions', () => {
     const result = adapter.setType({ target: SDT_TARGET, controlType: 'date' }, { changeMode: 'direct' });
 
     expect(result.success).toBe(true);
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     // Should be called at least once for the type element transitions + once for attrs
     expect(updateCmd).toHaveBeenCalled();
   });
@@ -667,7 +667,7 @@ describe('contentControls.setType OOXML element transitions', () => {
     // 1) remove old w:text element from sdtPr
     // 2) add new w:date element to sdtPr
     // 3) update controlType/type attrs
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     expect(updateCmd.mock.calls.length).toBeGreaterThanOrEqual(2);
 
     // Verify the final attrs update includes the new type
@@ -696,7 +696,7 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     expect(updateCmd).toHaveBeenCalled();
 
     // The sdtPr written back should contain the normalized element
@@ -727,7 +727,7 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
     const writtenSdtPr = call[1].attrs.sdtPr;
     const el = writtenSdtPr.elements.find((e: any) => e.name === 'w:correct');
@@ -752,7 +752,7 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
     const writtenSdtPr = call[1].attrs.sdtPr;
     const el = writtenSdtPr.elements.find((e: any) => e.name === 'w:custom');
@@ -775,7 +775,7 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
     const writtenSdtPr = call[1].attrs.sdtPr;
     const el = writtenSdtPr.elements.find((e: any) => e.name === 'w:custom');
@@ -802,7 +802,7 @@ describe('contentControls.patchRawProperties element normalization', () => {
       { changeMode: 'direct' },
     );
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     const call = updateCmd.mock.calls[updateCmd.mock.calls.length - 1];
     const writtenSdtPr = call[1].attrs.sdtPr;
     expect(writtenSdtPr.elements.find((e: any) => e.name === 'w:custom')).toBeUndefined();
@@ -1002,7 +1002,7 @@ describe('choiceList.setSelected visual text sync', () => {
     const result = adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'acme' }, { changeMode: 'direct' });
     expect(result.success).toBe(true);
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     const textCall = updateCmd.mock.calls.find((call) => call[1]?.text === 'Acme Corp');
     expect(textCall).toBeDefined();
   });
@@ -1029,7 +1029,7 @@ describe('choiceList.setSelected visual text sync', () => {
     const result = adapter.choiceList.setSelected({ target: SDT_TARGET, value: 'unknown' }, { changeMode: 'direct' });
     expect(result.success).toBe(true);
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     const textCall = updateCmd.mock.calls.find((call) => call[1]?.text === 'unknown');
     expect(textCall).toBeDefined();
   });
@@ -1043,7 +1043,7 @@ describe('create.contentControl default sdtPr seeding', () => {
     const result = adapter.create({ kind: 'inline', controlType: 'checkbox' }, { changeMode: 'direct' });
     expect(result.success).toBe(true);
 
-    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof mock>;
     expect(insertInline).toHaveBeenCalledTimes(1);
     expect(insertInline.mock.calls[0][0].json?.text).toBe(String.fromCodePoint(0x2610));
     expect(insertInline.mock.calls[0][0].json?.marks?.[0]?.attrs?.fontFamily).toBe('MS Gothic');
@@ -1067,7 +1067,7 @@ describe('create.contentControl default sdtPr seeding', () => {
     const result = adapter.create({ kind: 'inline', controlType }, { changeMode: 'direct' });
     expect(result.success).toBe(true);
 
-    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof mock>;
     const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
     const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
     expect(sdtPr.elements?.some((el) => el.name === xmlName)).toBe(true);
@@ -1080,7 +1080,7 @@ describe('create.contentControl default sdtPr seeding', () => {
     const result = adapter.create({ kind: 'inline', controlType: 'date' }, { changeMode: 'direct' });
     expect(result.success).toBe(true);
 
-    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof mock>;
     expect(insertInline.mock.calls[0][0].text).toMatch(/^\d{1,2}\/\d{1,2}\/\d{4}$/);
 
     const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
@@ -1112,7 +1112,7 @@ describe('contentControls.setType default sdtPr seeding', () => {
     const result = adapter.setType({ target: SDT_TARGET, controlType: 'checkbox' }, { changeMode: 'direct' });
     expect(result.success).toBe(true);
 
-    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof vi.fn>;
+    const updateCmd = editor.commands!.updateStructuredContentById as ReturnType<typeof mock>;
     const checkboxWrite = updateCmd.mock.calls.find((call) =>
       Boolean(call[1]?.attrs?.sdtPr?.elements?.find((el: { name: string }) => el.name === 'w14:checkbox')),
     );

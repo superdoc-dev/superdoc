@@ -1,6 +1,6 @@
+import { describe, it, expect, afterEach } from 'bun:test';
 /* @vitest-environment node */
 
-import { describe, it, expect, afterEach } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

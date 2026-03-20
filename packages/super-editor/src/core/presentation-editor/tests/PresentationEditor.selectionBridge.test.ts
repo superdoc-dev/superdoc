@@ -1,3 +1,4 @@
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 /**
  * Tests for the PresentationEditor selection bridge methods.
  *
@@ -8,7 +9,6 @@
  * - SelectionCommandContext bundling prevents surface mismatches
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
 import type { Editor } from '../../Editor.js';
 import type { SelectionCommandContext } from '../PresentationEditor.js';
@@ -42,10 +42,10 @@ function makeMockEditor(label: string): Editor {
   // Build the editor object first, then wire up capture to reference it
   // as `_owner` — this mirrors the real code where `_owner` is `this`.
   const editor: Record<string, unknown> = {
-    getCurrentSelectionRange: vi.fn(() => currentRange),
-    getEffectiveSelectionRange: vi.fn(() => effectiveRange),
-    resolveSelectionHandle: vi.fn(() => resolvedRange),
-    releaseSelectionHandle: vi.fn(),
+    getCurrentSelectionRange: mock(() => currentRange),
+    getEffectiveSelectionRange: mock(() => effectiveRange),
+    resolveSelectionHandle: mock(() => resolvedRange),
+    releaseSelectionHandle: mock(),
     doc,
     _label: label,
     _currentRange: currentRange,
@@ -54,7 +54,7 @@ function makeMockEditor(label: string): Editor {
   };
 
   // Capture methods return handles whose _owner is this editor instance
-  editor.captureCurrentSelectionHandle = vi.fn(
+  editor.captureCurrentSelectionHandle = mock(
     (surface: string): SelectionHandle => ({
       id: nextMockHandleId++,
       surface: surface as 'body' | 'header' | 'footer',
@@ -62,7 +62,7 @@ function makeMockEditor(label: string): Editor {
       _owner: editor as unknown as SelectionHandleOwner,
     }),
   );
-  editor.captureEffectiveSelectionHandle = vi.fn(
+  editor.captureEffectiveSelectionHandle = mock(
     (surface: string): SelectionHandle => ({
       id: nextMockHandleId++,
       surface: surface as 'body' | 'header' | 'footer',
@@ -243,7 +243,7 @@ describe('PresentationEditor selection bridge — tracked handle ownership', () 
 
   it('resolveSelectionHandle returns null when underlying resolve returns null', () => {
     const pe = makePresentationEditorStub(bodyEditor, headerEditorA, 'header');
-    (headerEditorA.resolveSelectionHandle as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    (headerEditorA.resolveSelectionHandle as ReturnType<typeof mock>).mockReturnValue(null);
     const handle = pe.captureCurrentSelectionHandle();
     const ctx = pe.resolveSelectionHandle(handle);
     expect(ctx).toBeNull();

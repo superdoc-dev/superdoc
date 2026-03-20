@@ -1,36 +1,35 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 // Mock binding object - we'll configure this in tests
 const mockBinding = {
-  initView: vi.fn(),
-  _forceRerender: vi.fn(),
-  mux: vi.fn((fn) => fn()),
-  _prosemirrorChanged: vi.fn(),
+  initView: mock(),
+  _forceRerender: mock(),
+  mux: mock((fn) => fn()),
+  _prosemirrorChanged: mock(),
 };
 
-vi.mock('y-prosemirror', () => {
+mock.module('y-prosemirror', () => {
   const mockSyncPluginKey = {
-    getState: vi.fn(() => ({ binding: mockBinding })),
+    getState: mock(() => ({ binding: mockBinding })),
   };
   const mockUndoPluginKey = {
-    getState: vi.fn(() => null),
+    getState: mock(() => null),
   };
   return {
-    ySyncPlugin: vi.fn(() => 'y-sync-plugin'),
+    ySyncPlugin: mock(() => 'y-sync-plugin'),
     ySyncPluginKey: mockSyncPluginKey,
     yUndoPluginKey: mockUndoPluginKey,
-    prosemirrorToYDoc: vi.fn(),
+    prosemirrorToYDoc: mock(),
   };
 });
 
-vi.mock('yjs', () => ({
-  encodeStateAsUpdate: vi.fn(() => new Uint8Array([1, 2, 3])),
+mock.module('yjs', () => ({
+  encodeStateAsUpdate: mock(() => new Uint8Array([1, 2, 3])),
 }));
 
 import * as YProsemirror from 'y-prosemirror';
 import * as Yjs from 'yjs';
 
-import * as CollaborationModule from './collaboration.js';
+const CollaborationModule = await import('./collaboration.js');
 
 const { Collaboration, CollaborationPluginKey, createSyncPlugin, initializeMetaMap, generateCollaborationData } =
   CollaborationModule;
@@ -39,14 +38,14 @@ const createYMap = (initial = {}) => {
   const store = new Map(Object.entries(initial));
   const observers = new Set();
   return {
-    set: vi.fn((key, value) => {
+    set: mock((key, value) => {
       store.set(key, value);
     }),
-    get: vi.fn((key) => store.get(key)),
-    observe: vi.fn((fn) => {
+    get: mock((key) => store.get(key)),
+    observe: mock((fn) => {
       observers.add(fn);
     }),
-    unobserve: vi.fn((fn) => {
+    unobserve: mock((fn) => {
       observers.delete(fn);
     }),
     _trigger(keys) {
@@ -63,27 +62,23 @@ const createYDocStub = ({ docxValue, hasDocx = true } = {}) => {
   const media = createYMap();
   const listeners = {};
   return {
-    getXmlFragment: vi.fn(() => ({ fragment: true })),
-    getMap: vi.fn((name) => {
+    getXmlFragment: mock(() => ({ fragment: true })),
+    getMap: mock((name) => {
       if (name === 'meta') return metas;
       return media;
     }),
-    on: vi.fn((event, handler) => {
+    on: mock((event, handler) => {
       listeners[event] = handler;
     }),
-    transact: vi.fn((fn, meta) => fn(meta)),
+    transact: mock((fn, meta) => fn(meta)),
     _maps: { metas, media },
     _listeners: listeners,
   };
 };
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+beforeEach(() => {});
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+afterEach(() => {});
 
 describe('collaboration extension', () => {
   it('skips plugin registration when no ydoc present', () => {
@@ -94,7 +89,7 @@ describe('collaboration extension', () => {
   it('configures sync plugin and listeners when ydoc exists', () => {
     const ydoc = createYDocStub();
     const editorState = { doc: {} };
-    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const provider = { synced: false, on: mock(), off: mock() };
     const editor = {
       options: {
         isHeadless: false,
@@ -102,8 +97,8 @@ describe('collaboration extension', () => {
         collaborationProvider: provider,
       },
       storage: { image: { media: {} } },
-      emit: vi.fn(),
-      view: { state: editorState, dispatch: vi.fn() },
+      emit: mock(),
+      view: { state: editorState, dispatch: mock() },
     };
 
     const context = { editor, options: {} };
@@ -126,7 +121,7 @@ describe('collaboration extension', () => {
 
   it('emits collaborationReady on sync(true) when provider does not emit synced', () => {
     const ydoc = createYDocStub();
-    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const provider = { synced: false, on: mock(), off: mock() };
     const editor = {
       options: {
         isHeadless: false,
@@ -134,8 +129,8 @@ describe('collaboration extension', () => {
         collaborationProvider: provider,
       },
       storage: { image: { media: {} } },
-      emit: vi.fn(),
-      view: { state: { doc: {} }, dispatch: vi.fn() },
+      emit: mock(),
+      view: { state: { doc: {} }, dispatch: mock() },
     };
 
     const context = { editor, options: {} };
@@ -204,7 +199,7 @@ describe('collaboration extension', () => {
 
   it('applies bodySectPr from the meta map when the meta entry changes', () => {
     const ydoc = createYDocStub();
-    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const provider = { synced: false, on: mock(), off: mock() };
     const bodySectPr = {
       type: 'element',
       name: 'w:sectPr',
@@ -213,8 +208,8 @@ describe('collaboration extension', () => {
     ydoc._maps.metas.store.set('bodySectPr', bodySectPr);
 
     const tr = {
-      setDocAttribute: vi.fn(() => tr),
-      setMeta: vi.fn(() => tr),
+      setDocAttribute: mock(() => tr),
+      setMeta: mock(() => tr),
     };
     const editor = {
       options: {
@@ -231,10 +226,10 @@ describe('collaboration extension', () => {
         },
         tr,
       },
-      dispatch: vi.fn(),
+      dispatch: mock(),
       storage: { image: { media: {} } },
-      emit: vi.fn(),
-      view: { state: { doc: {} }, dispatch: vi.fn() },
+      emit: mock(),
+      view: { state: { doc: {} }, dispatch: mock() },
     };
 
     const context = { editor, options: {} };
@@ -250,7 +245,7 @@ describe('collaboration extension', () => {
 
   it('publishes bodySectPr changes from local transactions into the meta map', () => {
     const ydoc = createYDocStub();
-    const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+    const provider = { synced: false, on: mock(), off: mock() };
     const bodySectPr = {
       type: 'element',
       name: 'w:sectPr',
@@ -271,10 +266,10 @@ describe('collaboration extension', () => {
         },
       },
       storage: { image: { media: {} } },
-      emit: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      view: { state: { doc: {} }, dispatch: vi.fn() },
+      emit: mock(),
+      on: mock(),
+      off: mock(),
+      view: { state: { doc: {} }, dispatch: mock() },
     };
 
     const context = { editor, options: {} };
@@ -290,7 +285,7 @@ describe('collaboration extension', () => {
             bodySectPr: null,
           },
         },
-        getMeta: vi.fn(() => null),
+        getMeta: mock(() => null),
       },
     });
 
@@ -322,7 +317,7 @@ describe('collaboration extension', () => {
     it('persists images in Y.js media map when addImageToCollaboration is called', () => {
       const ydoc = createYDocStub();
       const editorState = { doc: {} };
-      const provider = { synced: true, on: vi.fn(), off: vi.fn() };
+      const provider = { synced: true, on: mock(), off: mock() };
       const editor = {
         options: {
           isHeadless: false,
@@ -330,8 +325,8 @@ describe('collaboration extension', () => {
           collaborationProvider: provider,
         },
         storage: { image: { media: {} } },
-        emit: vi.fn(),
-        view: { state: editorState, dispatch: vi.fn() },
+        emit: mock(),
+        view: { state: editorState, dispatch: mock() },
       };
 
       const context = { editor, options: {} };
@@ -360,7 +355,7 @@ describe('collaboration extension', () => {
       ydoc._maps.media.get.mockImplementation((key) => ydoc._maps.media.store.get(key));
 
       const editorState = { doc: {} };
-      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const provider = { synced: false, on: mock(), off: mock() };
       const editor = {
         options: {
           isHeadless: false,
@@ -368,8 +363,8 @@ describe('collaboration extension', () => {
           collaborationProvider: provider,
         },
         storage: { image: { media: {} } },
-        emit: vi.fn(),
-        view: { state: editorState, dispatch: vi.fn() },
+        emit: mock(),
+        view: { state: editorState, dispatch: mock() },
       };
 
       const context = { editor, options: {} };
@@ -397,11 +392,11 @@ describe('collaboration extension', () => {
         options: {
           isHeadless: false,
           ydoc: sharedYdoc,
-          collaborationProvider: { synced: true, on: vi.fn(), off: vi.fn() },
+          collaborationProvider: { synced: true, on: mock(), off: mock() },
         },
         storage: { image: { media: {} } },
-        emit: vi.fn(),
-        view: { state: { doc: {} }, dispatch: vi.fn() },
+        emit: mock(),
+        view: { state: { doc: {} }, dispatch: mock() },
       };
 
       // User B's editor (same ydoc, simulating real-time collaboration)
@@ -409,11 +404,11 @@ describe('collaboration extension', () => {
         options: {
           isHeadless: false,
           ydoc: sharedYdoc,
-          collaborationProvider: { synced: true, on: vi.fn(), off: vi.fn() },
+          collaborationProvider: { synced: true, on: mock(), off: mock() },
         },
         storage: { image: { media: {} } },
-        emit: vi.fn(),
-        view: { state: { doc: {} }, dispatch: vi.fn() },
+        emit: mock(),
+        view: { state: { doc: {} }, dispatch: mock() },
       };
 
       const contextA = { editor: editorA, options: {} };
@@ -454,7 +449,7 @@ describe('collaboration extension', () => {
         options: {
           isHeadless: false,
           ydoc,
-          collaborationProvider: { synced: false, on: vi.fn(), off: vi.fn() },
+          collaborationProvider: { synced: false, on: mock(), off: mock() },
         },
         storage: {
           image: {
@@ -463,8 +458,8 @@ describe('collaboration extension', () => {
             },
           },
         },
-        emit: vi.fn(),
-        view: { state: { doc: {} }, dispatch: vi.fn() },
+        emit: mock(),
+        view: { state: { doc: {} }, dispatch: mock() },
       };
 
       const context = { editor, options: {} };
@@ -487,7 +482,7 @@ describe('collaboration extension', () => {
   describe('headless mode Y.js sync', () => {
     const createHeadlessEditor = (overrides = {}) => {
       const ydoc = overrides.ydoc ?? createYDocStub();
-      const provider = overrides.collaborationProvider ?? { synced: false, on: vi.fn(), off: vi.fn() };
+      const provider = overrides.collaborationProvider ?? { synced: false, on: mock(), off: mock() };
       const editor = {
         options: {
           isHeadless: true,
@@ -497,11 +492,11 @@ describe('collaboration extension', () => {
         },
         state: overrides.state ?? { doc: { type: 'doc' } },
         storage: { image: { media: {} } },
-        emit: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        dispatch: overrides.dispatch ?? vi.fn(),
+        emit: mock(),
+        on: mock(),
+        off: mock(),
+        once: mock(),
+        dispatch: overrides.dispatch ?? mock(),
       };
       return { editor, ydoc, provider, context: { editor, options: {} } };
     };
@@ -511,7 +506,6 @@ describe('collaboration extension', () => {
     const getDestroyCleanup = (editor) => editor.once.mock.calls.find((call) => call[0] === 'destroy')?.[1];
 
     beforeEach(() => {
-      vi.clearAllMocks();
       mockBinding.initView.mockClear();
       mockBinding._forceRerender.mockClear();
       mockBinding.mux.mockClear();
@@ -537,7 +531,7 @@ describe('collaboration extension', () => {
     it('does not initialize headless binding when isHeadless is false', () => {
       const ydoc = createYDocStub();
       const editorState = { doc: {} };
-      const provider = { synced: false, on: vi.fn(), off: vi.fn() };
+      const provider = { synced: false, on: mock(), off: mock() };
       const editor = {
         options: {
           isHeadless: false,
@@ -545,8 +539,8 @@ describe('collaboration extension', () => {
           collaborationProvider: provider,
         },
         storage: { image: { media: {} } },
-        emit: vi.fn(),
-        view: { state: editorState, dispatch: vi.fn() },
+        emit: mock(),
+        view: { state: editorState, dispatch: mock() },
       };
 
       const context = { editor, options: {} };
@@ -589,7 +583,7 @@ describe('collaboration extension', () => {
       const transactionListener = getTransactionListener(editor);
       expect(transactionListener).toBeDefined();
 
-      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue(null) } });
+      transactionListener({ transaction: { getMeta: mock().mockReturnValue(null) } });
 
       expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
     });
@@ -601,7 +595,7 @@ describe('collaboration extension', () => {
       Collaboration.config.onCreate.call(context);
 
       const transactionListener = getTransactionListener(editor);
-      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue(null) } });
+      transactionListener({ transaction: { getMeta: mock().mockReturnValue(null) } });
 
       expect(mockBinding.mux).toHaveBeenCalledTimes(1);
       expect(mockBinding._prosemirrorChanged).toHaveBeenCalledWith(editorState.doc);
@@ -609,8 +603,8 @@ describe('collaboration extension', () => {
 
     it('propagates addToHistory=false into Y.js transaction meta for headless sync', () => {
       const ydoc = createYDocStub();
-      const yjsMetaSet = vi.fn();
-      ydoc.transact = vi.fn((fn) => {
+      const yjsMetaSet = mock();
+      ydoc.transact = mock((fn) => {
         fn({ meta: { set: yjsMetaSet } });
       });
 
@@ -622,7 +616,7 @@ describe('collaboration extension', () => {
       const transactionListener = getTransactionListener(editor);
       transactionListener({
         transaction: {
-          getMeta: vi.fn((key) => {
+          getMeta: mock((key) => {
             if (key === 'addToHistory') return false;
             return null;
           }),
@@ -635,7 +629,7 @@ describe('collaboration extension', () => {
     });
 
     it('stops undo capture for headless transactions marked addToHistory=false', () => {
-      const stopCapturing = vi.fn();
+      const stopCapturing = mock();
       YProsemirror.yUndoPluginKey.getState.mockReturnValue({
         undoManager: {
           stopCapturing,
@@ -649,7 +643,7 @@ describe('collaboration extension', () => {
       const transactionListener = getTransactionListener(editor);
       transactionListener({
         transaction: {
-          getMeta: vi.fn((key) => {
+          getMeta: mock((key) => {
             if (key === 'addToHistory') return false;
             return null;
           }),
@@ -665,7 +659,7 @@ describe('collaboration extension', () => {
       Collaboration.config.onCreate.call(context);
 
       const transactionListener = getTransactionListener(editor);
-      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue({ isChangeOrigin: true }) } });
+      transactionListener({ transaction: { getMeta: mock().mockReturnValue({ isChangeOrigin: true }) } });
 
       expect(mockBinding._prosemirrorChanged).not.toHaveBeenCalled();
     });
@@ -673,7 +667,7 @@ describe('collaboration extension', () => {
     it('handles missing binding gracefully', () => {
       YProsemirror.ySyncPluginKey.getState.mockReturnValue(null);
 
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = spyOn(console, 'warn').mockImplementation(() => {});
       const { context } = createHeadlessEditor();
 
       Collaboration.config.addPmPlugins.call(context);
@@ -698,7 +692,7 @@ describe('collaboration extension', () => {
     });
 
     it('headless shim dispatch calls editor.dispatch', () => {
-      const dispatchMock = vi.fn();
+      const dispatchMock = mock();
       const { context } = createHeadlessEditor({ dispatch: dispatchMock });
       Collaboration.config.addPmPlugins.call(context);
       Collaboration.config.onCreate.call(context);
@@ -752,15 +746,15 @@ describe('collaboration extension', () => {
 
       // Simulate a new binding (e.g. after ydoc reconnect)
       const newBinding = {
-        initView: vi.fn(),
-        _forceRerender: vi.fn(),
-        mux: vi.fn((fn) => fn()),
-        _prosemirrorChanged: vi.fn(),
+        initView: mock(),
+        _forceRerender: mock(),
+        mux: mock((fn) => fn()),
+        _prosemirrorChanged: mock(),
       };
       YProsemirror.ySyncPluginKey.getState.mockReturnValue({ binding: newBinding });
 
       const transactionListener = getTransactionListener(editor);
-      transactionListener({ transaction: { getMeta: vi.fn().mockReturnValue(null) } });
+      transactionListener({ transaction: { getMeta: mock().mockReturnValue(null) } });
 
       // New binding should have been initialized
       expect(newBinding.initView).toHaveBeenCalledTimes(1);

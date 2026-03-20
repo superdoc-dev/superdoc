@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { translateInlineNode } from '@core/super-converter/v3/handlers/wp/inline/helpers/translate-inline-node.js';
 import { translateAnchorNode } from '@core/super-converter/v3/handlers/wp/anchor/helpers/translate-anchor-node.js';
 import { translateImageNode } from '@core/super-converter/v3/handlers/wp/helpers/decode-image-node-helpers.js';

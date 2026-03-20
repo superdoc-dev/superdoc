@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { findNodePosition } from './find-node-position.js';
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, spyOn } from 'bun:test';
 import { createDocxTestEditor } from '../../helpers/editor-test-utils.js';
 import { getMatchHighlights } from '@extensions/search/prosemirror-search-patched.js';
 import { EditorState, TextSelection } from 'prosemirror-state';
@@ -132,7 +132,7 @@ describe('Search navigation commands', () => {
         editor.setState(baseState);
 
         mockScrollIntoView(editor);
-        const focusSpy = vi.spyOn(editor.view, 'focus');
+        const focusSpy = spyOn(editor.view, 'focus');
 
         editor.commands.search('test');
         editor.commands.goToFirstMatch();
@@ -297,7 +297,7 @@ describe('Search navigation commands', () => {
         });
         editor.setState(baseState);
 
-        const focusSpy = vi.spyOn(editor.view, 'focus');
+        const focusSpy = spyOn(editor.view, 'focus');
 
         const matches = editor.commands.search('test');
         editor.commands.goToSearchResult(matches[0]);

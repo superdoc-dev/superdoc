@@ -1,28 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import type { CapturedStyle, CapturedRun } from './style-resolver.js';
-import { queryMatchAdapter } from './query-match-adapter.js';
-import { SNIPPET_MAX_LENGTH } from '@superdoc/document-api';
+const { queryMatchAdapter } = await import('./query-match-adapter.js');
+const { SNIPPET_MAX_LENGTH } = await import('@superdoc/document-api');
 
 // ---------------------------------------------------------------------------
 // Module mocks — intercept dependencies of queryMatchAdapter
 // ---------------------------------------------------------------------------
 
-const mockedDeps = vi.hoisted(() => ({
-  findLegacyAdapter: vi.fn(),
-  getBlockIndex: vi.fn(),
-  captureRunsInRange: vi.fn(),
-  getRevision: vi.fn(() => 'rev-1'),
-}));
+const mockedDeps = {
+  findLegacyAdapter: mock(),
+  getBlockIndex: mock(),
+  captureRunsInRange: mock(),
+  getRevision: mock(() => 'rev-1'),
+};
 
-vi.mock('../find-adapter.js', () => ({
+mock.module('../find-adapter.js', () => ({
   findLegacyAdapter: mockedDeps.findLegacyAdapter,
 }));
 
-vi.mock('../helpers/index-cache.js', () => ({
+mock.module('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-vi.mock('./style-resolver.js', async (importOriginal) => {
+mock.module('./style-resolver.js', async (importOriginal) => {
   const orig = await importOriginal<typeof import('./style-resolver.js')>();
   return {
     ...orig,
@@ -30,7 +30,7 @@ vi.mock('./style-resolver.js', async (importOriginal) => {
   };
 });
 
-vi.mock('./revision-tracker.js', () => ({
+mock.module('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
 }));
 
@@ -106,13 +106,13 @@ function makeEditorWithBlocks(
   const editor = {
     state: {
       doc: {
-        textBetween: vi.fn((from: number, to: number) => {
+        textBetween: mock((from: number, to: number) => {
           for (const c of candidates) {
             if (from === c.pos + 1 && to === c.end - 1) return c.text;
           }
           return '';
         }),
-        nodeAt: vi.fn((pos: number) => {
+        nodeAt: mock((pos: number) => {
           const c = candidates.find((cand) => cand.pos === pos);
           return {
             type: { name: c?.nodeType ?? 'paragraph' },
@@ -162,7 +162,6 @@ function setupBlockIndex(candidates: Array<{ nodeId: string; pos: number; end: n
 
 describe('queryMatchAdapter — blocks/runs output', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 
@@ -286,7 +285,6 @@ describe('queryMatchAdapter — blocks/runs output', () => {
 
 describe('queryMatchAdapter — V3 ref emission', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-42');
   });
 
@@ -360,7 +358,6 @@ describe('queryMatchAdapter — V3 ref emission', () => {
 
 describe('queryMatchAdapter — offset-aware id', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 
@@ -416,7 +413,6 @@ describe('queryMatchAdapter — offset-aware id', () => {
 
 describe('queryMatchAdapter — node-selector matches', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 
@@ -535,7 +531,6 @@ describe('queryMatchAdapter — node-selector matches', () => {
 
 describe('queryMatchAdapter — address semantics', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 
@@ -577,7 +572,6 @@ describe('queryMatchAdapter — address semantics', () => {
 
 describe('queryMatchAdapter — zero-width match filtering', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 
@@ -632,7 +626,6 @@ describe('queryMatchAdapter — zero-width match filtering', () => {
 
 describe('queryMatchAdapter — snippet assembly', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 
@@ -688,7 +681,6 @@ describe('queryMatchAdapter — snippet assembly', () => {
 
 describe('queryMatchAdapter — meta.effectiveResolved', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 
@@ -798,7 +790,6 @@ describe('queryMatchAdapter — meta.effectiveResolved', () => {
 
 describe('queryMatchAdapter — cardinality', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     mockedDeps.getRevision.mockReturnValue('rev-1');
   });
 

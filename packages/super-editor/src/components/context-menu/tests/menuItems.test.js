@@ -1,22 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getItems } from '../menuItems.js';
-import { createMockEditor, createMockContext, assertMenuSectionsStructure, ContextMenuConfigs } from './testHelpers.js';
+import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+const { getItems } = await import('../menuItems.js');
+const { createMockEditor, createMockContext, assertMenuSectionsStructure, ContextMenuConfigs } = await import(
+  './testHelpers.js'
+);
 import { TRIGGERS } from '../constants.js';
 
-const clipboardMocks = vi.hoisted(() => ({
-  readClipboardRaw: vi.fn(),
-  handleClipboardPaste: vi.fn(() => true),
-}));
+const clipboardMocks = {
+  readClipboardRaw: mock(),
+  handleClipboardPaste: mock(() => true),
+};
 
-vi.mock('../../cursor-helpers.js', async () => {
-  const actual = await vi.importActual('../../cursor-helpers.js');
+mock.module('../../cursor-helpers.js', async () => {
+  const actual = await import('../../cursor-helpers.js');
   return {
     ...actual,
-    selectionHasNodeOrMark: vi.fn(),
+    selectionHasNodeOrMark: mock(),
   };
 });
 
-vi.mock('../constants.js', () => ({
+mock.module('../constants.js', () => ({
   TEXTS: {
     replaceText: 'Replace text',
     insertText: 'Insert text',
@@ -49,22 +51,22 @@ vi.mock('../constants.js', () => ({
   },
 }));
 
-vi.mock('../../toolbar/TableGrid.vue', () => ({ default: { template: '<div>TableGrid</div>' } }));
-vi.mock('../../toolbar/AIWriter.vue', () => ({ default: { template: '<div>AIWriter</div>' } }));
-vi.mock('../../toolbar/TableActions.vue', () => ({ default: { template: '<div>TableActions</div>' } }));
-vi.mock('../../toolbar/LinkInput.vue', () => ({ default: { template: '<div>LinkInput</div>' } }));
-vi.mock('../CellBackgroundPicker.vue', () => ({ default: { template: '<div>CellBackgroundPicker</div>' } }));
+mock.module('../../toolbar/TableGrid.vue', () => ({ default: { template: '<div>TableGrid</div>' } }));
+mock.module('../../toolbar/AIWriter.vue', () => ({ default: { template: '<div>AIWriter</div>' } }));
+mock.module('../../toolbar/TableActions.vue', () => ({ default: { template: '<div>TableActions</div>' } }));
+mock.module('../../toolbar/LinkInput.vue', () => ({ default: { template: '<div>LinkInput</div>' } }));
+mock.module('../CellBackgroundPicker.vue', () => ({ default: { template: '<div>CellBackgroundPicker</div>' } }));
 
-vi.mock('../../../core/utilities/clipboardUtils.js', () => ({
+mock.module('../../../core/utilities/clipboardUtils.js', () => ({
   readClipboardRaw: clipboardMocks.readClipboardRaw,
 }));
 
-vi.mock('../../../core/InputRule.js', () => ({
+mock.module('../../../core/InputRule.js', () => ({
   handleClipboardPaste: clipboardMocks.handleClipboardPaste,
 }));
 
-vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
-  isTrackedChangeActionAllowed: vi.fn(() => true),
+mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+  isTrackedChangeActionAllowed: mock(() => true),
 }));
 
 describe('menuItems.js', () => {
@@ -73,8 +75,6 @@ describe('menuItems.js', () => {
   let mockIsTrackedChangeActionAllowed;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
-
     mockEditor = createMockEditor({
       isAiEnabled: false,
       contextMenuConfig: null,
@@ -127,8 +127,8 @@ describe('menuItems.js', () => {
     });
 
     it('routes tracked-change context-menu actions through selection commands when text is selected', () => {
-      const acceptTrackedChangeFromContextMenu = vi.fn();
-      const rejectTrackedChangeFromContextMenu = vi.fn();
+      const acceptTrackedChangeFromContextMenu = mock();
+      const rejectTrackedChangeFromContextMenu = mock();
 
       mockEditor.commands = {
         acceptTrackedChangeFromContextMenu,
@@ -169,8 +169,8 @@ describe('menuItems.js', () => {
     });
 
     it('routes tracked-change context-menu actions through toolbar commands for collapsed selections', () => {
-      const acceptTrackedChangeFromContextMenu = vi.fn();
-      const rejectTrackedChangeFromContextMenu = vi.fn();
+      const acceptTrackedChangeFromContextMenu = mock();
+      const rejectTrackedChangeFromContextMenu = mock();
 
       mockEditor.commands = {
         acceptTrackedChangeFromContextMenu,
@@ -373,7 +373,7 @@ describe('menuItems.js', () => {
                 id: 'items-alias-item',
                 label: 'Items Alias Item',
                 showWhen: (context) => [TRIGGERS.slash, TRIGGERS.click].includes(context.trigger),
-                action: vi.fn(),
+                action: mock(),
               },
             ],
           },
@@ -398,7 +398,7 @@ describe('menuItems.js', () => {
                 id: 'provider-item',
                 label: `Provider item for ${context.trigger}`,
                 showWhen: (context) => [TRIGGERS.slash, TRIGGERS.click].includes(context.trigger),
-                action: vi.fn(),
+                action: mock(),
               },
             ],
           },
@@ -416,7 +416,7 @@ describe('menuItems.js', () => {
     });
 
     it('should handle menuProvider errors gracefully', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       mockEditor.options.contextMenuConfig = {
         includeDefaultItems: true,
         menuProvider: () => {
@@ -460,7 +460,7 @@ describe('menuItems.js', () => {
     });
 
     it('should handle showWhen errors gracefully', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       mockEditor.options.contextMenuConfig = {
         includeDefaultItems: false,
         customItems: [
@@ -568,12 +568,12 @@ describe('menuItems.js', () => {
 
   describe('getItems - paste action behavior', () => {
     it('should not force plain-text insert when HTML paste is unhandled', async () => {
-      const insertContent = vi.fn();
+      const insertContent = mock();
       mockEditor = createMockEditor({
         commands: { insertContent },
       });
-      mockEditor.view.dom.focus = vi.fn();
-      mockEditor.view.pasteHTML = vi.fn();
+      mockEditor.view.dom.focus = mock();
+      mockEditor.view.pasteHTML = mock();
       mockContext = createMockContext({
         editor: mockEditor,
         trigger: TRIGGERS.click,
@@ -603,12 +603,12 @@ describe('menuItems.js', () => {
     });
 
     it('should use pasteText when clipboard has text but no HTML', async () => {
-      const insertContent = vi.fn();
+      const insertContent = mock();
       mockEditor = createMockEditor({
         commands: { insertContent },
       });
-      mockEditor.view.dom.focus = vi.fn();
-      mockEditor.view.pasteText = vi.fn();
+      mockEditor.view.dom.focus = mock();
+      mockEditor.view.pasteText = mock();
       mockContext = createMockContext({
         editor: mockEditor,
         trigger: TRIGGERS.click,
@@ -632,7 +632,7 @@ describe('menuItems.js', () => {
     });
 
     it('should fall back to insertContent when view has no pasteHTML or pasteText', async () => {
-      const insertContent = vi.fn();
+      const insertContent = mock();
       mockEditor = createMockEditor({
         commands: { insertContent },
       });
@@ -737,29 +737,29 @@ describe('menuItems.js', () => {
       const docSize = options.docSize ?? 100;
 
       const mockDoc = {
-        textBetween: vi.fn(() => ''),
-        nodeAt: vi.fn(() => ({ type: { name: 'paragraph' } })),
-        resolve: vi.fn(() => ({})),
+        textBetween: mock(() => ''),
+        nodeAt: mock(() => ({ type: { name: 'paragraph' } })),
+        resolve: mock(() => ({})),
         content: { size: docSize },
       };
 
-      const mockCreate = vi.fn((_doc, from, to) => ({ from, to }));
+      const mockCreate = mock((_doc, from, to) => ({ from, to }));
 
       const mockSelection = {
         from: selFrom,
         to: selTo,
         empty: selFrom === selTo,
-        $head: { marks: vi.fn(() => []) },
-        $from: { depth: 2, node: vi.fn(() => ({ type: { name: 'paragraph' } })) },
-        $to: { depth: 2, node: vi.fn(() => ({ type: { name: 'paragraph' } })) },
-        constructor: { create: mockCreate, near: vi.fn() },
+        $head: { marks: mock(() => []) },
+        $from: { depth: 2, node: mock(() => ({ type: { name: 'paragraph' } })) },
+        $to: { depth: 2, node: mock(() => ({ type: { name: 'paragraph' } })) },
+        constructor: { create: mockCreate, near: mock() },
       };
 
-      const mockSetSelection = vi.fn(function () {
+      const mockSetSelection = mock(function () {
         return this;
       });
       const mockTr = {
-        setMeta: vi.fn(function () {
+        setMeta: mock(function () {
           return this;
         }),
         setSelection: mockSetSelection,
@@ -777,10 +777,10 @@ describe('menuItems.js', () => {
 
       // Add pasteText/pasteHTML if not explicitly removed
       if (options.pasteText !== false) {
-        editor.view.pasteText = vi.fn();
+        editor.view.pasteText = mock();
       }
       if (options.pasteHTML !== false) {
-        editor.view.pasteHTML = vi.fn();
+        editor.view.pasteHTML = mock();
       }
 
       return {
@@ -798,7 +798,7 @@ describe('menuItems.js', () => {
 
     it('should call view.focus() instead of view.dom.focus()', async () => {
       const { editor } = createPasteTestEditor();
-      editor.view.dom.focus = vi.fn();
+      editor.view.dom.focus = mock();
 
       clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '', text: 'test' });
       clipboardMocks.handleClipboardPaste.mockReturnValue(false);

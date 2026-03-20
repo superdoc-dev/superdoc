@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { handleTextNode } from '@converter/v2/importer/textNodeImporter.js';
 import { createNodeListHandlerMock } from './testUtils.js';

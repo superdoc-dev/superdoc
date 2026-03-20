@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest';
-
+import { describe, it, expect } from 'bun:test';
 /**
  * Test the allowSelectionInViewMode behavior in the Editable extension.
  *

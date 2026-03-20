@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'bun:test';
 import { intToJapaneseCounting } from './orderedListUtils.js';
 
 describe('intToJapaneseCounting', () => {

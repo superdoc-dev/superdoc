@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
@@ -62,12 +62,12 @@ function makeEditor(
   options: { user?: { name: string } } = {},
 ): {
   editor: Editor;
-  dispatch: ReturnType<typeof vi.fn>;
-  insertTrackedChange: ReturnType<typeof vi.fn>;
-  textBetween: ReturnType<typeof vi.fn>;
+  dispatch: ReturnType<typeof mock>;
+  insertTrackedChange: ReturnType<typeof mock>;
+  textBetween: ReturnType<typeof mock>;
   tr: {
-    addMark: ReturnType<typeof vi.fn>;
-    setMeta: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof mock>;
+    setMeta: ReturnType<typeof mock>;
   };
 } {
   const textNode = createNode('text', [], { text });
@@ -79,15 +79,15 @@ function makeEditor(
   const doc = createNode('doc', [paragraph], { isBlock: false });
 
   const tr = {
-    addMark: vi.fn(),
-    setMeta: vi.fn(),
+    addMark: mock(),
+    setMeta: mock(),
   };
   tr.addMark.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
 
-  const dispatch = vi.fn();
-  const insertTrackedChange = vi.fn(() => true);
-  const textBetween = vi.fn((from: number, to: number) => {
+  const dispatch = mock();
+  const insertTrackedChange = mock(() => true);
+  const textBetween = mock((from: number, to: number) => {
     const start = Math.max(0, from - 1);
     const end = Math.max(start, to - 1);
     return text.slice(start, end);
@@ -104,19 +104,19 @@ function makeEditor(
     schema: {
       marks: {
         bold: {
-          create: vi.fn(() => ({ type: 'bold' })),
+          create: mock(() => ({ type: 'bold' })),
         },
         italic: {
-          create: vi.fn(() => ({ type: 'italic' })),
+          create: mock(() => ({ type: 'italic' })),
         },
         underline: {
-          create: vi.fn(() => ({ type: 'underline' })),
+          create: mock(() => ({ type: 'underline' })),
         },
         strike: {
-          create: vi.fn(() => ({ type: 'strike' })),
+          create: mock(() => ({ type: 'strike' })),
         },
         [TrackFormatMarkName]: {
-          create: vi.fn(() => ({ type: TrackFormatMarkName })),
+          create: mock(() => ({ type: TrackFormatMarkName })),
         },
       },
     },
@@ -402,7 +402,7 @@ describe('styleApplyWrapper — textStyle attr gating (SD-2074)', () => {
     (editor.schema as Record<string, unknown>).marks = {
       ...editor.schema?.marks,
       textStyle: {
-        create: vi.fn(() => ({ type: 'textStyle' })),
+        create: mock(() => ({ type: 'textStyle' })),
         attrs: {
           color: { default: null },
           fontSize: { default: null },

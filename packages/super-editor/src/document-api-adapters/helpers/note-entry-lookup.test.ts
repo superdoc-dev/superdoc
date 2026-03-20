@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { findNoteEntryById } from './note-entry-lookup.js';
 
 describe('findNoteEntryById', () => {

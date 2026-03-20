@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { syncPackageMetadata } from './sync-package-metadata.js';
 import { getOverrides, getRelationships } from './test-helpers.js';
 

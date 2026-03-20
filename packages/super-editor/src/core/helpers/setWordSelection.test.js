@@ -1,27 +1,25 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { TextSelection } from 'prosemirror-state';
+import { describe, it, expect, mock, spyOn, afterEach } from 'bun:test';
+const { TextSelection } = await import('prosemirror-state');
 
-vi.mock('./findWordBounds.js', () => ({
-  findWordBounds: vi.fn(),
+mock.module('./findWordBounds.js', () => ({
+  findWordBounds: mock(),
 }));
 
 import { findWordBounds } from './findWordBounds.js';
-import { setWordSelection } from './setWordSelection.js';
+const { setWordSelection } = await import('./setWordSelection.js');
 
 describe('setWordSelection', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => {});
 
   it('sets a text selection when findWordBounds returns a range', () => {
     const doc = {};
-    const tr = { setSelection: vi.fn(() => 'next-tr') };
+    const tr = { setSelection: mock(() => 'next-tr') };
     const state = { doc, tr };
-    const dispatch = vi.fn();
+    const dispatch = mock();
     const view = { state, dispatch };
 
     findWordBounds.mockReturnValue({ from: 2, to: 6 });
-    const selectionSpy = vi.spyOn(TextSelection, 'create').mockReturnValue('word-selection');
+    const selectionSpy = spyOn(TextSelection, 'create').mockReturnValue('word-selection');
 
     setWordSelection(view, 4);
 
@@ -35,9 +33,9 @@ describe('setWordSelection', () => {
     const view = {
       state: {
         doc: {},
-        tr: { setSelection: vi.fn(() => 'noop') },
+        tr: { setSelection: mock(() => 'noop') },
       },
-      dispatch: vi.fn(),
+      dispatch: mock(),
     };
 
     findWordBounds.mockReturnValue(undefined);

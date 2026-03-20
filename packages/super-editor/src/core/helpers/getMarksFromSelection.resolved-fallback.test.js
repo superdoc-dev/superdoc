@@ -1,16 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { Schema } from 'prosemirror-model';
+import { describe, it, expect, mock } from 'bun:test';
+const { EditorState, TextSelection } = await import('prosemirror-state');
+const { Schema } = await import('prosemirror-model');
 
-const resolveRunProperties = vi.fn(() => ({ bold: true }));
+const resolveRunProperties = mock(() => ({ bold: true }));
 
-vi.mock('@superdoc/style-engine/ooxml', () => ({
+mock.module('@superdoc/style-engine/ooxml', () => ({
   resolveRunProperties,
   TABLE_STYLE_ID_TABLE_GRID: 'TableGrid',
 }));
 
-vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
-  calculateResolvedParagraphProperties: vi.fn(() => ({})),
+mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  calculateResolvedParagraphProperties: mock(() => ({})),
 }));
 
 describe('getSelectionFormattingState resolved mark fallback', () => {

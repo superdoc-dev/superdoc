@@ -1,3 +1,4 @@
+import { describe, it, test, expect, mock, beforeEach } from 'bun:test';
 /**
  * Regression tests for story runtime cache invalidation.
  *
@@ -5,33 +6,32 @@
  * underlying parts are mutated (e.g., notes-part-changed event).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mocks = vi.hoisted(() => ({
-  buildStoryKey: vi.fn((locator: any) => {
+const mocks = {
+  buildStoryKey: mock((locator: any) => {
     if (locator.storyType === 'footnote') return `fn:${locator.noteId}`;
     if (locator.storyType === 'endnote') return `en:${locator.noteId}`;
     if (locator.storyType === 'body') return 'body';
     return `unknown:${JSON.stringify(locator)}`;
   }),
-  resolveNoteRuntime: vi.fn(),
-  resolveHeaderFooterSlotRuntime: vi.fn(),
-  resolveHeaderFooterPartRuntime: vi.fn(),
-  isHeaderFooterPartId: vi.fn((partId: string) => /^word\/(header|footer)\d+\.xml$/.test(partId)),
-  initRevision: vi.fn(),
-  trackRevisions: vi.fn(),
-  restoreRevision: vi.fn(),
-  getStoryRevisionStore: vi.fn(() => null),
-  getStoryRevision: vi.fn(() => '0'),
-  incrementStoryRevision: vi.fn(),
-}));
+  resolveNoteRuntime: mock(),
+  resolveHeaderFooterSlotRuntime: mock(),
+  resolveHeaderFooterPartRuntime: mock(),
+  isHeaderFooterPartId: mock((partId: string) => /^word\/(header|footer)\d+\.xml$/.test(partId)),
+  initRevision: mock(),
+  trackRevisions: mock(),
+  restoreRevision: mock(),
+  getStoryRevisionStore: mock(() => null),
+  getStoryRevision: mock(() => '0'),
+  incrementStoryRevision: mock(),
+};
 
-vi.mock('./story-key.js', async (importOriginal) => {
+mock.module('./story-key.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./story-key.js')>();
   return {
     ...original,
@@ -39,32 +39,32 @@ vi.mock('./story-key.js', async (importOriginal) => {
   };
 });
 
-vi.mock('./note-story-runtime.js', () => ({
+mock.module('./note-story-runtime.js', () => ({
   resolveNoteRuntime: mocks.resolveNoteRuntime,
 }));
 
-vi.mock('./header-footer-story-runtime.js', () => ({
+mock.module('./header-footer-story-runtime.js', () => ({
   resolveHeaderFooterSlotRuntime: mocks.resolveHeaderFooterSlotRuntime,
   resolveHeaderFooterPartRuntime: mocks.resolveHeaderFooterPartRuntime,
 }));
 
-vi.mock('../../core/parts/adapters/header-footer-part-descriptor.js', () => ({
+mock.module('../../core/parts/adapters/header-footer-part-descriptor.js', () => ({
   isHeaderFooterPartId: mocks.isHeaderFooterPartId,
 }));
 
-vi.mock('../plan-engine/revision-tracker.js', () => ({
+mock.module('../plan-engine/revision-tracker.js', () => ({
   initRevision: mocks.initRevision,
   trackRevisions: mocks.trackRevisions,
   restoreRevision: mocks.restoreRevision,
 }));
 
-vi.mock('./story-revision-store.js', () => ({
+mock.module('./story-revision-store.js', () => ({
   getStoryRevisionStore: mocks.getStoryRevisionStore,
   getStoryRevision: mocks.getStoryRevision,
   incrementStoryRevision: mocks.incrementStoryRevision,
 }));
 
-import { resolveStoryRuntime, invalidateStoryRuntime } from './resolve-story-runtime.js';
+const { resolveStoryRuntime, invalidateStoryRuntime } = await import('./resolve-story-runtime.js');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,11 +93,11 @@ function makeHostEditor(): Editor & { _emit: (event: string, payload?: unknown) 
 }
 
 function makeNoteRuntime(storyKey: string) {
-  const dispose = vi.fn();
+  const dispose = mock();
   return {
     locator: { kind: 'story', storyType: 'footnote', noteId: storyKey.split(':')[1] },
     storyKey,
-    editor: { on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any,
+    editor: { on: mock(), state: { doc: { content: { size: 5 } } } } as any,
     kind: 'note' as const,
     dispose,
     _dispose: dispose,
@@ -109,8 +109,6 @@ function makeNoteRuntime(storyKey: string) {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  vi.restoreAllMocks();
-
   // Restore default mock implementations (restoreAllMocks clears them).
   mocks.buildStoryKey.mockImplementation((locator: any) => {
     if (locator.storyType === 'footnote') return `fn:${locator.noteId}`;
@@ -201,11 +199,11 @@ describe('resolveStoryRuntime — cache invalidation on part change', () => {
 
 describe('resolveStoryRuntime — cache invalidation on header/footer part change', () => {
   function makeHfRuntime(storyKey: string) {
-    const dispose = vi.fn();
+    const dispose = mock();
     return {
       locator: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId7' } as any,
       storyKey,
-      editor: { on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any,
+      editor: { on: mock(), state: { doc: { content: { size: 5 } } } } as any,
       kind: 'headerFooter' as const,
       dispose,
       _dispose: dispose,

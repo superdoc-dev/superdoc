@@ -1,14 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import type { EditorState } from 'prosemirror-state';
-import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuilder.js';
+const { buildFootnotesInput, ConverterLike } = await import('../layout/FootnotesBuilder.js');
 import type { ConverterContext } from '@superdoc/pm-adapter';
 
 // Mock toFlowBlocks
-vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
+mock.module('@superdoc/pm-adapter', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
   return {
     ...actual,
-    toFlowBlocks: vi.fn((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
+    toFlowBlocks: mock((_doc: unknown, opts?: { blockIdPrefix?: string }) => {
       // Return mock blocks based on blockIdPrefix
       if (typeof opts?.blockIdPrefix === 'string') {
         const id = opts.blockIdPrefix.replace('footnote-', '').replace('-', '');

@@ -1,5 +1,5 @@
+import { describe, it, expect } from 'bun:test';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { describe, expect, it } from 'vitest';
 import { buildFallbackTocNodeId, resolvePublicTocNodeId } from './toc-node-id.js';
 
 function fakeNode(attrs: Record<string, unknown> = {}): ProseMirrorNode {

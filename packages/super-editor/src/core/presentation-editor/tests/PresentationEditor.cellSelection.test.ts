@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { TableHitResult } from '@superdoc/layout-bridge';
 import type { TableBlock, TableMeasure, Layout, TableFragment } from '@superdoc/contracts';
 

@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { getFieldAttrs, annotateDocument } from './annotator.js';
 
-globalThis.dateFormat = vi.fn(() => '2025-01-30');
+globalThis.dateFormat = mock(() => '2025-01-30');
 
 const createEditorsCollection = () => [];
 
@@ -60,10 +60,10 @@ describe('annotator helpers', () => {
       doc: {
         descendants: (cb) => cb(node, 5),
       },
-      setNodeMarkup: vi.fn(function () {
+      setNodeMarkup: mock(function () {
         return this;
       }),
-      delete: vi.fn(function () {
+      delete: mock(function () {
         return this;
       }),
     };
@@ -95,10 +95,10 @@ describe('annotator helpers', () => {
       doc: {
         descendants: (cb) => cb(emptyNode, 3),
       },
-      setNodeMarkup: vi.fn(function () {
+      setNodeMarkup: mock(function () {
         return this;
       }),
-      delete: vi.fn(function () {
+      delete: mock(function () {
         return this;
       }),
     };

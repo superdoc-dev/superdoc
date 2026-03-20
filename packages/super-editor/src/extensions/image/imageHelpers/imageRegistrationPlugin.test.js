@@ -1,10 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
-
-vi.mock('@extensions/image/imageHelpers/startImageUpload.js', () => ({
-  addImageRelationship: vi.fn(() => null),
+import { describe, it, expect, mock } from 'bun:test';
+mock.module('@extensions/image/imageHelpers/startImageUpload.js', () => ({
+  addImageRelationship: mock(() => null),
 }));
 
-import { handleNodePath, needsImageRegistration } from './imageRegistrationPlugin.js';
+const { handleNodePath, needsImageRegistration } = await import('./imageRegistrationPlugin.js');
 
 const createImageNode = (attrs = {}) => ({
   type: { name: 'image' },
@@ -13,7 +12,7 @@ const createImageNode = (attrs = {}) => ({
 
 const createStateStub = () => ({
   tr: {
-    setNodeMarkup: vi.fn(),
+    setNodeMarkup: mock(),
   },
 });
 
@@ -166,12 +165,12 @@ describe('handleNodePath', () => {
     const foundImages = [{ node: { attrs: { src: base64 } }, pos: 0 }];
 
     const state = createStateStub();
-    const mediaMapSet = vi.fn();
+    const mediaMapSet = mock();
     const editor = {
       ...createEditorStub(),
       options: {
         mode: 'docx',
-        ydoc: { getMap: vi.fn(() => ({ set: mediaMapSet })) },
+        ydoc: { getMap: mock(() => ({ set: mediaMapSet })) },
       },
     };
 

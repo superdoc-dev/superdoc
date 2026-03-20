@@ -157,6 +157,20 @@ function resolveParagraphRuntimeIdentity(
   return toId(attrs.sdBlockId) ?? buildFallbackBlockNodeId(nodeType, pos, path);
 }
 
+/**
+ * Resolves the public document-api nodeId for a block-level ProseMirror node.
+ *
+ * ID resolution strategy varies by block family:
+ * - **Paragraphs**: paraId → sdBlockId → deterministic fallback
+ * - **Tables/cells**: legacy attrs → non-volatile sdBlockId → deterministic fallback
+ * - **Other blocks**: blockId → id → paraId → uuid → sdBlockId
+ *
+ * @param node - The ProseMirror node.
+ * @param pos - Absolute document position of the node.
+ * @param nodeType - The mapped block node type.
+ * @param path - Optional traversal path for deterministic fallback IDs.
+ * @returns The resolved nodeId, or `undefined` if none could be determined.
+ */
 export function resolveBlockNodeId(
   node: ProseMirrorNode,
   pos: number,
@@ -347,9 +361,41 @@ export function findBlockByIdStrict(index: BlockIndex, address: BlockNodeAddress
 }
 
 /**
+ * Resolves a nodeId against alias entries in the block index (e.g., sdBlockId
+ * registered as an alias for a deterministic primary ID).
+ *
+ * @param index - The block index to search.
+ * @param nodeId - The node ID to resolve via alias lookup.
+ * @returns The single matching candidate, or `undefined` if no alias matches.
+ * @throws {DocumentApiAdapterError} `AMBIGUOUS_TARGET` when multiple blocks share the alias.
+ */
+export function resolveBlockAlias(index: BlockIndex, nodeId: string): BlockCandidate | undefined {
+  if (!index.byId) return undefined;
+
+  const aliasMatches = new Map<string, BlockCandidate>();
+  for (const [key, candidate] of index.byId) {
+    if (!key.endsWith(`:${nodeId}`)) continue;
+    aliasMatches.set(`${candidate.nodeType}:${candidate.nodeId}`, candidate);
+  }
+
+  if (aliasMatches.size > 1) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}" via aliases.`, {
+      nodeId,
+      count: aliasMatches.size,
+      matches: Array.from(aliasMatches.values()).map((candidate) => ({
+        nodeType: candidate.nodeType,
+        nodeId: candidate.nodeId,
+      })),
+    });
+  }
+
+  return aliasMatches.size === 1 ? Array.from(aliasMatches.values())[0] : undefined;
+}
+
+/**
  * Finds a block candidate by raw nodeId without requiring a nodeType.
  *
- * This is needed for create operations that position relative to _any_ block type.
+ * Falls back to alias resolution when no primary match exists.
  *
  * @param index - The block index to search.
  * @param nodeId - The node ID to resolve.
@@ -370,26 +416,8 @@ export function findBlockByNodeIdOnly(index: BlockIndex, nodeId: string): BlockC
   }
 
   // No primary match — check alias entries (e.g., sdBlockId for paragraph-like nodes).
-  const aliasMatches = new Map<string, BlockCandidate>();
-  for (const [key, candidate] of index.byId) {
-    if (!key.endsWith(`:${nodeId}`)) continue;
-    aliasMatches.set(`${candidate.nodeType}:${candidate.nodeId}`, candidate);
-  }
-
-  if (aliasMatches.size === 1) {
-    return Array.from(aliasMatches.values())[0]!;
-  }
-
-  if (aliasMatches.size > 1) {
-    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}" via aliases.`, {
-      nodeId,
-      count: aliasMatches.size,
-      matches: Array.from(aliasMatches.values()).map((candidate) => ({
-        nodeType: candidate.nodeType,
-        nodeId: candidate.nodeId,
-      })),
-    });
-  }
+  const alias = resolveBlockAlias(index, nodeId);
+  if (alias) return alias;
 
   throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block with nodeId "${nodeId}" was not found.`, { nodeId });
 }

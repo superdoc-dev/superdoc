@@ -95,8 +95,8 @@ function validateTargetLocator(input: Record<string, unknown>, operation: string
     });
   }
 
-  if (hasRef && typeof input.ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+  if (hasRef && (typeof input.ref !== 'string' || input.ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: input.ref,
     });

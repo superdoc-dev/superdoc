@@ -32,7 +32,12 @@ import { getBlockIndex } from '../helpers/index-cache.js';
 import { getRevision } from './revision-tracker.js';
 import { executeTextSelector } from '../find/text-strategy.js';
 import { executeBlockSelector } from '../find/block-strategy.js';
-import { isTextBlockCandidate, type BlockCandidate, type BlockIndex } from '../helpers/node-address-resolver.js';
+import {
+  isTextBlockCandidate,
+  resolveBlockAlias,
+  type BlockCandidate,
+  type BlockIndex,
+} from '../helpers/node-address-resolver.js';
 import { resolveTextRangeInBlock } from '../helpers/text-offset-resolver.js';
 import { resolveSelectionTarget, resolveSelectionPointPosition } from '../helpers/selection-target-resolver.js';
 import { expandDeleteSelection } from '../helpers/expand-delete-selection.js';
@@ -675,18 +680,18 @@ function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, r
 }
 
 function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
-  let candidate = index.candidates.find((c) => c.nodeId === ref);
+  const primaryMatches = index.candidates.filter((c) => c.nodeId === ref);
+  if (primaryMatches.length > 1) {
+    throw planError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${ref}".`, step.id, {
+      ref,
+      count: primaryMatches.length,
+    });
+  }
+
   // Alias-aware fallback: if the ref is an sdBlockId registered as an alias
   // (e.g., volatile UUID replaced by a deterministic para-auto-* primary ID),
-  // try the byId map which includes alias entries.
-  if (!candidate && index.byId) {
-    for (const [key, c] of index.byId) {
-      if (key.endsWith(`:${ref}`)) {
-        candidate = c;
-        break;
-      }
-    }
-  }
+  // try the shared resolveBlockAlias helper which enforces ambiguity checks.
+  const candidate = primaryMatches[0] ?? resolveBlockAlias(index, ref);
   if (!candidate) return [];
 
   const blockText = getBlockText(editor, candidate);

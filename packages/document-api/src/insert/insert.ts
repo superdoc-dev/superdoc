@@ -216,6 +216,19 @@ function validateStructuralInsertInput(input: Record<string, unknown>): void {
 // Execution
 // ---------------------------------------------------------------------------
 
+/**
+ * Executes an insert operation, routing to the appropriate adapter path.
+ *
+ * - Text inserts with `target` or `ref` route through the SelectionMutationAdapter.
+ * - Structural inserts (SDFragment) and non-text content types route through WriteAdapter.
+ * - Text inserts without a locator append at the document end via WriteAdapter.
+ *
+ * @param selectionAdapter - Adapter for target/ref-based text mutations.
+ * @param writeAdapter - Adapter for structural and untargeted writes.
+ * @param input - Insert payload (text string or structural SDFragment).
+ * @param options - Optional mutation options (changeMode, dryRun, expectedRevision).
+ * @returns Receipt indicating success/failure and mutation metadata.
+ */
 export function executeInsert(
   selectionAdapter: SelectionMutationAdapter,
   writeAdapter: WriteAdapter,

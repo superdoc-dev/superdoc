@@ -72,8 +72,8 @@ function validateDeleteInput(input: unknown): asserts input is DeleteInput {
     });
   }
 
-  if (hasRef && typeof ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+  if (hasRef && (typeof ref !== 'string' || ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: ref,
     });

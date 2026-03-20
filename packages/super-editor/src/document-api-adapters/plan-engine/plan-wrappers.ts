@@ -567,6 +567,20 @@ export function selectionMutationWrapper(
     if (mode === 'tracked') ensureTrackedInlinePropertySupport(inlineKeys);
   }
 
+  // Text inserts require a position inside a textblock. Node-edge targets
+  // (e.g., "before paragraph/table/image") resolve to block boundaries where
+  // tr.insert() would place a text node at the doc/block level instead of
+  // inside a textblock. Reject them up front before compilation.
+  if (request.kind === 'insert' && request.target) {
+    const hasNodeEdge = request.target.start.kind === 'nodeEdge' || request.target.end.kind === 'nodeEdge';
+    if (hasNodeEdge) {
+      throw new DocumentApiAdapterError(
+        'INVALID_TARGET',
+        'Text inserts do not support nodeEdge targets. Use a text-offset target inside a textblock.',
+      );
+    }
+  }
+
   const stepId = uuidv4();
   const where = buildSelectionWhere(request);
   const step = buildSelectionStepDef(stepId, request, where);
@@ -576,15 +590,14 @@ export function selectionMutationWrapper(
   // document state without mutating anything.
   const compiled = compilePlan(editor, [step]);
 
-  // Insert requires a collapsed (point) target. Reject non-collapsed ranges
-  // and multi-segment spans so the receipt is never misleading about the
-  // actual insertion point.
+  // Insert requires a collapsed (point) target inside a textblock.
+  // Reject spans, non-collapsed ranges, and positions that resolve to
+  // block boundaries (e.g., refs to images/tables) so executeTextInsert()
+  // never attempts tr.insert() outside a textblock.
   if (request.kind === 'insert') {
     const compiledStep = compiled.mutationSteps.find((s) => s.step.id === stepId);
     const target = compiledStep?.targets[0];
     if (target) {
-      // Multi-segment refs (span) are never valid for point inserts.
-      // Non-collapsed range/selection targets are also rejected.
       const isInvalidInsertTarget = target.kind === 'span' || target.absFrom !== target.absTo;
       if (isInvalidInsertTarget) {
         const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
@@ -594,6 +607,21 @@ export function selectionMutationWrapper(
           failure: { code: 'INVALID_TARGET', message: 'Insert operations require a collapsed target range.' },
         };
       }
+
+      // Verify the resolved position is inside a textblock — refs to
+      // non-text leaf blocks (image, table, sdt) resolve to block
+      // boundaries where a text node cannot be placed.
+      if (target.kind === 'range') {
+        const resolved = editor.state.doc.resolve(target.absFrom);
+        if (!resolved.parent.isTextblock) {
+          const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+          return {
+            success: false,
+            resolution,
+            failure: { code: 'INVALID_TARGET', message: 'Text insert target must be inside a textblock.' },
+          };
+        }
+      }
     }
   }
 
@@ -602,8 +630,12 @@ export function selectionMutationWrapper(
   checkRevision(editor, options?.expectedRevision);
 
   // Dry-run: compile and resolve, but do NOT execute.
+  // Mirror apply-time validation so callers do not get false-positive previews.
   if (options?.dryRun) {
     const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+    if (request.kind === 'insert' && !request.text) {
+      return { success: false, resolution, failure: { code: 'NO_OP', message: 'Insert text is empty.' } };
+    }
     return { success: true, resolution };
   }
 

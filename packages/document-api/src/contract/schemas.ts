@@ -4453,9 +4453,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         },
         parentCommentId: {
           type: 'string',
-          minLength: 1,
-          description:
-            'Parent comment ID for replying to an existing thread. Omit entirely when creating a new comment thread.',
+          description: 'Parent comment ID for creating a threaded reply.',
         },
       },
       ['text'],

@@ -66,6 +66,44 @@ export interface DocumentDefaults {
   styleId?: string;
 }
 
+/** A block in the document snapshot with its formatting. */
+export interface DocumentSnapshotBlock {
+  /** Block index in document order. */
+  ordinal: number;
+  /** Block ID for targeting (pass to superdoc_create, superdoc_format, etc.). */
+  nodeId: string;
+  /** Block type: paragraph, heading, table, listItem, image, etc. */
+  nodeType: string;
+  /** First 80 chars of text content. */
+  textPreview: string | null;
+  /** True if the block has no text content. */
+  isEmpty: boolean;
+  /** Named paragraph style ID (e.g. 'Normal', 'Heading1'). Null if implicit. */
+  styleId?: string | null;
+  /** Font family from the block's first text run. */
+  fontFamily?: string;
+  /** Font size from the block's first text run. */
+  fontSize?: number;
+  /** True if the block's text is bold. */
+  bold?: boolean;
+  /** Paragraph alignment: left, center, right, justify. */
+  alignment?: string;
+  /** Heading level (1-6). Only present for headings. */
+  headingLevel?: number;
+}
+
+/** Full document snapshot — structure, blocks with formatting, and defaults. */
+export interface DocumentSnapshot {
+  /** Total block count. */
+  total: number;
+  /** All blocks in document order with IDs, types, text, and formatting. */
+  blocks: DocumentSnapshotBlock[];
+  /** Default formatting detected from body text. */
+  defaults: DocumentDefaults;
+  /** Document revision. */
+  revision: string;
+}
+
 export interface DocumentInfo {
   counts: DocumentInfoCounts;
   outline: DocumentInfoOutlineItem[];

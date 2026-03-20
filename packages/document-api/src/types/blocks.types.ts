@@ -10,6 +10,18 @@ export interface BlockListEntry {
   nodeType: BlockNodeType;
   textPreview: string | null;
   isEmpty: boolean;
+  /** Named paragraph style ID (e.g. 'Normal', 'Heading1'). */
+  styleId?: string | null;
+  /** Font family from the block's first text run. */
+  fontFamily?: string;
+  /** Font size from the block's first text run. */
+  fontSize?: number;
+  /** True if the block's text is bold. */
+  bold?: boolean;
+  /** Paragraph alignment. */
+  alignment?: string;
+  /** Heading level (1-6). Only for headings. */
+  headingLevel?: number;
 }
 
 export interface BlocksListInput {

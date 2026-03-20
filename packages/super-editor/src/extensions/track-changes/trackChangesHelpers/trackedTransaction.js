@@ -11,6 +11,13 @@ import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 
+const COMPOSITION_INPUT_TYPES = new Set(['insertCompositionText', 'deleteCompositionText']);
+const COMBINING_MARK_REGEX = /^\p{Mark}$/u;
+const graphemeSegmenter =
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+
 const DEAD_KEY_PLACEHOLDER_MARKS = new Map([
   ['`', '\u0300'],
   ["'", '\u0301'],
@@ -39,10 +46,41 @@ const getTextNodeAtPos = ({ doc, pos }) => {
   return found;
 };
 
-const getOwnedDeadKeyPlaceholderAt = ({ doc, pos, user, composedChar }) => {
+const getFirstGrapheme = (text) => {
+  if (!text) {
+    return '';
+  }
+
+  if (graphemeSegmenter) {
+    const iterator = graphemeSegmenter.segment(text)[Symbol.iterator]();
+    return iterator.next().value?.segment ?? '';
+  }
+
+  const chars = Array.from(text);
+  if (!chars.length) {
+    return '';
+  }
+
+  const grapheme = [chars[0]];
+  for (let index = 1; index < chars.length; index += 1) {
+    if (!COMBINING_MARK_REGEX.test(chars[index])) {
+      break;
+    }
+    grapheme.push(chars[index]);
+  }
+
+  return grapheme.join('');
+};
+
+const startsWithCompatibleGrapheme = ({ text, combiningMark }) => {
+  const firstGrapheme = getFirstGrapheme(text);
+  return Boolean(firstGrapheme) && firstGrapheme.normalize('NFD').includes(combiningMark);
+};
+
+const getOwnedDeadKeyPlaceholderInfoAt = ({ doc, pos, user }) => {
   const placeholderChar = doc.textBetween(pos, pos + 1);
   const combiningMark = DEAD_KEY_PLACEHOLDER_MARKS.get(placeholderChar);
-  if (!combiningMark || !composedChar.normalize('NFD').includes(combiningMark)) {
+  if (!combiningMark) {
     return null;
   }
 
@@ -54,23 +92,32 @@ const getOwnedDeadKeyPlaceholderAt = ({ doc, pos, user, composedChar }) => {
   return hasOwnTrackedInsert ? { placeholderChar, combiningMark, textNodeAtPos } : null;
 };
 
-const stripDeadKeyPlaceholders = (text) => {
-  const chars = Array.from(text);
-  const normalized = [];
-
-  for (let index = 0; index < chars.length; index += 1) {
-    const current = chars[index];
-    const next = chars[index + 1];
-    const combiningMark = DEAD_KEY_PLACEHOLDER_MARKS.get(current);
-
-    if (combiningMark && next && next.normalize('NFD').includes(combiningMark)) {
-      continue;
-    }
-
-    normalized.push(current);
+const getOwnedDeadKeyPlaceholderAt = ({ doc, pos, user, insertedText }) => {
+  const placeholder = getOwnedDeadKeyPlaceholderInfoAt({ doc, pos, user });
+  if (!placeholder || !startsWithCompatibleGrapheme({ text: insertedText, combiningMark: placeholder.combiningMark })) {
+    return null;
   }
 
-  return normalized.join('');
+  return placeholder;
+};
+
+const getLeadingDeadKeyPlaceholderNormalization = (text) => {
+  const [placeholderChar] = Array.from(text);
+  if (!placeholderChar) {
+    return null;
+  }
+
+  const combiningMark = DEAD_KEY_PLACEHOLDER_MARKS.get(placeholderChar);
+  if (!combiningMark) {
+    return null;
+  }
+
+  const normalizedText = text.slice(placeholderChar.length);
+  if (!normalizedText || !startsWithCompatibleGrapheme({ text: normalizedText, combiningMark })) {
+    return null;
+  }
+
+  return { placeholderChar, combiningMark, normalizedText };
 };
 
 const createNormalizedSlice = ({ step, normalizedText, doc }) => {
@@ -97,95 +144,112 @@ const createNormalizedSlice = ({ step, normalizedText, doc }) => {
   return null;
 };
 
-const foldCollapsedPlaceholderInsertion = ({ step, doc, user, composedChar }) => {
-  const candidatePositions = [step.from, step.from - 1];
+const isCompositionTransaction = (tr) =>
+  tr.getMeta('composition') !== undefined || COMPOSITION_INPUT_TYPES.has(tr.getMeta('inputType'));
 
-  for (const pos of candidatePositions) {
+const getCandidatePlaceholderPositions = ({ step, pendingDeadKeyPlaceholder, isReplacement }) => {
+  if (pendingDeadKeyPlaceholder?.pos !== undefined) {
+    return [pendingDeadKeyPlaceholder.pos, pendingDeadKeyPlaceholder.pos - 1, pendingDeadKeyPlaceholder.pos + 1];
+  }
+
+  return isReplacement ? [step.from] : [step.from, step.from - 1];
+};
+
+const findCompatibleOwnedDeadKeyPlaceholder = ({ doc, positions, user, insertedText }) => {
+  for (const pos of positions) {
     if (pos < 1 || pos >= doc.content.size) {
       continue;
     }
 
-    const placeholder = getOwnedDeadKeyPlaceholderAt({ doc, pos, user, composedChar });
-    if (!placeholder) {
-      continue;
-    }
-
-    try {
-      const candidate = new ReplaceStep(pos, pos + 1, step.slice, step.structure);
-      if (!candidate.apply(doc).failed) {
-        return candidate;
-      }
-    } catch {
-      // Ignore invalid normalization attempts and keep the original step.
+    const placeholder = getOwnedDeadKeyPlaceholderAt({ doc, pos, user, insertedText });
+    if (placeholder) {
+      return { ...placeholder, pos };
     }
   }
 
   return null;
 };
 
-const normalizeCompositionInsertStep = ({ step, doc, tr, user }) => {
+const foldCollapsedPlaceholderInsertion = ({ step, doc, user, insertedText, pendingDeadKeyPlaceholder }) => {
+  const placeholder = findCompatibleOwnedDeadKeyPlaceholder({
+    doc,
+    positions: getCandidatePlaceholderPositions({ step, pendingDeadKeyPlaceholder, isReplacement: false }),
+    user,
+    insertedText,
+  });
+
+  if (!placeholder) {
+    return null;
+  }
+
+  try {
+    const candidate = new ReplaceStep(placeholder.pos, placeholder.pos + 1, step.slice, step.structure);
+    if (!candidate.apply(doc).failed) {
+      return candidate;
+    }
+  } catch {
+    // Ignore invalid normalization attempts and keep the original step.
+  }
+
+  return null;
+};
+
+const getInsertedText = (step) => step.slice.content.textBetween(0, step.slice.content.size);
+
+const normalizeCompositionInsertStep = ({ step, doc, tr, user, pendingDeadKeyPlaceholder }) => {
   if (!(step instanceof ReplaceStep)) {
     return step;
   }
 
-  const insertedText = step.slice.content.textBetween(0, step.slice.content.size);
-  const [composedChar] = Array.from(insertedText);
-  if (!composedChar) {
+  const insertedText = getInsertedText(step);
+  if (!insertedText) {
     return step;
   }
 
-  const normalizedInsertedText = stripDeadKeyPlaceholders(insertedText);
-  if (normalizedInsertedText !== insertedText) {
-    const normalizedSlice = createNormalizedSlice({ step, normalizedText: normalizedInsertedText, doc });
-    const [normalizedChar] = Array.from(normalizedInsertedText);
+  const hasCompositionContext = isCompositionTransaction(tr) || Boolean(pendingDeadKeyPlaceholder);
+  const leadingPlaceholderNormalization = hasCompositionContext
+    ? getLeadingDeadKeyPlaceholderNormalization(insertedText)
+    : null;
 
-    if (normalizedSlice && normalizedChar) {
-      if (step.from !== step.to) {
-        const placeholderInRange = getOwnedDeadKeyPlaceholderAt({
-          doc,
-          pos: step.from,
-          user,
-          composedChar: normalizedChar,
-        });
-        if (placeholderInRange) {
-          try {
-            const candidate = new ReplaceStep(step.from, step.to, normalizedSlice, step.structure);
-            if (!candidate.apply(doc).failed) {
-              return candidate;
-            }
-          } catch {
-            // Ignore invalid normalization attempts and keep the original step.
+  if (leadingPlaceholderNormalization) {
+    const { normalizedText } = leadingPlaceholderNormalization;
+    const normalizedSlice = createNormalizedSlice({ step, normalizedText, doc });
+
+    if (normalizedSlice) {
+      const placeholder = findCompatibleOwnedDeadKeyPlaceholder({
+        doc,
+        positions: getCandidatePlaceholderPositions({
+          step,
+          pendingDeadKeyPlaceholder,
+          isReplacement: step.from !== step.to,
+        }),
+        user,
+        insertedText: normalizedText,
+      });
+
+      if (placeholder) {
+        try {
+          const candidate =
+            step.from !== step.to
+              ? new ReplaceStep(step.from, step.to, normalizedSlice, step.structure)
+              : new ReplaceStep(placeholder.pos, placeholder.pos + 1, normalizedSlice, step.structure);
+          if (!candidate.apply(doc).failed) {
+            return candidate;
           }
-        }
-      } else {
-        const candidatePositions = [step.from, step.from - 1];
-        for (const pos of candidatePositions) {
-          if (pos < 1 || pos >= doc.content.size) {
-            continue;
-          }
-          const placeholder = getOwnedDeadKeyPlaceholderAt({ doc, pos, user, composedChar: normalizedChar });
-          if (!placeholder) {
-            continue;
-          }
-          try {
-            const candidate = new ReplaceStep(pos, pos + 1, normalizedSlice, step.structure);
-            if (!candidate.apply(doc).failed) {
-              return candidate;
-            }
-          } catch {
-            // Ignore invalid normalization attempts and keep the original step.
-          }
+        } catch {
+          // Ignore invalid normalization attempts and keep the original step.
         }
       }
     }
   }
 
-  if (step.from === step.to) {
+  if (step.from === step.to && hasCompositionContext) {
     const folded = foldCollapsedPlaceholderInsertion({
       step,
       doc,
       user,
-      composedChar,
+      insertedText,
+      pendingDeadKeyPlaceholder,
     });
 
     if (folded) {
@@ -193,6 +257,54 @@ const normalizeCompositionInsertStep = ({ step, doc, tr, user }) => {
     }
   }
   return step;
+};
+
+const mergeTrackChangesMeta = (tr, extraMeta) => {
+  const existingMeta = tr.getMeta(TrackChangesBasePluginKey) || {};
+  tr.setMeta(TrackChangesBasePluginKey, { ...existingMeta, ...extraMeta });
+};
+
+const getPendingDeadKeyPlaceholder = ({ tr, newTr, user }) => {
+  if (!isCompositionTransaction(tr) || tr.steps.length !== 1) {
+    return null;
+  }
+
+  const [originalStep] = tr.steps;
+  if (!(originalStep instanceof ReplaceStep) || originalStep.from !== originalStep.to) {
+    return null;
+  }
+
+  const insertedText = getInsertedText(originalStep);
+  if (!DEAD_KEY_PLACEHOLDER_MARKS.has(insertedText)) {
+    return null;
+  }
+
+  const trackMeta = newTr.getMeta(TrackChangesBasePluginKey);
+  const anchorPos = typeof trackMeta?.insertedTo === 'number' ? trackMeta.insertedTo : newTr.selection.from;
+  const matches = [];
+
+  newTr.doc.descendants((node, pos) => {
+    if (!node.isText || !node.text?.includes(insertedText)) {
+      return;
+    }
+
+    for (let index = 0; index < node.text.length; index += 1) {
+      if (node.text[index] === insertedText) {
+        matches.push(pos + index);
+      }
+    }
+  });
+
+  const pos = matches.sort((left, right) => Math.abs(left - anchorPos) - Math.abs(right - anchorPos))[0];
+  if (pos === undefined) {
+    return null;
+  }
+
+  return {
+    pos,
+    placeholderChar: insertedText,
+    authorEmail: user.email,
+  };
 };
 
 /**
@@ -205,6 +317,7 @@ export const trackedTransaction = ({ tr, state, user }) => {
   const notAllowedMeta = ['historyUndo', 'historyRedo', 'acceptReject'];
   const isProgrammaticInput = tr.getMeta('inputType') === 'programmatic';
   const ySyncMeta = tr.getMeta(ySyncPluginKey);
+  const pendingDeadKeyPlaceholder = TrackChangesBasePluginKey.getState(state)?.pendingDeadKeyPlaceholder ?? null;
   const allowedMeta = new Set([...onlyInputTypeMeta, ySyncPluginKey.key, 'forceTrackChanges']);
   const hasDisallowedMeta = tr.meta && Object.keys(tr.meta).some((meta) => !allowedMeta.has(meta));
 
@@ -215,6 +328,9 @@ export const trackedTransaction = ({ tr, state, user }) => {
     notAllowedMeta.includes(tr.getMeta('inputType')) ||
     tr.getMeta(CommentsPluginKey) // Skip if it's a comment transaction.
   ) {
+    if (pendingDeadKeyPlaceholder && !isCompositionTransaction(tr)) {
+      mergeTrackChangesMeta(tr, { pendingDeadKeyPlaceholder: null });
+    }
     return tr;
   }
 
@@ -231,7 +347,7 @@ export const trackedTransaction = ({ tr, state, user }) => {
       return;
     }
 
-    step = normalizeCompositionInsertStep({ step, doc, tr, user });
+    step = normalizeCompositionInsertStep({ step, doc, tr, user, pendingDeadKeyPlaceholder });
 
     if (step instanceof ReplaceStep) {
       replaceStep({
@@ -304,6 +420,10 @@ export const trackedTransaction = ({ tr, state, user }) => {
   if (tr.getMeta('addToHistory') !== undefined) {
     newTr.setMeta('addToHistory', tr.getMeta('addToHistory'));
   }
+
+  mergeTrackChangesMeta(newTr, {
+    pendingDeadKeyPlaceholder: getPendingDeadKeyPlaceholder({ tr, newTr, user }),
+  });
 
   // Get the track changes meta to check if we have an adjusted insertion position (SD-1624).
   const trackMeta = newTr.getMeta(TrackChangesBasePluginKey);

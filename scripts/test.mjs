@@ -24,11 +24,17 @@ const bunTestExitCode = run(pnpmCommand, ['-r', '--parallel', '--filter', '@supe
   '--filter', '@superdoc/common', '--filter', '@font-utils',
   '--filter', '@locale-utils', '--filter', '@url-validation', 'test']);
 
+// Run super-editor bun tests (migrated files excluded from vitest)
+const superEditorBunExitCode = run(pnpmCommand, ['--filter', '@superdoc/super-editor', 'run', 'test:bun']);
+
 if (vitestExitCode !== 0) {
   process.exit(vitestExitCode);
 }
 if (bunTestExitCode !== 0) {
   process.exit(bunTestExitCode);
+}
+if (superEditorBunExitCode !== 0) {
+  process.exit(superEditorBunExitCode);
 }
 
 if (args.length === 0) {

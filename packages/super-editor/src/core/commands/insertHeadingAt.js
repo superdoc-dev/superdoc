@@ -1,50 +1,4 @@
-/**
- * Find the text marks from the nearest heading in the document.
- * Falls back to the nearest body paragraph if no headings exist,
- * so the heading at least uses the document's font family.
- *
- * @param {import('prosemirror-model').Node} doc
- * @param {number} pos - insertion position
- * @returns {readonly import('prosemirror-model').Mark[]}
- */
-function findNearbyHeadingMarks(doc, pos) {
-  const headingPattern = /^Heading\d$/;
-  const resolvedPos = doc.resolve(Math.min(pos, doc.content.size));
-
-  let fallbackMarks = /** @type {readonly import('prosemirror-model').Mark[]} */ ([]);
-
-  for (let d = resolvedPos.depth; d >= 0; d--) {
-    const parent = resolvedPos.node(d);
-    const index = resolvedPos.index(d);
-
-    const candidates = [];
-    for (let i = index - 1; i >= 0; i--) candidates.push(parent.child(i));
-    for (let i = index; i < parent.childCount; i++) candidates.push(parent.child(i));
-
-    for (const node of candidates) {
-      if (node.type.name !== 'paragraph') continue;
-
-      let found = null;
-      node.descendants((child) => {
-        if (found) return false;
-        if (child.isText && child.marks.length > 0) {
-          found = child.marks;
-          return false;
-        }
-      });
-
-      if (!found) continue;
-
-      const sid = node.attrs.paragraphProperties?.styleId;
-      // Prefer heading marks
-      if (sid && headingPattern.test(sid)) return found;
-      // Track first body paragraph as fallback
-      if (fallbackMarks.length === 0) fallbackMarks = found;
-    }
-  }
-
-  return fallbackMarks;
-}
+import { findNearbyMarks } from '../helpers/findNearbyMarks.js';
 
 /**
  * Insert a heading node at an absolute document position.
@@ -52,8 +6,9 @@ function findNearbyHeadingMarks(doc, pos) {
  * Internally, headings are paragraph nodes with a heading styleId
  * (`Heading1` through `Heading6`) set on `paragraphProperties`.
  *
- * When text is provided, it copies the text formatting from the nearest
- * existing heading so new headings match the document's heading style.
+ * When text is provided, copies formatting from the nearest heading
+ * (or body paragraph if no headings exist) so new headings match
+ * the document's font family.
  *
  * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean; styleId?: string }} options
  * @returns {import('./types/index.js').Command}
@@ -75,7 +30,7 @@ export const insertHeadingAt =
 
     let textNode = null;
     if (normalizedText.length > 0) {
-      const marks = findNearbyHeadingMarks(state.doc, pos);
+      const marks = findNearbyMarks(state.doc, pos, { prefer: 'heading' });
       textNode = marks.length > 0 ? state.schema.text(normalizedText, marks) : state.schema.text(normalizedText);
     }
 

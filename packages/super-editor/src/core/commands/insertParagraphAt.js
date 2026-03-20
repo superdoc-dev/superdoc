@@ -1,53 +1,10 @@
-/**
- * Find the text marks (fontFamily, fontSize, etc.) from the nearest
- * body paragraph in the document. Returns the marks array from the
- * first text node found, or an empty array if none exist.
- *
- * @param {import('prosemirror-model').Node} doc
- * @param {number} pos - insertion position
- * @returns {readonly import('prosemirror-model').Mark[]}
- */
-function findNearbyTextMarks(doc, pos) {
-  const headingPattern = /^Heading\d$/;
-  const resolvedPos = doc.resolve(Math.min(pos, doc.content.size));
-
-  // Walk up the tree looking for sibling paragraphs
-  for (let d = resolvedPos.depth; d >= 0; d--) {
-    const parent = resolvedPos.node(d);
-    const index = resolvedPos.index(d);
-
-    // Check paragraphs before the insertion point first, then after
-    const candidates = [];
-    for (let i = index - 1; i >= 0; i--) candidates.push(parent.child(i));
-    for (let i = index; i < parent.childCount; i++) candidates.push(parent.child(i));
-
-    for (const node of candidates) {
-      if (node.type.name !== 'paragraph') continue;
-      // Skip headings — we want body text formatting
-      const sid = node.attrs.paragraphProperties?.styleId;
-      if (sid && headingPattern.test(sid)) continue;
-
-      // Find the first text node with marks
-      let found = null;
-      node.descendants((child) => {
-        if (found) return false;
-        if (child.isText && child.marks.length > 0) {
-          found = child.marks;
-          return false;
-        }
-      });
-      if (found) return found;
-    }
-  }
-
-  return [];
-}
+import { findNearbyMarks } from '../helpers/findNearbyMarks.js';
 
 /**
  * Insert a paragraph node at an absolute document position.
  *
- * When text is provided, it copies the text formatting (font, size, etc.)
- * from the nearest body paragraph so new content matches the document.
+ * When text is provided, copies formatting (font, size, etc.) from the
+ * nearest body paragraph so new content matches the document.
  *
  * @param {{ pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean; styleId?: string }} options
  * @returns {import('./types/index.js').Command}
@@ -66,10 +23,9 @@ export const insertParagraphAt =
     };
     const normalizedText = typeof text === 'string' ? text : '';
 
-    // Create text node with marks copied from nearest paragraph
     let textNode = null;
     if (normalizedText.length > 0) {
-      const marks = findNearbyTextMarks(state.doc, pos);
+      const marks = findNearbyMarks(state.doc, pos, { prefer: 'body' });
       textNode = marks.length > 0 ? state.schema.text(normalizedText, marks) : state.schema.text(normalizedText);
     }
 

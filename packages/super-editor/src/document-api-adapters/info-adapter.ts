@@ -8,6 +8,7 @@ import type {
   NodeInfo,
 } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
+import { HEADING_STYLE_PATTERN } from '../core/helpers/findNearbyMarks.js';
 import { findLegacyAdapter } from './find-adapter.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
 import { getLiveDocumentCounts } from './helpers/live-document-counts.js';
@@ -81,7 +82,7 @@ function extractTextFormatting(node: import('prosemirror-model').Node): { fontFa
  * and detect the document's default body text formatting.
  */
 function collectDocumentStyles(editor: Editor): { styles: DocumentStyles; defaults: DocumentDefaults } {
-  const headingPattern = /^Heading\d$/;
+  const headingPattern = HEADING_STYLE_PATTERN;
 
   // Per-style data
   const styleData = new Map<string, { count: number; fontFamily?: string; fontSize?: number }>();

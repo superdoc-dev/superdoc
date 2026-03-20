@@ -30,6 +30,8 @@ import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRu
 // Style resolution helpers
 // ---------------------------------------------------------------------------
 
+import { HEADING_STYLE_PATTERN } from '../../core/helpers/findNearbyMarks.js';
+
 /**
  * Scan the document for the most common non-heading paragraph styleId.
  * Falls back to 'Normal' (the OOXML default) when no explicit styles are
@@ -37,12 +39,11 @@ import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRu
  */
 function resolveDefaultParagraphStyle(editor: Editor): string {
   const counts = new Map<string, number>();
-  const headingPattern = /^Heading\d$/;
 
   editor.state.doc.descendants((node) => {
     if (node.type.name !== 'paragraph') return;
     const sid = (node.attrs as { paragraphProperties?: { styleId?: string } }).paragraphProperties?.styleId;
-    if (sid && !headingPattern.test(sid)) {
+    if (sid && !HEADING_STYLE_PATTERN.test(sid)) {
       counts.set(sid, (counts.get(sid) ?? 0) + 1);
     }
   });

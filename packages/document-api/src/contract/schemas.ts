@@ -3443,7 +3443,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ),
         ],
       },
-      text: { type: 'string', description: 'Paragraph text content.' },
+      text: {
+        type: 'string',
+        description:
+          'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.',
+      },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
     success: createParagraphSuccessSchema,
@@ -3797,7 +3801,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         mode: {
           enum: ['empty', 'fromParagraphs'],
           description:
-            "Required. Creation mode: 'empty' creates a new empty list at the paragraph specified by 'at'; 'fromParagraphs' converts existing paragraph(s) specified by 'target' into list items.",
+            "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
         },
         at: {
           ...ref('BlockAddress'),

@@ -71,6 +71,7 @@ import { resolveSelectionTarget } from '../helpers/selection-target-resolver.js'
 import { getBlockIndex } from '../helpers/index-cache.js';
 import {
   findBlockByNodeIdOnly,
+  findBlockByPos,
   isTextBlockCandidate,
   type BlockCandidate,
   type BlockIndex,
@@ -80,6 +81,22 @@ import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Computes the block-relative text offset for a `nodeEdge` `edge: 'after'` point.
+ * Returns the flattened text length of the block so the receipt target reflects
+ * the end of the anchor block rather than offset 0.
+ */
+function nodeEdgeAfterOffset(editor: Editor, nodeType: SelectionEdgeNodeType, nodeId: string): number {
+  const index = getBlockIndex(editor);
+  const key = `${nodeType}:${nodeId}`;
+  const block = index.byId.get(key);
+  if (!block || !block.node.isTextblock) return 0;
+  const contentStart = block.pos + 1;
+  const contentEnd = block.end - 1;
+  if (contentEnd <= contentStart) return 0;
+  return editor.state.doc.textBetween(contentStart, contentEnd, '', '\ufffc').length;
+}
 
 /** Check whether the editor has a DOM document available for HTML parsing. */
 function editorHasDom(editor: Editor): boolean {
@@ -871,7 +888,16 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
     // Derive backward-compatible TextAddress from the start point
     const startPoint = target.start;
     const blockId = startPoint.kind === 'text' ? startPoint.blockId : startPoint.node.nodeId;
-    const offset = startPoint.kind === 'text' ? startPoint.offset : 0;
+    let offset: number;
+    if (startPoint.kind === 'text') {
+      offset = startPoint.offset;
+    } else if (startPoint.edge === 'after') {
+      // For edge: 'after', compute the block's text length so the receipt
+      // reflects the end of the anchor block, not offset 0.
+      offset = nodeEdgeAfterOffset(editor, startPoint.node.nodeType, startPoint.node.nodeId);
+    } else {
+      offset = 0;
+    }
     effectiveTarget = { kind: 'text', blockId, range: { start: offset, end: offset } };
   } else if (ref) {
     // Resolve ref via a dummy compile step to get the absolute position
@@ -899,7 +925,15 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
     // but insert semantics is "insert before", not "replace range".
     resolvedRange = { from: compiledTarget.absFrom, to: compiledTarget.absFrom };
     const resolution = buildSelectionResolutionFromCompiled(compiled, dummyStepId);
-    effectiveTarget = resolution.target;
+    // Collapse the resolution target to match the collapsed resolvedRange —
+    // the original resolution may reflect the full matched range, but insert
+    // semantics is a point insert at the start, not a range replacement.
+    const refTarget = resolution.target;
+    effectiveTarget = {
+      kind: 'text',
+      blockId: refTarget.blockId,
+      range: { start: refTarget.range.start, end: refTarget.range.start },
+    };
   } else {
     const fallback = resolveDefaultInsertTarget(editor);
     if (!fallback) {

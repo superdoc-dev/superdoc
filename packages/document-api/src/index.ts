@@ -104,6 +104,7 @@ import type { SDDocument } from './types/fragment.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
 import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
 import { executeGetHtml, type GetHtmlAdapter, type GetHtmlInput } from './get-html/get-html.js';
+import { validateStoryLocator } from './validation/story-validator.js';
 import {
   executeMarkdownToFragment,
   type MarkdownToFragmentAdapter,
@@ -1715,8 +1716,48 @@ function executeQueryMatch(
       { value: input },
     );
   }
-  // Normalize flat selector shorthand to canonical nested form.
-  const normalized: QueryMatchInput = 'select' in input ? input : { select: input };
+  const rawInput = input as Record<string, unknown> &
+    Partial<QueryMatchInput> &
+    Partial<TextSelector> &
+    Partial<NodeSelector>;
+  const isFlatNodeShorthand =
+    rawInput.type === 'node' ||
+    (rawInput.type === undefined && (rawInput.nodeType !== undefined || rawInput.kind !== undefined));
+  const normalized: QueryMatchInput =
+    'select' in input
+      ? input
+      : rawInput.type === 'text'
+        ? {
+            select: {
+              type: 'text',
+              pattern: rawInput.pattern as string,
+              ...(rawInput.mode !== undefined ? { mode: rawInput.mode as TextSelector['mode'] } : {}),
+              ...(rawInput.caseSensitive !== undefined ? { caseSensitive: rawInput.caseSensitive as boolean } : {}),
+            },
+            ...(rawInput.within !== undefined ? { within: rawInput.within as QueryMatchInput['within'] } : {}),
+            ...(rawInput.in !== undefined ? { in: rawInput.in as QueryMatchInput['in'] } : {}),
+            ...(rawInput.require !== undefined ? { require: rawInput.require as QueryMatchInput['require'] } : {}),
+            ...(rawInput.includeNodes !== undefined ? { includeNodes: rawInput.includeNodes as boolean } : {}),
+            ...(rawInput.limit !== undefined ? { limit: rawInput.limit as number } : {}),
+            ...(rawInput.offset !== undefined ? { offset: rawInput.offset as number } : {}),
+          }
+        : isFlatNodeShorthand
+          ? {
+              select: {
+                type: 'node',
+                ...(rawInput.nodeType !== undefined ? { nodeType: rawInput.nodeType as NodeSelector['nodeType'] } : {}),
+                ...(rawInput.kind !== undefined ? { kind: rawInput.kind as NodeSelector['kind'] } : {}),
+              },
+              ...(rawInput.within !== undefined ? { within: rawInput.within as QueryMatchInput['within'] } : {}),
+              ...(rawInput.in !== undefined ? { in: rawInput.in as QueryMatchInput['in'] } : {}),
+              ...(rawInput.require !== undefined ? { require: rawInput.require as QueryMatchInput['require'] } : {}),
+              ...(rawInput.mode !== undefined ? { mode: rawInput.mode as QueryMatchInput['mode'] } : {}),
+              ...(rawInput.includeNodes !== undefined ? { includeNodes: rawInput.includeNodes as boolean } : {}),
+              ...(rawInput.limit !== undefined ? { limit: rawInput.limit as number } : {}),
+              ...(rawInput.offset !== undefined ? { offset: rawInput.offset as number } : {}),
+            }
+          : { select: input };
+  validateStoryLocator(normalized.in, 'in');
   return adapter.match(normalized);
 }
 

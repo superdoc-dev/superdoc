@@ -349,6 +349,7 @@ const refResolverMocks = vi.hoisted(() => ({
   // Index (block + entry)
   findAllIndexNodes: vi.fn(() => []),
   resolveIndexTarget: vi.fn(),
+  resolvePostMutationIndexId: vi.fn((_doc: ProseMirrorNode, sdBlockId: string) => sdBlockId),
   extractIndexInfo: vi.fn(),
   buildIndexDiscoveryItem: vi.fn(),
   findAllIndexEntries: vi.fn(() => []),
@@ -372,6 +373,7 @@ const refResolverMocks = vi.hoisted(() => ({
   buildCitationDiscoveryItem: vi.fn(),
   findAllBibliographies: vi.fn(() => []),
   resolveBibliographyTarget: vi.fn(),
+  resolvePostMutationBibliographyId: vi.fn((_doc: ProseMirrorNode, sdBlockId: string) => sdBlockId),
   extractBibliographyInfo: vi.fn(),
   buildBibliographyDiscoveryItem: vi.fn(),
   getSourcesFromConverter: vi.fn(() => []),
@@ -379,6 +381,7 @@ const refResolverMocks = vi.hoisted(() => ({
   // Authority (block + entry)
   findAllAuthorities: vi.fn(() => []),
   resolveAuthorityTarget: vi.fn(),
+  resolvePostMutationAuthorityId: vi.fn((_doc: ProseMirrorNode, sdBlockId: string) => sdBlockId),
   extractAuthorityInfo: vi.fn(),
   buildAuthorityDiscoveryItem: vi.fn(),
   findAllAuthorityEntries: vi.fn(() => []),
@@ -413,6 +416,7 @@ vi.mock('../helpers/index-resolver.js', async (importOriginal) => {
   return {
     findAllIndexNodes: refResolverMocks.findAllIndexNodes,
     resolveIndexTarget: refResolverMocks.resolveIndexTarget,
+    resolvePostMutationIndexId: refResolverMocks.resolvePostMutationIndexId,
     extractIndexInfo: refResolverMocks.extractIndexInfo,
     buildIndexDiscoveryItem: refResolverMocks.buildIndexDiscoveryItem,
     findAllIndexEntries: refResolverMocks.findAllIndexEntries,
@@ -444,10 +448,12 @@ vi.mock('../helpers/citation-resolver.js', () => ({
   buildCitationDiscoveryItem: refResolverMocks.buildCitationDiscoveryItem,
   findAllBibliographies: refResolverMocks.findAllBibliographies,
   resolveBibliographyTarget: refResolverMocks.resolveBibliographyTarget,
+  resolvePostMutationBibliographyId: refResolverMocks.resolvePostMutationBibliographyId,
   extractBibliographyInfo: refResolverMocks.extractBibliographyInfo,
   buildBibliographyDiscoveryItem: refResolverMocks.buildBibliographyDiscoveryItem,
   getSourcesFromConverter: refResolverMocks.getSourcesFromConverter,
   resolveSourceTarget: refResolverMocks.resolveSourceTarget,
+  syncBibliographyStyleToConverter: vi.fn(),
 }));
 
 vi.mock('../helpers/authority-resolver.js', async (importOriginal) => {
@@ -455,6 +461,7 @@ vi.mock('../helpers/authority-resolver.js', async (importOriginal) => {
   return {
     findAllAuthorities: refResolverMocks.findAllAuthorities,
     resolveAuthorityTarget: refResolverMocks.resolveAuthorityTarget,
+    resolvePostMutationAuthorityId: refResolverMocks.resolvePostMutationAuthorityId,
     extractAuthorityInfo: refResolverMocks.extractAuthorityInfo,
     buildAuthorityDiscoveryItem: refResolverMocks.buildAuthorityDiscoveryItem,
     findAllAuthorityEntries: refResolverMocks.findAllAuthorityEntries,
@@ -3784,15 +3791,28 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
       bibliographyInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'tracked' }),
     applyCase: () =>
       withAppliedReceipt(() =>
-        bibliographyInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'direct' }),
+        bibliographyInsertWrapper(
+          makeRefEditor(),
+          { at: { kind: 'documentEnd' }, style: 'APA' },
+          { changeMode: 'direct' },
+        ),
       ),
   },
   'citations.bibliography.configure': {
-    throwCase: () => bibliographyConfigureWrapper(makeRefEditor(), { style: 'APA' }, { changeMode: 'tracked' }),
+    throwCase: () =>
+      bibliographyConfigureWrapper(
+        makeRefEditor(),
+        { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' }, style: 'APA' },
+        { changeMode: 'tracked' },
+      ),
     applyCase: () => {
-      refResolverMocks.findAllBibliographies.mockReturnValueOnce([{ nodeId: 'bib-1' }]);
+      refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
       return withAppliedReceipt(() =>
-        bibliographyConfigureWrapper(makeRefEditor(), { style: 'APA' }, { changeMode: 'direct' }),
+        bibliographyConfigureWrapper(
+          makeRefEditor(),
+          { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' }, style: 'APA' },
+          { changeMode: 'direct' },
+        ),
       );
     },
   },
@@ -10392,6 +10412,489 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const result = imagesRemoveCaptionWrapper(editor, { imageId: 'img-cap' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
+  },
+
+  // ---- Bookmarks ----
+  'bookmarks.insert': () => {
+    const spy = vi.spyOn(adapterUtils, 'resolveTextTarget').mockReturnValueOnce({ from: 1, to: 1 });
+    try {
+      return bookmarksInsertWrapper(
+        makeRefEditor(),
+        { name: 'bm1', at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+        { changeMode: 'direct', dryRun: true },
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  },
+  'bookmarks.rename': () => {
+    refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
+      mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
+    );
+    return bookmarksRenameWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' }, newName: 'bm2' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'bookmarks.remove': () => {
+    refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
+      mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
+    );
+    return bookmarksRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'bookmark', name: 'bm1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Footnotes ----
+  'footnotes.insert': () => {
+    return footnotesInsertWrapper(
+      makeRefEditor(),
+      {
+        type: 'footnote',
+        content: 'x',
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'footnotes.update': () => {
+    refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
+      noteId: 'fn-1',
+      type: 'footnote',
+    });
+    return footnotesUpdateWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' }, patch: { content: 'Updated' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'footnotes.remove': () => {
+    refResolverMocks.resolveFootnoteTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'fn-1', 'footnoteReference'),
+      noteId: 'fn-1',
+      type: 'footnote',
+    });
+    return footnotesRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'footnote', noteId: 'fn-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'footnotes.configure': () => {
+    return footnotesConfigureWrapper(
+      makeRefEditor(),
+      { type: 'footnote', scope: { kind: 'document' }, numbering: { format: 'decimal' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Cross-References ----
+  'crossRefs.insert': () => {
+    return crossRefsInsertWrapper(
+      makeRefEditor(),
+      {
+        target: { kind: 'bookmark', name: 'bm1' },
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+        display: 'content',
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'crossRefs.rebuild': () => {
+    refResolverMocks.resolveCrossRefTarget.mockReturnValueOnce(mockResolvedNode(1, 'cr-1', 'crossReference'));
+    refResolverMocks.extractCrossRefInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'crossRef',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return crossRefsRebuildWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'crossRef',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'crossRefs.remove': () => {
+    refResolverMocks.resolveCrossRefTarget.mockReturnValueOnce(mockResolvedNode(1, 'cr-1', 'crossReference'));
+    refResolverMocks.extractCrossRefInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'crossRef',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return crossRefsRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'crossRef',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Index (block) ----
+  'index.insert': () => {
+    return indexInsertWrapper(makeRefEditor(), { at: { kind: 'documentEnd' } }, { changeMode: 'direct', dryRun: true });
+  },
+  'index.configure': () => {
+    refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+    return indexConfigureWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' }, patch: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.rebuild': () => {
+    refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+    return indexRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.remove': () => {
+    refResolverMocks.resolveIndexTarget.mockReturnValueOnce(mockResolvedNode(1, 'idx-1', 'documentIndex'));
+    return indexRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'index', nodeId: 'idx-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Index entries (inline) ----
+  'index.entries.insert': () => {
+    return indexEntriesInsertWrapper(
+      makeRefEditor(),
+      { entry: { text: 'Test' }, at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.entries.update': () => {
+    refResolverMocks.resolveIndexEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'xe-1', 'indexEntry'));
+    refResolverMocks.extractIndexEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'indexEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return indexEntriesUpdateWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'indexEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+        patch: { text: 'Updated' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'index.entries.remove': () => {
+    refResolverMocks.resolveIndexEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'xe-1', 'indexEntry'));
+    refResolverMocks.extractIndexEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'indexEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return indexEntriesRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'indexEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Captions ----
+  'captions.insert': () => {
+    return captionsInsertWrapper(
+      makeRefEditor(),
+      { label: 'Figure', adjacentTo: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }, position: 'below' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'captions.update': () => {
+    refResolverMocks.resolveCaptionTarget.mockReturnValueOnce(mockResolvedNode(1, 'cap-1', 'paragraph'));
+    return captionsUpdateWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' }, patch: { text: 'Updated' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'captions.remove': () => {
+    refResolverMocks.resolveCaptionTarget.mockReturnValueOnce(mockResolvedNode(1, 'cap-1', 'paragraph'));
+    return captionsRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'cap-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'captions.configure': () => {
+    return captionsConfigureWrapper(
+      makeRefEditor(),
+      { label: 'Figure', format: 'decimal' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Fields ----
+  'fields.insert': () => {
+    return fieldsInsertWrapper(
+      makeRefEditor(),
+      {
+        mode: 'raw',
+        instruction: 'DATE',
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'fields.rebuild': () => {
+    refResolverMocks.resolveFieldTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'f-1', 'field'),
+      blockId: 'p1',
+      occurrenceIndex: 0,
+      nestingDepth: 0,
+    });
+    return fieldsRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'fields.remove': () => {
+    refResolverMocks.resolveFieldTarget.mockReturnValueOnce({
+      ...mockResolvedNode(1, 'f-1', 'field'),
+      blockId: 'p1',
+      occurrenceIndex: 0,
+      nestingDepth: 0,
+    });
+    return fieldsRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'field', blockId: 'p1', occurrenceIndex: 0, nestingDepth: 0 }, mode: 'raw' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Citations (inline) ----
+  'citations.insert': () => {
+    return citationsInsertWrapper(
+      makeRefEditor(),
+      { sourceIds: ['src-1'], at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.update': () => {
+    refResolverMocks.resolveCitationTarget.mockReturnValueOnce(mockResolvedNode(1, 'cit-1', 'citation'));
+    refResolverMocks.extractCitationInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'citation',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return citationsUpdateWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'citation',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+        patch: { sourceIds: ['src-2'] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.remove': () => {
+    refResolverMocks.resolveCitationTarget.mockReturnValueOnce(mockResolvedNode(1, 'cit-1', 'citation'));
+    refResolverMocks.extractCitationInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'citation',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return citationsRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'citation',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Citation sources (out-of-band) ----
+  'citations.sources.insert': () => {
+    return citationSourcesInsertWrapper(
+      makeRefEditor(),
+      { type: 'book', fields: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.sources.update': () => {
+    refResolverMocks.resolveSourceTarget.mockReturnValueOnce({ tag: 'src-1', type: 'book', fields: {} });
+    return citationSourcesUpdateWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' }, patch: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.sources.remove': () => {
+    refResolverMocks.resolveSourceTarget.mockReturnValueOnce({ tag: 'src-1', type: 'book', fields: {} });
+    return citationSourcesRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'entity', entityType: 'citationSource', sourceId: 'src-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Bibliography (block) ----
+  'citations.bibliography.insert': () => {
+    return bibliographyInsertWrapper(
+      makeRefEditor(),
+      { at: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.bibliography.configure': () => {
+    refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+    return bibliographyConfigureWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' }, style: 'APA' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.bibliography.rebuild': () => {
+    refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+    return bibliographyRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'citations.bibliography.remove': () => {
+    refResolverMocks.resolveBibliographyTarget.mockReturnValueOnce(mockResolvedNode(1, 'bib-1', 'bibliography'));
+    return bibliographyRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'bibliography', nodeId: 'bib-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Authorities (block) ----
+  'authorities.insert': () => {
+    return authoritiesInsertWrapper(
+      makeRefEditor(),
+      { at: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.configure': () => {
+    refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+    return authoritiesConfigureWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' }, patch: {} },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.rebuild': () => {
+    refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+    return authoritiesRebuildWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.remove': () => {
+    refResolverMocks.resolveAuthorityTarget.mockReturnValueOnce(mockResolvedNode(1, 'toa-1', 'tableOfAuthorities'));
+    return authoritiesRemoveWrapper(
+      makeRefEditor(),
+      { target: { kind: 'block', nodeType: 'tableOfAuthorities', nodeId: 'toa-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Authority entries (inline) ----
+  'authorities.entries.insert': () => {
+    return authorityEntriesInsertWrapper(
+      makeRefEditor(),
+      {
+        entry: { longCitation: 'Test v. Case', shortCitation: 'Test', category: 1 },
+        at: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 0 } }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.entries.update': () => {
+    refResolverMocks.resolveAuthorityEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ta-1', 'authorityEntry'));
+    refResolverMocks.extractAuthorityEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'authorityEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return authorityEntriesUpdateWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'authorityEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+        patch: { longCitation: 'Updated' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'authorities.entries.remove': () => {
+    refResolverMocks.resolveAuthorityEntryTarget.mockReturnValueOnce(mockResolvedNode(1, 'ta-1', 'authorityEntry'));
+    refResolverMocks.extractAuthorityEntryInfo.mockReturnValueOnce({
+      address: {
+        kind: 'inline',
+        nodeType: 'authorityEntry',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+      },
+    });
+    return authorityEntriesRemoveWrapper(
+      makeRefEditor(),
+      {
+        target: {
+          kind: 'inline',
+          nodeType: 'authorityEntry',
+          anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
   },
 };
 

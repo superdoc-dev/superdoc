@@ -3,6 +3,7 @@
  * and citations.bibliography.* operations.
  */
 
+import { v4 as uuidv4 } from 'uuid';
 import type { Editor } from '../../core/Editor.js';
 import type {
   CitationListInput,
@@ -40,12 +41,13 @@ import {
   resolveCitationTarget,
   extractCitationInfo,
   buildCitationDiscoveryItem,
-  findAllBibliographies,
   resolveBibliographyTarget,
+  resolvePostMutationBibliographyId,
   extractBibliographyInfo,
   buildBibliographyDiscoveryItem,
   getSourcesFromConverter,
   resolveSourceTarget,
+  syncBibliographyStyleToConverter,
   type CitationSourceRecord,
 } from '../helpers/citation-resolver.js';
 import { paginate, resolveInlineInsertPosition, resolveBlockCreatePosition } from '../helpers/adapter-utils.js';
@@ -366,7 +368,7 @@ export function bibliographyInsertWrapper(
 ): BibliographyMutationResult {
   rejectTrackedMode('citations.bibliography.insert', options);
 
-  const nodeId = `bibliography-${Date.now()}`;
+  const nodeId = uuidv4();
   const address: BibliographyAddress = { kind: 'block', nodeType: 'bibliography', nodeId };
 
   if (options?.dryRun) return bibSuccess(address);
@@ -385,7 +387,11 @@ export function bibliographyInsertWrapper(
     editor,
     () => {
       const node = bibType.create(
-        { instruction: 'BIBLIOGRAPHY', sdBlockId: nodeId },
+        {
+          instruction: 'BIBLIOGRAPHY',
+          sdBlockId: nodeId,
+          ...(input.style !== undefined ? { style: input.style } : {}),
+        },
         editor.schema.nodes.paragraph.create(),
       );
       const { tr } = editor.state;
@@ -398,7 +404,13 @@ export function bibliographyInsertWrapper(
   );
 
   if (!receiptApplied(receipt)) return bibFailure('NO_OP', 'Insert produced no change.');
-  return bibSuccess(address);
+
+  if (input.style !== undefined) {
+    syncBibliographyStyleToConverter(editor, input.style);
+  }
+
+  const postMutationId = resolvePostMutationBibliographyId(editor.state.doc, nodeId);
+  return bibSuccess({ kind: 'block', nodeType: 'bibliography', nodeId: postMutationId });
 }
 
 export function bibliographyConfigureWrapper(
@@ -408,31 +420,20 @@ export function bibliographyConfigureWrapper(
 ): BibliographyMutationResult {
   rejectTrackedMode('citations.bibliography.configure', options);
 
-  const all = findAllBibliographies(editor.state.doc);
-  const nodeId = all[0]?.nodeId ?? '';
-  const address: BibliographyAddress = { kind: 'block', nodeType: 'bibliography', nodeId };
+  const resolved = resolveBibliographyTarget(editor.state.doc, input.target);
+  const address: BibliographyAddress = { kind: 'block', nodeType: 'bibliography', nodeId: resolved.nodeId };
 
   if (options?.dryRun) return bibSuccess(address);
 
-  // Apply the style to all bibliography nodes in the document.
   const receipt = executeDomainCommand(
     editor,
     () => {
+      if ((resolved.node.attrs.style as string) === input.style) return false;
       const { tr } = editor.state;
-      let changed = false;
-
-      tr.doc.descendants((node, pos) => {
-        if (node.type.name !== 'bibliography') return true;
-        if ((node.attrs.style as string) === input.style) return true;
-        tr.setNodeMarkup(tr.mapping.map(pos), undefined, {
-          ...node.attrs,
-          style: input.style,
-        });
-        changed = true;
-        return false; // bibliography is a block, no need to descend
+      tr.setNodeMarkup(resolved.pos, undefined, {
+        ...resolved.node.attrs,
+        style: input.style,
       });
-
-      if (!changed) return false;
       editor.dispatch(tr);
       clearIndexCache(editor);
       return true;
@@ -441,6 +442,9 @@ export function bibliographyConfigureWrapper(
   );
 
   if (!receiptApplied(receipt)) return bibFailure('NO_OP', 'Configure produced no change.');
+
+  syncBibliographyStyleToConverter(editor, input.style);
+
   return bibSuccess(address);
 }
 

@@ -33,13 +33,24 @@ export interface SDInsertInput {
 // ---------------------------------------------------------------------------
 
 /** Structural shape for the replace operation. */
-export interface SDReplaceInput {
-  /** Target to replace. BlockNodeAddress replaces the entire block; SelectionTarget replaces a contiguous selection. */
-  target?: BlockNodeAddress | SelectionTarget;
-  /** Opaque ref string (alternative to `target`). */
-  ref?: string;
+type StructuralReplaceLocator =
+  | {
+      /** Target to replace. BlockNodeAddress replaces the entire block; SelectionTarget replaces a contiguous selection. */
+      target: BlockNodeAddress | SelectionTarget;
+      /** Opaque ref string (alternative to `target`). */
+      ref?: undefined;
+    }
+  | {
+      /** Opaque ref string (alternative to `target`). */
+      ref: string;
+      /** Target to replace. BlockNodeAddress replaces the entire block; SelectionTarget replaces a contiguous selection. */
+      target?: undefined;
+    };
+
+/** Structural shape for the replace operation. */
+export type SDReplaceInput = StructuralReplaceLocator & {
   /** Structural content to replace with. */
   content: SDFragment;
   /** Nesting policy. Defaults to { tables: 'forbid' }. */
   nestingPolicy?: NestingPolicy;
-}
+};

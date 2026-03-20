@@ -675,7 +675,18 @@ function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, r
 }
 
 function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
-  const candidate = index.candidates.find((c) => c.nodeId === ref);
+  let candidate = index.candidates.find((c) => c.nodeId === ref);
+  // Alias-aware fallback: if the ref is an sdBlockId registered as an alias
+  // (e.g., volatile UUID replaced by a deterministic para-auto-* primary ID),
+  // try the byId map which includes alias entries.
+  if (!candidate && index.byId) {
+    for (const [key, c] of index.byId) {
+      if (key.endsWith(`:${ref}`)) {
+        candidate = c;
+        break;
+      }
+    }
+  }
   if (!candidate) return [];
 
   const blockText = getBlockText(editor, candidate);

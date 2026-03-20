@@ -5,7 +5,7 @@ import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@su
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
 import { toId } from './value-utils.js';
 import { resolvePublicTocNodeId } from './toc-node-id.js';
-import { buildFallbackTableNodeId, isVolatileRuntimeBlockId } from './table-node-id.js';
+import { buildFallbackBlockNodeId, isVolatileRuntimeBlockId } from './deterministic-node-id.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
 /** Superset of all possible ID attributes across block node types. */
@@ -117,7 +117,7 @@ function resolveLegacyTableIdentity(attrs: BlockIdAttrs): string | undefined {
   return toId(attrs.paraId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
 }
 
-function resolveRuntimeTableIdentity(
+function resolveRuntimeBlockIdentity(
   nodeType: BlockNodeType,
   attrs: BlockIdAttrs,
   pos: number,
@@ -127,7 +127,7 @@ function resolveRuntimeTableIdentity(
   if (sdBlockId && !isVolatileRuntimeBlockId(sdBlockId)) {
     return sdBlockId;
   }
-  return buildFallbackTableNodeId(nodeType, pos, path);
+  return buildFallbackBlockNodeId(nodeType, pos, path);
 }
 
 export function resolveBlockNodeId(
@@ -139,9 +139,9 @@ export function resolveBlockNodeId(
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
     // paraId (imported from DOCX) is the primary identity for paragraphs. This
-    // preserves historical IDs across DOCX round-trips, while sdBlockId remains
-    // a fallback for freshly created nodes.
-    return toId(attrs?.paraId) ?? toId(attrs?.sdBlockId);
+    // preserves historical IDs across DOCX round-trips. Non-volatile sdBlockId
+    // is preferred over deterministic fallback for freshly created nodes.
+    return toId(attrs?.paraId) ?? resolveRuntimeBlockIdentity(nodeType, (attrs ?? {}) as BlockIdAttrs, pos, path);
   }
 
   if (nodeType === 'tableOfContents') {
@@ -162,7 +162,7 @@ export function resolveBlockNodeId(
   // UUID sdBlockId exists, expose a deterministic fallback instead so session
   // addresses remain reusable across fresh document opens.
   if (typeName === 'table' || typeName === 'tableCell' || typeName === 'tableHeader') {
-    return resolveLegacyTableIdentity(attrs) ?? resolveRuntimeTableIdentity(nodeType, attrs, pos, path);
+    return resolveLegacyTableIdentity(attrs) ?? resolveRuntimeBlockIdentity(nodeType, attrs, pos, path);
   }
 
   // NOTE: Migration surface for the stable-addresses plan.

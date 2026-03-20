@@ -5,7 +5,7 @@
  * string from discovery APIs (`query.match`, `find`).
  */
 
-import type { SelectionTarget, DeleteBehavior } from '../types/address.js';
+import type { SelectionTarget, DeleteBehavior, TargetLocator } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
 import type { MutationOptions } from '../types/mutation-plan.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
@@ -18,7 +18,7 @@ import { isSelectionTarget } from '../validation/selection-target-validator.js';
 // Public input type
 // ---------------------------------------------------------------------------
 
-export interface DeleteInput {
+export type DeleteInput = TargetLocator & {
   /** Explicit selection target. Exactly one of `target` or `ref` is required. */
   target?: SelectionTarget;
   /** Mutation-ready ref from `query.match` or `find`. */
@@ -29,7 +29,7 @@ export interface DeleteInput {
    * - `'exact'`: delete only the exact resolved range.
    */
   behavior?: DeleteBehavior;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -99,13 +99,9 @@ export function executeDelete(
 ): TextMutationReceipt {
   validateDeleteInput(input);
 
-  return adapter.execute(
-    {
-      kind: 'delete',
-      target: input.target,
-      ref: input.ref,
-      behavior: input.behavior ?? 'selection',
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = input.target
+    ? { kind: 'delete' as const, target: input.target, behavior: input.behavior ?? 'selection' }
+    : { kind: 'delete' as const, ref: input.ref!, behavior: input.behavior ?? 'selection' };
+
+  return adapter.execute(request, normalizeMutationOptions(options));
 }

@@ -7,7 +7,7 @@
 
 import type { MutationOptions } from '../types/mutation-plan.types.js';
 import { normalizeMutationOptions } from '../write/write.js';
-import type { SelectionTarget } from '../types/address.js';
+import type { SelectionTarget, TargetLocator } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import { DocumentApiValidationError } from '../errors.js';
@@ -30,10 +30,7 @@ export type FormatItalicInput = FormatInlineAliasInput<'italic'>;
 export type FormatUnderlineInput = FormatInlineAliasInput<'underline'>;
 
 /** Input payload for `format.strikethrough`. */
-export interface FormatStrikethroughInput {
-  target?: SelectionTarget;
-  ref?: string;
-}
+export type FormatStrikethroughInput = TargetLocator;
 
 /**
  * Keys where `value` may be omitted — booleans (defaults to `true`) and
@@ -52,19 +49,19 @@ type ImplicitTrueKey =
  * omission defaults to `true` for ergonomic "turn on" calls.
  */
 export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends ImplicitTrueKey
-  ? { target?: SelectionTarget; ref?: string; value?: InlineRunPatch[K] }
-  : { target?: SelectionTarget; ref?: string; value: InlineRunPatch[K] };
+  ? TargetLocator & { target?: SelectionTarget; ref?: string; value?: InlineRunPatch[K] }
+  : TargetLocator & { target?: SelectionTarget; ref?: string; value: InlineRunPatch[K] };
 
 /**
  * Input payload for `format.apply`.
  *
  * Accepts either `target` (SelectionTarget) or `ref` (string) — exactly one required.
  */
-export interface StyleApplyInput {
+export type StyleApplyInput = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   inline: InlineRunPatch;
-}
+};
 
 /**
  * Named alias for MutationOptions on format.apply.
@@ -156,15 +153,10 @@ export function executeStyleApply(
   options?: MutationOptions,
 ): TextMutationReceipt {
   validateStyleApplyInput(input);
-  return adapter.execute(
-    {
-      kind: 'format',
-      target: input.target,
-      ref: input.ref,
-      inline: input.inline,
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = input.target
+    ? { kind: 'format' as const, target: input.target, inline: input.inline }
+    : { kind: 'format' as const, ref: input.ref!, inline: input.inline };
+  return adapter.execute(request, normalizeMutationOptions(options));
 }
 
 // ---------------------------------------------------------------------------
@@ -212,13 +204,8 @@ export function executeInlineAlias<K extends InlineRunPatchKey>(
   const value = normalizeInlineAliasValue(key, (input as { value?: InlineRunPatch[K] }).value);
   const inline = { [key]: value } as InlineRunPatch;
   validateInlineRunPatch(inline);
-  return adapter.execute(
-    {
-      kind: 'format',
-      target: input.target,
-      ref: input.ref,
-      inline,
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = input.target
+    ? { kind: 'format' as const, target: input.target, inline }
+    : { kind: 'format' as const, ref: input.ref!, inline };
+  return adapter.execute(request, normalizeMutationOptions(options));
 }

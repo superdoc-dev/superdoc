@@ -10,7 +10,7 @@
  */
 
 import type { MutationOptions } from '../types/mutation-plan.types.js';
-import type { SelectionTarget } from '../types/address.js';
+import type { SelectionTarget, TargetLocator } from '../types/address.js';
 import type { SDMutationReceipt } from '../types/sd-contract.js';
 import type { SDReplaceInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
@@ -33,11 +33,11 @@ import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 // ---------------------------------------------------------------------------
 
 /** Text replacement input — uses SelectionTarget / ref. */
-export interface TextReplaceInput {
+export type TextReplaceInput = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   text: string;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Discriminated union: text shape OR structural SDFragment shape
@@ -216,14 +216,9 @@ export function executeReplace(
 
   // Text replacement path — route through SelectionMutationAdapter
   const textInput = input as TextReplaceInput;
-  const textReceipt = selectionAdapter.execute(
-    {
-      kind: 'replace',
-      target: textInput.target,
-      ref: textInput.ref,
-      text: textInput.text,
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = textInput.target
+    ? { kind: 'replace' as const, target: textInput.target, text: textInput.text }
+    : { kind: 'replace' as const, ref: textInput.ref!, text: textInput.text };
+  const textReceipt = selectionAdapter.execute(request, normalizeMutationOptions(options));
   return textReceiptToSDReceipt(textReceipt);
 }

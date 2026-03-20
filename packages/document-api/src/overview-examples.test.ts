@@ -581,7 +581,11 @@ describe('overview.mdx examples', () => {
     // Mirrors the exact code block from overview.mdx § "Dry-run preview"
     it('insert with dryRun true', () => {
       const doc = makeApi();
-      const target = { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 3 } };
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
 
       const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed

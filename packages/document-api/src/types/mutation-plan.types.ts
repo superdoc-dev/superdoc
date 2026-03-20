@@ -94,12 +94,7 @@ export type TextRewriteStep = {
 export type TextInsertStep = {
   id: string;
   op: 'text.insert';
-  where: {
-    by: 'select';
-    select: TextSelector | NodeSelector;
-    within?: BlockNodeAddress;
-    require: 'first' | 'exactlyOne';
-  };
+  where: StepWhere;
   args: {
     position: 'before' | 'after';
     content: { text: string };

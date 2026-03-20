@@ -93,7 +93,12 @@ const FORMAT_TARGET_OPERATIONS = CLI_DOC_OPERATIONS.filter((operationId): operat
  * The CLI still supports legacy single-block text range flags/JSON inputs and
  * upgrades them to the equivalent SelectionTarget before dispatch.
  */
-const SELECTION_TARGET_OPERATIONS = new Set<CliExposedOperationId>(['replace', 'delete', ...FORMAT_TARGET_OPERATIONS]);
+const SELECTION_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
+  'insert',
+  'replace',
+  'delete',
+  ...FORMAT_TARGET_OPERATIONS,
+]);
 
 /**
  * Operations that still accept a text-range target (textAddressSchema):
@@ -104,11 +109,7 @@ const SELECTION_TARGET_OPERATIONS = new Set<CliExposedOperationId>(['replace', '
  */
 const TEXT_ADDRESS_TARGET_OPERATIONS = new Set<CliExposedOperationId>(['comments.create', 'comments.patch']);
 
-/**
- * Insert is a text-range operation but uses `offset` instead of `start`/`end`
- * to specify a zero-width insertion point.
- */
-const INSERT_OPERATION: CliExposedOperationId = 'insert';
+// INSERT_OPERATION removed — insert now uses SelectionTarget via SELECTION_TARGET_OPERATIONS.
 
 /**
  * List operations that accept a list-item target (listItemAddressSchema):
@@ -196,14 +197,16 @@ function normalizeFlatTargetFlags(operationId: CliExposedOperationId, apiInput: 
     return apiInput;
   }
 
-  // --- Selection-based text mutations (replace, delete, format.*) ---
+  // --- Selection-based text mutations (insert, replace, delete, format.*) ---
   if (SELECTION_TARGET_OPERATIONS.has(operationId)) {
     const blockId = apiInput.blockId;
     if (typeof blockId === 'string') {
-      const start = typeof apiInput.start === 'number' ? apiInput.start : 0;
-      const end = typeof apiInput.end === 'number' ? apiInput.end : 0;
+      // Legacy --offset for insert: expand to collapsed start/end
+      const hasOffset = typeof apiInput.offset === 'number';
+      const start = typeof apiInput.start === 'number' ? apiInput.start : hasOffset ? (apiInput.offset as number) : 0;
+      const end = typeof apiInput.end === 'number' ? apiInput.end : hasOffset ? (apiInput.offset as number) : 0;
       assertLegacySelectionTargetSupported(operationId, { range: { start, end } });
-      const { blockId: _, start: _s, end: _e, ...rest } = apiInput;
+      const { blockId: _, start: _s, end: _e, offset: _o, ...rest } = apiInput;
       return {
         ...rest,
         target: textAddressToSelectionTarget({ blockId, range: { start, end } }),
@@ -222,20 +225,6 @@ function normalizeFlatTargetFlags(operationId: CliExposedOperationId, apiInput: 
       return {
         ...rest,
         target: { kind: 'text', blockId, range: { start, end } },
-      };
-    }
-    return apiInput;
-  }
-
-  // --- Insert operation (uses offset for zero-width insertion point) ---
-  if (operationId === INSERT_OPERATION) {
-    const blockId = apiInput.blockId;
-    if (typeof blockId === 'string') {
-      const offset = typeof apiInput.offset === 'number' ? apiInput.offset : 0;
-      const { blockId: _, offset: _o, ...rest } = apiInput;
-      return {
-        ...rest,
-        target: { kind: 'text', blockId, range: { start: offset, end: offset } },
       };
     }
     return apiInput;

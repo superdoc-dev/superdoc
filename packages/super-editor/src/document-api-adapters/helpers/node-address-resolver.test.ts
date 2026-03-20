@@ -297,13 +297,61 @@ describe('buildBlockIndex', () => {
       expect(index.candidates[0].nodeId).toBe('p1');
     });
 
-    it('skips paragraph candidates when no explicit id attrs exist', () => {
+    it('assigns deterministic fallback id to paragraphs with no explicit id attrs', () => {
       const index = indexFromNodes({
         typeName: 'paragraph',
         attrs: {},
         offset: 7,
       });
-      expect(index.candidates).toHaveLength(0);
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeId).toMatch(/^para-auto-[0-9a-f]{8}$/);
+    });
+
+    it('assigns deterministic fallback id when sdBlockId is a volatile UUID', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { sdBlockId: '7701a615-4ad8-45b5-922c-2a32114df4c8' },
+        offset: 7,
+      });
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeId).toMatch(/^para-auto-[0-9a-f]{8}$/);
+      // Volatile sdBlockId registered as alias
+      expect(index.byId.get('paragraph:7701a615-4ad8-45b5-922c-2a32114df4c8')).toBeDefined();
+    });
+
+    it('keeps non-volatile sdBlockId as primary id for paragraphs', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { sdBlockId: 'my-stable-id' },
+        offset: 7,
+      });
+      expect(index.candidates[0].nodeId).toBe('my-stable-id');
+    });
+  });
+
+  describe('ID resolution — heading fallback', () => {
+    it('assigns deterministic fallback id to headings with no explicit id attrs', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { paragraphProperties: { styleId: 'Heading1' } },
+        offset: 5,
+      });
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeType).toBe('heading');
+      expect(index.candidates[0].nodeId).toMatch(/^heading-auto-[0-9a-f]{8}$/);
+    });
+  });
+
+  describe('ID resolution — listItem fallback', () => {
+    it('assigns deterministic fallback id to listItems with no explicit id attrs', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+        offset: 5,
+      });
+      expect(index.candidates).toHaveLength(1);
+      expect(index.candidates[0].nodeType).toBe('listItem');
+      expect(index.candidates[0].nodeId).toMatch(/^list-auto-[0-9a-f]{8}$/);
     });
   });
 

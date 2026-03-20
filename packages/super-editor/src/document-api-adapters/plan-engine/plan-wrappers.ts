@@ -176,35 +176,8 @@ function toTextAddress(target: TextAddress | BlockNodeAddress): TextAddress {
 // Locator normalization (same validation as the old adapters)
 // ---------------------------------------------------------------------------
 
-function normalizeWriteLocator(request: WriteRequest): WriteRequest {
-  const hasBlockId = request.blockId !== undefined;
-  const hasOffset = request.offset !== undefined;
-
-  if (hasOffset && request.target) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with offset on insert request.', {
-      fields: ['target', 'offset'],
-    });
-  }
-  if (hasOffset && !hasBlockId) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'offset requires blockId on insert request.', {
-      fields: ['offset', 'blockId'],
-    });
-  }
-  if (!hasBlockId) return request;
-  if (request.target) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'Cannot combine target with blockId on insert request.', {
-      fields: ['target', 'blockId'],
-    });
-  }
-
-  const effectiveOffset = request.offset ?? 0;
-  const target: TextAddress = {
-    kind: 'text',
-    blockId: request.blockId!,
-    range: { start: effectiveOffset, end: effectiveOffset },
-  };
-  return { kind: 'insert', target, text: request.text };
-}
+// normalizeWriteLocator removed — WriteRequest is now target-less only.
+// Targeted inserts route through SelectionMutationAdapter.
 
 type FormatOperationInput = {
   target?: TextAddress | SelectionTarget;
@@ -334,23 +307,19 @@ function validateWriteRequest(request: WriteRequest, resolved: ResolvedWrite): R
 }
 
 /**
- * Write wrapper for insert operations only.
+ * Write wrapper for target-less insert operations only.
  *
- * Delete and replace now route through `selectionMutationWrapper` via
- * `SelectionMutationAdapter`. This wrapper handles the legacy insert path
- * that still uses `TextAddress`-based `InsertWriteRequest`.
+ * Targeted inserts now route through `selectionMutationWrapper` via
+ * `SelectionMutationAdapter`. This wrapper handles the no-target fallback
+ * path that inserts at the document end.
  */
 export function writeWrapper(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
-  const normalizedRequest = normalizeWriteLocator(request);
-
-  const resolved = resolveWriteTarget(editor, normalizedRequest);
+  const resolved = resolveWriteTarget(editor, request);
   if (!resolved) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {
-      target: normalizedRequest.target,
-    });
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Mutation target could not be resolved.', {});
   }
 
-  const validationFailure = validateWriteRequest(normalizedRequest, resolved);
+  const validationFailure = validateWriteRequest(request, resolved);
   if (validationFailure) {
     return { success: false, resolution: resolved.resolution, failure: validationFailure };
   }
@@ -367,7 +336,7 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
   // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
   if (resolved.structuralEnd) {
     const insertPos = resolved.range.from;
-    const text = normalizedRequest.text ?? '';
+    const text = request.text ?? '';
     const receipt = executeDomainCommand(
       editor,
       (): boolean => {
@@ -386,7 +355,7 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
     id: stepId,
     op: 'text.insert',
     where: STUB_WHERE,
-    args: { position: 'before', content: { text: normalizedRequest.text ?? '' } },
+    args: { position: 'before', content: { text: request.text ?? '' } },
   } as unknown as MutationStep;
 
   const target = toCompiledTarget(stepId, 'text.insert', resolved);
@@ -558,6 +527,14 @@ function buildSelectionStepDef(stepId: string, request: SelectionMutationRequest
         },
       } as unknown as MutationStep;
 
+    case 'insert':
+      return {
+        id: stepId,
+        op: 'text.insert',
+        where,
+        args: { position: 'before', content: { text: request.text } },
+      } as unknown as MutationStep;
+
     case 'format':
       return {
         id: stepId,
@@ -598,6 +575,27 @@ export function selectionMutationWrapper(
   // Compilation is side-effect-free — it resolves targets against the current
   // document state without mutating anything.
   const compiled = compilePlan(editor, [step]);
+
+  // Insert requires a collapsed (point) target. Reject non-collapsed ranges
+  // and multi-segment spans so the receipt is never misleading about the
+  // actual insertion point.
+  if (request.kind === 'insert') {
+    const compiledStep = compiled.mutationSteps.find((s) => s.step.id === stepId);
+    const target = compiledStep?.targets[0];
+    if (target) {
+      // Multi-segment refs (span) are never valid for point inserts.
+      // Non-collapsed range/selection targets are also rejected.
+      const isInvalidInsertTarget = target.kind === 'span' || target.absFrom !== target.absTo;
+      if (isInvalidInsertTarget) {
+        const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
+        return {
+          success: false,
+          resolution,
+          failure: { code: 'INVALID_TARGET', message: 'Insert operations require a collapsed target range.' },
+        };
+      }
+    }
+  }
 
   // Enforce expectedRevision even on dry-run — callers need to know if the
   // document has drifted since their last query, regardless of execution.
@@ -814,7 +812,7 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
 
   // Legacy markdown/html path
   const contentType = input.type ?? 'text';
-  const { value, target } = input;
+  const { value, target, ref } = input as { value: string; target?: SelectionTarget; ref?: string; type?: string };
 
   // Tracked mode not supported for structured content
   const mode = options?.changeMode ?? 'direct';
@@ -830,14 +828,38 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
   let effectiveTarget: TextAddress;
 
   if (target) {
-    const range = resolveTextTarget(editor, target);
-    if (!range) {
-      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Structured insert target could not be resolved.', {
-        target,
-      });
+    const resolved = resolveSelectionTarget(editor, target);
+    resolvedRange = { from: resolved.absFrom, to: resolved.absTo };
+    // Derive backward-compatible TextAddress from the start point
+    const startPoint = target.start;
+    const blockId = startPoint.kind === 'text' ? startPoint.blockId : startPoint.node.nodeId;
+    const offset = startPoint.kind === 'text' ? startPoint.offset : 0;
+    effectiveTarget = { kind: 'text', blockId, range: { start: offset, end: offset } };
+  } else if (ref) {
+    // Resolve ref via a dummy compile step to get the absolute position
+    const dummyStepId = uuidv4();
+    const dummyStep = {
+      id: dummyStepId,
+      op: 'text.insert',
+      where: { by: 'ref' as const, ref },
+      args: { position: 'before', content: { text: '' } },
+    } as unknown as MutationStep;
+    const compiled = compilePlan(editor, [dummyStep]);
+    const compiledStep = compiled.mutationSteps.find((s) => s.step.id === dummyStepId);
+    const compiledTarget = compiledStep?.targets[0];
+    if (!compiledTarget) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Structured insert ref could not be resolved.', { ref });
     }
-    resolvedRange = range;
-    effectiveTarget = target;
+    if (compiledTarget.kind === 'span') {
+      throw new DocumentApiAdapterError(
+        'INVALID_TARGET',
+        'Insert operations require a single-block ref. Multi-segment refs are not supported.',
+        { ref },
+      );
+    }
+    resolvedRange = { from: compiledTarget.absFrom, to: compiledTarget.absTo };
+    const resolution = buildSelectionResolutionFromCompiled(compiled, dummyStepId);
+    effectiveTarget = resolution.target;
   } else {
     const fallback = resolveDefaultInsertTarget(editor);
     if (!fallback) {
@@ -857,7 +879,7 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
   }
 
   const resolution = buildTextMutationResolution({
-    requestedTarget: target,
+    requestedTarget: effectiveTarget,
     target: effectiveTarget,
     range: resolvedRange,
     text: readTextAtResolvedRange(editor, resolvedRange),

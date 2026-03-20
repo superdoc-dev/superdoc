@@ -11,7 +11,11 @@ export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
 export type { DiffAdapter, DiffApi } from './diff/diff.js';
 export * from './diff/diff.types.js';
-export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
+export type {
+  SelectionMutationAdapter,
+  SelectionMutationRequest,
+  SelectionInsertRequest,
+} from './selection-mutation.js';
 export type {
   RangeAnchor,
   DocumentEdgeAnchor,
@@ -1340,7 +1344,7 @@ export { DocumentApiValidationError } from './errors.js';
 export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
 export type { StructuralReceiptParams } from './receipt-bridge.js';
 export { isBlockNodeAddress } from './validation-primitives.js';
-export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
+export type { InsertInput, InsertContentType, TextInsertInput, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
 export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
 export { isStructuralReplaceInput } from './replace/replace.js';
@@ -1818,7 +1822,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt {
-      return executeInsert(adapters.write, input, options);
+      return executeInsert(adapters.selectionMutation, adapters.write, input, options);
     },
     replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
       return executeReplace(adapters.selectionMutation, adapters.write, input, options);

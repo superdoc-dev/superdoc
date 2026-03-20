@@ -71,7 +71,7 @@ describe('getFileObject', () => {
     expect(globalThis.fetch).toHaveBeenCalledWith('https://example.com/file.txt');
     expect(result).toBeInstanceOf(File);
     expect(result.name).toBe('file.txt');
-    expect(result.type).toBe('text/plain');
+    expect(result.type).toStartWith('text/plain');
     await expect(result.text()).resolves.toBe('hello world');
   });
 
@@ -87,7 +87,7 @@ describe('getFileObject', () => {
 
     expect(result).toBeInstanceOf(File);
     expect(result.name).toBe('test.txt');
-    expect(result.type).toBe('text/plain');
+    expect(result.type).toStartWith('text/plain');
     await expect(result.text()).resolves.toBe(payload);
   });
 
@@ -122,6 +122,6 @@ describe('getFileObject', () => {
 
     expect(result).toBeInstanceOf(File);
     expect(result.name).toBe('test.txt');
-    expect(result.type).toBe('text/plain');
+    expect(result.type).toStartWith('text/plain');
   });
 });

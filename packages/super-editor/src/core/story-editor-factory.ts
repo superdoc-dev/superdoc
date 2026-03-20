@@ -1,7 +1,5 @@
 import type { Editor } from './Editor.js';
 import type { EditorOptions } from './types/EditorConfig.js';
-import { Editor as SuperEditor } from './Editor.js';
-import { getStarterExtensions } from '../extensions/index.js';
 
 /**
  * Options for creating a story editor (header, footer, footnote, endnote, etc.).
@@ -128,13 +126,20 @@ export function createStoryEditor(
   // through the image extension's storage shape.
   const imageStorage = parentEditor.storage?.image as { media?: Record<string, unknown> } | undefined;
   const media = imageStorage?.media ?? parentEditor.options.media ?? {};
+  const inheritedExtensions = parentEditor.options.extensions?.length
+    ? [...parentEditor.options.extensions]
+    : undefined;
+  const StoryEditorClass = parentEditor.constructor as new (options: Partial<EditorOptions>) => Editor;
 
-  const storyEditor = new SuperEditor({
+  const storyEditor = new StoryEditorClass({
     role: parentEditor.options.role,
     loadFromSchema: true,
     mode: 'docx',
     content,
-    extensions: getStarterExtensions(),
+    // Reuse the parent's extension definitions instead of importing the
+    // starter bundle here, which keeps story-runtime resolution from
+    // eagerly pulling the full UI extension graph into headless callers.
+    extensions: inheritedExtensions,
     documentId,
     media,
     mediaFiles: media,

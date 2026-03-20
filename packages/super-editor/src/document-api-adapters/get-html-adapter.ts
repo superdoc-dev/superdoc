@@ -1,6 +1,6 @@
 import type { Editor } from '../core/Editor.js';
 import type { GetHtmlInput } from '@superdoc/document-api';
-import { resolveStoryRuntime } from './story-runtime/index.js';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 
 const DEFAULT_UNFLATTEN_LISTS = true;
 

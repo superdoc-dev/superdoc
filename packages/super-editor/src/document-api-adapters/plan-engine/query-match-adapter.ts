@@ -48,7 +48,7 @@ import {
 } from './match-style-helpers.js';
 import type { OoxmlResolverParams, ParagraphProperties } from '@superdoc/style-engine/ooxml';
 import { readTranslatedLinkedStyles } from '../../core/parts/adapters/styles-read.js';
-import { resolveStoryRuntime } from '../story-runtime/index.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
 
 // ---------------------------------------------------------------------------

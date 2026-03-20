@@ -12,7 +12,7 @@ import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@
 import { DocumentApiAdapterError } from './errors.js';
 import { dedupeDiagnostics } from './helpers/adapter-utils.js';
 import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
-import { resolveStoryRuntime } from './story-runtime/index.js';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
 import { findBlockByIdStrict, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { resolveIncludedNodes } from './helpers/node-info-resolver.js';

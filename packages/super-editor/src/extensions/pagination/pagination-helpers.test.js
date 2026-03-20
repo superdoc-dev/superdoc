@@ -45,6 +45,7 @@ import { createHeaderFooterEditor } from './pagination-helpers.js';
 
 function createParentEditor() {
   return {
+    constructor: MockEditor,
     options: {
       role: 'editor',
       fonts: {},

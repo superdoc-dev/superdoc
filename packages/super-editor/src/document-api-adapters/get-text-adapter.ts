@@ -1,6 +1,6 @@
 import type { Editor } from '../core/Editor.js';
 import type { GetTextInput } from '@superdoc/document-api';
-import { resolveStoryRuntime } from './story-runtime/index.js';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 
 /**
  * Return the full document text content from the ProseMirror document.

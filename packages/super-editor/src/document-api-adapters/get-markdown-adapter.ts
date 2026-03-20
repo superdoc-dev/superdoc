@@ -4,7 +4,7 @@ import remarkStringify from 'remark-stringify';
 import type { Editor } from '../core/Editor.js';
 import type { GetMarkdownInput } from '@superdoc/document-api';
 import { proseMirrorDocToMdast } from '../core/helpers/markdown/proseMirrorToMdast.js';
-import { resolveStoryRuntime } from './story-runtime/index.js';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 
 const remarkProcessor = unified().use(remarkGfm).use(remarkStringify, { bullet: '-', fences: true });
 

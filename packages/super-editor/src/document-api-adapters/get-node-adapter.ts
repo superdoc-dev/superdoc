@@ -6,7 +6,7 @@ import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
 import { projectContentNode, projectInlineNode, projectMarkBasedInline } from './helpers/sd-projection.js';
 import { DocumentApiAdapterError } from './errors.js';
-import { resolveStoryRuntime } from './story-runtime/index.js';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 
 function findBlocksByTypeAndId(blockIndex: BlockIndex, nodeType: BlockNodeType, nodeId: string): BlockCandidate[] {
   // Fast path: check the byId map which includes alias entries (e.g., sdBlockId

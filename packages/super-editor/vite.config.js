@@ -47,6 +47,9 @@ export default defineConfig(({ mode }) => {
       environmentMatchGlobs: [
         ['src/core/super-converter/**', 'node'],
         ['src/core/commands/**', 'node'],
+        // Keep DOM-dependent helpers on happy-dom (first match wins)
+        ['src/core/helpers/updateDOMAttributes.test.*', 'happy-dom'],
+        ['src/core/helpers/catchAllSchema.test.*', 'happy-dom'],
         ['src/core/helpers/**', 'node'],
         ['src/core/parts/**', 'node'],
         ['src/document-api-adapters/**', 'node'],

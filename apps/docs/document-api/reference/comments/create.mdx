@@ -26,16 +26,16 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
 
 ## Input fields
 
-| Field                | Type        | Required | Description        |
-| -------------------- | ----------- | -------- | ------------------ |
-| `parentCommentId`    | string      | no       |                    |
-| `target`             | TextAddress | no       | TextAddress        |
-| `target.blockId`     | string      | no       |                    |
-| `target.kind`        | `"text"`    | no       | Constant: `"text"` |
-| `target.range`       | Range       | no       | Range              |
-| `target.range.end`   | integer     | no       |                    |
-| `target.range.start` | integer     | no       |                    |
-| `text`               | string      | yes      |                    |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `parentCommentId` | string | no |  |
+| `target` | TextAddress | no | TextAddress |
+| `target.blockId` | string | no |  |
+| `target.kind` | `"text"` | no | Constant: `"text"` |
+| `target.range` | Range | no | Range |
+| `target.range.end` | integer | no |  |
+| `target.range.start` | integer | no |  |
+| `text` | string | yes |  |
 
 ### Example request
 
@@ -58,22 +58,22 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
 
 ### Variant 1 (success=true)
 
-| Field      | Type            | Required | Description      |
-| ---------- | --------------- | -------- | ---------------- |
-| `inserted` | EntityAddress[] | no       |                  |
-| `removed`  | EntityAddress[] | no       |                  |
-| `success`  | `true`          | yes      | Constant: `true` |
-| `updated`  | EntityAddress[] | no       |                  |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inserted` | EntityAddress[] | no |  |
+| `removed` | EntityAddress[] | no |  |
+| `success` | `true` | yes | Constant: `true` |
+| `updated` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
 
-| Field             | Type    | Required | Description                   |
-| ----------------- | ------- | -------- | ----------------------------- |
-| `failure`         | object  | yes      |                               |
-| `failure.code`    | enum    | yes      | `"INVALID_TARGET"`, `"NO_OP"` |
-| `failure.details` | any     | no       |                               |
-| `failure.message` | string  | yes      |                               |
-| `success`         | `false` | yes      | Constant: `false`             |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
@@ -116,7 +116,7 @@ Returns a Receipt confirming the comment was created; reports NO_OP if the ancho
   "additionalProperties": false,
   "properties": {
     "parentCommentId": {
-      "description": "Parent comment ID for replying to an existing thread. Omit entirely when creating a new comment thread.",
+      "description": "Parent comment ID for creating a threaded reply.",
       "type": "string"
     },
     "target": {

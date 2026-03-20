@@ -459,7 +459,7 @@ onUnmounted(() => {
           :class="['ruler-tick', `ruler-tick--${tick.size}`]"
           :style="getTickStyle(tick)"
         >
-          <span v-if="tick.label !== undefined" class="numbering">{{ tick.label }}</span>
+          <span v-if="tick.label !== undefined && tick.label !== 0" class="numbering">{{ tick.label }}</span>
         </div>
       </template>
     </div>

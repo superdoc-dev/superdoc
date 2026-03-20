@@ -88,14 +88,13 @@ describe('createRulerElement', () => {
       expect(allTicks[4].style.left).toBe('48px'); // Half tick
     });
 
-    it('adds labels to main ticks', () => {
+    it('adds labels to main ticks but skips the leading zero', () => {
       const ruler = createRulerElement({ definition, doc });
 
       const labels = ruler.querySelectorAll(`.${RULER_CLASS_NAMES.label}`);
-      expect(labels.length).toBe(2); // Two main ticks with labels
+      expect(labels.length).toBe(1); // Label 0 is hidden to prevent overflow clipping
 
-      expect(labels[0].textContent).toBe('0');
-      expect(labels[1].textContent).toBe('1');
+      expect(labels[0].textContent).toBe('1');
     });
 
     it('does not add labels to non-main ticks', () => {
@@ -264,7 +263,7 @@ describe('createRulerElement', () => {
       expect(labels.length).toBe(0);
     });
 
-    it('handles tick with label value of 0', () => {
+    it('does not render label for tick with label value of 0', () => {
       const singleTickDefinition: RulerDefinition = {
         ...definition,
         ticks: [{ size: 'main', height: '20%', label: 0, x: 0 }],
@@ -272,8 +271,8 @@ describe('createRulerElement', () => {
 
       const ruler = createRulerElement({ definition: singleTickDefinition, doc });
 
-      const label = ruler.querySelector(`.${RULER_CLASS_NAMES.label}`);
-      expect(label?.textContent).toBe('0');
+      const labels = ruler.querySelectorAll(`.${RULER_CLASS_NAMES.label}`);
+      expect(labels.length).toBe(0);
     });
   });
 

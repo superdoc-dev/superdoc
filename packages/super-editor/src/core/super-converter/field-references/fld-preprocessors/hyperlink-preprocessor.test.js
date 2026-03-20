@@ -1,10 +1,10 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { preProcessHyperlinkInstruction } = await import('./hyperlink-preprocessor.js');
 const { translator } = await import('../../v3/handlers/w/hyperlink');
 import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
 
-mock.module('@helpers/generateDocxRandomId.js', () => ({
+vi.mock('@helpers/generateDocxRandomId.js', () => ({
   generateDocxRandomId: mock(),
 }));
 

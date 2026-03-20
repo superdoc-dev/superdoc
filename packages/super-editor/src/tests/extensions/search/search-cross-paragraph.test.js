@@ -1,4 +1,4 @@
-import { describe, it, test, expect } from 'bun:test';
+import { describe, it, test, expect } from 'vitest';
 import { createDocxTestEditor } from '../../helpers/editor-test-utils.js';
 import { EditorState } from 'prosemirror-state';
 import { SearchIndex } from '@extensions/search/SearchIndex.js';

@@ -1,11 +1,11 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { restartNumbering } = await import('./restartNumbering.js');
 const { findParentNode } = await import('@helpers/index.js');
 import { isList } from '@core/commands/list-helpers';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 
-mock.module('@helpers/index.js', async (importOriginal) => {
+vi.mock('@helpers/index.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
@@ -13,17 +13,17 @@ mock.module('@helpers/index.js', async (importOriginal) => {
   };
 });
 
-mock.module('@core/commands/list-helpers', () => ({
+vi.mock('@core/commands/list-helpers', () => ({
   isList: mock(),
 }));
 
-mock.module('@helpers/list-numbering-helpers.js', () => ({
+vi.mock('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     setLvlOverride: mock(),
   },
 }));
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: mock((node) => {
     return node?.attrs?.paragraphProperties || { numberingProperties: null };
   }),

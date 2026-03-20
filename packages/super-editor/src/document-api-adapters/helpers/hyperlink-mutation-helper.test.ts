@@ -1,19 +1,19 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { Mark, MarkType } from 'prosemirror-model';
 
-mock.module('@superdoc/url-validation', () => ({
+vi.mock('@superdoc/url-validation', () => ({
   sanitizeHref: mock((href: string) => {
     if (href.startsWith('javascript:')) return null;
     return { href };
   }),
 }));
 
-mock.module('../../core/parts/adapters/relationships-mutation.js', () => ({
+vi.mock('../../core/parts/adapters/relationships-mutation.js', () => ({
   findOrCreateRelationship: mock(() => 'rId-mock'),
 }));
 
-mock.module('./transaction-meta.js', () => ({
+vi.mock('./transaction-meta.js', () => ({
   applyDirectMutationMeta: mock(),
 }));
 

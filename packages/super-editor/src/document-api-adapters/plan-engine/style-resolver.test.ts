@@ -1,4 +1,4 @@
-import { describe, it, test, expect } from 'bun:test';
+import { describe, it, test, expect } from 'vitest';
 import { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
 import { coalesceRuns, assertRunTilingInvariant } from './match-style-helpers.js';
 import type { Editor } from '../../core/Editor.js';

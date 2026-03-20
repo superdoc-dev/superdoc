@@ -1,8 +1,8 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 // @ts-check
 const getResolvedParagraphPropertiesMock = mock((node) => node.attrs.paragraphProperties || {});
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: getResolvedParagraphPropertiesMock,
 }));
 

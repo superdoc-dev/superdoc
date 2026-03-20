@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { buildTocEntryParagraphs, type TocSource } from './toc-entry-builder.js';
 import { generateTocBookmarkName } from './toc-bookmark-sync.js';
 import type { TocSwitchConfig } from '@superdoc/document-api';

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { prepareFootnotesXmlForExport } from '@converter/v2/exporter/footnotesExporter.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';

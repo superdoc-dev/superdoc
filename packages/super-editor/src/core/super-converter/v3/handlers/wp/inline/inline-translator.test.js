@@ -1,14 +1,14 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { config, translator } from './inline-translator.js';
 const { NodeTranslator } = await import('../../../node-translator/index.js');
 const { translateInlineNode } = await import('./helpers/translate-inline-node.js');
 const { handleInlineNode } = await import('./helpers/handle-inline-node.js');
 
-mock.module('@converter/v3/handlers/wp/inline/helpers/handle-inline-node.js', () => ({
+vi.mock('@converter/v3/handlers/wp/inline/helpers/handle-inline-node.js', () => ({
   handleInlineNode: mock(),
 }));
 
-mock.module('@converter/v3/handlers/wp/inline/helpers/translate-inline-node.js', () => ({
+vi.mock('@converter/v3/handlers/wp/inline/helpers/translate-inline-node.js', () => ({
   translateInlineNode: mock(),
 }));
 

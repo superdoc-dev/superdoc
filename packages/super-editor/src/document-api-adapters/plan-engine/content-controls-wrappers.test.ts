@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { registerBuiltInExecutors } from './register-executors.js';

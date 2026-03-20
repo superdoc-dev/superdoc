@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { SuperValidator } = await import('./super-validator.js');
 import { StateValidators } from './validators/state/index.js';
 import { XmlValidators } from './validators/xml/index.js';
 
-mock.module('./logger/logger.js', () => ({
+vi.mock('./logger/logger.js', () => ({
   createLogger: mock(() => ({
     debug: mock(),
     withPrefix: mock(() => ({
@@ -12,14 +12,14 @@ mock.module('./logger/logger.js', () => ({
   })),
 }));
 
-mock.module('./validators/state/index.js', () => ({
+vi.mock('./validators/state/index.js', () => ({
   StateValidators: {
     validatorA: mock(),
     validatorB: mock(),
   },
 }));
 
-mock.module('./validators/xml/index.js', () => {
+vi.mock('./validators/xml/index.js', () => {
   // Provide safe default factories for tests
   // that doesn't have export and doesn't need mock xml validators
   return {

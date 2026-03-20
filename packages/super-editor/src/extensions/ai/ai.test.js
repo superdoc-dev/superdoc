@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 const { Schema } = await import('prosemirror-model');
 const { EditorState, TextSelection } = await import('prosemirror-state');
 const { DecorationSet } = await import('prosemirror-view');
 
-mock.module('@superdoc/common/icons/dots-loader.svg', () => ({ default: 'dots-loader.svg' }));
+vi.mock('@superdoc/common/icons/dots-loader.svg', () => ({ default: 'dots-loader.svg' }));
 
 const { AiMarkName, AiAnimationMarkName, AiLoaderNodeName } = await import('./ai-constants.js');
 const { AiMark, AiAnimationMark } = await import('./ai-marks.js');

@@ -1,25 +1,25 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const { SuperToolbar } = await import('../../components/toolbar/super-toolbar.js');
 
 // Mock the dependencies
-mock.module('@core/helpers/getActiveFormatting.js', () => ({
+vi.mock('@core/helpers/getActiveFormatting.js', () => ({
   getActiveFormatting: mock(),
 }));
 
-mock.module('prosemirror-history', () => ({
+vi.mock('prosemirror-history', () => ({
   undoDepth: mock(),
   redoDepth: mock(),
 }));
 
-mock.module('@helpers/isInTable.js', () => ({
+vi.mock('@helpers/isInTable.js', () => ({
   isInTable: mock().mockImplementation(() => false),
 }));
 
-mock.module('@extensions/linked-styles/linked-styles.js', () => ({
+vi.mock('@extensions/linked-styles/linked-styles.js', () => ({
   getQuickFormatList: mock(),
 }));
 
-mock.module('@helpers/index.js', async (importOriginal) => {
+vi.mock('@helpers/index.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
@@ -27,7 +27,7 @@ mock.module('@helpers/index.js', async (importOriginal) => {
   };
 });
 
-mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
   collectTrackedChanges: mock(() => []),
   isTrackedChangeActionAllowed: mock(() => true),
 }));

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { translator } from './wAfter-translator.js';
 
 describe('w:wAfter translator', () => {

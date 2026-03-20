@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { preProcessVerticalMergeCells } from '../../../core/super-converter/export-helpers/pre-process-vertical-merge-cells.js';
 
 const paragraphJSON = { type: 'paragraph', content: [] };

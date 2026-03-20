@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 
 // ---------------------------------------------------------------------------
@@ -6,7 +6,7 @@ import type { Editor } from '../../core/Editor.js';
 // executeDomainCommand/executeOutOfBandMutation. We mock the parts system.
 // ---------------------------------------------------------------------------
 
-mock.module('./revision-tracker.js', async (importOriginal) => {
+vi.mock('./revision-tracker.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./revision-tracker.js')>();
   return {
     ...actual,
@@ -17,7 +17,7 @@ mock.module('./revision-tracker.js', async (importOriginal) => {
   };
 });
 
-mock.module('../helpers/adapter-utils.js', () => ({
+vi.mock('../helpers/adapter-utils.js', () => ({
   paginate: mock((items: unknown[], offset = 0, limit?: number) => {
     const total = items.length;
     const sliced = items.slice(offset, limit ? offset + limit : undefined);
@@ -26,16 +26,16 @@ mock.module('../helpers/adapter-utils.js', () => ({
   resolveInlineInsertPosition: mock(() => ({ from: 5, to: 5 })),
 }));
 
-mock.module('../helpers/mutation-helpers.js', () => ({
+vi.mock('../helpers/mutation-helpers.js', () => ({
   rejectTrackedMode: mock(),
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   clearIndexCache: mock(),
 }));
 
 // Mock mutatePart to execute the mutation callback directly against the part
-mock.module('../../core/parts/mutation/mutate-part.js', () => ({
+vi.mock('../../core/parts/mutation/mutate-part.js', () => ({
   mutatePart: mock(
     (request: { mutate?: (ctx: { part: unknown; dryRun: boolean }) => unknown; editor: Editor; partId: string }) => {
       const converter = (
@@ -59,7 +59,7 @@ mock.module('../../core/parts/mutation/mutate-part.js', () => ({
 }));
 
 // Mock compoundMutation to execute immediately
-mock.module('../../core/parts/mutation/compound-mutation.js', () => ({
+vi.mock('../../core/parts/mutation/compound-mutation.js', () => ({
   compoundMutation: mock((request: { execute: () => boolean }) => {
     const success = request.execute();
     return { success };

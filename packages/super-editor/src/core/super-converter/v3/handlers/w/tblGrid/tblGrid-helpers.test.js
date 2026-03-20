@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { pixelsToTwips } from '@converter/helpers.js';
 import {
   DEFAULT_COLUMN_WIDTH_PX,

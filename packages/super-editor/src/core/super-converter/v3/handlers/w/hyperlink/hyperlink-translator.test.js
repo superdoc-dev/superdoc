@@ -1,14 +1,14 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { config, translator } = await import('./hyperlink-translator.js');
 import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
 import { exportSchemaToJson } from '@core/super-converter/exporter';
 
-mock.module('@helpers/generateDocxRandomId.js', () => ({
+vi.mock('@helpers/generateDocxRandomId.js', () => ({
   generateDocxRandomId: mock(),
 }));
 
-mock.module('@core/super-converter/exporter', () => ({
+vi.mock('@core/super-converter/exporter', () => ({
   exportSchemaToJson: mock(),
 }));
 

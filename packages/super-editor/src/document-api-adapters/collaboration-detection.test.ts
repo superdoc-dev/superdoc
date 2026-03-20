@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { isCollaborationActive } from './collaboration-detection.js';
 
 function makeEditor(collaborationProvider: unknown) {

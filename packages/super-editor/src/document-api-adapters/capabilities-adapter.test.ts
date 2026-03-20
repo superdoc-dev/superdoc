@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { Editor } from '../core/Editor.js';
 import { INLINE_PROPERTY_REGISTRY, OPERATION_IDS, PUBLIC_MUTATION_STEP_OP_IDS } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';

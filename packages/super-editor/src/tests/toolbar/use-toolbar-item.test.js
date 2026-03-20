@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { useToolbarItem } from '../../components/toolbar/use-toolbar-item.js';
 
 describe('use-toolbar-item', () => {

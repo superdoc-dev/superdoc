@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach, jest } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach, jest } from 'vitest';
 import { PageNumber, TotalPageCount, AutoPageNumberNodeView } from './page-number.js';
 
 describe('PageNumber commands', () => {
@@ -73,11 +73,11 @@ describe('PageNumber commands', () => {
 
 describe('AutoPageNumberNodeView', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('renders page number node and syncs marks from neighbors', () => {
@@ -115,7 +115,7 @@ describe('AutoPageNumberNodeView', () => {
     expect(nodeView.dom.style['font-size']).toBe('16px');
     expect(nodeView.dom.style['text-decoration']).toContain('underline');
 
-    jest.runAllTimers();
+    vi.runAllTimers();
 
     expect(doc.nodeAt).toHaveBeenCalledWith(5);
     expect(tr.setNodeMarkup).toHaveBeenCalledWith(5, undefined, {
@@ -151,7 +151,7 @@ describe('AutoPageNumberNodeView', () => {
       editor,
     );
 
-    jest.runAllTimers();
+    vi.runAllTimers();
 
     expect(tr.setNodeMarkup).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();

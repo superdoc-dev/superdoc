@@ -1,6 +1,6 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 // Mock the individual border property translators
-mock.module('../bottom', () => ({
+vi.mock('../bottom', () => ({
   translator: {
     xmlName: 'w:bottom',
     sdNodeOrKeyName: 'bottom',
@@ -8,7 +8,7 @@ mock.module('../bottom', () => ({
     decode: mock(() => ({ name: 'w:bottom' })),
   },
 }));
-mock.module('../end', () => ({
+vi.mock('../end', () => ({
   translator: {
     xmlName: 'w:end',
     sdNodeOrKeyName: 'end',
@@ -16,7 +16,7 @@ mock.module('../end', () => ({
     decode: mock(() => ({ name: 'w:end' })),
   },
 }));
-mock.module('../insideH', () => ({
+vi.mock('../insideH', () => ({
   translator: {
     xmlName: 'w:insideH',
     sdNodeOrKeyName: 'insideH',
@@ -24,7 +24,7 @@ mock.module('../insideH', () => ({
     decode: mock(() => ({ name: 'w:insideH' })),
   },
 }));
-mock.module('../insideV', () => ({
+vi.mock('../insideV', () => ({
   translator: {
     xmlName: 'w:insideV',
     sdNodeOrKeyName: 'insideV',
@@ -32,7 +32,7 @@ mock.module('../insideV', () => ({
     decode: mock(() => ({ name: 'w:insideH' })),
   },
 }));
-mock.module('../left', () => ({
+vi.mock('../left', () => ({
   translator: {
     xmlName: 'w:left',
     sdNodeOrKeyName: 'left',
@@ -40,7 +40,7 @@ mock.module('../left', () => ({
     decode: mock(() => ({ name: 'w:left' })),
   },
 }));
-mock.module('../right', () => ({
+vi.mock('../right', () => ({
   translator: {
     xmlName: 'w:right',
     sdNodeOrKeyName: 'right',
@@ -48,7 +48,7 @@ mock.module('../right', () => ({
     decode: mock(() => ({ name: 'w:right' })),
   },
 }));
-mock.module('../start', () => ({
+vi.mock('../start', () => ({
   translator: {
     xmlName: 'w:start',
     sdNodeOrKeyName: 'start',
@@ -56,7 +56,7 @@ mock.module('../start', () => ({
     decode: mock(() => ({ name: 'w:start' })),
   },
 }));
-mock.module('../top', () => ({
+vi.mock('../top', () => ({
   translator: {
     xmlName: 'w:top',
     sdNodeOrKeyName: 'top',

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { Schema } = await import('prosemirror-model');
 const { EditorState, TextSelection } = await import('prosemirror-state');
@@ -8,11 +8,11 @@ const { increaseTextIndent, decreaseTextIndent, setTextIndentation, unsetTextInd
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { ptToTwips } from '@converter/helpers';
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
 }));
 
-mock.module('@converter/helpers', () => ({
+vi.mock('@converter/helpers', () => ({
   ptToTwips: mock((pt) => pt * 20),
 }));
 

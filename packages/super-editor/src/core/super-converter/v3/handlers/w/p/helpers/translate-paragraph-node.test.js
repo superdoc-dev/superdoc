@@ -1,12 +1,12 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/index.js';
 import { generateParagraphProperties } from './generate-paragraph-properties.js';
 
-mock.module('@converter/v2/exporter/helpers/index.js', () => ({
+vi.mock('@converter/v2/exporter/helpers/index.js', () => ({
   translateChildNodes: mock(),
 }));
 
-mock.module('./generate-paragraph-properties.js', () => ({
+vi.mock('./generate-paragraph-properties.js', () => ({
   generateParagraphProperties: mock(),
 }));
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, mock } from 'bun:test';
-mock.module('../../../../exporter.js', () => {
+import { describe, it, expect, vi } from 'vitest';
+vi.mock('../../../../exporter.js', () => {
   const processOutputMarks = mock((marks) => marks || []);
   const generateRunProps = mock((processedMarks) => ({
     name: 'w:rPr',

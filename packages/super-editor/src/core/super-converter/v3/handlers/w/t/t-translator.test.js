@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { config, translator } from './t-translator.js';
 const { NodeTranslator } = await import('@translator');
 import { getTextNodeForExport } from '@converter/v3/handlers/w/t/helpers/translate-text-node.js';
@@ -7,17 +7,17 @@ import { translator as wInsTranslator } from '@converter/v3/handlers/w/ins/index
 import { translator as wHyperlinkTranslator } from '@converter/v3/handlers/w/hyperlink/index.js';
 
 // Mocks
-mock.module('@converter/v3/handlers/w/t/helpers/translate-text-node.js', () => ({
+vi.mock('@converter/v3/handlers/w/t/helpers/translate-text-node.js', () => ({
   getTextNodeForExport: mock(),
 }));
 
-mock.module('@converter/v3/handlers/w/del/index.js', () => ({
+vi.mock('@converter/v3/handlers/w/del/index.js', () => ({
   translator: { decode: mock() },
 }));
-mock.module('@converter/v3/handlers/w/ins/index.js', () => ({
+vi.mock('@converter/v3/handlers/w/ins/index.js', () => ({
   translator: { decode: mock() },
 }));
-mock.module('@converter/v3/handlers/w/hyperlink/index.js', () => ({
+vi.mock('@converter/v3/handlers/w/hyperlink/index.js', () => ({
   translator: { decode: mock() },
 }));
 

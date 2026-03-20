@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { addDefaultStylesIfMissing, createDocumentJson } from '@core/super-converter/v2/importer/docxImporter';
 import { DEFAULT_LINKED_STYLES } from '../../core/super-converter/exporter-docx-defs';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';

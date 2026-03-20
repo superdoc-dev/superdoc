@@ -1,6 +1,6 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock table importer helpers used by the handler
-mock.module('@converter/v2/importer/tableImporter', () => ({
+vi.mock('@converter/v2/importer/tableImporter', () => ({
   getGridColumnWidths: mock(() => [90, 100, 110]),
   getReferencedTableStyles: mock(() => ({
     fontSize: '12pt',

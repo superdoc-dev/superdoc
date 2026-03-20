@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, afterEach } from 'vitest';
 import { base64ToFile, getBase64FileMeta } from './handleBase64.js';
 
 const base64ForPayload = (payload, mime = 'image/png') =>

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt } from '@superdoc/document-api';
 import type { ListItemProjection } from '../helpers/list-item-resolver.js';
@@ -10,7 +10,7 @@ const { clearInvalidationHandlers } = await import('../../core/parts/invalidatio
 // Module mocks — hoisted before any imports of the module under test
 // ---------------------------------------------------------------------------
 
-mock.module('./plan-wrappers.js', () => ({
+vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
@@ -30,37 +30,37 @@ mock.module('./plan-wrappers.js', () => ({
   }),
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getBlockIndex: mock(),
   clearIndexCache: mock(),
 }));
 
-mock.module('../helpers/list-item-resolver.js', () => ({
+vi.mock('../helpers/list-item-resolver.js', () => ({
   resolveListItem: mock(),
 }));
 
-mock.module('../helpers/list-sequence-helpers.js', () => ({
+vi.mock('../helpers/list-sequence-helpers.js', () => ({
   getAbstractNumId: mock(),
   getAllListItemProjections: mock(() => []),
   getContiguousSequence: mock(() => []),
   findAdjacentSequence: mock(() => null),
 }));
 
-mock.module('../../core/helpers/list-numbering-helpers.js', () => ({
+vi.mock('../../core/helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     removeLvlOverride: mock(),
   },
 }));
 
-mock.module('../../core/commands/changeListLevel.js', () => ({
+vi.mock('../../core/commands/changeListLevel.js', () => ({
   updateNumberingProperties: mock(),
 }));
 
-mock.module('../helpers/mutation-helpers.js', () => ({
+vi.mock('../helpers/mutation-helpers.js', () => ({
   rejectTrackedMode: mock(),
 }));
 
-mock.module('../../core/helpers/list-level-formatting-helpers.js', () => ({
+vi.mock('../../core/helpers/list-level-formatting-helpers.js', () => ({
   LevelFormattingHelpers: {
     getPresetTemplate: mock(),
     applyTemplateToAbstract: mock(),

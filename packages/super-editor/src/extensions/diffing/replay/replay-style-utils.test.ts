@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { applyAttributesDiff } from './replay-style-utils';
 
 describe('applyAttributesDiff', () => {

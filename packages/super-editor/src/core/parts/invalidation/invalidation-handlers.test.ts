@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { registerStaticInvalidationHandlers, registerHeaderFooterInvalidation } from './invalidation-handlers.js';
 import { applyPartInvalidation, clearInvalidationHandlers } from './part-invalidation-registry.js';
 import type { PartChangedEvent } from '../types.js';

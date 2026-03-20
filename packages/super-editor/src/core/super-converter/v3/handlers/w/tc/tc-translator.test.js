@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock the helper modules used by tc-translator
-mock.module('./helpers/legacy-handle-table-cell-node', () => ({
+vi.mock('./helpers/legacy-handle-table-cell-node', () => ({
   handleTableCellNode: mock(() => ({ type: 'tableCell', content: [], attrs: { a: 1 } })),
 }));
-mock.module('./helpers/translate-table-cell', () => ({
+vi.mock('./helpers/translate-table-cell', () => ({
   translateTableCell: mock(() => ({ name: 'w:tc', elements: [{ name: 'w:tcPr', elements: [] }] })),
 }));
 

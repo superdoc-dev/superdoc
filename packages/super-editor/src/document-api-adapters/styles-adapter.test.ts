@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { StylesApplyInput, NormalizedStylesApplyOptions, ValueSchema } from '@superdoc/document-api';
 import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import { stylesApplyAdapter } from './styles-adapter.js';

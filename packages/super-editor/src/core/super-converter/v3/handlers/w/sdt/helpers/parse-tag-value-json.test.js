@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn, afterEach } from 'bun:test';
+import { describe, it, expect, spyOn, afterEach } from 'vitest';
 import { parseTagValueJSON } from './parse-tag-value-json';
 
 describe('parseTagValueJSON', () => {

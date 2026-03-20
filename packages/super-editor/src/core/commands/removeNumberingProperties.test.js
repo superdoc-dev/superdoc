@@ -1,11 +1,11 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { findParentNode } = await import('../helpers/findParentNode.js');
 const { removeNumberingProperties } = await import('./removeNumberingProperties.js');
 import { decreaseListIndent } from './decreaseListIndent.js';
 import { updateNumberingProperties } from './changeListLevel.js';
 
-mock.module('../helpers/findParentNode.js', async (importOriginal) => {
+vi.mock('../helpers/findParentNode.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
@@ -13,19 +13,19 @@ mock.module('../helpers/findParentNode.js', async (importOriginal) => {
   };
 });
 
-mock.module('@core/commands/list-helpers', () => ({
+vi.mock('@core/commands/list-helpers', () => ({
   isList: mock(),
 }));
 
-mock.module('./decreaseListIndent.js', () => ({
+vi.mock('./decreaseListIndent.js', () => ({
   decreaseListIndent: mock(),
 }));
 
-mock.module('./changeListLevel.js', () => ({
+vi.mock('./changeListLevel.js', () => ({
   updateNumberingProperties: mock(),
 }));
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
 }));
 

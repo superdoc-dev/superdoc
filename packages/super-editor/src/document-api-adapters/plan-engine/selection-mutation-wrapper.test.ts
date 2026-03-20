@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { StoryLocator, MutationStep } from '@superdoc/document-api';
 const { selectionMutationWrapper } = await import('./plan-wrappers.js');
 const { encodeV4Ref } = await import('../story-runtime/story-ref-codec.js');
@@ -13,19 +13,19 @@ const mockedDeps = {
   getRevision: mock(() => 'rev-1'),
 };
 
-mock.module('../story-runtime/resolve-story-runtime.js', () => ({
+vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
   resolveStoryRuntime: mockedDeps.resolveStoryRuntime,
 }));
 
-mock.module('./compiler.js', () => ({
+vi.mock('./compiler.js', () => ({
   compilePlan: mockedDeps.compilePlan,
 }));
 
-mock.module('./executor.js', () => ({
+vi.mock('./executor.js', () => ({
   executeCompiledPlan: mockedDeps.executeCompiledPlan,
 }));
 
-mock.module('./revision-tracker.js', async (importOriginal) => {
+vi.mock('./revision-tracker.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./revision-tracker.js')>();
   return {
     ...original,

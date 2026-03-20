@@ -1,17 +1,17 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { TrackChanges } = await import('./track-changes.js');
 
-mock.module('../comment/comments-plugin.js', () => ({
+vi.mock('../comment/comments-plugin.js', () => ({
   CommentsPluginKey: {
     getState: mock(),
   },
 }));
 
-mock.module('./permission-helpers.js', () => ({
+vi.mock('./permission-helpers.js', () => ({
   collectTrackedChanges: mock(),
 }));
 
-mock.module('./trackChangesHelpers/getTrackChanges.js', () => ({
+vi.mock('./trackChangesHelpers/getTrackChanges.js', () => ({
   getTrackChanges: mock(),
 }));
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'bun:test';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { getExportedResult } from './export-helpers/index';
 
 describe('LineBreakExporter', () => {

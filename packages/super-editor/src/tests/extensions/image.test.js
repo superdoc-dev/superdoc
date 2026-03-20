@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createDocxTestEditor } from '../helpers/editor-test-utils.js';
 
 const parseStyle = (styleString = '') => {

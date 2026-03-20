@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
-mock.module('uuid', () => ({
+import { describe, it, expect, vi, spyOn, beforeEach, afterEach } from 'vitest';
+vi.mock('uuid', () => ({
   v4: mock(() => 'generated-id'),
 }));
 const { Schema } = await import('prosemirror-model');

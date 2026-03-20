@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 // @ts-check
 import { encode, decode, attrConfig } from './w14-text-id.js';
 

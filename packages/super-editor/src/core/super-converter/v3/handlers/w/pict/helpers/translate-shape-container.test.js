@@ -1,10 +1,10 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translateShapeContainer } from './translate-shape-container';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
 
-mock.module('@converter/v2/exporter/helpers/translateChildNodes');
-mock.module('@helpers/generateDocxRandomId');
+vi.mock('@converter/v2/exporter/helpers/translateChildNodes');
+vi.mock('@helpers/generateDocxRandomId');
 
 describe('translateShapeContainer', () => {
   beforeEach(() => {

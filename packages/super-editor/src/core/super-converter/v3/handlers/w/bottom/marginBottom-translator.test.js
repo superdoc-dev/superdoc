@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { translator as marginBottomTranslator } from './marginBottom-translator.js';
 
 describe('w:bottom margin translator (marginBottom)', () => {

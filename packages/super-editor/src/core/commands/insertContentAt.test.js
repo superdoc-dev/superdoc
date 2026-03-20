@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
-mock.module('../helpers/createNodeFromContent', () => ({
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+vi.mock('../helpers/createNodeFromContent', () => ({
   createNodeFromContent: mock(),
 }));
 
-mock.module('../helpers/selectionToInsertionEnd', () => ({
+vi.mock('../helpers/selectionToInsertionEnd', () => ({
   selectionToInsertionEnd: mock(),
 }));
 

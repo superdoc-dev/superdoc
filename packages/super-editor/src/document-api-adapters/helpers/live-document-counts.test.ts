@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { BlockIndex, BlockCandidate } from './node-address-resolver.js';
 import type { InlineIndex, InlineCandidate } from './inline-address-resolver.js';
@@ -19,20 +19,20 @@ import {
   countPages,
 } from './live-document-counts.js';
 
-mock.module('./index-cache.js', () => ({
+vi.mock('./index-cache.js', () => ({
   getBlockIndex: mock(),
   getInlineIndex: mock(),
 }));
 
-mock.module('../get-text-adapter.js', () => ({
+vi.mock('../get-text-adapter.js', () => ({
   getTextAdapter: mock(),
 }));
 
-mock.module('./tracked-change-resolver.js', () => ({
+vi.mock('./tracked-change-resolver.js', () => ({
   groupTrackedChanges: mock(),
 }));
 
-mock.module('./content-controls/index.js', () => ({
+vi.mock('./content-controls/index.js', () => ({
   findAllSdtNodes: mock(),
   resolveControlType: (attrs: Record<string, unknown>) => attrs.controlType ?? attrs.type ?? 'unknown',
 }));

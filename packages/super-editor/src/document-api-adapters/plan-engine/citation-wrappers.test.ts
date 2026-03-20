@@ -1,17 +1,17 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 
-mock.module('./plan-wrappers.js', () => ({
+vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: mock((_editor: Editor, handler: () => boolean) => ({
     steps: [{ effect: handler() ? 'changed' : 'noop' }],
   })),
 }));
 
-mock.module('./revision-tracker.js', () => ({
+vi.mock('./revision-tracker.js', () => ({
   getRevision: mock(() => 'rev-1'),
 }));
 
-mock.module('../helpers/adapter-utils.js', () => ({
+vi.mock('../helpers/adapter-utils.js', () => ({
   paginate: mock((items: unknown[], offset = 0, limit?: number) => {
     const total = items.length;
     const sliced = items.slice(offset, limit ? offset + limit : undefined);
@@ -21,15 +21,15 @@ mock.module('../helpers/adapter-utils.js', () => ({
   resolveBlockCreatePosition: mock(() => 0),
 }));
 
-mock.module('../helpers/mutation-helpers.js', () => ({
+vi.mock('../helpers/mutation-helpers.js', () => ({
   rejectTrackedMode: mock(),
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   clearIndexCache: mock(),
 }));
 
-mock.module('../helpers/citation-resolver.js', () => ({
+vi.mock('../helpers/citation-resolver.js', () => ({
   findAllCitations: mock(() => []),
   resolveCitationTarget: mock(),
   extractCitationInfo: mock(),

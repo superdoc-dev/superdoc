@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn } from 'bun:test';
+import { describe, it, expect, vi, spyOn } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import { writeAdapter } from './write-adapter.js';

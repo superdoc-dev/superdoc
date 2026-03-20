@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { translator } from './vMerge-translator.js';
 
 describe('w:vMerge translator', () => {

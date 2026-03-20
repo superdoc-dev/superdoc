@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { getTestDataByFileName } from '../../../../../../tests/helpers/helpers.js';
 import { defaultNodeListHandler } from '../../../../v2/importer/docxImporter.js';
 import { translator as r_translator } from './r-translator.js';

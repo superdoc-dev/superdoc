@@ -1,6 +1,6 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode } from './encode-image-node-helpers.js';
-mock.module('@converter/helpers.js', async (importOriginal) => {
+vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return {
     ...actual,
@@ -11,7 +11,7 @@ mock.module('@converter/helpers.js', async (importOriginal) => {
   };
 });
 
-mock.module('./vector-shape-helpers.js', () => ({
+vi.mock('./vector-shape-helpers.js', () => ({
   extractFillColor: mock((spPr) => {
     const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
     const srgbClr = solidFill?.elements?.find((el) => el.name === 'a:srgbClr');
@@ -28,7 +28,7 @@ mock.module('./vector-shape-helpers.js', () => ({
   extractCustomGeometry: mock(() => null),
 }));
 
-mock.module('@core/utilities/carbonCopy.js', () => ({
+vi.mock('@core/utilities/carbonCopy.js', () => ({
   carbonCopy: mock((obj) => JSON.parse(JSON.stringify(obj))),
 }));
 

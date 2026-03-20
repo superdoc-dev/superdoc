@@ -1,9 +1,9 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { translator } from './tblGrid-translator.js';
 const { NodeTranslator } = await import('@translator');
 
 // Mock dependencies
-mock.module('@core/super-converter/helpers.js', () => ({
+vi.mock('@core/super-converter/helpers.js', () => ({
   twipsToPixels: mock((val) => (val ? parseInt(val, 10) / 20 : 0)),
   pixelsToTwips: mock((val) => (val ? Math.round(val * 20) : 0)),
 }));

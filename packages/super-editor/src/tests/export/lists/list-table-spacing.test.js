@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { getExportedResult } from '@tests/export/export-helpers/index.js';
 
 const findFirst = (elements, name) => elements?.find((element) => element.name === name);

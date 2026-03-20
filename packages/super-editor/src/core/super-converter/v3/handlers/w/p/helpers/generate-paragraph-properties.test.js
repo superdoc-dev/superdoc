@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
-mock.module('../../pPr/pPr-translator.js', () => ({
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('../../pPr/pPr-translator.js', () => ({
   translator: {
     decode: mock(),
   },

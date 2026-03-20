@@ -1,4 +1,4 @@
-import { describe, it, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, test, expect, vi, beforeEach } from 'vitest';
 /**
  * Regression tests for story runtime cache invalidation.
  *
@@ -31,7 +31,7 @@ const mocks = {
   incrementStoryRevision: mock(),
 };
 
-mock.module('./story-key.js', async (importOriginal) => {
+vi.mock('./story-key.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./story-key.js')>();
   return {
     ...original,
@@ -39,26 +39,26 @@ mock.module('./story-key.js', async (importOriginal) => {
   };
 });
 
-mock.module('./note-story-runtime.js', () => ({
+vi.mock('./note-story-runtime.js', () => ({
   resolveNoteRuntime: mocks.resolveNoteRuntime,
 }));
 
-mock.module('./header-footer-story-runtime.js', () => ({
+vi.mock('./header-footer-story-runtime.js', () => ({
   resolveHeaderFooterSlotRuntime: mocks.resolveHeaderFooterSlotRuntime,
   resolveHeaderFooterPartRuntime: mocks.resolveHeaderFooterPartRuntime,
 }));
 
-mock.module('../../core/parts/adapters/header-footer-part-descriptor.js', () => ({
+vi.mock('../../core/parts/adapters/header-footer-part-descriptor.js', () => ({
   isHeaderFooterPartId: mocks.isHeaderFooterPartId,
 }));
 
-mock.module('../plan-engine/revision-tracker.js', () => ({
+vi.mock('../plan-engine/revision-tracker.js', () => ({
   initRevision: mocks.initRevision,
   trackRevisions: mocks.trackRevisions,
   restoreRevision: mocks.restoreRevision,
 }));
 
-mock.module('./story-revision-store.js', () => ({
+vi.mock('./story-revision-store.js', () => ({
   getStoryRevisionStore: mocks.getStoryRevisionStore,
   getStoryRevision: mocks.getStoryRevision,
   incrementStoryRevision: mocks.incrementStoryRevision,

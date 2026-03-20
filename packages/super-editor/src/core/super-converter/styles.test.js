@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn, beforeAll } from 'bun:test';
+import { describe, it, expect, spyOn, beforeAll } from 'vitest';
 import { encodeMarksFromRPr, decodeRPrFromMarks, encodeCSSFromRPr, encodeCSSFromPPr } from './styles.js';
 
 beforeAll(() => {

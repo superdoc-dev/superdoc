@@ -1,12 +1,12 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translateContentBlock, translateVRectContentBlock } from './translate-content-block';
 import { translator as alternateChoiceTranslator } from '@converter/v3/handlers/mc/altermateContent';
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
 import { wrapTextInRun } from '@converter/exporter';
 
-mock.module('@converter/v3/handlers/mc/altermateContent');
-mock.module('@helpers/generateDocxRandomId');
-mock.module('@converter/exporter');
+vi.mock('@converter/v3/handlers/mc/altermateContent');
+vi.mock('@helpers/generateDocxRandomId');
+vi.mock('@converter/exporter');
 
 describe('translateContentBlock', () => {
   beforeEach(() => {

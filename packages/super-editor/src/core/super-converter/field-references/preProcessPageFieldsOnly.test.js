@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 // @ts-check
 import { preProcessPageFieldsOnly } from './preProcessPageFieldsOnly.js';
 

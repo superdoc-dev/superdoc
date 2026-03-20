@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { makeColorOption, icons, getAvailableColorOptions, renderColorOptions } from './color-dropdown-helpers.js';
 
 describe('color-dropdown-helpers', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, spyOn, beforeEach, afterEach } from 'vitest';
 import { getFieldHighlightJson } from './translate-field-annotation';
 
 const extractFill = (result) => result?.elements?.[0]?.attributes?.['w:fill'];

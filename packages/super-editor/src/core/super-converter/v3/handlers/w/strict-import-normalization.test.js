@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 /**
  * Phase 6 hardening tests: strict import normalization for core-4 inline properties.
  *

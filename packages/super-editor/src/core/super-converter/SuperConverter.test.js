@@ -1,8 +1,8 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 import { SuperConverter } from './SuperConverter.js';
 import { v4 as uuidv4 } from 'uuid';
 
-mock.module('uuid', () => ({
+vi.mock('uuid', () => ({
   v4: mock(() => 'test-uuid-1234'),
 }));
 

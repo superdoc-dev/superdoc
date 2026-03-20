@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import { bootstrapPartSync } from './bootstrap.js';
 import { META_MAP_KEY, META_PARTS_CAPABILITY_KEY, PARTS_MAP_KEY } from './constants.js';

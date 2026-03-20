@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 const { getItems } = await import('../menuItems.js');
 const { createMockEditor, createMockContext, assertMenuSectionsStructure, ContextMenuConfigs } = await import(
   './testHelpers.js'
@@ -10,7 +10,7 @@ const clipboardMocks = {
   handleClipboardPaste: mock(() => true),
 };
 
-mock.module('../../cursor-helpers.js', async () => {
+vi.mock('../../cursor-helpers.js', async () => {
   const actual = await import('../../cursor-helpers.js');
   return {
     ...actual,
@@ -18,7 +18,7 @@ mock.module('../../cursor-helpers.js', async () => {
   };
 });
 
-mock.module('../constants.js', () => ({
+vi.mock('../constants.js', () => ({
   TEXTS: {
     replaceText: 'Replace text',
     insertText: 'Insert text',
@@ -51,21 +51,21 @@ mock.module('../constants.js', () => ({
   },
 }));
 
-mock.module('../../toolbar/TableGrid.vue', () => ({ default: { template: '<div>TableGrid</div>' } }));
-mock.module('../../toolbar/AIWriter.vue', () => ({ default: { template: '<div>AIWriter</div>' } }));
-mock.module('../../toolbar/TableActions.vue', () => ({ default: { template: '<div>TableActions</div>' } }));
-mock.module('../../toolbar/LinkInput.vue', () => ({ default: { template: '<div>LinkInput</div>' } }));
-mock.module('../CellBackgroundPicker.vue', () => ({ default: { template: '<div>CellBackgroundPicker</div>' } }));
+vi.mock('../../toolbar/TableGrid.vue', () => ({ default: { template: '<div>TableGrid</div>' } }));
+vi.mock('../../toolbar/AIWriter.vue', () => ({ default: { template: '<div>AIWriter</div>' } }));
+vi.mock('../../toolbar/TableActions.vue', () => ({ default: { template: '<div>TableActions</div>' } }));
+vi.mock('../../toolbar/LinkInput.vue', () => ({ default: { template: '<div>LinkInput</div>' } }));
+vi.mock('../CellBackgroundPicker.vue', () => ({ default: { template: '<div>CellBackgroundPicker</div>' } }));
 
-mock.module('../../../core/utilities/clipboardUtils.js', () => ({
+vi.mock('../../../core/utilities/clipboardUtils.js', () => ({
   readClipboardRaw: clipboardMocks.readClipboardRaw,
 }));
 
-mock.module('../../../core/InputRule.js', () => ({
+vi.mock('../../../core/InputRule.js', () => ({
   handleClipboardPaste: clipboardMocks.handleClipboardPaste,
 }));
 
-mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
   isTrackedChangeActionAllowed: mock(() => true),
 }));
 

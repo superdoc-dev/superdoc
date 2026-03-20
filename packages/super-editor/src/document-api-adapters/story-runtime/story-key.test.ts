@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { buildStoryKey, parseStoryKey, parseStoryKeyType, BODY_STORY_KEY } from './story-key.js';
 import type { StoryLocator } from '@superdoc/document-api';
 

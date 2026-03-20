@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 /**
  * Integration tests for header/footer slot materialization.
  *
@@ -27,22 +27,22 @@ import type { Editor } from '../../core/Editor.js';
 // ---------------------------------------------------------------------------
 
 const mockSectionProjections = mock();
-mock.module('./sections-resolver.js', () => ({
+vi.mock('./sections-resolver.js', () => ({
   resolveSectionProjections: (...args: unknown[]) => mockSectionProjections(...args),
 }));
 
 const mockReadTargetSectPr = mock();
-mock.module('./section-projection-access.js', () => ({
+vi.mock('./section-projection-access.js', () => ({
   readTargetSectPr: (...args: unknown[]) => mockReadTargetSectPr(...args),
 }));
 
 const mockApplySectPrToProjection = mock();
-mock.module('./section-mutation-wrapper.js', () => ({
+vi.mock('./section-mutation-wrapper.js', () => ({
   applySectPrToProjection: (...args: unknown[]) => mockApplySectPrToProjection(...args),
 }));
 
 // resolveEffectiveRef — returns null (no inherited ref to clone from)
-mock.module('./header-footer-refs-mutation.js', () => ({
+vi.mock('./header-footer-refs-mutation.js', () => ({
   resolveEffectiveRef: () => null,
 }));
 

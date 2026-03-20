@@ -1,6 +1,6 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock children translation to keep tests focused on this module
-mock.module('@converter/v2/exporter/helpers/index', () => ({
+vi.mock('@converter/v2/exporter/helpers/index', () => ({
   translateChildNodes: mock(() => [{ name: 'w:p', elements: [] }]),
 }));
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '@extensions/track-changes/constants.js';
 import { ensureTrackedWrapper, prepareRunTrackingContext } from './track-change-helpers.js';
 

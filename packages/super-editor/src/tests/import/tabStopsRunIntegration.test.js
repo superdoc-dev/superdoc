@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter.js';
 

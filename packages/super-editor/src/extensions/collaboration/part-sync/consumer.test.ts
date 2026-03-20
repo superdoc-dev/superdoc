@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import { createPartConsumer, isApplyingRemotePartChanges } from './consumer.js';
 import { encodeEnvelopeToYjs } from './json-crdt.js';

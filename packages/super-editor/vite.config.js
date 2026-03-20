@@ -3,17 +3,9 @@ import { configDefaults } from 'vitest/config'
 import { fileURLToPath, URL } from 'node:url'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import vue from '@vitejs/plugin-vue'
-import { execSync } from 'node:child_process'
 
 import { version as superdocVersion } from '../superdoc/package.json';
 import sourceResolve from '../../vite.sourceResolve'
-
-// Auto-detect files migrated to bun:test and exclude them from vitest.
-// Uses grep at config time so no static file list needs to be maintained.
-const bunTestFiles = execSync(
-  "grep -rl \"from 'bun:test'\" src/ --include='*.test.*' 2>/dev/null || true",
-  { cwd: new URL('.', import.meta.url).pathname, encoding: 'utf8' }
-).split('\n').filter(Boolean).map(f => `**/${f}`);
 
 const testPool = process.env.VITEST_POOL ?? 'threads';
 const minWorkers = process.env.VITEST_MIN_WORKERS ?? '50%';
@@ -85,8 +77,6 @@ export default defineConfig(({ mode }) => {
         '**/*.spec.js',
         // Slow test excluded by default, run with VITEST_SLOW=1 (test:slow script)
         ...(process.env.VITEST_SLOW ? [] : ['**/node-import-timing.test.js']),
-        // Files migrated to bun:test — run via `bun test` instead
-        ...bunTestFiles,
       ],
       coverage: {
         provider: 'v8',

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { createCascadeToggleCommands } from './cascade-toggle.js';
 
 const invoke = (command, commands) => command()({ commands });

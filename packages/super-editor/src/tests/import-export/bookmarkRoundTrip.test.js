@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'bun:test';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { createDocumentJson } from '@converter/v2/importer/docxImporter.js';
 import { exportSchemaToJson } from '@converter/exporter.js';
 import { getTestDataByFileName } from '@tests/helpers/helpers.js';

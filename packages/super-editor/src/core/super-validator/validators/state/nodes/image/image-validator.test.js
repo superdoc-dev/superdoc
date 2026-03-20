@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
-mock.module('../../../../../parts/adapters/relationships-mutation.js', () => ({
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('../../../../../parts/adapters/relationships-mutation.js', () => ({
   findOrCreateRelationship: mock(),
 }));
 

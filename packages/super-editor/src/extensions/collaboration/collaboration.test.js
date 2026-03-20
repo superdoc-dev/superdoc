@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach, afterEach } from 'vitest';
 // Mock binding object - we'll configure this in tests
 const mockBinding = {
   initView: mock(),
@@ -7,7 +7,7 @@ const mockBinding = {
   _prosemirrorChanged: mock(),
 };
 
-mock.module('y-prosemirror', () => {
+vi.mock('y-prosemirror', () => {
   const mockSyncPluginKey = {
     getState: mock(() => ({ binding: mockBinding })),
   };
@@ -22,7 +22,7 @@ mock.module('y-prosemirror', () => {
   };
 });
 
-mock.module('yjs', () => ({
+vi.mock('yjs', () => ({
   encodeStateAsUpdate: mock(() => new Uint8Array([1, 2, 3])),
 }));
 

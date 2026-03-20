@@ -1,10 +1,10 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
-mock.module('prosemirror-transform', () => ({
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+vi.mock('prosemirror-transform', () => ({
   canJoin: mock(),
   findWrapping: mock(),
 }));
 
-mock.module('../InputRule.js', () => {
+vi.mock('../InputRule.js', () => {
   return {
     InputRule: class {
       constructor(config) {
@@ -15,7 +15,7 @@ mock.module('../InputRule.js', () => {
   };
 });
 
-mock.module('../utilities/callOrGet.js', () => ({
+vi.mock('../utilities/callOrGet.js', () => ({
   callOrGet: mock((value, _context, ...args) => {
     return typeof value === 'function' ? value(...args) : value;
   }),

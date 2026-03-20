@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 // Controllable mock implementations — configure per test
 let mockFindPlaceholder = mock(() => 0);
 let mockRemoveImagePlaceholder = mock((_state, tr) => tr);
@@ -6,21 +6,21 @@ let mockFindOrCreateRelationship = mock(() => 'rId100');
 let mockDefaultUpload = mock();
 let mockGenerateDocxRandomId = mock();
 
-mock.module('./imageRegistrationPlugin.js', () => ({
+vi.mock('./imageRegistrationPlugin.js', () => ({
   findPlaceholder: (...args) => mockFindPlaceholder(...args),
   removeImagePlaceholder: (...args) => mockRemoveImagePlaceholder(...args),
   addImagePlaceholder: mock(),
 }));
 
-mock.module('@core/parts/adapters/relationships-mutation.js', () => ({
+vi.mock('@core/parts/adapters/relationships-mutation.js', () => ({
   findOrCreateRelationship: (...args) => mockFindOrCreateRelationship(...args),
 }));
 
-mock.module('./handleImageUpload.js', () => ({
+vi.mock('./handleImageUpload.js', () => ({
   handleImageUpload: (...args) => mockDefaultUpload(...args),
 }));
 
-mock.module('@core/helpers/index.js', () => ({
+vi.mock('@core/helpers/index.js', () => ({
   generateDocxRandomId: (...args) => mockGenerateDocxRandomId(...args),
 }));
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { encode, decode, attrConfig } from './w-clear.js';
 
 describe('w:clear (clear) encoder', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { EditorState } from 'prosemirror-state';
 import { schema, doc, p, br } from 'prosemirror-test-builder';
 import { getTextContentFromNodes } from './getTextContentFromNodes.js';

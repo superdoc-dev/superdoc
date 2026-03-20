@@ -1,7 +1,7 @@
-import { describe, it, expect, mock, spyOn, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, afterEach } from 'vitest';
 const { TextSelection } = await import('prosemirror-state');
 
-mock.module('./findWordBounds.js', () => ({
+vi.mock('./findWordBounds.js', () => ({
   findWordBounds: mock(),
 }));
 

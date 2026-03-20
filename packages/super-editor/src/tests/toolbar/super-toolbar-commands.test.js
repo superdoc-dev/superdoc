@@ -1,29 +1,29 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { SuperToolbar } = await import('../../components/toolbar/super-toolbar.js');
 
-mock.module('prosemirror-history', () => ({
+vi.mock('prosemirror-history', () => ({
   undoDepth: () => 0,
   redoDepth: () => 0,
 }));
 
-mock.module('@core/helpers/getActiveFormatting.js', () => ({
+vi.mock('@core/helpers/getActiveFormatting.js', () => ({
   getActiveFormatting: mock(() => []),
 }));
 
-mock.module('@helpers/isInTable.js', () => ({
+vi.mock('@helpers/isInTable.js', () => ({
   isInTable: mock(() => false),
 }));
 
-mock.module('@extensions/linked-styles/index.js', () => ({
+vi.mock('@extensions/linked-styles/index.js', () => ({
   getQuickFormatList: mock(() => []),
 }));
 
-mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
   collectTrackedChanges: mock(() => []),
   isTrackedChangeActionAllowed: mock(() => true),
 }));
 
-mock.module('../../components/toolbar/defaultItems.js', () => ({
+vi.mock('../../components/toolbar/defaultItems.js', () => ({
   makeDefaultItems: () => ({ defaultItems: [], overflowItems: [] }),
 }));
 

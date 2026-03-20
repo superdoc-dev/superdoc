@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CapturedStyle, CapturedRun } from './style-resolver.js';
 const { queryMatchAdapter } = await import('./query-match-adapter.js');
 const { SNIPPET_MAX_LENGTH } = await import('@superdoc/document-api');
@@ -14,15 +14,15 @@ const mockedDeps = {
   getRevision: mock(() => 'rev-1'),
 };
 
-mock.module('../find-adapter.js', () => ({
+vi.mock('../find-adapter.js', () => ({
   findLegacyAdapter: mockedDeps.findLegacyAdapter,
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-mock.module('./style-resolver.js', async (importOriginal) => {
+vi.mock('./style-resolver.js', async (importOriginal) => {
   const orig = await importOriginal<typeof import('./style-resolver.js')>();
   return {
     ...orig,
@@ -30,7 +30,7 @@ mock.module('./style-resolver.js', async (importOriginal) => {
   };
 });
 
-mock.module('./revision-tracker.js', () => ({
+vi.mock('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
 }));
 

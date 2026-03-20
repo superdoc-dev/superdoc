@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { handleBookmarkStartNode } from './bookmarkStartImporter.js';
 
 const baseParams = () => ({

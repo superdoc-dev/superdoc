@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { StoryRuntimeCache } from './runtime-cache.js';
 import type { StoryRuntime } from './story-types.js';
 import { BODY_STORY_KEY } from './story-key.js';

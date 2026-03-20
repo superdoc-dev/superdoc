@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { ensureExplicitHeaderFooterSlot, normalizeVariant } = await import('./header-footer-slot-materialization.js');
 
 // ---------------------------------------------------------------------------
@@ -6,32 +6,32 @@ const { ensureExplicitHeaderFooterSlot, normalizeVariant } = await import('./hea
 // ---------------------------------------------------------------------------
 
 const mockSectionProjections = mock();
-mock.module('./sections-resolver.js', () => ({
+vi.mock('./sections-resolver.js', () => ({
   resolveSectionProjections: (...args: unknown[]) => mockSectionProjections(...args),
 }));
 
 const mockReadTargetSectPr = mock();
-mock.module('./section-projection-access.js', () => ({
+vi.mock('./section-projection-access.js', () => ({
   readTargetSectPr: (...args: unknown[]) => mockReadTargetSectPr(...args),
 }));
 
 const mockCreateHeaderFooterPart = mock();
-mock.module('./header-footer-parts.js', () => ({
+vi.mock('./header-footer-parts.js', () => ({
   createHeaderFooterPart: (...args: unknown[]) => mockCreateHeaderFooterPart(...args),
 }));
 
 const mockResolveEffectiveRef = mock();
-mock.module('./header-footer-refs-mutation.js', () => ({
+vi.mock('./header-footer-refs-mutation.js', () => ({
   resolveEffectiveRef: (...args: unknown[]) => mockResolveEffectiveRef(...args),
 }));
 
 const mockApplySectPrToProjection = mock();
-mock.module('./section-mutation-wrapper.js', () => ({
+vi.mock('./section-mutation-wrapper.js', () => ({
   applySectPrToProjection: (...args: unknown[]) => mockApplySectPrToProjection(...args),
 }));
 
 // compoundMutation: execute callback directly (transparent wrapper for tests)
-mock.module('../../core/parts/mutation/compound-mutation.js', () => ({
+vi.mock('../../core/parts/mutation/compound-mutation.js', () => ({
   compoundMutation: ({ execute }: { execute: () => boolean }) => {
     try {
       const success = execute();
@@ -44,13 +44,13 @@ mock.module('../../core/parts/mutation/compound-mutation.js', () => ({
 
 const mockRemovePart = mock();
 const mockHasPart = mock().mockReturnValue(false);
-mock.module('../../core/parts/store/part-store.js', () => ({
+vi.mock('../../core/parts/store/part-store.js', () => ({
   removePart: (...args: unknown[]) => mockRemovePart(...args),
   hasPart: (...args: unknown[]) => mockHasPart(...args),
 }));
 
 const mockRemoveInvalidationHandler = mock();
-mock.module('../../core/parts/invalidation/part-invalidation-registry.js', () => ({
+vi.mock('../../core/parts/invalidation/part-invalidation-registry.js', () => ({
   removeInvalidationHandler: (...args: unknown[]) => mockRemoveInvalidationHandler(...args),
 }));
 

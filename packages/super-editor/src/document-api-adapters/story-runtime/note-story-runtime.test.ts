@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 /**
  * Regression tests for note story runtime resolution.
  *
@@ -21,15 +21,15 @@ const mockCreateStoryEditor = mock(() => ({
   on: mock(),
 }));
 
-mock.module('../../core/story-editor-factory.js', () => ({
+vi.mock('../../core/story-editor-factory.js', () => ({
   createStoryEditor: (...args: unknown[]) => mockCreateStoryEditor(...args),
 }));
 
-mock.module('../../core/parts/mutation/mutate-part.js', () => ({
+vi.mock('../../core/parts/mutation/mutate-part.js', () => ({
   mutatePart: mock(),
 }));
 
-mock.module('../../core/parts/adapters/notes-part-descriptor.js', () => ({
+vi.mock('../../core/parts/adapters/notes-part-descriptor.js', () => ({
   getNotesConfig: mock(() => ({ partId: 'notes', childElementName: 'w:footnote' })),
   getNoteElements: mock(() => []),
   ensureFootnoteRefRun: mock(),

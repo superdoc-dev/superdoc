@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { resolveStoryFromInput } from './resolve-story-context.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import type { StoryLocator } from '@superdoc/document-api';

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { EditorState, TextSelection } = await import('prosemirror-state');
 const { schema, doc, p, blockquote } = await import('prosemirror-test-builder');
 import {
@@ -9,7 +9,7 @@ import {
 } from './cursor-helpers.js';
 import LinkInput from './toolbar/LinkInput.vue';
 
-mock.module('../core/helpers/editorSurface.js', () => ({
+vi.mock('../core/helpers/editorSurface.js', () => ({
   getEditorSurfaceElement: mock(),
 }));
 

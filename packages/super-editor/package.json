@@ -70,7 +70,6 @@
     "types:check": "tsc --noEmit",
     "types:build": "tsc -p tsconfig.build.json",
     "test": "vitest",
-    "test:bun": "bun test src/core/super-converter && bun test src/core/commands && bun test src/core/helpers && bun test src/core/parts && bun test src/core/presentation-editor && bun test src/core/encoding-helpers.test.js src/core/selection-state.test.ts src/core/DocxZipper.test.js src/core/CommandService.test.js src/core/ExtensionService.test.js && bun test src/document-api-adapters && bun test src/extensions && bun test src/tests && bun test src/components && bun test src/utils",
     "test:debug": "vitest --inspect-brk --pool threads --poolOptions.threads.singleThread",
     "preview": "vite preview",
     "clean": "rm -rf dist types",

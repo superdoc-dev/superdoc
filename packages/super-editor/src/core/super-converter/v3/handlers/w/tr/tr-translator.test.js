@@ -1,17 +1,17 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 // Mock dependencies
-mock.module('@core/super-converter/helpers.js', () => ({
+vi.mock('@core/super-converter/helpers.js', () => ({
   twipsToPixels: mock((val) => (val ? parseInt(val, 10) / 20 : 0)),
   pixelsToTwips: mock((val) => (val ? Math.round(val * 20) : 0)),
   eighthPointsToPixels: mock((val) => (val != null ? parseInt(val, 10) / 8 : 0)),
 }));
 
-mock.module('@core/super-converter/v2/exporter/helpers/index.js', () => ({
+vi.mock('@core/super-converter/v2/exporter/helpers/index.js', () => ({
   translateChildNodes: mock(() => [{ name: 'w:tc', comment: 'mocked cell' }]),
 }));
 
-mock.module('../tc', () => ({
+vi.mock('../tc', () => ({
   translator: {
     encode: mock((params) => {
       const tcNode = params.extraParams.node;
@@ -31,7 +31,7 @@ mock.module('../tc', () => ({
   },
 }));
 
-mock.module('../trPr', () => ({
+vi.mock('../trPr', () => ({
   translator: {
     encode: mock(() => ({ encoded: 'trPr' })),
     decode: mock(() => ({ name: 'w:trPr', comment: 'mocked trPr' })),

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { NodeSelection } = await import('prosemirror-state');
 import type { ResolveRangeOutput } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
@@ -17,16 +17,16 @@ const mocks = {
   mapBlockNodeType: mock(),
 };
 
-mock.module('./range-resolver.js', () => ({
+vi.mock('./range-resolver.js', () => ({
   resolveAbsoluteRange: mocks.resolveAbsoluteRange,
 }));
 
-mock.module('../../core/selection-state.js', () => ({
+vi.mock('../../core/selection-state.js', () => ({
   CustomSelectionPluginKey: { getState: mock() },
   getPreservedSelection: mocks.getPreservedSelection,
 }));
 
-mock.module('./node-address-resolver.js', () => ({
+vi.mock('./node-address-resolver.js', () => ({
   mapBlockNodeType: mocks.mapBlockNodeType,
 }));
 

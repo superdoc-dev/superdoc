@@ -1,8 +1,8 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode } from './encode-image-node-helpers.js';
 import { emuToPixels } from '@converter/helpers.js';
 
-mock.module('@converter/helpers.js', async (importOriginal) => {
+vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return {
     ...actual,
@@ -12,7 +12,7 @@ mock.module('@converter/helpers.js', async (importOriginal) => {
   };
 });
 
-mock.module('./vector-shape-helpers.js', () => ({
+vi.mock('./vector-shape-helpers.js', () => ({
   extractFillColor: mock(),
   extractStrokeColor: mock(),
   extractStrokeWidth: mock(),

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import LinkInput from './LinkInput.vue';

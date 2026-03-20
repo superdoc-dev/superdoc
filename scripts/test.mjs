@@ -25,7 +25,6 @@ const bunExitCodes = [
     '--filter', '@superdoc/geometry-utils', '--filter', '@superdoc/word-layout',
     '--filter', '@superdoc/common', '--filter', '@superdoc/font-utils',
     '--filter', '@superdoc/locale-utils', '--filter', '@superdoc/url-validation', 'test']),
-  run(pnpmCommand, ['--filter', '@superdoc/super-editor', 'run', 'test:bun']),
 ];
 
 if (vitestExitCode !== 0) {

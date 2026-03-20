@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { TableMap } from 'prosemirror-tables';
 import type { Editor } from '../core/Editor.js';
@@ -16,7 +16,7 @@ import {
   tablesUnmergeCellsAdapter,
 } from './tables-adapter.js';
 
-mock.module('prosemirror-tables', () => ({
+vi.mock('prosemirror-tables', () => ({
   TableMap: {
     get: mock(() => ({
       width: 2,

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { createNumberingPlugin } = await import('./numberingPlugin.js');
 import { createNumberingManager } from './NumberingManager.js';
@@ -6,7 +6,7 @@ import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
 import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
 
-mock.module('prosemirror-state', () => ({
+vi.mock('prosemirror-state', () => ({
   Plugin: class {
     constructor(spec) {
       this.spec = spec;
@@ -19,22 +19,22 @@ mock.module('prosemirror-state', () => ({
   },
 }));
 
-mock.module('./NumberingManager.js', () => ({
+vi.mock('./NumberingManager.js', () => ({
   createNumberingManager: mock(),
 }));
 
-mock.module('@helpers/list-numbering-helpers.js', () => ({
+vi.mock('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     getAllListDefinitions: mock(),
     getListDefinitionDetails: mock(),
   },
 }));
 
-mock.module('@helpers/orderedListUtils.js', () => ({
+vi.mock('@helpers/orderedListUtils.js', () => ({
   generateOrderedListIndex: mock(),
 }));
 
-mock.module('@core/super-converter/v2/importer/listImporter.js', () => ({
+vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
   docxNumberingHelpers: {
     normalizeLvlTextChar: mock(),
   },

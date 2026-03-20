@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 // prettier-ignore
 import { getExportedResult } from '../export-helpers/index';
 

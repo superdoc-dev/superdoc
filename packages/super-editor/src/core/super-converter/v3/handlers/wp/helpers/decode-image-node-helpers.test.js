@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   translateImageNode,
   translateVectorShape,
@@ -6,7 +6,7 @@ import {
 import * as helpers from '@converter/helpers.js';
 import * as annotationHelpers from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 
-mock.module('@converter/helpers.js', async (importOriginal) => {
+vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return {
     ...actual,
@@ -23,11 +23,11 @@ mock.module('@converter/helpers.js', async (importOriginal) => {
   };
 });
 
-mock.module('@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js', () => ({
+vi.mock('@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js', () => ({
   prepareTextAnnotation: mock(() => ({ type: 'text', text: 'annotation' })),
 }));
 
-mock.module('@core/helpers/index.js', async (importOriginal) => {
+vi.mock('@core/helpers/index.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return {
     ...actual,

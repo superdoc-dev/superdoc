@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, afterEach } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { DecorationSet } from 'prosemirror-view';

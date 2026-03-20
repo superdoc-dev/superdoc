@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { pictNodeTypeStrategy } from './helpers/pict-node-type-strategy';
 import { handleShapeImageWatermarkImport } from './helpers/handle-shape-image-watermark-import';
 import { translateImageWatermark } from './helpers/translate-image-watermark';

@@ -1,4 +1,4 @@
-import { describe, it, test, expect } from 'bun:test';
+import { describe, it, test, expect } from 'vitest';
 import { generateDocxRandomId, generateRandomSigned32BitIntStrId } from './generateDocxRandomId.js';
 
 describe('generateDocxRandomId', () => {

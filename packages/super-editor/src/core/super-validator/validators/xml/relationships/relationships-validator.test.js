@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { createRelationshipsValidator } from './relationships-validator.js';
 
 function makeEditorWithRelationships(relsXmlLike, documentXmlLike = null, contentTypesXmlLike = null) {

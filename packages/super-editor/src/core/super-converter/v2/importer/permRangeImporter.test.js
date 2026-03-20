@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { handlePermStartNode } from './permStartImporter.js';
 import { handlePermEndNode } from './permEndImporter.js';
 

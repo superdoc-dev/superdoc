@@ -1,10 +1,10 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 import { deleteSelection as pmDeleteSelection } from 'prosemirror-commands';
 const { Schema } = await import('prosemirror-model');
 const { EditorState, TextSelection } = await import('prosemirror-state');
 const { deleteSelection } = await import('./deleteSelection.js');
 
-mock.module('prosemirror-commands', () => ({
+vi.mock('prosemirror-commands', () => ({
   deleteSelection: mock(),
 }));
 

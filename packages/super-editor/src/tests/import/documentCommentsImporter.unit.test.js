@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const handlerMock = mock(({ nodes }) =>
   nodes.map((node) => ({
     type: 'paragraph',
@@ -9,14 +9,14 @@ const handlerMock = mock(({ nodes }) =>
 
 let uuidCounter = 0;
 
-mock.module('@converter/v2/importer/docxImporter.js', () => ({
+vi.mock('@converter/v2/importer/docxImporter.js', () => ({
   defaultNodeListHandler: () => ({
     handler: handlerMock,
     handlerEntities: [],
   }),
 }));
 
-mock.module('uuid', () => ({
+vi.mock('uuid', () => ({
   v4: mock(() => {
     uuidCounter += 1;
     return `00000000-0000-4000-8000-00000000000${uuidCounter}`;

@@ -1,9 +1,9 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 // @ts-check
 const { setLineHeight, unsetLineHeight } = await import('./lineHeight.js');
 import { linesToTwips } from '@converter/helpers';
 
-mock.module('@converter/helpers', () => ({
+vi.mock('@converter/helpers', () => ({
   linesToTwips: mock((value) => value * 240),
 }));
 

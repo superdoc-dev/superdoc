@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { EditorState, TextSelection } = await import('prosemirror-state');
 const { schema, doc, p } = await import('prosemirror-test-builder');
 
@@ -6,7 +6,7 @@ const handleDocxPasteMock = mock(() => true);
 const handleGoogleDocsHtmlMock = mock(() => true);
 const flattenListsInHtmlMock = mock((html) => html);
 
-mock.module('./inputRules/docx-paste/docx-paste.js', async (importOriginal) => {
+vi.mock('./inputRules/docx-paste/docx-paste.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
@@ -14,11 +14,11 @@ mock.module('./inputRules/docx-paste/docx-paste.js', async (importOriginal) => {
   };
 });
 
-mock.module('./inputRules/google-docs-paste/google-docs-paste.js', () => ({
+vi.mock('./inputRules/google-docs-paste/google-docs-paste.js', () => ({
   handleGoogleDocsHtml: handleGoogleDocsHtmlMock,
 }));
 
-mock.module('./inputRules/html/html-helpers.js', () => ({
+vi.mock('./inputRules/html/html-helpers.js', () => ({
   flattenListsInHtml: flattenListsInHtmlMock,
 }));
 

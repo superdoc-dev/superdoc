@@ -1,19 +1,19 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { config, translator } = await import('./totalPageNumber-translator.js');
 const { NodeTranslator } = await import('../../../node-translator/node-translator.js');
 import { processOutputMarks } from '../../../../exporter.js';
 import { parseMarks } from './../../../../v2/importer/markImporter.js';
 
-mock.module('../../../../exporter.js', () => ({
+vi.mock('../../../../exporter.js', () => ({
   processOutputMarks: mock(() => []),
 }));
 
-mock.module('./../../../../v2/importer/markImporter.js', () => ({
+vi.mock('./../../../../v2/importer/markImporter.js', () => ({
   parseMarks: mock(() => []),
 }));
 
-mock.module('../build-complex-field-runs.js', async (importOriginal) => {
+vi.mock('../build-complex-field-runs.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return actual;
 });

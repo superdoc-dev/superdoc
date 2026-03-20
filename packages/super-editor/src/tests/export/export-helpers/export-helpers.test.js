@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const readFileMock = mock();
 const loadXmlDataMock = mock();
 const exportSchemaToJsonMock = mock();
@@ -9,12 +9,12 @@ const getRichTextExtensionsMock = mock(() => ['rich-extension']);
 
 const editorInstances = [];
 
-mock.module('fs/promises', () => ({
+vi.mock('fs/promises', () => ({
   readFile: readFileMock,
   default: { readFile: readFileMock },
 }));
 
-mock.module('@core/Editor.js', () => {
+vi.mock('@core/Editor.js', () => {
   class EditorMock {
     static loadXmlData = loadXmlDataMock;
 
@@ -39,19 +39,19 @@ mock.module('@core/Editor.js', () => {
   return { Editor: EditorMock };
 });
 
-mock.module('../../../index.js', () => ({
+vi.mock('../../../index.js', () => ({
   getRichTextExtensions: getRichTextExtensionsMock,
 }));
 
-mock.module('@extensions/index.js', () => ({
+vi.mock('@extensions/index.js', () => ({
   getStarterExtensions: getStarterExtensionsMock,
 }));
 
-mock.module('@converter/exporter', () => ({
+vi.mock('@converter/exporter', () => ({
   exportSchemaToJson: exportSchemaToJsonMock,
 }));
 
-mock.module('@converter/v2/exporter/commentsExporter.js', () => ({
+vi.mock('@converter/v2/exporter/commentsExporter.js', () => ({
   getCommentDefinition: getCommentDefinitionMock,
 }));
 

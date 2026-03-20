@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { createDocxTestEditor } from '../helpers/editor-test-utils.js';
 import { EditorState } from 'prosemirror-state';
 import { positionTrackerKey } from '@core/PositionTracker.js';

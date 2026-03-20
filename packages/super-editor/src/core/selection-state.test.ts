@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 /**
  * Tests for the tracked selection handle system in selection-state.ts.
  *

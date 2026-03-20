@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { Node as ProseMirrorNode, Mark as ProseMirrorMark } from 'prosemirror-model';
 import type { BlockCandidate } from './node-address-resolver.js';
 import type { InlineCandidate } from './inline-address-resolver.js';

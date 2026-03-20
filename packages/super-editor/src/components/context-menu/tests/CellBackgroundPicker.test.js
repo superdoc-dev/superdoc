@@ -1,15 +1,15 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { mount } = await import('@vue/test-utils');
 
-mock.module('@extensions/table/tableHelpers/isCellSelection.js', () => ({
+vi.mock('@extensions/table/tableHelpers/isCellSelection.js', () => ({
   isCellSelection: mock(() => false),
 }));
 
-mock.module('@extensions/table/tableHelpers/cellAround.js', () => ({
+vi.mock('@extensions/table/tableHelpers/cellAround.js', () => ({
   cellAround: mock(() => null),
 }));
 
-mock.module('../../toolbar/IconGrid.vue', () => ({
+vi.mock('../../toolbar/IconGrid.vue', () => ({
   default: {
     props: ['icons', 'customIcons', 'activeColor', 'hasNoneIcon'],
     emits: ['select'],
@@ -17,7 +17,7 @@ mock.module('../../toolbar/IconGrid.vue', () => ({
   },
 }));
 
-mock.module('../../toolbar/color-dropdown-helpers.js', () => ({
+vi.mock('../../toolbar/color-dropdown-helpers.js', () => ({
   icons: [[{ label: 'black', value: '#000000', icon: '<svg/>', style: {} }]],
 }));
 

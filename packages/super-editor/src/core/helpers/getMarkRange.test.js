@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { EditorState } from 'prosemirror-state';
 import { schema, doc, p, em } from 'prosemirror-test-builder';
 import { getMarkRange } from './getMarkRange.js';

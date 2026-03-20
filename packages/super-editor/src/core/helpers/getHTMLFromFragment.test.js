@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { schema } from 'prosemirror-test-builder';
 import { getHTMLFromFragment } from './getHTMLFromFragment.js';
 

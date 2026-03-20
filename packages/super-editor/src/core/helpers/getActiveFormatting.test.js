@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 const getMarksFromSelectionMock = mock(() => [
   { type: { name: 'bold' }, attrs: {} },
   { type: { name: 'textStyle' }, attrs: { textColor: '#f00' } },
@@ -6,11 +6,11 @@ const getMarksFromSelectionMock = mock(() => [
 
 const findMarkMock = mock(() => ({ from: 0, to: 10, attrs: { href: 'https://example.com' } }));
 
-mock.module('./getMarksFromSelection.js', () => ({
+vi.mock('./getMarksFromSelection.js', () => ({
   getMarksFromSelection: getMarksFromSelectionMock,
 }));
 
-mock.module('./findMark.js', () => ({
+vi.mock('./findMark.js', () => ({
   findMark: findMarkMock,
 }));
 

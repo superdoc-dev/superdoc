@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { TextAddress } from '@superdoc/document-api';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mutation-resolution.js';
 import type { Editor } from '../../core/Editor.js';

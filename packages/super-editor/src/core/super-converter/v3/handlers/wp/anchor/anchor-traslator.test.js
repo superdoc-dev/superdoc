@@ -1,14 +1,14 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { config, translator } from './anchor-translator.js';
 const { NodeTranslator } = await import('../../../node-translator/index.js');
 const { translateAnchorNode } = await import('./helpers/translate-anchor-node.js');
 const { handleAnchorNode } = await import('./helpers/handle-anchor-node.js');
 
-mock.module('@converter/v3/handlers/wp/anchor/helpers/handle-anchor-node.js', () => ({
+vi.mock('@converter/v3/handlers/wp/anchor/helpers/handle-anchor-node.js', () => ({
   handleAnchorNode: mock(),
 }));
 
-mock.module('@converter/v3/handlers/wp/anchor/helpers/translate-anchor-node.js', () => ({
+vi.mock('@converter/v3/handlers/wp/anchor/helpers/translate-anchor-node.js', () => ({
   translateAnchorNode: mock(),
 }));
 

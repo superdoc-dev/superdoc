@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { handleRunNode } from '@core/super-converter/v2/importer/runNodeImporter.js';
 
 // Helper functions to create common mocks

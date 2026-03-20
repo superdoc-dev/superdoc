@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { createCascadeToggleCommands } from '../shared/cascade-toggle.js';
 
 describe('createCascadeToggleCommands', () => {

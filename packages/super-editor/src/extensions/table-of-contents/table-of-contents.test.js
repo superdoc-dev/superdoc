@@ -1,11 +1,11 @@
-import { describe, it, expect, mock } from 'bun:test';
-mock.module('@core/Node.js', () => ({
+import { describe, it, expect, vi } from 'vitest';
+vi.mock('@core/Node.js', () => ({
   Node: {
     create: (config) => ({ config }),
   },
 }));
 
-mock.module('@core/Attribute.js', () => ({
+vi.mock('@core/Attribute.js', () => ({
   Attribute: {
     mergeAttributes: (...args) => Object.assign({}, ...args),
   },

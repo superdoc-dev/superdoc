@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { UnknownNodeDiagnostic } from '@superdoc/document-api';
 import {
   addDiagnostic,

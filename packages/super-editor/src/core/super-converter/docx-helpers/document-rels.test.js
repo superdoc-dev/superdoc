@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, spyOn, beforeEach } from 'vitest';
 import {
   getNewRelationshipId,
   getDocumentRelationshipElements,

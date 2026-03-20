@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { diffNodes, normalizeNodes } from './generic-diffing.ts';
 
 const createDocFromNodes = (nodes = []) => {

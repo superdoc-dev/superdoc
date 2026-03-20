@@ -1,11 +1,11 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { config, translator } = await import('./tableOfContents-translator.js');
 const { NodeTranslator } = await import('../../../node-translator/node-translator.js');
 import { exportSchemaToJson } from '../../../../exporter.js';
 
 // Mock the exporter
-mock.module('../../../../exporter.js', () => ({
+vi.mock('../../../../exporter.js', () => ({
   exportSchemaToJson: mock(),
 }));
 

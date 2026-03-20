@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { encode, decode, attrConfig } from './w-tab-leader.js';
 
 describe('w:tab w:leader (leader) encoder', () => {

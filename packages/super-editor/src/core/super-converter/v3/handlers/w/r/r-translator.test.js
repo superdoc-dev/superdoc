@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn } from 'bun:test';
+import { describe, it, expect, vi, spyOn } from 'vitest';
 import { translator, config } from './r-translator.js';
 import * as converterStyles from '../../../../styles.js';
 

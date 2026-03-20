@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 const { resolveBlockInsertionPos, resolveCreateAnchor } = await import('./create-insertion.js');
 const { PlanError } = await import('./errors.js');
@@ -13,11 +13,11 @@ const mockedDeps = {
   findBlockByNodeIdOnly: mock(),
 };
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-mock.module('../helpers/node-address-resolver.js', async (importOriginal) => {
+vi.mock('../helpers/node-address-resolver.js', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,

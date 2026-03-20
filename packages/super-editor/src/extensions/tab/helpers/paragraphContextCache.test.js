@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 // @ts-check
 import { getParagraphContext, clearParagraphContext, clearAllParagraphContexts } from './paragraphContextCache.js';
 

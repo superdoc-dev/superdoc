@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { CapturedRun } from './style-resolver.js';
 import {
   marksEqual,
@@ -14,7 +14,7 @@ import type { MatchRun } from '@superdoc/document-api';
 
 // Mock style-engine resolveRunProperties for cascade context tests
 const resolveRunPropertiesMock = mock(() => ({}));
-mock.module('@superdoc/style-engine/ooxml', async (importOriginal) => {
+vi.mock('@superdoc/style-engine/ooxml', async (importOriginal) => {
   const orig = await importOriginal<typeof import('@superdoc/style-engine/ooxml')>();
   return {
     ...orig,

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FindOutput, FindItemDomain } from '@superdoc/document-api';
 const { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } = await import('@superdoc/document-api');
 import type { Editor } from '../core/Editor.js';
@@ -7,15 +7,15 @@ import { getLiveDocumentCounts } from './helpers/live-document-counts.js';
 import type { LiveDocumentCounts } from './helpers/live-document-counts.js';
 const { infoAdapter } = await import('./info-adapter.js');
 
-mock.module('./find-adapter.js', () => ({
+vi.mock('./find-adapter.js', () => ({
   findLegacyAdapter: mock(),
 }));
 
-mock.module('./helpers/live-document-counts.js', () => ({
+vi.mock('./helpers/live-document-counts.js', () => ({
   getLiveDocumentCounts: mock(),
 }));
 
-mock.module('./plan-engine/revision-tracker.js', () => ({
+vi.mock('./plan-engine/revision-tracker.js', () => ({
   getRevision: mock(() => '42'),
 }));
 

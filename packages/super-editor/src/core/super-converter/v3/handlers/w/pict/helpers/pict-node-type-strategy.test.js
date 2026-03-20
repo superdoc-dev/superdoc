@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { pictNodeTypeStrategy } from './pict-node-type-strategy';
 import { handleVRectImport } from './handle-v-rect-import';
 import { handleShapeTextboxImport } from './handle-shape-textbox-import';

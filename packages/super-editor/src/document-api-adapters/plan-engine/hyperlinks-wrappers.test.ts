@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt, HyperlinkTarget, InlineAnchor } from '@superdoc/document-api';
@@ -9,7 +9,7 @@ import type { BlockIndex } from '../helpers/node-address-resolver.js';
 // Module mocks — must come before imports of the module under test
 // ---------------------------------------------------------------------------
 
-mock.module('./plan-wrappers.js', () => ({
+vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
@@ -29,16 +29,16 @@ mock.module('./plan-wrappers.js', () => ({
   }),
 }));
 
-mock.module('./revision-tracker.js', () => ({
+vi.mock('./revision-tracker.js', () => ({
   getRevision: mock(() => '42'),
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getBlockIndex: mock((): BlockIndex => ({ candidates: [] }) as unknown as BlockIndex),
   clearIndexCache: mock(),
 }));
 
-mock.module('../helpers/mutation-helpers.js', () => ({
+vi.mock('../helpers/mutation-helpers.js', () => ({
   rejectTrackedMode: mock((opName: string, options?: { changeMode?: string }) => {
     if (options?.changeMode === 'tracked') {
       const err = new Error(`${opName} does not support tracked mode`);
@@ -51,7 +51,7 @@ mock.module('../helpers/mutation-helpers.js', () => ({
   }),
 }));
 
-mock.module('../helpers/hyperlink-mutation-helper.js', () => ({
+vi.mock('../helpers/hyperlink-mutation-helper.js', () => ({
   wrapWithLink: mock(() => true),
   insertLinkedText: mock(() => true),
   patchLinkMark: mock(() => true),
@@ -68,7 +68,7 @@ mock.module('../helpers/hyperlink-mutation-helper.js', () => ({
 // Store a reference we can control per-test
 let mockCandidates: InlineCandidate[] = [];
 
-mock.module('../helpers/inline-address-resolver.js', () => ({
+vi.mock('../helpers/inline-address-resolver.js', () => ({
   buildInlineIndex: mock(
     (): InlineIndex => ({
       candidates: mockCandidates,
@@ -89,7 +89,7 @@ mock.module('../helpers/inline-address-resolver.js', () => ({
   }),
 }));
 
-mock.module('../helpers/adapter-utils.js', () => ({
+vi.mock('../helpers/adapter-utils.js', () => ({
   paginate: mock((items: unknown[], offset = 0, limit?: number) => {
     const total = items.length;
     const sliced = items.slice(offset, limit ? offset + limit : undefined);

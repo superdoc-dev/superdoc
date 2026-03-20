@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { hyperlinkNodeHandlerEntity } from '@converter/v2/importer/hyperlinkImporter.js';
 import { getTestDataByFileName } from '@tests/helpers/helpers.js';
 import { defaultNodeListHandler, translateStyleDefinitions } from '@converter/v2/importer/docxImporter.js';

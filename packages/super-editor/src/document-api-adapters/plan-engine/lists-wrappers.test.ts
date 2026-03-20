@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { PlanReceipt } from '@superdoc/document-api';
 import type { ListItemProjection } from '../helpers/list-item-resolver.js';
@@ -7,7 +7,7 @@ import type { ListItemProjection } from '../helpers/list-item-resolver.js';
 // Module mocks — hoisted before any imports of the module under test
 // ---------------------------------------------------------------------------
 
-mock.module('./plan-wrappers.js', () => ({
+vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: mock((_editor: Editor, handler: () => boolean): PlanReceipt => {
     const applied = handler();
     return {
@@ -27,12 +27,12 @@ mock.module('./plan-wrappers.js', () => ({
   }),
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getBlockIndex: mock(),
   clearIndexCache: mock(),
 }));
 
-mock.module('../helpers/list-item-resolver.js', () => ({
+vi.mock('../helpers/list-item-resolver.js', () => ({
   listItemProjectionToInfo: mock((proj: ListItemProjection, listId: string) => ({
     address: proj.address,
     listId,
@@ -42,7 +42,7 @@ mock.module('../helpers/list-item-resolver.js', () => ({
   resolveListItem: mock(),
 }));
 
-mock.module('../helpers/list-sequence-helpers.js', () => ({
+vi.mock('../helpers/list-sequence-helpers.js', () => ({
   resolveBlock: mock(),
   resolveBlocksInRange: mock(),
   getAbstractNumId: mock(),
@@ -57,7 +57,7 @@ mock.module('../helpers/list-sequence-helpers.js', () => ({
   evaluateCanContinuePrevious: mock(),
 }));
 
-mock.module('../../core/helpers/list-numbering-helpers.js', () => ({
+vi.mock('../../core/helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     hasListDefinition: mock(() => true),
     getNewListId: mock(() => 42),
@@ -69,21 +69,21 @@ mock.module('../../core/helpers/list-numbering-helpers.js', () => ({
   },
 }));
 
-mock.module('../../core/commands/changeListLevel.js', () => ({
+vi.mock('../../core/commands/changeListLevel.js', () => ({
   updateNumberingProperties: mock(),
 }));
 
-mock.module('../helpers/mutation-helpers.js', () => ({
+vi.mock('../helpers/mutation-helpers.js', () => ({
   requireEditorCommand: mock((cmd: unknown) => cmd),
   ensureTrackedCapability: mock(),
   rejectTrackedMode: mock(),
 }));
 
-mock.module('../helpers/tracked-change-refs.js', () => ({
+vi.mock('../helpers/tracked-change-refs.js', () => ({
   collectTrackInsertRefsInRange: mock(() => []),
 }));
 
-mock.module('uuid', () => ({
+vi.mock('uuid', () => ({
   v4: mock(() => 'test-uuid'),
 }));
 

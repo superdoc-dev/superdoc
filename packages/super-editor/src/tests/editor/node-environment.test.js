@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, afterEach } from 'vitest';
 /* @vitest-environment node */
 
 import { JSDOM } from 'jsdom';

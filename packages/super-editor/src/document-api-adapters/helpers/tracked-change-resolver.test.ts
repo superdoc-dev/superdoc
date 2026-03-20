@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   TrackDeleteMarkName,
@@ -14,7 +14,7 @@ import {
   toCanonicalTrackedChangeId,
 } from './tracked-change-resolver.js';
 
-mock.module('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
+vi.mock('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
   getTrackChanges: mock(),
 }));
 

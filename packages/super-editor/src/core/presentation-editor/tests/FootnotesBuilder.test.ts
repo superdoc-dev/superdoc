@@ -1,10 +1,10 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { EditorState } from 'prosemirror-state';
 const { buildFootnotesInput, ConverterLike } = await import('../layout/FootnotesBuilder.js');
 import type { ConverterContext } from '@superdoc/pm-adapter';
 
 // Mock toFlowBlocks
-mock.module('@superdoc/pm-adapter', async (importOriginal) => {
+vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@superdoc/pm-adapter')>();
   return {
     ...actual,

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { normalizeDocPartContent, handleDocPartObj, tableOfContentsHandler } from './handle-doc-part-obj.js';
 
 describe('normalizeDocPartContent', () => {

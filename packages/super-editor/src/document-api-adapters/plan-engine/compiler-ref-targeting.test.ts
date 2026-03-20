@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MutationStep } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 const { compilePlan, STEP_INTERACTION_MATRIX, MATRIX_EXEMPT_OPS } = await import('./compiler.js');
@@ -14,15 +14,15 @@ const mockedDeps = {
   hasStepExecutor: mock(() => true),
 };
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-mock.module('../helpers/text-offset-resolver.js', () => ({
+vi.mock('../helpers/text-offset-resolver.js', () => ({
   resolveTextRangeInBlock: mockedDeps.resolveTextRangeInBlock,
 }));
 
-mock.module('./style-resolver.js', async (importOriginal) => {
+vi.mock('./style-resolver.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./style-resolver.js')>();
   return {
     ...original,
@@ -30,19 +30,19 @@ mock.module('./style-resolver.js', async (importOriginal) => {
   };
 });
 
-mock.module('./revision-tracker.js', () => ({
+vi.mock('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
 }));
 
-mock.module('../find/text-strategy.js', () => ({
+vi.mock('../find/text-strategy.js', () => ({
   executeTextSelector: mockedDeps.executeTextSelector,
 }));
 
-mock.module('../find/block-strategy.js', () => ({
+vi.mock('../find/block-strategy.js', () => ({
   executeBlockSelector: mockedDeps.executeBlockSelector,
 }));
 
-mock.module('./executor-registry.js', () => ({
+vi.mock('./executor-registry.js', () => ({
   hasStepExecutor: mockedDeps.hasStepExecutor,
 }));
 

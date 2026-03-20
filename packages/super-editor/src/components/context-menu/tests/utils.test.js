@@ -1,43 +1,43 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 const { createMockEditor, createBeforeEachSetup } = await import('./testHelpers.js');
 
 // Mock the modules first
-mock.module('../../../core/utilities/clipboardUtils.js');
-mock.module('../../cursor-helpers.js', async () => {
+vi.mock('../../../core/utilities/clipboardUtils.js');
+vi.mock('../../cursor-helpers.js', async () => {
   const actual = await import('../../cursor-helpers.js');
   return {
     ...actual,
     selectionHasNodeOrMark: mock(),
   };
 });
-mock.module('../constants.js', () => ({
+vi.mock('../constants.js', () => ({
   tableActionsOptions: [{ label: 'Add Row', command: 'addRow', icon: '<svg>add-row</svg>' }],
 }));
-mock.module('prosemirror-history', () => ({
+vi.mock('prosemirror-history', () => ({
   undoDepth: mock(() => 0),
   redoDepth: mock(() => 0),
 }));
-mock.module('y-prosemirror', () => ({
+vi.mock('y-prosemirror', () => ({
   yUndoPluginKey: {
     getState: mock(() => ({ undoManager: { undoStack: [], redoStack: [] } })),
   },
 }));
 
-mock.module('@extensions/track-changes/permission-helpers.js', () => ({
+vi.mock('@extensions/track-changes/permission-helpers.js', () => ({
   collectTrackedChanges: mock(() => []),
   collectTrackedChangesForContext: mock(() => []),
   isTrackedChangeActionAllowed: mock(() => true),
 }));
 
-mock.module('@core/commands/list-helpers', () => ({
+vi.mock('@core/commands/list-helpers', () => ({
   isList: mock(() => false),
 }));
 
-mock.module('@extensions/table/tableHelpers/isCellSelection.js', () => ({
+vi.mock('@extensions/table/tableHelpers/isCellSelection.js', () => ({
   isCellSelection: mock(() => false),
 }));
 
-mock.module('prosemirror-tables', () => ({
+vi.mock('prosemirror-tables', () => ({
   selectedRect: mock(() => ({
     top: 0,
     bottom: 2,

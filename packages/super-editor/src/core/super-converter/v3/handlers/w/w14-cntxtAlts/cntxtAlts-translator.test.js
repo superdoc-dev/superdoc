@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { NodeTranslator } from '../../../node-translator/node-translator.js';
 import { translator } from './cntxtAlts-translator.js';
 

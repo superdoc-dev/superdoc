@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getFieldAttrs, annotateDocument } from './annotator.js';
 
 globalThis.dateFormat = mock(() => '2025-01-30');

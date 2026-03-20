@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { getExportedResult, getExportedResultWithDocContent } from './export-helpers/index.js';
 import { twipsToPixels, pixelsToTwips } from '../../core/super-converter/helpers.js';
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
-mock.module('./helpers/chainableEditorState.js', () => ({
+import { describe, it, expect, vi, spyOn, beforeEach, afterEach } from 'vitest';
+vi.mock('./helpers/chainableEditorState.js', () => ({
   chainableEditorState: mock(() => 'mocked-chain-state'),
 }));
 

@@ -1,10 +1,10 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock dependencies before importing the module under test
-mock.module('../get-text-adapter.js', () => ({
+vi.mock('../get-text-adapter.js', () => ({
   getTextAdapter: mock(() => ''),
 }));
 
-mock.module('./live-document-counts.js', async (importOriginal) => {
+vi.mock('./live-document-counts.js', async (importOriginal) => {
   const original = (await importOriginal()) as any;
   return {
     ...original,

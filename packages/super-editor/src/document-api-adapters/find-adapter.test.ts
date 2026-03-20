@@ -1,4 +1,4 @@
-import { describe, it, test, expect } from 'bun:test';
+import { describe, it, test, expect } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import type { Query } from '@superdoc/document-api';

@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
-mock.module('./word-statistics.js', async (importOriginal) => {
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('./word-statistics.js', async (importOriginal) => {
   const original = (await importOriginal()) as typeof import('./word-statistics.js');
   return {
     ...original,

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach, afterEach } from 'vitest';
 const { Schema } = await import('@core/Schema.js');
 const { EditorState, TextSelection, NodeSelection } = await import('prosemirror-state');
 const listHelpers = await import('./list-numbering-helpers.js');
@@ -12,7 +12,7 @@ const { numberingPartDescriptor } = await import('@core/parts/adapters/numbering
 const { patchMockForParts } = await import('@core/parts/testing/test-helpers.js');
 
 // Mock the external dependencies
-mock.module('@core/super-converter/v2/importer/listImporter.js', () => ({
+vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
   getStyleTagFromStyleId: mock(),
   getAbstractDefinition: mock(),
   getDefinitionForLevel: mock(),
@@ -1348,7 +1348,7 @@ describe('lvlOverride → getAllListDefinitions roundtrip', () => {
   });
 });
 
-mock.module('@core/super-converter/v2/importer/listImporter.js', () => ({
+vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
   getStyleTagFromStyleId: mock(),
   getAbstractDefinition: mock(),
   getDefinitionForLevel: mock(),

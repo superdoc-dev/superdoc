@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 const { increaseListIndent } = await import('./increaseListIndent.js');
 import { changeListLevel } from './changeListLevel.js';
 
-mock.module('./changeListLevel.js', () => ({
+vi.mock('./changeListLevel.js', () => ({
   changeListLevel: mock(),
 }));
 

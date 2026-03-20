@@ -1,13 +1,13 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { splitBlock } = await import('./splitBlock.js');
 
-mock.module('../Attribute.js', () => ({
+vi.mock('../Attribute.js', () => ({
   Attribute: {
     getSplittedAttributes: mock((extensionAttrs, nodeName, nodeAttrs) => ({ ...nodeAttrs })),
   },
 }));
 
-mock.module('prosemirror-transform', () => ({
+vi.mock('prosemirror-transform', () => ({
   canSplit: mock(() => true),
 }));
 

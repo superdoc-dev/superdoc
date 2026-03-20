@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { SelectionSyncCoordinator, type SelectionSyncScheduler } from '../selection/SelectionSyncCoordinator.js';
 
 function createManualScheduler(): {

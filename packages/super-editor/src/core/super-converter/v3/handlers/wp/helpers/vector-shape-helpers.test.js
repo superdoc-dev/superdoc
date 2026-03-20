@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getThemeColor,
   getPresetColor,
@@ -9,7 +9,7 @@ import {
 } from './vector-shape-helpers.js';
 import { emuToPixels } from '@converter/helpers.js';
 
-mock.module('@converter/helpers.js', () => ({
+vi.mock('@converter/helpers.js', () => ({
   emuToPixels: mock(),
 }));
 

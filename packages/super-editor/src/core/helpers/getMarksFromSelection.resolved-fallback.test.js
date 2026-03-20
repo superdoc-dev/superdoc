@@ -1,15 +1,15 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 const { EditorState, TextSelection } = await import('prosemirror-state');
 const { Schema } = await import('prosemirror-model');
 
 const resolveRunProperties = mock(() => ({ bold: true }));
 
-mock.module('@superdoc/style-engine/ooxml', () => ({
+vi.mock('@superdoc/style-engine/ooxml', () => ({
   resolveRunProperties,
   TABLE_STYLE_ID_TABLE_GRID: 'TableGrid',
 }));
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   calculateResolvedParagraphProperties: mock(() => ({})),
 }));
 

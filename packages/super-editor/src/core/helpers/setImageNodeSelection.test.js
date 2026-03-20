@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, afterEach } from 'vitest';
 import { NodeSelection } from 'prosemirror-state';
 import { setImageNodeSelection } from './setImageNodeSelection.js';
 

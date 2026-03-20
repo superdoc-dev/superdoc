@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { mergeTextNodes } from './mergeTextNodes.js';
 
 const textNode = (text, marks) => ({ type: 'text', text, marks });

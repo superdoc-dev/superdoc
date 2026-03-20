@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 const { doc, p, em, schema } = await import('prosemirror-test-builder');
 
 const getMarkRangeMock = mock(() => ({ from: 0, to: 2 }));
 
-mock.module('./getMarkRange.js', () => ({
+vi.mock('./getMarkRange.js', () => ({
   getMarkRange: getMarkRangeMock,
 }));
 

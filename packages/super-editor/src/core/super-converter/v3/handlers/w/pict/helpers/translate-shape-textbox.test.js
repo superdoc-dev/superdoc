@@ -1,8 +1,8 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { translateShapeTextbox } from './translate-shape-textbox';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 
-mock.module('@converter/v2/exporter/helpers/translateChildNodes');
+vi.mock('@converter/v2/exporter/helpers/translateChildNodes');
 
 describe('translateShapeTextbox', () => {
   it('should create textbox structure with translated child nodes and attributes', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { handleParagraphNode } from '@converter/v2/importer/paragraphNodeImporter.js';
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { translator as wPTranslator } from '@converter/v3/handlers/w/p';

@@ -1,8 +1,8 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 const ids = ['a1', 'b2', 'c3', 'd4', 'e5'];
 const generateDocxRandomIdMock = mock(() => ids.shift() || 'ffff');
 
-mock.module('./generateDocxRandomId', () => ({
+vi.mock('./generateDocxRandomId', () => ({
   generateDocxRandomId: generateDocxRandomIdMock,
 }));
 

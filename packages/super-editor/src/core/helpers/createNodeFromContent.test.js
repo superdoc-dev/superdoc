@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn, afterEach } from 'bun:test';
+import { describe, it, expect, spyOn, afterEach } from 'vitest';
 import { Fragment } from 'prosemirror-model';
 import { schema as testSchema } from 'prosemirror-test-builder';
 import { createNodeFromContent } from './createNodeFromContent.js';

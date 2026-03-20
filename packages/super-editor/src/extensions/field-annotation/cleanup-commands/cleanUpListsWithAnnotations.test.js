@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 const { cleanUpListsWithAnnotations } = await import('./cleanUpListsWithAnnotations.js');
 import * as fieldHelpers from '../fieldAnnotationHelpers/index.js';
 import * as coreHelpers from '@core/helpers/index.js';
 
-mock.module('../fieldAnnotationHelpers/index.js', async () => {
+vi.mock('../fieldAnnotationHelpers/index.js', async () => {
   const actual = await import('../fieldAnnotationHelpers/index.js');
   return {
     ...actual,
@@ -11,7 +11,7 @@ mock.module('../fieldAnnotationHelpers/index.js', async () => {
   };
 });
 
-mock.module('@core/helpers/index.js', async () => {
+vi.mock('@core/helpers/index.js', async () => {
   const actual = await import('@core/helpers/index.js');
   return {
     ...actual,

@@ -1,6 +1,6 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 // Mock the individual margin property translators
-mock.module('../bottom', () => ({
+vi.mock('../bottom', () => ({
   marginBottomTranslator: {
     xmlName: 'w:bottom',
     sdNodeOrKeyName: 'marginBottom',
@@ -8,7 +8,7 @@ mock.module('../bottom', () => ({
     decode: mock(() => ({ name: 'w:bottom' })),
   },
 }));
-mock.module('../end', () => ({
+vi.mock('../end', () => ({
   marginEndTranslator: {
     xmlName: 'w:end',
     sdNodeOrKeyName: 'marginEnd',
@@ -16,7 +16,7 @@ mock.module('../end', () => ({
     decode: mock(() => ({ name: 'w:end' })),
   },
 }));
-mock.module('../left', () => ({
+vi.mock('../left', () => ({
   marginLeftTranslator: {
     xmlName: 'w:left',
     sdNodeOrKeyName: 'marginLeft',
@@ -24,7 +24,7 @@ mock.module('../left', () => ({
     decode: mock(() => ({ name: 'w:left' })),
   },
 }));
-mock.module('../right', () => ({
+vi.mock('../right', () => ({
   marginRightTranslator: {
     xmlName: 'w:right',
     sdNodeOrKeyName: 'marginRight',
@@ -32,7 +32,7 @@ mock.module('../right', () => ({
     decode: mock(() => ({ name: 'w:right' })),
   },
 }));
-mock.module('../start', () => ({
+vi.mock('../start', () => ({
   marginStartTranslator: {
     xmlName: 'w:start',
     sdNodeOrKeyName: 'marginStart',
@@ -40,7 +40,7 @@ mock.module('../start', () => ({
     decode: mock(() => ({ name: 'w:start' })),
   },
 }));
-mock.module('../top', () => ({
+vi.mock('../top', () => ({
   marginTopTranslator: {
     xmlName: 'w:top',
     sdNodeOrKeyName: 'marginTop',

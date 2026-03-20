@@ -1,21 +1,21 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
-mock.module('./changeListLevel.js', () => ({
+vi.mock('./changeListLevel.js', () => ({
   updateNumberingProperties: mock(),
 }));
 
-mock.module('@helpers/list-numbering-helpers.js', () => ({
+vi.mock('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     getNewListId: mock(),
     generateNewListDefinition: mock(),
   },
 }));
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
 }));
 
-mock.module('./removeNumberingProperties.js', () => ({
+vi.mock('./removeNumberingProperties.js', () => ({
   isVisuallyEmptyParagraph: mock(() => false),
 }));
 

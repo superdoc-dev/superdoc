@@ -1,18 +1,18 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 // Mock dependencies used by the helper
-mock.module('@core/utilities/carbonCopy.js', () => ({
+vi.mock('@core/utilities/carbonCopy.js', () => ({
   carbonCopy: (obj) => JSON.parse(JSON.stringify(obj)),
 }));
 
 // Mock parseMarks/mergeTextNodes as vi.fn so tests can reconfigure
-mock.module('@converter/v2/importer/index.js', () => ({
+vi.mock('@converter/v2/importer/index.js', () => ({
   parseMarks: mock(() => []),
   mergeTextNodes: mock((content) => content),
 }));
 
 // Simple and predictable conversion for positions
-mock.module('@converter/helpers.js', async (importOriginal) => {
+vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return {
     ...actual,

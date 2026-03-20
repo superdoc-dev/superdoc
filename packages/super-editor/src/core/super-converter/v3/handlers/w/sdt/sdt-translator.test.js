@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { config, translator } from './sdt-translator.js';
 const { NodeTranslator } = await import('../../../node-translator/node-translator');
 import { sdtNodeTypeStrategy } from './helpers/sdt-node-type-strategy';
@@ -7,16 +7,16 @@ import { translateDocumentSection } from './helpers/translate-document-section';
 import { translateStructuredContent } from './helpers/translate-structured-content';
 
 // Mock the helper modules used by sdt-translator
-mock.module('./helpers/sdt-node-type-strategy', () => ({
+vi.mock('./helpers/sdt-node-type-strategy', () => ({
   sdtNodeTypeStrategy: mock(),
 }));
-mock.module('./helpers/translate-field-annotation', () => ({
+vi.mock('./helpers/translate-field-annotation', () => ({
   translateFieldAnnotation: mock(() => ({ name: 'w:sdt', elements: [] })),
 }));
-mock.module('./helpers/translate-document-section', () => ({
+vi.mock('./helpers/translate-document-section', () => ({
   translateDocumentSection: mock(() => ({ name: 'w:sdt', elements: [] })),
 }));
-mock.module('./helpers/translate-structured-content', () => ({
+vi.mock('./helpers/translate-structured-content', () => ({
   translateStructuredContent: mock(() => ({ name: 'w:sdt', elements: [] })),
 }));
 

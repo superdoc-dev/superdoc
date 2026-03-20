@@ -1,15 +1,15 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach, afterEach } from 'vitest';
 const { mount, flushPromises } = await import('@vue/test-utils');
 const { nextTick } = await import('vue');
 import TableResizeOverlay from './TableResizeOverlay.vue';
 
 // Mock dependencies
-mock.module('@core/super-converter/helpers.js', () => ({
+vi.mock('@core/super-converter/helpers.js', () => ({
   pixelsToTwips: mock((px) => Math.round(px * 15)), // 1px ≈ 15 twips
   twipsToPixels: mock((twips) => Math.round(twips / 15)),
 }));
 
-mock.module('@superdoc/layout-bridge', () => ({
+vi.mock('@superdoc/layout-bridge', () => ({
   measureCache: {
     invalidate: mock(),
   },

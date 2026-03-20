@@ -1,7 +1,7 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 const setupKeymap = async ({ isMacOS, isIOS }) => {
-  mock.module('../utilities/isMacOS.js', () => ({ isMacOS: () => isMacOS }));
-  mock.module('../utilities/isIOS.js', () => ({ isIOS: () => isIOS }));
+  vi.mock('../utilities/isMacOS.js', () => ({ isMacOS: () => isMacOS }));
+  vi.mock('../utilities/isIOS.js', () => ({ isIOS: () => isIOS }));
 
   const { Keymap } = await import('./keymap.js');
   const { getExtensionConfigField } = await import('../helpers/getExtensionConfigField.js');

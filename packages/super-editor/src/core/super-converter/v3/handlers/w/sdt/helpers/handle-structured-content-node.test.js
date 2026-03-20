@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleStructuredContentNode } from './handle-structured-content-node';
 import { parseAnnotationMarks } from './handle-annotation-node';
 
 // Mock dependencies
-mock.module('./handle-annotation-node', () => ({
+vi.mock('./handle-annotation-node', () => ({
   parseAnnotationMarks: mock(),
 }));
 

@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from 'vitest';
 import { commentRangeStartTranslator, commentRangeEndTranslator } from './comment-range-translator';
 
 describe('w:commentRangeStart and w:commentRangeEnd', () => {

@@ -1,17 +1,17 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleAnnotationNode, parseAnnotationMarks, getAttrsFromElements } from './handle-annotation-node';
 import { parseTagValueJSON } from './parse-tag-value-json';
 import { parseMarks } from '@converter/v2/importer/markImporter';
 import { generateDocxRandomId } from '@core/helpers/generateDocxRandomId';
 
 // Mock dependencies
-mock.module('./parse-tag-value-json', () => ({
+vi.mock('./parse-tag-value-json', () => ({
   parseTagValueJSON: mock(),
 }));
-mock.module('@converter/v2/importer/markImporter', () => ({
+vi.mock('@converter/v2/importer/markImporter', () => ({
   parseMarks: mock(() => []),
 }));
-mock.module('@core/helpers/generateDocxRandomId', () => ({
+vi.mock('@core/helpers/generateDocxRandomId', () => ({
   generateDocxRandomId: mock(() => 'test-hash-1234'),
 }));
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, mock } from 'bun:test';
-mock.module('./myers-diff.ts', async () => {
+import { describe, it, expect, vi } from 'vitest';
+vi.mock('./myers-diff.ts', async () => {
   const actual = await import('./myers-diff.ts');
   return {
     myersDiff: mock(actual.myersDiff),

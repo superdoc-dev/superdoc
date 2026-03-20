@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 /**
  * Regression tests for create.paragraph and create.heading story routing.
  *
@@ -25,11 +25,11 @@ const mocks = {
   ensureTrackedCapability: mock(),
 };
 
-mock.module('../story-runtime/resolve-story-runtime.js', () => ({
+vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
   resolveStoryRuntime: mocks.resolveStoryRuntime,
 }));
 
-mock.module('./plan-wrappers.js', async (importOriginal) => {
+vi.mock('./plan-wrappers.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./plan-wrappers.js')>();
   return {
     ...original,
@@ -40,20 +40,20 @@ mock.module('./plan-wrappers.js', async (importOriginal) => {
   };
 });
 
-mock.module('./create-insertion.js', () => ({
+vi.mock('./create-insertion.js', () => ({
   resolveCreateAnchor: mocks.resolveCreateAnchor,
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   clearIndexCache: mocks.clearIndexCache,
   getBlockIndex: mocks.getBlockIndex,
 }));
 
-mock.module('../helpers/tracked-change-refs.js', () => ({
+vi.mock('../helpers/tracked-change-refs.js', () => ({
   collectTrackInsertRefsInRange: mocks.collectTrackInsertRefsInRange,
 }));
 
-mock.module('../helpers/mutation-helpers.js', () => ({
+vi.mock('../helpers/mutation-helpers.js', () => ({
   requireEditorCommand: mocks.requireEditorCommand,
   ensureTrackedCapability: mocks.ensureTrackedCapability,
 }));

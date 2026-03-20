@@ -1,9 +1,9 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleDocumentSectionNode } from './handle-document-section-node';
 import { parseTagValueJSON } from './parse-tag-value-json';
 
 // Mock dependencies
-mock.module('./parse-tag-value-json', () => ({
+vi.mock('./parse-tag-value-json', () => ({
   parseTagValueJSON: mock(),
 }));
 

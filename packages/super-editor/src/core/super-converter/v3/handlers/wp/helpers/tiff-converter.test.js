@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach } from 'vitest';
 import { isTiffExtension, convertTiffToPng, setTiffDomEnvironment } from './tiff-converter.js';
 
 describe('tiff-converter', () => {
@@ -62,7 +62,7 @@ describe('tiff-converter', () => {
     // mocked utif2 — vi.doMock applies lazily and needs a fresh module graph entry.
     it('returns a PNG data URI for valid TIFF input', () => {
       const fakeRgba = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]);
-      mock.module('utif2', () => ({
+      vi.mock('utif2', () => ({
         decode: () => [{ t256: [2], t257: [2] }],
         decodeImage: (_buf, ifd) => {
           ifd.width = 2;
@@ -94,7 +94,7 @@ describe('tiff-converter', () => {
       // Mock utif2 to return oversized dimensions via IFD tags.
       // decodeImage should never be called.
       const decodeImageSpy = mock();
-      mock.module('utif2', () => ({
+      vi.mock('utif2', () => ({
         decode: () => [{ t256: [100_000], t257: [10_000] }],
         decodeImage: decodeImageSpy,
         toRGBA8: () => new Uint8Array(0),
@@ -108,7 +108,7 @@ describe('tiff-converter', () => {
     });
 
     it('returns null when decode returns empty IFDs', () => {
-      mock.module('utif2', () => ({
+      vi.mock('utif2', () => ({
         decode: () => [],
         decodeImage: () => {},
         toRGBA8: () => new Uint8Array(0),
@@ -121,7 +121,7 @@ describe('tiff-converter', () => {
     });
 
     it('returns null when toRGBA8 returns empty data', () => {
-      mock.module('utif2', () => ({
+      vi.mock('utif2', () => ({
         decode: () => [{ t256: [2], t257: [2] }],
         decodeImage: () => {},
         toRGBA8: () => new Uint8Array(0),

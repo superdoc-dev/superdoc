@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 const { resolveRowLocator, resolveCellLocator, resolveTableScopedCellLocator } = await import(
@@ -7,7 +7,7 @@ const { resolveRowLocator, resolveCellLocator, resolveTableScopedCellLocator } =
 
 let tableMapOverride: { width: number; height: number; map: number[] } | null = null;
 
-mock.module('prosemirror-tables', () => ({
+vi.mock('prosemirror-tables', () => ({
   TableMap: {
     get: mock(() => {
       if (tableMapOverride) return { ...tableMapOverride, positionAt: mock(() => 0), colCount: mock(() => 0) };

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { translator } from './adjustRightInd-translator.js';
 
 describe('w:adjustRightInd translator', () => {

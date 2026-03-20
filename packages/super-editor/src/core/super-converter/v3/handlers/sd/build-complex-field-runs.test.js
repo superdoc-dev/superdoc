@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 // @ts-check
 import { buildComplexFieldRuns } from './build-complex-field-runs.js';
 

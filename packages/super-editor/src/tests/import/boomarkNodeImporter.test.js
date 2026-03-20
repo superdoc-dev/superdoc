@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { handleBookmarkNode } from '@converter/v2/importer/bookmarkNodeImporter.js';
 import { createNodeListHandlerMock } from './testUtils.js';

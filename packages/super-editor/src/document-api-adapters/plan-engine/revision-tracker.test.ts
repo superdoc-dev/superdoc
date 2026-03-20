@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { getRevision, incrementRevision, initRevision, checkRevision, trackRevisions } from './revision-tracker.js';
 import { PlanError } from './errors.js';
 import type { Editor } from '../../core/Editor.js';

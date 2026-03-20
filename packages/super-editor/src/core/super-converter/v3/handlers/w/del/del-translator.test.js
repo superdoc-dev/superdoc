@@ -1,10 +1,10 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { config, translator } from './del-translator.js';
 const { NodeTranslator } = await import('@translator');
 import { exportSchemaToJson } from '@converter/exporter.js';
 
 // Mock external modules
-mock.module('@converter/exporter.js', () => ({
+vi.mock('@converter/exporter.js', () => ({
   exportSchemaToJson: mock(),
 }));
 

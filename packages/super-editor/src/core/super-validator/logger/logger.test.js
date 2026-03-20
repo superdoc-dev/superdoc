@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, spyOn, beforeEach, afterEach } from 'vitest';
 import { createLogger } from './logger.js';
 
 describe('createLogger', () => {

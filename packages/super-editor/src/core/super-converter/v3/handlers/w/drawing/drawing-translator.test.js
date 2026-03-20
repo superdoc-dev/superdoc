@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { config, translator } from './drawing-translator.js';
 const { NodeTranslator } = await import('../../../node-translator/index.js');
 const { wrapTextInRun } = await import('../../../../exporter.js');
@@ -13,15 +13,15 @@ const inlineTranslatorMock = {
   decode: mock(),
 };
 
-mock.module('@converter/v3/handlers/wp/anchor/anchor-translator.js', () => ({
+vi.mock('@converter/v3/handlers/wp/anchor/anchor-translator.js', () => ({
   translator: anchorTranslatorMock,
 }));
 
-mock.module('@converter/v3/handlers/wp/inline/inline-translator.js', () => ({
+vi.mock('@converter/v3/handlers/wp/inline/inline-translator.js', () => ({
   translator: inlineTranslatorMock,
 }));
 
-mock.module('@converter/exporter.js', () => ({
+vi.mock('@converter/exporter.js', () => ({
   wrapTextInRun: mock((node) => ({ wrapped: node })),
 }));
 

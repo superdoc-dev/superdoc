@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { proseMirrorDocToMdast } from './proseMirrorToMdast.js';
 import type { Root, Paragraph, Heading, List, Blockquote, ThematicBreak, Table, Image } from 'mdast';

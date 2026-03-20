@@ -1,37 +1,37 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
-mock.module('prosemirror-keymap', () => ({
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+vi.mock('prosemirror-keymap', () => ({
   keymap: mock((bindings) => ({ type: 'keymap', bindings })),
 }));
 
-mock.module('./Schema.js', () => ({
+vi.mock('./Schema.js', () => ({
   Schema: {
     createSchemaByExtensions: mock(() => 'mock-schema'),
   },
 }));
 
-mock.module('./Attribute.js', () => ({
+vi.mock('./Attribute.js', () => ({
   Attribute: {
     getAttributesFromExtensions: mock(() => []),
     getAttributesToRender: mock(() => ({})),
   },
 }));
 
-mock.module('./helpers/getNodeType.js', () => ({
+vi.mock('./helpers/getNodeType.js', () => ({
   getNodeType: mock(() => 'node-type'),
 }));
 
-mock.module('./helpers/getSchemaTypeByName.js', () => ({
+vi.mock('./helpers/getSchemaTypeByName.js', () => ({
   getSchemaTypeByName: mock(() => 'schema-type'),
 }));
 
-mock.module('./utilities/callOrGet.js', () => ({
+vi.mock('./utilities/callOrGet.js', () => ({
   callOrGet: mock((value) => {
     if (typeof value === 'function') return value();
     return value;
   }),
 }));
 
-mock.module('./InputRule.js', () => ({
+vi.mock('./InputRule.js', () => ({
   inputRulesPlugin: mock(({ rules }) => ({ type: 'input-rules', rules })),
 }));
 

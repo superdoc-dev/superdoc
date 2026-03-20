@@ -1,12 +1,12 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
-mock.module('@helpers/list-numbering-helpers.js', () => ({
+vi.mock('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     hasListDefinition: mock().mockReturnValue(true),
   },
 }));
 
-mock.module('@helpers/index.js', async (importOriginal) => {
+vi.mock('@helpers/index.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
@@ -14,7 +14,7 @@ mock.module('@helpers/index.js', async (importOriginal) => {
   };
 });
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: mock((node) => node.attrs.paragraphProperties || {}),
   calculateResolvedParagraphProperties: mock((_, node, __) => node.attrs.paragraphProperties || {}),
 }));

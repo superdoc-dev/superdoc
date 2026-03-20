@@ -1,4 +1,4 @@
-import { describe, it, test, expect, mock, beforeAll } from 'bun:test';
+import { describe, it, test, expect, vi, beforeAll } from 'vitest';
 /**
  * T5: Determinism stress test (§13.16)
  *
@@ -31,31 +31,31 @@ const mockedDeps = {
   mapBlockNodeType: mock(),
 };
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getBlockIndex: mockedDeps.getBlockIndex,
 }));
 
-mock.module('../helpers/text-offset-resolver.js', () => ({
+vi.mock('../helpers/text-offset-resolver.js', () => ({
   resolveTextRangeInBlock: mockedDeps.resolveTextRangeInBlock,
 }));
 
-mock.module('./revision-tracker.js', () => ({
+vi.mock('./revision-tracker.js', () => ({
   getRevision: mockedDeps.getRevision,
   checkRevision: mockedDeps.checkRevision,
   incrementRevision: mockedDeps.incrementRevision,
 }));
 
-mock.module('./style-resolver.js', () => ({
+vi.mock('./style-resolver.js', () => ({
   captureRunsInRange: mockedDeps.captureRunsInRange,
   resolveInlineStyle: mockedDeps.resolveInlineStyle,
 }));
 
-mock.module('../helpers/transaction-meta.js', () => ({
+vi.mock('../helpers/transaction-meta.js', () => ({
   applyDirectMutationMeta: mockedDeps.applyDirectMutationMeta,
   applyTrackedMutationMeta: mockedDeps.applyTrackedMutationMeta,
 }));
 
-mock.module('../helpers/node-address-resolver.js', () => ({
+vi.mock('../helpers/node-address-resolver.js', () => ({
   mapBlockNodeType: mockedDeps.mapBlockNodeType,
   findBlockById: (index: any, address: { nodeType: string; nodeId: string }) =>
     index.byId.get(`${address.nodeType}:${address.nodeId}`),

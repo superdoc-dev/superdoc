@@ -1,24 +1,24 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { CommentAnchor } from '../helpers/comment-target-resolver.js';
 import type { CommentEntityRecord } from '../helpers/comment-entity-store.js';
 const { createCommentsWrapper } = await import('./comments-wrappers.js');
 
-mock.module('../helpers/comment-target-resolver.js', () => ({
+vi.mock('../helpers/comment-target-resolver.js', () => ({
   listCommentAnchors: mock(() => []),
   resolveCommentAnchorsById: mock(() => []),
 }));
 
-mock.module('../helpers/index-cache.js', () => ({
+vi.mock('../helpers/index-cache.js', () => ({
   getInlineIndex: mock(() => ({ byType: new Map() })),
   clearIndexCache: mock(),
 }));
 
-mock.module('./revision-tracker.js', () => ({
+vi.mock('./revision-tracker.js', () => ({
   getRevision: mock(() => 'rev-1'),
 }));
 
-mock.module('./plan-wrappers.js', () => ({
+vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: mock(),
 }));
 

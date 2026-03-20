@@ -1,10 +1,10 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 // @ts-check
-mock.module('./changeListLevel.js', () => ({
+vi.mock('./changeListLevel.js', () => ({
   updateNumberingProperties: mock(),
 }));
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: mock((node) => node.attrs?.paragraphProperties ?? {}),
 }));
 

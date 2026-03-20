@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { translator } from './tr2bl-translator.js';
 
 describe('w:tr2bl border translator', () => {

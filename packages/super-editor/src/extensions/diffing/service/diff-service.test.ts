@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { Editor } from '@core/Editor.js';
 import { BLANK_DOCX_BASE64 } from '@core/blank-docx.js';
 import { getStarterExtensions } from '@extensions/index.js';

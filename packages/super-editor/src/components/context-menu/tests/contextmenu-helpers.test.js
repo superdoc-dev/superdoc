@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { shouldBypassContextMenu, shouldAllowNativeContextMenu } from '../../../utils/contextmenu-helpers.js';
 
 describe('context menu helpers', () => {

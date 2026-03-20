@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { SuperConverter } from '@converter/SuperConverter.js';
 import { handleTrackChangeNode, __testables__ } from '@converter/v2/importer/trackChangesImporter.js';
 import { TrackDeleteMarkName, TrackInsertMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';

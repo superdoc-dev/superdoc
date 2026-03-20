@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { parseMarks } from '@core/super-converter/v2/importer/markImporter.js';
 import { parseProperties } from '@core/super-converter/v2/importer/importerHelpers.js';
 

@@ -1,17 +1,17 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test';
-mock.module('@converter/v2/importer/index.js', () => ({
+import { describe, it, expect, vi, afterEach } from 'vitest';
+vi.mock('@converter/v2/importer/index.js', () => ({
   parseMarks: mock(() => [
     { type: 'textStyle', attrs: { fontSize: '12pt', backgroundColor: '#fff' } },
     { type: 'highlight', attrs: { color: 'yellow' } },
   ]),
 }));
 
-mock.module('@converter/helpers.js', () => ({
+vi.mock('@converter/helpers.js', () => ({
   twipsToLines: (n) => Number(n) / 240,
   twipsToPixels: (n) => Number(n) / 10,
 }));
 
-mock.module('@superdoc/common', () => ({
+vi.mock('@superdoc/common', () => ({
   kebabCase: (s) =>
     s
       .replace(/([a-z0-9])([A-Z])/g, '$1-$2')

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { createDocxTestEditor } from '../../helpers/editor-test-utils.js';
 import { __searchTextContent } from '@extensions/search/prosemirror-search-patched.js';
 import { EditorState } from 'prosemirror-state';

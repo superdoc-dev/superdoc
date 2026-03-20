@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from 'vitest';
 /**
  * IT-268 / SD-1493: Test that namespace declarations are preserved during export
  *

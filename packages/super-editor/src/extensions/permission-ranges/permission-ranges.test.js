@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach, afterEach } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 
 import { Editor } from '@core/index.js';

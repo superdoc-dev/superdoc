@@ -1,14 +1,14 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-check
 // Mock dependencies
-mock.module('@core/super-converter/helpers.js', () => ({
+vi.mock('@core/super-converter/helpers.js', () => ({
   twipsToPixels: mock((val) => (val ? parseInt(val, 10) / 20 : null)),
   eighthPointsToPixels: mock((val) => (val ? parseInt(val, 10) / 8 : null)),
   halfPointToPoints: mock((val) => (val ? parseInt(val, 10) / 2 : null)),
   pixelsToTwips: mock((val) => (val ? Math.round(val * 20) : 0)),
 }));
 
-mock.module('../tr', () => ({
+vi.mock('../tr', () => ({
   translator: {
     encode: mock((params) => ({
       type: 'tableRow',
@@ -22,7 +22,7 @@ mock.module('../tr', () => ({
   },
 }));
 
-mock.module('@core/super-converter/v2/exporter/helpers/index.js', () => ({
+vi.mock('@core/super-converter/v2/exporter/helpers/index.js', () => ({
   translateChildNodes: mock(() => [{ name: 'w:tr', comment: 'mocked row' }]),
 }));
 

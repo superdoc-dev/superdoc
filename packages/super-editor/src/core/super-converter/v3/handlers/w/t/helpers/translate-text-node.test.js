@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { getTextNodeForExport } from './translate-text-node.js';
 
 const buildParams = (runProperties = {}) => ({

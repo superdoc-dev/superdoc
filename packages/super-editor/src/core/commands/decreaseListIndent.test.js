@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach, afterEach } from 'vitest';
 // @ts-check
 import { decreaseListIndent } from './decreaseListIndent.js';
 import * as changeListLevelModule from './changeListLevel.js';

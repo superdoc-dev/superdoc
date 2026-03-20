@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import type { Editor } from '../core/Editor.js';
 import { getTextAdapter } from './get-text-adapter.js';
 

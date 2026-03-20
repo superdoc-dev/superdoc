@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn } from 'bun:test';
+import { describe, it, expect, spyOn } from 'vitest';
 import { handleShapeTextWatermarkImport } from './handle-shape-text-watermark-import';
 
 describe('handleShapeTextWatermarkImport', () => {

@@ -1,4 +1,4 @@
-import { describe, it, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, test, expect, vi, beforeEach } from 'vitest';
 /** Lightweight stand-in so `selection instanceof TextSelection` works in tests. */
 class MockTextSelection {
   constructor({ from = 0, to = 0 } = {}) {
@@ -8,11 +8,11 @@ class MockTextSelection {
   }
 }
 
-mock.module('prosemirror-state', () => ({
+vi.mock('prosemirror-state', () => ({
   TextSelection: MockTextSelection,
 }));
 
-mock.module('@superdoc/url-validation', () => {
+vi.mock('@superdoc/url-validation', () => {
   const DEFAULT_ALLOWED_PROTOCOLS = ['http', 'https', 'mailto', 'tel', 'sms'];
 
   return {
@@ -39,11 +39,11 @@ mock.module('@superdoc/url-validation', () => {
   };
 });
 
-mock.module('@core/parts/adapters/relationships-mutation.js', () => ({
+vi.mock('@core/parts/adapters/relationships-mutation.js', () => ({
   findOrCreateRelationship: mock(),
 }));
 
-mock.module('../../utils/rangeUtils.js', () => ({
+vi.mock('../../utils/rangeUtils.js', () => ({
   mergeRanges: mock((ranges, _docSize) => {
     if (!ranges.length) return [];
     const sorted = [...ranges].sort((a, b) => a.from - b.from);

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   collectTextBoxParagraphs,
   preProcessTextBoxContent,
@@ -15,40 +15,40 @@ import { resolveRunProperties } from '@converter/styles';
 import { translator as rPrTranslator } from '@converter/v3/handlers/w/rpr';
 
 // Mock all dependencies
-mock.module('@converter/field-references/preProcessNodesForFldChar.js', () => ({
+vi.mock('@converter/field-references/preProcessNodesForFldChar.js', () => ({
   preProcessNodesForFldChar: mock((nodes) => ({ processedNodes: nodes })),
 }));
 
-mock.module('@converter/field-references/preProcessPageFieldsOnly.js', () => ({
+vi.mock('@converter/field-references/preProcessPageFieldsOnly.js', () => ({
   preProcessPageFieldsOnly: mock((nodes) => ({ processedNodes: nodes })),
 }));
 
-mock.module('@core/utilities/carbonCopy.js', () => ({
+vi.mock('@core/utilities/carbonCopy.js', () => ({
   carbonCopy: mock((obj) => JSON.parse(JSON.stringify(obj))),
 }));
 
-mock.module('@converter/styles', () => ({
+vi.mock('@converter/styles', () => ({
   resolveParagraphProperties: mock(() => ({})),
   resolveRunProperties: mock((params, inline, paragraph) => ({ ...inline, ...paragraph })),
 }));
 
-mock.module('@converter/v3/handlers/w/pPr', () => ({
+vi.mock('@converter/v3/handlers/w/pPr', () => ({
   translator: {
     encode: mock(() => ({})),
   },
 }));
 
-mock.module('@converter/v3/handlers/w/rpr', () => ({
+vi.mock('@converter/v3/handlers/w/rpr', () => ({
   translator: {
     encode: mock(() => ({})),
   },
 }));
 
-mock.module('@superdoc/style-engine/ooxml', () => ({
+vi.mock('@superdoc/style-engine/ooxml', () => ({
   resolveDocxFontFamily: mock((fontFamily) => fontFamily?.ascii || 'Arial'),
 }));
 
-mock.module('@converter/SuperConverter.js', () => ({
+vi.mock('@converter/SuperConverter.js', () => ({
   SuperConverter: {
     toCssFontFamily: mock((font) => font),
   },

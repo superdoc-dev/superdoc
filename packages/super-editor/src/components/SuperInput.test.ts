@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { mount } = await import('@vue/test-utils');
 const { defineComponent, h, nextTick } = await import('vue');
 
@@ -10,11 +10,11 @@ const EditorConstructor = mock(function (options: any) {
   this.destroy = mock();
 });
 
-mock.module('@superdoc/super-editor', () => ({
+vi.mock('@superdoc/super-editor', () => ({
   Editor: EditorConstructor,
 }));
 
-mock.module('@extensions/index.js', () => ({
+vi.mock('@extensions/index.js', () => ({
   getRichTextExtensions: () => [],
   Placeholder: { options: { placeholder: '' } },
 }));

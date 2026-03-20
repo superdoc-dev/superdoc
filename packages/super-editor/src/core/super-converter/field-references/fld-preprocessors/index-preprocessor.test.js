@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { preProcessIndexInstruction } from './index-preprocessor.js';
 
 describe('preProcessIndexInstruction', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mutatePart, mutateParts } from './mutate-part.js';
 import { createTestEditor, withPart, withDescriptor, cleanupParts } from '../testing/test-helpers.js';
 import { registerPartDescriptor, clearPartDescriptors } from '../registry/part-registry.js';

@@ -1,8 +1,8 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translateInlineNode } from './translate-inline-node.js';
 const { translateImageNode } = await import('../../helpers/decode-image-node-helpers.js');
 
-mock.module('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
+vi.mock('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
   translateImageNode: mock(),
 }));
 

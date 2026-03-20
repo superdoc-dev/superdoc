@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { join } from 'path';
 import { readFile } from 'fs/promises';
 import { JSDOM } from 'jsdom';

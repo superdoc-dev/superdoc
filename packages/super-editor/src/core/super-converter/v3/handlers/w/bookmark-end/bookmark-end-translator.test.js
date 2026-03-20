@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { translator, config } from './bookmark-end-translator.js';
 import { NodeTranslator } from '@translator';
 

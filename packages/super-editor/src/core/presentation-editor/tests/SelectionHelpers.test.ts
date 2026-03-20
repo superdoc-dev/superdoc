@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { FlowBlock } from '@superdoc/contracts';
 
 import { isWordCharacter, calculateExtendedSelection } from '../selection/SelectionHelpers.js';

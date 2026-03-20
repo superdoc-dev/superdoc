@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { Schema } = await import('prosemirror-model');
 const { EditorState, TextSelection } = await import('prosemirror-state');
 
@@ -8,13 +8,13 @@ const resolveRunPropertiesMock = mock(() => ({ bold: false }));
 const calculateResolvedParagraphPropertiesMock = mock(() => ({ paragraph: 'calculated' }));
 const getResolvedParagraphPropertiesMock = mock(() => null);
 
-mock.module('@converter/styles.js', () => ({
+vi.mock('@converter/styles.js', () => ({
   decodeRPrFromMarks: decodeRPrFromMarksMock,
   encodeMarksFromRPr: encodeMarksFromRPrMock,
   resolveRunProperties: resolveRunPropertiesMock,
 }));
 
-mock.module('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   calculateResolvedParagraphProperties: calculateResolvedParagraphPropertiesMock,
   getResolvedParagraphProperties: getResolvedParagraphPropertiesMock,
 }));

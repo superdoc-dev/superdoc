@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, beforeEach, beforeAll } from 'bun:test';
-mock.module('../helpers/getMarksFromSelection.js', () => ({
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+vi.mock('../helpers/getMarksFromSelection.js', () => ({
   getSelectionFormattingState: mock(),
 }));
 

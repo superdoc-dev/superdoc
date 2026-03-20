@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { applyLayoutResult, calculateTabLayout } from './tabAdapter.js';
 
 const createNode = (name, children = [], extra = {}) => {

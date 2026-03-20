@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn } from 'bun:test';
+import { describe, it, expect, spyOn } from 'vitest';
 import { createDocxTestEditor } from '../../helpers/editor-test-utils.js';
 import { getMatchHighlights } from '@extensions/search/prosemirror-search-patched.js';
 import { EditorState, TextSelection } from 'prosemirror-state';

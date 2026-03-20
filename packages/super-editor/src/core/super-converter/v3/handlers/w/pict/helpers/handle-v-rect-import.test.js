@@ -1,8 +1,8 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleVRectImport } from './handle-v-rect-import';
 import { parseInlineStyles } from './parse-inline-styles';
 
-mock.module('./parse-inline-styles');
+vi.mock('./parse-inline-styles');
 
 describe('handleVRectImport', () => {
   const createPict = (rectAttributes = {}) => ({

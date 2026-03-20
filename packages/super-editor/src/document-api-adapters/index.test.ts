@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { Editor } from '../core/Editor.js';
 import { getDocumentApiAdapters } from './index.js';
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { createNumberingValidator } from './numbering-validator.js';
 
 function makeEditorWithNumbering(numberingXmlLike) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, vi, spyOn, beforeEach, beforeAll, afterAll } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import {
@@ -289,20 +289,20 @@ const mockedDeps = {
   insertRowAtIndex: mock(() => {}),
 };
 
-mock.module('../helpers/comment-target-resolver.js', () => ({
+vi.mock('../helpers/comment-target-resolver.js', () => ({
   resolveCommentAnchorsById: mockedDeps.resolveCommentAnchorsById,
   listCommentAnchors: mockedDeps.listCommentAnchors,
 }));
 
-mock.module('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
+vi.mock('../../extensions/track-changes/trackChangesHelpers/getTrackChanges.js', () => ({
   getTrackChanges: mockedDeps.getTrackChanges,
 }));
 
-mock.module('../../extensions/table/tableHelpers/appendRows.js', () => ({
+vi.mock('../../extensions/table/tableHelpers/appendRows.js', () => ({
   insertRowAtIndex: mockedDeps.insertRowAtIndex,
 }));
 
-mock.module('prosemirror-tables', () => ({
+vi.mock('prosemirror-tables', () => ({
   TableMap: {
     get: mock(() => ({
       width: 2,
@@ -317,7 +317,7 @@ mock.module('prosemirror-tables', () => ({
   },
 }));
 
-mock.module('prosemirror-model', async (importOriginal) => {
+vi.mock('prosemirror-model', async (importOriginal) => {
   const original = await importOriginal<typeof import('prosemirror-model')>();
   return {
     ...original,
@@ -391,28 +391,28 @@ const refResolverMocks = {
   buildAuthorityEntryDiscoveryItem: mock(),
 };
 
-mock.module('../helpers/bookmark-resolver.js', () => ({
+vi.mock('../helpers/bookmark-resolver.js', () => ({
   findAllBookmarks: refResolverMocks.findAllBookmarks,
   resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
   extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
   buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
 }));
 
-mock.module('../helpers/footnote-resolver.js', () => ({
+vi.mock('../helpers/footnote-resolver.js', () => ({
   findAllFootnotes: refResolverMocks.findAllFootnotes,
   resolveFootnoteTarget: refResolverMocks.resolveFootnoteTarget,
   extractFootnoteInfo: refResolverMocks.extractFootnoteInfo,
   buildFootnoteDiscoveryItem: refResolverMocks.buildFootnoteDiscoveryItem,
 }));
 
-mock.module('../helpers/crossref-resolver.js', () => ({
+vi.mock('../helpers/crossref-resolver.js', () => ({
   findAllCrossRefs: refResolverMocks.findAllCrossRefs,
   resolveCrossRefTarget: refResolverMocks.resolveCrossRefTarget,
   extractCrossRefInfo: refResolverMocks.extractCrossRefInfo,
   buildCrossRefDiscoveryItem: refResolverMocks.buildCrossRefDiscoveryItem,
 }));
 
-mock.module('../helpers/index-resolver.js', async (importOriginal) => {
+vi.mock('../helpers/index-resolver.js', async (importOriginal) => {
   const orig = await importOriginal<Record<string, unknown>>();
   return {
     findAllIndexNodes: refResolverMocks.findAllIndexNodes,
@@ -427,21 +427,21 @@ mock.module('../helpers/index-resolver.js', async (importOriginal) => {
   };
 });
 
-mock.module('../helpers/caption-resolver.js', () => ({
+vi.mock('../helpers/caption-resolver.js', () => ({
   findAllCaptions: refResolverMocks.findAllCaptions,
   resolveCaptionTarget: refResolverMocks.resolveCaptionTarget,
   extractCaptionInfo: refResolverMocks.extractCaptionInfo,
   buildCaptionDiscoveryItem: refResolverMocks.buildCaptionDiscoveryItem,
 }));
 
-mock.module('../helpers/field-resolver.js', () => ({
+vi.mock('../helpers/field-resolver.js', () => ({
   findAllFields: refResolverMocks.findAllFields,
   resolveFieldTarget: refResolverMocks.resolveFieldTarget,
   extractFieldInfo: refResolverMocks.extractFieldInfo,
   buildFieldDiscoveryItem: refResolverMocks.buildFieldDiscoveryItem,
 }));
 
-mock.module('../helpers/citation-resolver.js', () => ({
+vi.mock('../helpers/citation-resolver.js', () => ({
   findAllCitations: refResolverMocks.findAllCitations,
   resolveCitationTarget: refResolverMocks.resolveCitationTarget,
   extractCitationInfo: refResolverMocks.extractCitationInfo,
@@ -454,7 +454,7 @@ mock.module('../helpers/citation-resolver.js', () => ({
   resolveSourceTarget: refResolverMocks.resolveSourceTarget,
 }));
 
-mock.module('../helpers/authority-resolver.js', async (importOriginal) => {
+vi.mock('../helpers/authority-resolver.js', async (importOriginal) => {
   const orig = await importOriginal<Record<string, unknown>>();
   return {
     findAllAuthorities: refResolverMocks.findAllAuthorities,

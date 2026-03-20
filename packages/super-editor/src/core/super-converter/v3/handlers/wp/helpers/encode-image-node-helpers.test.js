@@ -1,10 +1,10 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js';
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
 import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
 import { convertTiffToPng } from './tiff-converter.js';
 
-mock.module('@converter/helpers.js', async (importOriginal) => {
+vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return {
     ...actual,
@@ -14,7 +14,7 @@ mock.module('@converter/helpers.js', async (importOriginal) => {
   };
 });
 
-mock.module('./vector-shape-helpers.js', () => ({
+vi.mock('./vector-shape-helpers.js', () => ({
   extractFillColor: mock(),
   extractStrokeColor: mock(),
   extractStrokeWidth: mock(),
@@ -22,7 +22,7 @@ mock.module('./vector-shape-helpers.js', () => ({
   extractCustomGeometry: mock(),
 }));
 
-mock.module('./tiff-converter.js', async (importOriginal) => {
+vi.mock('./tiff-converter.js', async (importOriginal) => {
   const actual = await import(/* original */ '.');
   return {
     ...actual,

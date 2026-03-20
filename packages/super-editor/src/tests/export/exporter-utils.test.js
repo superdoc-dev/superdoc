@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { isLineBreakOnlyRun, processOutputMarks, exportSchemaToJson } from '@converter/exporter.js';
 
 describe('isLineBreakOnlyRun', () => {

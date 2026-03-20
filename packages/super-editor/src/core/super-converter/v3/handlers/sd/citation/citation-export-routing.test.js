@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { exportSchemaToJson } from '../../../../exporter.js';
 import { translator as runTranslator } from '../../w/r/r-translator.js';
 

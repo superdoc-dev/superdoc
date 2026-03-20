@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Editor } from '../core/Editor.js';
 const { createHistoryAdapter } = await import('./history-adapter.js');
 
@@ -8,12 +8,12 @@ const { undoDepthMock, redoDepthMock, yGetStateMock } = {
   yGetStateMock: mock(() => undefined),
 };
 
-mock.module('prosemirror-history', () => ({
+vi.mock('prosemirror-history', () => ({
   undoDepth: undoDepthMock,
   redoDepth: redoDepthMock,
 }));
 
-mock.module('y-prosemirror', () => ({
+vi.mock('y-prosemirror', () => ({
   yUndoPluginKey: {
     getState: yGetStateMock,
   },

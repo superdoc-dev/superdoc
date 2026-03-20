@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { mergeDrawingChildren } from './merge-drawing-children.js';
 
 describe('mergeDrawingChildren', () => {

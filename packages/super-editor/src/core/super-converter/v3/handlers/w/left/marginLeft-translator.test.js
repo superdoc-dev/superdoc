@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 // The translator is exported as `translator` from the file, but imported as `marginLeftTranslator` in the index.
 import { translator as marginLeftTranslator } from './marginLeft-translator.js';
 

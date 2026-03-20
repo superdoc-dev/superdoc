@@ -1,8 +1,8 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 const { Schema } = await import('prosemirror-model');
 const { prepareCommentsForImport } = await import('./comments-helpers.js');
 
-mock.module('./comment-import-helpers.js', () => {
+vi.mock('./comment-import-helpers.js', () => {
   return {
     resolveCommentMeta: mock().mockReturnValue({
       importedId: 'import-1',

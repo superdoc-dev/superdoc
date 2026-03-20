@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { DocxExporter } from '@core/super-converter/exporter.js';
 import { mergeRelationshipElements } from '@core/super-converter/relationship-helpers.js';
 

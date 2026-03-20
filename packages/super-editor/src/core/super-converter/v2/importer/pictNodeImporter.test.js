@@ -1,7 +1,7 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockHandler = mock();
 
-mock.module('../../v3/handlers/w/pict/helpers/pict-node-type-strategy', () => ({
+vi.mock('../../v3/handlers/w/pict/helpers/pict-node-type-strategy', () => ({
   pictNodeTypeStrategy: mock(),
 }));
 

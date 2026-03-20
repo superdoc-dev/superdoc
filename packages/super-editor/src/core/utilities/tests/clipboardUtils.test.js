@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, afterEach } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ensureClipboardPermission, readClipboardRaw, readFromClipboard } from '../clipboardUtils.js';
 
 // Helper to restore globals after each test

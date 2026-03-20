@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { StepMap } from 'prosemirror-transform';
 import type { Transaction } from 'prosemirror-state';
 

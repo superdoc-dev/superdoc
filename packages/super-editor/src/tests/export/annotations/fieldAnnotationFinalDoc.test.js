@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getExportedResultForAnnotations, getTextFromNode } from '../export-helpers/index.js';
 
 describe('AnnotationNodeExporter for final doc', async () => {

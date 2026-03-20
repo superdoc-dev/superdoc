@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { NumberingProperties } from '@superdoc/style-engine/ooxml';
 import { diffNumbering } from './numbering-diffing';
 

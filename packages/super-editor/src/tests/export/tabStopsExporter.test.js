@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, vi } from 'vitest';
 import { translator as wPTranslator } from '@converter/v3/handlers/w/p';
 
 describe('Tab Stops Export Tests', () => {

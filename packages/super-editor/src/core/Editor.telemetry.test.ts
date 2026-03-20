@@ -1,8 +1,8 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
 
 // Mock the Telemetry class to verify it's called correctly
-mock.module('@superdoc/common', () => ({
+vi.mock('@superdoc/common', () => ({
   Telemetry: mock().mockImplementation(() => ({
     trackDocumentOpen: mock(),
   })),

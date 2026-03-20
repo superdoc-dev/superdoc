@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, afterEach } from 'vitest';
 import { cloneMark, cloneXmlNode, applyRunPropertiesTemplate, resolveFontFamily } from './helpers.js';
 
 describe('w:r helper utilities', () => {

@@ -1,13 +1,13 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translateAnchorNode } from './translate-anchor-node.js';
 const { translateImageNode } = await import('../../helpers/decode-image-node-helpers.js');
 const { pixelsToEmu, objToPolygon } = await import('../../../../../helpers.js');
 
-mock.module('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
+vi.mock('@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js', () => ({
   translateImageNode: mock(),
 }));
 
-mock.module('@converter/helpers.js', () => ({
+vi.mock('@converter/helpers.js', () => ({
   pixelsToEmu: mock(),
   objToPolygon: mock(),
 }));

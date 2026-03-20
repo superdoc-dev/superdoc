@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { schema, doc, p, strong } from 'prosemirror-test-builder';
 import { isMarkActive } from './isMarkActive.js';

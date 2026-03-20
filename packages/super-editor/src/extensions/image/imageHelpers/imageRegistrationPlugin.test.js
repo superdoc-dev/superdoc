@@ -1,5 +1,5 @@
-import { describe, it, expect, mock } from 'bun:test';
-mock.module('@extensions/image/imageHelpers/startImageUpload.js', () => ({
+import { describe, it, expect, vi } from 'vitest';
+vi.mock('@extensions/image/imageHelpers/startImageUpload.js', () => ({
   addImageRelationship: mock(() => null),
 }));
 

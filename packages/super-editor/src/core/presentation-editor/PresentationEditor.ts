@@ -455,6 +455,7 @@ export class PresentationEditor extends EventEmitter {
     // This prevents screen readers from encountering duplicate or non-semantic visual elements.
     this.#viewportHost.setAttribute('aria-hidden', 'true');
     this.#viewportHost.style.position = 'relative';
+    this.#viewportHost.style.isolation = 'isolate';
     this.#viewportHost.style.width = '100%';
     // Set min-height to at least one page so the viewport is clickable before layout renders
     const pageHeight = this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;

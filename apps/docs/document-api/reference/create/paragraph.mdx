@@ -30,7 +30,6 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 | --- | --- | --- | --- |
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
 | `in` | StoryLocator | no | StoryLocator |
-| `styleId` | string | no |  |
 | `text` | string | no |  |
 
 ### Example request
@@ -191,12 +190,8 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
     "in": {
       "$ref": "#/$defs/StoryLocator"
     },
-    "styleId": {
-      "description": "Named paragraph style (e.g. 'Normal', 'BodyText'). Omit for document default. Use superdoc_get_content info to discover available styles.",
-      "type": "string"
-    },
     "text": {
-      "description": "Paragraph text content.",
+      "description": "Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.",
       "type": "string"
     }
   },

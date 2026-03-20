@@ -2,6 +2,7 @@ import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { assertTargetPresent } from '../validation-primitives.js';
+import { validateTargetOnlyTocCreateLocation } from '../validation/create-location-validator.js';
 import type {
   IndexAddress,
   IndexEntryAddress,
@@ -103,6 +104,7 @@ export function executeIndexInsert(
   input: IndexInsertInput,
   options?: MutationOptions,
 ): IndexMutationResult {
+  validateTargetOnlyTocCreateLocation(input.at, 'index.insert');
   return adapter.insert(input, normalizeMutationOptions(options));
 }
 

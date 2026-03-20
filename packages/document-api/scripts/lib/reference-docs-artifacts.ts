@@ -1062,8 +1062,6 @@ description: ${yamlQuote(description)}
 
 ${GENERATED_MARKER}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 ${escapedDescription}
@@ -1146,8 +1144,6 @@ description: ${group.definition.title} operation reference from the canonical Do
 
 ${GENERATED_MARKER}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 [Back to full reference](${toRelativeDocHref(group.pagePath, REFERENCE_INDEX_PATH)})
 
 ${group.definition.description}${
@@ -1223,7 +1219,6 @@ description: Operation reference from the canonical Document API contract.
 ${GENERATED_MARKER}
 
 This reference is sourced from \`packages/document-api/src/contract/*\`.
-Document API is currently alpha and subject to breaking changes.
 
 <style>{\`
   table th,

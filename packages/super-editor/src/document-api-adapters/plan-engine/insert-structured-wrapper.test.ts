@@ -163,8 +163,12 @@ describe('insertStructuredWrapper — markdown', () => {
     const result = insertStructuredWrapper(editor, {
       value: 'X',
       type: 'markdown',
-      target: { kind: 'text', ...target },
-    });
+      target: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: target.blockId, offset: target.range.start },
+        end: { kind: 'text', blockId: target.blockId, offset: target.range.end },
+      },
+    } as any);
 
     expect(result.success).toBe(false);
     expect(result.failure?.code).toBe('INVALID_TARGET');

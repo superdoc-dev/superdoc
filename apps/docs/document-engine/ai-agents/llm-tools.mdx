@@ -28,7 +28,7 @@ Install the SDK, create a client, and wire up an agentic loop.
 
     const client = createSuperDocClient();
     await client.connect();
-    await client.doc.open({ doc: './contract.docx' });
+    const doc = await client.open({ doc: './contract.docx' });
 
     const { tools } = await chooseTools({ provider: 'openai' });
     const openai = new OpenAI();
@@ -53,13 +53,14 @@ Install the SDK, create a client, and wire up an agentic loop.
 
       for (const call of message.tool_calls) {
         const result = await dispatchSuperDocTool(
-          client, call.function.name, JSON.parse(call.function.arguments),
+          doc, call.function.name, JSON.parse(call.function.arguments),
         );
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
       }
     }
 
-    await client.doc.save({ inPlace: true });
+    await doc.save({ inPlace: true });
+    await doc.close();
     await client.dispose();
     ```
   </Tab>
@@ -74,9 +75,9 @@ Install the SDK, create a client, and wire up an agentic loop.
 
     client = SuperDocClient()
     client.connect()
-    client.doc.open(doc="./contract.docx")
+    doc = client.open({"doc": "./contract.docx"})
 
-    result = choose_tools(provider="openai")
+    result = choose_tools({"provider": "openai"})
     tools = result["tools"]
 
     messages = [
@@ -96,7 +97,7 @@ Install the SDK, create a client, and wire up an agentic loop.
 
         for call in message.tool_calls:
             result = dispatch_superdoc_tool(
-                client, call.function.name, json.loads(call.function.arguments)
+                doc, call.function.name, json.loads(call.function.arguments)
             )
             messages.append({
                 "role": "tool",
@@ -104,7 +105,8 @@ Install the SDK, create a client, and wire up an agentic loop.
                 "content": json.dumps(result),
             })
 
-    client.doc.save(in_place=True)
+    doc.save({"inPlace": True})
+    doc.close({})
     client.dispose()
     ```
   </Tab>
@@ -128,9 +130,7 @@ Install the SDK, create a client, and wire up an agentic loop.
     ```python
     from superdoc import choose_tools
 
-    result = choose_tools(
-        provider="openai",
-    )
+    result = choose_tools({"provider": "openai"})
     tools = result["tools"]
     ```
   </Tab>
@@ -165,21 +165,21 @@ Multi-action tools use an `action` argument to select the underlying operation. 
     ```typescript
     import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
 
-    const result = await dispatchSuperDocTool(client, toolName, args);
+    const result = await dispatchSuperDocTool(doc, toolName, args);
     ```
   </Tab>
   <Tab title="Python (sync)">
     ```python
     from superdoc import dispatch_superdoc_tool
 
-    result = dispatch_superdoc_tool(client, tool_name, args)
+    result = dispatch_superdoc_tool(doc, tool_name, args)
     ```
   </Tab>
   <Tab title="Python (async)">
     ```python
     from superdoc import dispatch_superdoc_tool_async
 
-    result = await dispatch_superdoc_tool_async(client, tool_name, args)
+    result = await dispatch_superdoc_tool_async(doc, tool_name, args)
     ```
   </Tab>
 </Tabs>
@@ -278,7 +278,7 @@ Keep it to 3-5 tool calls total when possible.
 | Function | Description |
 | --- | --- |
 | `chooseTools(input)` | Load grouped tool definitions for a provider |
-| `dispatchSuperDocTool(client, name, args)` | Execute a tool call against a connected client |
+| `dispatchSuperDocTool(doc, name, args)` | Execute a tool call against a bound document handle |
 | `listTools(provider)` | List all tool definitions for a provider |
 | `getToolCatalog()` | Load the full tool catalog with metadata |
 | `getSystemPrompt()` | Read the bundled system prompt for intent tools |

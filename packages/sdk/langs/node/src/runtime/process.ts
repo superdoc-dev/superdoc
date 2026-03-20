@@ -1,6 +1,12 @@
 import { HostTransport } from './host.js';
 import { resolveEmbeddedCliBinary } from './embedded-cli.js';
-import type { InvokeOptions, OperationParamSpec, OperationSpec, SuperDocClientOptions } from './transport-common.js';
+import type {
+  InvokeOptions,
+  OperationParamSpec,
+  OperationSpec,
+  RuntimeInvoker,
+  SuperDocClientOptions,
+} from './transport-common.js';
 
 /**
  * Internal runtime that delegates CLI invocations to a persistent host transport.
@@ -37,4 +43,4 @@ export class SuperDocRuntime {
   }
 }
 
-export type { InvokeOptions, OperationParamSpec, OperationSpec, SuperDocClientOptions };
+export type { InvokeOptions, OperationParamSpec, OperationSpec, RuntimeInvoker, SuperDocClientOptions };

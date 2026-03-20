@@ -35,7 +35,7 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json --emitDeclarationOnly",
-    "test": "vitest run",
+    "test": "bun test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

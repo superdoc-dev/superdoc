@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { extractIndexEntryInfo, buildIndexEntryDiscoveryItem, type ResolvedIndexEntry } from './index-resolver.js';
+import {
+  extractIndexEntryInfo,
+  buildIndexEntryDiscoveryItem,
+  findAllIndexNodes,
+  resolveIndexTarget,
+  resolvePostMutationIndexId,
+  type ResolvedIndexEntry,
+} from './index-resolver.js';
 
 function makeDoc(blockId = 'p-entry'): ProseMirrorNode {
   return {
@@ -106,5 +113,48 @@ describe('index-resolver entry text extraction', () => {
 
     expect(item.text).toBe('Delta');
     expect(item.subEntry).toBe('Fourth');
+  });
+});
+
+describe('index-resolver block ids', () => {
+  function makeIndexDoc(sdBlockId?: string) {
+    return {
+      descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
+        cb(
+          {
+            type: { name: 'documentIndex' },
+            attrs: { ...(sdBlockId !== undefined ? { sdBlockId } : {}), instruction: 'INDEX \\e ","' },
+            childCount: 1,
+          },
+          7,
+        );
+        return true;
+      },
+    } as unknown as ProseMirrorNode;
+  }
+
+  it('uses sdBlockId as the public id when present', () => {
+    const doc = makeIndexDoc('idx-runtime');
+    const [resolved] = findAllIndexNodes(doc);
+
+    expect(resolved.nodeId).toBe('idx-runtime');
+    expect(resolveIndexTarget(doc, { kind: 'block', nodeType: 'index', nodeId: resolved.nodeId }).nodeId).toBe(
+      resolved.nodeId,
+    );
+    expect(resolveIndexTarget(doc, { kind: 'block', nodeType: 'index', nodeId: 'idx-runtime' }).nodeId).toBe(
+      resolved.nodeId,
+    );
+  });
+
+  it('re-resolves the current public id from an sdBlockId after mutation', () => {
+    const doc = makeIndexDoc('idx-runtime');
+    expect(resolvePostMutationIndexId(doc, 'idx-runtime')).toBe('idx-runtime');
+  });
+
+  it('falls back to a deterministic id when sdBlockId is missing', () => {
+    const doc = makeIndexDoc(undefined);
+    const [resolved] = findAllIndexNodes(doc);
+
+    expect(resolved.nodeId).toMatch(/^index-auto-[0-9a-f]{8}$/);
   });
 });

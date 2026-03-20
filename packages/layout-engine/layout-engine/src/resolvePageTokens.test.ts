@@ -4,7 +4,7 @@
  * Tests the resolution of page number and total page count tokens in paragraph blocks.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { resolveTokensInBlock } from './resolvePageTokens';
 import type { ParagraphBlock, TextRun } from '@superdoc/contracts';
 

@@ -11,7 +11,11 @@ export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
 export type { DiffAdapter, DiffApi } from './diff/diff.js';
 export * from './diff/diff.types.js';
-export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
+export type {
+  SelectionMutationAdapter,
+  SelectionMutationRequest,
+  SelectionInsertRequest,
+} from './selection-mutation.js';
 export type {
   RangeAnchor,
   DocumentEdgeAnchor,
@@ -103,6 +107,7 @@ import type { SDDocument } from './types/fragment.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
 import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
 import { executeGetHtml, type GetHtmlAdapter, type GetHtmlInput } from './get-html/get-html.js';
+import { validateStoryLocator } from './validation/story-validator.js';
 import {
   executeMarkdownToFragment,
   type MarkdownToFragmentAdapter,
@@ -1343,7 +1348,7 @@ export { DocumentApiValidationError } from './errors.js';
 export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
 export type { StructuralReceiptParams } from './receipt-bridge.js';
 export { isBlockNodeAddress } from './validation-primitives.js';
-export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
+export type { InsertInput, InsertContentType, TextInsertInput, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
 export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
 export { isStructuralReplaceInput } from './replace/replace.js';
@@ -1714,8 +1719,48 @@ function executeQueryMatch(
       { value: input },
     );
   }
-  // Normalize flat selector shorthand to canonical nested form.
-  const normalized: QueryMatchInput = 'select' in input ? input : { select: input };
+  const rawInput = input as Record<string, unknown> &
+    Partial<QueryMatchInput> &
+    Partial<TextSelector> &
+    Partial<NodeSelector>;
+  const isFlatNodeShorthand =
+    rawInput.type === 'node' ||
+    (rawInput.type === undefined && (rawInput.nodeType !== undefined || rawInput.kind !== undefined));
+  const normalized: QueryMatchInput =
+    'select' in input
+      ? input
+      : rawInput.type === 'text'
+        ? {
+            select: {
+              type: 'text',
+              pattern: rawInput.pattern as string,
+              ...(rawInput.mode !== undefined ? { mode: rawInput.mode as TextSelector['mode'] } : {}),
+              ...(rawInput.caseSensitive !== undefined ? { caseSensitive: rawInput.caseSensitive as boolean } : {}),
+            },
+            ...(rawInput.within !== undefined ? { within: rawInput.within as QueryMatchInput['within'] } : {}),
+            ...(rawInput.in !== undefined ? { in: rawInput.in as QueryMatchInput['in'] } : {}),
+            ...(rawInput.require !== undefined ? { require: rawInput.require as QueryMatchInput['require'] } : {}),
+            ...(rawInput.includeNodes !== undefined ? { includeNodes: rawInput.includeNodes as boolean } : {}),
+            ...(rawInput.limit !== undefined ? { limit: rawInput.limit as number } : {}),
+            ...(rawInput.offset !== undefined ? { offset: rawInput.offset as number } : {}),
+          }
+        : isFlatNodeShorthand
+          ? {
+              select: {
+                type: 'node',
+                ...(rawInput.nodeType !== undefined ? { nodeType: rawInput.nodeType as NodeSelector['nodeType'] } : {}),
+                ...(rawInput.kind !== undefined ? { kind: rawInput.kind as NodeSelector['kind'] } : {}),
+              },
+              ...(rawInput.within !== undefined ? { within: rawInput.within as QueryMatchInput['within'] } : {}),
+              ...(rawInput.in !== undefined ? { in: rawInput.in as QueryMatchInput['in'] } : {}),
+              ...(rawInput.require !== undefined ? { require: rawInput.require as QueryMatchInput['require'] } : {}),
+              ...(rawInput.mode !== undefined ? { mode: rawInput.mode as QueryMatchInput['mode'] } : {}),
+              ...(rawInput.includeNodes !== undefined ? { includeNodes: rawInput.includeNodes as boolean } : {}),
+              ...(rawInput.limit !== undefined ? { limit: rawInput.limit as number } : {}),
+              ...(rawInput.offset !== undefined ? { offset: rawInput.offset as number } : {}),
+            }
+          : { select: input };
+  validateStoryLocator(normalized.in, 'in');
   return adapter.match(normalized);
 }
 
@@ -1821,7 +1866,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt {
-      return executeInsert(adapters.write, input, options);
+      return executeInsert(adapters.selectionMutation, adapters.write, input, options);
     },
     replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
       return executeReplace(adapters.selectionMutation, adapters.write, input, options);

@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 import { DocumentApiValidationError } from '../errors.js';
 import { executeImagesSetZOrder, type ImagesAdapter } from './images.js';
 import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from './z-order.js';
 
 function makeSetZOrderAdapter() {
-  const setZOrder = vi.fn(() => ({
+  const setZOrder = mock(() => ({
     success: true as const,
     image: {
       kind: 'inline' as const,

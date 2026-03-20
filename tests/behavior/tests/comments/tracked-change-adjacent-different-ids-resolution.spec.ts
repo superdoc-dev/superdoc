@@ -2,13 +2,13 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
 import {
   assertDocumentApiReady,
+  collapseSelectionTargetToStart,
   deleteText,
   findFirstSelectionTarget,
-  findFirstTextRange,
   insertText,
   listTrackChanges,
 } from '../../helpers/document-api.js';
-import type { SelectionTarget, TextAddress, TextMutationReceipt, TrackChangeType } from '../../helpers/document-api.js';
+import type { SelectionTarget, TextMutationReceipt, TrackChangeType } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
 
@@ -25,14 +25,6 @@ type TrackedSegment = {
   to: number;
   type: TrackChangeType;
 };
-
-function requireTextTarget(target: TextAddress | null, pattern: string): TextAddress {
-  if (target != null) {
-    return target;
-  }
-
-  throw new Error(`Could not find a text target for pattern "${pattern}".`);
-}
 
 function requireSelectionTarget(target: SelectionTarget | null, pattern: string): SelectionTarget {
   if (target != null) {
@@ -61,14 +53,8 @@ async function createAdjacentTrackedDeleteAndInsert(superdoc: SuperDocHarness) {
   const deleteReceipt = await deleteText(superdoc.page, { target: deleteTarget }, { changeMode: 'tracked' });
   assertMutationSucceeded('deleteText', deleteReceipt);
 
-  const beforeB = requireTextTarget(await findFirstTextRange(superdoc.page, 'B'), 'B');
-  const insertTarget: TextAddress = {
-    ...beforeB,
-    range: {
-      start: beforeB.range.start,
-      end: beforeB.range.start,
-    },
-  };
+  const beforeB = requireSelectionTarget(await findFirstSelectionTarget(superdoc.page, 'B'), 'B');
+  const insertTarget = collapseSelectionTargetToStart(beforeB);
   const insertReceipt = await insertText(
     superdoc.page,
     { value: 'X', target: insertTarget, type: 'text' },

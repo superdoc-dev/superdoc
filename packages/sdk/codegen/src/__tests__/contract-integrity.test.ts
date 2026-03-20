@@ -40,6 +40,7 @@ type Contract = {
       skipAsATool?: boolean;
       intentGroup?: string;
       intentAction?: string;
+      sdkSurface?: 'client' | 'document' | 'internal' | string;
     }
   >;
 };
@@ -55,6 +56,44 @@ type IntentCatalog = {
     operations: Array<{ operationId: string; intentAction: string }>;
   }>;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function extractToolSchema(tool: Record<string, unknown>): Record<string, unknown> {
+  if (isRecord(tool.inputSchema)) return tool.inputSchema;
+  if (isRecord(tool.parameters)) return tool.parameters;
+  if (isRecord(tool.input_schema)) return tool.input_schema;
+  if (isRecord(tool.function) && isRecord(tool.function.parameters)) return tool.function.parameters;
+
+  throw new Error(`Unable to extract tool schema from ${JSON.stringify(tool).slice(0, 200)}`);
+}
+
+function collectForbiddenSchemaKeys(
+  node: unknown,
+  forbiddenKeys: ReadonlySet<string>,
+  path: string[] = [],
+  matches: string[] = [],
+): string[] {
+  if (Array.isArray(node)) {
+    node.forEach((value, index) => {
+      collectForbiddenSchemaKeys(value, forbiddenKeys, [...path, String(index)], matches);
+    });
+    return matches;
+  }
+
+  if (!isRecord(node)) return matches;
+
+  for (const [key, value] of Object.entries(node)) {
+    if (forbiddenKeys.has(key)) {
+      matches.push([...path, key].join('.'));
+    }
+    collectForbiddenSchemaKeys(value, forbiddenKeys, [...path, key], matches);
+  }
+
+  return matches;
+}
 
 describe('Contract integrity', () => {
   let contract: Contract;
@@ -206,6 +245,48 @@ describe('Intent tool catalog integrity', () => {
         const schemaActions = [...(actionProp.action.enum as string[])].sort();
         expect(schemaActions).toEqual(catalogActions);
       }
+    }
+  });
+
+  test('all catalog operations are document-surface operations', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+
+    for (const tool of catalog.tools) {
+      for (const op of tool.operations) {
+        expect(contract.operations[op.operationId]?.sdkSurface).toBe('document');
+      }
+    }
+  });
+
+  test('tool schemas exclude doc and sessionId in catalog and provider bundles', async () => {
+    const forbiddenKeys = new Set(['doc', 'sessionId']);
+    const providers = ['openai', 'anthropic', 'vercel', 'generic'];
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+
+    for (const tool of catalog.tools) {
+      expect(collectForbiddenSchemaKeys(tool.inputSchema, forbiddenKeys)).toEqual([]);
+    }
+
+    for (const provider of providers) {
+      const bundle = await loadJson<{ tools: Array<Record<string, unknown>> }>(
+        path.join(REPO_ROOT, `packages/sdk/tools/tools.${provider}.json`),
+      );
+      for (const tool of bundle.tools) {
+        expect(collectForbiddenSchemaKeys(extractToolSchema(tool), forbiddenKeys)).toEqual([]);
+      }
+    }
+  });
+
+  test('client/internal intent-annotated operations never reach the catalog', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+    const catalogOperationIds = new Set(catalog.tools.flatMap((tool) => tool.operations.map((op) => op.operationId)));
+
+    for (const op of Object.values(contract.operations)) {
+      if (!op.intentGroup) continue;
+      if (op.sdkSurface === 'document') continue;
+      expect(catalogOperationIds.has(op.operationId)).toBe(false);
     }
   });
 

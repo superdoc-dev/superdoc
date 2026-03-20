@@ -2,6 +2,7 @@ import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { assertTargetPresent } from '../validation-primitives.js';
+import { validateTargetOnlyTocCreateLocation } from '../validation/create-location-validator.js';
 import type {
   AuthoritiesAddress,
   AuthorityEntryAddress,
@@ -96,6 +97,7 @@ export function executeAuthoritiesInsert(
   input: AuthoritiesInsertInput,
   options?: MutationOptions,
 ): AuthoritiesMutationResult {
+  validateTargetOnlyTocCreateLocation(input.at, 'authorities.insert');
   return adapter.insert(input, normalizeMutationOptions(options));
 }
 

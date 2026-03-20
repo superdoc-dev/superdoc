@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import {
   executeHyperlinksList,
   executeHyperlinksGet,
@@ -38,12 +38,12 @@ function makeAdapter(overrides: Partial<HyperlinksAdapter> = {}): HyperlinksAdap
   };
 
   return {
-    list: vi.fn(() => defaultList),
-    get: vi.fn(() => defaultInfo),
-    wrap: vi.fn(() => defaultResult),
-    insert: vi.fn(() => defaultResult),
-    patch: vi.fn(() => defaultResult),
-    remove: vi.fn(() => defaultResult),
+    list: mock(() => defaultList),
+    get: mock(() => defaultInfo),
+    wrap: mock(() => defaultResult),
+    insert: mock(() => defaultResult),
+    patch: mock(() => defaultResult),
+    remove: mock(() => defaultResult),
     ...overrides,
   };
 }

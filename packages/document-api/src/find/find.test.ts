@@ -1,3 +1,4 @@
+import { describe, expect, it, mock } from 'bun:test';
 import { executeFind, normalizeFindQuery } from './find.js';
 import type { Query, Selector } from '../types/index.js';
 import type { SDFindInput, SDFindResult } from '../types/sd-envelope.js';
@@ -167,7 +168,7 @@ describe('executeFind', () => {
       offset: 0,
       items: [],
     };
-    const adapter: FindAdapter = { find: vi.fn(() => sdResult) };
+    const adapter: FindAdapter = { find: mock(() => sdResult) };
     const input: SDFindInput = {
       select: { type: 'node', nodeType: 'paragraph' },
       limit: 5,
@@ -186,7 +187,7 @@ describe('executeFind', () => {
       offset: 0,
       items: [],
     };
-    const adapter: FindAdapter = { find: vi.fn(() => sdResult) };
+    const adapter: FindAdapter = { find: mock(() => sdResult) };
     const input: SDFindInput = {
       select: { type: 'text', pattern: 'hello' },
       limit: 10,

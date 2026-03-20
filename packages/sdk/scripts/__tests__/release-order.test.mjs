@@ -61,6 +61,39 @@ test('release-sdk fallback workflow publishes Node SDK via sdk-release-publish',
   );
 });
 
+test('release-sdk manual version input description matches manual fallback behavior', async () => {
+  const content = await readRepoFile('.github/workflows/release-sdk.yml');
+  assert.ok(
+    content.includes('Leave empty to publish the current repo version.'),
+    '.github/workflows/release-sdk.yml: manual version input must describe current-version publish behavior',
+  );
+  assert.equal(
+    content.includes('Leave empty to let semantic-release decide.'),
+    false,
+    '.github/workflows/release-sdk.yml: manual fallback must not claim semantic-release chooses the version',
+  );
+});
+
+test('release-sdk auto workflow resumes releases from sdk-v tags at HEAD', async () => {
+  const content = await readRepoFile('.github/workflows/release-sdk.yml');
+  assert.ok(
+    content.includes("git tag --points-at HEAD --list 'sdk-v*' --sort=-version:refname | head -n 1"),
+    '.github/workflows/release-sdk.yml: auto-release must detect sdk release tags at HEAD',
+  );
+  assert.ok(
+    content.includes("if: steps.detect.outputs.release_present == 'true'"),
+    '.github/workflows/release-sdk.yml: Python publish must key off release tag presence, not per-run tag creation',
+  );
+  assert.ok(
+    content.includes('Resume Node SDK publish for existing release tag'),
+    '.github/workflows/release-sdk.yml: auto-release must have an npm publish recovery step for reruns',
+  );
+  assert.ok(
+    content.includes('node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ steps.detect.outputs.dist_tag }}" --npm-only'),
+    '.github/workflows/release-sdk.yml: npm publish recovery must reuse sdk-release-publish.mjs',
+  );
+});
+
 test('sdk semantic-release prepareCmd builds Node SDK before validate', async () => {
   const content = await readRepoFile('packages/sdk/.releaserc.cjs');
   assertOrder(
@@ -77,19 +110,24 @@ test('sdk semantic-release prepareCmd builds Node SDK before validate', async ()
   );
 });
 
-test('sdk semantic-release main branch uses alpha prerelease on latest channel', async () => {
+test('sdk semantic-release matches CLI channel model (next/next on main, latest on stable)', async () => {
   const content = await readRepoFile('packages/sdk/.releaserc.cjs');
   assert.ok(
     content.includes("{ name: 'stable', channel: 'latest' }"),
     "packages/sdk/.releaserc.cjs: stable release branch must remain configured",
   );
   assert.ok(
-    content.includes("{ name: 'main', prerelease: 'alpha', channel: 'latest' }"),
-    "packages/sdk/.releaserc.cjs: main branch must release alpha versions on latest",
+    content.includes("{ name: 'main', prerelease: 'next', channel: 'next' }"),
+    "packages/sdk/.releaserc.cjs: main branch must release next versions on next channel",
   );
-  assert.equal(
-    content.includes("prerelease: 'next'"),
-    false,
-    "packages/sdk/.releaserc.cjs: SDK release config must not use 'next' prerelease channel",
+});
+
+test('sdk-release-publish validates local PyPI prerequisites before Node publish', async () => {
+  const content = await readRepoFile('packages/sdk/scripts/sdk-release-publish.mjs');
+  assertOrder(
+    content,
+    'const localPypiPublishConfig = resolveLocalPypiPublishConfig({ npmOnly, dryRun });',
+    "const nodePublishArgs = [path.join(__dirname, 'publish-node-sdk.mjs'), '--tag', tag];",
+    'packages/sdk/scripts/sdk-release-publish.mjs',
   );
 });

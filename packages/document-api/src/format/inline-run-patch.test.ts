@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { INLINE_PROPERTY_BY_KEY, validateInlineRunPatch } from './inline-run-patch.js';
 import { DocumentApiValidationError } from '../errors.js';
 

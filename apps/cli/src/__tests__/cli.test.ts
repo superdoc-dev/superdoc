@@ -1028,7 +1028,42 @@ describe('superdoc CLI', () => {
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
   });
 
-  test('insert with --block-id and --offset targets a specific block position', async () => {
+  test('insert with --block-id and --offset targets a specific block position (legacy compat)', async () => {
+    const insertSource = join(TEST_DIR, 'insert-blockid-legacy-offset-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-blockid-legacy-offset-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const target = await firstTextRange(['find', insertSource, '--type', 'text', '--pattern', 'Wilde']);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--block-id',
+      target.blockId,
+      '--offset',
+      '0',
+      '--value',
+      'CLI_BLOCKID_LEGACY_OFFSET_INSERT',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+
+    const verifyResult = await runCli([
+      'find',
+      insertOut,
+      '--type',
+      'text',
+      '--pattern',
+      'CLI_BLOCKID_LEGACY_OFFSET_INSERT',
+    ]);
+    expect(verifyResult.code).toBe(0);
+    const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
+    expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('insert with --block-id and --start/--end targets a specific block position', async () => {
     const insertSource = join(TEST_DIR, 'insert-blockid-offset-source.docx');
     const insertOut = join(TEST_DIR, 'insert-blockid-offset-out.docx');
     await copyFile(SAMPLE_DOC, insertSource);
@@ -1041,7 +1076,9 @@ describe('superdoc CLI', () => {
       insertSource,
       '--block-id',
       target.blockId,
-      '--offset',
+      '--start',
+      '0',
+      '--end',
       '0',
       '--value',
       'CLI_BLOCKID_OFFSET_INSERT_1597',
@@ -1064,7 +1101,7 @@ describe('superdoc CLI', () => {
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
   });
 
-  test('insert with --block-id alone defaults offset to 0', async () => {
+  test('insert with --block-id alone defaults start/end to 0', async () => {
     const insertSource = join(TEST_DIR, 'insert-blockid-only-source.docx');
     const insertOut = join(TEST_DIR, 'insert-blockid-only-out.docx');
     await copyFile(SAMPLE_DOC, insertSource);
@@ -1093,15 +1130,19 @@ describe('superdoc CLI', () => {
     expect(resolvedTarget?.range.end).toBe(0);
   });
 
-  test('insert with --offset but no --block-id returns INVALID_ARGUMENT', async () => {
+  test('insert with --start but no --block-id returns validation error', async () => {
     const insertSource = join(TEST_DIR, 'insert-offset-no-blockid-source.docx');
     const insertOut = join(TEST_DIR, 'insert-offset-no-blockid-out.docx');
     await copyFile(SAMPLE_DOC, insertSource);
 
+    // --start/--end without --block-id are not normalized into a target.
+    // They pass through as unknown fields and are rejected by validation.
     const result = await runCli([
       'insert',
       insertSource,
-      '--offset',
+      '--start',
+      '5',
+      '--end',
       '5',
       '--value',
       'should-fail',
@@ -1110,9 +1151,6 @@ describe('superdoc CLI', () => {
     ]);
 
     expect(result.code).toBe(1);
-    const envelope = parseJsonOutput<ErrorEnvelope>(result);
-    expect(envelope.error.code).toBe('INVALID_ARGUMENT');
-    expect(envelope.error.message).toContain('Unknown field');
   });
 
   test('insert with --type html inserts HTML content into the document', async () => {

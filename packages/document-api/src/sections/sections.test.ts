@@ -1,3 +1,4 @@
+import { describe, expect, it, mock } from 'bun:test';
 import {
   executeSectionsList,
   executeSectionsGet,
@@ -48,7 +49,7 @@ function makeAdapter(overrides: Partial<SectionsAdapter> = {}): SectionsAdapter 
 
 describe('sections API validation', () => {
   it('normalizes list defaults to limit=250 and offset=0', () => {
-    const list = vi.fn(makeAdapter().list);
+    const list = mock(makeAdapter().list);
     const adapter = makeAdapter({ list });
 
     executeSectionsList(adapter);
@@ -90,7 +91,7 @@ describe('sections API validation', () => {
   });
 
   it('accepts targetless odd/even settings mutation input', () => {
-    const setOddEvenHeadersFooters = vi.fn(makeAdapter().setOddEvenHeadersFooters);
+    const setOddEvenHeadersFooters = mock(makeAdapter().setOddEvenHeadersFooters);
     const adapter = makeAdapter({ setOddEvenHeadersFooters });
 
     executeSectionsSetOddEvenHeadersFooters(adapter, { enabled: true }, { dryRun: true });

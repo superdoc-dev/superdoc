@@ -107,3 +107,33 @@ export function createOperationTree(operations) {
 
   return root;
 }
+
+// ---------------------------------------------------------------------------
+// SDK surface filtering helpers
+// ---------------------------------------------------------------------------
+
+/** Param names that are injected by the bound document handle, not by the caller. */
+const BOUND_INJECTED_PARAMS = new Set(['doc', 'sessionId']);
+
+/**
+ * Filter operations by their sdkSurface classification.
+ * Returns a new Record containing only matching operations.
+ */
+export function filterOperationsBySurface(operations, surface) {
+  const filtered = {};
+  for (const [operationId, operation] of Object.entries(operations)) {
+    if (operation.sdkSurface === surface) {
+      filtered[operationId] = operation;
+    }
+  }
+  return filtered;
+}
+
+/**
+ * Strip bound-injected params (doc, sessionId) from an operation's params array.
+ * Used for generating bound document handle types where the handle injects these.
+ */
+export function stripBoundParams(params) {
+  return (params ?? []).filter((p) => !BOUND_INJECTED_PARAMS.has(p.name));
+}
+

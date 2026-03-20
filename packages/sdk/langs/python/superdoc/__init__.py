@@ -1,4 +1,4 @@
-from .client import AsyncSuperDocClient, SuperDocClient
+from .client import AsyncSuperDocClient, AsyncSuperDocDocument, SuperDocClient, SuperDocDocument
 from .errors import SuperDocError
 from .skill_api import get_skill, install_skill, list_skills
 from .tools_api import (
@@ -13,6 +13,8 @@ from .tools_api import (
 __all__ = [
     "SuperDocClient",
     "AsyncSuperDocClient",
+    "SuperDocDocument",
+    "AsyncSuperDocDocument",
     "SuperDocError",
     "get_skill",
     "install_skill",

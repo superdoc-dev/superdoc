@@ -10,7 +10,7 @@
  */
 
 import type { MutationOptions } from '../types/mutation-plan.types.js';
-import type { SelectionTarget } from '../types/address.js';
+import type { SelectionTarget, TargetLocator } from '../types/address.js';
 import type { SDMutationReceipt } from '../types/sd-contract.js';
 import type { SDReplaceInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
@@ -35,13 +35,13 @@ import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 // ---------------------------------------------------------------------------
 
 /** Text replacement input — uses SelectionTarget / ref. */
-export interface TextReplaceInput {
+export type TextReplaceInput = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   text: string;
   /** Target a specific document story (body, header, footer, footnote, endnote). */
   in?: StoryLocator;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Discriminated union: text shape OR structural SDFragment shape
@@ -99,8 +99,8 @@ function validateTargetLocator(input: Record<string, unknown>, operation: string
     });
   }
 
-  if (hasRef && typeof input.ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+  if (hasRef && (typeof input.ref !== 'string' || input.ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: input.ref,
     });
@@ -222,15 +222,9 @@ export function executeReplace(
 
   // Text replacement path — route through SelectionMutationAdapter
   const textInput = input as TextReplaceInput;
-  const textReceipt = selectionAdapter.execute(
-    {
-      kind: 'replace',
-      target: textInput.target,
-      ref: textInput.ref,
-      text: textInput.text,
-      in: textInput.in,
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = textInput.target
+    ? { kind: 'replace' as const, target: textInput.target, text: textInput.text, in: textInput.in }
+    : { kind: 'replace' as const, ref: textInput.ref!, text: textInput.text, in: textInput.in };
+  const textReceipt = selectionAdapter.execute(request, normalizeMutationOptions(options));
   return textReceiptToSDReceipt(textReceipt);
 }

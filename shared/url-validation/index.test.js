@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test';
 import { sanitizeHref, encodeTooltip, UrlValidationConstants, buildAllowedProtocols } from './index.js';
 
 describe('url-validation', () => {
@@ -203,7 +203,7 @@ describe('url-validation', () => {
     let originalEnv;
 
     beforeEach(() => {
-      warnSpy = vi.spyOn(console, 'warn').mockImplementation();
+      warnSpy = spyOn(console, 'warn').mockImplementation();
       originalEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = 'development';
     });

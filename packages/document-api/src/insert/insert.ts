@@ -1,5 +1,5 @@
 import { executeWrite, normalizeMutationOptions, type MutationOptions, type WriteAdapter } from '../write/write.js';
-import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
+import type { SelectionTarget, TargetLocator, SDMutationReceipt } from '../types/index.js';
 import type { SDInsertInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
 import type { StoryLocator } from '../types/story.types.js';
@@ -7,51 +7,59 @@ import { PLACEMENT_VALUES } from '../types/placement.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   isRecord,
-  isTextAddress,
   isBlockNodeAddress,
   assertNoUnknownFields,
   validateNestingPolicyValue,
 } from '../validation-primitives.js';
+import { isSelectionTarget } from '../validation/selection-target-validator.js';
 import { validateDocumentFragment } from '../validation/fragment-validator.js';
 import { validateStoryLocator } from '../validation/story-validator.js';
 import { textReceiptToSDReceipt } from '../receipt-bridge.js';
+import type { SelectionMutationAdapter } from '../selection-mutation.js';
 
 // ---------------------------------------------------------------------------
-// Legacy string-based input shape
+// Text insert input shape (uses SelectionTarget/ref)
 // ---------------------------------------------------------------------------
 
-/** Content format for the legacy insert operation payload. */
+/** Content format for the text insert operation payload. */
 export type InsertContentType = 'text' | 'markdown' | 'html';
 
-/** Legacy string-based input for the insert operation. */
-export interface LegacyInsertInput {
-  /** Optional insertion target. When omitted, inserts at the end of the document. */
-  target?: TextAddress;
-  /** The content to insert. Interpreted according to {@link LegacyInsertInput.type}. */
+type OptionalInsertLocator = TargetLocator | { target?: undefined; ref?: undefined };
+
+/** Text-based input for the insert operation. */
+export type TextInsertInput = OptionalInsertLocator & {
+  /** Optional insertion target (SelectionTarget). When omitted, inserts at the end of the document. */
+  target?: SelectionTarget;
+  /** Optional mutation ref returned by a prior find/query. Mutually exclusive with target. */
+  ref?: string;
+  /** The content to insert. Interpreted according to {@link TextInsertInput.type}. */
   value: string;
   /** Content format. Defaults to `'text'` when omitted. */
   type?: InsertContentType;
   /** Target a specific document story (body, header, footer, footnote, endnote). */
   in?: StoryLocator;
-}
+};
+
+/** @deprecated Use {@link TextInsertInput} instead. */
+export type LegacyInsertInput = TextInsertInput;
 
 // ---------------------------------------------------------------------------
-// Discriminated union: legacy string shape OR structural SDFragment shape
+// Discriminated union: text string shape OR structural SDFragment shape
 // ---------------------------------------------------------------------------
 
 /**
  * Input payload for the `doc.insert` operation.
  *
- * Discrimination: presence of `content` (structural) vs `value` (legacy string).
+ * Discrimination: presence of `content` (structural) vs `value` (text string).
  * These are mutually exclusive — providing both is an error.
  */
-export type InsertInput = LegacyInsertInput | SDInsertInput;
+export type InsertInput = TextInsertInput | SDInsertInput;
 
 // ---------------------------------------------------------------------------
 // Allowlists for strict field validation
 // ---------------------------------------------------------------------------
 
-const LEGACY_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target', 'in']);
+const TEXT_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target', 'ref', 'in']);
 const STRUCTURAL_INSERT_ALLOWED_KEYS = new Set(['content', 'target', 'placement', 'nestingPolicy', 'in']);
 const VALID_INSERT_TYPES: ReadonlySet<string> = new Set(['text', 'markdown', 'html']);
 
@@ -69,7 +77,7 @@ export function isStructuralInsertInput(input: InsertInput): input is SDInsertIn
 // ---------------------------------------------------------------------------
 
 /**
- * Validates InsertInput as either legacy or structural shape.
+ * Validates InsertInput as either text or structural shape.
  *
  * Validation order:
  * 0. Input shape guard (must be non-null plain object)
@@ -88,7 +96,7 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
   if (hasValue && hasContent) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
-      'Insert input must provide either "value" (legacy) or "content" (structural), not both.',
+      'Insert input must provide either "value" (text) or "content" (structural), not both.',
       { fields: ['value', 'content'] },
     );
   }
@@ -97,7 +105,7 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
   if (!hasValue && !hasContent) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
-      'Insert input must provide either "value" (legacy string) or "content" (SDFragment).',
+      'Insert input must provide either "value" (text string) or "content" (SDFragment).',
       { fields: ['value', 'content'] },
     );
   }
@@ -107,13 +115,13 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
   if (hasContent) {
     validateStructuralInsertInput(input);
   } else {
-    validateLegacyInsertInput(input);
+    validateTextInsertInput(input);
   }
 }
 
-/** Validates the legacy string-based insert input shape. */
-function validateLegacyInsertInput(input: Record<string, unknown>): void {
-  // Union conflict rule 4: structural-only fields with legacy shape
+/** Validates the text-based insert input shape. */
+function validateTextInsertInput(input: Record<string, unknown>): void {
+  // Union conflict rule 4: structural-only fields with text shape
   if ('placement' in input && input.placement !== undefined) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
@@ -129,14 +137,30 @@ function validateLegacyInsertInput(input: Record<string, unknown>): void {
     );
   }
 
-  assertNoUnknownFields(input, LEGACY_INSERT_ALLOWED_KEYS, 'insert');
+  assertNoUnknownFields(input, TEXT_INSERT_ALLOWED_KEYS, 'insert');
 
-  const { target, value, type } = input;
+  const { target, ref, value, type } = input;
 
-  if (target !== undefined && !isTextAddress(target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
+  // Mutual exclusivity: target and ref
+  if (target !== undefined && ref !== undefined) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'Insert input must provide either "target" or "ref", not both.',
+      { fields: ['target', 'ref'] },
+    );
+  }
+
+  if (target !== undefined && !isSelectionTarget(target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a SelectionTarget object.', {
       field: 'target',
       value: target,
+    });
+  }
+
+  if (ref !== undefined && (typeof ref !== 'string' || ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
+      field: 'ref',
+      value: ref,
     });
   }
 
@@ -158,7 +182,7 @@ function validateLegacyInsertInput(input: Record<string, unknown>): void {
 
 /** Validates the structural SDFragment insert input shape. */
 function validateStructuralInsertInput(input: Record<string, unknown>): void {
-  // Union conflict rule 3: legacy-only "type" field with structural content
+  // Union conflict rule 3: text-only "type" field with structural content
   if ('type' in input && input.type !== undefined) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
@@ -198,28 +222,53 @@ function validateStructuralInsertInput(input: Record<string, unknown>): void {
 // Execution
 // ---------------------------------------------------------------------------
 
-export function executeInsert(adapter: WriteAdapter, input: InsertInput, options?: MutationOptions): SDMutationReceipt {
+/**
+ * Executes an insert operation, routing to the appropriate adapter path.
+ *
+ * - Text inserts with `target` or `ref` route through the SelectionMutationAdapter.
+ * - Structural inserts (SDFragment) and non-text content types route through WriteAdapter.
+ * - Text inserts without a locator append at the document end via WriteAdapter.
+ *
+ * @param selectionAdapter - Adapter for target/ref-based text mutations.
+ * @param writeAdapter - Adapter for structural and untargeted writes.
+ * @param input - Insert payload (text string or structural SDFragment).
+ * @param options - Optional mutation options (changeMode, dryRun, expectedRevision).
+ * @returns Receipt indicating success/failure and mutation metadata.
+ */
+export function executeInsert(
+  selectionAdapter: SelectionMutationAdapter,
+  writeAdapter: WriteAdapter,
+  input: InsertInput,
+  options?: MutationOptions,
+): SDMutationReceipt {
   validateInsertInput(input);
 
   // Structural content path — returns SDMutationReceipt directly
   if (isStructuralInsertInput(input)) {
-    return adapter.insertStructured(input, normalizeMutationOptions(options));
+    return writeAdapter.insertStructured(input, normalizeMutationOptions(options));
   }
 
-  // Legacy string path
-  const { target, value } = input;
+  // Text string path
+  const { target, ref, value } = input;
   const contentType = input.type ?? 'text';
 
   // For non-text content types, delegate to the adapter's structured insert path.
   if (contentType !== 'text') {
-    return adapter.insertStructured(input, normalizeMutationOptions(options));
+    return writeAdapter.insertStructured(input, normalizeMutationOptions(options));
   }
 
-  // Text path: use the existing write pipeline, wrap TextMutationReceipt → SDMutationReceipt
+  // Text path with target/ref → route through SelectionMutationAdapter
   const storyIn = input.in;
-  const request = target
-    ? { kind: 'insert' as const, target, text: value, ...(storyIn ? { in: storyIn } : undefined) }
-    : { kind: 'insert' as const, text: value, ...(storyIn ? { in: storyIn } : undefined) };
-  const textReceipt = executeWrite(adapter, request, options);
+  if (target || ref) {
+    const request = target
+      ? { kind: 'insert' as const, target, text: value, ...(storyIn ? { in: storyIn } : {}) }
+      : { kind: 'insert' as const, ref: ref!, text: value, ...(storyIn ? { in: storyIn } : {}) };
+    const textReceipt = selectionAdapter.execute(request, normalizeMutationOptions(options));
+    return textReceiptToSDReceipt(textReceipt);
+  }
+
+  // Text path without target/ref → target-less insert at document end
+  const request = { kind: 'insert' as const, text: value, ...(storyIn ? { in: storyIn } : {}) };
+  const textReceipt = executeWrite(writeAdapter, request, options);
   return textReceiptToSDReceipt(textReceipt);
 }

@@ -3,7 +3,7 @@
  * Tests empty paragraph detection and spacing suppression utilities.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import type { ParagraphBlock, TextRun, ImageRun } from '@superdoc/contracts';
 import { isEmptyTextParagraph, shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 

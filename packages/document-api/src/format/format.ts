@@ -7,7 +7,7 @@
 
 import type { MutationOptions } from '../types/mutation-plan.types.js';
 import { normalizeMutationOptions } from '../write/write.js';
-import type { SelectionTarget } from '../types/address.js';
+import type { SelectionTarget, TargetLocator } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
 import type { StoryLocator } from '../types/story.types.js';
 import type { SelectionMutationAdapter } from '../selection-mutation.js';
@@ -32,10 +32,7 @@ export type FormatItalicInput = FormatInlineAliasInput<'italic'>;
 export type FormatUnderlineInput = FormatInlineAliasInput<'underline'>;
 
 /** Input payload for `format.strikethrough`. */
-export interface FormatStrikethroughInput {
-  target?: SelectionTarget;
-  ref?: string;
-}
+export type FormatStrikethroughInput = FormatInlineAliasInput<'strike'>;
 
 /**
  * Keys where `value` may be omitted — booleans (defaults to `true`) and
@@ -54,21 +51,21 @@ type ImplicitTrueKey =
  * omission defaults to `true` for ergonomic "turn on" calls.
  */
 export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends ImplicitTrueKey
-  ? { target?: SelectionTarget; ref?: string; value?: InlineRunPatch[K]; in?: StoryLocator }
-  : { target?: SelectionTarget; ref?: string; value: InlineRunPatch[K]; in?: StoryLocator };
+  ? TargetLocator & { target?: SelectionTarget; ref?: string; in?: StoryLocator; value?: InlineRunPatch[K] }
+  : TargetLocator & { target?: SelectionTarget; ref?: string; in?: StoryLocator; value: InlineRunPatch[K] };
 
 /**
  * Input payload for `format.apply`.
  *
  * Accepts either `target` (SelectionTarget) or `ref` (string) — exactly one required.
  */
-export interface StyleApplyInput {
+export type StyleApplyInput = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
   inline: InlineRunPatch;
   /** Target a specific document story (body, header, footer, footnote, endnote). */
   in?: StoryLocator;
-}
+};
 
 /**
  * Named alias for MutationOptions on format.apply.
@@ -122,8 +119,8 @@ function validateTargetLocator(input: Record<string, unknown>, operation: string
     });
   }
 
-  if (hasRef && typeof input.ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+  if (hasRef && (typeof input.ref !== 'string' || input.ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: input.ref,
     });
@@ -161,16 +158,11 @@ export function executeStyleApply(
   options?: MutationOptions,
 ): TextMutationReceipt {
   validateStyleApplyInput(input);
-  return adapter.execute(
-    {
-      kind: 'format',
-      target: input.target,
-      ref: input.ref,
-      inline: input.inline,
-      in: input.in,
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = input.target
+    ? { kind: 'format' as const, target: input.target, inline: input.inline, in: input.in }
+    : { kind: 'format' as const, ref: input.ref!, inline: input.inline, in: input.in };
+
+  return adapter.execute(request, normalizeMutationOptions(options));
 }
 
 // ---------------------------------------------------------------------------
@@ -219,14 +211,9 @@ export function executeInlineAlias<K extends InlineRunPatchKey>(
   const value = normalizeInlineAliasValue(key, (input as { value?: InlineRunPatch[K] }).value);
   const inline = { [key]: value } as InlineRunPatch;
   validateInlineRunPatch(inline);
-  return adapter.execute(
-    {
-      kind: 'format',
-      target: input.target,
-      ref: input.ref,
-      inline,
-      in: (input as { in?: StoryLocator }).in,
-    },
-    normalizeMutationOptions(options),
-  );
+  const request = input.target
+    ? { kind: 'format' as const, target: input.target, inline, in: input.in }
+    : { kind: 'format' as const, ref: input.ref!, inline, in: input.in };
+
+  return adapter.execute(request, normalizeMutationOptions(options));
 }

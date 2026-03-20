@@ -4,7 +4,7 @@
  * Tests for Word-compatible column balancing algorithm.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   calculateBalancedColumnHeight,
   shouldBalanceColumns,

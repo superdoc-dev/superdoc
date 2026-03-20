@@ -1,0 +1,143 @@
+---
+title: Debugging
+sidebarTitle: Debugging
+tag: NEW
+description: Troubleshoot LLM tool calls — logging, error shapes, and common failure modes
+keywords: "llm debugging, tool call errors, superdoc tools, ai document editing, troubleshooting, document api"
+---
+
+When tool calls fail or produce unexpected results, use these patterns to diagnose the issue.
+
+## LLM tools wrap the Document API
+
+Every LLM tool call maps to a [Document API](/document-api/overview) operation under the hood. `superdoc_edit` with `action: "replace"` calls the same function as `doc.replace()`.
+
+This gives you a clear debugging strategy:
+
+1. **Test the Document API directly.** Call the underlying SDK method with the same arguments. If it works, the operation is fine — the problem is in the prompt or the tool schema.
+2. **If the API call fails,** the issue is in the operation itself — check arguments, targets, and document state.
+3. **If the API call succeeds but the LLM tool call fails,** the model is calling the tool incorrectly. Fix the prompt, add examples, or check the tool schema.
+
+```typescript
+// Instead of going through the LLM, test the operation directly:
+const result = await doc.replace({
+  target: { handle: 'some-handle' },
+  content: 'New text',
+});
+console.log(result); // Does this work?
+```
+
+This narrows every issue to one of two layers: the operation or the prompt.
+
+## Log tool calls and results
+
+Add logging around `dispatchSuperDocTool` to see exactly what the model is requesting and what comes back.
+
+```typescript
+for (const toolCall of choice.message.tool_calls) {
+  const args = JSON.parse(toolCall.function.arguments);
+
+  // Log what the model wants to do
+  console.log(`[agent] tool: ${toolCall.function.name}`, JSON.stringify(args, null, 2));
+
+  try {
+    const result = await dispatchSuperDocTool(doc, toolCall.function.name, args);
+
+    // Log the result (truncate large responses)
+    const resultStr = JSON.stringify(result);
+    console.log(`[agent] result: ${resultStr.substring(0, 500)}`);
+
+    messages.push({ role: 'tool', tool_call_id: toolCall.id, content: resultStr });
+  } catch (err: any) {
+    console.error(`[agent] error: ${err.message}`);
+    messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: err.message }) });
+  }
+}
+```
+
+What to look for in logs:
+- **Tool name** — is the model calling the right tool?
+- **Arguments** — are required fields present? Is the `action` correct?
+- **Targets** — are handles/addresses from a recent search, or did the model guess?
+- **Result** — did the operation return data or an error?
+
+## Error shapes
+
+`dispatchSuperDocTool` throws errors in two categories:
+
+**Validation errors** — bad arguments before the operation runs:
+```json
+{ "error": "Missing required parameter: action" }
+{ "error": "Unknown action 'bold' for tool superdoc_format. Valid actions: inline, set_style, set_alignment, set_indentation, set_spacing" }
+{ "error": "Parameter 'target' is required for action 'replace'" }
+```
+
+**Execution errors** — the operation ran but failed:
+```json
+{ "error": "Target not found: no node matches the given handle" }
+{ "error": "Invalid address: block at index 42 does not exist" }
+```
+
+Both types are returned as strings in `err.message`. Pass them back as tool results — the model usually self-corrects.
+
+## Common failure modes
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Model calls the wrong tool | System prompt missing or too vague | Use `getSystemPrompt()` or add workflow instructions |
+| "Target not found" errors | Model uses stale or guessed handles | Instruct model to always search before editing |
+| Edits land in the wrong place | Model invented a block address | Use `superdoc_search` to get fresh handles |
+| Infinite tool call loop | Model never reaches a stopping point | Add a max iterations guard (see below) |
+| Model doesn't use tools at all | Tools not passed to the API call | Verify `chooseTools()` result is in the `tools` param |
+| "Missing required parameter" | Model forgot `action` or another field | Check the tool schema — add examples to the prompt |
+| Collaboration edits not appearing | SDK not in the same collab room | Verify the collaboration URL and documentId match |
+| Operation works via API but fails via tool | Model passes wrong argument types/names | Log the parsed arguments and compare to the API signature |
+
+## Inspect tools directly
+
+Dump the tool schemas to verify the SDK loaded correctly:
+
+```typescript
+import { listTools, getToolCatalog } from '@superdoc-dev/sdk';
+
+// See all tools for a provider
+const tools = await listTools('openai');
+console.log(JSON.stringify(tools, null, 2));
+
+// Get the full catalog with metadata
+const catalog = await getToolCatalog();
+console.log(`Loaded ${catalog.tools.length} tools`);
+```
+
+## Max iterations guard
+
+Prevent runaway loops by capping the number of iterations:
+
+```typescript
+const MAX_ITERATIONS = 20;
+let iterations = 0;
+
+while (iterations++ < MAX_ITERATIONS) {
+  const response = await openai.chat.completions.create({ model, messages, tools });
+  const message = response.choices[0].message;
+  messages.push(message);
+
+  if (!message.tool_calls?.length) break;
+
+  for (const call of message.tool_calls) {
+    const result = await dispatchSuperDocTool(doc, call.function.name, JSON.parse(call.function.arguments));
+    messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+  }
+}
+
+if (iterations >= MAX_ITERATIONS) {
+  console.warn('[agent] Hit max iterations — stopping');
+}
+```
+
+## Related
+
+- [LLM tools](/document-engine/ai-agents/llm-tools) — tool catalog and SDK functions
+- [How to use](/document-engine/ai-agents/integrations) — step-by-step integration guide
+- [Best practices](/document-engine/ai-agents/best-practices) — prompting and workflow tips
+- [Document API](/document-api/overview) — the underlying operations that tools call

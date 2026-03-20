@@ -1,7 +1,7 @@
 /**
  * Find the text marks from the nearest heading in the document.
- * Returns the marks array from the first text node found in a heading,
- * or an empty array if none exist.
+ * Falls back to the nearest body paragraph if no headings exist,
+ * so the heading at least uses the document's font family.
  *
  * @param {import('prosemirror-model').Node} doc
  * @param {number} pos - insertion position
@@ -10,6 +10,8 @@
 function findNearbyHeadingMarks(doc, pos) {
   const headingPattern = /^Heading\d$/;
   const resolvedPos = doc.resolve(Math.min(pos, doc.content.size));
+
+  let fallbackMarks = /** @type {readonly import('prosemirror-model').Mark[]} */ ([]);
 
   for (let d = resolvedPos.depth; d >= 0; d--) {
     const parent = resolvedPos.node(d);
@@ -21,8 +23,6 @@ function findNearbyHeadingMarks(doc, pos) {
 
     for (const node of candidates) {
       if (node.type.name !== 'paragraph') continue;
-      const sid = node.attrs.paragraphProperties?.styleId;
-      if (!sid || !headingPattern.test(sid)) continue;
 
       let found = null;
       node.descendants((child) => {
@@ -32,11 +32,18 @@ function findNearbyHeadingMarks(doc, pos) {
           return false;
         }
       });
-      if (found) return found;
+
+      if (!found) continue;
+
+      const sid = node.attrs.paragraphProperties?.styleId;
+      // Prefer heading marks
+      if (sid && headingPattern.test(sid)) return found;
+      // Track first body paragraph as fallback
+      if (fallbackMarks.length === 0) fallbackMarks = found;
     }
   }
 
-  return [];
+  return fallbackMarks;
 }
 
 /**

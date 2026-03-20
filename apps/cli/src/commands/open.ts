@@ -178,7 +178,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       const bootstrap = 'bootstrap' in opened ? opened.bootstrap : undefined;
       let adoptedToHostPool = false;
       try {
-        const output = await exportToPath(opened.editor, paths.workingDocPath, true);
+        await exportToPath(opened.editor, paths.workingDocPath, true);
         const sourcePath =
           opened.meta.source === 'path' && opened.meta.path
             ? resolveSourcePathForMetadata(opened.meta.path)
@@ -195,7 +195,13 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
         });
 
         await writeContextMetadata(paths, metadata);
-        await setActiveSessionId(metadata.contextId);
+
+        // Only update the project-global active-session pointer in oneshot (CLI) mode.
+        // Host mode must never write this file — it causes cross-document contamination
+        // when multiple SDK clients share the same project root.
+        if (context.executionMode !== 'host') {
+          await setActiveSessionId(metadata.contextId);
+        }
 
         if (context.executionMode === 'host' && context.sessionPool) {
           context.sessionPool.adoptFromOpen(sessionId, opened, {

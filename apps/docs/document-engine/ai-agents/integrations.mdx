@@ -248,7 +248,7 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
 
     const client = createSuperDocClient();
     await client.connect();
-    await client.doc.open({ doc: './contract.docx' });
+    const doc = await client.open({ doc: './contract.docx' });
 
     // Get tools in Anthropic format, convert to Bedrock toolSpec shape
     const { tools } = await chooseTools({ provider: 'anthropic' });
@@ -285,14 +285,15 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
       const results = [];
       for (const block of toolUses) {
         const { name, input, toolUseId } = block.toolUse;
-        const result = await dispatchSuperDocTool(client, name, input ?? {});
+        const result = await dispatchSuperDocTool(doc, name, input ?? {});
         const json = typeof result === 'object' && result !== null ? result : { result };
         results.push({ toolResult: { toolUseId, content: [{ json }] } });
       }
       messages.push({ role: 'user', content: results });
     }
 
-    await client.doc.save();
+    await doc.save();
+    await doc.close();
     await client.dispose();
     ```
   </Tab>
@@ -303,7 +304,7 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
 
     client = SuperDocClient()
     client.connect()
-    client.doc.open({"doc": "./contract.docx"})
+    doc = client.open({"doc": "./contract.docx"})
 
     # Get tools in Anthropic format, convert to Bedrock toolSpec shape
     sd_tools = choose_tools({"provider": "anthropic"})
@@ -341,14 +342,15 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
         tool_results = []
         for block in tool_uses:
             tu = block["toolUse"]
-            result = dispatch_superdoc_tool(client, tu["name"], tu.get("input", {}))
+            result = dispatch_superdoc_tool(doc, tu["name"], tu.get("input", {}))
             json_result = result if isinstance(result, dict) else {"result": result}
             tool_results.append(
                 {"toolResult": {"toolUseId": tu["toolUseId"], "content": [{"json": json_result}]}}
             )
         messages.append({"role": "user", "content": tool_results})
 
-    client.doc.save()
+    doc.save({})
+    doc.close({})
     client.dispose()
     ```
   </Tab>

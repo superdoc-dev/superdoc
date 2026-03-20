@@ -36,20 +36,26 @@ import { createSuperDocClient } from '@superdoc-dev/sdk';
 const client = createSuperDocClient();
 await client.connect();
 
-await client.doc.open({ doc: './contract.docx' });
+const doc = await client.open({ doc: './contract.docx' });
 
-const info = await client.doc.info();
+const info = await doc.info();
 console.log(info.counts);
 
-const results = await client.doc.find({ type: 'text', pattern: 'termination' });
-
-await client.doc.replace({
-  target: results.items[0].context.target,
-  text: 'expiration',
+const match = await doc.query.match({
+  select: { type: 'text', pattern: 'termination' },
+  require: 'first',
 });
 
-await client.doc.save({ inPlace: true });
-await client.doc.close();
+const target = match.items?.[0]?.target;
+if (target) {
+  await doc.replace({
+    target,
+    text: 'expiration',
+  });
+}
+
+await doc.save({ inPlace: true });
+await doc.close();
 await client.dispose();
 ```
 
@@ -65,29 +71,29 @@ await client.connect();    // start the host process
 await client.dispose();    // shut down gracefully
 ```
 
-All document operations are on `client.doc`:
+Open documents from the client, then operate on the returned handle:
 
 ```ts
-client.doc.open(params)
-client.doc.find(params)
-client.doc.insert(params)
-// ... etc
+const doc = await client.open(params)
+await doc.find(params)
+await doc.insert(params)
+await doc.save(params)
+await doc.close(params)
 ```
 
 ### Operations
 
 | Category | Operations |
 |----------|-----------|
-| **Query** | `find`, `getNode`, `getNodeById`, `info` |
+| **Query** | `find`, `query.match`, `getNode`, `getNodeById`, `info` |
 | **Mutation** | `insert`, `replace`, `delete` |
-| **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
+| **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strike` |
 | **Create** | `create.paragraph` |
 | **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.create`, `lists.attach`, `lists.detach`, `lists.indent`, `lists.outdent`, `lists.join`, `lists.separate`, `lists.setLevel`, `lists.setValue`, `lists.continuePrevious`, `lists.setLevelRestart`, `lists.convertToText`, `lists.canJoin`, `lists.canContinuePrevious` |
 | **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
 | **Track Changes** | `trackChanges.list`, `trackChanges.get`, `trackChanges.decide` |
-| **Lifecycle** | `open`, `save`, `close` |
-| **Session** | `session.list`, `session.save`, `session.close`, `session.setDefault` |
-| **Introspection** | `status`, `describe`, `describeCommand` |
+| **Lifecycle** | `client.open`, `doc.save`, `doc.close` |
+| **Client** | `client.describe`, `client.describeCommand` |
 
 ### AI Tool Integration
 
@@ -109,7 +115,8 @@ const { tools, meta } = await chooseTools({
 const catalog = await getToolCatalog();
 
 // Dispatch a tool call from the AI model
-const result = await dispatchSuperDocTool(client, toolName, args);
+const doc = await client.open({ doc: './contract.docx' });
+const result = await dispatchSuperDocTool(doc, toolName, args);
 ```
 
 The current catalog contains 9 grouped tools:
@@ -121,7 +128,7 @@ Multi-action tools use an `action` field to select the underlying operation. Sin
 |----------|-------------|
 | `chooseTools(input)` | Load grouped tool definitions for a provider |
 | `listTools(provider)` | List all tool definitions for a provider |
-| `dispatchSuperDocTool(client, toolName, args)` | Execute a tool call against a client |
+| `dispatchSuperDocTool(doc, toolName, args)` | Execute a tool call against a bound document handle |
 | `getToolCatalog()` | Load the grouped tool catalog with metadata |
 | `getSystemPrompt()` | Read the bundled system prompt for intent tools |
 

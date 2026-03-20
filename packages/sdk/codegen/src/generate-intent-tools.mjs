@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { loadContract, REPO_ROOT, writeGeneratedFile } from './shared.mjs';
+import { loadContract, REPO_ROOT, stripBoundParams, writeGeneratedFile } from './shared.mjs';
 
 const TOOLS_OUTPUT_DIR = path.join(REPO_ROOT, 'packages/sdk/tools');
 
@@ -103,7 +103,10 @@ function buildInputSchemaFromParams(operation) {
   const properties = {};
   const required = [];
 
-  for (const param of operation.params ?? []) {
+  // Strip doc/sessionId — the document handle manages targeting.
+  const params = stripBoundParams(operation.params);
+
+  for (const param of params) {
     if (param.agentVisible === false) continue;
 
     let schema;
@@ -198,6 +201,8 @@ function buildIntentTools(contract) {
   const groups = new Map();
   for (const [operationId, operation] of Object.entries(contract.operations)) {
     if (operation.skipAsATool) continue;
+    // Tool dispatch targets a document handle — only document-surface operations qualify.
+    if (operation.sdkSurface !== 'document') continue;
     if (!operation.intentGroup) continue;
 
     const group = operation.intentGroup;

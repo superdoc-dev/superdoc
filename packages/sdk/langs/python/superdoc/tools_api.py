@@ -101,17 +101,13 @@ def choose_tools(input: ToolChooserInput) -> Dict[str, Any]:
     }
 
 
-def _resolve_doc_method(client: Any, operation_id: str) -> Any:
-    doc = getattr(client, 'doc', None)
-    if doc is None:
-        raise SuperDocError('Client has no doc API.', code='TOOL_DISPATCH_NOT_FOUND', details={'operationId': operation_id})
-
+def _resolve_doc_method(document_handle: Any, operation_id: str) -> Any:
     def _snake_case(token: str) -> str:
         token = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', token)
         token = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', token)
         return token.replace('-', '_').lower()
 
-    cursor = doc
+    cursor = document_handle
     for token in operation_id.split('.')[1:]:
         candidates = [token]
         snake_token = _snake_case(token)
@@ -143,20 +139,26 @@ def _resolve_doc_method(client: Any, operation_id: str) -> Any:
 
 
 def dispatch_superdoc_tool(
-    client: Any,
+    document_handle: Any,
     tool_name: str,
     args: Optional[Dict[str, Any]] = None,
     invoke_options: Optional[Dict[str, Any]] = None,
 ) -> Any:
+    """Dispatch a tool call against a bound document handle.
+
+    The document handle injects session targeting automatically.
+    Tool arguments should not contain doc or sessionId — those are
+    stripped if present for backwards compatibility with older tool schemas.
+    """
     payload = args or {}
     if not isinstance(payload, dict):
         raise SuperDocError('Tool arguments must be an object.', code='INVALID_ARGUMENT', details={'toolName': tool_name})
 
-    # Strip doc/sessionId — the SDK client manages session targeting after doc.open().
+    # Strip doc/sessionId if present — the document handle manages targeting.
     payload = {k: v for k, v in payload.items() if k not in ('doc', 'sessionId')}
 
     def execute(operation_id: str, input_args: Dict[str, Any]) -> Any:
-        method = _resolve_doc_method(client, operation_id)
+        method = _resolve_doc_method(document_handle, operation_id)
         if inspect.iscoroutinefunction(method):
             raise SuperDocError(
                 'dispatch_superdoc_tool cannot call async methods. Use dispatch_superdoc_tool_async.',
@@ -170,20 +172,21 @@ def dispatch_superdoc_tool(
 
 
 async def dispatch_superdoc_tool_async(
-    client: Any,
+    document_handle: Any,
     tool_name: str,
     args: Optional[Dict[str, Any]] = None,
     invoke_options: Optional[Dict[str, Any]] = None,
 ) -> Any:
+    """Async version of dispatch_superdoc_tool. Dispatches against a bound document handle."""
     payload = args or {}
     if not isinstance(payload, dict):
         raise SuperDocError('Tool arguments must be an object.', code='INVALID_ARGUMENT', details={'toolName': tool_name})
 
-    # Strip doc/sessionId — same as sync version above.
+    # Strip doc/sessionId if present — the document handle manages targeting.
     payload = {k: v for k, v in payload.items() if k not in ('doc', 'sessionId')}
 
     def execute(operation_id: str, input_args: Dict[str, Any]) -> Any:
-        method = _resolve_doc_method(client, operation_id)
+        method = _resolve_doc_method(document_handle, operation_id)
         kwargs = dict(invoke_options or {})
         return method(input_args, **kwargs)
 

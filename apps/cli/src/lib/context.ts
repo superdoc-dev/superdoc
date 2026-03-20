@@ -8,7 +8,7 @@ import { CliError } from './errors';
 import { asRecord, pathExists } from './guards';
 import type { CollaborationProfile } from './collaboration';
 import { validateSessionId } from './session';
-import type { CliIO, UserIdentity } from './types';
+import type { CliIO, ExecutionMode, UserIdentity } from './types';
 
 const CONTEXT_VERSION = 'v1';
 const ACTIVE_SESSION_FILENAME = 'active-session';
@@ -538,16 +538,44 @@ export async function clearContext(paths: ContextPaths): Promise<void> {
   await rm(paths.contextDir, { recursive: true, force: true });
 }
 
+/**
+ * Resolve the target session id for an operation, respecting execution mode.
+ *
+ * - If an explicit session id is provided, return it immediately.
+ * - In host mode, an explicit session id is **required** — never fall back to
+ *   the project-global active-session file. This prevents cross-document
+ *   contamination between SDK clients sharing the same project root.
+ * - In oneshot (CLI) mode, fall back to the active-session file as a
+ *   convenience for single-terminal workflows.
+ */
+export async function resolveSessionId(
+  sessionId: string | undefined,
+  executionMode: ExecutionMode | undefined,
+): Promise<string> {
+  if (sessionId) return sessionId;
+
+  if (executionMode === 'host') {
+    throw new CliError(
+      'SESSION_REQUIRED',
+      'Host-mode operations require an explicit session id. Use the SDK document handle or pass --session.',
+    );
+  }
+
+  const activeSessionId = await getActiveSessionId();
+  if (!activeSessionId) {
+    throw new CliError('NO_ACTIVE_DOCUMENT', 'No active document. Run "superdoc open <doc>" first.');
+  }
+  return activeSessionId;
+}
+
 export async function withActiveContext<T>(
   io: CliIO,
   command: string,
   action: (state: { metadata: ContextMetadata; paths: ContextPaths }) => Promise<T>,
   contextId?: string,
+  executionMode?: ExecutionMode,
 ): Promise<T> {
-  const resolvedContextId = contextId ?? (await getActiveSessionId());
-  if (!resolvedContextId) {
-    throw new CliError('NO_ACTIVE_DOCUMENT', 'No active document. Run "superdoc open <doc>" first.');
-  }
+  const resolvedContextId = await resolveSessionId(contextId, executionMode);
 
   return withContextLock(
     io,

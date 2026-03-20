@@ -20,6 +20,18 @@ export interface InvokeOptions {
   stdinBytes?: Uint8Array;
 }
 
+/**
+ * Minimal invoke interface that both SuperDocRuntime and BoundRuntime satisfy.
+ * Generated code depends on this interface, not on the concrete runtime class.
+ */
+export interface RuntimeInvoker {
+  invoke<TData = unknown>(
+    operation: OperationSpec,
+    params?: Record<string, unknown>,
+    options?: InvokeOptions,
+  ): Promise<TData>;
+}
+
 export type ChangeMode = 'direct' | 'tracked';
 
 export interface UserIdentity {

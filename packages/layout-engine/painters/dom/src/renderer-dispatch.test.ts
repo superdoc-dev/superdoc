@@ -190,6 +190,55 @@ function drawingFixtures() {
   return { blocks: [block], measures: [measure], layout };
 }
 
+function chartDrawingFixtures() {
+  const block: FlowBlock = {
+    kind: 'drawing',
+    id: 'chart-dispatch',
+    drawingKind: 'chart',
+    geometry: { width: 400, height: 300, rotation: 0, flipH: false, flipV: false },
+    chartData: {
+      chartType: 'barChart',
+      barDirection: 'col',
+      series: [{ name: 'Series 1', categories: ['A', 'B'], values: [10, 20] }],
+    },
+    attrs: { pmStart: 1, pmEnd: 2 },
+  };
+  const measure: Measure = {
+    kind: 'drawing',
+    drawingKind: 'chart',
+    width: 400,
+    height: 300,
+    scale: 1,
+    naturalWidth: 400,
+    naturalHeight: 300,
+    geometry: { width: 400, height: 300, rotation: 0, flipH: false, flipV: false },
+  };
+  const layout: Layout = {
+    pageSize: { w: 800, h: 600 },
+    pages: [
+      {
+        number: 1,
+        fragments: [
+          {
+            kind: 'drawing',
+            blockId: 'chart-dispatch',
+            drawingKind: 'chart',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            geometry: { width: 400, height: 300, rotation: 0, flipH: false, flipV: false },
+            scale: 1,
+            pmStart: 1,
+            pmEnd: 2,
+          },
+        ],
+      },
+    ],
+  };
+  return { blocks: [block], measures: [measure], layout };
+}
+
 function tableFixtures() {
   const block: FlowBlock = {
     kind: 'table',
@@ -316,6 +365,16 @@ describe('renderFragment dispatch', () => {
     painter.paint(layout, container);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0].kind).toBe('drawing');
+  });
+
+  it('routes chart drawing fragment to renderDrawingFragment', () => {
+    const dummyDiv = document.createElement('div');
+    const spy = vi.spyOn(DomPainter.prototype as any, 'renderDrawingFragment').mockReturnValue(dummyDiv);
+    const { blocks, measures, layout } = chartDrawingFixtures();
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, container);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0].drawingKind).toBe('chart');
   });
 
   it('routes table fragment to renderTableFragment', () => {

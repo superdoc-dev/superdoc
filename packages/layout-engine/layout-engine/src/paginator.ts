@@ -4,7 +4,7 @@ export type NormalizedColumns = ColumnLayout & { width: number };
 
 export type ConstraintBoundary = {
   y: number;
-  columns: { count: number; gap: number };
+  columns: ColumnLayout;
 };
 
 export type PageState = {
@@ -17,6 +17,7 @@ export type PageState = {
   activeConstraintIndex: number;
   trailingSpacing: number;
   lastParagraphStyleId?: string;
+  lastParagraphContextualSpacing: boolean;
 };
 
 export type PaginatorOptions = {
@@ -27,7 +28,7 @@ export type PaginatorOptions = {
   getActiveFooterDistance(): number;
   getActivePageSize(): { w: number; h: number };
   getDefaultPageSize(): { w: number; h: number };
-  getActiveColumns(): { count: number; gap: number };
+  getActiveColumns(): ColumnLayout;
   getCurrentColumns(): NormalizedColumns;
   createPage(number: number, pageMargins: PageMargins, pageSizeOverride?: { w: number; h: number }): Page;
   onNewPage?: (state: PageState) => void;
@@ -37,7 +38,7 @@ export function createPaginator(opts: PaginatorOptions) {
   const states: PageState[] = [];
   const pages: Page[] = [];
 
-  const getActiveColumnsForState = (state: PageState): { count: number; gap: number } => {
+  const getActiveColumnsForState = (state: PageState): ColumnLayout => {
     if (state.activeConstraintIndex >= 0 && state.constraintBoundaries[state.activeConstraintIndex]) {
       return state.constraintBoundaries[state.activeConstraintIndex].columns;
     }
@@ -46,7 +47,15 @@ export function createPaginator(opts: PaginatorOptions) {
 
   const columnX = (columnIndex: number): number => {
     const cols = opts.getCurrentColumns();
-    return opts.margins.left + columnIndex * (cols.width + cols.gap);
+    const widths = Array.isArray(cols.widths) && cols.widths.length > 0 ? cols.widths : null;
+    if (!widths) {
+      return opts.margins.left + columnIndex * (cols.width + cols.gap);
+    }
+    let x = opts.margins.left;
+    for (let index = 0; index < columnIndex; index += 1) {
+      x += (widths[index] ?? cols.width) + cols.gap;
+    }
+    return x;
   };
 
   const startNewPage = (): PageState => {
@@ -88,6 +97,7 @@ export function createPaginator(opts: PaginatorOptions) {
       activeConstraintIndex: -1,
       trailingSpacing: 0,
       lastParagraphStyleId: undefined,
+      lastParagraphContextualSpacing: false,
     };
     states.push(state);
     pages.push(state.page);
@@ -112,6 +122,7 @@ export function createPaginator(opts: PaginatorOptions) {
       }
       state.trailingSpacing = 0;
       state.lastParagraphStyleId = undefined;
+      state.lastParagraphContextualSpacing = false;
       return state;
     }
     return startNewPage();

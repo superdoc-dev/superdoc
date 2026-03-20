@@ -2,14 +2,10 @@ import { existsSync, cpSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CliIO } from '../lib/types';
+import { resolveSkillTargets } from './skill-targets';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-const AGENT_TARGETS = [
-  { name: 'Claude Code', dir: '.claude' },
-  { name: 'Codex', dir: '.agents' },
-] as const;
 
 function resolveSkillSource(): string {
   // In compiled dist: __dirname is dist/, skill/ is at dist/../skill/
@@ -31,21 +27,20 @@ export async function runInstall(tokens: string[], io: CliIO): Promise<number> {
 
   const cwd = process.cwd();
   const skillSource = resolveSkillSource();
+  const targets = resolveSkillTargets(cwd);
   let installed = 0;
 
-  for (const target of AGENT_TARGETS) {
-    const agentDir = join(cwd, target.dir);
-    if (!existsSync(agentDir)) continue;
-
-    const dest = join(agentDir, 'skills', 'superdoc');
-    mkdirSync(dest, { recursive: true });
-    cpSync(skillSource, dest, { recursive: true });
-    io.stdout(`Installed skill to ${target.dir}/skills/superdoc/\n`);
+  for (const target of targets) {
+    mkdirSync(target.skillDir, { recursive: true });
+    cpSync(skillSource, target.skillDir, { recursive: true });
+    io.stdout(`Installed skill to ${target.displaySkillDir}\n`);
     installed += 1;
   }
 
   if (installed === 0) {
-    io.stderr('No agent directories found. Create .claude/ (Claude Code) or .agents/ (Codex) first, then re-run.\n');
+    io.stderr(
+      'No agent directories found in current or home directory. Create .claude/ (Claude Code) or .agents/ (Codex) first, then re-run.\n',
+    );
     return 1;
   }
 

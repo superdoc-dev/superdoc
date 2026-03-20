@@ -1,0 +1,7 @@
+# Cloudflare Pages configuration for the Vue frontend
+name = "document-api-agentic-demo"
+pages_build_output_dir = "dist"
+
+# Production deployment settings
+[env.production]
+name = "document-api-agentic-demo"

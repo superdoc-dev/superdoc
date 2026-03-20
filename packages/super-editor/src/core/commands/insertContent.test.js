@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { insertContent } from './insertContent.js';
 import * as contentProcessor from '../helpers/contentProcessor.js';
 
@@ -161,11 +161,14 @@ describe('insertContent', () => {
 
 // Integration-style tests that use a real Editor instance to
 // insert markdown/HTML lists and verify exported OOXML has list numbering.
+//
+// These tests need the REAL contentProcessor (not the mock from the unit tests
+// above). We use a separate vi.mock-free import path by dynamically importing
+// the real insertContent function.
 describe('insertContent (integration) list export', () => {
-  // Cache loaded DOCX data and helpers to avoid repeated file loading
-  let cachedDocxData = null;
   let helpers = null;
   let exportHelpers = null;
+  let cachedDocxData = null;
 
   const getListParagraphs = (result) => {
     const body = result.elements?.find((el) => el.name === 'w:body');
@@ -185,22 +188,16 @@ describe('insertContent (integration) list export', () => {
     return { numId, ilvl };
   };
 
-  const setupEditor = async () => {
-    // Use real content processor for these tests
+  // Load helpers and DOCX data once for all integration tests
+  beforeAll(async () => {
     vi.resetModules();
     vi.doUnmock('../helpers/contentProcessor.js');
+    helpers = await import('../../tests/helpers/helpers.js');
+    cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+    exportHelpers = await import('../../tests/export/export-helpers/index.js');
+  });
 
-    // Cache helpers and DOCX data on first call
-    if (!helpers) {
-      helpers = await import('../../tests/helpers/helpers.js');
-    }
-    if (!cachedDocxData) {
-      cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
-    }
-    if (!exportHelpers) {
-      exportHelpers = await import('../../tests/export/export-helpers/index.js');
-    }
-
+  const setupEditor = () => {
     const { docx, media, mediaFiles, fonts } = cachedDocxData;
     const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
     return editor;
@@ -212,7 +209,7 @@ describe('insertContent (integration) list export', () => {
   };
 
   it('exports ordered list from markdown with numId/ilvl', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     editor.commands.insertContent('1. One\n2. Two', { contentType: 'markdown' });
     await Promise.resolve();
 
@@ -230,7 +227,7 @@ describe('insertContent (integration) list export', () => {
   });
 
   it('exports unordered list from markdown with numId/ilvl', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     editor.commands.insertContent('- Alpha\n- Beta', { contentType: 'markdown' });
     await Promise.resolve();
 
@@ -248,7 +245,7 @@ describe('insertContent (integration) list export', () => {
   });
 
   it('exports ordered list from HTML with numId/ilvl', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     editor.commands.insertContent('<ol><li>First</li><li>Second</li></ol>', { contentType: 'html' });
     await Promise.resolve();
 
@@ -262,7 +259,7 @@ describe('insertContent (integration) list export', () => {
   });
 
   it('inserts markdown heading + bold text without creating a table', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
 
     editor.commands.insertContent('# Hello\n\nSome **bold** text', { contentType: 'markdown' });
     await Promise.resolve();
@@ -280,7 +277,7 @@ describe('insertContent (integration) list export', () => {
   });
 
   it('exports unordered list from HTML with numId/ilvl', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     editor.commands.insertContent('<ul><li>Apple</li><li>Banana</li></ul>', { contentType: 'html' });
     await Promise.resolve();
 
@@ -294,7 +291,7 @@ describe('insertContent (integration) list export', () => {
   });
 
   it('defaults imported HTML tables to 100% width', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     editor.commands.insertContent(
       '<table><tbody><tr><td>Query</td><td>Assessment</td></tr><tr><td>A</td><td>B</td></tr></tbody></table>',
       { contentType: 'html' },
@@ -310,7 +307,7 @@ describe('insertContent (integration) list export', () => {
   });
 
   it('defaults imported markdown tables to 100% width', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     editor.commands.insertContent('| Query | Assessment |\n| --- | --- |\n| A | B |', { contentType: 'markdown' });
     await Promise.resolve();
 
@@ -323,7 +320,7 @@ describe('insertContent (integration) list export', () => {
   });
 
   it('does not inject inline cell borders on imported HTML table headers', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     editor.commands.insertContent(
       '<table><thead><tr><th>Search Query</th><th>Findings / Assessment</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
       { contentType: 'html' },
@@ -358,17 +355,14 @@ describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', 
   let helpers = null;
   let cachedDocxData = null;
 
-  const setupEditor = async () => {
+  beforeAll(async () => {
     vi.resetModules();
     vi.doUnmock('../helpers/contentProcessor.js');
+    helpers = await import('../../tests/helpers/helpers.js');
+    cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+  });
 
-    if (!helpers) {
-      helpers = await import('../../tests/helpers/helpers.js');
-    }
-    if (!cachedDocxData) {
-      cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
-    }
-
+  const setupEditor = () => {
     const { docx, media, mediaFiles, fonts } = cachedDocxData;
     const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
     return editor;
@@ -391,7 +385,7 @@ describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', 
   };
 
   it('insertContent with contentType html creates a horizontal rule', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     expect(countHorizontalRules(editor)).toBe(0);
 
     editor.commands.insertContent('<hr>', { contentType: 'html' });
@@ -400,7 +394,7 @@ describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', 
   });
 
   it('insertContent with contentType markdown creates a horizontal rule', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     expect(countHorizontalRules(editor)).toBe(0);
 
     editor.commands.insertContent('---', { contentType: 'markdown' });
@@ -409,7 +403,7 @@ describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', 
   });
 
   it('insertContent with bare <hr> (no contentType) creates a horizontal rule', async () => {
-    const editor = await setupEditor();
+    const editor = setupEditor();
     expect(countHorizontalRules(editor)).toBe(0);
 
     editor.commands.insertContent('<hr>');

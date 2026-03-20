@@ -19,27 +19,39 @@ function formatPropertyValue(value: unknown): string | null {
   }
 }
 
-export function buildNodePretty(revision: number, headerLabel: string, node: unknown): string {
+export function buildNodePretty(revision: number, headerLabel: string, result: unknown): string {
   const lines: string[] = [`Revision ${revision}: ${headerLabel}`];
-  const record = asRecord(node);
+  const record = asRecord(result);
   if (!record) return lines.join('\n');
 
-  const nodeId = typeof record.nodeId === 'string' ? record.nodeId : '';
-  const nodeType = typeof record.nodeType === 'string' ? record.nodeType : '';
-  if (nodeId.length > 0 || nodeType.length > 0) {
+  // SDNodeResult format: { node: { kind, ... }, address: { nodeId, ... } }
+  const sdNode = asRecord(record.node);
+  const sdAddress = asRecord(record.address);
+
+  const nodeId =
+    (sdAddress && typeof sdAddress.nodeId === 'string' ? sdAddress.nodeId : '') ||
+    (typeof record.nodeId === 'string' ? record.nodeId : '');
+  const nodeKind =
+    (sdNode && typeof sdNode.kind === 'string' ? sdNode.kind : '') ||
+    (typeof record.nodeType === 'string' ? record.nodeType : '');
+
+  if (nodeId.length > 0 || nodeKind.length > 0) {
     const parts: string[] = [];
     if (nodeId.length > 0) parts.push(nodeId);
-    if (nodeType.length > 0) parts.push(`(${nodeType})`);
+    if (nodeKind.length > 0) parts.push(`(${nodeKind})`);
     lines.push(`  ${parts.join(' ')}`);
   }
 
-  const text = typeof record.text === 'string' ? toSingleLine(record.text) : '';
+  // Try to extract text from SDM/1 node structure
+  const text = extractNodeText(sdNode) || (typeof record.text === 'string' ? toSingleLine(record.text) : '');
   if (text.length > 0) {
     lines.push('');
     lines.push(`  Text: "${truncate(text, 80)}"`);
   }
 
-  const properties = asRecord(record.properties);
+  // Check for properties on the node's kind-keyed object (e.g., node.paragraph.props)
+  const kindData = sdNode && typeof sdNode.kind === 'string' ? asRecord(sdNode[sdNode.kind]) : null;
+  const properties = asRecord(kindData?.props) ?? asRecord(record.properties);
   if (!properties) return lines.join('\n');
 
   const formatted = Object.entries(properties)
@@ -56,4 +68,29 @@ export function buildNodePretty(revision: number, headerLabel: string, node: unk
   }
 
   return lines.join('\n');
+}
+
+/** Extract text content from an SDM/1 node. */
+function extractNodeText(node: NodeLike | null): string {
+  if (!node || typeof node.kind !== 'string') return '';
+  const kindData = asRecord(node[node.kind]);
+  if (!kindData) return '';
+
+  // Run nodes: { kind: 'run', run: { text: '...' } }
+  if (node.kind === 'run' && typeof kindData.text === 'string') {
+    return toSingleLine(kindData.text);
+  }
+
+  // Paragraph/heading nodes: collect inline text
+  const inlines = Array.isArray(kindData.inlines) ? kindData.inlines : [];
+  const texts: string[] = [];
+  for (const inline of inlines) {
+    const inlineRecord = asRecord(inline);
+    if (!inlineRecord) continue;
+    if (inlineRecord.kind === 'run') {
+      const runData = asRecord(inlineRecord.run);
+      if (runData && typeof runData.text === 'string') texts.push(runData.text);
+    }
+  }
+  return texts.length > 0 ? toSingleLine(texts.join('')) : '';
 }

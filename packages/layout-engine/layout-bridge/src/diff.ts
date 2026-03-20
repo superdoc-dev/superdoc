@@ -478,6 +478,14 @@ const drawingBlocksEqual = (a: DrawingBlock, b: DrawingBlock): boolean => {
     );
   }
 
+  if (a.drawingKind === 'chart' && b.drawingKind === 'chart') {
+    return (
+      drawingGeometryEqual(a.geometry, b.geometry) &&
+      a.chartRelId === b.chartRelId &&
+      jsonEqual(a.chartData, b.chartData)
+    );
+  }
+
   return true;
 };
 

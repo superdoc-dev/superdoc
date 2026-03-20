@@ -1,12 +1,12 @@
 <script setup>
 import { formatDate } from './helpers';
 import { superdocIcons } from '@superdoc/icons.js';
-import { NDropdown } from 'naive-ui';
 import { computed, getCurrentInstance } from 'vue';
 import { isAllowed, PERMISSIONS } from '@superdoc/core/collaboration/permissions.js';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import Avatar from '@superdoc/components/general/Avatar.vue';
 import { useUiFontFamily } from '@superdoc/composables/useUiFontFamily.js';
+import CommentsDropdown from './CommentsDropdown.vue';
 
 const emit = defineEmits(['resolve', 'reject', 'overflow-select']);
 const commentsStore = useCommentsStore();
@@ -178,17 +178,16 @@ const getCurrentUser = computed(() => {
         @click.stop.prevent="handleReject"
       ></div>
 
-      <n-dropdown
+      <CommentsDropdown
         v-if="allowOverflow"
-        trigger="click"
         :options="getOverflowOptions"
         @select="handleSelect"
         :content-style="{ fontFamily: uiFontFamily }"
       >
-        <div class="overflow-menu__icon" @click.stop.prevent>
+        <div class="overflow-menu__icon">
           <div class="overflow-icon" v-html="superdocIcons.overflow"></div>
         </div>
-      </n-dropdown>
+      </CommentsDropdown>
     </div>
   </div>
 </template>
@@ -210,9 +209,9 @@ const getCurrentUser = computed(() => {
   flex-direction: column;
 }
 .user-name {
-  font-size: var(--sd-comment-author-size, 14px);
-  font-weight: var(--sd-comment-author-weight, 600);
-  color: var(--sd-comment-author-color, #212121);
+  font-size: var(--sd-ui-comments-author-size, 14px);
+  font-weight: var(--sd-ui-comments-author-weight, 600);
+  color: var(--sd-ui-comments-author-text, #212121);
   line-height: 1.2em;
 }
 .imported-tag {
@@ -221,8 +220,8 @@ const getCurrentUser = computed(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--sd-comment-imported-tag-color, var(--sd-color-gray-600, #888888));
-  background: var(--sd-comment-imported-tag-bg, var(--sd-color-gray-200, #f2f2f2));
+  color: var(--sd-ui-comments-tag-text, #888888);
+  background: var(--sd-ui-comments-tag-bg, #f2f2f2);
   border-radius: 3px;
   padding: 1px 4px;
   margin-left: 6px;
@@ -231,8 +230,8 @@ const getCurrentUser = computed(() => {
 }
 .user-timestamp {
   line-height: 1.2em;
-  font-size: var(--sd-comment-time-size, 12px);
-  color: var(--sd-comment-time-color, #888888);
+  font-size: var(--sd-ui-comments-timestamp-size, 12px);
+  color: var(--sd-ui-comments-timestamp-text, #888888);
 }
 .overflow-menu {
   flex-shrink: 1;
@@ -260,7 +259,7 @@ const getCurrentUser = computed(() => {
   transition: all 250ms ease;
 }
 .overflow-menu__icon:hover {
-  background-color: var(--sd-comment-separator, #dbdbdb);
+  background-color: var(--sd-ui-comments-separator, #dbdbdb);
 }
 .overflow-menu__icon :deep(svg) {
   width: 100%;

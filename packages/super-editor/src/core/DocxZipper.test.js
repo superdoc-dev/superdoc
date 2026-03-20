@@ -105,7 +105,92 @@ describe('DocxZipper - UTF-16 XML handling', () => {
     expect(item2.content).toContain('<?xml'); // prolog present
     expect(item2.content).toContain('<properties'); // real tag (no NULs interleaved)
     expect(item2.content).not.toMatch(/\u0000/); // no embedded NULs
-    expect(item2.content.toLowerCase()).toContain('encoding="utf-16"');
+    // ensureXmlString rewrites the stale encoding declaration to UTF-8
+    expect(item2.content).toContain('encoding="UTF-8"');
+    expect(item2.content.toLowerCase()).not.toContain('encoding="utf-16"');
+  });
+
+  it('round-trips UTF-16LE XML through exportFromOriginalFile without corruption', async () => {
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+
+    const customXmlUtf16 = `<?xml version="1.0" encoding="utf-16"?>
+<properties xmlns="http://www.imanage.com/work/xmlschema">
+  <documentid>DOC!123.1</documentid>
+</properties>`;
+    zip.file('customXml/item1.xml', utf16leWithBOM(customXmlUtf16));
+
+    const originalDocxFile = await zip.generateAsync({ type: 'nodebuffer' });
+
+    const result = await zipper.updateZip({
+      docx: [],
+      updatedDocs: {
+        'word/document.xml': '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+      },
+      originalDocxFile,
+      media: {},
+      fonts: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const customXml = await readBack.file('customXml/item1.xml').async('string');
+
+    expect(customXml).toContain('<properties');
+    expect(customXml).toContain('DOC!123.1');
+    expect(customXml).not.toMatch(/\u0000/); // no NUL bytes from garbled UTF-16
+    expect(customXml).toContain('encoding="UTF-8"');
+    expect(customXml.toLowerCase()).not.toContain('encoding="utf-16"');
+  });
+
+  it('preserves binary entries unchanged through exportFromOriginalFile', async () => {
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Default Extension="png" ContentType="image/png"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+
+    // Arbitrary binary bytes (fake PNG header + random data)
+    const binaryData = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xde, 0xad, 0xbe, 0xef]);
+    zip.file('word/media/image1.png', binaryData);
+
+    const originalDocxFile = await zip.generateAsync({ type: 'nodebuffer' });
+
+    const result = await zipper.updateZip({
+      docx: [],
+      updatedDocs: {
+        'word/document.xml': '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+      },
+      originalDocxFile,
+      media: {},
+      fonts: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const imageBytes = await readBack.file('word/media/image1.png').async('uint8array');
+
+    expect(imageBytes).toEqual(binaryData);
   });
 });
 
@@ -257,6 +342,55 @@ describe('DocxZipper - updateContentTypes', () => {
     expect(updatedContentTypes).toContain('/word/footer1.xml');
   });
 
+  it('adds an Override for extensionless image media parts based on detected bytes', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+
+    // Minimal JPEG bytes (SOI marker)
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+    await zipper.updateContentTypes(zip, { 'word/media/300': jpegBytes.buffer }, false, {});
+
+    const updatedContentTypes = await zip.file('[Content_Types].xml').async('string');
+    expect(updatedContentTypes).toContain('PartName="/word/media/300"');
+    expect(updatedContentTypes).toContain('ContentType="image/jpeg"');
+  });
+
+  it('adds an Override for extensionless media stored as a data URI', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+
+    await zipper.updateContentTypes(zip, { 'word/media/abc123': 'data:image/png;base64,iVBOR' }, false, {});
+
+    const updatedContentTypes = await zip.file('[Content_Types].xml').async('string');
+    expect(updatedContentTypes).toContain('PartName="/word/media/abc123"');
+    expect(updatedContentTypes).toContain('ContentType="image/png"');
+  });
+
   it('removes stale comment overrides when updated docs mark comment files as deleted', async () => {
     const zipper = new DocxZipper();
     const zip = new JSZip();
@@ -297,6 +431,22 @@ describe('DocxZipper - updateContentTypes', () => {
 });
 
 describe('DocxZipper - exportFromCollaborativeDocx media handling', () => {
+  it('throws when collaborative export has no original docx entries to rebuild from', async () => {
+    const zipper = new DocxZipper();
+
+    await expect(
+      zipper.updateZip({
+        docx: null,
+        updatedDocs: {
+          'word/document.xml': '<w:document/>',
+        },
+        media: {},
+        fonts: {},
+        isHeadless: true,
+      }),
+    ).rejects.toThrow('Collaborative DOCX export requires base package entries');
+  });
+
   it('handles both base64 string and ArrayBuffer media values', async () => {
     const zipper = new DocxZipper();
 
@@ -394,6 +544,37 @@ describe('DocxZipper - .tif MIME type mapping', () => {
     expect(updatedContentTypes).toContain('ContentType="image/tiff"');
     expect(updatedContentTypes).not.toContain('ContentType="image/tif"');
   });
+
+  it('writes image/jpeg content type for .jpg extensions on export', async () => {
+    const zipper = new DocxZipper();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+
+    const docx = [
+      { name: '[Content_Types].xml', content: contentTypes },
+      { name: 'word/document.xml', content: '<w:document/>' },
+    ];
+
+    const result = await zipper.updateZip({
+      docx,
+      updatedDocs: {},
+      media: { 'word/media/photo.jpg': 'AAAA' },
+      fonts: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const updatedContentTypes = await readBack.file('[Content_Types].xml').async('string');
+
+    expect(updatedContentTypes).toContain('Extension="jpg"');
+    expect(updatedContentTypes).toContain('ContentType="image/jpeg"');
+    expect(updatedContentTypes).not.toContain('ContentType="image/jpg"');
+  });
 });
 
 describe('DocxZipper - .tmp image file detection', () => {
@@ -490,6 +671,79 @@ describe('DocxZipper - .tmp image file detection', () => {
 
     // Should not be in media blob URLs
     expect(zipper.media['word/media/data.tmp']).toBeFalsy();
+  });
+});
+
+describe('DocxZipper - exportFromOriginalFile font preservation', () => {
+  it('includes caller-supplied fonts in the output zip', async () => {
+    const zipper = new DocxZipper();
+    const originalZip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    originalZip.file('[Content_Types].xml', contentTypes);
+    originalZip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+    const originalDocxFile = await originalZip.generateAsync({ type: 'nodebuffer' });
+
+    const fontData = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0xde, 0xad, 0xbe, 0xef]);
+
+    const result = await zipper.updateZip({
+      docx: [],
+      updatedDocs: {
+        'word/document.xml': '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+      },
+      originalDocxFile,
+      media: {},
+      fonts: { 'word/fonts/font1.odttf': fontData },
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const fontBytes = await readBack.file('word/fonts/font1.odttf').async('uint8array');
+    expect(fontBytes).toEqual(fontData);
+
+    // Verify [Content_Types].xml includes the odttf content type
+    const outputContentTypes = await readBack.file('[Content_Types].xml').async('string');
+    expect(outputContentTypes).toContain('Extension="odttf"');
+    expect(outputContentTypes).toContain('application/vnd.openxmlformats-officedocument.obfuscatedFont');
+  });
+
+  it('does not fail when fonts is undefined', async () => {
+    const zipper = new DocxZipper();
+    const originalZip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    originalZip.file('[Content_Types].xml', contentTypes);
+    originalZip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+    const originalDocxFile = await originalZip.generateAsync({ type: 'nodebuffer' });
+
+    const result = await zipper.updateZip({
+      docx: [],
+      updatedDocs: {
+        'word/document.xml': '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+      },
+      originalDocxFile,
+      media: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    expect(readBack.file('word/document.xml')).toBeTruthy();
   });
 });
 

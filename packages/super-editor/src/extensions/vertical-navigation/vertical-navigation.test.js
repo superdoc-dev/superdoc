@@ -4,7 +4,7 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 
 import { Extension } from '@core/Extension.js';
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
-import { VerticalNavigation, VerticalNavigationPluginKey } from './vertical-navigation.js';
+import { VerticalNavigation, VerticalNavigationPluginKey, resolvePositionAtGoalX } from './vertical-navigation.js';
 
 const createSchema = () => {
   const nodes = {
@@ -162,6 +162,79 @@ describe('VerticalNavigation', () => {
     expect(view.state.selection.to).toBe(6);
   });
 
+  it('uses hit test result when it falls within the adjacent line PM range', () => {
+    const { line1, line2 } = createDomStructure();
+    // Set PM range on the adjacent line
+    line2.dataset.pmStart = '3';
+    line2.dataset.pmEnd = '8';
+    vi.spyOn(line2, 'getBoundingClientRect').mockReturnValue({
+      top: 200,
+      left: 0,
+      right: 0,
+      bottom: 220,
+      width: 0,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    // Hit test returns pos 5, which is within [3, 8] — should use it directly
+    presentationEditor.hitTest.mockReturnValue({ pos: 5 });
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(view.state.selection.head).toBe(5);
+    // resolvePositionAtGoalX (computeCaretLayoutRect) should NOT have been called
+    // for position resolution — only for initial goalX
+    expect(presentationEditor.computeCaretLayoutRect).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to resolvePositionAtGoalX when hit test lands outside PM range', () => {
+    const { line1, line2 } = createDomStructure();
+    // Set PM range on the adjacent line
+    line2.dataset.pmStart = '3';
+    line2.dataset.pmEnd = '8';
+    vi.spyOn(line2, 'getBoundingClientRect').mockReturnValue({
+      top: 200,
+      left: 0,
+      right: 0,
+      bottom: 220,
+      width: 0,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    // Hit test returns pos 100, way outside [3, 8] — should trigger fallback
+    presentationEditor.hitTest.mockReturnValue({ pos: 100 });
+    // computeCaretLayoutRect is called by fallback binary search
+    presentationEditor.computeCaretLayoutRect.mockImplementation((pos) => ({
+      x: (pos - 3) * 10,
+      y: 200,
+      height: 10,
+      pageIndex: 0,
+    }));
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
+
+    expect(handled).toBe(true);
+    // Should have resolved to a position within [3, 8], not 100
+    const head = view.state.selection.head;
+    expect(head).toBeGreaterThanOrEqual(3);
+    expect(head).toBeLessThanOrEqual(8);
+    // Binary search should have called computeCaretLayoutRect multiple times
+    expect(presentationEditor.computeCaretLayoutRect.mock.calls.length).toBeGreaterThan(1);
+  });
+
   it('resets goalX on pointer-driven selection changes', () => {
     const { plugin, view } = createEnvironment();
 
@@ -170,5 +243,59 @@ describe('VerticalNavigation', () => {
 
     const dispatchedTr = view.dispatch.mock.calls[0][0];
     expect(dispatchedTr.getMeta(VerticalNavigationPluginKey)).toMatchObject({ type: 'reset-goal-x' });
+  });
+});
+
+describe('resolvePositionAtGoalX', () => {
+  const makeEditor = (rectFn) => ({
+    presentationEditor: { computeCaretLayoutRect: rectFn },
+  });
+
+  it('returns the position whose X is closest to goalX', () => {
+    // Simulate 5 positions (10-14) with X values 0, 10, 20, 30, 40
+    const editor = makeEditor((pos) => ({ x: (pos - 10) * 10 }));
+    const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+    // Position 12 has x=20 (dist=5), position 13 has x=30 (dist=5).
+    // Binary search encounters 12 first so it becomes bestPos.
+    expect(result).toEqual({ pos: 12 });
+  });
+
+  it('returns exact match when goalX lands on a position', () => {
+    const editor = makeEditor((pos) => ({ x: (pos - 10) * 10 }));
+    const result = resolvePositionAtGoalX(editor, 10, 14, 20);
+    expect(result).toEqual({ pos: 12 });
+  });
+
+  it('returns pmStart when goalX is before all positions', () => {
+    const editor = makeEditor((pos) => ({ x: pos * 10 }));
+    const result = resolvePositionAtGoalX(editor, 5, 10, -100);
+    expect(result).toEqual({ pos: 5 });
+  });
+
+  it('returns pmEnd when goalX is past all positions', () => {
+    const editor = makeEditor((pos) => ({ x: pos * 10 }));
+    const result = resolvePositionAtGoalX(editor, 5, 10, 9999);
+    expect(result).toEqual({ pos: 10 });
+  });
+
+  it('skips positions where computeCaretLayoutRect returns null', () => {
+    // Position 12 returns null (inline node boundary), others are normal
+    const editor = makeEditor((pos) => (pos === 12 ? null : { x: (pos - 10) * 10 }));
+    const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+    // Should still find a valid position, not fall back to pmStart
+    expect(result.pos).toBeGreaterThan(10);
+  });
+
+  it('handles all-null positions gracefully', () => {
+    const editor = makeEditor(() => null);
+    const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+    // Falls back to pmStart since no positions are measurable
+    expect(result).toEqual({ pos: 10 });
+  });
+
+  it('handles single-position range', () => {
+    const editor = makeEditor((pos) => ({ x: 50 }));
+    const result = resolvePositionAtGoalX(editor, 10, 10, 50);
+    expect(result).toEqual({ pos: 10 });
   });
 });

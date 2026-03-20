@@ -73,6 +73,45 @@ export type ClaimResult = { granted: true } | { granted: false; competitor: Obse
 export type RaceDetectionResult = { raceSuspected: false } | { raceSuspected: true; competitor: ObservedCompetitor };
 
 // ---------------------------------------------------------------------------
+// Post-sync content settling
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum time (ms) to wait for the XmlFragment to be populated after the
+ * provider reports "synced". Some providers fire the synced event before Yjs
+ * updates are fully applied to local shared types. This brief window avoids
+ * false-empty room detection that leads to destructive re-seeding (SD-2138).
+ */
+const CONTENT_SETTLING_MAX_MS = 200;
+
+/**
+ * After the collaboration provider reports "synced", wait briefly for the
+ * XmlFragment to be populated. Returns immediately if content is already
+ * present, or after CONTENT_SETTLING_MAX_MS if nothing arrives.
+ */
+export function waitForContentSettling(ydoc: YDoc, maxWaitMs: number = CONTENT_SETTLING_MAX_MS): Promise<void> {
+  if (detectRoomState(ydoc) === 'populated') return Promise.resolve();
+
+  const fragment = ydoc.getXmlFragment('supereditor');
+
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      fragment.unobserve(observer);
+      resolve();
+    }, maxWaitMs);
+
+    const observer = () => {
+      if (fragment.length > 0) {
+        clearTimeout(timeout);
+        fragment.unobserve(observer);
+        resolve();
+      }
+    };
+    fragment.observe(observer);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Room state detection
 // ---------------------------------------------------------------------------
 
@@ -120,6 +159,16 @@ export function resolveBootstrapDecision(
 // ---------------------------------------------------------------------------
 // Bootstrap marker
 // ---------------------------------------------------------------------------
+
+/**
+ * Remove the bootstrap marker from the meta map. Used when a claim winner
+ * discovers the room is already populated and joins instead of seeding —
+ * leaving a stale pending marker would cause future reconnects to
+ * misdetect the room as empty (SD-2138).
+ */
+export function clearBootstrapMarker(ydoc: YDoc): void {
+  ydoc.getMap('meta').delete('bootstrap');
+}
 
 export function writeBootstrapMarker(ydoc: YDoc, source: string): void {
   const metaMap = ydoc.getMap('meta');
@@ -182,6 +231,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+function nextTimerTurn(): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap claim
 // ---------------------------------------------------------------------------
@@ -209,8 +262,10 @@ export async function claimBootstrap(
   settlingMs: number,
   jitterMs: number = DEFAULT_BOOTSTRAP_JITTER_MS,
 ): Promise<ClaimResult> {
+  const jitterDelayMs = Math.floor(Math.random() * jitterMs);
+
   // Random jitter reduces perfect-collision starts between concurrent clients.
-  await sleep(Math.floor(Math.random() * jitterMs));
+  if (jitterDelayMs > 0) await sleep(jitterDelayMs);
 
   const metaMap = ydoc.getMap('meta');
   metaMap.set('bootstrap', {
@@ -222,7 +277,16 @@ export async function claimBootstrap(
 
   const observer = observeCompetitor(ydoc);
   try {
-    await sleep(settlingMs);
+    if (settlingMs > 0) {
+      await sleep(settlingMs);
+
+      // Give already-due timer callbacks one more turn to run before the
+      // final ownership check. This makes bootstrap claiming more
+      // conservative under event-loop jitter, where a competing marker can
+      // be queued before the settling window ends but execute immediately
+      // after our sleep resolves.
+      await nextTimerTurn();
+    }
 
     const competitor = observer.getCompetitor();
     if (competitor) return { granted: false, competitor };

@@ -20,6 +20,16 @@ class _AsyncRuntimeStub:
 
 class _SyncEnvelopeRuntimeStub:
     def invoke(self, operation_id, params, **_kwargs):
+        if operation_id == "doc.find":
+            return {
+                "document": {"path": "x.docx"},
+                "result": {
+                    "evaluatedRevision": "1",
+                    "total": 1,
+                    "items": [{"id": "f-1", "handle": {"ref": "f-1"}, "address": {"kind": "block"}}],
+                    "page": {"limit": 1, "offset": 0, "returned": 1},
+                },
+            }
         if operation_id == "doc.getMarkdown":
             return {"document": {"path": "x.docx"}, "markdown": "# Hello"}
         if operation_id == "doc.getText":
@@ -30,6 +40,16 @@ class _SyncEnvelopeRuntimeStub:
 
 
 async def _async_invoke_with_envelopes(operation_id, params, **_kwargs):
+    if operation_id == "doc.find":
+        return {
+            "document": {"path": "x.docx"},
+            "result": {
+                "evaluatedRevision": "1",
+                "total": 1,
+                "items": [{"id": "f-1", "handle": {"ref": "f-1"}, "address": {"kind": "block"}}],
+                "page": {"limit": 1, "offset": 0, "returned": 1},
+            },
+        }
     if operation_id == "doc.getMarkdown":
         return {"document": {"path": "x.docx"}, "markdown": "# Hello"}
     if operation_id == "doc.getText":
@@ -84,6 +104,9 @@ def test_sync_doc_api_unwraps_string_envelopes():
     from superdoc.generated.client import _SyncDocApi
 
     doc = _SyncDocApi(_SyncEnvelopeRuntimeStub())
+    find = doc.find({})
+    assert isinstance(find, dict)
+    assert find.get("items")
     assert doc.get_markdown({}) == "# Hello"
     assert doc.get_text({}) == "Hello"
     assert doc.get_html({}) == "<p>Hello</p>"
@@ -93,6 +116,9 @@ def test_async_doc_api_unwraps_string_envelopes():
     from superdoc.generated.client import _AsyncDocApi
 
     doc = _AsyncDocApi(_AsyncEnvelopeRuntimeStub())
+    find = asyncio.run(doc.find({}))
+    assert isinstance(find, dict)
+    assert find.get("items")
     assert asyncio.run(doc.get_markdown({})) == "# Hello"
     assert asyncio.run(doc.get_text({})) == "Hello"
     assert asyncio.run(doc.get_html({})) == "<p>Hello</p>"

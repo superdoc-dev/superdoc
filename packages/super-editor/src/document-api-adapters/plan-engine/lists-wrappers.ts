@@ -37,12 +37,16 @@ import type {
   ListsSetLevelRestartInput,
   ListsConvertToTextInput,
   ListsConvertToTextResult,
+  ListTemplate,
+  ListPresetId,
   MutationOptions,
   ReceiptFailureCode,
+  PlanReceipt,
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, ensureTrackedCapability, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
+import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
 import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js';
 import {
@@ -55,6 +59,7 @@ import {
   resolveBlock,
   resolveBlocksInRange,
   getAbstractNumId,
+  getAllListItemProjections,
   getContiguousSequence,
   getSequenceFromTarget,
   isFirstInSequence,
@@ -65,7 +70,11 @@ import {
   evaluateCanContinuePrevious,
 } from '../helpers/list-sequence-helpers.js';
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
+import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
 import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
+import { syncNumberingToXmlTree } from '../../core/parts/adapters/numbering-part-descriptor.js';
+import { getPart } from '../../core/parts/store/part-store.js';
+import type { PartId } from '../../core/parts/types.js';
 
 // ---------------------------------------------------------------------------
 // Command types
@@ -103,6 +112,41 @@ function dispatchEditorTransaction(editor: Editor, tr: unknown): void {
     'Cannot apply list mutation because no transaction dispatcher is available.',
     { reason: 'missing_dispatch' },
   );
+}
+
+type NumberingModel = Parameters<typeof syncNumberingToXmlTree>[1];
+
+function getConverterNumbering(editor: Editor): NumberingModel {
+  return (
+    editor as unknown as {
+      converter?: { numbering: NumberingModel };
+    }
+  ).converter!.numbering;
+}
+
+/**
+ * Execute a domain command with automatic numbering rollback.
+ *
+ * Wraps the handler in a compound mutation that snapshots
+ * `word/numbering.xml` and converter metadata. If the PM dispatch
+ * inside the handler fails, all numbering changes are rolled back.
+ */
+function executeDomainCommandWithRollback(
+  editor: Editor,
+  handler: () => boolean,
+  options?: { expectedRevision?: string },
+): PlanReceipt {
+  let receipt!: PlanReceipt;
+  compoundMutation({
+    editor,
+    source: 'lists',
+    affectedParts: ['word/numbering.xml'],
+    execute() {
+      receipt = executeDomainCommand(editor, handler, options);
+      return receipt.steps[0]?.effect === 'changed';
+    },
+  });
+  return receipt;
 }
 
 function resolveInsertedListItem(editor: Editor, sdBlockId: string): ListItemProjection {
@@ -371,6 +415,73 @@ export function listsOutdentWrapper(
 // New SD-1272 mutations
 // ---------------------------------------------------------------------------
 
+/** Ordered presets map to 'ordered' kind, bullet presets to 'bullet'. */
+const PRESET_KIND_MAP: Record<string, 'ordered' | 'bullet'> = {
+  decimal: 'ordered',
+  decimalParenthesis: 'ordered',
+  lowerLetter: 'ordered',
+  upperLetter: 'ordered',
+  lowerRoman: 'ordered',
+  upperRoman: 'ordered',
+  disc: 'bullet',
+  circle: 'bullet',
+  square: 'bullet',
+  dash: 'bullet',
+};
+
+/**
+ * Resolve the effective list kind from the create input.
+ * Returns the kind or a failure result.
+ */
+function resolveCreateKind(input: ListsCreateInput): { kind: 'ordered' | 'bullet' } | { failure: ListsCreateResult } {
+  const raw = input as Record<string, unknown>;
+
+  // style and preset cannot both be provided
+  if (raw.style != null && raw.preset != null) {
+    return { failure: toListsFailure('INVALID_INPUT', 'Cannot provide both style and preset.', {}) };
+  }
+
+  if (raw.preset != null) {
+    const presetKind = PRESET_KIND_MAP[raw.preset as string];
+    if (!presetKind) {
+      return { failure: toListsFailure('INVALID_INPUT', `Unknown preset: ${raw.preset}.`, { preset: raw.preset }) };
+    }
+    if (raw.kind != null && raw.kind !== presetKind) {
+      return {
+        failure: toListsFailure(
+          'INVALID_INPUT',
+          `Preset kind (${presetKind}) conflicts with provided kind (${raw.kind}).`,
+          {
+            preset: raw.preset,
+            kind: raw.kind,
+          },
+        ),
+      };
+    }
+    return { kind: presetKind };
+  }
+
+  if (raw.style != null) {
+    // When style is provided, kind is required
+    if (raw.kind == null) {
+      return { failure: toListsFailure('INVALID_INPUT', 'kind is required when style is provided.', {}) };
+    }
+    return { kind: raw.kind as 'ordered' | 'bullet' };
+  }
+
+  // Neither style nor preset — kind is required
+  if (raw.kind == null) {
+    return {
+      failure: toListsFailure('INVALID_INPUT', 'kind is required when neither preset nor style is provided.', {}),
+    };
+  }
+  return { kind: raw.kind as 'ordered' | 'bullet' };
+}
+
+function isListKind(value: unknown): value is 'ordered' | 'bullet' {
+  return value === 'ordered' || value === 'bullet';
+}
+
 export function listsCreateWrapper(
   editor: Editor,
   input: ListsCreateInput,
@@ -395,54 +506,35 @@ export function listsCreateWrapper(
     return toListsFailure('LEVEL_OUT_OF_RANGE', 'Level must be between 0 and 8.', { level });
   }
 
-  const listType = input.kind === 'ordered' ? 'orderedList' : 'bulletList';
+  // Resolve style template to apply (if any)
+  let styleTemplate: ListTemplate | undefined;
+  if (raw.style != null) {
+    styleTemplate = raw.style as ListTemplate;
+    if (styleTemplate.version !== 1) {
+      return toListsFailure('INVALID_INPUT', 'Unsupported style version.', { version: styleTemplate.version });
+    }
+  } else if (raw.preset != null) {
+    styleTemplate = LevelFormattingHelpers.getPresetTemplate(raw.preset as string) as ListTemplate | undefined;
+    if (!styleTemplate) {
+      return toListsFailure('INVALID_INPUT', `Unknown preset: ${raw.preset}.`, { preset: raw.preset });
+    }
+  }
 
+  // Resolve target blocks — narrowing via the mode discriminant
+  let blocks: ReturnType<typeof resolveBlock>[];
   if (input.mode === 'empty') {
-    const block = resolveBlock(editor, input.at.nodeId);
-    if (block.nodeType === 'listItem') {
-      return toListsFailure('INVALID_TARGET', 'Target paragraph is already a list item.', { target: input.at });
-    }
-
-    if (options?.dryRun) {
-      return { success: true, listId: '(dry-run)', item: { kind: 'block', nodeType: 'listItem', nodeId: '(dry-run)' } };
-    }
-
-    let numId: number | undefined;
-    const receipt = executeDomainCommand(
-      editor,
-      () => {
-        numId = ListHelpers.getNewListId(editor);
-        ListHelpers.generateNewListDefinition({ numId, listType, editor });
-        const { tr } = editor.state;
-        updateNumberingProperties({ numId, ilvl: level }, block.node, block.pos, editor, tr);
-        dispatchEditorTransaction(editor, tr);
-        clearIndexCache(editor);
-        return true;
-      },
-      { expectedRevision: options?.expectedRevision },
-    );
-
-    if (receipt.steps[0]?.effect !== 'changed') {
-      return toListsFailure('INVALID_TARGET', 'List creation could not be applied.', { mode: input.mode });
-    }
-
-    return {
-      success: true,
-      listId: `${numId!}:${block.nodeId}`,
-      item: { kind: 'block', nodeType: 'listItem', nodeId: block.nodeId },
-    };
+    blocks = [resolveBlock(editor, input.at.nodeId)];
+  } else {
+    blocks = isBlockRange(input.target)
+      ? resolveBlocksInRange(editor, input.target.from.nodeId, input.target.to.nodeId)
+      : [resolveBlock(editor, input.target.nodeId)];
   }
 
-  // mode: 'fromParagraphs'
-  const targets = isBlockRange(input.target)
-    ? resolveBlocksInRange(editor, input.target.from.nodeId, input.target.to.nodeId)
-    : [resolveBlock(editor, input.target.nodeId)];
-
-  if (targets.length === 0) {
-    return toListsFailure('INVALID_TARGET', 'No paragraphs found in the specified range.', { target: input.target });
+  if (blocks.length === 0) {
+    return toListsFailure('INVALID_TARGET', 'No paragraphs found in the specified range.', {});
   }
 
-  const alreadyListItem = targets.find((t) => t.nodeType === 'listItem');
+  const alreadyListItem = blocks.find((t) => t.nodeType === 'listItem');
   if (alreadyListItem) {
     return toListsFailure('INVALID_TARGET', 'One or more target paragraphs are already list items.', {
       nodeId: alreadyListItem.nodeId,
@@ -453,22 +545,107 @@ export function listsCreateWrapper(
     return {
       success: true,
       listId: '(dry-run)',
-      item: { kind: 'block', nodeType: 'listItem', nodeId: targets[0]!.nodeId },
+      item: { kind: 'block', nodeType: 'listItem', nodeId: blocks[0]!.nodeId },
     };
   }
 
+  // Sequence mode resolution
+  const sequenceInput = (raw.sequence as { mode: string; startAt?: number } | undefined) ?? { mode: 'new' };
+  const requestedKind = raw.kind;
+  if (requestedKind != null && !isListKind(requestedKind)) {
+    return toListsFailure('INVALID_INPUT', `Unknown list kind: ${String(requestedKind)}.`, { kind: requestedKind });
+  }
+
+  let kind: 'ordered' | 'bullet' | undefined;
+  let listType: 'orderedList' | 'bulletList' | undefined;
+
+  if (sequenceInput.mode !== 'continuePrevious') {
+    const kindResult = resolveCreateKind(input);
+    if ('failure' in kindResult) return kindResult.failure;
+    kind = kindResult.kind;
+    listType = kind === 'ordered' ? 'orderedList' : 'bulletList';
+  } else {
+    kind = requestedKind as 'ordered' | 'bullet' | undefined;
+  }
+
+  // Pre-flight continuePrevious compatibility BEFORE any mutations.
+  // continuePrevious binds the new paragraphs to an existing sequence's
+  // numId — applying a different style/preset is contradictory since the
+  // formatting comes from the previous sequence's definition.
+  let continuePreviousNumId: number | undefined;
+  if (sequenceInput.mode === 'continuePrevious') {
+    if (styleTemplate) {
+      return toListsFailure(
+        'INVALID_INPUT',
+        'preset/style cannot be combined with sequence.mode "continuePrevious". ' +
+          'The new items inherit formatting from the previous sequence.',
+        {},
+      );
+    }
+
+    const allItems = getAllListItemProjections(editor);
+    const firstBlockPos = blocks[0]!.pos;
+    for (let i = allItems.length - 1; i >= 0; i--) {
+      const item = allItems[i]!;
+      if (item.candidate.pos >= firstBlockPos) continue;
+      if (item.numId == null) continue;
+      if (kind != null && item.kind !== kind) continue;
+      continuePreviousNumId = item.numId;
+      break;
+    }
+    if (continuePreviousNumId == null) {
+      return toListsFailure('NO_COMPATIBLE_PREVIOUS', 'No compatible previous list sequence found.', {});
+    }
+  }
+
   let numId: number | undefined;
-  const receipt = executeDomainCommand(
+
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
-      numId = ListHelpers.getNewListId(editor);
-      ListHelpers.generateNewListDefinition({ numId, listType, editor });
-      const { tr } = editor.state;
-      for (const block of targets) {
-        updateNumberingProperties({ numId, ilvl: level }, block.node, block.pos, editor, tr);
+      if (sequenceInput.mode === 'continuePrevious') {
+        // Use the previous sequence's numId directly — no fresh allocation,
+        // no orphan definitions. Style/preset is NOT applied to the previous
+        // sequence (the plan says preset/style applies to the new list only,
+        // not as a constraint on the previous sequence's formatting).
+        numId = continuePreviousNumId!;
+
+        const { tr } = editor.state;
+        for (const block of blocks) {
+          updateNumberingProperties({ numId, ilvl: level }, block.node, block.pos, editor, tr);
+        }
+        dispatchEditorTransaction(editor, tr);
+        clearIndexCache(editor);
+      } else {
+        // mode: 'new' — allocate a fresh definition
+        numId = ListHelpers.getNewListId(editor);
+        ListHelpers.generateNewListDefinition({ numId, listType: listType!, editor });
+
+        // Apply style/preset template if provided
+        if (styleTemplate) {
+          const abstractNumId = getAbstractNumId(editor, numId!);
+          if (abstractNumId != null) {
+            LevelFormattingHelpers.applyTemplateToAbstract(editor, abstractNumId, styleTemplate, undefined);
+            const numberingPart = getPart(editor, 'word/numbering.xml' as PartId);
+            if (numberingPart) {
+              syncNumberingToXmlTree(numberingPart, getConverterNumbering(editor));
+            }
+          }
+        }
+
+        // Convert paragraphs to list items
+        const { tr } = editor.state;
+        for (const block of blocks) {
+          updateNumberingProperties({ numId: numId!, ilvl: level }, block.node, block.pos, editor, tr);
+        }
+        dispatchEditorTransaction(editor, tr);
+        clearIndexCache(editor);
+
+        if (sequenceInput.startAt != null) {
+          ListHelpers.setLvlOverride(editor, numId!, level, { startOverride: sequenceInput.startAt });
+        }
       }
-      dispatchEditorTransaction(editor, tr);
-      clearIndexCache(editor);
+
       return true;
     },
     { expectedRevision: options?.expectedRevision },
@@ -480,8 +657,8 @@ export function listsCreateWrapper(
 
   return {
     success: true,
-    listId: `${numId!}:${targets[0]!.nodeId}`,
-    item: { kind: 'block', nodeType: 'listItem', nodeId: targets[0]!.nodeId },
+    listId: `${numId!}:${blocks[0]!.nodeId}`,
+    item: { kind: 'block', nodeType: 'listItem', nodeId: blocks[0]!.nodeId },
   };
 }
 
@@ -677,7 +854,7 @@ export function listsSeparateWrapper(
   }
 
   let newNumId: number | undefined;
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       const result = ListHelpers.createNumDefinition(editor, abstractNumId, {
@@ -744,7 +921,7 @@ export function listsSetValueWrapper(
       return toListsFailure('NO_OP', 'No startOverride to remove.', { target: input.target });
     }
 
-    const receipt = executeDomainCommand(
+    const receipt = executeDomainCommandWithRollback(
       editor,
       () => {
         ListHelpers.removeLvlOverride(editor, target.numId!, level);
@@ -765,7 +942,7 @@ export function listsSetValueWrapper(
 
   if (isFirst) {
     // Simple case: set startOverride on existing numId
-    const receipt = executeDomainCommand(
+    const receipt = executeDomainCommandWithRollback(
       editor,
       () => {
         ListHelpers.setLvlOverride(editor, target.numId!, level, { startOverride: input.value as number });
@@ -792,7 +969,7 @@ export function listsSetValueWrapper(
 
   const itemsToReassign = getSequenceFromTarget(editor, target);
 
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       // 1. Create new numId pointing to same abstract, copying overrides
@@ -864,7 +1041,7 @@ export function listsContinuePreviousWrapper(
   const sequence = getContiguousSequence(editor, target);
   const level = target.level ?? 0;
 
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       // Remove startOverride on target's level (if any)
@@ -917,7 +1094,7 @@ export function listsSetLevelRestartWrapper(
 
   const scope = input.scope ?? 'definition';
 
-  const receipt = executeDomainCommand(
+  const receipt = executeDomainCommandWithRollback(
     editor,
     () => {
       if (scope === 'instance') {

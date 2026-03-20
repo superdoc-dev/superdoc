@@ -32,12 +32,15 @@ import {
   hydrateImageBlocks,
   handleParagraphNode,
 } from './converters/index.js';
+import { chartNodeToDrawingBlock, handleChartNode } from './converters/chart.js';
 import {
   handleTableOfContentsNode,
   handleIndexNode,
   handleStructuredContentBlockNode,
   handleDocumentSectionNode,
   handleDocumentPartObjectNode,
+  handleBibliographyNode,
+  handleTableOfAuthoritiesNode,
 } from './sdt/index.js';
 import type {
   PMNode,
@@ -68,11 +71,14 @@ export const nodeHandlers: Record<string, NodeHandler> = {
   documentSection: handleDocumentSectionNode,
   table: handleTableNode,
   documentPartObject: handleDocumentPartObjectNode,
+  bibliography: handleBibliographyNode,
+  tableOfAuthorities: handleTableOfAuthoritiesNode,
   image: handleImageNode,
   vectorShape: handleVectorShapeNode,
   shapeGroup: handleShapeGroupNode,
   shapeContainer: handleShapeContainerNode,
   shapeTextbox: handleShapeTextboxNode,
+  chart: handleChartNode,
 };
 
 const converters: NestedConverters = {
@@ -82,6 +88,7 @@ const converters: NestedConverters = {
   shapeGroupNodeToDrawingBlock,
   shapeContainerNodeToDrawingBlock,
   shapeTextboxNodeToDrawingBlock,
+  chartNodeToDrawingBlock,
   tableNodeToBlock,
   paragraphToFlowBlocks,
 };
@@ -196,6 +203,8 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     converters,
     themeColors,
     flowBlockCache,
+    trackedListMarkerOffsets: new Map<string, number>(),
+    trackedListLastOrdinals: new Map<string, number>(),
   };
 
   // Process nodes using handler dispatch pattern

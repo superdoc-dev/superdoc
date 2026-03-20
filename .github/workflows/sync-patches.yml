@@ -1,7 +1,9 @@
-name: 🔄 Sync Patches [disabled]
+name: 🔄 Sync stable → main
 
 on:
-  # Disabled to stop automatic PRs syncing stable/*.x back to main.
+  push:
+    branches:
+      - stable
   workflow_dispatch:
 
 permissions:
@@ -10,9 +12,9 @@ permissions:
 
 jobs:
   sync-to-main:
-    # Short-circuit to fully disable the workflow.
-    if: ${{ false }}
     runs-on: ubuntu-latest
+    # Skip release commits (chore(release): ... [skip ci]) to avoid noisy no-op PRs
+    if: "!contains(github.event.head_commit.message, '[skip ci]') || github.event_name == 'workflow_dispatch'"
 
     steps:
       - name: Generate token
@@ -27,31 +29,109 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
 
-      - name: Create sync PR
+      - name: Sync stable into main
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Create patch branch
-          PATCH_BRANCH="sync-patch-${{ github.sha }}"
-          git checkout -b "$PATCH_BRANCH" origin/main
+          SYNC_BRANCH="sync/stable-to-main-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$SYNC_BRANCH" origin/main
 
-          # Cherry-pick the commit
-          if git cherry-pick "${{ github.sha }}"; then
-            git push origin "$PATCH_BRANCH"
-            
-            # Create PR
+          # Merge stable into the branch
+          if git merge origin/stable --no-edit -m "chore: merge stable into main"; then
+            # Check if there are actually new commits to sync
+            if git diff --quiet origin/main; then
+              echo "No changes to sync — stable and main are already in sync."
+              exit 0
+            fi
+
+            git push origin "$SYNC_BRANCH"
+
+            # Check for existing open sync PR
+            EXISTING=$(gh pr list --base main --head "$SYNC_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
+            if [ -n "$EXISTING" ]; then
+              echo "Sync PR #$EXISTING already exists."
+              exit 0
+            fi
+
             gh pr create \
               --base main \
-              --head "$PATCH_BRANCH" \
-              --title "🔄 Sync: ${{ github.event.head_commit.message }}" \
-              --body "Auto-sync patch from ${{ github.ref_name }}
-              
-              Commit: ${{ github.sha }}
-              
-              ---
-              _This PR was automatically created to sync a patch to main._" \
+              --head "$SYNC_BRANCH" \
+              --title "🔄 Sync stable → main" \
+              --body "$(cat <<'EOF'
+          ## Summary
+          Merges latest stable patches into main to keep branches in sync.
+
+          This ensures `@next` prereleases stay ahead of `@latest` releases.
+
+          ---
+          _Auto-created by sync-patches workflow._
+          EOF
+              )" \
               --label "patch-sync"
+
+            echo "✅ Created sync PR"
+          else
+            echo "Merge conflict — attempting auto-resolution of release artifacts..."
+
+            # Auto-resolve expected conflicts: package.json version and CHANGELOG.md.
+            # For these files, keep main's version (semantic-release manages them per-branch).
+            for f in packages/superdoc/package.json packages/superdoc/CHANGELOG.md; do
+              if git diff --name-only --diff-filter=U | grep -qF "$f"; then
+                echo "  Auto-resolving $f (keeping main's version)"
+                git checkout --ours "$f"
+                git add "$f"
+              fi
+            done
+
+            # Check if all conflicts are resolved
+            if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
+              git commit --no-edit
+              git push origin "$SYNC_BRANCH"
+
+              gh pr create \
+                --base main \
+                --head "$SYNC_BRANCH" \
+                --title "🔄 Sync stable → main" \
+                --body "$(cat <<'EOF'
+          ## Summary
+          Merges latest stable patches into main to keep branches in sync.
+
+          Release artifact conflicts (package.json version, CHANGELOG.md) were auto-resolved.
+
+          ---
+          _Auto-created by sync-patches workflow._
+          EOF
+                )" \
+                --label "patch-sync"
+
+              echo "✅ Created sync PR (release conflicts auto-resolved)"
+            else
+              echo "⚠️ Unresolved conflicts remain — creating PR for manual resolution."
+
+              # Commit with conflict markers so the PR is reviewable
+              git add -A
+              git commit -m "chore: merge stable into main (conflicts need resolution)"
+              git push origin "$SYNC_BRANCH"
+
+              gh pr create \
+                --base main \
+                --head "$SYNC_BRANCH" \
+                --title "🔄 Sync stable → main (conflicts)" \
+                --body "$(cat <<'EOF'
+          ## Summary
+          Merges latest stable patches into main. **Has merge conflicts that need manual resolution.**
+
+          Release artifact conflicts were auto-resolved, but other conflicts remain.
+
+          ---
+          _Auto-created by sync-patches workflow._
+          EOF
+                )" \
+                --label "patch-sync"
+
+              echo "⚠️ Created sync PR with conflicts"
+            fi
           fi

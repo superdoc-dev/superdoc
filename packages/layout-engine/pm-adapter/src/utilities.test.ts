@@ -836,6 +836,40 @@ describe('Media Utilities', () => {
       const result = hydrateImageBlocks(blocks, mediaFiles);
       expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
     });
+
+    it('handles Uint8Array media values from persistence layers', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'media/image.png',
+          runs: [],
+        },
+      ];
+      // Persistence layers (e.g., Y.js binary encoding) may return Uint8Array
+      const base64String = 'iVBORw0KGgoAAAANS';
+      const mediaFiles = { 'media/image.png': new TextEncoder().encode(base64String) };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
+    });
+
+    it('handles Uint8Array data URI values from persistence layers', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'media/image.png',
+          runs: [],
+        },
+      ];
+      // Data URI stored as Uint8Array
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANS';
+      const mediaFiles = { 'media/image.png': new TextEncoder().encode(dataUri) };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
+    });
   });
 
   describe('hydrateImageBlocks - ShapeGroup image hydration', () => {

@@ -27,4 +27,17 @@ describe('use-comment', () => {
       hasCommentsIds: true,
     });
   });
+
+  it('returns the latest docxCommentJSON value from getValues()', () => {
+    const comment = useComment({
+      commentId: 'comment-2',
+      docxCommentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'old' }] }],
+    });
+
+    const updatedDocxCommentJSON = [{ type: 'paragraph', content: [{ type: 'text', text: 'new' }] }];
+    comment.docxCommentJSON = updatedDocxCommentJSON;
+
+    const values = comment.getValues();
+    expect(values.docxCommentJSON).toEqual(updatedDocxCommentJSON);
+  });
 });

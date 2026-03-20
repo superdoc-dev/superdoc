@@ -4,6 +4,7 @@
  * Consumers should prefer checking `error.code` over `instanceof` for resilience
  * across package boundaries and bundling scenarios.
  */
+
 export class DocumentApiValidationError extends Error {
   readonly code: string;
   readonly details?: Record<string, unknown>;

@@ -19,6 +19,7 @@ import {
   extractBodyPrProperties,
 } from './textbox-content-helpers.js';
 import { parseRelativeHeight } from './relative-height.js';
+import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -310,6 +311,10 @@ export function handleImageNode(node, params, isAnchor) {
     return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isHidden);
   }
 
+  if (uri === CHART_URI) {
+    return handleChartDrawing(params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isAnchor);
+  }
+
   const picture = graphicData?.elements.find((el) => el.name === 'pic:pic');
   if (!picture || !picture.elements) {
     return null;
@@ -321,8 +326,18 @@ export function handleImageNode(node, params, isAnchor) {
     return null;
   }
 
-  // Check for image effects (grayscale, etc.)
+  // Check for image effects (grayscale, luminance, etc.)
   const hasGrayscale = blip.elements?.some((el) => el.name === 'a:grayscl');
+  const lumEl = blip.elements?.find((el) => el.name === 'a:lum');
+  const rawBright = Number(lumEl?.attributes?.bright);
+  const rawContrast = Number(lumEl?.attributes?.contrast);
+  const lum =
+    Number.isFinite(rawBright) || Number.isFinite(rawContrast)
+      ? {
+          ...(Number.isFinite(rawBright) ? { bright: rawBright } : {}),
+          ...(Number.isFinite(rawContrast) ? { contrast: rawContrast } : {}),
+        }
+      : undefined;
 
   // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
   // This tells Word to scale the image to fill the extent rectangle.
@@ -363,6 +378,52 @@ export function handleImageNode(node, params, isAnchor) {
         verticalFlip: xfrm.attributes['flipV'] === '1',
         horizontalFlip: xfrm.attributes['flipH'] === '1',
       };
+    }
+  }
+
+  // --- Parse pic:nvPicPr for lockAspectRatio, hyperlink ---
+  const nvPicPr = picture.elements.find((el) => el.name === 'pic:nvPicPr');
+  const cNvPicPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPicPr');
+  const picLocks = cNvPicPr?.elements?.find((el) => el.name === 'a:picLocks');
+  // Per OOXML §20.1.2.2.31, noChangeAspect defaults to false when not specified.
+  // When a:picLocks is absent entirely, there is no lock → false.
+  const lockAspectRatio = picLocks
+    ? picLocks.attributes?.['noChangeAspect'] === '1' || picLocks.attributes?.['noChangeAspect'] === 1
+    : false;
+
+  // Parse image hyperlink from pic:cNvPr > a:hlinkClick, falling back to
+  // wp:docPr > a:hlinkClick (Word's canonical placement per §20.4.2.5).
+  const cNvPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPr');
+  const hlinkClick =
+    cNvPr?.elements?.find((el) => el.name === 'a:hlinkClick') ||
+    docPr?.elements?.find((el) => el.name === 'a:hlinkClick');
+  let hyperlink = null;
+  if (hlinkClick?.attributes?.['r:id']) {
+    const hlinkRId = hlinkClick.attributes['r:id'];
+    const currentFile2 = filename || 'document.xml';
+    let hlinkRels = docx[`word/_rels/${currentFile2}.rels`];
+    if (!hlinkRels) hlinkRels = docx[`word/_rels/document.xml.rels`];
+    const hlinkRelationships = hlinkRels?.elements?.find((el) => el.name === 'Relationships');
+    const hlinkRel = hlinkRelationships?.elements?.find((el) => el.attributes?.['Id'] === hlinkRId);
+    if (hlinkRel?.attributes?.['Target']) {
+      hyperlink = { url: hlinkRel.attributes['Target'] };
+      if (hlinkClick.attributes?.['tooltip']) {
+        hyperlink.tooltip = hlinkClick.attributes['tooltip'];
+      }
+    }
+  }
+
+  // --- Parse decorative flag from wp:docPr > a:extLst > a:ext > adec:decorative ---
+  let decorative = false;
+  const docPrExtLst = docPr?.elements?.find((el) => el.name === 'a:extLst');
+  if (docPrExtLst) {
+    for (const ext of docPrExtLst.elements || []) {
+      if (ext.name !== 'a:ext') continue;
+      const decEl = ext.elements?.find((el) => el.name === 'adec:decorative' || el.name === 'a16:decorative');
+      if (decEl && (decEl.attributes?.['val'] === '1' || decEl.attributes?.['val'] === 1)) {
+        decorative = true;
+        break;
+      }
     }
   }
 
@@ -495,9 +556,13 @@ export function handleImageNode(node, params, isAnchor) {
     },
     originalAttributes: node.attributes,
     rId: relAttributes['Id'],
+    lockAspectRatio,
+    decorative,
+    hyperlink,
     ...(order.length ? { drawingChildOrder: order } : {}),
     ...(originalChildren.length ? { originalDrawingChildren: originalChildren } : {}),
     ...(hasGrayscale ? { grayscale: true } : {}),
+    ...(lum ? { lum } : {}),
   };
 
   return {
@@ -859,6 +924,64 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
   };
 
   return result;
+};
+
+/**
+ * Handles a chart drawing within a WordprocessingML graphic node.
+ *
+ * Detects the c:chart element, resolves the chart part from relationships,
+ * parses the chart XML into a normalized ChartModel, and returns a chart node.
+ *
+ * @param {{ docx: Object, filename?: string }} params - Translator params
+ * @param {Object} node - The wp:anchor or wp:inline node
+ * @param {Object} graphicData - The a:graphicData node with chart URI
+ * @param {{ width?: number, height?: number }} size - Bounding box from wp:extent
+ * @param {{ top?: number, right?: number, bottom?: number, left?: number }} padding
+ * @param {{ horizontal?: number, top?: number }} marginOffset - Anchor position offsets
+ * @param {Object|null} anchorData - Anchor positioning data
+ * @param {Object} wrap - Wrap configuration
+ * @param {boolean} isAnchor - Whether the drawing is anchored
+ * @returns {{ type: 'chart', attrs: Object }|null}
+ */
+const handleChartDrawing = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isAnchor) => {
+  const chartEl = graphicData?.elements?.find((el) => el.name === 'c:chart');
+  const chartRelId = chartEl?.attributes?.['r:id'];
+
+  if (!chartRelId) return null;
+
+  const { docx, filename } = params;
+  const resolved = resolveChartPart(docx, chartRelId, filename);
+  if (!resolved) return null;
+
+  const { chartPartPath } = resolved;
+  const chartXml = docx[chartPartPath];
+  const chartData = chartXml ? parseChartXml(chartXml) : null;
+
+  // Preserve original drawing XML for round-trip export
+  const drawingNode = params.nodes?.[0];
+
+  const { order, originalChildren } = collectPreservedDrawingChildren(node);
+
+  return {
+    type: 'chart',
+    attrs: {
+      width: size.width || 400,
+      height: size.height || 300,
+      chartData,
+      chartRelId,
+      chartPartPath,
+      isAnchor,
+      anchorData,
+      wrap,
+      padding,
+      marginOffset,
+      originalAttributes: node?.attributes,
+      originalChildren,
+      originalChildOrder: order,
+      originalXml: drawingNode ? carbonCopy(drawingNode) : null,
+      drawingContent: drawingNode || null,
+    },
+  };
 };
 
 /**

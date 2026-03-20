@@ -2,7 +2,15 @@
 import * as xmljs from 'xml-js';
 import { v4 as uuidv4 } from 'uuid';
 import { DocxExporter, exportSchemaToJson } from './exporter';
-import { createDocumentJson, addDefaultStylesIfMissing } from './v2/importer/docxImporter.js';
+import {
+  createDocumentJson,
+  addDefaultStylesIfMissing,
+  defaultNodeListHandler,
+  filterOutRootInlineNodes,
+} from './v2/importer/docxImporter.js';
+import { normalizeDuplicateBlockIdentitiesInContent } from './v2/importer/normalizeDuplicateBlockIdentitiesInContent.js';
+import { preProcessPageFieldsOnly } from './field-references/preProcessPageFieldsOnly.js';
+import { carbonCopy } from '../utilities/carbonCopy.js';
 import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
@@ -12,9 +20,20 @@ import {
   prepareCommentsXmlFilesForExport,
 } from './v2/exporter/commentsExporter.js';
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
+import { writeAppStatistics } from '../../document-api-adapters/helpers/app-properties.js';
+import { getWordStatistics, resolveMainBodyEditor } from '../../document-api-adapters/helpers/word-statistics.js';
+import { refreshAllStatFields } from '../../document-api-adapters/helpers/refresh-stat-fields.js';
+import { ensureSettingsRoot, hasUpdateFields, setUpdateFields } from '../../document-api-adapters/document-settings.js';
+import { importFootnoteData, importEndnoteData } from './v2/importer/documentFootnotesImporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
+import {
+  createEmptyBibliographyPart,
+  loadBibliographyPartFromPackage,
+  syncBibliographyPartToPackage,
+  getBibliographyPartExportPaths,
+} from './citation-sources.js';
 import {
   collectReferencedNumIds,
   filterOrphanedNumberingDefinitions,
@@ -32,6 +51,7 @@ const FONT_FAMILY_FALLBACKS = Object.freeze({
 
 const DEFAULT_GENERIC_FALLBACK = 'sans-serif';
 const DEFAULT_FONT_SIZE_PT = 10;
+const CURRENT_APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0';
 
 /**
  * Pull default run formatting (font family, size, kern) out of a DOCX run properties node.
@@ -192,6 +212,7 @@ class SuperConverter {
     this.comments = [];
     this.footnotes = [];
     this.footnoteProperties = null;
+    this.bibliographyPart = createEmptyBibliographyPart();
     this.viewSetting = null;
     this.inlineDocumentFonts = [];
     this.commentThreadingProfile = null;
@@ -604,7 +625,7 @@ class SuperConverter {
     return SuperConverter.getStoredCustomProperty(docx, 'SuperdocVersion');
   }
 
-  static setStoredSuperdocVersion(docx = this.convertedXml, version = __APP_VERSION__) {
+  static setStoredSuperdocVersion(docx = this.convertedXml, version = CURRENT_APP_VERSION) {
     return SuperConverter.setStoredCustomProperty(docx, 'SuperdocVersion', version, false);
   }
 
@@ -1079,12 +1100,14 @@ class SuperConverter {
       this.numbering = result.numbering;
       this.comments = result.comments;
       this.footnotes = result.footnotes;
+      this.endnotes = result.endnotes ?? [];
       this.linkedStyles = result.linkedStyles;
       this.translatedLinkedStyles = result.translatedLinkedStyles;
       this.translatedNumbering = result.translatedNumbering;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
       this.importDiagnostics = result.importDiagnostics ?? [];
+      this.bibliographyPart = loadBibliographyPartFromPackage(this.convertedXml);
 
       return result.pmDoc;
     } else {
@@ -1107,6 +1130,7 @@ class SuperConverter {
     editor,
     exportJsonOnly = false,
     fieldsHighlightColor,
+    preserveSdtWrappers = false,
   ) {
     // Reset export warnings for this export cycle
     this.exportWarnings = [];
@@ -1118,6 +1142,19 @@ class SuperConverter {
       getCommentDefinition(c, index, commentsWithParaIds, editor),
     );
 
+    // Compute the stat-field cache map once from the main body editor.
+    // This same map is reused for header/footer exports so all parts
+    // see document-level counts, not sub-editor-local counts.
+    let statFieldCacheMap;
+    try {
+      if (editor) {
+        statFieldCacheMap = refreshAllStatFields(editor);
+      }
+    } catch {
+      // Non-critical — translators will fall back to node attrs
+    }
+    this._currentStatFieldCacheMap = statFieldCacheMap;
+
     const { result, params } = this.exportToXmlJson({
       data: jsonData,
       editorSchema,
@@ -1127,6 +1164,8 @@ class SuperConverter {
       isFinalDoc,
       editor,
       fieldsHighlightColor,
+      preserveSdtWrappers,
+      statFieldCacheMap,
     });
 
     // Keep convertedXml's document part in sync with the current export tree
@@ -1193,6 +1232,7 @@ class SuperConverter {
     }
 
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
+    this._currentStatFieldCacheMap = undefined; // cleanup after export cycle
 
     // Update the rels table
     this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...footnotesRels, ...headFootRels]);
@@ -1201,6 +1241,9 @@ class SuperConverter {
     if (removedTargets?.length) {
       this.#pruneCommentRelationships(removedTargets);
     }
+
+    // Persist citation sources to package customXml bibliography part.
+    this.bibliographyPart = syncBibliographyPartToPackage(this.convertedXml, this.bibliographyPart);
 
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
@@ -1214,6 +1257,9 @@ class SuperConverter {
       // Always store in custom.xml (never modify settings.xml)
       SuperConverter.setStoredCustomProperty(this.convertedXml, 'DocumentGuid', this.documentGuid, true);
     }
+
+    // Flush document statistics into app.xml and settings.xml.
+    this.#exportStatFieldMetadata(editor);
 
     // Update the numbering.xml
     this.#exportNumberingFile(params);
@@ -1231,8 +1277,25 @@ class SuperConverter {
     editor,
     isHeaderFooter = false,
     fieldsHighlightColor = null,
+    preserveSdtWrappers = false,
+    statFieldCacheMap = undefined,
   }) {
     const bodyNode = this.savedTagsToRestore.find((el) => el.name === 'w:body');
+
+    // Use the pre-computed cache map (from exportToDocx) when available.
+    // This ensures header/footer exports use main-body statistics, not
+    // sub-editor-local counts. Falls back to computing from the current
+    // editor for standalone calls.
+    let resolvedCacheMap = statFieldCacheMap ?? this._currentStatFieldCacheMap;
+    if (!resolvedCacheMap) {
+      try {
+        if (editor) {
+          resolvedCacheMap = refreshAllStatFields(editor);
+        }
+      } catch {
+        // Non-critical — translators will fall back to node attrs
+      }
+    }
 
     const [result, params] = exportSchemaToJson({
       node: data,
@@ -1250,9 +1313,91 @@ class SuperConverter {
       editor,
       isHeaderFooter,
       fieldsHighlightColor,
+      preserveSdtWrappers,
+      statFieldCacheMap: resolvedCacheMap,
     });
 
     return { result, params };
+  }
+
+  getBibliographyPartExportPaths() {
+    return getBibliographyPartExportPaths(this.bibliographyPart);
+  }
+
+  /**
+   * Writes document-statistic metadata into docProps/app.xml and
+   * word/settings.xml as part of the export pipeline.
+   *
+   * Only upserts targeted elements — all unrelated metadata is preserved.
+   */
+  #exportStatFieldMetadata(editor) {
+    if (!editor) return;
+
+    try {
+      // docProps/app.xml is document-scoped metadata. When export runs from a
+      // linked child editor (for example a header/footer editor), compute the
+      // statistics from the main body editor so package-level counts stay
+      // aligned with Word's document-level stat-field semantics.
+      const statsEditor = resolveMainBodyEditor(editor);
+      const stats = getWordStatistics(statsEditor);
+      writeAppStatistics(this.convertedXml, stats);
+
+      // Only set w:updateFields when the document actually contains a
+      // total-page-number node AND pagination is unavailable. This is the
+      // only scenario where the cached NUMPAGES result is definitively stale.
+      // Setting w:updateFields unconditionally would cause Word to recalculate
+      // ALL fields on open (TOC, cross-references, etc.) — a side effect the
+      // plan explicitly warns against.
+      const settingsPart = this.convertedXml['word/settings.xml'];
+      if (settingsPart && stats.pages == null) {
+        const hasNumPagesNode = this.#anyPartContainsNodeType('total-page-number', editor);
+        if (hasNumPagesNode) {
+          const settingsRoot = ensureSettingsRoot(settingsPart);
+          if (!hasUpdateFields(settingsRoot)) {
+            setUpdateFields(settingsRoot, true);
+          }
+        }
+      }
+    } catch {
+      // Non-critical — export should not fail if stats cannot be computed
+    }
+  }
+
+  /**
+   * Checks whether any document part (body + all header/footer editors)
+   * contains at least one node of the given type.
+   */
+  #anyPartContainsNodeType(typeName, mainEditor) {
+    // Check main body
+    if (mainEditor && this.#docContainsNodeType(mainEditor.state.doc, typeName)) {
+      return true;
+    }
+    // Check all header editors
+    for (const entry of this.headerEditors ?? []) {
+      if (entry?.editor && this.#docContainsNodeType(entry.editor.state.doc, typeName)) {
+        return true;
+      }
+    }
+    // Check all footer editors
+    for (const entry of this.footerEditors ?? []) {
+      if (entry?.editor && this.#docContainsNodeType(entry.editor.state.doc, typeName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #docContainsNodeType(doc, typeName) {
+    let found = false;
+    doc.descendants((node) => {
+      if (found) return false;
+      if (node.type.name === typeName) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
   }
 
   #exportNumberingFile() {
@@ -1486,6 +1631,64 @@ class SuperConverter {
     this.addedMedia = {
       ...processedData,
     };
+  }
+
+  /**
+   * Re-import a single header/footer part from OOXML JSON to PM JSON.
+   *
+   * Used by the part-sync afterCommit hook to rebuild the PM JSON cache
+   * after a remote collaborator updates a header/footer part.
+   *
+   * @param {string} partId - OOXML zip path (e.g. 'word/header1.xml')
+   * @returns {object|null} PM JSON document, or null on failure
+   */
+  reimportHeaderFooterPart(partId) {
+    const xmlJson = this.convertedXml?.[partId];
+    if (!xmlJson?.elements?.[0]?.elements) return null;
+
+    const rootElements = carbonCopy(xmlJson.elements[0].elements);
+    const { processedNodes } = preProcessPageFieldsOnly(rootElements);
+
+    const nodeListHandler = defaultNodeListHandler();
+    let schema = nodeListHandler.handler({
+      nodes: processedNodes,
+      nodeListHandler,
+      docx: this.convertedXml,
+      converter: this,
+      numbering: this.numbering,
+      translatedNumbering: this.translatedNumbering,
+      translatedLinkedStyles: this.translatedLinkedStyles,
+      editor: {},
+      filename: partId.split('/').pop(),
+      path: [],
+    });
+
+    schema = filterOutRootInlineNodes(schema);
+    schema = normalizeDuplicateBlockIdentitiesInContent(schema);
+
+    return { type: 'doc', content: [...schema] };
+  }
+
+  /**
+   * Re-import a notes part (footnotes.xml or endnotes.xml) from OOXML JSON
+   * to the derived NoteEntry[] cache.
+   *
+   * Used by the notes-part-descriptor afterCommit hook to rebuild
+   * `converter.footnotes` / `converter.endnotes` after a mutation.
+   *
+   * @param {string} partId - OOXML zip path ('word/footnotes.xml' or 'word/endnotes.xml')
+   * @returns {Array<{id: string, type?: string|null, content: any[], originalXml?: any}>}
+   */
+  reimportNotePart(partId) {
+    if (!this.convertedXml?.[partId]) return [];
+
+    const importFn = partId === 'word/endnotes.xml' ? importEndnoteData : importFootnoteData;
+    return importFn({
+      docx: this.convertedXml,
+      editor: {},
+      converter: this,
+      numbering: this.numbering,
+    });
   }
 
   /**

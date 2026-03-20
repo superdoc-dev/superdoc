@@ -5,7 +5,6 @@ import path from 'node:path';
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../');
 const CONTRACT_PATH = path.join(REPO_ROOT, 'apps/cli/generated/sdk-contract.json');
 const CATALOG_PATH = path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json');
-const NAME_MAP_PATH = path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json');
 
 async function loadJson<T>(filePath: string): Promise<T> {
   return JSON.parse(await readFile(filePath, 'utf8')) as T;
@@ -16,6 +15,7 @@ type Contract = {
   sourceHash: string;
   cli: { package: string; minVersion: string };
   protocol: { version: string; transport: string; features: string[] };
+  intentGroupMeta?: Record<string, { toolName: string; description: string }>;
   operations: Record<
     string,
     {
@@ -33,22 +33,27 @@ type Contract = {
         agentVisible?: boolean;
       }>;
       mutates: boolean;
-      intentName: string | null;
       outputSchema: Record<string, unknown>;
       inputSchema?: Record<string, unknown>;
       successSchema?: Record<string, unknown>;
       failureSchema?: Record<string, unknown>;
+      skipAsATool?: boolean;
+      intentGroup?: string;
+      intentAction?: string;
     }
   >;
 };
 
-type Catalog = {
+type IntentCatalog = {
   contractVersion: string;
   toolCount: number;
-  profiles: {
-    intent: { tools: Array<{ operationId: string; toolName: string }> };
-    operation: { tools: Array<{ operationId: string; toolName: string }> };
-  };
+  tools: Array<{
+    toolName: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+    mutates: boolean;
+    operations: Array<{ operationId: string; intentAction: string }>;
+  }>;
 };
 
 describe('Contract integrity', () => {
@@ -87,7 +92,6 @@ describe('Contract integrity', () => {
     contract = await loadJson<Contract>(CONTRACT_PATH);
     for (const [id, op] of Object.entries(contract.operations)) {
       if (op.mutates && op.inputSchema) {
-        // Doc-backed mutations should have success/failure schemas
         expect(op.successSchema).toBeTruthy();
         expect(op.failureSchema).toBeTruthy();
       }
@@ -135,61 +139,88 @@ describe('Contract integrity', () => {
   });
 });
 
-describe('Tool catalog integrity', () => {
-  test('tool counts match contract operation count', async () => {
+describe('Intent tool catalog integrity', () => {
+  test('catalog has correct number of intent tools', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);
-    const catalog = await loadJson<Catalog>(CATALOG_PATH);
-    const opCount = Object.keys(contract.operations).length;
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
 
-    expect(catalog.profiles.intent.tools.length).toBe(opCount);
-    expect(catalog.profiles.operation.tools.length).toBe(opCount);
-    expect(catalog.toolCount).toBe(opCount * 2);
+    // Count unique intentGroups with at least one annotated operation
+    const intentGroups = new Set<string>();
+    for (const op of Object.values(contract.operations)) {
+      if (op.skipAsATool) continue;
+      if (op.intentGroup) intentGroups.add(op.intentGroup);
+    }
+
+    expect(catalog.tools.length).toBe(intentGroups.size);
+    expect(catalog.toolCount).toBe(intentGroups.size);
   });
 
-  test('tool name map covers all operations', async () => {
-    const contract = await loadJson<Contract>(CONTRACT_PATH);
-    const nameMap = await loadJson<Record<string, string>>(NAME_MAP_PATH);
-    const contractOps = new Set(Object.keys(contract.operations));
-    const mappedOps = new Set(Object.values(nameMap));
+  test('each provider bundle has same tool count as catalog', async () => {
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+    const providers = ['openai', 'anthropic', 'vercel', 'generic'];
 
-    for (const opId of contractOps) {
-      expect(mappedOps.has(opId)).toBe(true);
+    for (const provider of providers) {
+      const bundle = await loadJson<{ tools: unknown[] }>(
+        path.join(REPO_ROOT, `packages/sdk/tools/tools.${provider}.json`),
+      );
+      expect(Array.isArray(bundle.tools)).toBe(true);
+      expect(bundle.tools.length).toBe(catalog.tools.length);
     }
   });
 
-  test('all catalog entries have required fields', async () => {
-    const catalog = await loadJson<Catalog>(CATALOG_PATH);
+  test('all tool names match superdoc_* pattern', async () => {
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+    for (const tool of catalog.tools) {
+      expect(tool.toolName).toMatch(/^superdoc_[a-z_]+$/);
+    }
+  });
 
-    for (const profile of ['intent', 'operation'] as const) {
-      for (const tool of catalog.profiles[profile].tools) {
-        expect(tool.operationId).toBeTruthy();
-        expect(tool.toolName).toBeTruthy();
+  test('tool schemas are valid JSON Schema', async () => {
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+    for (const tool of catalog.tools) {
+      expect(tool.inputSchema).toBeTruthy();
+      expect(tool.inputSchema.type).toBe('object');
+      expect(typeof tool.inputSchema.properties).toBe('object');
+    }
+  });
+
+  test('each tool action enum matches intentAction values of grouped operations', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+
+    for (const tool of catalog.tools) {
+      const catalogActions = tool.operations.map((op) => op.intentAction).sort();
+
+      // Verify against contract
+      for (const op of tool.operations) {
+        const contractOp = contract.operations[op.operationId];
+        expect(contractOp).toBeDefined();
+        expect(contractOp.intentAction).toBe(op.intentAction);
+      }
+
+      // For multi-op tools, verify action enum exists
+      if (tool.operations.length > 1) {
+        const actionProp = tool.inputSchema.properties as Record<string, Record<string, unknown>>;
+        expect(actionProp.action).toBeDefined();
+        expect(actionProp.action.enum).toBeTruthy();
+        const schemaActions = [...(actionProp.action.enum as string[])].sort();
+        expect(schemaActions).toEqual(catalogActions);
       }
     }
   });
 
-  test('provider bundles have correct structure', async () => {
-    const contract = await loadJson<Contract>(CONTRACT_PATH);
-    const opCount = Object.keys(contract.operations).length;
-    const providers = ['openai', 'anthropic', 'vercel', 'generic'];
-
-    for (const provider of providers) {
-      const bundle = await loadJson<{ profiles: Record<string, unknown[]> }>(
-        path.join(REPO_ROOT, `packages/sdk/tools/tools.${provider}.json`),
-      );
-      expect(Array.isArray(bundle.profiles.intent)).toBe(true);
-      expect(Array.isArray(bundle.profiles.operation)).toBe(true);
-      expect(bundle.profiles.intent.length).toBe(opCount);
-      expect(bundle.profiles.operation.length).toBe(opCount);
-    }
+  test('system prompt file exists and is non-empty', async () => {
+    const promptPath = path.join(REPO_ROOT, 'packages/sdk/tools/system-prompt.md');
+    const content = await readFile(promptPath, 'utf8');
+    expect(content.length).toBeGreaterThan(100);
   });
 
   test('OpenAI tools have required function shape', async () => {
-    const bundle = await loadJson<{ profiles: { intent: Array<Record<string, unknown>> } }>(
+    const bundle = await loadJson<{ tools: Array<Record<string, unknown>> }>(
       path.join(REPO_ROOT, 'packages/sdk/tools/tools.openai.json'),
     );
 
-    for (const tool of bundle.profiles.intent) {
+    for (const tool of bundle.tools) {
       expect(tool.type).toBe('function');
       const fn = tool.function as Record<string, unknown>;
       expect(typeof fn.name).toBe('string');
@@ -199,14 +230,54 @@ describe('Tool catalog integrity', () => {
   });
 
   test('Anthropic tools have required shape', async () => {
-    const bundle = await loadJson<{ profiles: { intent: Array<Record<string, unknown>> } }>(
+    const bundle = await loadJson<{ tools: Array<Record<string, unknown>> }>(
       path.join(REPO_ROOT, 'packages/sdk/tools/tools.anthropic.json'),
     );
 
-    for (const tool of bundle.profiles.intent) {
+    for (const tool of bundle.tools) {
       expect(typeof tool.name).toBe('string');
       expect(typeof tool.description).toBe('string');
       expect(typeof tool.input_schema).toBe('object');
+    }
+  });
+});
+
+describe('Intent annotation integrity', () => {
+  test('intentGroup + intentAction consistency: no duplicate intentAction within a group', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+
+    const groupActions = new Map<string, Set<string>>();
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (!op.intentGroup || !op.intentAction) continue;
+      if (!groupActions.has(op.intentGroup)) {
+        groupActions.set(op.intentGroup, new Set());
+      }
+      const actions = groupActions.get(op.intentGroup)!;
+      expect(actions.has(op.intentAction)).toBe(false);
+      actions.add(op.intentAction);
+    }
+  });
+
+  test('all annotated operations have valid intentGroup in intentGroupMeta', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    const meta = contract.intentGroupMeta ?? {};
+
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (op.intentGroup) {
+        expect(meta[op.intentGroup]).toBeDefined();
+      }
+    }
+  });
+
+  test('annotated operations always have both intentGroup and intentAction', async () => {
+    const contract = await loadJson<Contract>(CONTRACT_PATH);
+    for (const [id, op] of Object.entries(contract.operations)) {
+      if (op.intentGroup) {
+        expect(op.intentAction).toBeTruthy();
+      }
+      if (op.intentAction) {
+        expect(op.intentGroup).toBeTruthy();
+      }
     }
   });
 });
@@ -216,14 +287,8 @@ const POLICY_PATH = path.join(REPO_ROOT, 'packages/sdk/tools/tools-policy.json')
 type ToolsPolicy = {
   policyVersion: string;
   contractHash: string;
-  phases: Record<string, { include: string[]; exclude: string[]; priority: string[] }>;
-  defaults: {
-    maxToolsByProfile: Record<string, number>;
-    minReadTools: number;
-    foundationalOperationIds: string[];
-    chooserDecisionVersion: string;
-  };
-  capabilityFeatures: Record<string, string[]>;
+  toolCount: number;
+  tools: Array<{ toolName: string; mutates: boolean }>;
 };
 
 describe('Tools policy integrity', () => {
@@ -231,39 +296,8 @@ describe('Tools policy integrity', () => {
     const policy = await loadJson<ToolsPolicy>(POLICY_PATH);
     expect(policy.policyVersion).toBeTruthy();
     expect(policy.contractHash).toBeTruthy();
-    expect(typeof policy.phases).toBe('object');
-    expect(typeof policy.defaults).toBe('object');
-    expect(typeof policy.capabilityFeatures).toBe('object');
-  });
-
-  test('all 4 phase keys present with correct shape', async () => {
-    const policy = await loadJson<ToolsPolicy>(POLICY_PATH);
-    for (const phase of ['read', 'locate', 'mutate', 'review']) {
-      expect(policy.phases[phase]).toBeDefined();
-      expect(Array.isArray(policy.phases[phase].include)).toBe(true);
-      expect(Array.isArray(policy.phases[phase].exclude)).toBe(true);
-      expect(Array.isArray(policy.phases[phase].priority)).toBe(true);
-    }
-  });
-
-  test('phase categories exist in catalog entries', async () => {
-    const policy = await loadJson<ToolsPolicy>(POLICY_PATH);
-    const catalog = await loadJson<Catalog>(CATALOG_PATH);
-    const catalogCategories = new Set(catalog.profiles.intent.tools.map((t) => (t as Record<string, string>).category));
-
-    for (const phaseRule of Object.values(policy.phases)) {
-      for (const category of [...phaseRule.include, ...phaseRule.exclude]) {
-        expect(catalogCategories.has(category)).toBe(true);
-      }
-    }
-  });
-
-  test('foundational operation IDs exist in contract', async () => {
-    const policy = await loadJson<ToolsPolicy>(POLICY_PATH);
-    const contract = await loadJson<Contract>(CONTRACT_PATH);
-    for (const opId of policy.defaults.foundationalOperationIds) {
-      expect(contract.operations[opId]).toBeDefined();
-    }
+    expect(typeof policy.toolCount).toBe('number');
+    expect(Array.isArray(policy.tools)).toBe(true);
   });
 
   test('contractHash matches contract sourceHash', async () => {
@@ -272,80 +306,23 @@ describe('Tools policy integrity', () => {
     expect(policy.contractHash).toBe(contract.sourceHash);
   });
 
-  test('capabilityFeatures consistent with catalog entries', async () => {
+  test('policy tool count matches catalog', async () => {
     const policy = await loadJson<ToolsPolicy>(POLICY_PATH);
-    const catalog = await loadJson<Catalog>(CATALOG_PATH);
-
-    for (const [category, expectedFeatures] of Object.entries(policy.capabilityFeatures)) {
-      const categoryTools = catalog.profiles.intent.tools.filter(
-        (t) => (t as Record<string, string>).category === category,
-      );
-      for (const tool of categoryTools) {
-        expect((tool as Record<string, unknown>).requiredCapabilities).toEqual(expectedFeatures);
-      }
-    }
-  });
-});
-
-describe('Intent name integrity', () => {
-  test('all operations have intentName in contract', async () => {
-    const contract = await loadJson<Contract>(CONTRACT_PATH);
-    for (const [id, op] of Object.entries(contract.operations)) {
-      expect(op.intentName).toBeTruthy();
-    }
-  });
-
-  test('contract intentNames match catalog intent profile toolNames', async () => {
-    const contract = await loadJson<Contract>(CONTRACT_PATH);
-    const catalog = await loadJson<Catalog>(CATALOG_PATH);
-
-    const catalogIntentNames = new Map(catalog.profiles.intent.tools.map((t) => [t.operationId, t.toolName]));
-
-    for (const [id, op] of Object.entries(contract.operations)) {
-      const catalogName = catalogIntentNames.get(id);
-      expect(catalogName).toBe(op.intentName);
-    }
-  });
-
-  test('all intentNames are unique and match snake_case naming policy', async () => {
-    const contract = await loadJson<Contract>(CONTRACT_PATH);
-    const seen = new Set<string>();
-    for (const [id, op] of Object.entries(contract.operations)) {
-      expect(op.intentName).toMatch(/^[a-z][a-z0-9_]*$/);
-      expect(seen.has(op.intentName!)).toBe(false);
-      seen.add(op.intentName!);
-    }
+    const catalog = await loadJson<IntentCatalog>(CATALOG_PATH);
+    expect(policy.toolCount).toBe(catalog.toolCount);
   });
 });
 
 describe('agentVisible param annotation integrity', () => {
-  const EXPECTED_HIDDEN = new Set(['out', 'expectedRevision', 'changeMode', 'dryRun']);
+  const EXPECTED_HIDDEN = new Set(['out', 'expectedRevision']);
 
-  test('expected transport-envelope params are agentVisible: false', async () => {
+  test('expected transport-envelope params are agentVisible: false when present', async () => {
     const contract = await loadJson<Contract>(CONTRACT_PATH);
     for (const [, op] of Object.entries(contract.operations)) {
       for (const param of op.params) {
-        if (EXPECTED_HIDDEN.has(param.name)) {
+        if (EXPECTED_HIDDEN.has(param.name) && 'agentVisible' in param) {
           expect(param.agentVisible).toBe(false);
         }
-      }
-    }
-  });
-
-  test('agentVisible: false params are excluded from catalog inputSchema', async () => {
-    const contract = await loadJson<Contract>(CONTRACT_PATH);
-    const catalog = await loadJson<Catalog>(CATALOG_PATH);
-
-    for (const tool of catalog.profiles.intent.tools) {
-      const entry = tool as Record<string, unknown>;
-      const inputSchema = entry.inputSchema as { properties?: Record<string, unknown> } | undefined;
-      if (!inputSchema?.properties) continue;
-      const op = contract.operations[entry.operationId as string];
-      if (!op) continue;
-
-      const hiddenParams = op.params.filter((p) => p.agentVisible === false).map((p) => p.name);
-      for (const hidden of hiddenParams) {
-        expect(inputSchema.properties[hidden]).toBeUndefined();
       }
     }
   });

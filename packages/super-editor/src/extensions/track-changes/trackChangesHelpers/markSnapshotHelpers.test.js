@@ -7,6 +7,7 @@ import {
   hasMatchingMark,
   upsertMarkSnapshotByType,
   findMarkInRangeBySnapshot,
+  isTrackFormatNoOp,
 } from './markSnapshotHelpers.js';
 
 describe('markSnapshotHelpers', () => {
@@ -138,6 +139,69 @@ describe('markSnapshotHelpers', () => {
     });
 
     expect(match).toBeNull();
+  });
+
+  describe('isTrackFormatNoOp', () => {
+    it('returns true when both before and after are empty', () => {
+      expect(isTrackFormatNoOp([], [])).toBe(true);
+    });
+
+    it('returns true when after has only textStyle with vertAlign baseline (identity value)', () => {
+      // Scenario: text had no textStyle, user added superscript then reverted to baseline
+      expect(isTrackFormatNoOp([], [{ type: 'textStyle', attrs: { vertAlign: 'baseline' } }])).toBe(true);
+    });
+
+    it('returns true when before and after differ only by vertAlign baseline', () => {
+      // Scenario: text had textStyle with fontSize, user added superscript then reverted
+      expect(
+        isTrackFormatNoOp(
+          [{ type: 'textStyle', attrs: { fontSize: '24pt' } }],
+          [{ type: 'textStyle', attrs: { fontSize: '24pt', vertAlign: 'baseline' } }],
+        ),
+      ).toBe(true);
+    });
+
+    it('returns false for a real format change', () => {
+      expect(
+        isTrackFormatNoOp(
+          [{ type: 'textStyle', attrs: { fontSize: '12pt' } }],
+          [{ type: 'textStyle', attrs: { fontSize: '24pt' } }],
+        ),
+      ).toBe(false);
+    });
+
+    it('returns false when bold is added (structural mark)', () => {
+      expect(isTrackFormatNoOp([], [{ type: 'bold', attrs: {} }])).toBe(false);
+    });
+
+    it('returns false when bold is removed (structural mark)', () => {
+      expect(isTrackFormatNoOp([{ type: 'bold', attrs: {} }], [])).toBe(false);
+    });
+
+    it('returns true when textStyle with only null attrs is in after', () => {
+      expect(isTrackFormatNoOp([], [{ type: 'textStyle', attrs: { vertAlign: null, position: null } }])).toBe(true);
+    });
+
+    it('returns false when non-identity textStyle change exists alongside baseline revert', () => {
+      // Bold was also changed — not a no-op
+      expect(
+        isTrackFormatNoOp([{ type: 'bold', attrs: {} }], [{ type: 'textStyle', attrs: { vertAlign: 'baseline' } }]),
+      ).toBe(false);
+    });
+
+    it('returns true when position is reverted to 0pt (identity value)', () => {
+      expect(isTrackFormatNoOp([], [{ type: 'textStyle', attrs: { position: '0pt' } }])).toBe(true);
+    });
+
+    it('returns true when vertAlign superscript matches in both before and after', () => {
+      // Both say the same thing — no net change
+      expect(
+        isTrackFormatNoOp(
+          [{ type: 'textStyle', attrs: { vertAlign: 'superscript' } }],
+          [{ type: 'textStyle', attrs: { vertAlign: 'superscript' } }],
+        ),
+      ).toBe(true);
+    });
   });
 
   it('findMarkInRangeBySnapshot falls back to subset attr match for sparse snapshots', () => {

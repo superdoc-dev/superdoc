@@ -404,12 +404,28 @@ export const CommentsPlugin = Extension.create({
           return true;
         },
       setCursorById:
-        (id) =>
+        (id, options = {}) =>
         ({ state, editor }) => {
           const { from } = findRangeById(state.doc, id) || {};
           if (from != null) {
-            state.tr.setSelection(TextSelection.create(state.doc, from));
-            if (editor.view && typeof editor.view.focus === 'function') {
+            const tr = state.tr;
+            tr.setSelection(TextSelection.create(state.doc, from));
+            if (options.activeCommentId) {
+              tr.setMeta(CommentsPluginKey, {
+                type: 'setActiveComment',
+                activeThreadId: options.activeCommentId,
+                forceUpdate: true,
+              });
+            } else if (options.preferredActiveThreadId) {
+              tr.setMeta(CommentsPluginKey, {
+                type: 'setCursorById',
+                preferredActiveThreadId: options.preferredActiveThreadId,
+              });
+            }
+            // Skip view.focus() when activating from the sidebar (activeCommentId set).
+            // Focusing the hidden PM view can trigger a DOM selection sync transaction
+            // that overwrites the activeThreadId via position-based detection.
+            if (!options.activeCommentId && editor.view && typeof editor.view.focus === 'function') {
               editor.view.focus();
             }
             return true;
@@ -421,11 +437,10 @@ export const CommentsPlugin = Extension.create({
 
   addPmPlugins() {
     const editor = this.editor;
+    const isHeadless = editor.options.isHeadless;
     let shouldUpdate = true;
 
-    if (editor.options.isHeadless) return [];
-
-    const commentsPlugin = new Plugin({
+    const pluginSpec = {
       key: CommentsPluginKey,
 
       state: {
@@ -438,7 +453,6 @@ export const CommentsPlugin = Extension.create({
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],
-            changedActiveThread: false,
             trackedChanges: {},
           };
         },
@@ -468,7 +482,6 @@ export const CommentsPlugin = Extension.create({
             return {
               ...pluginState,
               activeThreadId: newActiveThreadId,
-              changedActiveThread: true,
             };
           }
 
@@ -498,6 +511,13 @@ export const CommentsPlugin = Extension.create({
             const { selection } = tr;
             let currentActiveThread = getActiveCommentId(newEditorState.doc, selection);
             if (trChangedActiveComment) currentActiveThread = meta.activeThreadId;
+            if (
+              meta?.type === 'setCursorById' &&
+              meta.preferredActiveThreadId &&
+              selectionContainsThread(newEditorState.doc, selection, meta.preferredActiveThreadId)
+            ) {
+              currentActiveThread = meta.preferredActiveThreadId;
+            }
 
             const previousSelectionId = pluginState.activeThreadId;
             if (previousSelectionId !== currentActiveThread) {
@@ -513,17 +533,20 @@ export const CommentsPlugin = Extension.create({
             }
           }
 
-          return pluginState;
+          return { ...pluginState };
         },
       },
+    };
 
-      props: {
+    // In headless mode, skip DOM-dependent props and view — only state tracking is needed.
+    if (!isHeadless) {
+      pluginSpec.props = {
         decorations(state) {
           return this.getState(state).decorations;
         },
-      },
+      };
 
-      view() {
+      pluginSpec.view = () => {
         let prevDoc = null;
         let prevActiveThreadId = null;
         let prevAllCommentPositions = {};
@@ -687,10 +710,10 @@ export const CommentsPlugin = Extension.create({
             }
           },
         };
-      },
-    });
+      };
+    }
 
-    return [commentsPlugin];
+    return [new Plugin(pluginSpec)];
   },
 });
 
@@ -804,6 +827,17 @@ const getActiveCommentId = (doc, selection) => {
   return containingComments[0].commentId;
 };
 
+const selectionContainsThread = (doc, selection, threadId) => {
+  if (!selection || !threadId) return false;
+  const { $from, $to } = selection;
+  if ($from.pos !== $to.pos) return false;
+
+  const range = findRangeById(doc, threadId);
+  if (!range) return false;
+
+  return $from.pos >= range.from && $from.pos < range.to;
+};
+
 const findTrackedMark = ({
   doc,
   from,
@@ -873,18 +907,21 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
     });
   }
 
-  const emitParams = createOrUpdateTrackedChangeComment({
-    documentId: editor.options.documentId,
-    event: isNewChange ? 'add' : 'update',
-    marks: {
-      insertedMark,
-      deletionMark,
-      formatMark,
-    },
-    deletionNodes,
-    nodes,
-    newEditorState,
-  });
+  const hasCandidateNodes = nodes.length > 0 || Boolean(deletionNodes?.length);
+  const emitParams = hasCandidateNodes
+    ? createOrUpdateTrackedChangeComment({
+        documentId: editor.options.documentId,
+        event: isNewChange ? 'add' : 'update',
+        marks: {
+          insertedMark,
+          deletionMark,
+          formatMark,
+        },
+        deletionNodes,
+        nodes,
+        newEditorState,
+      })
+    : null;
 
   if (emitParams && emitCommentEvent) editor.emit('commentsUpdate', emitParams);
 
@@ -1138,6 +1175,7 @@ export { createOrUpdateTrackedChangeComment };
 
 export const __test__ = {
   getActiveCommentId,
+  selectionContainsThread,
   findTrackedMark,
   handleTrackedChangeTransaction,
   getTrackedChangeText,

@@ -26,53 +26,63 @@ Returns a TableMutationResult receipt; reports NO_OP if the row height already m
 
 ## Input fields
 
-### Variant 1
+### Variant 1 (target.nodeType="tableRow")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `heightPt` | number | yes |  |
+| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
+| `target` | TableRowAddress | yes | TableRowAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableRow"` | yes | Constant: `"tableRow"` |
 
-### Variant 2
+### Variant 2 (target.nodeType="table")
 
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `heightPt` | number | yes |  |
+| `rowIndex` | integer | yes |  |
+| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
 
-### Variant 3
+### Variant 3 (required: nodeId, rowIndex, heightPt, rule)
 
-_No fields._
-
-### Variant 4
-
-_No fields._
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `heightPt` | number | yes |  |
+| `nodeId` | string | yes |  |
+| `rowIndex` | integer | yes |  |
+| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
 
 ### Example request
 
 ```json
 {
   "heightPt": 12.5,
-  "nodeId": "node-def456",
   "rule": "atLeast",
-  "tableTarget": {
-    "kind": "block",
-    "nodeId": "node-def456",
-    "nodeType": "paragraph"
-  },
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "tableRow"
   }
 }
 ```
 
 ## Output fields
 
-### Variant 1 (table.kind="block")
+### Variant 1 (success=true)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `success` | `true` | yes | Constant: `true` |
-| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table` | TableAddress | no | TableAddress |
 | `table.kind` | `"block"` | no | Constant: `"block"` |
 | `table.nodeId` | string | no |  |
-| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
 | `trackedChangeRefs` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
@@ -85,6 +95,10 @@ _No fields._
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
 
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
 ### Example response
 
 ```json
@@ -93,7 +107,7 @@ _No fields._
   "table": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "table"
   },
   "trackedChangeRefs": [
     {
@@ -121,65 +135,93 @@ _No fields._
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
   "oneOf": [
     {
+      "additionalProperties": false,
+      "properties": {
+        "heightPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "rule": {
+          "enum": [
+            "atLeast",
+            "exact",
+            "auto"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/TableRowAddress"
+        }
+      },
       "required": [
-        "target"
-      ]
+        "target",
+        "heightPt",
+        "rule"
+      ],
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "heightPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule": {
+          "enum": [
+            "atLeast",
+            "exact",
+            "auto"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/TableAddress"
+        }
+      },
       "required": [
-        "nodeId"
-      ]
+        "target",
+        "rowIndex",
+        "heightPt",
+        "rule"
+      ],
+      "type": "object"
     },
     {
+      "additionalProperties": false,
+      "properties": {
+        "heightPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "rowIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule": {
+          "enum": [
+            "atLeast",
+            "exact",
+            "auto"
+          ]
+        }
+      },
       "required": [
-        "tableTarget",
-        "rowIndex"
-      ]
-    },
-    {
-      "required": [
-        "tableNodeId",
-        "rowIndex"
-      ]
+        "nodeId",
+        "rowIndex",
+        "heightPt",
+        "rule"
+      ],
+      "type": "object"
     }
-  ],
-  "properties": {
-    "heightPt": {
-      "exclusiveMinimum": 0,
-      "type": "number"
-    },
-    "nodeId": {
-      "type": "string"
-    },
-    "rowIndex": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "rule": {
-      "enum": [
-        "atLeast",
-        "exact",
-        "auto"
-      ]
-    },
-    "tableNodeId": {
-      "type": "string"
-    },
-    "tableTarget": {
-      "$ref": "#/$defs/BlockNodeAddress"
-    },
-    "target": {
-      "$ref": "#/$defs/BlockNodeAddress"
-    }
-  },
-  "required": [
-    "heightPt",
-    "rule"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>
@@ -195,7 +237,7 @@ _No fields._
           "const": true
         },
         "table": {
-          "$ref": "#/$defs/BlockNodeAddress"
+          "$ref": "#/$defs/TableAddress"
         },
         "trackedChangeRefs": {
           "items": {
@@ -258,7 +300,7 @@ _No fields._
       "const": true
     },
     "table": {
-      "$ref": "#/$defs/BlockNodeAddress"
+      "$ref": "#/$defs/TableAddress"
     },
     "trackedChangeRefs": {
       "items": {

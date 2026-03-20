@@ -1,3 +1,5 @@
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { getListOrdinalFromPath, getListRendering } from '@superdoc/common/list-rendering';
 import { getHeadingLevel, type BlockCandidate } from './node-address-resolver.js';
 import type { InlineCandidate } from './inline-address-resolver.js';
 import { resolveCommentIdFromAttrs, toFiniteNumber } from './value-utils.js';
@@ -19,7 +21,6 @@ import type {
   ParagraphNodeInfo,
   ParagraphProperties,
   RunNodeInfo,
-  SdtNodeInfo,
   TabNodeInfo,
   TableCellNodeInfo,
   TableNodeInfo,
@@ -35,6 +36,7 @@ import type {
   TableMeasurement,
 } from '../../extensions/types/node-attributes.js';
 import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
+import { buildContentControlInfoFromAttrs } from './content-controls/sdt-info-builder.js';
 
 function resolveMeasurement(value: number | TableMeasurement | null | undefined): number | undefined {
   if (typeof value === 'number') return value;
@@ -100,15 +102,13 @@ function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): Parag
 }
 
 function mapListNumbering(attrs: ParagraphAttrs | null | undefined): ListNumbering | undefined {
-  const listRendering = attrs?.listRendering ?? undefined;
+  const listRendering = getListRendering(attrs?.listRendering);
   if (!listRendering) return undefined;
 
   const listNumbering: ListNumbering = {};
   if (listRendering.markerText) listNumbering.marker = listRendering.markerText;
   if (Array.isArray(listRendering.path)) listNumbering.path = listRendering.path;
-  if (Array.isArray(listRendering.path) && listRendering.path.length > 0) {
-    listNumbering.ordinal = listRendering.path[listRendering.path.length - 1];
-  }
+  listNumbering.ordinal = getListOrdinalFromPath(listRendering.path);
   return Object.keys(listNumbering).length ? listNumbering : undefined;
 }
 
@@ -232,9 +232,61 @@ function mapTableOfContentsNode(candidate: BlockCandidate): TableOfContentsNodeI
   };
 }
 
-function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline'): ImageNodeInfo {
+/**
+ * Parse a CSS `inset(top% right% bottom% left%)` string into crop percentages.
+ */
+function parseCropFromClipPath(clipPath: string | undefined | null): ImageNodeInfo['properties']['crop'] {
+  if (!clipPath) return null;
+  const match = clipPath.match(/^inset\(\s*([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s*\)$/);
+  if (!match) return null;
+  return {
+    top: parseFloat(match[1]),
+    right: parseFloat(match[2]),
+    bottom: parseFloat(match[3]),
+    left: parseFloat(match[4]),
+  };
+}
+
+/**
+ * Detect whether the image at `imagePos` has a Caption-styled sibling paragraph.
+ * Returns false when `doc` is unavailable (context-free call sites).
+ */
+function detectCaptionSibling(doc: ProseMirrorNode | undefined, imagePos: number): boolean {
+  if (!doc) return false;
+  try {
+    const $pos = doc.resolve(imagePos);
+    const parentDepth = $pos.depth - 1;
+    if (parentDepth < 0) return false;
+    const parentPos = $pos.before(parentDepth + 1);
+    const parentNode = $pos.node(parentDepth + 1);
+    const afterParentPos = parentPos + parentNode.nodeSize;
+    if (afterParentPos >= doc.content.size) return false;
+    const nextNode = doc.nodeAt(afterParentPos);
+    if (!nextNode || nextNode.type.name !== 'paragraph') return false;
+    return nextNode.attrs?.paragraphProperties?.styleId === 'Caption';
+  } catch {
+    return false;
+  }
+}
+
+function buildImageInfo(
+  attrs: ImageAttrs | undefined,
+  kind: 'block' | 'inline',
+  doc?: ProseMirrorNode,
+  pos?: number,
+): ImageNodeInfo {
   const isFloating = Boolean(attrs?.isAnchor);
   const wrapObj = attrs?.wrap;
+  const td = attrs?.transformData;
+
+  const transform: ImageNodeInfo['properties']['transform'] =
+    td && (td.rotation || td.verticalFlip || td.horizontalFlip)
+      ? {
+          rotation: td.rotation ?? undefined,
+          verticalFlip: td.verticalFlip ?? undefined,
+          horizontalFlip: td.horizontalFlip ?? undefined,
+        }
+      : null;
 
   const properties: ImageNodeInfo['properties'] = {
     src: attrs?.src ?? undefined,
@@ -254,23 +306,18 @@ function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline')
     anchorData: attrs?.anchorData ?? null,
     marginOffset: attrs?.marginOffset ?? null,
     relativeHeight: attrs?.relativeHeight ?? null,
+    name: attrs?.alt ?? undefined,
+    description: attrs?.title ?? undefined,
+    transform,
+    crop: parseCropFromClipPath(attrs?.clipPath),
+    lockAspectRatio: attrs?.lockAspectRatio ?? true,
+    decorative: attrs?.decorative ?? false,
+    hyperlink: attrs?.hyperlink ?? null,
+    hasCaption: pos != null ? detectCaptionSibling(doc, pos) : false,
   };
 
   return {
     nodeType: 'image',
-    kind,
-    properties,
-  };
-}
-
-function buildSdtInfo(attrs: StructuredContentBlockAttrs | undefined, kind: 'block' | 'inline'): SdtNodeInfo {
-  const properties = {
-    tag: attrs?.tag ?? undefined,
-    alias: attrs?.alias ?? undefined,
-  };
-
-  return {
-    nodeType: 'sdt',
     kind,
     properties,
   };
@@ -480,7 +527,11 @@ function isInlineCandidate(candidate: BlockCandidate | InlineCandidate): candida
  * @returns Typed node information with properties populated from node attributes.
  * @throws {Error} If the node type is not implemented or the candidate kind mismatches.
  */
-export function mapNodeInfo(candidate: BlockCandidate | InlineCandidate, overrideType?: NodeType): NodeInfo {
+export function mapNodeInfo(
+  candidate: BlockCandidate | InlineCandidate,
+  overrideType?: NodeType,
+  doc?: ProseMirrorNode,
+): NodeInfo {
   const nodeType: NodeType = overrideType ?? candidate.nodeType;
   const kind = isInlineCandidate(candidate) ? 'inline' : 'block';
 
@@ -511,11 +562,11 @@ export function mapNodeInfo(candidate: BlockCandidate | InlineCandidate, overrid
       return mapTableCellNode(candidate as BlockCandidate);
     case 'image': {
       const attrs = candidate.node?.attrs as ImageAttrs | undefined;
-      return buildImageInfo(attrs, kind);
+      return buildImageInfo(attrs, kind, doc, candidate.pos);
     }
     case 'sdt': {
       const attrs = candidate.node?.attrs as StructuredContentBlockAttrs | undefined;
-      return buildSdtInfo(attrs, kind);
+      return buildContentControlInfoFromAttrs(attrs as Record<string, unknown> | undefined, kind);
     }
     case 'tableOfContents':
       if (kind !== 'block')

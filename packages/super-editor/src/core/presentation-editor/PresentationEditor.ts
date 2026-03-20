@@ -3,7 +3,7 @@ import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
-import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
@@ -67,8 +67,6 @@ import {
 import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
-import { decodeRPrFromMarks } from '../super-converter/styles.js';
-import { halfPointToPoints } from '../super-converter/helpers.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
@@ -84,6 +82,7 @@ import {
 import type {
   HeaderFooterIdentifier,
   HeaderFooterLayoutResult,
+  HeaderFooterConstraints,
   HeaderFooterType,
   PositionHit,
   TableHitResult,
@@ -114,6 +113,9 @@ import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegist
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
+
+import type { ResolveRangeOutput, DocumentApi } from '@superdoc/document-api';
+import type { SelectionHandle } from '../selection-state.js';
 
 // Types
 import type {
@@ -168,17 +170,24 @@ export type {
   TelemetryEvent,
 } from './types.js';
 
+/**
+ * Bundles the active editing surface's editor, document API, surface label,
+ * and resolved selection range into a single coherent object.
+ *
+ * Guarantees that `doc` and `range` refer to the same editing surface.
+ * This is the canonical layout-mode command surface — use it whenever the
+ * active context (body / header / footer) matters for the follow-up mutation.
+ */
+export type SelectionCommandContext = {
+  editor: Editor;
+  doc: DocumentApi;
+  surface: 'body' | 'header' | 'footer';
+  range: ResolveRangeOutput;
+};
+
 // Mark name constants
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
-
-/**
- * Font size scaling factor for subscript and superscript text.
- * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
- * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
- * Applied to the base font size to reduce text size for sub/superscripts.
- */
-const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
@@ -279,11 +288,14 @@ export class PresentationEditor extends EventEmitter {
   #selectionOverlay: HTMLElement;
   #permissionOverlay: HTMLElement | null = null;
   #hiddenHost: HTMLElement;
+  /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
+  #hiddenHostWrapper: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
   /** Cache for incremental toFlowBlocks conversion */
   #flowBlockCache: FlowBlockCache = new FlowBlockCache();
   #footnoteNumberSignature: string | null = null;
+  #endnoteNumberSignature: string | null = null;
   #domPainter: ReturnType<typeof createDomPainter> | null = null;
   #pageGeometryHelper: PageGeometryHelper | null = null;
   #dragDropManager: DragDropManager | null = null;
@@ -293,9 +305,17 @@ export class PresentationEditor extends EventEmitter {
   #errorBannerMessage: HTMLElement | null = null;
   #renderScheduled = false;
   #pendingDocChange = false;
+  #focusScrollRafId: number | null = null;
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
   #selectionSync = new SelectionSyncCoordinator();
+  /**
+   * When true, the next selection render scrolls the caret/selection head into view.
+   * Only set for user-initiated actions (keyboard/mouse selection, image click, zoom).
+   * Passive re-renders (virtualization remounts, layout completions, DOM rebuilds) leave
+   * this unset so they don't fight the user's scroll position.
+   */
+  #shouldScrollSelectionIntoView = false;
   #epochMapper = new EpochPositionMapper();
   #layoutEpoch = 0;
   #htmlAnnotationHeights: Map<string, number> = new Map();
@@ -315,6 +335,7 @@ export class PresentationEditor extends EventEmitter {
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
   #scrollContainer: Element | Window | null = null;
+  #scrollContainerValidated = false;
   #sectionMetadata: SectionMetadata[] = [];
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
   #inputBridge: PresentationInputBridge | null = null;
@@ -329,6 +350,8 @@ export class PresentationEditor extends EventEmitter {
   #ariaLiveRegion: HTMLElement | null = null;
   #a11ySelectionAnnounceTimeout: number | null = null;
   #a11yLastAnnouncedSelectionKey: string | null = null;
+  #headerFooterSelectionHandler: ((...args: unknown[]) => void) | null = null;
+  #headerFooterEditor: Editor | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
     pmStart: number;
@@ -592,11 +615,16 @@ export class PresentationEditor extends EventEmitter {
     });
     this.#visibleHost.appendChild(this.#ariaLiveRegion);
 
-    this.#hiddenHost = createHiddenHost(doc, this.#layoutOptions.pageSize?.w ?? DEFAULT_PAGE_SIZE.w);
+    const { wrapper: hiddenHostWrapper, host: hiddenHost } = createHiddenHost(
+      doc,
+      this.#layoutOptions.pageSize?.w ?? DEFAULT_PAGE_SIZE.w,
+    );
+    this.#hiddenHostWrapper = hiddenHostWrapper;
+    this.#hiddenHost = hiddenHost;
     if (doc.body) {
-      doc.body.appendChild(this.#hiddenHost);
+      doc.body.appendChild(this.#hiddenHostWrapper);
     } else {
-      this.#visibleHost.appendChild(this.#hiddenHost);
+      this.#visibleHost.appendChild(this.#hiddenHostWrapper);
     }
 
     const { layoutEngineOptions: _layoutEngineOptions, element: _element, ...editorOptions } = options;
@@ -726,6 +754,7 @@ export class PresentationEditor extends EventEmitter {
 
       const beforeX = win.scrollX;
       const beforeY = win.scrollY;
+      const alreadyFocused = view.hasFocus();
       let focused = false;
 
       // Strategy 1: Try focus with preventScroll option (modern browsers)
@@ -764,10 +793,35 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
+      // When the editor was not focused before, the browser places the DOM selection
+      // at an arbitrary position inside the off-screen contenteditable. ProseMirror's
+      // DOMObserver would read this stale position via a selectionchange event and
+      // overwrite PM state, causing the cursor to jump. Suppress selection updates
+      // for the next 50ms so PM re-applies its own selection to the DOM instead.
+      if (!alreadyFocused) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (view as any).domObserver.suppressSelectionUpdates();
+      }
+
       // Restore scroll position if any focus attempt changed it
       if (win.scrollX !== beforeX || win.scrollY !== beforeY) {
         win.scrollTo(beforeX, beforeY);
       }
+
+      // Safety net: the browser may asynchronously scroll after ProseMirror's
+      // selectionToDOM() modifies the DOM selection inside the hidden editor.
+      // A single requestAnimationFrame catches this post-layout scroll.
+      // The RAF ID is stored so scrollToPosition() can cancel it — otherwise
+      // intentional scrolls (e.g. search navigation) would be undone.
+      if (this.#focusScrollRafId != null) {
+        win.cancelAnimationFrame(this.#focusScrollRafId);
+      }
+      this.#focusScrollRafId = win.requestAnimationFrame(() => {
+        this.#focusScrollRafId = null;
+        if (win.scrollX !== beforeX || win.scrollY !== beforeY) {
+          win.scrollTo(beforeX, beforeY);
+        }
+      });
     };
   }
 
@@ -937,6 +991,129 @@ export class PresentationEditor extends EventEmitter {
       return this.#editor;
     }
     return activeHfEditor;
+  }
+
+  // -------------------------------------------------------------------
+  // Selection bridge — tracked handles + snapshot convenience
+  // -------------------------------------------------------------------
+
+  /**
+   * Inspects `#headerFooterSession` to determine which editing surface is active.
+   */
+  #resolveActiveSurface(): 'body' | 'header' | 'footer' {
+    const mode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (mode === 'header') return 'header';
+    if (mode === 'footer') return 'footer';
+    return 'body';
+  }
+
+  // --- Tracked handle API ---
+
+  /**
+   * Capture the live PM selection on the active editor as a tracked handle.
+   *
+   * The handle is bound to the specific editor that captured it (not just
+   * the surface label), so it remains valid even if the active header/footer
+   * session changes later.
+   */
+  captureCurrentSelectionHandle(): SelectionHandle {
+    const surface = this.#resolveActiveSurface();
+    return this.getActiveEditor().captureCurrentSelectionHandle(surface);
+  }
+
+  /**
+   * Capture the "effective" selection on the active editor as a tracked handle.
+   * Uses the same fallback chain: live non-collapsed → preserved → live.
+   */
+  captureEffectiveSelectionHandle(): SelectionHandle {
+    const surface = this.#resolveActiveSurface();
+    return this.getActiveEditor().captureEffectiveSelectionHandle(surface);
+  }
+
+  /**
+   * Resolve a previously captured handle into a `SelectionCommandContext`.
+   *
+   * The handle carries a reference to the editor that captured it, so
+   * resolution always reads from the correct editor's plugin state —
+   * even if the active header/footer session has changed since capture.
+   *
+   * Returns `null` when:
+   * - the handle was released
+   * - a previously non-empty selection collapsed (content was deleted)
+   */
+  resolveSelectionHandle(handle: SelectionHandle): SelectionCommandContext | null {
+    // The handle's _owner is the Editor that captured it. We use it to
+    // resolve the range, but we need the Editor type for the context.
+    // Since _owner satisfies SelectionHandleOwner (which Editor implements),
+    // and capture always passes `this` (an Editor), this cast is safe.
+    const ownerEditor = handle._owner as Editor;
+    const range = ownerEditor.resolveSelectionHandle(handle);
+    if (!range) return null;
+    return { editor: ownerEditor, doc: ownerEditor.doc, surface: handle.surface, range };
+  }
+
+  /**
+   * Release a tracked selection handle.
+   *
+   * Routes to the owning editor regardless of the current active surface.
+   */
+  releaseSelectionHandle(handle: SelectionHandle): void {
+    (handle._owner as Editor).releaseSelectionHandle(handle);
+  }
+
+  // --- Snapshot convenience API ---
+
+  /**
+   * Snapshot convenience: resolve the live PM selection on the active editor
+   * into a canonical Document API range immediately.
+   */
+  getCurrentSelectionRange(): ResolveRangeOutput {
+    return this.getActiveEditor().getCurrentSelectionRange();
+  }
+
+  /**
+   * Snapshot convenience: resolve the "effective" selection on the active
+   * editor into a canonical Document API range immediately.
+   */
+  getEffectiveSelectionRange(): ResolveRangeOutput {
+    return this.getActiveEditor().getEffectiveSelectionRange();
+  }
+
+  /**
+   * Snapshot convenience: returns the current live selection plus the active
+   * editing context. Guarantees `doc` and `range` refer to the same surface.
+   */
+  getCurrentSelectionContext(): SelectionCommandContext {
+    const activeEditor = this.getActiveEditor();
+    return {
+      editor: activeEditor,
+      doc: activeEditor.doc,
+      surface: this.#resolveActiveSurface(),
+      range: activeEditor.getCurrentSelectionRange(),
+    };
+  }
+
+  /**
+   * Snapshot convenience: returns the effective selection plus the active
+   * editing context. The canonical layout-mode command surface.
+   *
+   * @example
+   * ```ts
+   * const ctx = presentationEditor.getEffectiveSelectionContext();
+   * ctx.doc.replace({
+   *   target: ctx.range.target,
+   *   text: 'New content',
+   * });
+   * ```
+   */
+  getEffectiveSelectionContext(): SelectionCommandContext {
+    const activeEditor = this.getActiveEditor();
+    return {
+      editor: activeEditor,
+      doc: activeEditor.doc,
+      surface: this.#resolveActiveSurface(),
+      range: activeEditor.getEffectiveSelectionRange(),
+    };
   }
 
   /**
@@ -1113,6 +1290,10 @@ export class PresentationEditor extends EventEmitter {
   #syncDocumentModeClass() {
     if (!this.#visibleHost) return;
     this.#visibleHost.classList.toggle('presentation-editor--viewing', this.#documentMode === 'viewing');
+    this.#visibleHost.classList.toggle(
+      'presentation-editor--allow-selection',
+      this.#documentMode === 'viewing' && !!this.#options.allowSelectionInViewMode,
+    );
   }
 
   /**
@@ -2137,6 +2318,14 @@ export class PresentationEditor extends EventEmitter {
     pos: number,
     options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
   ): boolean {
+    // Cancel any pending focus-scroll RAF so this intentional scroll is not undone
+    // by the wrapHiddenEditorFocus safety net (e.g. search navigation after focus).
+    if (this.#focusScrollRafId != null) {
+      const win = this.#visibleHost.ownerDocument?.defaultView;
+      if (win) win.cancelAnimationFrame(this.#focusScrollRafId);
+      this.#focusScrollRafId = null;
+    }
+
     const activeEditor = this.getActiveEditor();
     const doc = activeEditor?.state?.doc;
     if (!doc) return false;
@@ -2180,6 +2369,52 @@ export class PresentationEditor extends EventEmitter {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Scroll a comment or tracked-change anchor so its top edge lands at the
+   * requested viewport Y coordinate.
+   *
+   * @param threadId - Comment or tracked-change identifier
+   * @param targetClientY - Desired top position in client/viewport coordinates
+   * @param options - Scrolling options
+   * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @returns True when the thread could be resolved and scrolling was applied
+   */
+  scrollThreadAnchorToClientY(
+    threadId: string,
+    targetClientY: number,
+    options: { behavior?: ScrollBehavior } = {},
+  ): boolean {
+    if (!threadId || !Number.isFinite(targetClientY)) return false;
+
+    const threadPosition = this.#collectCommentPositions()[threadId];
+    if (!threadPosition) return false;
+
+    const selectionBounds = this.getSelectionBounds(threadPosition.start, threadPosition.end);
+    const currentTop = selectionBounds?.bounds?.top;
+    if (!Number.isFinite(currentTop)) return false;
+
+    const deltaY = currentTop - targetClientY;
+    if (Math.abs(deltaY) < 1) return true;
+
+    const behavior = options.behavior ?? 'auto';
+    const scrollTarget = this.#scrollContainer ?? this.#visibleHost;
+
+    if (scrollTarget instanceof Window) {
+      const currentScrollY = scrollTarget.scrollY ?? scrollTarget.pageYOffset ?? 0;
+      scrollTarget.scrollTo({ top: currentScrollY + deltaY, behavior });
+      return true;
+    }
+
+    if (scrollTarget instanceof HTMLElement) {
+      const maxScrollTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, scrollTarget.scrollTop + deltaY));
+      scrollTarget.scrollTo({ top: nextScrollTop, behavior });
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -2441,6 +2676,7 @@ export class PresentationEditor extends EventEmitter {
     // Notify DomPainter so virtualization accounts for the CSS transform scale
     this.#domPainter?.setZoom?.(zoom);
     this.emit('zoomChange', { zoom });
+    this.#shouldScrollSelectionIntoView = true;
     this.#scheduleSelectionUpdate();
     // Trigger cursor updates on zoom changes
     if (this.#remoteCursorManager?.hasRemoteCursors()) {
@@ -2463,6 +2699,15 @@ export class PresentationEditor extends EventEmitter {
         win.cancelAnimationFrame(this.#rafHandle!);
         this.#rafHandle = null;
       }, 'Layout RAF');
+    }
+
+    // Cancel pending focus-scroll safety net RAF
+    if (this.#focusScrollRafId != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#focusScrollRafId!);
+        this.#focusScrollRafId = null;
+      }, 'Focus scroll RAF');
     }
 
     // Cancel pending decoration sync RAF
@@ -2562,7 +2807,7 @@ export class PresentationEditor extends EventEmitter {
     this.#dragDropManager = null;
     this.#selectionOverlay?.remove();
     this.#painterHost?.remove();
-    this.#hiddenHost?.remove();
+    this.#hiddenHostWrapper?.remove();
     this.#hoverOverlay = null;
     this.#hoverTooltip = null;
     this.#modeBanner?.remove();
@@ -2644,20 +2889,17 @@ export class PresentationEditor extends EventEmitter {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
 
+        const inputType = transaction.getMeta?.('inputType');
         // Detect Y.js-origin transactions (remote collaboration changes).
         // These bypass the blockNodePlugin's sdBlockRev increment to prevent
         // feedback loops, so the FlowBlockCache's fast revision comparison
-        // cannot be trusted — signal it to fall through to JSON comparison.
+        // cannot be trusted. History undo/redo can also restore tracked-mark-only
+        // changes where visible text stays the same, so use the same JSON fallback.
         const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
-        if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
-          this.#flowBlockCache?.setHasExternalChanges(true);
-        }
-        // History undo/redo can restore prior paragraph content while preserving/reusing
-        // sdBlockRev values, which makes the cache's fast revision check unsafe.
-        // Force JSON comparison for this render cycle to avoid stale paragraph reuse.
-        const inputType = transaction.getMeta?.('inputType');
-        const isHistoryType = inputType === 'historyUndo' || inputType === 'historyRedo';
-        if (isHistoryType && transaction.docChanged) {
+        const shouldBypassFastRevision =
+          transaction.docChanged &&
+          (ySyncMeta?.isChangeOrigin || inputType === 'historyUndo' || inputType === 'historyRedo');
+        if (shouldBypassFastRevision) {
           this.#flowBlockCache?.setHasExternalChanges(true);
         }
       }
@@ -2690,6 +2932,8 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
+      // User-initiated selection change (keyboard, mouse) — scroll caret into view.
+      this.#shouldScrollSelectionIntoView = true;
       // Use immediate rendering for selection-only changes (clicks, arrow keys).
       // Without immediate, the render is RAF-deferred — leaving a window where
       // a remote collaborator's edit can cancel the pending render via
@@ -2764,13 +3008,32 @@ export class PresentationEditor extends EventEmitter {
     // These changes mutate translatedLinkedStyles directly and need a full re-render
     // so the style-engine picks up the updated default properties.
     const handleStylesDefaultsChanged = () => {
+      // Stylesheet default mutations can change block conversion output even
+      // when PM JSON is unchanged (e.g., default run color/font). Cached flow
+      // blocks must be invalidated so toFlowBlocks recomputes with new defaults.
+      this.#flowBlockCache.clear();
       this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
       this.#scheduleRerender();
     };
     this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);
     this.#editorListeners.push({
       event: 'stylesDefaultsChanged',
       handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
+    });
+
+    // Listen for footnote/endnote part mutations (e.g., insert via document API).
+    // These modify the OOXML part and derived cache but don't change the PM document,
+    // so the normal 'update' event won't trigger a layout refresh.
+    const handleNotesPartChanged = () => {
+      this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    };
+    this.#editor.on('notes-part-changed', handleNotesPartChanged);
+    this.#editorListeners.push({
+      event: 'notes-part-changed',
+      handler: handleNotesPartChanged as (...args: unknown[]) => void,
     });
 
     const handleCollaborationReady = (payload: unknown) => {
@@ -2786,24 +3049,6 @@ export class PresentationEditor extends EventEmitter {
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
-
-    // Handle remote header/footer changes from collaborators
-    const handleRemoteHeaderFooterChanged = (payload: {
-      type: 'header' | 'footer';
-      sectionId: string;
-      content: unknown;
-    }) => {
-      this.#headerFooterSession?.adapter?.invalidate(payload.sectionId);
-      this.#headerFooterSession?.manager?.refresh();
-      this.#pendingDocChange = true;
-      this.#scheduleRerender();
-    };
-    this.#editor.on('remoteHeaderFooterChanged', handleRemoteHeaderFooterChanged);
-    this.#editorListeners.push({
-      event: 'remoteHeaderFooterChanged',
-      handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
-    });
-
     // Listen for comment selection changes to update Layout Engine highlighting
     const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
       if (this.#domPainter?.setActiveComment) {
@@ -3008,6 +3253,60 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Re-validates the detected scroll container after the first layout completes.
+   *
+   * At setup time, #findScrollableAncestor picks the first ancestor with
+   * overflow-y: auto|scroll — but it can't verify the element actually constrains
+   * content height (content isn't laid out yet). A consumer may set overflow:auto
+   * on the SuperDoc container without constraining its height, causing the element
+   * to expand to fit all content instead of scrolling.
+   *
+   * After layout, we can check scrollHeight vs clientHeight. If the detected
+   * container isn't actually scrollable AND it grew beyond the viewport (ruling
+   * out properly constrained containers that simply don't have enough content
+   * yet), we walk further up to find one that actually scrolls, or fall back
+   * to window.
+   */
+  #revalidateScrollContainer(): void {
+    if (this.#scrollContainerValidated) return;
+    this.#scrollContainerValidated = true;
+
+    if (!(this.#scrollContainer instanceof Element)) return;
+    if (this.#scrollContainer.scrollHeight > this.#scrollContainer.clientHeight + 1) return;
+
+    // A properly constrained container (e.g. height:600px; overflow:auto) may
+    // not be overflowing yet if the document is short. Its clientHeight stays
+    // within viewport bounds. Only switch when the container grew beyond the
+    // viewport — a clear sign its height is unconstrained.
+    const win = this.#scrollContainer.ownerDocument?.defaultView;
+    const viewportHeight = win?.innerHeight ?? 0;
+    if (this.#scrollContainer.clientHeight <= viewportHeight) return;
+
+    let el: Element | null = this.#scrollContainer.parentElement;
+    let next: Element | Window | null = win ?? null;
+
+    while (el) {
+      const { overflowY } = getComputedStyle(el);
+      if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+        next = el;
+        break;
+      }
+      el = el.parentElement;
+    }
+
+    if (!next || next === this.#scrollContainer) return;
+
+    const prev = this.#scrollContainer;
+    prev.removeEventListener('scroll', this.#scrollHandler!);
+    this.#scrollContainer = next;
+
+    if (next instanceof Element) {
+      next.addEventListener('scroll', this.#scrollHandler!, { passive: true });
+    }
+    this.#domPainter?.setScrollContainer?.(next instanceof HTMLElement ? next : null);
+  }
+
+  /**
    * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
@@ -3034,6 +3333,7 @@ export class PresentationEditor extends EventEmitter {
    * @returns {void}
    */
   #focusEditorAfterImageSelection(): void {
+    this.#shouldScrollSelectionIntoView = true;
     this.#scheduleSelectionUpdate();
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -3142,11 +3442,41 @@ export class PresentationEditor extends EventEmitter {
       },
       onEditingContext: (data) => {
         this.emit('headerFooterEditingContext', data);
-        this.#announce(
-          data.kind === 'body'
-            ? 'Exited header/footer edit mode.'
-            : `Editing ${data.kind === 'header' ? 'Header' : 'Footer'} (${data.sectionType ?? 'default'})`,
-        );
+
+        // Clean up any previous header/footer selection listener
+        if (this.#headerFooterEditor && this.#headerFooterSelectionHandler) {
+          this.#headerFooterEditor.off?.('selectionUpdate', this.#headerFooterSelectionHandler);
+          this.#headerFooterEditor = null;
+          this.#headerFooterSelectionHandler = null;
+        }
+
+        if (data.kind === 'body') {
+          this.#announce('Exited header/footer edit mode.');
+          // Ensure the selection overlay is immediately resynced to the body
+          // editor when leaving header/footer mode, so any stale header/footer
+          // highlights are cleared.
+          this.#scheduleSelectionUpdate({ immediate: true });
+        } else {
+          this.#announce(`Editing ${data.kind === 'header' ? 'Header' : 'Footer'} (${data.sectionType ?? 'default'})`);
+
+          // Wire selection updates from the active header/footer editor into
+          // the shared selection overlay + aria-live announcements.
+          const headerFooterEditor = data.editor;
+          const handler = () => {
+            this.#scheduleSelectionUpdate();
+            this.#scheduleA11ySelectionAnnouncement();
+          };
+          headerFooterEditor.on?.('selectionUpdate', handler);
+          this.#headerFooterEditor = headerFooterEditor;
+          this.#headerFooterSelectionHandler = handler;
+
+          // Also trigger an initial selection sync immediately on entry so the
+          // body selection overlay is cleared or updated to match the current
+          // header/footer selection state, instead of leaving stale body
+          // highlights until the first selectionUpdate event fires.
+          this.#scheduleSelectionUpdate({ immediate: true });
+          this.#scheduleA11ySelectionAnnouncement({ immediate: true });
+        }
       },
       onEditBlocked: (reason) => {
         this.emit('headerFooterEditBlocked', { reason });
@@ -3159,6 +3489,26 @@ export class PresentationEditor extends EventEmitter {
       },
       onUpdateAwarenessSession: () => {
         this.#updateAwarenessSession();
+      },
+      onSurfaceUpdate: ({ sourceEditor, surface, headerId, sectionType }) => {
+        this.emit('headerFooterUpdate', {
+          editor: this.#editor,
+          sourceEditor,
+          surface,
+          headerId,
+          sectionType,
+        });
+      },
+      onSurfaceTransaction: ({ sourceEditor, surface, headerId, sectionType, transaction, duration }) => {
+        this.emit('headerFooterTransaction', {
+          editor: this.#editor,
+          sourceEditor,
+          surface,
+          headerId,
+          sectionType,
+          transaction,
+          duration,
+        });
       },
     });
 
@@ -3310,12 +3660,35 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#pendingDocChange = false;
     this.#isRerendering = true;
+
+    // Capture H/F editor focus state before rerender so we can restore it if
+    // a DOM mutation (e.g. page re-ordering in updateVirtualWindow) causes the
+    // browser to blur the active header/footer editor (SD-1993).
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    const activeHfEditor = sessionMode !== 'body' ? this.#headerFooterSession?.activeEditor : null;
+    const hadHfFocus = activeHfEditor?.view?.hasFocus?.() ?? false;
+
     try {
       await this.#rerender();
     } finally {
       this.#isRerendering = false;
       if (this.#pendingDocChange) {
         this.#scheduleRerender();
+      }
+
+      // Restore focus if the H/F editor lost it during rerender.
+      // Guard: only restore if the session is still active with the same editor
+      // (user may have exited H/F mode during the async rerender).
+      if (hadHfFocus && activeHfEditor?.view && this.#headerFooterSession?.activeEditor === activeHfEditor) {
+        const doc = this.#visibleHost.ownerDocument;
+        const editorDom = activeHfEditor.view.dom;
+        if (doc && !editorDom.contains(doc.activeElement)) {
+          try {
+            activeHfEditor.view.focus();
+          } catch {
+            // Ignore focus errors during recovery
+          }
+        }
       }
     }
   }
@@ -3378,10 +3751,39 @@ export class PresentationEditor extends EventEmitter {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
         }
+        // Compute visible endnote numbering (same approach as footnotes).
+        const endnoteNumberById: Record<string, number> = {};
+        const endnoteOrder: string[] = [];
+        try {
+          const seen = new Set<string>();
+          let counter = 1;
+          this.#editor?.state?.doc?.descendants?.((node: any) => {
+            if (node?.type?.name !== 'endnoteReference') return;
+            const rawId = node?.attrs?.id;
+            if (rawId == null) return;
+            const key = String(rawId);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            endnoteNumberById[key] = counter;
+            endnoteOrder.push(key);
+            counter += 1;
+          });
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PresentationEditor] Failed to compute endnote numbering:', e);
+          }
+        }
+        const endnoteSignature = endnoteOrder.join('|');
+        if (endnoteSignature !== this.#endnoteNumberSignature) {
+          this.#flowBlockCache.clear();
+          this.#endnoteNumberSignature = endnoteSignature;
+        }
+
         // Expose numbering to node views and layout adapter.
         try {
           if (converter && typeof converter === 'object') {
             converter['footnoteNumberById'] = footnoteNumberById;
+            converter['endnoteNumberById'] = endnoteNumberById;
           }
         } catch {}
 
@@ -3397,6 +3799,7 @@ export class PresentationEditor extends EventEmitter {
           ? {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
+              ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
@@ -3654,7 +4057,6 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintEnd = perfNow();
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
       const painterPostStart = perfNow();
-      this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
       this.#syncDecorations();
       this.#domIndexObserverManager?.resume();
@@ -3668,6 +4070,7 @@ export class PresentationEditor extends EventEmitter {
       this.#epochMapper.onLayoutComplete(layoutEpoch);
       this.#selectionSync.onLayoutComplete(layoutEpoch);
       layoutCompleted = true;
+      this.#revalidateScrollContainer();
       this.#updatePermissionOverlay();
 
       // Reset error state on successful layout
@@ -4159,10 +4562,16 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #updateSelection() {
-    // In header/footer mode, the ProseMirror editor handles its own caret
+    // Consume the scroll intent before any early returns. Passive re-renders
+    // (virtualization remounts, layout completions) never set this flag, so
+    // they won't scroll the viewport to the caret — only real user-initiated
+    // selection changes (keyboard, mouse, image click, zoom) will.
+    const shouldScrollIntoView = this.#shouldScrollSelectionIntoView;
+    this.#shouldScrollSelectionIntoView = false;
+
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
-      this.#clearSelectedFieldAnnotationClass();
+      this.#updateHeaderFooterSelection();
       return;
     }
 
@@ -4172,7 +4581,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // In viewing mode, don't render caret or selection highlights
-    if (this.#isViewLocked()) {
+    // (unless allowSelectionInViewMode is enabled for read-only selection)
+    if (this.#isViewLocked() && !this.#options.allowSelectionInViewMode) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -4191,11 +4601,13 @@ export class PresentationEditor extends EventEmitter {
     // Keep selection visible when context menu is open.
     const contextMenuOpen = activeEditor?.state ? !!ContextMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
-    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
-    // so it won't be inside [data-editor-ui-surface]. Check both.
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns, tooltips).
+    // Dropdown/tooltip content is portaled under <body>, so it won't be inside
+    // [data-editor-ui-surface]. Check both in-surface and portaled SD UI roots.
     const activeEl = document.activeElement;
-    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.(
+      '[data-editor-ui-surface], .sd-toolbar-dropdown-menu, .toolbar-dropdown-menu',
+    );
 
     if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
       try {
@@ -4275,6 +4687,9 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render caret overlay:', error);
         }
       }
+      if (shouldScrollIntoView) {
+        this.#scrollActiveEndIntoView(caretLayout.pageIndex);
+      }
       return;
     }
 
@@ -4316,6 +4731,99 @@ export class PresentationEditor extends EventEmitter {
       if (process.env.NODE_ENV === 'development') {
         console.warn('[PresentationEditor] Failed to render selection rects:', error);
       }
+    }
+
+    // Scroll to keep the selection head visible (Shift+Arrow across page boundaries).
+    // Use the head's layout rect to determine the target page.
+    if (shouldScrollIntoView) {
+      const head = activeEditor?.view?.state?.selection?.head ?? to;
+      const headLayout = this.#computeCaretLayoutRect(head);
+      if (headLayout) {
+        this.#scrollActiveEndIntoView(headLayout.pageIndex);
+      }
+    }
+  }
+
+  /**
+   * Scrolls the scroll container minimally so that a screen-space rect is visible,
+   * keeping a small margin (20px) for comfortable viewing. No-ops when the rect
+   * is already within the visible bounds.
+   */
+  #scrollScreenRectIntoView(screenTop: number, screenBottom: number): void {
+    const scrollContainer = this.#scrollContainer;
+    if (!scrollContainer) return;
+
+    let containerTop: number;
+    let containerBottom: number;
+
+    if (scrollContainer instanceof Window) {
+      containerTop = 0;
+      containerBottom = scrollContainer.innerHeight;
+    } else {
+      const r = (scrollContainer as Element).getBoundingClientRect();
+      containerTop = r.top;
+      containerBottom = r.bottom;
+    }
+
+    const SCROLL_MARGIN = 20;
+
+    if (screenBottom > containerBottom - SCROLL_MARGIN) {
+      const delta = screenBottom - containerBottom + SCROLL_MARGIN;
+      if (scrollContainer instanceof Window) {
+        scrollContainer.scrollBy({ top: delta });
+      } else {
+        (scrollContainer as Element).scrollTop += delta;
+      }
+    } else if (screenTop < containerTop + SCROLL_MARGIN) {
+      const delta = containerTop + SCROLL_MARGIN - screenTop;
+      if (scrollContainer instanceof Window) {
+        scrollContainer.scrollBy({ top: -delta });
+      } else {
+        (scrollContainer as Element).scrollTop -= delta;
+      }
+    }
+  }
+
+  /**
+   * Scrolls the scroll container so the caret or selection head remains visible
+   * after selection changes. Works for both collapsed (caret) and range selections.
+   *
+   * For collapsed selections, uses the rendered caret element's screen position.
+   * For range selections, uses the rendered selection rect nearest to the head.
+   *
+   * If the target page isn't mounted (virtualized), falls back to scrolling the
+   * page into view to trigger mount; the next selection update handles precise scroll.
+   */
+  #scrollActiveEndIntoView(pageIndex: number): void {
+    // Check if the target page is mounted before trusting rendered element positions.
+    const pageIsMounted = !!this.#painterHost.querySelector(`[data-page-index="${pageIndex}"]`);
+    if (!pageIsMounted) {
+      this.#scrollPageIntoView(pageIndex);
+      return;
+    }
+
+    // Try caret element first (collapsed selection)
+    const caretEl = this.#localSelectionLayer?.querySelector(
+      '.presentation-editor__selection-caret',
+    ) as HTMLElement | null;
+    if (caretEl) {
+      const r = caretEl.getBoundingClientRect();
+      this.#scrollScreenRectIntoView(r.top, r.bottom);
+      return;
+    }
+
+    // Range selection: pick the rendered rect nearest the selection head.
+    // Rects are rendered in document order. head < anchor means the user is
+    // extending backward (Shift+ArrowUp) → first child. head >= anchor means
+    // extending forward (Shift+ArrowDown) → last child.
+    const sel = this.getActiveEditor()?.view?.state?.selection;
+    const headIsForward = !sel || sel.head >= sel.anchor;
+    const headRect = (
+      headIsForward ? this.#localSelectionLayer?.lastElementChild : this.#localSelectionLayer?.firstElementChild
+    ) as HTMLElement | null;
+    if (headRect) {
+      const r = headRect.getBoundingClientRect();
+      this.#scrollScreenRectIntoView(r.top, r.bottom);
     }
   }
 
@@ -4426,7 +4934,10 @@ export class PresentationEditor extends EventEmitter {
       ...(firstSection?.margins?.header != null ? { header: firstSection.margins.header } : {}),
       ...(firstSection?.margins?.footer != null ? { footer: firstSection.margins.footer } : {}),
     };
-    const columns = firstSection?.columns ?? defaults.columns;
+    // For the first emitted section break, absence of w:cols means OOXML single-column default.
+    // Falling back to document defaults here is wrong because bodySectPr often reflects the
+    // final section, which can leak a later multi-column configuration into the document start.
+    const columns = firstSection ? (firstSection.columns ?? { count: 1, gap: 0 }) : defaults.columns;
 
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
@@ -4603,9 +5114,15 @@ export class PresentationEditor extends EventEmitter {
     return {
       width: measurementWidth,
       height,
-      // Pass actual page dimensions for page-relative anchor positioning in headers/footers
       pageWidth: pageSize.w,
-      margins: { left: marginLeft, right: marginRight },
+      pageHeight: pageSize.h,
+      margins: {
+        left: marginLeft,
+        right: marginRight,
+        top: marginTop,
+        bottom: marginBottom,
+        header: headerMargin,
+      },
       overflowBaseHeight,
     };
   }
@@ -4624,7 +5141,7 @@ export class PresentationEditor extends EventEmitter {
       footerBlocks?: unknown;
       headerBlocksByRId: Map<string, FlowBlock[]> | undefined;
       footerBlocksByRId: Map<string, FlowBlock[]> | undefined;
-      constraints: { width: number; height: number; pageWidth: number; margins: { left: number; right: number } };
+      constraints: HeaderFooterConstraints;
     } | null,
     layout: Layout,
     sectionMetadata: SectionMetadata[],
@@ -4724,8 +5241,6 @@ export class PresentationEditor extends EventEmitter {
 
   #announceSelectionNow(): void {
     if (!this.#ariaLiveRegion) return;
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') return;
     const announcement = computeA11ySelectionAnnouncementFromHelper(this.getActiveEditor().state);
     if (!announcement) return;
 
@@ -4953,6 +5468,8 @@ export class PresentationEditor extends EventEmitter {
         bookmarks: this.#layoutState.bookmarks,
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,
+        scrollContainer: this.#scrollContainer ?? this.#visibleHost,
+        zoom: this.zoom,
         scrollPageIntoView: (pageIndex) => this.#scrollPageIntoView(pageIndex),
         waitForPageMount: (pageIndex, timeoutMs) => this.#waitForPageMount(pageIndex, { timeout: timeoutMs }),
         getActiveEditor: () => this.getActiveEditor(),
@@ -5210,21 +5727,42 @@ export class PresentationEditor extends EventEmitter {
    */
   #applyZoom() {
     if (this.#isSemanticFlowMode()) {
-      // Semantic mode: fill the container with fluid widths, no zoom scaling.
-      this.#viewportHost.style.width = '100%';
+      const zoom = this.#layoutOptions.zoom ?? 1;
+
+      // Semantic mode: fluid widths with optional zoom scaling.
       this.#viewportHost.style.minWidth = '';
       this.#viewportHost.style.minHeight = '';
-      this.#viewportHost.style.transform = '';
 
-      this.#painterHost.style.width = '100%';
-      this.#painterHost.style.minHeight = '';
-      this.#painterHost.style.transformOrigin = '';
-      this.#painterHost.style.transform = '';
+      if (zoom === 1) {
+        this.#viewportHost.style.width = '100%';
+        this.#viewportHost.style.transform = '';
 
-      this.#selectionOverlay.style.width = '100%';
-      this.#selectionOverlay.style.height = '100%';
-      this.#selectionOverlay.style.transformOrigin = '';
-      this.#selectionOverlay.style.transform = '';
+        this.#painterHost.style.width = '100%';
+        this.#painterHost.style.minHeight = '';
+        this.#painterHost.style.transformOrigin = '';
+        this.#painterHost.style.transform = '';
+
+        this.#selectionOverlay.style.width = '100%';
+        this.#selectionOverlay.style.height = '100%';
+        this.#selectionOverlay.style.transformOrigin = '';
+        this.#selectionOverlay.style.transform = '';
+      } else {
+        // Scale content while keeping fluid layout: set unscaled width to
+        // container/zoom so the reflowed content visually fills the container
+        // after the CSS transform enlarges it.
+        this.#viewportHost.style.width = `${100 / zoom}%`;
+        this.#viewportHost.style.transform = '';
+
+        this.#painterHost.style.width = '100%';
+        this.#painterHost.style.minHeight = '';
+        this.#painterHost.style.transformOrigin = 'top left';
+        this.#painterHost.style.transform = `scale(${zoom})`;
+
+        this.#selectionOverlay.style.width = '100%';
+        this.#selectionOverlay.style.height = '100%';
+        this.#selectionOverlay.style.transformOrigin = 'top left';
+        this.#selectionOverlay.style.transform = `scale(${zoom})`;
+      }
       return;
     }
 
@@ -5698,6 +6236,70 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  /**
+   * Updates the selection overlay while editing headers/footers.
+   *
+   * Uses header/footer layout data from HeaderFooterSessionManager to compute
+   * selection rectangles in layout space, then renders them into the shared
+   * selection overlay so selection behaves consistently with body content.
+   *
+   * Caret rendering is left to the ProseMirror header/footer editor; this
+   * overlay only mirrors non-collapsed selections.
+   */
+  #updateHeaderFooterSelection() {
+    this.#clearSelectedFieldAnnotationClass();
+
+    if (!this.#localSelectionLayer) {
+      return;
+    }
+
+    const activeEditor = this.getActiveEditor();
+    const selection = activeEditor?.state?.selection;
+    if (!selection) {
+      try {
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
+    const { from, to } = selection;
+
+    // Let the header/footer ProseMirror editor handle caret rendering.
+    if (from === to) {
+      try {
+        this.#localSelectionLayer.innerHTML = '';
+      } catch {}
+      return;
+    }
+
+    const rects = this.#computeHeaderFooterSelectionRects(from, to);
+    if (!rects.length) {
+      return;
+    }
+
+    // Header/footer selection rects are already mapped into body-page
+    // coordinates using the body page height and no page gap. To avoid
+    // double-applying any gap or using the header/footer layout height, use
+    // the body page height here and a zero page gap.
+    const pageHeight = this.#getBodyPageHeight();
+    const pageGap = 0;
+
+    try {
+      this.#localSelectionLayer.innerHTML = '';
+      renderSelectionRects({
+        localSelectionLayer: this.#localSelectionLayer,
+        rects,
+        pageHeight,
+        pageGap,
+        convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+      });
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PresentationEditor] Failed to render header/footer selection rects:', error);
+      }
+    }
+  }
+
   #dismissErrorBanner() {
     this.#errorBanner?.remove();
     this.#errorBanner = null;
@@ -5708,6 +6310,9 @@ export class PresentationEditor extends EventEmitter {
    * Determines whether the current viewing mode should block edits.
    * When documentMode is viewing but the active editor has been toggled
    * back to editable (e.g. permission ranges), we treat the view as editable.
+   *
+   * Note: This method controls input blocking. For selection visuals,
+   * check allowSelectionInViewMode separately.
    */
   #isViewLocked(): boolean {
     if (this.#documentMode !== 'viewing') return false;
@@ -5715,108 +6320,5 @@ export class PresentationEditor extends EventEmitter {
       ?.permissionRanges?.hasAllowedRanges;
     if (hasPermissionOverride) return false;
     return this.#documentMode === 'viewing';
-  }
-
-  /**
-   * Applies vertical alignment and font scaling to layout DOM elements for subscript/superscript rendering.
-   *
-   * This method post-processes the painted DOM layout to apply vertical alignment styles
-   * (super, sub, baseline, or custom position) based on run properties and text style marks.
-   * It handles both DOCX-style vertAlign ('superscript', 'subscript', 'baseline') and
-   * custom position offsets (in half-points).
-   *
-   * Processing logic:
-   * 1. Queries all text spans with ProseMirror position markers
-   * 2. For each span, resolves the ProseMirror position to find the containing run node
-   * 3. Extracts vertAlign and position from run properties and/or text style marks
-   * 4. Applies CSS vertical-align and font-size styles based on the extracted properties
-   * 5. Position takes precedence over vertAlign when both are present
-   *
-   * @throws Does not throw - DOM manipulation errors are silently caught to prevent layout corruption
-   * @private
-   */
-  #applyVertAlignToLayout() {
-    const doc = this.#editor?.state?.doc;
-    if (!doc || !this.#painterHost) return;
-
-    try {
-      const spans = this.#painterHost.querySelectorAll('.superdoc-line span[data-pm-start]') as NodeListOf<HTMLElement>;
-      spans.forEach((span) => {
-        try {
-          // Skip header/footer spans - they belong to separate PM documents
-          // and their data-pm-start values don't correspond to the body doc
-          if (span.closest('.superdoc-page-header, .superdoc-page-footer')) return;
-
-          const pmStart = Number(span.dataset.pmStart ?? 'NaN');
-          if (!Number.isFinite(pmStart)) return;
-
-          const pos = Math.max(0, Math.min(pmStart, doc.content.size));
-          const $pos = doc.resolve(pos);
-
-          let runNode: ProseMirrorNode | null = null;
-          for (let depth = $pos.depth; depth >= 0; depth--) {
-            const node = $pos.node(depth);
-            if (node.type.name === 'run') {
-              runNode = node;
-              break;
-            }
-          }
-
-          let vertAlign: string | null = runNode?.attrs?.runProperties?.vertAlign ?? null;
-          let position: number | null = runNode?.attrs?.runProperties?.position ?? null;
-          let fontSizeHalfPts: number | null = runNode?.attrs?.runProperties?.fontSize ?? null;
-
-          if (!vertAlign && position == null && runNode) {
-            runNode.forEach((child: ProseMirrorNode) => {
-              if (!child.isText || !child.marks?.length) return;
-              const rpr = decodeRPrFromMarks(child.marks as Mark[]) as {
-                vertAlign?: string;
-                position?: number;
-                fontSize?: number;
-              };
-              if (rpr.vertAlign && !vertAlign) vertAlign = rpr.vertAlign;
-              if (rpr.position != null && position == null) position = rpr.position;
-              if (rpr.fontSize != null && fontSizeHalfPts == null) fontSizeHalfPts = rpr.fontSize;
-            });
-          }
-
-          if (vertAlign == null && position == null) return;
-
-          const styleEntries: string[] = [];
-          if (position != null && Number.isFinite(position)) {
-            const pts = halfPointToPoints(position);
-            if (Number.isFinite(pts)) {
-              styleEntries.push(`vertical-align: ${pts}pt`);
-            }
-          } else if (vertAlign === 'superscript' || vertAlign === 'subscript') {
-            styleEntries.push(`vertical-align: ${vertAlign === 'superscript' ? 'super' : 'sub'}`);
-            if (fontSizeHalfPts != null && Number.isFinite(fontSizeHalfPts)) {
-              const scaledPts = halfPointToPoints(fontSizeHalfPts * SUBSCRIPT_SUPERSCRIPT_SCALE);
-              if (Number.isFinite(scaledPts)) {
-                styleEntries.push(`font-size: ${scaledPts}pt`);
-              } else {
-                styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-              }
-            } else {
-              styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-            }
-          } else if (vertAlign === 'baseline') {
-            styleEntries.push('vertical-align: baseline');
-          }
-
-          if (!styleEntries.length) return;
-          const existing = span.getAttribute('style');
-          const merged = existing ? `${existing}; ${styleEntries.join('; ')}` : styleEntries.join('; ');
-          span.setAttribute('style', merged);
-        } catch (error) {
-          // Silently catch errors for individual spans to prevent layout corruption
-          // DOM manipulation failures should not break the entire layout process
-          console.error('Failed to apply vertical alignment to span:', error);
-        }
-      });
-    } catch (error) {
-      // Silently catch errors to prevent layout corruption
-      console.error('Failed to apply vertical alignment to layout:', error);
-    }
   }
 }

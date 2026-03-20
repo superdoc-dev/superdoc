@@ -71,6 +71,7 @@ perf-baseline-results.json
 .claude
 plans/
 
+tests/layout-snapshots
 tests/layout/candidate/
 tests/layout/reference/
 tests/layout/reports/
@@ -84,6 +85,7 @@ devtools/visual-testing/pnpm-lock.yaml
 __pycache__/
 *.pyc
 *.pyo
+venv/
 # Generated platform companion build metadata (do not commit)
 packages/sdk/langs/python/platforms/**/*.egg-info/
 # Generated python packaging metadata (do not commit)
@@ -101,4 +103,5 @@ packages/sdk/langs/python/superdoc/generated/
 packages/sdk/tools/*.json
 # Note: apps/docs/document-api/reference/ stays committed because Mintlify
 # deploys directly from git with no pre-build hook support.
-examples/collaboration/superdoc-yjs/.venv
+
+.playwright-cli/

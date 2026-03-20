@@ -15,6 +15,14 @@ import {
   OPERATION_REQUIRES_DOCUMENT_CONTEXT_MAP,
   type OperationId,
 } from '@superdoc/document-api';
+import { CLI_OPERATION_COMMAND_KEYS } from './commands';
+import {
+  CLI_DOC_OPERATIONS,
+  CLI_OPERATION_IDS,
+  type CliOnlyOperation,
+  type CliOperationId,
+  type DocBackedCliOpId,
+} from './operation-set';
 import type {
   CliOperationConstraints,
   CliOperationMetadata,
@@ -22,37 +30,45 @@ import type {
   CliOperationParamSpec,
   CliTypeSpec,
 } from './types';
-import {
-  CLI_DOC_OPERATIONS,
-  CLI_OPERATION_IDS,
-  type CliOperationId,
-  type CliOnlyOperation,
-  type DocBackedCliOpId,
-} from './operation-set';
-import { CLI_OPERATION_COMMAND_KEYS } from './commands';
 
 // ---------------------------------------------------------------------------
 // Envelope param templates (CLI transport — not in document-api)
 // ---------------------------------------------------------------------------
 
-const DOC_PARAM: CliOperationParamSpec = { name: 'doc', kind: 'doc', type: 'string' };
-const SESSION_PARAM: CliOperationParamSpec = { name: 'sessionId', kind: 'flag', flag: 'session', type: 'string' };
+const DOC_PARAM: CliOperationParamSpec = {
+  name: 'doc',
+  kind: 'doc',
+  type: 'string',
+  description: 'Document path. Optional when a session is already open.',
+};
+const SESSION_PARAM: CliOperationParamSpec = {
+  name: 'sessionId',
+  kind: 'flag',
+  flag: 'session',
+  type: 'string',
+  description: 'Session ID for multi-session workflows. Optional when only one session is open.',
+};
 const OUT_PARAM: CliOperationParamSpec = { name: 'out', kind: 'flag', type: 'string', agentVisible: false };
-const FORCE_PARAM: CliOperationParamSpec = { name: 'force', kind: 'flag', type: 'boolean' };
+const FORCE_PARAM: CliOperationParamSpec = {
+  name: 'force',
+  kind: 'flag',
+  type: 'boolean',
+  description: 'Bypass confirmation checks.',
+};
 const DRY_RUN_PARAM: CliOperationParamSpec = {
   name: 'dryRun',
   kind: 'flag',
   flag: 'dry-run',
   type: 'boolean',
-  agentVisible: false,
+  description: 'Preview the result without applying changes.',
 };
 const CHANGE_MODE_PARAM: CliOperationParamSpec = {
   name: 'changeMode',
   kind: 'flag',
   flag: 'change-mode',
   type: 'string',
-  schema: { oneOf: [{ const: 'direct' }, { const: 'tracked' }] } as CliTypeSpec,
-  agentVisible: false,
+  schema: { enum: ['direct', 'tracked'] } as CliTypeSpec,
+  description: 'Edit mode: "direct" applies changes immediately, "tracked" records as suggestions.',
 };
 const EXPECTED_REVISION_PARAM: CliOperationParamSpec = {
   name: 'expectedRevision',
@@ -79,7 +95,12 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'expectedRevision', 'changeMode', 'dryRun']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
+
+type ObjectSchemaVariant = {
+  properties: Record<string, JsonSchema>;
+  required: Set<string>;
+};
 
 function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): JsonSchema {
   if (schema.$ref && $defs) {
@@ -91,6 +112,108 @@ function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): Jso
     }
   }
   return schema;
+}
+
+function hasObjectShape(schema: JsonSchema): boolean {
+  return schema.type === 'object' || schema.properties != null || schema.required != null;
+}
+
+function cloneVariant(variant: ObjectSchemaVariant): ObjectSchemaVariant {
+  return {
+    properties: { ...variant.properties },
+    required: new Set(variant.required),
+  };
+}
+
+function directObjectVariant(schema: JsonSchema): ObjectSchemaVariant {
+  return {
+    properties: {
+      ...(((schema.properties as Record<string, JsonSchema> | undefined) ?? {}) as Record<string, JsonSchema>),
+    },
+    required: new Set<string>(((schema.required as string[] | undefined) ?? []) as string[]),
+  };
+}
+
+function schemasEqual(left: JsonSchema, right: JsonSchema): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergePropertySchemas(left: JsonSchema, right: JsonSchema): JsonSchema {
+  if (schemasEqual(left, right)) return left;
+
+  const variants: JsonSchema[] = [];
+  const appendVariant = (schema: JsonSchema) => {
+    if (variants.some((candidate) => schemasEqual(candidate, schema))) return;
+    variants.push(schema);
+  };
+
+  if (Array.isArray(left.oneOf)) {
+    for (const entry of left.oneOf as JsonSchema[]) appendVariant(entry);
+  } else {
+    appendVariant(left);
+  }
+
+  if (Array.isArray(right.oneOf)) {
+    for (const entry of right.oneOf as JsonSchema[]) appendVariant(entry);
+  } else {
+    appendVariant(right);
+  }
+
+  return variants.length === 1 ? variants[0]! : { oneOf: variants };
+}
+
+function mergeObjectVariants(left: ObjectSchemaVariant, right: ObjectSchemaVariant): ObjectSchemaVariant {
+  const merged = cloneVariant(left);
+  for (const [name, schema] of Object.entries(right.properties)) {
+    const existing = merged.properties[name];
+    merged.properties[name] = existing ? mergePropertySchemas(existing, schema) : schema;
+  }
+  for (const key of right.required) {
+    merged.required.add(key);
+  }
+  return merged;
+}
+
+function extractObjectSchemaVariants(rawSchema: JsonSchema, $defs?: Record<string, JsonSchema>): ObjectSchemaVariant[] {
+  const schema = resolveRef(rawSchema, $defs);
+  const directVariants = hasObjectShape(schema) ? [directObjectVariant(schema)] : [];
+  let variants = directVariants.length > 0 ? directVariants.map(cloneVariant) : [];
+
+  if (Array.isArray(schema.allOf)) {
+    variants = variants.length > 0 ? variants : [{ properties: {}, required: new Set<string>() }];
+    for (const member of schema.allOf as JsonSchema[]) {
+      const memberVariants = extractObjectSchemaVariants(member, $defs);
+      if (memberVariants.length === 0) continue;
+
+      const nextVariants: ObjectSchemaVariant[] = [];
+      for (const base of variants) {
+        for (const part of memberVariants) {
+          nextVariants.push(mergeObjectVariants(base, part));
+        }
+      }
+      variants = nextVariants;
+    }
+  }
+
+  const alternativeKeyword = Array.isArray(schema.oneOf) ? 'oneOf' : Array.isArray(schema.anyOf) ? 'anyOf' : null;
+  if (alternativeKeyword) {
+    const branches = (schema[alternativeKeyword] as JsonSchema[]).flatMap((member) =>
+      extractObjectSchemaVariants(member, $defs),
+    );
+    if (branches.length > 0) {
+      const baseVariants = variants.length > 0 ? variants : [{ properties: {}, required: new Set<string>() }];
+      const nextVariants: ObjectSchemaVariant[] = [];
+      for (const base of baseVariants) {
+        for (const branch of branches) {
+          nextVariants.push(mergeObjectVariants(base, branch));
+        }
+      }
+      variants = nextVariants;
+    }
+  }
+
+  if (variants.length > 0) return variants;
+  return hasObjectShape(schema) ? [directObjectVariant(schema)] : [];
 }
 
 function schemaToParamType(schema: JsonSchema, $defs?: Record<string, JsonSchema>): CliOperationParamSpec['type'] {
@@ -122,43 +245,46 @@ function isSimpleType(schema: JsonSchema, $defs?: Record<string, JsonSchema>): b
 
 function jsonSchemaToTypeSpec(schema: JsonSchema, $defs?: Record<string, JsonSchema>): CliTypeSpec {
   schema = resolveRef(schema, $defs);
+  const desc = typeof schema.description === 'string' ? schema.description : undefined;
 
-  if ('const' in schema) return { const: schema.const } as CliTypeSpec;
+  let result: CliTypeSpec;
 
-  if (schema.oneOf) {
-    return {
+  if ('const' in schema) {
+    result = { const: schema.const } as CliTypeSpec;
+  } else if (schema.oneOf) {
+    result = {
       oneOf: (schema.oneOf as JsonSchema[]).map((s) => jsonSchemaToTypeSpec(s, $defs)),
     } as CliTypeSpec;
-  }
-
-  if (schema.enum && Array.isArray(schema.enum)) {
-    return {
+  } else if (schema.enum && Array.isArray(schema.enum)) {
+    result = {
       oneOf: (schema.enum as unknown[]).map((v) => ({ const: v }) as CliTypeSpec),
     } as CliTypeSpec;
-  }
-
-  if (schema.type === 'string') return { type: 'string' } as CliTypeSpec;
-  if (schema.type === 'number' || schema.type === 'integer') return { type: 'number' } as CliTypeSpec;
-  if (schema.type === 'boolean') return { type: 'boolean' } as CliTypeSpec;
-
-  if (schema.type === 'array') {
+  } else if (schema.type === 'string') {
+    result = { type: 'string' } as CliTypeSpec;
+  } else if (schema.type === 'number' || schema.type === 'integer') {
+    result = { type: 'number' } as CliTypeSpec;
+  } else if (schema.type === 'boolean') {
+    result = { type: 'boolean' } as CliTypeSpec;
+  } else if (schema.type === 'array') {
     const items = (schema.items as JsonSchema) ?? {};
-    return { type: 'array', items: jsonSchemaToTypeSpec(items, $defs) } as CliTypeSpec;
-  }
-
-  if (schema.type === 'object') {
+    result = { type: 'array', items: jsonSchemaToTypeSpec(items, $defs) } as CliTypeSpec;
+  } else if (schema.type === 'object') {
     const properties: Record<string, CliTypeSpec> = {};
     for (const [key, propSchema] of Object.entries((schema.properties as Record<string, JsonSchema>) ?? {})) {
       properties[key] = jsonSchemaToTypeSpec(propSchema, $defs);
     }
-    const result: CliTypeSpec = { type: 'object', properties } as CliTypeSpec;
+    result = { type: 'object', properties } as CliTypeSpec;
     if (schema.required && Array.isArray(schema.required)) {
       (result as { required: readonly string[] }).required = schema.required as string[];
     }
-    return result;
+  } else {
+    result = { type: 'json' } as CliTypeSpec;
   }
 
-  return { type: 'json' } as CliTypeSpec;
+  if (desc) {
+    (result as { description?: string }).description = desc;
+  }
+  return result;
 }
 
 function deriveParamsFromInputSchema(
@@ -170,8 +296,26 @@ function deriveParamsFromInputSchema(
 } {
   const params: CliOperationParamSpec[] = [];
   const positionalParams: string[] = [];
-  const properties = (inputSchema.properties ?? {}) as Record<string, JsonSchema>;
-  const required = new Set<string>((inputSchema.required as string[]) ?? []);
+  const variants = extractObjectSchemaVariants(inputSchema, $defs);
+  const properties: Record<string, JsonSchema> = {};
+  const requiredCounts = new Map<string, number>();
+
+  for (const variant of variants) {
+    for (const [name, schema] of Object.entries(variant.properties)) {
+      const existing = properties[name];
+      properties[name] = existing ? mergePropertySchemas(existing, schema) : schema;
+    }
+    for (const name of variant.required) {
+      requiredCounts.set(name, (requiredCounts.get(name) ?? 0) + 1);
+    }
+  }
+
+  const required = new Set<string>();
+  for (const [name] of Object.entries(properties)) {
+    if (variants.length > 0 && requiredCounts.get(name) === variants.length) {
+      required.add(name);
+    }
+  }
 
   for (const [name, rawPropSchema] of Object.entries(properties)) {
     const propSchema = resolveRef(rawPropSchema, $defs);
@@ -179,13 +323,23 @@ function deriveParamsFromInputSchema(
     const isComplex = !isSimpleType(propSchema, $defs) && paramType === 'json';
 
     const flagBase = camelToKebab(name);
+    const isRequired = required.has(name);
     const param: CliOperationParamSpec = {
       name,
       kind: isComplex ? 'jsonFlag' : 'flag',
       flag: isComplex ? `${flagBase}-json` : flagBase,
       type: paramType,
-      required: required.has(name),
+      required: isRequired,
     };
+
+    // Propagate description from JSON Schema property.
+    // Check raw schema first (description may sit alongside $ref), then resolved schema.
+    const rawDesc = (rawPropSchema as JsonSchema).description;
+    const resolvedDesc = propSchema.description;
+    const desc = typeof rawDesc === 'string' ? rawDesc : typeof resolvedDesc === 'string' ? resolvedDesc : undefined;
+    if (desc) {
+      param.description = desc;
+    }
 
     if (AGENT_HIDDEN_PARAM_NAMES.has(name)) {
       param.agentVisible = false;
@@ -288,19 +442,11 @@ const PARAM_FLAG_OVERRIDES: Partial<Record<string, Record<string, { name?: strin
 // ---------------------------------------------------------------------------
 // Per-operation param schema overrides
 //
-// Some contract schemas intentionally use broad placeholders (for example,
-// mutation-step arrays represented as { type: 'object' }). Validate these
-// payloads as generic JSON to avoid over-constraining CLI flags.
+// Override specific parameter schemas when the contract schema needs
+// adjustment for CLI metadata (e.g. simplifying or enriching).
 // ---------------------------------------------------------------------------
 
-const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {
-  'doc.mutations.preview': {
-    steps: { type: 'json' },
-  },
-  'doc.mutations.apply': {
-    steps: { type: 'json' },
-  },
-};
+const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {};
 
 // ---------------------------------------------------------------------------
 // Schema-derived param exclusions
@@ -327,18 +473,18 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
 // These are convenience alternatives to --target-json; invoke-input.ts
 // normalizes them into canonical target objects before dispatch.
 const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
-  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string' },
-  { name: 'start', kind: 'flag', type: 'number' },
-  { name: 'end', kind: 'flag', type: 'number' },
+  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
+  { name: 'start', kind: 'flag', type: 'number', description: 'Start offset within the block (character index).' },
+  { name: 'end', kind: 'flag', type: 'number', description: 'End offset within the block (character index).' },
 ];
 
 const INSERT_FLAT_PARAMS: CliOperationParamSpec[] = [
-  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string' },
-  { name: 'offset', kind: 'flag', type: 'number' },
+  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
+  { name: 'offset', kind: 'flag', type: 'number', description: 'Character offset within the block for insertion.' },
 ];
 
 const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
-  { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+  { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string', description: 'Node ID of the target list item.' },
 ];
 
 const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is OperationId =>
@@ -347,90 +493,364 @@ const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationI
 
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.find': [
-    { name: 'type', kind: 'flag', type: 'string' },
-    { name: 'nodeType', kind: 'flag', flag: 'node-type', type: 'string' },
-    { name: 'kind', kind: 'flag', type: 'string' },
-    { name: 'pattern', kind: 'flag', type: 'string' },
-    { name: 'mode', kind: 'flag', type: 'string' },
-    { name: 'caseSensitive', kind: 'flag', flag: 'case-sensitive', type: 'boolean' },
-    { name: 'select', kind: 'jsonFlag', flag: 'select-json', type: 'json' },
-    { name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json' },
+    {
+      name: 'type',
+      kind: 'flag',
+      type: 'string',
+      description: "Selector type: 'text' for text search or 'node' for node type search.",
+    },
+    {
+      name: 'nodeType',
+      kind: 'flag',
+      flag: 'node-type',
+      type: 'string',
+      description: 'Node type to match (paragraph, heading, table, listItem, etc.).',
+    },
+    { name: 'kind', kind: 'flag', type: 'string', description: "Filter: 'block' or 'inline'." },
+    { name: 'pattern', kind: 'flag', type: 'string', description: 'Text or regex pattern to match.' },
+    { name: 'mode', kind: 'flag', type: 'string', description: "Match mode: 'contains' (substring) or 'regex'." },
+    {
+      name: 'caseSensitive',
+      kind: 'flag',
+      flag: 'case-sensitive',
+      type: 'boolean',
+      description: 'Case-sensitive matching. Default: false.',
+    },
+    {
+      name: 'select',
+      kind: 'jsonFlag',
+      flag: 'select-json',
+      type: 'json',
+      description: "Search selector as JSON: {type:'text', pattern:'...'} or {type:'node', nodeType:'...'}.",
+    },
+    { name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json', description: 'Query filter as JSON object.' },
   ],
   'doc.lists.list': [{ name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json' }],
-  'doc.getNode': [{ name: 'address', kind: 'jsonFlag', flag: 'address-json', type: 'json' }],
+  'doc.getNode': [
+    {
+      name: 'address',
+      kind: 'jsonFlag',
+      flag: 'address-json',
+      type: 'json',
+      description: 'Node address to retrieve (block or inline address object).',
+    },
+  ],
   // Text-range operations: flat flags (--block-id, --start, --end) as shortcuts for --target-json
   'doc.insert': [...INSERT_FLAT_PARAMS],
   'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.styles.apply': [
-    { name: 'target', kind: 'jsonFlag', flag: 'target-json', type: 'json' },
-    { name: 'patch', kind: 'jsonFlag', flag: 'patch-json', type: 'json' },
+    {
+      name: 'target',
+      kind: 'jsonFlag',
+      flag: 'target-json',
+      type: 'json',
+      description: 'Text address or block address to apply styles to.',
+    },
+    {
+      name: 'patch',
+      kind: 'jsonFlag',
+      flag: 'patch-json',
+      type: 'json',
+      description: 'Style patch object with run and/or paragraph properties to apply.',
+    },
   ],
   'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS],
   // List operations: flat flag (--node-id) as shortcut for --target-json, plus --input-json
   'doc.lists.insert': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.indent': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.outdent': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
-  'doc.lists.create': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.attach': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.create': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.attach': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
   'doc.lists.detach': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
-  'doc.lists.join': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.canJoin': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.join': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.canJoin': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
   'doc.lists.separate': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.setLevel': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.setValue': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.continuePrevious': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.canContinuePrevious': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
-  'doc.lists.setLevelRestart': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.applyTemplate': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.applyPreset': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.captureTemplate': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setLevelNumbering': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setLevelBullet': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setLevelPictureBullet': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setLevelAlignment': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setLevelIndents': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setLevelTrailingCharacter': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setLevelMarkerFont': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.clearLevelOverrides': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelRestart': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.applyTemplate': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.applyPreset': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.captureTemplate': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.setLevelNumbering': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.setLevelBullet': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.setLevelPictureBullet': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.setLevelAlignment': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.setLevelIndents': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.setLevelTrailingCharacter': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.setLevelMarkerFont': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
+  'doc.lists.clearLevelOverrides': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
+  ],
   'doc.lists.convertToText': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Operation input as JSON object.',
+    },
     ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.blocks.list': [
+    { name: 'offset', kind: 'flag', flag: 'offset', type: 'number' },
+    { name: 'limit', kind: 'flag', flag: 'limit', type: 'number' },
+    { name: 'nodeTypes', kind: 'jsonFlag', flag: 'node-types-json', type: 'json' },
   ],
   'doc.blocks.delete': [
-    { name: 'nodeType', kind: 'flag', flag: 'node-type', type: 'string' },
-    { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+    {
+      name: 'nodeType',
+      kind: 'flag',
+      flag: 'node-type',
+      type: 'string',
+      description: 'Block type of the node to delete.',
+    },
+    { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string', description: 'Node ID of the block to delete.' },
   ],
-  'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.blocks.deleteRange': [
+    {
+      name: 'start',
+      kind: 'jsonFlag',
+      flag: 'start-json',
+      type: 'json',
+      description: 'Block address of the first block in the range to delete.',
+    },
+    {
+      name: 'end',
+      kind: 'jsonFlag',
+      flag: 'end-json',
+      type: 'json',
+      description: 'Block address of the last block in the range to delete.',
+    },
+  ],
+  'doc.create.paragraph': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Full paragraph input as JSON (alternative to individual text/at params).',
+    },
+  ],
+  'doc.create.heading': [
+    {
+      name: 'input',
+      kind: 'jsonFlag',
+      flag: 'input-json',
+      type: 'json',
+      description: 'Full heading input as JSON (alternative to individual text/level/at params).',
+    },
+  ],
 };
 
 for (const operationId of FORMAT_OPERATION_IDS) {
@@ -575,9 +995,9 @@ function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata
     const seenNames = new Set<string>();
     const mergedParams: CliOperationParamSpec[] = [];
 
-    for (const param of envelope) {
-      seenNames.add(param.name);
-      mergedParams.push(param);
+    for (const envelopeParam of envelope) {
+      seenNames.add(envelopeParam.name);
+      mergedParams.push(envelopeParam);
     }
 
     // Apply flag overrides and exclusions to schema params before merging
@@ -662,7 +1082,15 @@ export const CLI_OPERATION_METADATA: Record<CliOperationId, CliOperationMetadata
 // Option specs (derived mechanically from params)
 // ---------------------------------------------------------------------------
 
-function deriveOptionSpecs(params: readonly CliOperationParamSpec[]): CliOperationOptionSpec[] {
+// Legacy flag aliases — accepted by the parser but not in the canonical schema.
+// The pre-validation normalizer in operation-executor.ts maps aliased values
+// to their canonical names before schema validation.
+const OPTION_FLAG_ALIASES: Partial<Record<string, Record<string, string[]>>> = {
+  // SD-2132: tables.split renamed atRowIndex → rowIndex.
+  'doc.tables.split': { 'row-index': ['at-row-index'] },
+};
+
+function deriveOptionSpecs(operationId: string, params: readonly CliOperationParamSpec[]): CliOperationOptionSpec[] {
   const specs: CliOperationOptionSpec[] = [];
 
   for (const param of params) {
@@ -679,11 +1107,23 @@ function deriveOptionSpecs(params: readonly CliOperationParamSpec[]): CliOperati
     });
   }
 
+  const aliases = OPTION_FLAG_ALIASES[operationId];
+  if (aliases) {
+    for (const spec of specs) {
+      if (aliases[spec.name]) {
+        spec.aliases = aliases[spec.name];
+      }
+    }
+  }
+
   return specs;
 }
 
 export const CLI_OPERATION_OPTION_SPECS: Record<CliOperationId, CliOperationOptionSpec[]> = Object.fromEntries(
-  CLI_OPERATION_IDS.map((operationId) => [operationId, deriveOptionSpecs(CLI_OPERATION_METADATA[operationId].params)]),
+  CLI_OPERATION_IDS.map((operationId) => [
+    operationId,
+    deriveOptionSpecs(operationId, CLI_OPERATION_METADATA[operationId].params),
+  ]),
 ) as Record<CliOperationId, CliOperationOptionSpec[]>;
 
 // Exposed for unit testing $ref resolution only

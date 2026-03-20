@@ -16,23 +16,30 @@ import type {
   TextStepData,
   TextStepResolution,
   SpanStepResolution,
+  SelectionStepResolution,
   TextRewriteStep,
   TextInsertStep,
   TextDeleteStep,
   StyleApplyStep,
+  StructuralInsertStep,
+  StructuralReplaceStep,
+  StructuralStepData,
   DomainStepData,
   TableStepData,
   TableMutationResult,
   MutationOptions,
+  InlineRunPatchKey,
 } from '@superdoc/document-api';
 import type {
   CompiledTarget,
   CompiledRangeTarget,
   CompiledSpanTarget,
+  CompiledSelectionTarget,
   ExecuteContext,
 } from './executor-registry.types.js';
 import { registerStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
+import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue } from './inline-property-guards.js';
 
 /** Safely extract blockId from a target (only present on range targets). */
 function targetBlockId(t: CompiledTarget | undefined): string {
@@ -48,6 +55,7 @@ import {
   executeSpanStyleApply,
   executeCreateStep,
 } from './executor.js';
+import { executeStructuralInsert, executeStructuralReplace } from '../structural-write-engine/index.js';
 import {
   tablesDeleteAdapter,
   tablesClearContentsAdapter,
@@ -92,17 +100,48 @@ import {
 // Target partitioning
 // ---------------------------------------------------------------------------
 
+/**
+ * Converts a CompiledSelectionTarget to a CompiledRangeTarget for executor
+ * dispatch. Range executors only use absFrom/absTo for PM operations.
+ */
+function selectionTargetToRange(t: CompiledSelectionTarget): CompiledRangeTarget {
+  const startPoint = t.normalizedTarget.start;
+  const endPoint = t.normalizedTarget.end;
+
+  // Derive a real blockId from the nearest text point so fallback lookups
+  // (e.g. style capture in resolveMarksForRange) never hit a synthetic id.
+  const blockId =
+    startPoint.kind === 'text' ? startPoint.blockId : endPoint.kind === 'text' ? endPoint.blockId : '__selection__';
+
+  return {
+    kind: 'range',
+    stepId: t.stepId,
+    op: t.op,
+    blockId,
+    from: 0,
+    to: t.absTo - t.absFrom,
+    absFrom: t.absFrom,
+    absTo: t.absTo,
+    text: t.text,
+    marks: [],
+    capturedStyle: t.capturedStyle,
+  };
+}
+
 function partitionTargets(targets: CompiledTarget[]): {
   range: CompiledRangeTarget[];
   span: CompiledSpanTarget[];
+  selection: CompiledSelectionTarget[];
 } {
   const range: CompiledRangeTarget[] = [];
   const span: CompiledSpanTarget[] = [];
+  const selection: CompiledSelectionTarget[] = [];
   for (const t of targets) {
     if (t.kind === 'range') range.push(t);
+    else if (t.kind === 'selection') selection.push(t);
     else span.push(t);
   }
-  return { range, span };
+  return { range, span, selection };
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +179,14 @@ function buildSpanResolution(target: CompiledSpanTarget): SpanStepResolution {
   };
 }
 
+function buildSelectionResolution(target: CompiledSelectionTarget): SelectionStepResolution {
+  return {
+    selectionTarget: target.normalizedTarget,
+    range: { from: target.absFrom, to: target.absTo },
+    text: target.text,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Unified step execution — dispatches range and span targets
 // ---------------------------------------------------------------------------
@@ -172,15 +219,25 @@ function executeTextStep(
   rangeExecutor: RangeExecutorFn,
   spanExecutor?: SpanExecutorFn,
 ): StepOutcome {
-  const { range, span } = partitionTargets(targets);
+  const { range, span, selection } = partitionTargets(targets);
   let overallChanged = false;
   const resolutions: TextStepResolution[] = [];
   const spanResolutions: SpanStepResolution[] = [];
+  const selectionResolutions: SelectionStepResolution[] = [];
 
   // Execute range targets in document order
   for (const target of sortRangeTargets(range)) {
     resolutions.push(buildRangeResolution(target));
     const { changed } = rangeExecutor(ctx.editor, ctx.tr, target, step, ctx.mapping);
+    if (changed) overallChanged = true;
+  }
+
+  // Execute selection targets — convert to range for the executor, but
+  // produce proper SelectionStepResolution instead of bogus TextStepResolution.
+  for (const selTarget of selection) {
+    selectionResolutions.push(buildSelectionResolution(selTarget));
+    const rangeTarget = selectionTargetToRange(selTarget);
+    const { changed } = rangeExecutor(ctx.editor, ctx.tr, rangeTarget, step, ctx.mapping);
     if (changed) overallChanged = true;
   }
 
@@ -199,9 +256,25 @@ function executeTextStep(
     domain: 'text',
     resolutions,
     ...(spanResolutions.length > 0 ? { spanResolutions } : {}),
+    ...(selectionResolutions.length > 0 ? { selectionResolutions } : {}),
   };
 
   return { stepId: step.id, op: step.op, effect, matchCount: targets.length, data };
+}
+
+function ensureFormatStepCapabilities(ctx: ExecuteContext, step: StyleApplyStep): void {
+  const inlineKeys = Object.keys(step.args.inline) as InlineRunPatchKey[];
+  const capabilityIssue = getInlinePropertyCapabilityIssue(ctx.editor, inlineKeys, step.op);
+  if (capabilityIssue) {
+    throw planError(capabilityIssue.code, capabilityIssue.message, step.id, capabilityIssue.details);
+  }
+
+  if (ctx.changeMode !== 'tracked') return;
+
+  const trackedIssue = getTrackedInlinePropertySupportIssue(inlineKeys, step.op);
+  if (trackedIssue) {
+    throw planError(trackedIssue.code, trackedIssue.message, step.id, trackedIssue.details);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -256,41 +329,31 @@ const TABLE_ADAPTER_DISPATCH: Record<
 };
 
 /**
- * Ops that use table-scoped locators (tableNodeId) instead of simple
- * table locators (nodeId). When the ref target is a table, the
- * executor sets `tableNodeId` for these ops.
+ * Constructs adapter input from a compiled target's blockId + step args.
+ *
+ * All table operations use the unified `nodeId` locator field. The resolver
+ * layer detects whether the node is a table, row, or cell by node type.
+ *
+ * @internal Exported for testing only.
  */
-/** Row operations that support both table-scoped and direct row locator modes. */
-const ROW_OPS = new Set(['tables.insertRow', 'tables.deleteRow', 'tables.setRowHeight', 'tables.setRowOptions']);
-
-const TABLE_SCOPED_OPS = new Set([
+const ROW_TARGETED_TABLE_OPS = new Set([
   'tables.insertRow',
   'tables.deleteRow',
   'tables.setRowHeight',
   'tables.setRowOptions',
-  'tables.insertColumn',
-  'tables.deleteColumn',
-  'tables.setColumnWidth',
-  'tables.mergeCells',
 ]);
 
-/**
- * Constructs adapter input from a compiled target's blockId + step args.
- * Maps the ref-resolved blockId to the appropriate locator field.
- */
-/** @internal Exported for testing only. */
 export function buildTableInput(op: string, blockId: string, args: Record<string, unknown>): Record<string, unknown> {
   // Strip locator fields from args to prevent override of compiler-resolved target
-  const { target: _target, nodeId: _n, tableTarget: _tableTarget, tableNodeId: _t, ...safeArgs } = args;
-  if (TABLE_SCOPED_OPS.has(op)) {
-    // Row ops support two addressing modes: table-scoped (tableNodeId + rowIndex)
-    // or direct row locator (nodeId pointing at the row). When rowIndex is absent
-    // the blockId refers to the row itself, not the parent table.
-    if (ROW_OPS.has(op) && safeArgs.rowIndex == null) {
-      return { ...safeArgs, nodeId: blockId };
-    }
-    return { ...safeArgs, tableNodeId: blockId };
+  const { target: _target, nodeId: _n, ...safeArgs } = args;
+
+  if (ROW_TARGETED_TABLE_OPS.has(op) && safeArgs.rowIndex == null) {
+    return {
+      ...safeArgs,
+      target: { kind: 'block', nodeType: 'tableRow', nodeId: blockId },
+    };
   }
+
   return { ...safeArgs, nodeId: blockId };
 }
 
@@ -332,14 +395,16 @@ export function registerBuiltInExecutors(): void {
   });
 
   registerStepExecutor('format.apply', {
-    execute: (ctx, targets, step) =>
-      executeTextStep(
+    execute: (ctx, targets, step) => {
+      ensureFormatStepCapabilities(ctx, step as StyleApplyStep);
+      return executeTextStep(
         ctx,
         targets,
         step,
         (e, tr, t, s, m) => executeStyleApply(e, tr, t, s as StyleApplyStep, m),
         (e, tr, t, s, m) => executeSpanStyleApply(e, tr, t, s as StyleApplyStep, m),
-      ),
+      );
+    },
   });
 
   registerStepExecutor('create.paragraph', {
@@ -436,6 +501,130 @@ export function registerBuiltInExecutors(): void {
         effect: (result.success ? 'changed' : 'noop') as StepEffect,
         matchCount: result.success ? 1 : 0,
         data: { domain: 'table', tableId: targetBlockId(targets[0]) } as TableStepData,
+      };
+    },
+  });
+
+  // Structural insert — materializes SDFragment content at a target position
+  registerStepExecutor('structural.insert', {
+    execute(ctx, targets, step) {
+      if (ctx.isPreview) {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: targets.length,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const structuralStep = step as StructuralInsertStep;
+
+      // Structural insert is single-target — reject multi-target to prevent silent data loss
+      if (targets.length > 1) {
+        throw planError(
+          'INVALID_INPUT',
+          `structural.insert requires at most one target, got ${targets.length}`,
+          step.id,
+        );
+      }
+
+      // Guard: if the step's where clause expected targets but none resolved,
+      // return noop rather than silently falling back to document-end insertion.
+      if (targets.length === 0) {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: 0,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const target = targets[0];
+      const targetAddress =
+        target?.kind === 'range'
+          ? {
+              kind: 'text' as const,
+              blockId: target.blockId,
+              range: { start: target.from, end: target.to },
+            }
+          : undefined;
+
+      const result = executeStructuralInsert(ctx.editor, {
+        target: targetAddress,
+        content: structuralStep.args.content,
+        placement: structuralStep.args.placement,
+        nestingPolicy: structuralStep.args.nestingPolicy,
+        changeMode: ctx.changeMode,
+      });
+
+      if (result.success) ctx.commandDispatched = true;
+
+      return {
+        stepId: step.id,
+        op: step.op,
+        effect: result.success ? ('changed' as StepEffect) : ('noop' as StepEffect),
+        matchCount: result.success ? 1 : 0,
+        data: { domain: 'structural', insertedBlockIds: result.insertedBlockIds } as StructuralStepData,
+      };
+    },
+  });
+
+  // Structural replace — materializes SDFragment and replaces target range
+  registerStepExecutor('structural.replace', {
+    execute(ctx, targets, step) {
+      if (ctx.isPreview) {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: targets.length,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const structuralStep = step as StructuralReplaceStep;
+
+      // Structural replace is single-target — reject multi-target to prevent silent data loss
+      if (targets.length > 1) {
+        throw planError(
+          'INVALID_INPUT',
+          `structural.replace requires exactly one target, got ${targets.length}`,
+          step.id,
+        );
+      }
+
+      const target = targets[0];
+      if (!target || target.kind !== 'range') {
+        return {
+          stepId: step.id,
+          op: step.op,
+          effect: 'noop' as StepEffect,
+          matchCount: 0,
+          data: { domain: 'structural' } as StructuralStepData,
+        };
+      }
+
+      const result = executeStructuralReplace(ctx.editor, {
+        target: {
+          kind: 'text',
+          blockId: target.blockId,
+          range: { start: target.from, end: target.to },
+        },
+        content: structuralStep.args.content,
+        nestingPolicy: structuralStep.args.nestingPolicy,
+        changeMode: ctx.changeMode,
+      });
+
+      if (result.success) ctx.commandDispatched = true;
+
+      return {
+        stepId: step.id,
+        op: step.op,
+        effect: result.success ? ('changed' as StepEffect) : ('noop' as StepEffect),
+        matchCount: result.success ? 1 : 0,
+        data: { domain: 'structural', insertedBlockIds: result.insertedBlockIds } as StructuralStepData,
       };
     },
   });

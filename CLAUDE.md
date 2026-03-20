@@ -59,309 +59,18 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 |------|----------|
 | React integration | `packages/react/src/SuperDocEditor.tsx` |
 | Editing features | `super-editor/src/extensions/` |
-| Presentation mode visuals | `layout-engine/painters/dom/src/renderer.ts` |
+| Presentation mode visuals | `layout-engine/painters/dom/src/features/feature-registry.ts` → feature module |
+| Rendering orchestration | `layout-engine/painters/dom/src/renderer.ts` |
 | DOCX import/export | `super-editor/src/core/super-converter/` |
 | Style resolution | `layout-engine/style-engine/` |
 | Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
 | Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
 | Document API contract | `packages/document-api/src/contract/operation-definitions.ts` |
 | Adding a doc-api operation | See `packages/document-api/README.md` § "Adding a new operation" |
-| SDK + Collab + LLM demo | `examples/sdk-poc/` |
-| Collaboration agent demo | `examples/collaboration/superdoc-yjs/` |
-
-## SDK POC (Document API Testing)
-
-`examples/sdk-poc/` is a three-tier demo for testing the Document API SDK with real-time collaboration and AI-powered document verification.
-
-### Architecture
-
-```
-┌─────────────┐     WebSocket      ┌──────────────────┐
-│   Client    │ ◄─────────────────► │     Server       │
-│  (Vue 3)    │    :3050            │  (Fastify + Yjs) │
-│   :5173     │                     │                  │
-└─────────────┘                     └────────▲─────────┘
-                                             │
-                            SDK poll (5s)    │
-                                             │
-                                    ┌────────┴─────────┐
-                                    │   Agent (Node    │
-                                    │   or Python)     │
-                                    │   + OpenAI LLM   │
-                                    └──────────────────┘
-```
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| Server | `examples/sdk-poc/server/` | Yjs collaboration hub (Fastify WebSocket) |
-| Client | `examples/sdk-poc/client/` | Vue 3 SuperDoc editor with collab UI |
-| Node Agent | `examples/sdk-poc/node/` | SDK demo with OpenAI tool-calling |
-| Python Agent | `examples/sdk-poc/python/` | Async Python equivalent |
-
-### Running the POC
-
-```bash
-# Node agent version
-./examples/sdk-poc/run-node.sh
-
-# Python agent version
-./examples/sdk-poc/run-python.sh
-```
-
-Requires `OPENAI_API_KEY` in `node/.env` or `python/.env` (copy from `.env.example`).
-
-### SDK Integration Patterns
-
-The agents demonstrate key SDK usage:
-
-```typescript
-// Create client and join collaboration room
-const client = createSuperDocClient({ user: { name: 'Agent' } });
-await client.doc.open({ collabUrl, collabDocumentId });
-
-// Poll for changes
-const info = await client.doc.info({});
-const text = await client.doc.getText({});
-
-// LLM tool-calling integration
-const tools = await chooseTools({ provider: 'openai', profile: 'readonly', budget: 8 });
-const result = await dispatchSuperDocTool(client, toolName, args);
-```
-
-Key SDK functions: `createSuperDocClient()`, `doc.open()`, `doc.info()`, `doc.getText()`, `chooseTools()`, `dispatchSuperDocTool()`, `inferDocumentFeatures()`.
-
-## SDK + LLM Tools Gotchas
-
-These issues were discovered while building `examples/collaboration/superdoc-yjs/agent.ts`. They need proper documentation.
-
-### Collaboration provider type
-
-When using the `collaboration` object in `doc.open()`, you must specify `providerType`. The shorthand `collabUrl`/`collabDocumentId` defaults to `'hocuspocus'`, but y-websocket servers (like `superdoc-yjs-collaboration`) require `'y-websocket'`:
-
-```typescript
-await client.doc.open({
-  collaboration: {
-    providerType: 'y-websocket',  // Required for y-websocket servers
-    url: 'ws://localhost:3050/collaboration',
-    documentId: 'my-doc',
-  },
-});
-```
-
-### LLM tool schema issues
-
-Some tools have `"type": "json"` in their schemas which is not valid JSON Schema. OpenAI rejects them with "Invalid schema". Exclude these until codegen is fixed:
-
-```typescript
-const { tools } = await chooseTools({
-  provider: 'openai',
-  policy: {
-    forceExclude: [
-      'apply_mutations', 'preview_mutations',
-      'doc_mutations_apply', 'doc_mutations_preview',
-      'doc_lists_setLevelRestart', 'doc_lists_setValue',
-      'doc_sections_setPageBorders', 'set_list_level_restart',
-      'set_list_value', 'set_section_page_borders',
-    ],
-  },
-});
-```
-
-### Getting mutation tools
-
-By default, `chooseTools()` uses `mode: 'essential'` which returns a limited set of tools. To get mutation tools like `insert_content`:
-
-```typescript
-// npm SDK v1.0.0-alpha.44
-const { tools } = await chooseTools({
-  provider: 'openai',
-  mode: 'all',                           // Get all tools including mutations
-  groups: ['core', 'format', 'create'],  // Ensure these groups are included
-});
-
-// Then filter out LLM-incompatible tools manually
-const EXCLUDED = new Set(['apply_mutations', 'query_match']);
-const usableTools = tools.filter((t) => !EXCLUDED.has(t.function.name));
-```
-
-### Tool parameter complexity
-
-The `insert_content` tool has a complex `target` schema requiring `kind`, `blockId`, and `range`. For simple appends, omit `target` entirely:
-
-```typescript
-// Insert at end of document - just pass value, no target
-{ "value": "text to append" }
-```
-
-### Markdown content insertion
-
-The SDK supports markdown formatting in `insert_content`. Pass `type: "markdown"` to parse headings, bold, italic:
-
-```typescript
-{ "value": "# New Chapter\n\nThis is **bold** and *italic* text.", "type": "markdown" }
-```
-
-## Collaboration Agent Example
-
-`examples/collaboration/superdoc-yjs/` demonstrates a real-time AI writing agent that collaborates with human users.
-
-### Architecture
-
-```
-┌─────────────┐     y-websocket      ┌──────────────────┐
-│   Client    │ ◄───────────────────► │     Server       │
-│  (Vue 3)    │    :3050              │  (Fastify + Yjs) │
-│   :5173     │                       │                  │
-└─────────────┘                       └────────▲─────────┘
-       ▲                                       │
-       │ awareness                    y-websocket + SDK
-       │ (status)                              │
-       │                              ┌────────┴─────────┐
-       └──────────────────────────────│   Agent (Node)   │
-                                      │   + OpenAI LLM   │
-                                      └──────────────────┘
-```
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `agent.ts` | AI agent that listens for changes and continues writing |
-| `server.ts` | Yjs collaboration server (Fastify + y-websocket) |
-| `src/App.vue` | Vue client with status indicator |
-
-### Running
-
-```bash
-cd examples/collaboration/superdoc-yjs
-cp .env.example .env  # Add OPENAI_API_KEY
-pnpm dev              # Runs server, client, and agent concurrently
-```
-
-### Agent Patterns
-
-#### Real-time updates via Yjs
-
-The agent connects to the same Yjs room as the client and listens for remote document changes:
-
-```typescript
-const provider = new WebsocketProvider(COLLAB_URL, documentId, ydoc);
-
-ydoc.on('update', (_update, origin) => {
-  // Only trigger on remote changes (origin is the provider for remote updates)
-  if (origin === provider) {
-    onUpdate();
-  }
-});
-```
-
-#### Debouncing with AbortController
-
-Wait for user to stop typing before processing, with cancellation support:
-
-```typescript
-function createDebouncedHandler(handler, delayMs) {
-  let timeoutId = null;
-  let abortController = null;
-
-  const cancel = () => {
-    if (timeoutId) clearTimeout(timeoutId);
-    if (abortController) abortController.abort();
-  };
-
-  const trigger = () => {
-    cancel();
-    timeoutId = setTimeout(async () => {
-      abortController = new AbortController();
-      await handler(abortController.signal);
-    }, delayMs);
-  };
-
-  return { trigger, cancel };
-}
-```
-
-#### Preventing infinite loops
-
-The agent's own writes trigger Yjs updates. Use a flag to ignore self-triggered updates:
-
-```typescript
-let isAgentWriting = false;
-
-// When executing tools:
-isAgentWriting = true;
-await dispatchSuperDocTool(client, toolName, args);
-setTimeout(() => { isAgentWriting = false; }, 500); // Delay for sync propagation
-
-// When handling updates:
-if (isAgentWriting) return; // Ignore our own writes
-```
-
-#### Content buffering
-
-Track last-seen content to avoid re-prompting on unchanged documents:
-
-```typescript
-let lastSeenContent = '';
-
-// Before prompting LLM:
-if (currentContent === lastSeenContent) return;
-const newContent = currentContent.slice(lastSeenContent.length).trim();
-if (newContent.length === 0) return;
-
-// After writing:
-lastSeenContent = await client.doc.getText({});
-```
-
-#### Status broadcasting via Yjs awareness
-
-Broadcast agent status to all clients using Yjs awareness protocol:
-
-```typescript
-// Agent broadcasts status
-provider.awareness.setLocalStateField('agent', {
-  status: 'working',  // 'idle' | 'starting' | 'working' | 'done' | 'error'
-  message: 'Executing: insert_content',
-  timestamp: Date.now(),
-});
-
-// Client receives via onAwarenessUpdate callback
-const onAwarenessUpdate = ({ states }) => {
-  for (const state of Object.values(states)) {
-    if (state?.agent) {
-      agentStatus.value = state.agent.status;
-      agentMessage.value = state.agent.message;
-    }
-  }
-};
-```
-
-#### Agentic/ReAct loop
-
-The standard pattern for LLM tool-calling agents:
-
-```typescript
-while (true) {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages,
-    tools,
-    tool_choice: isFirstCall ? 'required' : 'auto',
-  });
-
-  const message = response.choices[0].message;
-  messages.push(message);
-
-  if (!message.tool_calls?.length) {
-    return message.content; // Done
-  }
-
-  for (const call of message.tool_calls) {
-    const result = await dispatchSuperDocTool(client, call.function.name, JSON.parse(call.function.arguments));
-    messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
-  }
-}
-```
+| Theming (`createTheme()`) | `packages/superdoc/src/core/theme/create-theme.js` |
+| CSS variable defaults | `packages/superdoc/src/assets/styles/helpers/variables.css` |
+| Preset themes | `packages/superdoc/src/assets/styles/helpers/themes.css` |
+| Consumer-facing agent guide | `packages/superdoc/AGENTS.md` (ships with npm package) |
 
 ## Style Resolution Boundary
 
@@ -375,7 +84,7 @@ while (true) {
 
 ## When to Modify Which System
 
-- **Visual rendering**: Modify `pm-adapter/` (to feed data) and/or `painters/dom/` (to render it)
+- **Visual rendering**: Check `painters/dom/src/features/feature-registry.ts` to find the feature module, then modify it. If no module exists yet, create one (see layout-engine CLAUDE.md). Feed data via `pm-adapter/`
 - **Style resolution**: Modify `style-engine/` — called by pm-adapter during conversion
 - **Editing commands/behavior**: Modify `super-editor/src/extensions/`
 - **State bridging**: Modify `PresentationEditor.ts`
@@ -407,13 +116,31 @@ Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., 
 - `pnpm dev` - Start dev server (from examples/)
 - `pnpm run generate:all` - Generate all derived artifacts (schemas, SDK clients, tool catalogs, reference docs)
 
+## AI Eval Suite
+
+The `evals/` directory contains a Promptfoo-based evaluation suite for validating AI tool call quality.
+
+| Command | What it does | Cost |
+|---------|-------------|------|
+| `pnpm --filter @superdoc-testing/evals run eval` | Run deterministic evals (reading + argument tests) | ~$0.30 |
+| `pnpm --filter @superdoc-testing/evals run eval:reading` | Run reading tool tests only | ~$0.15 |
+| `pnpm --filter @superdoc-testing/evals run eval:gdpval` | Run GDPval benchmark (Model+SuperDoc vs Model-Only) | ~$1-2 |
+| `pnpm --filter @superdoc-testing/evals run eval:view` | Open Promptfoo web UI with results | Free |
+| `pnpm --filter @superdoc-testing/evals run baseline:save <label>` | Save versioned results snapshot | Free |
+
+Tool definitions are extracted from `packages/sdk/tools/` via `evals/tools/extract.mjs`. Run `pnpm run generate:all` first if SDK artifacts are missing.
+
+Test files are YAML in `evals/tests/`. Each test has a `vars.task` prompt and JavaScript assertions that check tool call structure (Level 1: tool selection + argument accuracy, not execution).
+
+The system prompt at `evals/prompts/agent.txt` is a copy of the proven prompt from `examples/eval-demo/lib/agent.ts`. Update both when changing the prompt.
+
 ## Generated Artifacts
 
 These directories are produced by `pnpm run generate:all`:
 
 | Directory | In git? | What it contains |
 |-----------|---------|-----------------|
-| `packages/document-api/generated/` | No (gitignored) | Agent tool schemas, JSON schemas, manifest |
+| `packages/document-api/generated/` | No (gitignored) | Agent artifacts, JSON schemas |
 | `apps/cli/generated/` | No (gitignored) | SDK contract JSON exported from CLI metadata |
 | `packages/sdk/langs/node/src/generated/` | No (gitignored) | Node SDK generated client code |
 | `packages/sdk/langs/python/superdoc/generated/` | No (gitignored) | Python SDK generated client code |
@@ -470,13 +197,16 @@ Pixel-level before/after comparison for documents that failed layout comparison.
 
 ## Brand & Design System
 
-Brand guidelines, voice, and design tokens live in `brand/`. Token values are defined in `packages/superdoc/src/assets/styles/tokens.css`.
+Brand guidelines, voice, and design tokens live in `brand/`.
+Token contract source is `packages/superdoc/src/assets/styles/helpers/variables.css` (`:root` defaults).
+Preset theme overrides are defined in `packages/superdoc/src/assets/styles/helpers/themes.css`.
 
 **When creating or modifying UI components:**
-- Use `--sd-*` CSS custom properties — never hardcode hex values. See `tokens.css` for all available variables.
-- Tokens follow three tiers: primitive (`--sd-color-blue-500`) → semantic (`--sd-action-primary`) → component (`--sd-comment-bg`). Components reference semantic or component-level variables.
-- Expose component-specific variables as `--sd-{component}-*` so consumers can customize via CSS.
-- Document component CSS variables in `apps/docs/ui-components/` (Mintlify docs).
+- Use `--sd-*` CSS custom properties — never hardcode hex values.
+- Treat `variables.css` as the canonical token contract; add new tokens there.
+- Keep preset themes in `themes.css` (`.sd-theme-*`) and override only the tokens that need theme-specific values.
+- Tokens are organized by layers: primitive (`--sd-color-blue-500`) → UI/document tokens (`--sd-ui-*`, `--sd-comments-*`, etc.) → component usage.
+- Expose UI component-specific variables as `--sd-ui-{component}-*` so consumers can customize via CSS.
 
 **When writing copy or content:** see `brand/brand-guidelines.md` for voice, tone, and the dual-register pattern (developer vs. leader). Product name is always **SuperDoc** (capital S, capital D).
 

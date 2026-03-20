@@ -19,3 +19,8 @@ export declare const computeFragmentPmRange: (
   toLine: number,
 ) => LinePmRange;
 export declare const computeLinePmRange: (block: ParagraphBlock, line: Line) => LinePmRange;
+export declare function shouldSuppressOwnSpacing(
+  ownStyleId: string | undefined,
+  ownContextualSpacing: boolean,
+  adjacentStyleId: string | undefined,
+): boolean;

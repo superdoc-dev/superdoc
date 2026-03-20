@@ -6,6 +6,10 @@ import { Paragraph } from '@extensions/paragraph/paragraph.js';
 import { Document } from '@extensions/document/document.js';
 import { Text } from '@extensions/text/text.js';
 import { OxmlNode, Attribute } from '@core/index.js';
+import { registerPartDescriptor, clearPartDescriptors } from '@core/parts/registry/part-registry.js';
+import { clearInvalidationHandlers } from '@core/parts/invalidation/part-invalidation-registry.js';
+import { numberingPartDescriptor } from '@core/parts/adapters/numbering-part-descriptor.js';
+import { patchMockForParts } from '@core/parts/testing/test-helpers.js';
 
 // Mock the external dependencies
 vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
@@ -18,6 +22,15 @@ import { getStyleTagFromStyleId } from '@core/super-converter/v2/importer/listIm
 
 // Import the function we want to test
 const { getListDefinitionDetails, createNewList, ListHelpers } = listHelpers;
+
+// Global parts runtime setup — needed because helpers now route through mutatePart
+beforeEach(() => {
+  registerPartDescriptor(numberingPartDescriptor);
+});
+afterEach(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
+});
 
 describe('getListDefinitionDetails', () => {
   let mockEditor;
@@ -44,10 +57,14 @@ describe('getListDefinitionDetails', () => {
           definitions: {},
           abstracts: {},
         },
-        convertedXml: '<mock>xml</mock>',
+        convertedXml: {},
+        documentModified: false,
+        documentGuid: null,
       },
-      emit: vi.fn(), // Add mock emit function
+      emit: vi.fn(),
+      safeEmit: vi.fn().mockReturnValue([]),
     };
+    patchMockForParts(mockEditor);
 
     mockEditor.schema = Schema.createSchemaByExtensions([Document, Paragraph, Text], mockEditor);
   });
@@ -393,7 +410,7 @@ describe('getListDefinitionDetails', () => {
         editor: mockEditor,
       });
 
-      expect(getStyleTagFromStyleId).toHaveBeenCalledWith('style1', '<mock>xml</mock>');
+      expect(getStyleTagFromStyleId).toHaveBeenCalledWith('style1', mockEditor.converter.convertedXml);
       expect(result.start).toBe('1');
       expect(result.numFmt).toBe('decimal');
     });
@@ -893,6 +910,7 @@ describe('getListDefinitionDetails', () => {
         },
         emit: vi.fn(),
       };
+      patchMockForParts(editor);
 
       ListHelpers.generateNewListDefinition({
         numId: 10,
@@ -1032,6 +1050,7 @@ describe('setLvlOverride', () => {
       },
       emit: vi.fn(),
     };
+    patchMockForParts(mockEditor);
   });
 
   afterEach(() => {
@@ -1145,6 +1164,7 @@ describe('removeLvlOverride', () => {
       },
       emit: vi.fn(),
     };
+    patchMockForParts(mockEditor);
   });
 
   afterEach(() => {
@@ -1247,6 +1267,7 @@ describe('lvlOverride → getAllListDefinitions roundtrip', () => {
       },
       emit: vi.fn(),
     };
+    patchMockForParts(mockEditor);
   });
 
   afterEach(() => {

@@ -20,6 +20,7 @@ import { validateOperationResponseData } from './lib/operation-args';
 import { runInstall } from './commands/install';
 import { runUninstall } from './commands/uninstall';
 import { withStateDirOverride } from './lib/context';
+import { resolveCliPackageVersion } from './lib/version';
 import {
   CLI_COMMAND_SPECS,
   CLI_COMMAND_KEYS,
@@ -39,9 +40,24 @@ const HELP = [
   '',
   'Canonical machine call:',
   '  superdoc call <operationId> [--input-json "{...}"|--input-file payload.json]',
+  '',
+  'Global flags:',
+  '  --output <json|pretty>',
+  '  --json',
+  '  --pretty',
+  '  --session <id>',
+  '  --timeout-ms <n>',
+  '  --help, -h',
+  '  --version, -v',
 ].join('\n');
 
 type CommandRunner = (tokens: string[], context: CommandContext) => Promise<CommandExecution>;
+
+type ParsedInvocationOutput = {
+  execution?: CommandExecution;
+  helpText?: string;
+  versionText?: string;
+};
 
 type ParsedInvocation = {
   globals: GlobalOptions;
@@ -53,6 +69,7 @@ export type InvokeCommandResult = {
   globals: GlobalOptions;
   execution?: CommandExecution;
   helpText?: string;
+  versionText?: string;
   elapsedMs: number;
 };
 
@@ -209,8 +226,18 @@ async function executeParsedInvocation(
   io: CliIO,
   executionMode: ExecutionMode,
   sessionPool?: CommandContext['sessionPool'],
-): Promise<{ execution?: CommandExecution; helpText?: string }> {
-  if (parsed.globals.help || parsed.rest.length === 0) {
+): Promise<ParsedInvocationOutput> {
+  if (parsed.globals.help) {
+    return { helpText: HELP };
+  }
+
+  if (parsed.globals.version) {
+    return {
+      versionText: resolveCliPackageVersion(),
+    };
+  }
+
+  if (parsed.rest.length === 0) {
     return { helpText: HELP };
   }
 
@@ -279,6 +306,7 @@ export async function invokeCommand(argv: string[], options: InvokeCommandOption
     globals: parsed.globals,
     execution: output.execution,
     helpText: output.helpText,
+    versionText: output.versionText,
     elapsedMs: io.now() - startedAt,
   };
 }
@@ -311,6 +339,11 @@ export async function run(
       const parsed = parseInvocation(argv);
       outputMode = parsed.globals.output;
 
+      if (parsed.globals.version && !parsed.globals.help) {
+        io.stdout(`${resolveCliPackageVersion()}\n`);
+        return 0;
+      }
+
       if (parsed.rest[0] === 'host') {
         const hostTokens = parsed.rest.slice(1);
         if (parsed.globals.help) hostTokens.push('--help');
@@ -341,8 +374,12 @@ export async function run(
         io.stdout(output.helpText);
         return 0;
       }
+      if (output.versionText) {
+        io.stdout(`${output.versionText}\n`);
+        return 0;
+      }
       if (!output.execution) {
-        throw new CliError('COMMAND_FAILED', 'Command produced no execution result and no help text.');
+        throw new CliError('COMMAND_FAILED', 'Command produced no execution result, help text, or version text.');
       }
 
       const elapsedMs = io.now() - startedAt;

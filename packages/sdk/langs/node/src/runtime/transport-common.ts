@@ -92,6 +92,15 @@ export function buildOperationArgv(
     }
   }
 
+  // Legacy alias: tables.split renamed atRowIndex → rowIndex (SD-2132).
+  if (operation.operationId === 'doc.tables.split' && normalizedParams.atRowIndex !== undefined) {
+    if (normalizedParams.rowIndex !== undefined && normalizedParams.rowIndex !== normalizedParams.atRowIndex) {
+      throw new Error('tables.split: cannot provide both rowIndex and atRowIndex with different values.');
+    }
+    const { atRowIndex, ...rest } = normalizedParams;
+    normalizedParams = { ...rest, rowIndex: atRowIndex };
+  }
+
   const argv: string[] = [...operation.commandTokens];
 
   for (const spec of operation.params) {
@@ -117,6 +126,8 @@ export function buildOperationArgv(
         }
         break;
       case 'jsonFlag':
+        // CLI always parses --*-json values via JSON.parse, so even scalar
+        // strings must be serialized as JSON string literals.
         argv.push(flag, JSON.stringify(value));
         break;
     }

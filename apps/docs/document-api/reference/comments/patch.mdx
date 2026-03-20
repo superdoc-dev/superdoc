@@ -122,9 +122,11 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       "type": "string"
     },
     "isInternal": {
+      "description": "When true, marks the comment as internal (hidden from external collaborators).",
       "type": "boolean"
     },
     "status": {
+      "description": "Set comment status. Use 'resolved' to mark as resolved.",
       "enum": [
         "resolved"
       ]
@@ -133,6 +135,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       "$ref": "#/$defs/TextAddress"
     },
     "text": {
+      "description": "Updated comment text.",
       "type": "string"
     }
   },

@@ -565,7 +565,7 @@ const CNF_STYLE_MAP: ReadonlyArray<[keyof ParagraphConditionalFormatting, TableS
   ['lastRowLastColumn', 'seCell'],
 ];
 
-// ECMA-376 §17.7.6 precedence order (low → high).
+// Word / Office precedence order (low → high), per MS-OI29500 §2.1.1310.
 // combineProperties treats later entries as higher priority, so this array
 // must list types from lowest to highest override strength.
 const TABLE_STYLE_PRECEDENCE: TableStyleType[] = [
@@ -615,38 +615,23 @@ function determineCellStyleTypes(
     applicable.add(colGroup % 2 === 0 ? 'band1Vert' : 'band2Vert');
   }
 
-  if (tblLook?.firstRow && rowIndex === 0) {
-    applicable.add('firstRow');
-  }
-  if (tblLook?.firstColumn && cellIndex === 0) {
-    applicable.add('firstCol');
-  }
-  if (tblLook?.lastRow && numRows != null && numRows > 0 && rowIndex === numRows - 1) {
-    applicable.add('lastRow');
-  }
-  if (tblLook?.lastColumn && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
-    applicable.add('lastCol');
-  }
+  // Row/column edge flags — reused for both row/col styles and corner gating.
+  const isFirstRow = !!tblLook?.firstRow && rowIndex === 0;
+  const isLastRow = !!tblLook?.lastRow && numRows != null && numRows > 0 && rowIndex === numRows - 1;
+  const isFirstCol = !!tblLook?.firstColumn && cellIndex === 0;
+  const isLastCol = !!tblLook?.lastColumn && numCells != null && numCells > 0 && cellIndex === numCells - 1;
 
-  if (rowIndex === 0 && cellIndex === 0) {
-    applicable.add('nwCell');
-  }
-  if (rowIndex === 0 && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
-    applicable.add('neCell');
-  }
-  if (numRows != null && numRows > 0 && rowIndex === numRows - 1 && cellIndex === 0) {
-    applicable.add('swCell');
-  }
-  if (
-    numRows != null &&
-    numRows > 0 &&
-    numCells != null &&
-    numCells > 0 &&
-    rowIndex === numRows - 1 &&
-    cellIndex === numCells - 1
-  ) {
-    applicable.add('seCell');
-  }
+  if (isFirstRow) applicable.add('firstRow');
+  if (isFirstCol) applicable.add('firstCol');
+  if (isLastRow) applicable.add('lastRow');
+  if (isLastCol) applicable.add('lastCol');
+
+  // Corner cells apply only when the corresponding row AND column toggles
+  // are both enabled — matching Word / Office behavior (MS-OI29500 §2.1.1310).
+  if (isFirstRow && isFirstCol) applicable.add('nwCell');
+  if (isFirstRow && isLastCol) applicable.add('neCell');
+  if (isLastRow && isFirstCol) applicable.add('swCell');
+  if (isLastRow && isLastCol) applicable.add('seCell');
 
   // Union in cnfStyle-derived types that index-based logic didn't already add.
   // cnfStyle only adds types, never removes them.

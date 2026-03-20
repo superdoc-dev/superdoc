@@ -91,31 +91,39 @@ client.doc.insert(params)
 
 ### AI Tool Integration
 
-The SDK includes built-in support for exposing document operations as AI tool definitions:
+The SDK includes built-in support for exposing grouped intent tools as AI tool definitions:
 
 ```ts
-import { chooseTools, dispatchSuperDocTool, inferDocumentFeatures } from '@superdoc-dev/sdk';
+import {
+  chooseTools,
+  dispatchSuperDocTool,
+  getToolCatalog,
+} from '@superdoc-dev/sdk';
 
-// Get tool definitions for your AI provider
-const { tools, selected } = await chooseTools({
-  provider: 'openai',       // 'openai' | 'anthropic' | 'vercel' | 'generic'
-  profile: 'intent',        // human-friendly tool names
-  taskContext: { phase: 'mutate' },
-  documentFeatures: inferDocumentFeatures(await client.doc.info()),
+// Get the full grouped tool set for your AI provider
+const { tools, meta } = await chooseTools({
+  provider: 'openai',  // 'openai' | 'anthropic' | 'vercel' | 'generic'
 });
+
+// Optional: inspect the generated tool catalog
+const catalog = await getToolCatalog();
 
 // Dispatch a tool call from the AI model
 const result = await dispatchSuperDocTool(client, toolName, args);
 ```
 
+The current catalog contains 9 grouped tools:
+`superdoc_get_content`, `superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_comment`, `superdoc_track_changes`, `superdoc_search`, and `superdoc_mutations`.
+
+Multi-action tools use an `action` field to select the underlying operation. Single-action tools like `superdoc_search` do not require `action`.
+
 | Function | Description |
 |----------|-------------|
-| `chooseTools(input)` | Select tools filtered by phase, capabilities, and budget |
-| `listTools(provider, options?)` | List all tool definitions for a provider |
+| `chooseTools(input)` | Load grouped tool definitions for a provider |
+| `listTools(provider)` | List all tool definitions for a provider |
 | `dispatchSuperDocTool(client, toolName, args)` | Execute a tool call against a client |
-| `resolveToolOperation(toolName)` | Map a tool name to its operation ID |
-| `getToolCatalog(options?)` | Load the full tool catalog |
-| `inferDocumentFeatures(infoResult)` | Derive feature flags from `doc.info` output |
+| `getToolCatalog()` | Load the grouped tool catalog with metadata |
+| `getSystemPrompt()` | Read the bundled system prompt for intent tools |
 
 ## Part of SuperDoc
 

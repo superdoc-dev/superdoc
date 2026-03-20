@@ -199,4 +199,47 @@ describe('translateStructuredContent', () => {
       expect(lockElements[0].attributes['w:val']).toBe('sdtContentLocked');
     });
   });
+
+  describe('default type element export when sdtPr is absent', () => {
+    it('exports checkbox defaults with checked + symbol state metadata', () => {
+      const node = {
+        type: 'structuredContent',
+        attrs: {
+          id: '101',
+          controlType: 'checkbox',
+        },
+        content: [{ type: 'text', text: ' ' }],
+      };
+
+      const result = translateStructuredContent({ node });
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const checkbox = sdtPr.elements.find((el) => el.name === 'w14:checkbox');
+
+      expect(checkbox).toBeDefined();
+      expect(checkbox.elements.some((el) => el.name === 'w14:checked')).toBe(true);
+      expect(checkbox.elements.some((el) => el.name === 'w14:checkedState')).toBe(true);
+      expect(checkbox.elements.some((el) => el.name === 'w14:uncheckedState')).toBe(true);
+    });
+
+    it('exports date defaults with format/locale/storage/calendar metadata', () => {
+      const node = {
+        type: 'structuredContent',
+        attrs: {
+          id: '102',
+          controlType: 'date',
+        },
+        content: [{ type: 'text', text: '3/7/2026' }],
+      };
+
+      const result = translateStructuredContent({ node });
+      const sdtPr = result.elements.find((el) => el.name === 'w:sdtPr');
+      const dateEl = sdtPr.elements.find((el) => el.name === 'w:date');
+
+      expect(dateEl).toBeDefined();
+      expect(dateEl.elements.some((el) => el.name === 'w:dateFormat')).toBe(true);
+      expect(dateEl.elements.some((el) => el.name === 'w:lid')).toBe(true);
+      expect(dateEl.elements.some((el) => el.name === 'w:storeMappedDataAs')).toBe(true);
+      expect(dateEl.elements.some((el) => el.name === 'w:calendar')).toBe(true);
+    });
+  });
 });

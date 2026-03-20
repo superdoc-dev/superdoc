@@ -96,6 +96,15 @@ describe('buildOperationArgv', () => {
     expect(argv[argv.indexOf('--query-json') + 1]).toBe(JSON.stringify(data));
   });
 
+  test('encodes json string scalar as a JSON string literal', () => {
+    const op = makeOp({
+      params: [{ name: 'delimiter', kind: 'jsonFlag', flag: 'delimiter-json', type: 'json' }],
+    });
+    const argv = buildOperationArgv(op, { delimiter: 'tab' }, {}, undefined);
+    expect(argv).toContain('--delimiter-json');
+    expect(argv[argv.indexOf('--delimiter-json') + 1]).toBe(JSON.stringify('tab'));
+  });
+
   test('skips null/undefined params', () => {
     const op = makeOp({
       params: [
@@ -236,6 +245,74 @@ describe('buildOperationArgv', () => {
     // Should only appear once each
     expect(argv.filter((v) => v === '--user-name').length).toBe(1);
     expect(argv.filter((v) => v === '--user-email').length).toBe(1);
+  });
+});
+
+describe('legacy atRowIndex normalization for tables.split', () => {
+  test('maps legacy atRowIndex to canonical rowIndex', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', atRowIndex: 2 }, {}, undefined);
+    expect(argv).toContain('--row-index');
+    expect(argv[argv.indexOf('--row-index') + 1]).toBe('2');
+  });
+
+  test('does not overwrite explicit rowIndex with legacy atRowIndex', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', rowIndex: 1 }, {}, undefined);
+    expect(argv).toContain('--row-index');
+    expect(argv[argv.indexOf('--row-index') + 1]).toBe('1');
+  });
+
+  test('accepts both when values match', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', rowIndex: 1, atRowIndex: 1 }, {}, undefined);
+    expect(argv).toContain('--row-index');
+    expect(argv[argv.indexOf('--row-index') + 1]).toBe('1');
+  });
+
+  test('rejects conflicting rowIndex and atRowIndex', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.split',
+      commandTokens: ['doc', 'tables', 'split'],
+      params: [
+        { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+        { name: 'rowIndex', kind: 'flag', flag: 'row-index', type: 'number' },
+      ],
+    });
+    expect(() => buildOperationArgv(op, { nodeId: 'table-1', rowIndex: 1, atRowIndex: 2 }, {}, undefined)).toThrow(
+      'tables.split: cannot provide both rowIndex and atRowIndex with different values.',
+    );
+  });
+
+  test('does not apply normalization to other operations', () => {
+    const op = makeOp({
+      operationId: 'doc.tables.delete',
+      commandTokens: ['doc', 'tables', 'delete'],
+      params: [{ name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' }],
+    });
+    const argv = buildOperationArgv(op, { nodeId: 'table-1', atRowIndex: 2 } as any, {}, undefined);
+    expect(argv).not.toContain('--row-index');
   });
 });
 

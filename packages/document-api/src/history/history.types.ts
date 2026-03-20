@@ -19,6 +19,9 @@ export interface HistoryState {
   historyUnsafeOperations: readonly OperationId[];
 }
 
+/** Machine-readable reason for a history no-op. */
+export type HistoryNoopReason = 'EMPTY_UNDO_STACK' | 'EMPTY_REDO_STACK' | 'NO_EFFECT';
+
 /**
  * Result of a history.undo or history.redo action.
  * Mirrors PlanReceipt's revision shape for consistency.
@@ -26,6 +29,8 @@ export interface HistoryState {
 export interface HistoryActionResult {
   /** True if the action had no effect (empty stack). */
   noop: boolean;
+  /** Machine-readable reason when noop is true. */
+  reason?: HistoryNoopReason;
   /** Revision bookends matching PlanReceipt.revision shape. */
   revision: {
     before: string;

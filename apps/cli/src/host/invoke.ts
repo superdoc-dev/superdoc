@@ -136,6 +136,18 @@ export async function invokeCliFromHost(
     };
   }
 
+  if (invocation.versionText) {
+    return {
+      command: 'version',
+      data: {
+        version: invocation.versionText,
+      },
+      meta: {
+        elapsedMs: invocation.elapsedMs,
+      },
+    };
+  }
+
   if (!invocation.execution) {
     throw new CliError('COMMAND_FAILED', 'cli.invoke produced no command result.');
   }

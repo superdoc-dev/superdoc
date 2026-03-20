@@ -44,6 +44,10 @@ import { translator as numFormTranslator } from '../w14-numForm/numForm-translat
 import { translator as numSpacingTranslator } from '../w14-numSpacing/numSpacing-translator.js';
 import { translator as stylisticSetsTranslator } from '../w14-stylisticSets/stylisticSets-translator.js';
 import { translator as cntxtAltsTranslator } from '../w14-cntxtAlts/cntxtAlts-translator.js';
+import {
+  trackInsertRunPropertyTranslator,
+  trackDeleteRunPropertyTranslator,
+} from './track-change-run-property-translator.js';
 
 // Property translators for w:rPr child elements
 // Each translator handles a specific property of the run properties
@@ -91,6 +95,8 @@ export const propertyTranslators = [
   numSpacingTranslator,
   stylisticSetsTranslator,
   cntxtAltsTranslator,
+  trackInsertRunPropertyTranslator,
+  trackDeleteRunPropertyTranslator,
   webHiddenTranslator,
   wTranslator,
 ];

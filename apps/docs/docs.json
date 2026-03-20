@@ -17,7 +17,7 @@
   "logo": {
     "light": "/public/images/logo-light.png",
     "dark": "/public/images/logo-dark.png",
-    "href": "https://superdoc.dev"
+    "href": "https://docs.superdoc.dev"
   },
   "favicon": "/public/images/favicon.png",
   "icons": {
@@ -65,7 +65,8 @@
                 ]
               },
               "getting-started/import-export",
-              "getting-started/fonts"
+              "getting-started/fonts",
+              "getting-started/theming"
             ]
           },
           {
@@ -109,9 +110,20 @@
                   "document-api/available-operations"
                 ]
               },
-              "document-engine/sdks",
+              {
+                "group": "SDKs",
+                "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
+              },
               "document-engine/cli",
-              "document-engine/mcp"
+              {
+                "group": "AI Agents",
+                "pages": [
+                  "document-engine/ai-agents/llm-tools",
+                  "document-engine/ai-agents/integrations",
+                  "document-engine/ai-agents/skills",
+                  "document-engine/ai-agents/mcp-server"
+                ]
+              }
             ]
           },
           {
@@ -227,6 +239,7 @@
             "pages": [
               "guides/general/storage",
               "guides/general/stable-navigation",
+              "guides/general/custom-themes",
               {
                 "group": "Collaboration",
                 "pages": [
@@ -240,7 +253,8 @@
                 "pages": [
                   "guides/migration/prosemirror",
                   "guides/migration/breaking-changes-v1",
-                  "guides/migration/typescript-migration"
+                  "guides/migration/typescript-migration",
+                  "guides/migration/css-variables"
                 ]
               }
             ]
@@ -307,6 +321,14 @@
     ]
   },
   "redirects": [
+    {
+      "source": "/document-engine/mcp",
+      "destination": "/document-engine/ai-agents/mcp-server"
+    },
+    {
+      "source": "/document-engine/ai-agents/providers",
+      "destination": "/document-engine/ai-agents/integrations"
+    },
     {
       "source": "/core/superdoc/properties",
       "destination": "/core/superdoc/methods#properties"

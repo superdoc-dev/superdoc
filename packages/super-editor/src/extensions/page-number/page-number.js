@@ -154,6 +154,25 @@ export const TotalPageCount = Node.create({
         default: null,
         rendered: false,
       },
+      /**
+       * Preserves the imported OOXML cached field result for NUMPAGES.
+       * Used as a fallback when pagination is unavailable (headless context)
+       * so the export can write the original cached value instead of empty text.
+       */
+      importedCachedText: {
+        default: null,
+        rendered: false,
+      },
+      /**
+       * Cached display value set by an explicit field update (F9).
+       * Sits between the export cache map and importedCachedText in the
+       * export fallback chain, giving the user's last F9 result priority
+       * over the original imported value.
+       */
+      resolvedText: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 
@@ -270,6 +289,7 @@ export class AutoPageNumberNodeView {
 
   #scheduleUpdateNodeStyle(pos, marks) {
     setTimeout(() => {
+      if (!this.editor?.state) return; // editor may have been destroyed
       const { state } = this.editor;
       const { dispatch } = this.view;
 

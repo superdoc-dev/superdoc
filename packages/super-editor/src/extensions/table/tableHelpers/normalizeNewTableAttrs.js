@@ -7,6 +7,7 @@ import {
   TABLE_STYLE_ID_TABLE_GRID,
 } from '@superdoc/style-engine/ooxml';
 import { readDefaultTableStyle, readSettingsRoot } from '../../../document-api-adapters/document-settings.js';
+import { readTranslatedLinkedStyles } from '../../../core/parts/adapters/styles-read.js';
 
 /**
  * @typedef {Object} NormalizedTableAttrs
@@ -23,10 +24,10 @@ import { readDefaultTableStyle, readSettingsRoot } from '../../../document-api-a
  * @returns {{ styleId: string | null, source: string }}
  */
 export function resolvePreferredNewTableStyleIdFromEditor(editor) {
-  const converter = editor?.converter;
-  const translatedLinkedStyles = converter?.translatedLinkedStyles ?? null;
+  const translatedLinkedStyles = readTranslatedLinkedStyles(editor);
 
   let settingsDefaultStyleId = null;
+  const converter = editor?.converter;
   if (converter) {
     const settingsRoot = readSettingsRoot(converter);
     if (settingsRoot) {

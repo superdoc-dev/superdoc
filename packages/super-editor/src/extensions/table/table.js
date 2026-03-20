@@ -169,6 +169,9 @@
  * @property {import('prosemirror-model').Node[]} rows - Row nodes to append
  */
 
+import { v4 as uuidv4 } from 'uuid';
+import { generateDocxHexId } from '../../utils/generateDocxHexId.js';
+import { Fragment } from 'prosemirror-model';
 import { Node, Attribute } from '@core/index.js';
 import { callOrGet } from '@core/utilities/callOrGet.js';
 import { getExtensionConfigField } from '@core/helpers/getExtensionConfigField.js';
@@ -220,6 +223,28 @@ import {
   insertRowsAtTableEnd,
   insertRowAtIndex,
 } from './tableHelpers/appendRows.js';
+
+/**
+ * Determines which sides of a table inserted at `pos` need a separator
+ * paragraph to prevent adjacency with an existing table.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} pos - Absolute insertion position (between top-level blocks)
+ * @returns {{ before: boolean, after: boolean }}
+ */
+function tableSeparatorNeeds(doc, pos) {
+  const $pos = doc.resolve(pos);
+  if ($pos.depth !== 0) return { before: false, after: false };
+
+  const indexAfter = $pos.index(0);
+  const nodeAfter = indexAfter < doc.childCount ? doc.child(indexAfter) : null;
+  const nodeBefore = indexAfter > 0 ? doc.child(indexAfter - 1) : null;
+
+  return {
+    before: nodeBefore?.type.name === 'table',
+    after: !nodeAfter || nodeAfter.type.name === 'table',
+  };
+}
 
 const IMPORT_CONTEXT_SELECTOR = '[data-superdoc-import="true"]';
 const IMPORT_DEFAULT_TABLE_WIDTH_PCT = 5000; // OOXML percent units where 5000 == 100%
@@ -353,7 +378,7 @@ export const Table = Node.create({
       /**
        * @private
        * @category Attribute
-       * @param {string} [paraId] - OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips
+       * @param {string} [paraId] - Legacy imported identity preserved for backwards compatibility
        */
       paraId: {
         default: null,
@@ -365,7 +390,7 @@ export const Table = Node.create({
       /**
        * @private
        * @category Attribute
-       * @param {string} [textId] - OOXML text identifier (w14:textId), preserved across DOCX roundtrips
+       * @param {string} [textId] - Legacy imported text identifier preserved for backwards compatibility
        */
       textId: {
         default: null,
@@ -661,11 +686,10 @@ export const Table = Node.create({
        * @param {number} options.rows - Number of rows
        * @param {number} options.columns - Number of columns
        * @param {string} [options.sdBlockId] - Stable block ID for the created table
-       * @param {string} [options.paraId] - OOXML-compatible identifier (w14:paraId) that survives DOCX roundtrips
        * @param {boolean} [options.tracked] - When true, sets forceTrackChanges meta; when false, sets skipTrackChanges meta
        */
       insertTableAt:
-        ({ pos, rows, columns, sdBlockId, paraId, tracked } = {}) =>
+        ({ pos, rows, columns, sdBlockId, tracked } = {}) =>
         ({ tr, state, dispatch, editor }) => {
           const tableType = state.schema.nodes.table;
           const tableRowType = state.schema.nodes.tableRow;
@@ -676,21 +700,17 @@ export const Table = Node.create({
           if (!Number.isInteger(columns) || columns < 1) return false;
 
           try {
-            const genParaId = () =>
-              Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
-                .join('')
-                .toUpperCase();
             const widths = computeColumnWidths(editor, columns);
             const rowNodes = [];
             for (let r = 0; r < rows; r++) {
               const cellNodes = [];
               for (let c = 0; c < columns; c++) {
-                const cellAttrs = { paraId: genParaId(), ...(widths ? { colwidth: [widths[c]] } : {}) };
+                const cellAttrs = widths ? { colwidth: [widths[c]] } : {};
                 const cell = tableCellType.createAndFill(cellAttrs);
                 if (!cell) return false;
                 cellNodes.push(cell);
               }
-              const row = tableRowType.createChecked(null, cellNodes);
+              const row = tableRowType.createChecked({ paraId: generateDocxHexId() }, cellNodes);
               rowNodes.push(row);
             }
             const resolved = normalizeNewTableAttrs(editor);
@@ -699,12 +719,30 @@ export const Table = Node.create({
               ...(resolved.borders ? { borders: resolved.borders } : {}),
               ...(resolved.tableProperties ? { tableProperties: resolved.tableProperties } : {}),
               ...(sdBlockId ? { sdBlockId } : {}),
-              ...(paraId ? { paraId } : {}),
             };
             const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
             if (dispatch) {
-              tr.insert(pos, tableNode);
+              const sep = tableSeparatorNeeds(state.doc, pos);
+              const makeSep = () => {
+                const attrs = { sdBlockId: uuidv4(), paraId: generateDocxHexId() };
+                return state.schema.nodes.paragraph.createAndFill(attrs);
+              };
+              if (sep.before || sep.after) {
+                const nodes = [];
+                if (sep.before) {
+                  const s = makeSep();
+                  if (s) nodes.push(s);
+                }
+                nodes.push(tableNode);
+                if (sep.after) {
+                  const s = makeSep();
+                  if (s) nodes.push(s);
+                }
+                tr.insert(pos, Fragment.from(nodes));
+              } else {
+                tr.insert(pos, tableNode);
+              }
               tr.setMeta('inputType', 'programmatic');
               if (tracked === true) tr.setMeta('forceTrackChanges', true);
               else if (tracked === false) tr.setMeta('skipTrackChanges', true);

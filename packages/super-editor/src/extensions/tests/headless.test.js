@@ -44,6 +44,42 @@ const hasInvalidParagraphRangeError = (calls) =>
     ),
   );
 
+describe('Headless static Editor.open()', () => {
+  it('initializes from json option', async () => {
+    const jsonDoc = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'From JSON' }] }],
+    };
+    const editor = await Editor.open(undefined, { json: jsonDoc });
+    expect(editor.state.doc.textContent).toContain('From JSON');
+    editor.destroy();
+  });
+
+  it('comments plugin state is accessible via headless Editor.open()', async () => {
+    const { buffer } = await loadHeadlessOpenFixtureBuffer();
+
+    const editor = await Editor.open(buffer, {
+      isCommentsEnabled: true,
+      extensions: getStarterExtensions(),
+      suppressDefaultDocxStyles: true,
+    });
+
+    // Find the comments plugin by its key name
+    const commentsPlugin = editor.state.plugins.find((p) => p.key?.startsWith?.('comments'));
+    expect(commentsPlugin).toBeDefined();
+
+    // Verify plugin state is initialized (state spec with init/apply is active)
+    expect(commentsPlugin.spec.state).toBeDefined();
+    expect(commentsPlugin.spec.state.init).toBeDefined();
+
+    // Verify DOM-dependent parts are excluded in headless mode
+    expect(commentsPlugin.spec.props).toBeUndefined();
+    expect(commentsPlugin.spec.view).toBeUndefined();
+
+    editor.destroy();
+  });
+});
+
 describe('Headless Mode Optimization', () => {
   it('opens real DOCX fixtures headlessly without paragraph RangeErrors', async () => {
     const { buffer } = await loadHeadlessOpenFixtureBuffer();
@@ -130,7 +166,7 @@ describe('Headless Mode Optimization', () => {
     editor.destroy();
   });
 
-  it('updates paragraph runProperties for first runs nested in inline wrappers in headless mode', async () => {
+  it('does not sync paragraph runProperties for first runs nested in inline wrappers in headless mode', async () => {
     const buffer = await getTestDataAsFileBuffer('blank-doc.docx');
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -170,7 +206,7 @@ describe('Headless Mode Optimization', () => {
       editor.dispatch(tr);
 
       const updatedParagraph = editor.state.doc.firstChild;
-      expect(updatedParagraph?.attrs?.paragraphProperties).toEqual({ runProperties: { bold: true } });
+      expect(updatedParagraph?.attrs?.paragraphProperties).toBeNull();
       expect(hasInvalidParagraphRangeError(logSpy.mock.calls)).toBe(false);
     } finally {
       logSpy.mockRestore();

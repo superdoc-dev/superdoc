@@ -1,0 +1,413 @@
+---
+title: citations.sources.update
+sidebarTitle: citations.sources.update
+description: Update the fields of an existing citation source.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Update the fields of an existing citation source.
+
+- Operation ID: `citations.sources.update`
+- API member path: `editor.doc.citations.sources.update(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CitationSourceMutationResult indicating success or a failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.authors` | object[] | no |  |
+| `patch.city` | string | no |  |
+| `patch.doi` | string | no |  |
+| `patch.edition` | string | no |  |
+| `patch.editor` | object[] | no |  |
+| `patch.issue` | string | no |  |
+| `patch.journalName` | string | no |  |
+| `patch.medium` | string | no |  |
+| `patch.pages` | string | no |  |
+| `patch.publisher` | string | no |  |
+| `patch.shortTitle` | string | no |  |
+| `patch.standardNumber` | string | no |  |
+| `patch.title` | string | no |  |
+| `patch.translator` | object[] | no |  |
+| `patch.url` | string | no |  |
+| `patch.volume` | string | no |  |
+| `patch.year` | string | no |  |
+| `target` | object(kind="entity") | yes |  |
+| `target.entityType` | `"citationSource"` | yes | Constant: `"citationSource"` |
+| `target.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `target.sourceId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "patch": {
+    "authors": [
+      {
+        "first": "example",
+        "last": "example",
+        "middle": "example"
+      }
+    ],
+    "title": "example"
+  },
+  "target": {
+    "entityType": "citationSource",
+    "kind": "entity",
+    "sourceId": "example"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `source` | object(kind="entity") | yes |  |
+| `source.entityType` | `"citationSource"` | yes | Constant: `"citationSource"` |
+| `source.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `source.sourceId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "source": {
+    "entityType": "citationSource",
+    "kind": "entity",
+    "sourceId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "patch": {
+      "additionalProperties": false,
+      "properties": {
+        "authors": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "city": {
+          "type": "string"
+        },
+        "doi": {
+          "type": "string"
+        },
+        "edition": {
+          "type": "string"
+        },
+        "editor": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "issue": {
+          "type": "string"
+        },
+        "journalName": {
+          "type": "string"
+        },
+        "medium": {
+          "type": "string"
+        },
+        "pages": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "shortTitle": {
+          "type": "string"
+        },
+        "standardNumber": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "translator": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "middle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "last"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "url": {
+          "type": "string"
+        },
+        "volume": {
+          "type": "string"
+        },
+        "year": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "citationSource"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "sourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "sourceId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "patch"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "entityType": {
+              "const": "citationSource"
+            },
+            "kind": {
+              "const": "entity"
+            },
+            "sourceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "entityType",
+            "sourceId"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "source"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "const": "citationSource"
+        },
+        "kind": {
+          "const": "entity"
+        },
+        "sourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entityType",
+        "sourceId"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "source"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

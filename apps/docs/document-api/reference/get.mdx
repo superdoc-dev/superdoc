@@ -1,0 +1,118 @@
+---
+title: get
+sidebarTitle: get
+description: Read the full document as an SDDocument structure.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Read the full document as an SDDocument structure.
+
+- Operation ID: `get`
+- API member path: `editor.doc.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an SDDocument with body content projected into SDM/1 canonical shapes.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options` | object | no |  |
+| `options.includeContext` | boolean | no |  |
+| `options.includeProvenance` | boolean | no |  |
+| `options.includeResolved` | boolean | no |  |
+
+### Example request
+
+```json
+{
+  "options": {
+    "includeProvenance": true,
+    "includeResolved": true
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | array | yes |  |
+| `modelVersion` | `"sdm/1"` | yes | Constant: `"sdm/1"` |
+
+### Example response
+
+```json
+{
+  "body": [],
+  "modelVersion": "sdm/1"
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "includeContext": {
+          "type": "boolean"
+        },
+        "includeProvenance": {
+          "type": "boolean"
+        },
+        "includeResolved": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "body": {
+      "type": "array"
+    },
+    "modelVersion": {
+      "const": "sdm/1"
+    }
+  },
+  "required": [
+    "modelVersion",
+    "body"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

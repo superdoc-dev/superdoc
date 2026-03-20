@@ -158,7 +158,7 @@ const caretIcon = computed(() => {
   position: relative;
   z-index: 1;
   min-width: 30px;
-  margin: 0 1px;
+  margin: 0 calc(var(--sd-ui-toolbar-item-gap, 2px) / 2);
 }
 
 .visually-hidden {
@@ -170,16 +170,16 @@ const caretIcon = computed(() => {
 }
 
 .toolbar-button {
-  padding: 5px;
-  height: 32px;
-  max-height: 32px;
-  border-radius: 6px;
+  padding: var(--sd-ui-toolbar-item-padding, 5px);
+  height: var(--sd-ui-toolbar-height, 32px);
+  max-height: var(--sd-ui-toolbar-height, 32px);
+  border-radius: var(--sd-ui-radius, 6px);
   overflow-y: visible;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #47484a;
+  color: var(--sd-ui-toolbar-button-text, #47484a);
   transition: all 0.2s ease-out;
   user-select: none;
   position: relative;
@@ -187,7 +187,7 @@ const caretIcon = computed(() => {
 }
 
 .toolbar-button:hover {
-  background-color: #dbdbdb;
+  background-color: var(--sd-ui-toolbar-button-hover-bg, var(--sd-ui-hover-bg, #dbdbdb));
 
   .toolbar-icon {
     &.high-contrast {
@@ -203,7 +203,7 @@ const caretIcon = computed(() => {
 
 .toolbar-button:active,
 .active {
-  background-color: #c8d0d8;
+  background-color: var(--sd-ui-toolbar-button-active-bg, var(--sd-ui-active-bg, #c8d0d8));
 }
 
 .button-label {
@@ -213,7 +213,7 @@ const caretIcon = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 400;
-  font-size: 15px;
+  font-size: var(--sd-ui-font-size-500, 15px);
   margin: 5px;
 }
 
@@ -255,17 +255,17 @@ const caretIcon = computed(() => {
 }
 
 .button-text-input {
-  color: #47484a;
+  color: var(--sd-ui-toolbar-button-text, #47484a);
   border-radius: 4px;
   text-align: center;
   width: 30px;
-  font-size: 14px;
+  font-size: var(--sd-ui-font-size-400, 14px);
   margin-right: 5px;
   font-weight: 400;
   background-color: transparent;
   padding: 2px 0;
   outline: none;
-  border: 1px solid #d8dee5;
+  border: 1px solid var(--sd-ui-border, #dbdbdb);
   box-sizing: border-box;
 
   &.high-contrast {
@@ -278,7 +278,7 @@ const caretIcon = computed(() => {
 }
 
 .button-text-input::placeholder {
-  color: #47484a;
+  color: var(--sd-ui-toolbar-button-text, #47484a);
 }
 
 .dropdown-caret {

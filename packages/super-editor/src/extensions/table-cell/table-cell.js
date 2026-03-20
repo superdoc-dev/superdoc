@@ -111,7 +111,7 @@ export const TableCell = Node.create({
         },
       },
 
-      /** @private - OOXML identifier preserved across DOCX roundtrips */
+      /** @private - Legacy imported identity preserved for backwards compatibility */
       paraId: {
         default: null,
         keepOnSplit: false,
@@ -119,7 +119,7 @@ export const TableCell = Node.create({
         renderDOM: () => ({}),
       },
 
-      /** @private - OOXML text identifier preserved across DOCX roundtrips */
+      /** @private - Legacy imported text identifier preserved for backwards compatibility */
       textId: {
         default: null,
         keepOnSplit: false,

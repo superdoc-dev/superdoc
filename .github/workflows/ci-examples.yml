@@ -4,28 +4,74 @@ on:
   pull_request:
     paths:
       - 'examples/**'
+      - 'packages/superdoc/**'
+      - 'packages/react/**'
+      - 'packages/super-editor/**'
+      - 'packages/collaboration-yjs/**'
+      - 'packages/sdk/**'
+      - 'packages/layout-engine/**'
+      - 'shared/**'
   workflow_dispatch:
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build superdoc
+        run: pnpm build:superdoc
+
+      - name: Build React wrapper
+        run: pnpm --filter @superdoc-dev/react build
+
+      - name: Build collaboration package
+        run: pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build
+
+      - name: Install Playwright
+        working-directory: examples/__tests__
+        run: npx playwright install chromium
+
+      - name: Cache workspace
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
   getting-started:
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         example: [react, vue, vanilla, cdn, angular, nuxt, laravel]
     steps:
-      - uses: actions/checkout@v6
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
 
       - name: Setup PHP
         if: matrix.example == 'laravel'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
 
       - name: Install Composer dependencies
         if: matrix.example == 'laravel'
@@ -37,32 +83,25 @@ jobs:
         working-directory: examples/getting-started/laravel
         run: cp .env.example .env && php artisan key:generate
 
-      - name: Install example dependencies
-        if: matrix.example != 'cdn'
-        working-directory: examples/getting-started/${{ matrix.example }}
-        run: npm install
-
-      - name: Install smoke test dependencies
-        working-directory: examples/__tests__
-        run: npm install && npx playwright install chromium
-
       - name: Run smoke test
         working-directory: examples/__tests__
         run: EXAMPLE=${{ matrix.example }} npx playwright test
 
   collaboration:
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         example: [superdoc-yjs, hocuspocus, liveblocks]
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
         with:
-          node-version: '20'
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
 
       - name: Create .env for cloud providers
         working-directory: examples/collaboration/${{ matrix.example }}
@@ -71,43 +110,45 @@ jobs:
             echo "VITE_LIVEBLOCKS_PUBLIC_KEY=${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}" > .env
           fi
 
-      - name: Install example dependencies
-        working-directory: examples/collaboration/${{ matrix.example }}
-        run: npm install
-
-      - name: Install smoke test dependencies
-        working-directory: examples/__tests__
-        run: npm install && npx playwright install chromium
-
       - name: Run smoke test
         working-directory: examples/__tests__
         run: EXAMPLE=collaboration/${{ matrix.example }} npx playwright test
 
   features:
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         example: [track-changes, ai-redlining, comments, custom-toolbar]
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
         with:
-          node-version: '20'
-
-      - name: Install example dependencies
-        working-directory: examples/features/${{ matrix.example }}
-        run: npm install
-
-      - name: Install smoke test dependencies
-        working-directory: examples/__tests__
-        run: npm install && npx playwright install chromium
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
 
       - name: Run smoke test
         working-directory: examples/__tests__
         run: EXAMPLE=features/${{ matrix.example }} npx playwright test
+
+  headless:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - name: Run headless tests
+        working-directory: examples/headless/ai-redlining
+        run: npx tsx src/index.test.ts
 
   validate:
     if: always()
@@ -119,21 +160,3 @@ jobs:
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             exit 1
           fi
-
-  headless:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        working-directory: examples/headless/ai-redlining
-        run: npm install
-
-      - name: Run headless tests
-        working-directory: examples/headless/ai-redlining
-        run: npx tsx src/index.test.ts

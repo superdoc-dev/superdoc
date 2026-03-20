@@ -1,6 +1,7 @@
 // @ts-check
 import { getNodeType } from '@core/helpers/getNodeType.js';
 import { createCell } from './createCell.js';
+import { generateDocxHexId } from '../../../utils/generateDocxHexId.js';
 
 /**
  * Create a new table with specified dimensions
@@ -57,7 +58,10 @@ export const createTable = (
   for (let index = 0; index < rowsCount; index++) {
     const isHeader = withHeaderRow && index === 0;
     const cellsToInsert = isHeader ? headerCells : cells;
-    const rowAttrs = isHeader ? { tableRowProperties: { repeatHeader: true } } : null;
+    const rowAttrs = {
+      ...(isHeader ? { tableRowProperties: { repeatHeader: true } } : {}),
+      paraId: generateDocxHexId(),
+    };
     rows.push(types.tableRow.createChecked(rowAttrs, cellsToInsert));
   }
 

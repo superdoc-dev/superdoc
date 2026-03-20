@@ -1,5 +1,21 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { unwrap, useStoryHarness } from '../harness';
+
+const execFileAsync = promisify(execFile);
+const ZIP_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function readDocxPart(docPath: string, partPath: string): Promise<string> {
+  const { stdout } = await execFileAsync('unzip', ['-p', docPath, partPath], {
+    maxBuffer: ZIP_MAX_BUFFER_BYTES,
+  });
+  return stdout;
+}
 
 /**
  * End-to-end story tests for all inline formatting operations.
@@ -41,15 +57,19 @@ describe('document-api story: inline formatting', () => {
     const insertResult = unwrap<any>(await client.doc.insert({ sessionId, value: text }));
     expect(insertResult.receipt?.success).toBe(true);
 
-    // The receipt's hoisted target contains the paragraph's stable blockId.
-    const blockId = insertResult.target?.blockId;
+    // Prefer SDM/1 receipt resolution target; keep legacy fallback for compatibility.
+    const resolutionTarget = insertResult?.receipt?.resolution?.target;
+    const blockId =
+      insertResult?.target?.blockId ?? resolutionTarget?.anchor?.start?.blockId ?? resolutionTarget?.nodeId;
     if (!blockId) throw new Error('Insert did not return a target blockId.');
+    const startOffset =
+      typeof resolutionTarget?.anchor?.start?.offset === 'number' ? resolutionTarget.anchor.start.offset : 0;
 
     // Build a target spanning the full inserted text
     return {
       kind: 'text' as const,
       blockId,
-      range: { start: 0, end: text.length },
+      range: { start: startOffset, end: startOffset + text.length },
     };
   }
 
@@ -165,6 +185,52 @@ describe('document-api story: inline formatting', () => {
     await saveResult(sid, 'fontFamily.docx');
   });
 
+  it('fontFamily: persists in doc.get after applying via format.fontFamily (SD-2249)', async () => {
+    const sid = `fontFamily-persist-${Date.now()}`;
+    const target = await setupFormattableText(sid, 'This text should be Georgia');
+
+    const result = unwrap<any>(
+      await client.doc.format.apply({
+        sessionId: sid,
+        target,
+        inline: { fontFamily: 'Georgia' },
+      }),
+    );
+    expect(result.receipt?.success).toBe(true);
+
+    // Verify fontFamily survives in the in-memory model via doc.get
+    const doc = unwrap<any>(await client.doc.get({ sessionId: sid }));
+    const block = doc.body?.[0];
+    const runs = block?.paragraph?.inlines?.filter((i: any) => i.kind === 'run') ?? [];
+    const propsWithFont = runs.find((r: any) => r.run?.props?.fontFamily);
+    expect(propsWithFont).toBeDefined();
+    expect(propsWithFont.run.props.fontFamily).toBe('Georgia');
+  });
+
+  it('fontFamily: clearing with null removes fontFamily from doc.get (SD-2249)', async () => {
+    const sid = `fontFamily-clear-${Date.now()}`;
+    const target = await setupFormattableText(sid, 'This text should reset font');
+
+    // Set fontFamily first
+    const setResult = unwrap<any>(
+      await client.doc.format.apply({ sessionId: sid, target, inline: { fontFamily: 'Georgia' } }),
+    );
+    expect(setResult.receipt?.success).toBe(true);
+
+    // Clear fontFamily
+    const clearResult = unwrap<any>(
+      await client.doc.format.apply({ sessionId: sid, target, inline: { fontFamily: null } }),
+    );
+    expect(clearResult.receipt?.success).toBe(true);
+
+    // Verify fontFamily is absent after clearing
+    const doc = unwrap<any>(await client.doc.get({ sessionId: sid }));
+    const block = doc.body?.[0];
+    const runs = block?.paragraph?.inlines?.filter((i: any) => i.kind === 'run') ?? [];
+    const propsWithFont = runs.find((r: any) => r.run?.props?.fontFamily);
+    expect(propsWithFont).toBeUndefined();
+  });
+
   it('color: sets a hex color', async () => {
     const sid = `color-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be red');
@@ -172,6 +238,33 @@ describe('document-api story: inline formatting', () => {
     const result = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { color: '#FF0000' } }));
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'color.docx');
+  });
+
+  it('letterSpacing: applies tracking and persists run spacing in exported DOCX', async () => {
+    const sid = `letterSpacing-${Date.now()}`;
+    const probeText = 'TrackingProbe123';
+    const target = await setupFormattableText(sid, probeText);
+
+    const result = unwrap<any>(
+      await client.doc.format.letterSpacing({
+        sessionId: sid,
+        blockId: target.blockId,
+        start: target.range.start,
+        end: target.range.end,
+        value: 0.5,
+      }),
+    );
+    expect(result.receipt?.success).toBe(true);
+
+    const docPath = outPath('letterSpacing.docx');
+    await client.doc.save({ sessionId: sid, out: docPath });
+
+    const documentXml = await readDocxPart(docPath, 'word/document.xml');
+    const runRegex = new RegExp(
+      `<w:r\\b[\\s\\S]*?<w:rPr>[\\s\\S]*?<w:spacing\\b[^>]*\\bw:val="10"[\\s\\S]*?<w:t[^>]*>${escapeForRegex(probeText)}</w:t>[\\s\\S]*?<\\/w:r>`,
+    );
+
+    expect(documentXml).toMatch(runRegex);
   });
 
   // ---------------------------------------------------------------------------

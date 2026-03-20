@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { NSkeleton, useMessage } from 'naive-ui';
 import 'tippy.js/dist/tippy.css';
 import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, computed, watch, nextTick } from 'vue';
 import { Editor } from '@superdoc/super-editor';
@@ -9,6 +8,7 @@ import ContextMenu from './context-menu/ContextMenu.vue';
 import { onMarginClickCursorChange } from './cursor-helpers.js';
 import Ruler from './rulers/Ruler.vue';
 import GenericPopover from './popovers/GenericPopover.vue';
+import EditorSkeleton from './EditorSkeleton.vue';
 import LinkInput from './toolbar/LinkInput.vue';
 import TableResizeOverlay from './TableResizeOverlay.vue';
 import ImageResizeOverlay from './ImageResizeOverlay.vue';
@@ -23,6 +23,8 @@ import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } fro
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const FILE_LOAD_ERROR_MESSAGE = 'Unable to load the file. Please verify the .docx is valid and not password protected.';
+
 const props = defineProps({
   documentId: {
     type: String,
@@ -265,8 +267,6 @@ const setupRulerObservers = () => {
   }
 };
 
-const message = useMessage();
-
 const editorWrapper = ref(null);
 const editorElem = ref(null);
 
@@ -302,6 +302,7 @@ const openPopover = (component, props, position) => {
 const tableResizeState = reactive({
   visible: false,
   tableElement: null,
+  dragging: false,
 });
 
 /**
@@ -553,6 +554,9 @@ const isNearRowBoundary = (event, tableElement) => {
  * @returns {void}
  */
 const updateTableResizeOverlay = (event) => {
+  // Don't change overlay visibility while a resize drag is active
+  if (tableResizeState.dragging) return;
+
   // Throttle: skip if called too frequently
   const now = Date.now();
   if (now - lastUpdateTableResizeTimestamp < TABLE_RESIZE_THROTTLE_MS) {
@@ -594,6 +598,17 @@ const updateTableResizeOverlay = (event) => {
  * Hide table resize overlay (on mouse leave)
  */
 const hideTableResizeOverlay = () => {
+  if (tableResizeState.dragging) return;
+  tableResizeState.visible = false;
+  tableResizeState.tableElement = null;
+};
+
+const onTableResizeStart = () => {
+  tableResizeState.dragging = true;
+};
+
+const onTableResizeEnd = () => {
+  tableResizeState.dragging = false;
   tableResizeState.visible = false;
   tableResizeState.tableElement = null;
 };
@@ -721,9 +736,26 @@ const setSelectedImage = (element, blockId, pmStart) => {
 /**
  * Combined handler to update both table and image resize overlays
  */
+const getDocumentMode = () => {
+  if (activeEditor.value?.options?.documentMode) return activeEditor.value.options.documentMode;
+  if (props.options?.documentMode) return props.options.documentMode;
+  return 'editing';
+};
+
+const isViewingMode = () => getDocumentMode() === 'viewing';
+
 const handleOverlayUpdates = (event) => {
-  updateTableResizeOverlay(event);
-  updateImageResizeOverlay(event);
+  if (isViewingMode()) {
+    hideTableResizeOverlay();
+  } else {
+    updateTableResizeOverlay(event);
+  }
+  // Don't evaluate image overlay during an active table resize drag —
+  // without the oversized table overlay, pointer events can reach images
+  // and spuriously activate the image resize overlay mid-drag.
+  if (!tableResizeState.dragging) {
+    updateImageResizeOverlay(event);
+  }
 };
 
 /**
@@ -732,31 +764,6 @@ const handleOverlayUpdates = (event) => {
 const handleOverlayHide = () => {
   hideTableResizeOverlay();
   hideImageResizeOverlay();
-};
-
-let dataPollTimeout;
-
-const stopPolling = () => {
-  clearTimeout(dataPollTimeout);
-};
-
-const pollForMetaMapData = (ydoc, retries = 10, interval = 500) => {
-  const metaMap = ydoc.getMap('meta');
-
-  const checkData = () => {
-    const docx = metaMap.get('docx');
-    if (docx) {
-      stopPolling();
-      initEditor({ content: docx });
-    } else if (retries > 0) {
-      dataPollTimeout = setTimeout(checkData, interval);
-      retries--;
-    } else {
-      console.warn('Failed to load docx data from meta map.');
-    }
-  };
-
-  checkData();
 };
 
 const setDefaultBlankFile = async () => {
@@ -782,12 +789,40 @@ const loadNewFileData = async () => {
   }
 };
 
+const waitForCollaborativeFragmentSettling = async (ydoc, maxWaitMs = 200) => {
+  const fragment = ydoc.getXmlFragment('supereditor');
+  if (fragment.length > 0) return fragment;
+
+  await new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      fragment.unobserve?.(observer);
+      resolve();
+    }, maxWaitMs);
+
+    const observer = () => {
+      if (fragment.length <= 0) return;
+      clearTimeout(timeout);
+      fragment.unobserve?.(observer);
+      resolve();
+    };
+
+    fragment.observe?.(observer);
+  });
+
+  return fragment;
+};
+
+const notifyFileLoadError = () => {
+  console.warn(FILE_LOAD_ERROR_MESSAGE);
+};
+
 const initializeData = async () => {
   // If we have the file, initialize immediately from file
   if (props.fileSource) {
     let fileData = await loadNewFileData();
     if (!fileData) {
-      message.error('Unable to load the file. Please verify the .docx is valid and not password protected.');
+      // TODO: show a visible error to the user (toast removed with naive-ui)
+      notifyFileLoadError();
       await setDefaultBlankFile();
       fileData = await loadNewFileData();
     }
@@ -817,14 +852,42 @@ const initializeData = async () => {
     };
 
     waitForSync().then(async () => {
+      const partsMap = ydoc.getMap('parts');
       const metaMap = ydoc.getMap('meta');
+      const hasLegacyContent = metaMap.has('docx');
+      const fragment = hasLegacyContent
+        ? ydoc.getXmlFragment('supereditor')
+        : await waitForCollaborativeFragmentSettling(ydoc);
 
-      if (metaMap.has('docx')) {
-        // Existing content - poll for it
-        pollForMetaMapData(ydoc);
+      // Three-way room classification:
+      // 1. New-format room: has parts map entries or Y fragment content
+      // 2. Legacy room: has meta.docx but no parts yet (migration pending)
+      // 3. Empty room: first client, nothing in ydoc
+      const hasPartsContent = fragment.length > 0 || partsMap.size > 0;
+
+      if (hasPartsContent || hasLegacyContent) {
+        // Existing room — editor will hydrate from Y fragment + parts map
+        // during bootstrap. Legacy rooms will be migrated in bootstrapPartSync.
+        props.options.isNewFile = false;
+
+        if (fragment.length > 0) {
+          props.options.fragment = fragment;
+          initEditor({});
+          return;
+        }
+
+        delete props.options.fragment;
+
+        if (hasLegacyContent) {
+          initEditor({ content: metaMap.get('docx') });
+          return;
+        }
+
+        initEditor({});
       } else {
-        // First client - load blank document
+        // First client — load blank document
         props.options.isNewFile = true;
+        delete props.options.fragment;
         const fileData = await loadNewFileData();
         if (fileData) initEditor(fileData);
       }
@@ -1005,7 +1068,11 @@ const handleSuperEditorClick = (event) => {
   }
 
   // Update table resize overlay on click
-  updateTableResizeOverlay(event);
+  if (isViewingMode()) {
+    hideTableResizeOverlay();
+  } else {
+    updateTableResizeOverlay(event);
+  }
 };
 
 onMounted(() => {
@@ -1092,7 +1159,6 @@ const handleMarginChange = ({ side, value }) => {
 };
 
 onBeforeUnmount(() => {
-  stopPolling();
   clearSelectedImage();
 
   // Clean up zoomChange listener if it exists
@@ -1161,6 +1227,8 @@ onBeforeUnmount(() => {
         :editor="activeEditor"
         :visible="tableResizeState.visible"
         :tableElement="tableResizeState.tableElement"
+        @resize-start="onTableResizeStart"
+        @resize-end="onTableResizeEnd"
       />
       <!-- Image resize overlay for interactive image resizing -->
       <ImageResizeOverlay
@@ -1171,23 +1239,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <div class="placeholder-editor" v-if="!editorReady">
-      <div class="placeholder-title">
-        <n-skeleton text style="width: 60%" />
-      </div>
-
-      <n-skeleton text :repeat="6" />
-      <n-skeleton text style="width: 60%" />
-
-      <n-skeleton text :repeat="6" style="width: 30%; display: block; margin: 20px" />
-      <n-skeleton text style="width: 60%" />
-      <n-skeleton text :repeat="5" />
-      <n-skeleton text style="width: 30%" />
-
-      <n-skeleton text style="margin-top: 50px" />
-      <n-skeleton text :repeat="6" />
-      <n-skeleton text style="width: 70%" />
-    </div>
+    <EditorSkeleton v-if="!editorReady" />
 
     <GenericPopover
       v-if="activeEditor"
@@ -1263,24 +1315,5 @@ onBeforeUnmount(() => {
   color: initial;
   overflow: hidden;
   position: relative;
-}
-
-.placeholder-editor {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
-  padding: 1in;
-  z-index: 5;
-  background-color: white;
-  box-sizing: border-box;
-}
-
-.placeholder-title {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 40px;
 }
 </style>

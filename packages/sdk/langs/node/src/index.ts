@@ -31,14 +31,8 @@ export function createSuperDocClient(options: SuperDocClientOptions = {}): Super
 }
 
 export { getSkill, installSkill, listSkills } from './skills.js';
-export {
-  chooseTools,
-  dispatchSuperDocTool,
-  getToolCatalog,
-  inferDocumentFeatures,
-  listTools,
-  resolveToolOperation,
-} from './tools.js';
+export { chooseTools, dispatchSuperDocTool, getSystemPrompt, getToolCatalog, listTools } from './tools.js';
+export { dispatchIntentTool } from './generated/intent-dispatch.generated.js';
 export { SuperDocCliError } from './runtime/errors.js';
 export type { InvokeOptions, OperationSpec, OperationParamSpec, SuperDocClientOptions } from './runtime/process.js';
-export type { DocumentFeatures, ToolChooserInput, ToolPhase, ToolProfile, ToolProvider } from './tools.js';
+export type { ToolChooserInput, ToolProvider } from './tools.js';

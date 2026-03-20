@@ -1,0 +1,217 @@
+---
+title: hyperlinks.get
+sidebarTitle: hyperlinks.get
+description: Retrieve details of a specific hyperlink by its inline address.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Retrieve details of a specific hyperlink by its inline address.
+
+- Operation ID: `hyperlinks.get`
+- API member path: `editor.doc.hyperlinks.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HyperlinkInfo object with the address, destination properties, and display text.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="inline") | yes |  |
+| `target.anchor` | InlineAnchor | yes | InlineAnchor |
+| `target.anchor.end` | Position | yes | Position |
+| `target.anchor.end.blockId` | string | yes |  |
+| `target.anchor.end.offset` | integer | yes |  |
+| `target.anchor.start` | Position | yes | Position |
+| `target.anchor.start.blockId` | string | yes |  |
+| `target.anchor.start.offset` | integer | yes |  |
+| `target.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `target.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "inline",
+    "nodeType": "hyperlink"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | object(kind="inline") | yes |  |
+| `address.anchor` | InlineAnchor | yes | InlineAnchor |
+| `address.anchor.end` | Position | yes | Position |
+| `address.anchor.end.blockId` | string | yes |  |
+| `address.anchor.end.offset` | integer | yes |  |
+| `address.anchor.start` | Position | yes | Position |
+| `address.anchor.start.blockId` | string | yes |  |
+| `address.anchor.start.offset` | integer | yes |  |
+| `address.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `address.nodeType` | `"hyperlink"` | yes | Constant: `"hyperlink"` |
+| `properties` | object | yes |  |
+| `properties.anchor` | string | no |  |
+| `properties.docLocation` | string | no |  |
+| `properties.href` | string | no |  |
+| `properties.rel` | string | no |  |
+| `properties.target` | string | no |  |
+| `properties.tooltip` | string | no |  |
+| `text` | string | no |  |
+
+### Example response
+
+```json
+{
+  "address": {
+    "anchor": {
+      "end": {
+        "blockId": "block-abc123",
+        "offset": 0
+      },
+      "start": {
+        "blockId": "block-abc123",
+        "offset": 0
+      }
+    },
+    "kind": "inline",
+    "nodeType": "hyperlink"
+  },
+  "properties": {
+    "anchor": "example",
+    "href": "example"
+  },
+  "text": "Hello, world."
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InlineAnchor"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "hyperlink"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InlineAnchor"
+        },
+        "kind": {
+          "const": "inline"
+        },
+        "nodeType": {
+          "const": "hyperlink"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "properties": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "type": "string"
+        },
+        "docLocation": {
+          "type": "string"
+        },
+        "href": {
+          "type": "string"
+        },
+        "rel": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "tooltip": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "address",
+    "properties"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

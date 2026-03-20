@@ -4,18 +4,7 @@ import { PRETTY_ROW_LIMIT, moreLine, padCol, safeNumber, toSingleLine, truncate 
 import { validateQuery } from './validate';
 import type { Query, FindOutput } from './types';
 
-const FLAT_FIND_FLAGS = [
-  'type',
-  'node-type',
-  'kind',
-  'pattern',
-  'mode',
-  'case-sensitive',
-  'limit',
-  'offset',
-  'include-nodes',
-  'include-unknown',
-];
+const FLAT_FIND_FLAGS = ['type', 'node-type', 'kind', 'pattern', 'mode', 'case-sensitive', 'limit', 'offset'];
 
 function hasFlatFindFlags(parsed: ParsedArgs): boolean {
   return FLAT_FIND_FLAGS.some((flag) => parsed.options[flag] != null);
@@ -27,10 +16,6 @@ function buildFlatFindQueryDraft(parsed: ParsedArgs): unknown {
     throw new CliError('MISSING_REQUIRED', 'find: missing required --type, or provide --query-json/--query-file.');
   }
 
-  const includeNodesFlag = getOptionalBooleanOption(parsed, 'include-nodes');
-  const includeNodes = typeof includeNodesFlag === 'boolean' ? includeNodesFlag : undefined;
-  const includeUnknownFlag = getOptionalBooleanOption(parsed, 'include-unknown');
-  const includeUnknown = typeof includeUnknownFlag === 'boolean' ? includeUnknownFlag : undefined;
   const caseSensitive = getOptionalBooleanOption(parsed, 'case-sensitive');
 
   if (selectorType === 'text') {
@@ -43,8 +28,6 @@ function buildFlatFindQueryDraft(parsed: ParsedArgs): unknown {
       },
       limit: getNumberOption(parsed, 'limit'),
       offset: getNumberOption(parsed, 'offset'),
-      includeNodes,
-      includeUnknown,
     };
   }
 
@@ -57,8 +40,6 @@ function buildFlatFindQueryDraft(parsed: ParsedArgs): unknown {
       },
       limit: getNumberOption(parsed, 'limit'),
       offset: getNumberOption(parsed, 'offset'),
-      includeNodes,
-      includeUnknown,
     };
   }
 
@@ -77,8 +58,6 @@ function buildFlatFindQueryDraft(parsed: ParsedArgs): unknown {
     select,
     limit: getNumberOption(parsed, 'limit'),
     offset: getNumberOption(parsed, 'offset'),
-    includeNodes,
-    includeUnknown,
   };
 }
 
@@ -123,23 +102,48 @@ export async function resolveFindQuery(parsed: ParsedArgs): Promise<Query> {
   return validateQuery(finalDraft, 'query');
 }
 
-function resolveMatchLabel(address: FindOutput['items'][number]['address'], maxTypeLength: number): string {
-  const nodeId = address.kind === 'block' ? address.nodeId : 'inline';
-  return `[${padCol(address.nodeType, maxTypeLength)} ${nodeId}]`;
+/** Extracts a human-readable node kind string from an SDNodeResult item. */
+function resolveNodeKind(item: { node?: unknown; address?: unknown }): string {
+  const node = item.node;
+  if (typeof node === 'object' && node != null && 'kind' in node) {
+    const kind = (node as { kind: unknown }).kind;
+    if (typeof kind === 'string') return kind;
+  }
+  // Fallback: use address.kind if available
+  const address = item.address;
+  if (typeof address === 'object' && address != null && 'kind' in address) {
+    const kind = (address as { kind: unknown }).kind;
+    if (typeof kind === 'string') return kind;
+  }
+  return 'unknown';
 }
 
-function resolveNodeText(item: FindOutput['items'][number]): string | null {
-  const snippet = item.context?.snippet;
-  if (typeof snippet === 'string' && snippet.length > 0) return snippet;
+function resolveMatchLabel(item: { node?: unknown; address?: unknown }, maxTypeLength: number): string {
+  const nodeKind = resolveNodeKind(item);
+  const address = item.address as { nodeId?: string; kind?: string } | undefined;
+  const nodeId = address?.nodeId ?? 'inline';
+  return `[${padCol(nodeKind, maxTypeLength)} ${nodeId}]`;
+}
 
+function resolveNodeText(item: { node?: unknown }): string | null {
   const node = item.node;
   if (typeof node !== 'object' || node == null) return null;
-  const text = (node as { text?: unknown }).text;
+  // SDM/1 run nodes have text inside their kind-keyed object
+  const record = node as Record<string, unknown>;
+  if (record.kind === 'run' && typeof record.run === 'object' && record.run != null) {
+    const text = (record.run as { text?: unknown }).text;
+    if (typeof text === 'string' && text.length > 0) return text;
+  }
+  // Fallback: check for a top-level text field
+  const text = (record as { text?: unknown }).text;
   if (typeof text === 'string' && text.length > 0) return text;
   return null;
 }
 
-export function formatFindPretty(result: FindOutput, revision: number): string {
+export function formatFindPretty(
+  result: { total?: number; items: Array<{ node?: unknown; address?: unknown }> },
+  revision: number,
+): string {
   const total = safeNumber(result.total, result.items.length);
   const suffix = result.items.length !== total ? ` (${total} total)` : '';
   const lines: string[] = [`Revision ${revision}: ${result.items.length} matches${suffix}`];
@@ -148,10 +152,10 @@ export function formatFindPretty(result: FindOutput, revision: number): string {
   lines.push('');
   const shownCount = Math.min(result.items.length, PRETTY_ROW_LIMIT);
   const shownItems = result.items.slice(0, shownCount);
-  const maxTypeLength = Math.max(1, ...shownItems.map((item) => item.address.nodeType.length));
+  const maxTypeLength = Math.max(1, ...shownItems.map((item) => resolveNodeKind(item).length));
 
   for (const item of shownItems) {
-    const label = resolveMatchLabel(item.address, maxTypeLength);
+    const label = resolveMatchLabel(item, maxTypeLength);
     const snippet = resolveNodeText(item);
     if (!snippet) {
       lines.push(label);

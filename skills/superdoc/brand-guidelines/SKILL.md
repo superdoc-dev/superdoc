@@ -19,7 +19,7 @@ Always "SuperDoc" (capital S, capital D). Never: Super Doc, Superdoc, superdoc, 
 
 ## Primary Color
 
-`#1355FF` (SuperDoc Blue). Full scale in `packages/superdoc/src/assets/styles/tokens.css`.
+`#1355FF` (SuperDoc Blue). Full scale is defined in `packages/superdoc/src/assets/styles/helpers/variables.css`.
 
 ## Typography
 
@@ -67,7 +67,8 @@ Never use: "AI-powered" (unless actual AI features), "revolutionary", "game-chan
 
 ## Design Tokens
 
-All color, spacing, and typography values are defined in `packages/superdoc/src/assets/styles/tokens.css` as `--sd-*` CSS custom properties. Use semantic tokens (`--sd-action-primary`, `--sd-surface-card`) — never hardcode hex values in components.
+All color, spacing, and typography token defaults are defined in `packages/superdoc/src/assets/styles/helpers/variables.css` as `--sd-*` CSS custom properties (`:root` contract). 
+Preset theme overrides are defined in `packages/superdoc/src/assets/styles/helpers/themes.css` (`.sd-theme-*`).
 
 ## When Building UI
 
@@ -81,4 +82,5 @@ All color, spacing, and typography values are defined in `packages/superdoc/src/
 
 - `brand/brand-guidelines.md` — Full voice guide with dual registers, spectrum, and examples
 - `brand/visual-identity.md` — Logo, colors, typography, surfaces
-- `packages/superdoc/src/assets/styles/tokens.css` — All design token values as CSS custom properties
+- `packages/superdoc/src/assets/styles/helpers/variables.css` — Token contract defaults (`:root`)
+- `packages/superdoc/src/assets/styles/helpers/themes.css` — Preset theme overrides (`.sd-theme-*`)

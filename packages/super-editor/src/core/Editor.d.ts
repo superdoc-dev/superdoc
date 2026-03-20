@@ -58,5 +58,13 @@ export declare class Editor {
    */
   can(): CanObject;
 
+  /**
+   * Get the maximum content size based on page dimensions and margins.
+   * When the cursor is inside a table cell, the max width is constrained to that
+   * cell's width so that newly inserted images are never wider than their containing cell.
+   * Returns empty object in web layout mode or when no page size is available.
+   */
+  getMaxContentSize(): { width?: number; height?: number };
+
   [key: string]: any;
 }

@@ -9,20 +9,6 @@ export interface ConverterWithDocumentSettings {
   };
 }
 
-function createSettingsPart(): XmlElement {
-  return {
-    type: 'element',
-    name: 'document',
-    elements: [
-      {
-        type: 'element',
-        name: 'w:settings',
-        elements: [],
-      },
-    ],
-  };
-}
-
 function findSettingsRoot(part: XmlElement): XmlElement | null {
   if (part.name === 'w:settings') return part;
   if (!Array.isArray(part.elements)) return null;
@@ -44,15 +30,14 @@ export function readSettingsRoot(converter: ConverterWithDocumentSettings): XmlE
   return findSettingsRoot(part);
 }
 
-export function ensureSettingsRoot(converter: ConverterWithDocumentSettings): XmlElement {
-  if (!converter.convertedXml) converter.convertedXml = {};
-
-  let part = converter.convertedXml[SETTINGS_PART_PATH] as XmlElement | undefined;
-  if (!part) {
-    part = createSettingsPart();
-    converter.convertedXml[SETTINGS_PART_PATH] = part;
-  }
-
+/**
+ * Navigate to the `w:settings` root element inside the given part XML.
+ *
+ * Must be called from inside a `mutatePart` callback where the part is
+ * guaranteed to exist (via `settingsPartDescriptor.ensurePart`). If the
+ * `w:settings` element is missing, a fallback root is created in place.
+ */
+export function ensureSettingsRoot(part: XmlElement): XmlElement {
   const settingsRoot = findSettingsRoot(part);
   if (settingsRoot) return settingsRoot;
 
@@ -133,4 +118,45 @@ export function setOddEvenHeadersFooters(settingsRoot: XmlElement, enabled: bool
 
   const hasFlag = hasOddEvenHeadersFooters(settingsRoot);
   return hadFlag !== hasFlag;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// w:updateFields
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reads the `w:updateFields` flag from settings.xml.
+ * Returns true when the element is present with `w:val="true"` (or `"1"`).
+ */
+export function hasUpdateFields(settingsRoot: XmlElement): boolean {
+  const el = settingsRoot.elements?.find((entry) => entry.name === 'w:updateFields');
+  if (!el) return false;
+  const val = (el.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  return val === 'true' || val === '1' || val === true;
+}
+
+/**
+ * Sets the `w:updateFields` flag in settings.xml.
+ * Creates the element if absent, updates its value if present.
+ * Only upserts the targeted element — all other settings are preserved.
+ */
+export function setUpdateFields(settingsRoot: XmlElement, enabled: boolean): void {
+  const elements = ensureSettingsRootElements(settingsRoot);
+  const idx = elements.findIndex((entry) => entry.name === 'w:updateFields');
+
+  if (enabled) {
+    const newEl: XmlElement = {
+      type: 'element',
+      name: 'w:updateFields',
+      attributes: { 'w:val': 'true' },
+      elements: [],
+    };
+    if (idx !== -1) {
+      elements[idx] = newEl;
+    } else {
+      elements.push(newEl);
+    }
+  } else if (idx !== -1) {
+    elements.splice(idx, 1);
+  }
 }

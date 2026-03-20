@@ -188,7 +188,7 @@ import {
 } from '../table-cell/helpers/legacyBorderMigration.js';
 import { isInTable } from '@helpers/isInTable.js';
 import { findParentNode } from '@helpers/findParentNode.js';
-import { NodeSelection, TextSelection, Plugin, PluginKey } from 'prosemirror-state';
+import { TextSelection, Plugin, PluginKey } from 'prosemirror-state';
 import { isCellSelection } from './tableHelpers/isCellSelection.js';
 import {
   addColumnBefore as originalAddColumnBefore,
@@ -274,7 +274,7 @@ function createTableSeparatorParagraph(schema) {
  * @param {number} pos
  * @param {import('prosemirror-model').Node} tableNode
  * @param {{ from?: number, to?: number }} [replaceRange]
- * @returns {{ inserted: boolean, trailingParagraphPos: number | null }}
+ * @returns {{ inserted: boolean }}
  */
 function insertTopLevelTableWithSeparators(tr, doc, pos, tableNode, replaceRange = {}) {
   const replaceFrom = replaceRange.from ?? pos;
@@ -282,15 +282,14 @@ function insertTopLevelTableWithSeparators(tr, doc, pos, tableNode, replaceRange
   const sep = tableSeparatorNeeds(doc, pos, replaceRange);
   if (!sep.before && !sep.after) {
     tr.replaceWith(replaceFrom, replaceTo, tableNode);
-    return { inserted: true, trailingParagraphPos: null };
+    return { inserted: true };
   }
 
   const nodes = [];
-  let trailingParagraphPos = null;
 
   if (sep.before) {
     const before = createTableSeparatorParagraph(doc.type.schema);
-    if (!before) return { inserted: false, trailingParagraphPos: null };
+    if (!before) return { inserted: false };
     nodes.push(before);
   }
 
@@ -298,13 +297,12 @@ function insertTopLevelTableWithSeparators(tr, doc, pos, tableNode, replaceRange
 
   if (sep.after) {
     const after = createTableSeparatorParagraph(doc.type.schema);
-    if (!after) return { inserted: false, trailingParagraphPos: null };
-    trailingParagraphPos = pos + nodes.reduce((size, node) => size + node.nodeSize, 0);
+    if (!after) return { inserted: false };
     nodes.push(after);
   }
 
   tr.replaceWith(replaceFrom, replaceTo, Fragment.from(nodes));
-  return { inserted: true, trailingParagraphPos };
+  return { inserted: true };
 }
 
 /**

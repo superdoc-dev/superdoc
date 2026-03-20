@@ -342,7 +342,13 @@ function findAdjacentLineElement(currentLine, direction, caretX) {
   if (!currentLineMetrics) return null;
 
   const currentPageLines = getPageLineElements(page);
-  const adjacentOnCurrentPage = findClosestLineInDirection(currentPageLines, currentLine, direction, caretX);
+  const adjacentOnCurrentPage = findClosestLineInDirection(
+    currentPageLines,
+    currentLine,
+    currentLineMetrics,
+    direction,
+    caretX,
+  );
   if (adjacentOnCurrentPage) return adjacentOnCurrentPage;
 
   const pages = Array.from(page.parentElement?.querySelectorAll?.(`.${pageClass}`) ?? []);
@@ -429,14 +435,12 @@ function getPageLineElements(page) {
  * Chooses the closest visual line in the requested direction.
  * @param {Element[]} lineEls
  * @param {Element} currentLine
+ * @param {NonNullable<ReturnType<typeof getLineMetrics>>} currentMetrics
  * @param {number} direction
  * @param {number} caretX
  * @returns {Element | null}
  */
-function findClosestLineInDirection(lineEls, currentLine, direction, caretX) {
-  const currentMetrics = getLineMetrics(currentLine);
-  if (!currentMetrics) return null;
-
+function findClosestLineInDirection(lineEls, currentLine, currentMetrics, direction, caretX) {
   const directionalCandidates = lineEls
     .filter((line) => line !== currentLine)
     .map((line) => ({ line, metrics: getLineMetrics(line) }))
@@ -464,10 +468,7 @@ function findClosestLineInDirection(lineEls, currentLine, direction, caretX) {
     isWithinTolerance(metrics.centerY, targetRowCenterY, getRowTolerance(currentMetrics, metrics)),
   );
 
-  return chooseLineClosestToX(
-    rowCandidates.map(({ line, metrics }) => ({ line, metrics })),
-    caretX,
-  );
+  return chooseLineClosestToX(rowCandidates, caretX);
 }
 
 /**

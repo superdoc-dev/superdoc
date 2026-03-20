@@ -117,11 +117,30 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function resolveWriteStoryRuntime(editor: Editor, locator?: StoryLocator): StoryRuntime {
+/**
+ * Resolves a story runtime with write intent.
+ *
+ * Convenience wrapper around {@link resolveStoryRuntime} that always passes
+ * `{ intent: 'write' }`, enabling story-specific resolvers to materialize
+ * parts that do not yet exist (e.g., blank header/footer slots).
+ *
+ * @param editor  - The host (body) editor.
+ * @param locator - Target story. `undefined` defaults to body.
+ */
+export function resolveWriteStoryRuntime(editor: Editor, locator?: StoryLocator): StoryRuntime {
   return resolveStoryRuntime(editor, locator, { intent: 'write' });
 }
 
-function disposeEphemeralWriteRuntime(runtime: StoryRuntime): void {
+/**
+ * Disposes a story runtime only if it is ephemeral (non-cacheable).
+ *
+ * Cacheable runtimes are managed by the LRU cache and must not be
+ * disposed by the caller. Ephemeral runtimes (e.g., temporary write-only
+ * views) must be cleaned up after use to avoid leaking editor instances.
+ *
+ * @param runtime - The story runtime to conditionally dispose.
+ */
+export function disposeEphemeralWriteRuntime(runtime: StoryRuntime): void {
   if (runtime.cacheable === false) {
     runtime.dispose?.();
   }
@@ -1445,19 +1464,17 @@ function resolveStructuralLocator(editor: Editor, input: SDReplaceInput): Resolv
 }
 
 /**
- * Decodes a V3 text ref and resolves all segments to a spanning block range.
+ * Decodes a text ref (V3 or V4) and resolves all segments to a spanning block range.
  * Single-segment refs resolve as single-block; multi-segment refs produce
  * a resolvedRange spanning from the first to last segment's block.
  */
 function resolveTextRefLocator(editor: Editor, ref: string): ResolvedStructuralLocator {
-  let payload: { segments?: Array<{ blockId: string }> };
-  try {
-    payload = JSON.parse(atob(ref.slice(5)));
-  } catch {
+  const decoded = decodeRef(ref);
+  if (!decoded) {
     throw new DocumentApiAdapterError('INVALID_TARGET', `Cannot decode text ref for structural replace: ${ref}`);
   }
 
-  const segments = payload?.segments;
+  const segments = decoded.segments;
   if (!Array.isArray(segments) || segments.length === 0) {
     throw new DocumentApiAdapterError(
       'INVALID_TARGET',

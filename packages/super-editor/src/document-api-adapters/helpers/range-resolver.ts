@@ -27,6 +27,7 @@ import { encodeV3Ref } from '../plan-engine/query-match-adapter.js';
 import { getRevision, checkRevision } from '../plan-engine/revision-tracker.js';
 import { PlanError } from '../plan-engine/errors.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { decodeRef } from '../story-runtime/story-ref-codec.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -75,52 +76,40 @@ function resolveDocumentEnd(editor: Editor, index: BlockIndex): number {
 /**
  * Decodes a text ref and extracts the start or end boundary as an absolute position.
  *
- * Only accepts `text:` prefixed refs (V3 text refs from query.match or ranges.resolve).
+ * Accepts both V3 (`text:...`) and V4 (`text:v4:...`) refs from query.match or ranges.resolve.
  */
 function resolveRefAnchor(editor: Editor, ref: string, boundary: 'start' | 'end', revision: string): number {
-  if (!ref.startsWith('text:')) {
+  const decoded = decodeRef(ref);
+
+  if (!decoded) {
     throw new DocumentApiAdapterError(
       'INVALID_TARGET',
-      `Only text refs (from query.match or ranges.resolve) are valid range anchors. Got prefix: "${ref.split(':')[0]}".`,
+      `Only text refs (from query.match or ranges.resolve) are valid range anchors. Got: "${ref}".`,
       { ref, boundary },
     );
   }
 
-  const encoded = ref.slice('text:'.length);
-  let payload: unknown;
-  try {
-    payload = JSON.parse(atob(encoded));
-  } catch {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'Invalid text ref encoding.', { ref, boundary });
-  }
-
-  const data = payload as {
-    v?: number;
-    rev?: string;
-    segments?: Array<{ blockId: string; start: number; end: number }>;
-  };
-
-  if (!data.segments?.length) {
+  const segments = decoded.segments;
+  if (!segments?.length) {
     throw new DocumentApiAdapterError('INVALID_TARGET', 'Ref contains no segments.', { ref, boundary });
   }
 
-  if (data.rev !== revision) {
+  if (decoded.rev !== revision) {
     throw new PlanError(
       'REVISION_MISMATCH',
-      `REVISION_MISMATCH — ref was created at revision ${data.rev} but document is at revision ${revision}. Re-run the discovery operation to obtain a fresh ref.`,
+      `REVISION_MISMATCH — ref was created at revision ${decoded.rev} but document is at revision ${revision}. Re-run the discovery operation to obtain a fresh ref.`,
       undefined,
       {
         ref,
         boundary,
-        refRevision: data.rev,
+        refRevision: decoded.rev,
         currentRevision: revision,
         refStability: 'ephemeral',
         remediation: 'Re-run ranges.resolve or query.match to obtain a fresh ref valid for the current revision.',
       },
     );
   }
-
-  const seg = boundary === 'start' ? data.segments[0] : data.segments[data.segments.length - 1];
+  const seg = boundary === 'start' ? segments[0] : segments[segments.length - 1];
   const offset = boundary === 'start' ? seg.start : seg.end;
   const point: SelectionPoint = { kind: 'text', blockId: seg.blockId, offset };
 

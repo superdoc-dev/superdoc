@@ -168,11 +168,13 @@ function extractNotePmJson(converter: any, isFootnote: boolean, noteId: string):
   const note: any = collection.find((item: any) => String(item.id) === String(noteId));
   if (!note) return null;
 
-  // If the note has a `content` array, wrap it as a PM doc
-  if (Array.isArray(note.content) && note.content.length > 0) {
+  // If the note has a `content` array, wrap it as a PM doc.
+  // Empty arrays represent blank notes (e.g., after the reference marker is stripped)
+  // and are valid — they produce a minimal doc with an empty paragraph.
+  if (Array.isArray(note.content)) {
     return {
       type: 'doc',
-      content: note.content,
+      content: note.content.length > 0 ? note.content : [{ type: 'paragraph' }],
     };
   }
 

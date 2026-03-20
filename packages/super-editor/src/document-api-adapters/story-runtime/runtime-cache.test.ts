@@ -229,3 +229,68 @@ describe('StoryRuntimeCache — body protection', () => {
     expect(cache.has('fn:2')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// invalidate
+// ---------------------------------------------------------------------------
+
+describe('StoryRuntimeCache — invalidate', () => {
+  it('removes and disposes an existing entry', () => {
+    const dispose = vi.fn();
+    const cache = new StoryRuntimeCache();
+    cache.set('fn:1', makeRuntime('fn:1', { dispose }));
+
+    expect(cache.invalidate('fn:1')).toBe(true);
+    expect(cache.get('fn:1')).toBeUndefined();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it('returns false for a missing key', () => {
+    const cache = new StoryRuntimeCache();
+    expect(cache.invalidate('fn:1')).toBe(false);
+  });
+
+  it('does not throw when runtime has no dispose', () => {
+    const cache = new StoryRuntimeCache();
+    cache.set('fn:1', makeRuntime('fn:1'));
+    expect(() => cache.invalidate('fn:1')).not.toThrow();
+    expect(cache.has('fn:1')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// invalidateByPrefix
+// ---------------------------------------------------------------------------
+
+describe('StoryRuntimeCache — invalidateByPrefix', () => {
+  it('invalidates all entries matching the prefix', () => {
+    const disposeFn1 = vi.fn();
+    const disposeFn2 = vi.fn();
+    const disposeEn1 = vi.fn();
+    const cache = new StoryRuntimeCache();
+    cache.set('fn:1', makeRuntime('fn:1', { dispose: disposeFn1 }));
+    cache.set('fn:2', makeRuntime('fn:2', { dispose: disposeFn2 }));
+    cache.set('en:1', makeRuntime('en:1', { dispose: disposeEn1 }));
+
+    const count = cache.invalidateByPrefix('fn:');
+
+    expect(count).toBe(2);
+    expect(cache.has('fn:1')).toBe(false);
+    expect(cache.has('fn:2')).toBe(false);
+    expect(cache.has('en:1')).toBe(true);
+    expect(disposeFn1).toHaveBeenCalledOnce();
+    expect(disposeFn2).toHaveBeenCalledOnce();
+    expect(disposeEn1).not.toHaveBeenCalled();
+  });
+
+  it('returns 0 when no entries match the prefix', () => {
+    const cache = new StoryRuntimeCache();
+    cache.set('fn:1', makeRuntime('fn:1'));
+    expect(cache.invalidateByPrefix('hf:')).toBe(0);
+  });
+
+  it('handles empty cache without error', () => {
+    const cache = new StoryRuntimeCache();
+    expect(cache.invalidateByPrefix('fn:')).toBe(0);
+  });
+});

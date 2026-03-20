@@ -158,6 +158,47 @@ export class StoryRuntimeCache {
   }
 
   /**
+   * Removes an entry and disposes its runtime.
+   *
+   * Unlike {@link delete}, this calls `dispose` on the removed runtime,
+   * making it suitable for cache invalidation after part mutations.
+   *
+   * @param storyKey - Canonical story key.
+   * @returns `true` if the entry existed and was invalidated.
+   */
+  invalidate(storyKey: string): boolean {
+    const node = this.map.get(storyKey);
+    if (!node) return false;
+
+    this.detach(node);
+    this.map.delete(storyKey);
+    node.runtime.dispose?.();
+    return true;
+  }
+
+  /**
+   * Invalidates all entries whose keys start with the given prefix.
+   *
+   * Useful for bulk-invalidating all notes (`'fn:'`, `'en:'`) or all
+   * header/footer runtimes (`'hf:'`) after a part mutation.
+   *
+   * @param prefix - The key prefix to match (e.g., `'fn:'`).
+   * @returns The number of entries invalidated.
+   */
+  invalidateByPrefix(prefix: string): number {
+    let count = 0;
+    for (const [key, node] of this.map) {
+      if (key.startsWith(prefix)) {
+        this.detach(node);
+        this.map.delete(key);
+        node.runtime.dispose?.();
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Returns `true` if the cache contains an entry for the given story key.
    *
    * Does NOT promote the entry — use {@link get} if you intend to read it.

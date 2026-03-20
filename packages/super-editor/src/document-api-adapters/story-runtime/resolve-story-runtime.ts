@@ -18,12 +18,14 @@
 
 import type { StoryLocator, BodyStoryLocator } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
+import type { PartChangedEvent } from '../../core/parts/types.js';
 import type { StoryRuntime } from './story-types.js';
 import { buildStoryKey, BODY_STORY_KEY } from './story-key.js';
 import { StoryRuntimeCache } from './runtime-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { resolveHeaderFooterSlotRuntime, resolveHeaderFooterPartRuntime } from './header-footer-story-runtime.js';
 import { resolveNoteRuntime } from './note-story-runtime.js';
+import { isHeaderFooterPartId } from '../../core/parts/adapters/header-footer-part-descriptor.js';
 import { initRevision, trackRevisions, restoreRevision } from '../plan-engine/revision-tracker.js';
 import { getStoryRevisionStore, getStoryRevision, incrementStoryRevision } from './story-revision-store.js';
 
@@ -36,6 +38,10 @@ const cacheByHost = new WeakMap<Editor, StoryRuntimeCache>();
 /**
  * Returns the runtime cache for a host editor, creating it on first access.
  *
+ * On first creation, subscribes to part-change events so that cached story
+ * runtimes are automatically invalidated when underlying parts are mutated
+ * through external paths (e.g., `footnotes.update` via `mutatePart`).
+ *
  * @param hostEditor - The body (host) editor.
  */
 function getOrCreateCache(hostEditor: Editor): StoryRuntimeCache {
@@ -43,8 +49,43 @@ function getOrCreateCache(hostEditor: Editor): StoryRuntimeCache {
   if (!cache) {
     cache = new StoryRuntimeCache();
     cacheByHost.set(hostEditor, cache);
+    subscribeToPartChanges(hostEditor);
   }
   return cache;
+}
+
+/**
+ * Subscribes to editor events that signal part-level mutations so the
+ * story runtime cache stays consistent with the converter's derived caches.
+ *
+ * - `notes-part-changed` → invalidates all footnote and endnote runtimes.
+ * - `partChanged` → invalidates all header/footer runtimes when any
+ *   header/footer part is mutated through an external path (collab sync,
+ *   PresentationEditor sub-editor blur, etc.).
+ *
+ * The next `resolveStoryRuntime` call will create fresh editors from the
+ * updated converter data.
+ */
+function subscribeToPartChanges(hostEditor: Editor): void {
+  // Guard: not all editor instances (e.g., test stubs) expose EventEmitter methods.
+  if (typeof hostEditor.on !== 'function') return;
+
+  hostEditor.on('notes-part-changed', () => {
+    const cache = cacheByHost.get(hostEditor);
+    if (!cache) return;
+    cache.invalidateByPrefix('fn:');
+    cache.invalidateByPrefix('en:');
+  });
+
+  hostEditor.on('partChanged', (event: PartChangedEvent) => {
+    const cache = cacheByHost.get(hostEditor);
+    if (!cache) return;
+
+    const hasHfPart = event.parts.some((p) => isHeaderFooterPartId(p.partId));
+    if (hasHfPart) {
+      cache.invalidateByPrefix('hf:');
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +254,23 @@ function resolveBodyRuntime(hostEditor: Editor): StoryRuntime {
 // ---------------------------------------------------------------------------
 // Cache access (for testing / advanced usage)
 // ---------------------------------------------------------------------------
+
+/**
+ * Invalidates a specific cached story runtime, disposing it and removing
+ * it from the cache.
+ *
+ * The next call to {@link resolveStoryRuntime} for the same story key
+ * will create a fresh runtime from the current converter data.
+ *
+ * @param hostEditor - The body (host) editor.
+ * @param storyKey   - The canonical story key to invalidate.
+ * @returns `true` if the entry existed and was invalidated.
+ */
+export function invalidateStoryRuntime(hostEditor: Editor, storyKey: string): boolean {
+  const cache = cacheByHost.get(hostEditor);
+  if (!cache) return false;
+  return cache.invalidate(storyKey);
+}
 
 /**
  * Returns the {@link StoryRuntimeCache} attached to a host editor.

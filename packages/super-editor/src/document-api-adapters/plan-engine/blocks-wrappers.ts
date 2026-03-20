@@ -222,7 +222,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
     ordinal: offset + i,
     nodeId: candidate.nodeId,
     nodeType: candidate.nodeType,
-    textPreview: extractTextPreview(candidate.node),
+    textPreview: candidate.node.isTextblock ? candidate.node.textContent || null : null,
     isEmpty: candidate.node.textContent.length === 0,
     ...extractBlockFormatting(candidate.node),
   }));

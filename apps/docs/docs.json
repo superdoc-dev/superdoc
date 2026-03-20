@@ -106,8 +106,7 @@
                   "document-api/overview",
                   "document-api/reference/index",
                   "document-api/common-workflows",
-                  "document-api/available-operations",
-                  "document-api/eval-results"
+                  "document-api/available-operations"
                 ]
               },
               {
@@ -121,7 +120,8 @@
                   "document-engine/ai-agents/llm-tools",
                   "document-engine/ai-agents/integrations",
                   "document-engine/ai-agents/best-practices",
-                  "document-engine/ai-agents/debugging"
+                  "document-engine/ai-agents/debugging",
+                  "document-api/eval-results"
                 ]
               }
             ]

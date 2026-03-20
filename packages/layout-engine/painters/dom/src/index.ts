@@ -69,7 +69,7 @@ export type PageDecorationPayload = {
   offset?: number;
   marginLeft?: number;
   contentWidth?: number;
-  headerId?: string;
+  headerFooterRefId?: string;
   sectionType?: string;
   /** Minimum Y coordinate from layout; negative when content extends above y=0 */
   minY?: number;

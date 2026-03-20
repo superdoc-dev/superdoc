@@ -62,6 +62,59 @@ function extractTextPreview(node: ProseMirrorNode): string | null {
   return text.slice(0, TEXT_PREVIEW_MAX_LENGTH);
 }
 
+const HEADING_PATTERN = /^Heading(\d)$/;
+
+/**
+ * Extract key formatting from a block node's first text run marks.
+ */
+function extractBlockFormatting(node: ProseMirrorNode): {
+  styleId?: string | null;
+  fontFamily?: string;
+  fontSize?: number;
+  bold?: boolean;
+  alignment?: string;
+  headingLevel?: number;
+} {
+  const pProps = (node.attrs as Record<string, unknown>).paragraphProperties as
+    | { styleId?: string; alignment?: string }
+    | undefined;
+  const styleId = pProps?.styleId ?? null;
+
+  let fontFamily: string | undefined;
+  let fontSize: number | undefined;
+  let bold: boolean | undefined;
+
+  node.descendants((child) => {
+    if (fontFamily !== undefined) return false;
+    if (!child.isText || child.marks.length === 0) return;
+    for (const mark of child.marks) {
+      const attrs = mark.attrs as Record<string, unknown>;
+      if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;
+      if (attrs.fontSize != null) {
+        const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
+        if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
+      }
+      if (attrs.bold === true) bold = true;
+    }
+    return false;
+  });
+
+  let headingLevel: number | undefined;
+  if (typeof styleId === 'string') {
+    const m = HEADING_PATTERN.exec(styleId);
+    if (m) headingLevel = parseInt(m[1], 10);
+  }
+
+  return {
+    ...(styleId ? { styleId } : {}),
+    ...(fontFamily ? { fontFamily } : {}),
+    ...(fontSize !== undefined ? { fontSize } : {}),
+    ...(bold ? { bold } : {}),
+    ...(pProps?.alignment ? { alignment: pProps.alignment } : {}),
+    ...(headingLevel ? { headingLevel } : {}),
+  };
+}
+
 function toBlockSummary(candidate: BlockCandidate, ordinal: number): DeletedBlockSummary {
   return {
     ordinal,
@@ -169,8 +222,9 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
     ordinal: offset + i,
     nodeId: candidate.nodeId,
     nodeType: candidate.nodeType,
-    textPreview: extractTextPreview(candidate.node),
+    textPreview: candidate.node.isTextblock ? candidate.node.textContent || null : null,
     isEmpty: candidate.node.textContent.length === 0,
+    ...extractBlockFormatting(candidate.node),
   }));
 
   return { total, blocks, revision: getRevision(editor) };

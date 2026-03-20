@@ -1,7 +1,5 @@
-import { helpers } from '@core/index.js';
+import { findChildren } from '@core/helpers/findChildren.js';
 import { getAllHeaderFooterEditors } from '../../../core/helpers/annotator.js';
-
-const { findChildren } = helpers;
 
 /**
  * Find field annotations in headers and footers by field ID or array of field IDs.

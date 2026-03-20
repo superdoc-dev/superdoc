@@ -6,8 +6,6 @@ description: Create a new heading at the target position.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Create a new heading at the target position.
@@ -29,6 +27,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `in` | StoryLocator | no | StoryLocator |
 | `level` | integer | yes |  |
 | `text` | string | no |  |
 
@@ -39,8 +38,11 @@ Returns a CreateHeadingResult with the new heading block ID and address.
   "at": {
     "kind": "documentStart"
   },
-  "level": 1,
-  "text": "Hello, world."
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
+  "level": 1
 }
 ```
 
@@ -107,6 +109,11 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `AMBIGUOUS_TARGET`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -179,6 +186,9 @@ Returns a CreateHeadingResult with the new heading block ID and address.
           "type": "object"
         }
       ]
+    },
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
     },
     "level": {
       "description": "Heading level (1-6).",

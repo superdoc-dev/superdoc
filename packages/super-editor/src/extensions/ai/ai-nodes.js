@@ -1,4 +1,5 @@
-import { Attribute, Node } from '@core/index.js';
+import { Attribute } from '@core/Attribute.js';
+import { Node } from '@core/Node.js';
 import dotsLoader from '@superdoc/common/icons/dots-loader.svg';
 import { AiLoaderNodeName } from './ai-constants.js';
 

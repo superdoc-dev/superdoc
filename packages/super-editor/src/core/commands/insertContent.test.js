@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest';
 import { insertContent } from './insertContent.js';
 import * as contentProcessor from '../helpers/contentProcessor.js';
 
@@ -169,6 +169,7 @@ describe('insertContent (integration) list export', () => {
   let helpers = null;
   let exportHelpers = null;
   let cachedDocxData = null;
+  let activeEditor = null;
 
   const getListParagraphs = (result) => {
     const body = result.elements?.find((el) => el.name === 'w:body');
@@ -200,8 +201,14 @@ describe('insertContent (integration) list export', () => {
   const setupEditor = () => {
     const { docx, media, mediaFiles, fonts } = cachedDocxData;
     const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    activeEditor = editor;
     return editor;
   };
+
+  afterEach(() => {
+    activeEditor?.destroy();
+    activeEditor = null;
+  });
 
   const exportFromEditorContent = async (editor) => {
     const content = editor.getJSON().content || [];
@@ -354,6 +361,7 @@ describe('insertContent (integration) list export', () => {
 describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', () => {
   let helpers = null;
   let cachedDocxData = null;
+  let activeEditor = null;
 
   beforeAll(async () => {
     vi.resetModules();
@@ -365,8 +373,14 @@ describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', 
   const setupEditor = () => {
     const { docx, media, mediaFiles, fonts } = cachedDocxData;
     const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    activeEditor = editor;
     return editor;
   };
+
+  afterEach(() => {
+    activeEditor?.destroy();
+    activeEditor = null;
+  });
 
   const countHorizontalRules = (editor) => {
     let count = 0;

@@ -1,0 +1,172 @@
+---
+title: Best practices
+sidebarTitle: Best practices
+tag: NEW
+description: Get better results from LLM document editing — prompting, tool call patterns, and workflow tips
+keywords: "llm best practices, ai document editing, prompt engineering, superdoc tools, tool calling, document automation"
+---
+
+These patterns help your LLM agent produce reliable, efficient document edits.
+
+## Use the bundled system prompt
+
+`getSystemPrompt()` returns a tested prompt that teaches the model how to use SuperDoc tools — targeting, workflow order, and multi-action tools. Load it once and pass it as the system message.
+
+```typescript
+import { getSystemPrompt } from '@superdoc-dev/sdk';
+
+const systemPrompt = await getSystemPrompt();
+// Pass as the system message in your LLM call
+```
+
+You can extend it with task-specific instructions. Append your own rules after the bundled prompt:
+
+```typescript
+const systemPrompt = await getSystemPrompt();
+const fullPrompt = `${systemPrompt}\n\n## Additional rules\n- Use tracked changes for all edits.\n- Always search before editing.`;
+```
+
+Or start from scratch with something like this:
+
+````markdown
+You edit `.docx` files using SuperDoc intent tools. Be efficient and minimize tool calls.
+
+## Workflow
+
+1. **Read** — Use `superdoc_get_content` to understand the document.
+2. **Search** — Use `superdoc_search` to find stable handles or block addresses.
+3. **Edit** — Use the focused tool that matches the job:
+   - `superdoc_edit` for insert, replace, delete, undo, redo
+   - `superdoc_format` for inline or paragraph formatting
+   - `superdoc_create` for paragraphs and headings
+   - `superdoc_comment` for comment threads
+   - `superdoc_track_changes` for review decisions
+4. **Batch only when useful** — Use `superdoc_mutations` for preview/apply or atomic multi-step edits.
+
+## Rules
+
+- Search before mutating so targets come from fresh results.
+- Use focused intent tools for normal edits.
+- Use `superdoc_mutations` when you need an atomic batch or preview/apply flow.
+- Set `changeMode: "tracked"` when edits need human review.
+- Feed tool errors back so you can recover.
+````
+
+## Read first, search, then edit
+
+A typical edit takes 3-5 tool calls:
+
+1. `superdoc_get_content` — understand what's in the document
+2. `superdoc_search` — find the exact location (returns stable handles/addresses)
+3. Edit tool (`superdoc_edit`, `superdoc_format`, etc.) — apply the change using targets from search
+
+This matters because handles from search results point to the exact right location. If the model guesses a block address instead of searching for it, edits land in the wrong place.
+
+## Minimize tool calls
+
+Instruct the LLM to plan all edits before calling tools. A well-structured prompt like "Find the termination clause and rewrite it to allow 30-day notice" should take 3-5 calls, not 15.
+
+Batch multiple changes only when atomic execution is genuinely helpful — use `superdoc_mutations` for that.
+
+## Use focused tools; `superdoc_mutations` is an escape hatch
+
+For straightforward edits, use the focused intent tools (`superdoc_edit`, `superdoc_format`, `superdoc_create`, `superdoc_list`, `superdoc_comment`). They validate arguments, give clear errors, and are easier for models to call correctly.
+
+Reach for `superdoc_mutations` only when you need:
+- Preview/apply semantics (show what will change before committing)
+- Atomic multi-step edits (all-or-nothing batch)
+- A workflow that would otherwise require refreshing targets between steps
+
+## Feed errors back
+
+`dispatchSuperDocTool` returns structured errors. Pass them back as tool results — most models self-correct on the next turn.
+
+```typescript
+try {
+  const result = await dispatchSuperDocTool(doc, toolCall.function.name, JSON.parse(toolCall.function.arguments));
+  messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) });
+} catch (err: any) {
+  // Return the error as a tool result — the model will see it and adjust
+  messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: err.message }) });
+}
+```
+
+## Add examples for repeatable workflows
+
+If the same kind of edit runs across many documents (e.g., always rewriting a specific clause, always adding a comment to a section), include a concrete tool call example in your system prompt. Models that see a working example of the exact tool invocation produce correct calls more reliably than models that only see the schema.
+
+## Use tracked changes for review workflows
+
+Add `changeMode: "tracked"` to edit tool calls, or instruct the model via the system prompt:
+
+```
+Use tracked changes for all edits so a human can review them.
+```
+
+This way every AI edit appears as a tracked change that users can accept or reject in SuperDoc or Microsoft Word.
+
+## Pin your model version
+
+Use a specific model ID (e.g., `gpt-4.1` or `claude-sonnet-4-6`) rather than an alias like `gpt-4o`. Aliases can change behavior between releases and break working tool call patterns.
+
+## Cache tools and prompts
+
+Tools and the system prompt don't change between requests. Load them once at startup and reuse across all conversations.
+
+```typescript
+let cachedTools: any[] | null = null;
+let cachedSystemPrompt: string | null = null;
+
+async function ensureToolsLoaded() {
+  if (!cachedTools) {
+    const result = await chooseTools({ provider: 'openai' });
+    cachedTools = result.tools;
+  }
+  if (!cachedSystemPrompt) {
+    cachedSystemPrompt = await getSystemPrompt();
+  }
+  return { tools: cachedTools, systemPrompt: cachedSystemPrompt };
+}
+```
+
+## Prompt examples
+
+These prompts have been tested against the SuperDoc tool set. Use them as inspiration for your own workflows, or include them as few-shot examples in your system prompt.
+
+### Document review
+
+- "Find the termination clause and rewrite it to require 30-day written notice. Use tracked changes."
+- "Apply yellow highlight to every sentence that contains an indemnification obligation."
+- "Replace all references to 'Contractor' with 'Service Provider' and make each replacement italic with tracked changes enabled."
+- "Underline every sentence that references payment terms or late fees."
+- "Insert CONFIDENTIAL — DO NOT DISTRIBUTE at the very top of the document and make it bold, red, 14pt."
+- "Scan the document for inconsistent capitalization of defined terms and fix them with tracked changes enabled."
+
+### Formatting and structure
+
+- "Format the entire document in Times New Roman, 12-point."
+- "Make all Heading 2 paragraphs bold and set them to 14-point font."
+- "Keep each section heading with the paragraph that follows it so they don't split across pages."
+- "Remove all extra blank paragraphs and convert all double spaces after periods to single spaces."
+- "Right-align all section headings."
+
+### Content generation and editing
+
+- "Add a new heading 'Learning Objectives' at the top, followed by a bullet list with 3 key takeaways from the document content."
+- "Read the document and add a heading 'Executive Summary' at the end, followed by a one-paragraph summary and a bullet list of the 5 key provisions."
+- "Find the governing law section and insert a new paragraph after it: 'Any disputes arising under this Agreement shall be resolved through binding arbitration.'"
+- "Find all paragraphs that mention 'personally identifiable information' and add a comment: 'Verify PII handling complies with current data retention policy.'"
+- "Convert the list of references at the end into a numbered list and restart numbering at 1."
+
+### Search and replace
+
+- "Rewrite all dates in this document in the format January 1, 2026."
+- "Replace every occurrence of 'FY2024' with 'FY2025' throughout the document."
+- "Add the § symbol before every section number reference."
+
+## Related
+
+- [LLM tools](/document-engine/ai-agents/llm-tools) — tool catalog and SDK functions
+- [How to use](/document-engine/ai-agents/integrations) — step-by-step integration guide
+- [Debugging](/document-engine/ai-agents/debugging) — troubleshoot tool call failures
+- [Document API](/document-api/overview) — the operation set behind the tools

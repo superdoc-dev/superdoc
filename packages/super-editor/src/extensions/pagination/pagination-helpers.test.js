@@ -45,6 +45,7 @@ import { createHeaderFooterEditor } from './pagination-helpers.js';
 
 function createParentEditor() {
   return {
+    constructor: MockEditor,
     options: {
       role: 'editor',
       fonts: {},
@@ -83,7 +84,7 @@ describe('createHeaderFooterEditor', () => {
       data: { type: 'doc', content: [{ type: 'paragraph' }] },
       editorContainer,
       editorHost,
-      sectionId: 'rId-footer-default',
+      headerFooterRefId: 'rId-footer-default',
       type: 'footer',
     });
 

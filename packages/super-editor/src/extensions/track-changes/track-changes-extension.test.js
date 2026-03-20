@@ -880,6 +880,41 @@ describe('TrackChanges extension commands', () => {
     }
   });
 
+  it('interaction: setLink in suggesting mode emits hyperlink-specific tracked change messaging', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Visit website</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.setDocumentMode('suggesting');
+
+      const websiteRange = getSubstringRange(interactionEditor.state.doc, 'website');
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, websiteRange.from, websiteRange.to),
+        ),
+      );
+
+      const emitSpy = vi.spyOn(interactionEditor, 'emit');
+      interactionEditor.commands.setLink({ href: 'https://example.com' });
+
+      const trackedChangePayload = emitSpy.mock.calls.find(
+        ([eventName, payload]) =>
+          eventName === 'commentsUpdate' && payload?.type === 'trackedChange' && payload?.event === 'add',
+      )?.[1];
+
+      expect(trackedChangePayload).toMatchObject({
+        trackedChangeType: TrackFormatMarkName,
+        trackedChangeText: 'https://example.com',
+        trackedChangeDisplayType: 'hyperlinkAdded',
+      });
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
   it('undo/redo restores partially accepted insertion splits', () => {
     const { editor: interactionEditor } = initTestEditor({
       mode: 'text',

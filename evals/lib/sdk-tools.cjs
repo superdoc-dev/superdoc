@@ -13,4 +13,14 @@ function get_tools() {
   return bundle.tools;
 }
 
-module.exports = { get_tools };
+function get_tools_claude() {
+  const bundle = require(resolve(__dirname, '../../packages/sdk/tools/tools.anthropic.json'));
+  return bundle.tools;
+}
+
+function get_tools_generic() {
+  const bundle = require(resolve(__dirname, '../../packages/sdk/tools/tools.generic.json'));
+  return bundle.tools;
+}
+
+module.exports = { get_tools, get_tools_claude, get_tools_generic };

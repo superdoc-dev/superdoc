@@ -1,77 +1,64 @@
 /**
- * Chat WebSocket helpers for agent communication.
+ * Chat WebSocket client for agent communication.
  */
 
 import WebSocket from 'ws';
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-}
+type MessageHandler = (userMessage: string) => Promise<string>;
 
-export interface ChatConnection {
-  send: (content: string) => void;
-  setStatus: (status: string) => void;
-  close: () => void;
-}
+export class Chat {
+  private url: string;
+  private ws!: WebSocket;
 
-/**
- * Connect to the chat WebSocket server.
- */
-export function connectChat(
-  url: string,
-  onMessage: (msg: ChatMessage) => void,
-  onClear: () => void,
-): Promise<ChatConnection> {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    const timeout = setTimeout(() => reject(new Error('Chat connection timeout')), 10000);
+  constructor(url: string) {
+    this.url = url;
+  }
 
-    ws.on('open', () => {
-      clearTimeout(timeout);
-      console.log('[Agent] Chat WebSocket connected');
+  connect(): Promise<this> {
+    return new Promise((resolve, reject) => {
+      this.ws = new WebSocket(this.url);
+      this.ws.on('open', () => resolve(this));
+      this.ws.on('error', reject);
+    });
+  }
 
-      const send = (content: string) => {
-        ws.send(JSON.stringify({
-          type: 'message',
-          role: 'assistant',
-          id: `agent-${Date.now()}`,
-          content,
-          timestamp: Date.now(),
-        }));
-      };
-
-      const setStatus = (status: string) => {
-        ws.send(JSON.stringify({ type: 'status', status }));
-      };
-
-      const close = () => {
-        setStatus('offline');
-        ws.close();
-      };
-
-      ws.on('message', (data) => {
+  serve(handler: MessageHandler): this {
+    this.ws.on('message', async (data) => {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === 'message' && msg.message?.role === 'user') {
+        this.setStatus('thinking');
         try {
-          const msg = JSON.parse(data.toString());
-          console.log('[Agent] Received:', msg.type, msg.message?.role || '');
-          if (msg.type === 'message' && msg.message?.role === 'user') {
-            onMessage(msg.message);
-          } else if (msg.type === 'clear') {
-            onClear();
-          }
-        } catch (e) {
-          console.error('[Agent] Parse error:', e);
+          const response = await handler(msg.message.content);
+          this.send(response);
+        } catch (err) {
+          console.error('[Agent] Error:', err);
+          this.send('Sorry, I encountered an error.');
         }
-      });
-
-      resolve({ send, setStatus, close });
+        this.setStatus('ready');
+      }
     });
+    this.setStatus('ready');
+    return this;
+  }
 
-    ws.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-  });
+  send(content: string): this {
+    this.ws.send(JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      id: `agent-${Date.now()}`,
+      content,
+      timestamp: Date.now(),
+    }));
+    return this;
+  }
+
+  setStatus(status: string): this {
+    this.ws.send(JSON.stringify({ type: 'status', status }));
+    return this;
+  }
+
+  close() {
+    this.setStatus('offline');
+    this.ws.close();
+  }
 }

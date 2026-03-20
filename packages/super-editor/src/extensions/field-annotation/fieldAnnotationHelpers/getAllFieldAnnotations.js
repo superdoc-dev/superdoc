@@ -1,6 +1,4 @@
-import { helpers } from '@core/index.js';
-
-const { findChildren } = helpers;
+import { findChildren } from '@core/helpers/findChildren.js';
 
 /**
  * Get all field annotations in the doc.

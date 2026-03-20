@@ -12,6 +12,7 @@ import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@
 import { DocumentApiAdapterError } from './errors.js';
 import { dedupeDiagnostics } from './helpers/adapter-utils.js';
 import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
 import { findBlockByIdStrict, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { resolveIncludedNodes } from './helpers/node-info-resolver.js';
@@ -21,7 +22,8 @@ import { executeDualKindSelector } from './find/dual-kind-strategy.js';
 import { executeInlineSelector } from './find/inline-strategy.js';
 import { executeTextSelector } from './find/text-strategy.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
-import { buildSelectionTargetFromTextRanges, encodeV3Ref } from './plan-engine/query-match-adapter.js';
+import { buildSelectionTargetFromTextRanges } from './plan-engine/query-match-adapter.js';
+import { encodeV4Ref } from './story-runtime/story-ref-codec.js';
 import {
   projectContentNode,
   projectInlineNode,
@@ -40,10 +42,11 @@ import {
  * domain fields (`address`, `node`, `context`) and a real `evaluatedRevision`.
  */
 export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
+  const runtime = resolveStoryRuntime(editor, query.in);
   const diagnostics: UnknownNodeDiagnostic[] = [];
-  const index = getBlockIndex(editor);
+  const index = getBlockIndex(runtime.editor);
   if (query.includeUnknown) {
-    collectUnknownNodeDiagnostics(editor, index, diagnostics);
+    collectUnknownNodeDiagnostics(runtime.editor, index, diagnostics);
   }
 
   const isInlineSelector = query.select.type !== 'text' && isInlineQuery(query.select);
@@ -51,16 +54,19 @@ export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
 
   const result =
     query.select.type === 'text'
-      ? executeTextSelector(editor, index, query, diagnostics)
+      ? executeTextSelector(runtime.editor, index, query, diagnostics)
       : isDualKindSelector
-        ? executeDualKindSelector(editor, index, query, diagnostics)
+        ? executeDualKindSelector(runtime.editor, index, query, diagnostics)
         : isInlineSelector
-          ? executeInlineSelector(editor, index, query, diagnostics)
+          ? executeInlineSelector(runtime.editor, index, query, diagnostics)
           : executeBlockSelector(index, query, diagnostics);
 
   const uniqueDiagnostics = dedupeDiagnostics(diagnostics);
-  const includedNodes = query.includeNodes ? resolveIncludedNodes(editor, index, result.matches) : undefined;
-  const evaluatedRevision = getRevision(editor);
+  const includedNodes = query.includeNodes ? resolveIncludedNodes(runtime.editor, index, result.matches) : undefined;
+  const evaluatedRevision = getRevision(runtime.editor);
+
+  // Non-body stories need their locator propagated to addresses and targets.
+  const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
 
   // Merge parallel arrays into per-item FindItemDomain entries.
   const items = result.matches.map((address, idx) => {
@@ -69,7 +75,7 @@ export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
     const textRanges = contextEntry?.textRanges;
     const isTextContext = textRanges?.length;
 
-    // Text matches get real V3 refs so they can be chained into mutations.
+    // Text matches get real V4 refs so they can be chained into mutations.
     // Node matches use the stable nodeId or a coarse indexed ref.
     let ref: string;
     let targetKind: 'text' | 'node';
@@ -79,11 +85,12 @@ export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
         start: tr.range.start,
         end: tr.range.end,
       }));
-      ref = encodeV3Ref({
-        v: 3,
+      ref = encodeV4Ref({
+        v: 4,
         rev: evaluatedRevision,
-        matchId: `f:${idx}`,
+        storyKey: runtime.storyKey,
         scope: 'match',
+        matchId: `f:${idx}`,
         segments,
       });
       targetKind = 'text';
@@ -92,6 +99,9 @@ export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
       targetKind = 'node';
     }
     const handle = buildResolvedHandle(ref, 'ephemeral', targetKind);
+
+    // Propagate story to addresses for non-body stories.
+    if (nonBodyStory && !address.story) address.story = nonBodyStory;
 
     const domain: {
       address: typeof address;
@@ -102,7 +112,7 @@ export function findLegacyAdapter(editor: Editor, query: Query): FindOutput {
     if (contextEntry) {
       // Inject mutation-ready SelectionTarget into text match contexts.
       if (textRanges?.length) {
-        contextEntry.target = buildSelectionTargetFromTextRanges(textRanges);
+        contextEntry.target = buildSelectionTargetFromTextRanges(textRanges, nonBodyStory);
       }
       domain.context = contextEntry;
     }
@@ -292,8 +302,9 @@ function projectMatchToSDNodeResult(
  *   - `includeContext` — include parent/sibling context in each SDNodeResult
  */
 export function sdFindAdapter(editor: Editor, input: SDFindInput): SDFindResult {
+  const runtime = resolveStoryRuntime(editor, input.in);
   const query = translateToInternalQuery(input);
-  const index = getBlockIndex(editor);
+  const index = getBlockIndex(runtime.editor);
 
   // Resolve within scope after index is built — validates the caller-supplied
   // nodeType matches the actual node found in the document.
@@ -309,16 +320,20 @@ export function sdFindAdapter(editor: Editor, input: SDFindInput): SDFindResult 
 
   const result =
     query.select.type === 'text'
-      ? executeTextSelector(editor, index, query, diagnostics)
+      ? executeTextSelector(runtime.editor, index, query, diagnostics)
       : isDualKindSelector
-        ? executeDualKindSelector(editor, index, query, diagnostics)
+        ? executeDualKindSelector(runtime.editor, index, query, diagnostics)
         : isInlineSelector
-          ? executeInlineSelector(editor, index, query, diagnostics)
+          ? executeInlineSelector(runtime.editor, index, query, diagnostics)
           : executeBlockSelector(index, query, diagnostics);
+
+  // Non-body stories need their locator propagated to result addresses.
+  const sdNonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
 
   const items: SDNodeResult[] = [];
   for (const address of result.matches) {
-    const projected = projectMatchToSDNodeResult(editor, address, index);
+    if (sdNonBodyStory && !address.story) address.story = sdNonBodyStory;
+    const projected = projectMatchToSDNodeResult(runtime.editor, address, index);
     if (projected) items.push(projected);
   }
 

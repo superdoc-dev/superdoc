@@ -2,6 +2,7 @@ import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { assertTargetPresent } from '../validation-primitives.js';
+import { validateTargetOnlyTocCreateLocation } from '../validation/create-location-validator.js';
 import type {
   CitationAddress,
   CitationSourceAddress,
@@ -208,6 +209,13 @@ export function executeBibliographyInsert(
   input: BibliographyInsertInput,
   options?: MutationOptions,
 ): BibliographyMutationResult {
+  validateTargetOnlyTocCreateLocation(input.at, 'citations.bibliography.insert');
+  if (input.style !== undefined && typeof input.style !== 'string') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'citations.bibliography.insert style must be a string when provided.',
+    );
+  }
   return adapter.bibliography.insert(input, normalizeMutationOptions(options));
 }
 
@@ -225,6 +233,7 @@ export function executeBibliographyConfigure(
   input: BibliographyConfigureInput,
   options?: MutationOptions,
 ): BibliographyMutationResult {
+  validateBibliographyTarget(input.target, 'citations.bibliography.configure');
   if (!input.style || typeof input.style !== 'string') {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',

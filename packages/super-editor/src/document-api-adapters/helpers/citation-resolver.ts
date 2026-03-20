@@ -20,6 +20,7 @@ import type {
 } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { resolvePublicReferenceBlockNodeId } from './reference-block-node-id.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +39,7 @@ export interface ResolvedBibliography {
   node: ProseMirrorNode;
   pos: number;
   nodeId: string;
+  commandNodeId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,8 +120,9 @@ export function findAllBibliographies(doc: ProseMirrorNode): ResolvedBibliograph
   const results: ResolvedBibliography[] = [];
   doc.descendants((node, pos) => {
     if (node.type.name === 'bibliography') {
-      const nodeId = (node.attrs?.sdBlockId as string) ?? `bibliography-${pos}`;
-      results.push({ node, pos, nodeId });
+      const commandNodeId = node.attrs?.sdBlockId as string | undefined;
+      const nodeId = resolvePublicReferenceBlockNodeId(node, pos);
+      results.push({ node, pos, nodeId, commandNodeId });
       return false;
     }
     return true;
@@ -129,11 +132,17 @@ export function findAllBibliographies(doc: ProseMirrorNode): ResolvedBibliograph
 
 export function resolveBibliographyTarget(doc: ProseMirrorNode, target: BibliographyAddress): ResolvedBibliography {
   const all = findAllBibliographies(doc);
-  const found = all.find((b) => b.nodeId === target.nodeId);
+  const found = all.find((b) => b.nodeId === target.nodeId || b.commandNodeId === target.nodeId);
   if (!found) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Bibliography with nodeId "${target.nodeId}" not found.`);
   }
   return found;
+}
+
+export function resolvePostMutationBibliographyId(doc: ProseMirrorNode, sdBlockId: string): string {
+  const all = findAllBibliographies(doc);
+  const found = all.find((b) => b.commandNodeId === sdBlockId);
+  return found?.nodeId ?? sdBlockId;
 }
 
 export function extractBibliographyInfo(resolved: ResolvedBibliography): BibliographyInfo {
@@ -182,14 +191,52 @@ export interface CitationSourceRecord {
 
 interface BibliographyPartState {
   sources?: CitationSourceRecord[];
+  selectedStyle?: string | null;
+  styleName?: string | null;
+}
+
+type ConverterWithBibliography = { converter?: { bibliographyPart?: BibliographyPartState } };
+
+function getBibliographyPart(editor: Editor): BibliographyPartState | undefined {
+  const converter = (editor as unknown as ConverterWithBibliography).converter;
+  if (!converter) return undefined;
+  converter.bibliographyPart ??= {};
+  return converter.bibliographyPart;
 }
 
 export function getSourcesFromConverter(editor: Editor): CitationSourceRecord[] {
-  const converter = (editor as unknown as { converter?: { bibliographyPart?: BibliographyPartState } }).converter;
-  if (!converter) return [];
-  converter.bibliographyPart ??= {};
-  converter.bibliographyPart.sources ??= [];
-  return converter.bibliographyPart.sources;
+  const part = getBibliographyPart(editor);
+  if (!part) return [];
+  part.sources ??= [];
+  return part.sources;
+}
+
+/**
+ * Converts a human-readable style name (e.g. `"MLA"`) into the OOXML
+ * `SelectedStyle` path format (e.g. `"/MLA.XSL"`).
+ *
+ * If the value already looks like a path (starts with `/` or contains `.XSL`),
+ * it is returned as-is.
+ */
+function toSelectedStylePath(styleName: string): string {
+  if (styleName.startsWith('/') || styleName.toUpperCase().includes('.XSL')) {
+    return styleName;
+  }
+  return `/${styleName}.XSL`;
+}
+
+/**
+ * Persists the bibliography style to the converter so DOCX export writes
+ * the correct `SelectedStyle` / `StyleName` attributes on the sources root.
+ *
+ * `SelectedStyle` is an XSL path (e.g. `"/APA.XSL"`); `StyleName` is the
+ * human-readable label (e.g. `"APA"`).
+ */
+export function syncBibliographyStyleToConverter(editor: Editor, style: string): void {
+  const part = getBibliographyPart(editor);
+  if (!part) return;
+  part.selectedStyle = toSelectedStylePath(style);
+  part.styleName = style;
 }
 
 export function resolveSourceTarget(editor: Editor, target: CitationSourceAddress): CitationSourceRecord {

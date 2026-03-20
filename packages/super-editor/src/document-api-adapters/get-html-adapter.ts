@@ -1,5 +1,6 @@
 import type { Editor } from '../core/Editor.js';
 import type { GetHtmlInput } from '@superdoc/document-api';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 
 const DEFAULT_UNFLATTEN_LISTS = true;
 
@@ -16,6 +17,7 @@ const DEFAULT_UNFLATTEN_LISTS = true;
  * @returns HTML string representation of the document.
  */
 export function getHtmlAdapter(editor: Editor, input: GetHtmlInput): string {
+  const runtime = resolveStoryRuntime(editor, input.in);
   const unflattenLists = input.unflattenLists ?? DEFAULT_UNFLATTEN_LISTS;
-  return editor.getHTML({ unflattenLists });
+  return runtime.editor.getHTML({ unflattenLists });
 }

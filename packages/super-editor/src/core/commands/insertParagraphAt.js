@@ -1,9 +1,6 @@
 /**
  * Insert a paragraph node at an absolute document position.
  *
- * Supports optional seed text, deterministic block id assignment, and
- * operation-scoped tracked-change conversion via transaction meta.
- *
  * @param {{ pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */
@@ -32,8 +29,6 @@ export const insertParagraphAt =
 
     if (!paragraphNode) return false;
 
-    // Validate the structural insertion before the dispatch guard so that
-    // editor.can().insertParagraphAt() accurately reflects feasibility.
     try {
       const tr = state.tr.insert(pos, paragraphNode);
       if (!dispatch) return true;

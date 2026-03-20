@@ -13,6 +13,7 @@ import type {
 } from '@superdoc/contracts';
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
+import { describeCellRenderBlocks, createCellSliceCursor, computeFullCellContentHeight } from './table-cell-slice.js';
 
 /**
  * Ratio of column width (0..1). An anchored table with totalWidth >= columnWidth * this value
@@ -399,73 +400,54 @@ function sumRowHeights(rows: TableRowMeasure[], fromRow: number, toRow: number):
 }
 
 /**
- * Calculate the actual rendered height of a table fragment.
+ * Compute the rendered height of a table fragment, including repeated headers,
+ * body rows, cell spacing, and outer borders.
  *
- * CRITICAL: This is used for cursor advancement, not measure.totalHeight.
- * Fragment height = (repeated headers) + (body rows from fromRow to toRow)
+ * CRITICAL: Used for cursor advancement and fragment positioning. All three
+ * partial-row fragment paths (continuation, forced-split, normal) must use this
+ * function to stay aligned with `renderTableFragment.ts`.
  *
- * @param fragment - Table fragment with fromRow, toRow, repeatHeaderCount
- * @param measure - Table measurements
- * @param headerCount - Total number of header rows in the table
- * @returns Actual fragment height in pixels
+ * When `partialRow` is provided, its `partialHeight` is substituted for the
+ * measured row height at `partialRow.rowIndex`.
  */
-function calculateFragmentHeight(
-  fragment: Pick<TableFragment, 'fromRow' | 'toRow' | 'repeatHeaderCount'>,
+function computeFragmentHeight(
   measure: TableMeasure,
-  _headerCount: number,
+  fromRow: number,
+  toRow: number,
+  repeatHeaderCount: number,
   borderCollapse?: 'collapse' | 'separate',
+  partialRow?: PartialRowInfo | null,
 ): number {
   let height = 0;
   let rowCount = 0;
 
-  // Add header height if continuation with repeated headers
-  if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
-    height += sumRowHeights(measure.rows, 0, fragment.repeatHeaderCount);
-    rowCount += fragment.repeatHeaderCount;
+  // Repeated headers
+  if (repeatHeaderCount > 0) {
+    height += sumRowHeights(measure.rows, 0, repeatHeaderCount);
+    rowCount += repeatHeaderCount;
   }
 
-  // Add body row heights (fromRow to toRow, exclusive)
-  const bodyRowCount = fragment.toRow - fragment.fromRow;
-  height += sumRowHeights(measure.rows, fragment.fromRow, fragment.toRow);
-  rowCount += bodyRowCount;
+  // Body rows — substitute partialRow height when applicable
+  for (let i = fromRow; i < toRow && i < measure.rows.length; i++) {
+    if (partialRow && partialRow.rowIndex === i) {
+      height += partialRow.partialHeight;
+    } else {
+      height += measure.rows[i].height;
+    }
+    rowCount++;
+  }
 
-  // Add vertical gaps: space before first row, between rows, after last row (outer spacing)
+  // Cell spacing: gaps before first row, between rows, and after last row
   const cellSpacingPx = measure.cellSpacingPx ?? 0;
   if (rowCount > 0 && cellSpacingPx > 0) {
     height += (rowCount + 1) * cellSpacingPx;
   }
-  // Only add outer border height when border-collapse is separate (DOM paints container-level borders only then)
+
+  // Outer border height when border-collapse is separate
   if (rowCount > 0 && measure.tableBorderWidths && borderCollapse === 'separate') {
-    const borderWidthV = measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
-    height += borderWidthV;
-  }
-
-  return height;
-}
-
-/**
- * Height of a body-only fragment (rows fromRow..toRow) including vertical spacing and borders.
- * Must match the body portion of calculateFragmentHeight so findSplitPoint's fit check
- * agrees with the actual rendered fragment height. Borders only included when borderCollapse === 'separate'.
- */
-function calculateBodyFragmentHeight(
-  measure: TableMeasure,
-  fromRow: number,
-  toRow: number,
-  borderCollapse?: 'collapse' | 'separate',
-): number {
-  const rowCount = toRow - fromRow;
-  if (rowCount <= 0) {
-    return 0;
-  }
-  let height = sumRowHeights(measure.rows, fromRow, toRow);
-  const cellSpacingPx = measure.cellSpacingPx ?? 0;
-  if (cellSpacingPx > 0) {
-    height += (rowCount + 1) * cellSpacingPx;
-  }
-  if (measure.tableBorderWidths && borderCollapse === 'separate') {
     height += measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
   }
+
   return height;
 }
 
@@ -490,7 +472,7 @@ const MIN_PARTIAL_ROW_HEIGHT = 20;
  * sub-row boundaries even for deeply nested tables (table-in-table-in-table).
  * Otherwise, return the row as a single segment with its measured height.
  */
-function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }> {
+export function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }> {
   // Check if any cell has nested table blocks
   const hasNestedTable = row.cells.some((cell) => cell.blocks?.some((b) => b.kind === 'table'));
 
@@ -583,9 +565,10 @@ function getRowContentHeight(blockRow: TableRow | undefined, rowMeasure: TableRo
     const cell = rowMeasure.cells[cellIdx];
     const cellPadding = getCellPadding(cellIdx, blockRow);
     const paddingTotal = cellPadding.top + cellPadding.bottom;
-    const lines = getCellLines(cell);
-    const linesHeight = lines.reduce((sum, line) => sum + (line.lineHeight || 0), 0);
-    contentHeight = Math.max(contentHeight, linesHeight + paddingTotal);
+    const cellBlock = blockRow?.cells?.[cellIdx];
+    // Use the allocation-free fast path — this runs on every row.
+    const sliceHeight = computeFullCellContentHeight(cell, cellBlock, cellPadding);
+    contentHeight = Math.max(contentHeight, sliceHeight + paddingTotal);
   }
   return contentHeight;
 }
@@ -978,7 +961,10 @@ function computePartialRow(
   // Capture cell paddings to keep height math aligned with rendering
   const cellPaddings = row.cells.map((_, idx: number) => getCellPadding(idx, blockRow));
 
-  // First pass: find cutoff for each cell based on available height
+  // First pass: find cutoff for each cell based on available height.
+  // Uses block-aware height from the cell slice cursor so that paragraph
+  // spacing.before, totalHeight promotion, and spacing.after are included
+  // in the fit check — matching what the DOM painter actually renders.
   for (let cellIdx = 0; cellIdx < cellCount; cellIdx++) {
     const cell = row.cells[cellIdx];
     const startLine = startLines[cellIdx] || 0;
@@ -987,32 +973,42 @@ function computePartialRow(
     const cellPadding = cellPaddings[cellIdx];
     const availableForLines = Math.max(0, availableHeight - (cellPadding.top + cellPadding.bottom));
 
-    // Get all lines from all blocks in this cell (multi-block support)
+    // Build block descriptors and cursor for block-aware height accumulation
+    const cellBlock = blockRow?.cells?.[cellIdx];
+    const blocks = describeCellRenderBlocks(cell, cellBlock, cellPadding);
+    const cursor = createCellSliceCursor(blocks, startLine);
+
+    // Get all lines for index bookkeeping (line indices remain unchanged)
     const lines = getCellLines(cell);
     let cumulativeHeight = 0;
     let cutLine = startLine;
 
     for (let i = startLine; i < lines.length; i++) {
-      const lineHeight = lines[i].lineHeight || 0;
-      if (cumulativeHeight + lineHeight > availableForLines) {
-        // Force progress: only when the segment is truly taller than a full page
-        // (e.g. an embedded table that can never fit on any page). This prevents
-        // infinite pagination loops. Normal lines that don't fit at the bottom of a
-        // page should NOT be forced — the caller will advance to the next page.
+      const lineCost = cursor.advanceLine(i);
+      if (cumulativeHeight + lineCost > availableForLines) {
+        // Force progress: only when the minimum rendered cost of this segment
+        // exceeds a full page height. This accounts for spacing.before and
+        // totalHeight promotion that can make a segment over-tall even when
+        // the raw line height alone would fit.
+        // When availableForLines === 0 (e.g. headers consumed the budget and
+        // cell padding exceeded the remainder), we do NOT force here — that
+        // would advance line indices for lines rendered with zero content
+        // height, permanently dropping content. Instead, the caller retries
+        // without headers (retryWithoutHeaders flag in the layout loop).
         if (
           cumulativeHeight === 0 &&
           i === startLine &&
           availableForLines > 0 &&
           fullPageHeight != null &&
-          lineHeight > fullPageHeight
+          cursor.minSegmentCost(i) > fullPageHeight
         ) {
           // Cap height to available space — overflow:hidden on the cell clips the rest.
-          cumulativeHeight += Math.min(lineHeight, availableForLines);
+          cumulativeHeight += Math.min(lineCost, availableForLines);
           cutLine = i + 1;
         }
         break;
       }
-      cumulativeHeight += lineHeight;
+      cumulativeHeight += lineCost;
       cutLine = i + 1; // Exclusive index
     }
 
@@ -1118,7 +1114,7 @@ function findSplitPoint(
     }
 
     // Check if this row fits: use full fragment height (rows + spacing + borders) so pagination matches render
-    const fragmentHeightWithRow = calculateBodyFragmentHeight(measure, startRow, i + 1, borderCollapse);
+    const fragmentHeightWithRow = computeFragmentHeight(measure, startRow, i + 1, 0, borderCollapse);
     if (fragmentHeightWithRow <= availableHeight) {
       // Row fits completely
       lastFitRow = i + 1; // Next row index (exclusive)
@@ -1131,9 +1127,8 @@ function findSplitPoint(
       // Row doesn't fit completely; remaining space after last full row set.
       // When lastFitRow === startRow (first row doesn't fit), no rows have been placed yet, so
       // we must subtract the vertical space that appears before the first row (top spacing + top border)
-      // instead of using calculateBodyFragmentHeight(startRow, startRow) which is 0.
-      let remainingHeight =
-        availableHeight - calculateBodyFragmentHeight(measure, startRow, lastFitRow, borderCollapse);
+      // instead of using computeFragmentHeight(startRow, startRow) which is 0.
+      let remainingHeight = availableHeight - computeFragmentHeight(measure, startRow, lastFitRow, 0, borderCollapse);
       if (lastFitRow === startRow) {
         const cellSpacingPx = measure.cellSpacingPx ?? 0;
         const topBorderPx =
@@ -1319,7 +1314,10 @@ export function layoutTableBlock({
 
   // 2. Count header rows
   const headerCount = countHeaderRows(block);
-  const headerHeight = headerCount > 0 ? sumRowHeights(measure.rows, 0, headerCount) : 0;
+  const headerPrefixHeights = [0];
+  for (let i = 0; i < headerCount; i += 1) {
+    headerPrefixHeights.push(headerPrefixHeights[i] + (measure.rows[i]?.height ?? 0));
+  }
 
   // 3. Initialize state
   let state = ensurePage();
@@ -1417,6 +1415,25 @@ export function layoutTableBlock({
   // Resolve border-collapse for fragment height (match measuring/render: only add borders when separate)
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
 
+  const getRepeatedHeaderHeight = (repeatCount: number): number => {
+    const clampedCount = Math.max(0, Math.min(repeatCount, headerCount));
+    return headerPrefixHeights[clampedCount] ?? 0;
+  };
+
+  // Tracks whether the current iteration is a same-page continuation of a
+  // partial row. Headers must not repeat mid-page: the painter always renders
+  // repeated headers at the top of a fragment, which would insert headers
+  // between two slices of the same row on the same page.
+  let samePagePartialContinuation = false;
+
+  // When computePartialRow makes no progress because repeated headers
+  // consumed the body budget, this flag causes the next iteration to retry
+  // with repeatHeaderCount = 0 (full page budget) instead of advancing to
+  // a new page with the same cramped budget. This avoids both livelocking
+  // and the content-dropping alternative of forcing line indices forward
+  // with zero content height.
+  let retryWithoutHeaders = false;
+
   // 4. Loop until all rows processed (including pending partial rows)
   while (currentRow < block.rows.length || pendingPartialRow !== null) {
     state = ensurePage();
@@ -1425,18 +1442,33 @@ export function layoutTableBlock({
     // Determine repeat header count for this fragment
     let repeatHeaderCount = 0;
 
-    if (currentRow === 0 && !pendingPartialRow) {
+    if (retryWithoutHeaders) {
+      // Previous iteration's no-progress was caused by headers eating the
+      // body budget. Retry this page without headers.
+      repeatHeaderCount = 0;
+      retryWithoutHeaders = false;
+    } else if (currentRow === 0 && !pendingPartialRow) {
       // First fragment: headers are part of body rows, don't repeat separately
       repeatHeaderCount = 0;
+    } else if (samePagePartialContinuation) {
+      // Same-page continuation of a partial row: never insert headers mid-page
+      repeatHeaderCount = 0;
     } else {
-      // Continuation fragment: check if headers should repeat
-      if (headerCount > 0 && headerHeight <= availableHeight) {
-        repeatHeaderCount = headerCount;
-      } else if (headerCount > 0 && headerHeight > availableHeight) {
-        // Table headers taller than page height - skip header repetition to avoid overflow
-        repeatHeaderCount = 0;
+      // When continuing a later header row on a new page, repeat only the
+      // completed header prefix. The current partial header row continues as
+      // body content, so including it in repeatHeaderCount would duplicate it.
+      const candidateRepeatHeaderCount =
+        pendingPartialRow && pendingPartialRow.rowIndex < headerCount ? pendingPartialRow.rowIndex : headerCount;
+      const candidateHeaderHeight = getRepeatedHeaderHeight(candidateRepeatHeaderCount);
+
+      if (candidateRepeatHeaderCount > 0 && candidateHeaderHeight < availableHeight) {
+        // New page with room for the repeated header prefix plus body content.
+        repeatHeaderCount = candidateRepeatHeaderCount;
       }
     }
+
+    // Reset for this iteration — set by same-page partial-row paths below.
+    samePagePartialContinuation = false;
 
     // If repeated headers would prevent a cantSplit row from fitting, skip header repetition.
     // Word does not split cantSplit rows just because repeated headers eat up space.
@@ -1444,19 +1476,28 @@ export function layoutTableBlock({
       const bodyRow = block.rows[currentRow];
       const bodyRowHeight = measure.rows[currentRow]?.height || 0;
       const bodyCantSplit = bodyRow?.attrs?.tableRowProperties?.cantSplit === true;
-      const spaceWithHeaders = availableHeight - headerHeight;
+      const spaceWithHeaders = availableHeight - getRepeatedHeaderHeight(repeatHeaderCount);
       if (bodyCantSplit && bodyRowHeight > spaceWithHeaders && bodyRowHeight <= availableHeight) {
         repeatHeaderCount = 0;
       }
     }
 
+    const repeatedHeaderHeight = getRepeatedHeaderHeight(repeatHeaderCount);
+
     // Adjust available height for header repetition
-    const availableForBody = repeatHeaderCount > 0 ? availableHeight - headerHeight : availableHeight;
+    const availableForBody = availableHeight - repeatedHeaderHeight;
 
     // Calculate full page height (for detecting over-tall rows)
     // This is the actual usable content area height, accounting for top margin.
     // The ?? 0 handles test fixtures that may not set topMargin.
     const fullPageHeight = state.contentBottom - (state.topMargin ?? 0);
+
+    // When headers are repeated on every page, the force-progress threshold
+    // must account for the header budget. Otherwise a segment that's smaller
+    // than a full page but larger than (fullPage − repeated headers) will livelock:
+    // computePartialRow makes no progress, the guard advances to a new page
+    // with the same repeated-header budget, and the same no-progress state recurs.
+    const fullPageHeightForBody = fullPageHeight - repeatedHeaderHeight;
 
     // Handle pending partial row continuation
     if (pendingPartialRow !== null) {
@@ -1469,7 +1510,7 @@ export function layoutTableBlock({
         measure,
         availableForBody,
         fromLineByCell,
-        fullPageHeight,
+        fullPageHeightForBody,
       );
 
       const madeProgress = continuationPartialRow.toLineByCell.some(
@@ -1488,7 +1529,14 @@ export function layoutTableBlock({
         return fromLine < totalLines;
       });
 
-      const fragmentHeight = continuationPartialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
+      const fragmentHeight = computeFragmentHeight(
+        measure,
+        rowIndex,
+        rowIndex + 1,
+        repeatHeaderCount,
+        borderCollapse,
+        continuationPartialRow,
+      );
 
       // Only create a fragment if we made progress (rendered some lines)
       // Don't create empty fragments with just padding
@@ -1534,15 +1582,21 @@ export function layoutTableBlock({
         currentRow = rowIndex + 1;
         pendingPartialRow = null;
       } else if (!madeProgress && hadRemainingLinesBefore) {
-        // No progress made - need to advance to next page/column and retry
-        state = advanceColumn(state);
-        // Keep the same pendingPartialRow to retry on next page (no assignment needed)
+        if (repeatHeaderCount > 0) {
+          // Headers consumed the body budget. Retry this page without headers
+          // instead of advancing to a new page with the same cramped budget.
+          retryWithoutHeaders = true;
+        } else {
+          // No progress and no headers to drop — advance to a new page.
+          state = advanceColumn(state);
+        }
+        // Keep the same pendingPartialRow to retry (no assignment needed)
       } else {
-        // Made progress but row not complete - continue on SAME page
-        // DO NOT call advanceColumn here! The cursor has already been advanced
-        // by the fragment height above. Just update pendingPartialRow to track
-        // remaining lines for the next iteration.
+        // Made progress but row not complete - continue on SAME page.
+        // Flag this so the next iteration does NOT insert repeated headers
+        // mid-page between two slices of the same row.
         pendingPartialRow = continuationPartialRow;
+        samePagePartialContinuation = true;
       }
 
       isTableContinuation = true;
@@ -1556,7 +1610,7 @@ export function layoutTableBlock({
       measure,
       bodyStartRow,
       availableForBody,
-      fullPageHeight,
+      fullPageHeightForBody,
     );
 
     // If no rows fit and page has content, advance
@@ -1574,10 +1628,32 @@ export function layoutTableBlock({
         measure,
         availableForBody,
         undefined,
-        fullPageHeight,
+        fullPageHeightForBody,
       );
+
+      // Guard against zero-line-progress fragments. With block-aware height,
+      // spacing alone can exceed available space. If no lines were rendered,
+      // creating a fragment would cause an infinite loop of blank fragments.
+      const forcedMadeProgress = forcedPartialRow.toLineByCell.some((cutLine: number) => cutLine > 0);
+      if (!forcedMadeProgress) {
+        if (repeatHeaderCount > 0) {
+          // Headers consumed the body budget. Retry this page without headers.
+          retryWithoutHeaders = true;
+        } else {
+          state = advanceColumn(state);
+        }
+        continue;
+      }
+
       const forcedEndRow = bodyStartRow + 1;
-      const fragmentHeight = forcedPartialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
+      const fragmentHeight = computeFragmentHeight(
+        measure,
+        bodyStartRow,
+        forcedEndRow,
+        repeatHeaderCount,
+        borderCollapse,
+        forcedPartialRow,
+      );
 
       const baseX = columnX(state.columnIndex);
       const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
@@ -1613,23 +1689,20 @@ export function layoutTableBlock({
       state.page.fragments.push(fragment);
       state.cursorY += fragmentHeight;
       pendingPartialRow = forcedPartialRow;
+      samePagePartialContinuation = true;
       isTableContinuation = true;
       continue;
     }
 
-    // Calculate fragment height
-    let fragmentHeight: number;
-    if (partialRow) {
-      const fullRowsHeight = sumRowHeights(measure.rows, bodyStartRow, endRow - 1);
-      fragmentHeight = fullRowsHeight + partialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
-    } else {
-      fragmentHeight = calculateFragmentHeight(
-        { fromRow: bodyStartRow, toRow: endRow, repeatHeaderCount },
-        measure,
-        headerCount,
-        borderCollapse,
-      );
-    }
+    // Calculate fragment height — unified for both partial and full row cases
+    const fragmentHeight = computeFragmentHeight(
+      measure,
+      bodyStartRow,
+      endRow,
+      repeatHeaderCount,
+      borderCollapse,
+      partialRow,
+    );
 
     const baseX = columnX(state.columnIndex);
     const baseWidth = Math.min(columnWidth, measure.totalWidth || columnWidth);
@@ -1681,6 +1754,10 @@ export function layoutTableBlock({
     // continuing to fill the current page with another fragment.
     if (forcePageBreak && currentRow < block.rows.length) {
       state = advanceColumn(state);
+    } else if (pendingPartialRow) {
+      // The partial row will continue on the same page. Suppress header
+      // repetition on the next iteration to avoid mid-page headers.
+      samePagePartialContinuation = true;
     }
   }
 }

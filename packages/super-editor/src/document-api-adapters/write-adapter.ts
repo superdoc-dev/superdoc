@@ -1,18 +1,31 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Editor } from '../core/Editor.js';
-import type {
-  MutationOptions,
-  ReceiptFailure,
-  TextAddress,
-  TextMutationReceipt,
-  WriteRequest,
-} from '@superdoc/document-api';
+import type { MutationOptions, ReceiptFailure, TextAddress, TextMutationReceipt } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from './errors.js';
 import { ensureTrackedCapability } from './helpers/mutation-helpers.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { checkRevision } from './plan-engine/revision-tracker.js';
-import { insertParagraphAtEnd, resolveWriteTarget, type ResolvedWrite } from './helpers/adapter-utils.js';
+import {
+  insertParagraphAtEnd,
+  resolveTextTarget,
+  resolveWriteTarget,
+  type ResolvedWrite,
+} from './helpers/adapter-utils.js';
+import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
 import { toCanonicalTrackedChangeId } from './helpers/tracked-change-resolver.js';
+
+/**
+ * Legacy insert request with optional TextAddress target and block-relative locator.
+ * The public InsertWriteRequest is now target-less; this extends it for
+ * backward-compat test callers that still exercise the targeted path.
+ */
+type LegacyInsertWriteRequest = {
+  kind: 'insert';
+  target?: TextAddress;
+  text: string;
+  blockId?: string;
+  offset?: number;
+};
 
 type LegacyReplaceWriteRequest = {
   kind: 'replace';
@@ -31,20 +44,28 @@ type LegacyDeleteWriteRequest = {
   end?: number;
 };
 
-type LegacyWriteRequest = WriteRequest | LegacyReplaceWriteRequest | LegacyDeleteWriteRequest;
+type LegacyWriteRequest = LegacyInsertWriteRequest | LegacyReplaceWriteRequest | LegacyDeleteWriteRequest;
 
 function resolveLegacyWriteTarget(editor: Editor, request: LegacyWriteRequest): ResolvedWrite | null {
-  if (request.kind === 'insert') {
+  // Target-less insert → default document-end insertion
+  if (request.kind === 'insert' && !request.target) {
     return resolveWriteTarget(editor, request);
   }
 
-  if (!request.target) return null;
+  // Targeted request (insert with target, replace, delete) → resolve TextAddress directly
+  const target = request.target;
+  if (!target) return null;
 
-  return resolveWriteTarget(editor, {
-    kind: 'insert',
-    target: request.target,
-    text: '',
-  });
+  const range = resolveTextTarget(editor, target);
+  if (!range) return null;
+
+  const text = readTextAtResolvedRange(editor, range);
+  return {
+    requestedTarget: target,
+    effectiveTarget: target,
+    range,
+    resolution: buildTextMutationResolution({ requestedTarget: target, target, range, text }),
+  };
 }
 
 function validateWriteRequest(request: LegacyWriteRequest, resolvedTarget: ResolvedWrite): ReceiptFailure | null {
@@ -269,12 +290,14 @@ function toFailureReceipt(failure: ReceiptFailure, resolvedTarget: ResolvedWrite
   };
 }
 
-export function writeAdapter(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
+export function writeAdapter(
+  editor: Editor,
+  request: LegacyWriteRequest,
+  options?: MutationOptions,
+): TextMutationReceipt {
   checkRevision(editor, options?.expectedRevision);
 
-  // Keep the internal helper backwards-compatible for direct test callers
-  // that still exercise legacy replace/delete paths outside the public adapter.
-  const legacyRequest = request as LegacyWriteRequest;
+  const legacyRequest = request;
 
   // Normalize friendly locator fields (blockId + offset) into canonical TextAddress
   // before resolution. This is the adapter-layer normalization per the contract.

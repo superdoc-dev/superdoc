@@ -1,6 +1,8 @@
 import type { BlockNodeAddress, NodeSelector, Query, Selector, TextSelector } from '../types/index.js';
 import type { SDFindInput, SDFindResult } from '../types/sd-envelope.js';
+import type { StoryLocator } from '../types/story.types.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 
 /**
  * Options for the `find` method when using a selector shorthand.
@@ -18,6 +20,8 @@ export interface FindOptions {
   includeNodes?: Query['includeNodes'];
   /** Whether to include unknown/unsupported nodes in diagnostics. */
   includeUnknown?: Query['includeUnknown'];
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 }
 
 /**
@@ -87,6 +91,10 @@ function normalizeSelector(selector: Selector): NodeSelector | TextSelector {
  * @returns A normalized query.
  */
 export function normalizeFindQuery(selectorOrQuery: Selector | Query, options?: FindOptions): Query {
+  if (options?.in !== undefined) {
+    validateStoryLocator(options.in, 'in');
+  }
+
   if ('select' in selectorOrQuery) {
     return { ...selectorOrQuery, select: normalizeSelector(selectorOrQuery.select) };
   }
@@ -99,6 +107,7 @@ export function normalizeFindQuery(selectorOrQuery: Selector | Query, options?: 
     require: options?.require,
     includeNodes: options?.includeNodes,
     includeUnknown: options?.includeUnknown,
+    in: options?.in,
   };
 }
 

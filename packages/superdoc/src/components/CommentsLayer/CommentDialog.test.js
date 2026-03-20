@@ -118,6 +118,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     importedId: null,
     trackedChangeType: null,
     trackedChangeText: null,
+    trackedChangeDisplayType: null,
     deletedText: null,
     selection: {
       getValues: () => ({ selectionBounds: { top: 110, bottom: 130, left: 15, right: 30 } }),
@@ -296,6 +297,40 @@ describe('CommentDialog.vue', () => {
     await nextTick();
     expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
     expect(superdocStub.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders hyperlink additions without a format label', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeDisplayType: 'hyperlinkAdded',
+        trackedChangeText: 'https://example.com',
+      },
+    });
+
+    const trackedChange = wrapper.find('.tracked-change');
+    expect(trackedChange.text()).toContain('Added hyperlink');
+    expect(trackedChange.text()).toContain('https://example.com');
+    expect(trackedChange.text()).not.toContain('Format:');
+    expect(trackedChange.text()).not.toContain('underline');
+  });
+
+  it('renders hyperlink modifications without a format label', async () => {
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeDisplayType: 'hyperlinkModified',
+        trackedChangeText: 'https://new.com',
+      },
+    });
+
+    const trackedChange = wrapper.find('.tracked-change');
+    expect(trackedChange.text()).toContain('Changed hyperlink to');
+    expect(trackedChange.text()).toContain('https://new.com');
+    expect(trackedChange.text()).not.toContain('Format:');
+    expect(trackedChange.text()).not.toContain('underline');
   });
 
   it('calls custom accept handler instead of default behavior when configured', async () => {

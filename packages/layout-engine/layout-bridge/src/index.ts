@@ -14,6 +14,7 @@ import type {
   ParagraphMeasure,
 } from '@superdoc/contracts';
 import { computeLinePmRange as computeLinePmRangeUnified, effectiveTableCellSpacing } from '@superdoc/contracts';
+import { describeCellRenderBlocks, computeCellSliceContentHeight, getEmbeddedRowLines } from '@superdoc/layout-engine';
 import { charOffsetToPm, findCharacterAtX, measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
 import {
@@ -1381,6 +1382,32 @@ const getCellMeasures = (cell: TableCellMeasure | undefined) => {
   return cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
 };
 
+/**
+ * Count the number of segments a measured block contributes to getCellLines().
+ * Used to advance the global line counter past non-paragraph blocks so that
+ * paragraph line ranges stay aligned with the full global index space.
+ */
+const countBlockSegments = (measure: {
+  kind: string;
+  rows?: { cells: unknown[] }[];
+  height?: number;
+  lines?: unknown[];
+}): number => {
+  if (measure.kind === 'paragraph') {
+    return (measure as ParagraphMeasure).lines?.length ?? 0;
+  }
+  if (measure.kind === 'table') {
+    let count = 0;
+    for (const row of (measure as TableMeasure).rows) {
+      count += getEmbeddedRowLines(row).length;
+    }
+    return count;
+  }
+  // Image, drawing, other: 1 segment if height > 0
+  const h = typeof measure.height === 'number' ? measure.height : 0;
+  return h > 0 ? 1 : 0;
+};
+
 const sumLineHeights = (measure: ParagraphMeasure, fromLine: number, toLine: number) => {
   let height = 0;
   for (let i = fromLine; i < toLine && i < measure.lines.length; i += 1) {
@@ -1657,20 +1684,43 @@ export function selectionToRects(
             const cellBlocks = getCellBlocks(cell);
             const cellBlockMeasures = getCellMeasures(cellMeasure);
 
-            // Map each block to its global line range within the cell
+            // Build block descriptors for renderer-semantic content height.
+            // This fixes the spacing.after bug where the old code used measurement
+            // semantics (effectiveTableCellSpacing) for the last block, but the
+            // renderer skips spacing.after entirely for the last block.
+            const cellRenderBlocks = describeCellRenderBlocks(cellMeasure, cell, padding);
+            const totalCellLines =
+              cellRenderBlocks.length > 0 ? cellRenderBlocks[cellRenderBlocks.length - 1].globalEndLine : 0;
+            const cellAllowedStart = partialRowData?.fromLineByCell?.[cellIdx] ?? 0;
+            const rawCellAllowedEnd = partialRowData?.toLineByCell?.[cellIdx];
+            const cellAllowedEnd =
+              rawCellAllowedEnd == null || rawCellAllowedEnd === -1 ? totalCellLines : rawCellAllowedEnd;
+
+            // Map each paragraph block to its global line range within the cell.
+            // cumulativeLine must advance for ALL block types (not just paragraphs)
+            // so that paragraph line ranges align with the global index space used
+            // by cellAllowedStart/cellAllowedEnd and computeCellSliceContentHeight.
             const renderedBlocks: Array<{
               block: ParagraphBlock;
               measure: ParagraphMeasure;
               startLine: number;
               endLine: number;
               height: number;
+              originalBlockIndex: number;
+              globalBlockStart: number;
             }> = [];
 
             let cumulativeLine = 0;
-            for (let i = 0; i < Math.min(cellBlocks.length, cellBlockMeasures.length); i += 1) {
+            const blockCount = Math.min(cellBlocks.length, cellBlockMeasures.length);
+            for (let i = 0; i < blockCount; i += 1) {
               const paraBlock = cellBlocks[i];
               const paraMeasure = cellBlockMeasures[i];
               if (!paraBlock || !paraMeasure || paraBlock.kind !== 'paragraph' || paraMeasure.kind !== 'paragraph') {
+                // Advance cumulativeLine past non-paragraph segments to stay
+                // aligned with getCellLines() / describeCellRenderBlocks().
+                if (paraMeasure) {
+                  cumulativeLine += countBlockSegments(paraMeasure);
+                }
                 continue;
               }
               const lineCount = paraMeasure.lines.length;
@@ -1678,12 +1728,8 @@ export function selectionToRects(
               const blockEnd = cumulativeLine + lineCount;
               cumulativeLine = blockEnd;
 
-              const allowedStart = partialRowData?.fromLineByCell?.[cellIdx] ?? 0;
-              const rawAllowedEnd = partialRowData?.toLineByCell?.[cellIdx];
-              const allowedEnd = rawAllowedEnd == null || rawAllowedEnd === -1 ? cumulativeLine : rawAllowedEnd;
-
-              const renderStartGlobal = Math.max(blockStart, allowedStart);
-              const renderEndGlobal = Math.min(blockEnd, allowedEnd);
+              const renderStartGlobal = Math.max(blockStart, cellAllowedStart);
+              const renderEndGlobal = Math.min(blockEnd, cellAllowedEnd);
               if (renderStartGlobal >= renderEndGlobal) continue;
 
               const startLine = renderStartGlobal - blockStart;
@@ -1697,17 +1743,32 @@ export function selectionToRects(
                   height = totalHeight;
                 }
                 const isFirstBlock = i === 0;
-                const isLastBlock = i === cellBlocks.length - 1;
                 const spacingBefore = (paraBlock as ParagraphBlock).attrs?.spacing?.before;
                 height += effectiveTableCellSpacing(spacingBefore, isFirstBlock, padding.top);
-                const spacingAfter = (paraBlock as ParagraphBlock).attrs?.spacing?.after;
-                height += effectiveTableCellSpacing(spacingAfter, isLastBlock, padding.bottom);
+                // Match renderer: skip spacing.after for the last block
+                const isLastBlock = i === blockCount - 1;
+                if (!isLastBlock) {
+                  const spacingAfter = (paraBlock as ParagraphBlock).attrs?.spacing?.after;
+                  if (typeof spacingAfter === 'number' && spacingAfter > 0) {
+                    height += spacingAfter;
+                  }
+                }
               }
 
-              renderedBlocks.push({ block: paraBlock, measure: paraMeasure, startLine, endLine, height });
+              renderedBlocks.push({
+                block: paraBlock,
+                measure: paraMeasure,
+                startLine,
+                endLine,
+                height,
+                originalBlockIndex: i,
+                globalBlockStart: blockStart,
+              });
             }
 
-            const contentHeight = renderedBlocks.reduce((acc, info) => acc + info.height, 0);
+            // Use shared helper for aggregate content height — keeps selection
+            // rects aligned with pagination and the DOM painter.
+            const contentHeight = computeCellSliceContentHeight(cellRenderBlocks, cellAllowedStart, cellAllowedEnd);
             const contentAreaHeight = Math.max(0, rowHeight - (padding.top + padding.bottom));
             const freeSpace = Math.max(0, contentAreaHeight - contentHeight);
 
@@ -1721,7 +1782,27 @@ export function selectionToRects(
 
             let blockTopCursor = padding.top + verticalOffset;
 
-            renderedBlocks.forEach((info, blockIndex) => {
+            // Track the global end line of the last processed block so we can
+            // advance blockTopCursor past non-paragraph blocks (images, tables)
+            // that sit between consecutive paragraphs.
+            let prevBlockGlobalEndLine = cellAllowedStart;
+
+            renderedBlocks.forEach((info) => {
+              // Advance past any visible non-paragraph blocks between the previous
+              // paragraph and this one. Without this, images/tables between
+              // paragraphs would be invisible to blockTopCursor and later
+              // paragraph rects would be positioned too high.
+              for (const rb of cellRenderBlocks) {
+                if (rb.kind === 'paragraph') continue;
+                if (rb.visibleHeight === 0) continue;
+                if (rb.globalEndLine <= prevBlockGlobalEndLine) continue;
+                if (rb.globalStartLine >= info.globalBlockStart) break;
+                const localStart = Math.max(0, cellAllowedStart - rb.globalStartLine);
+                const localEnd = Math.min(rb.lineHeights.length, cellAllowedEnd - rb.globalStartLine);
+                for (let li = localStart; li < localEnd; li++) {
+                  blockTopCursor += rb.lineHeights[li];
+                }
+              }
               const paragraphMarkerWidth = info.measure.marker?.markerWidth ?? 0;
               // List items in table cells are also rendered with left alignment
               const cellIsListItem = isListItem(paragraphMarkerWidth, info.block);
@@ -1735,9 +1816,13 @@ export function selectionToRects(
               const intersectingLines = findLinesIntersectingRange(info.block, info.measure, from, to);
 
               // Match renderer: spacing.before is only applied when rendering from the start of the block (startLine === 0).
+              // Use the original block index (not renderedBlocks index) so that isFirstBlock matches
+              // the renderer's i === 0 check, which includes non-paragraph blocks.
               const rawSpacingBefore = (info.block as ParagraphBlock).attrs?.spacing?.before;
               const effectiveSpacingBeforePx =
-                info.startLine === 0 ? effectiveTableCellSpacing(rawSpacingBefore, blockIndex === 0, padding.top) : 0;
+                info.startLine === 0
+                  ? effectiveTableCellSpacing(rawSpacingBefore, info.originalBlockIndex === 0, padding.top)
+                  : 0;
 
               intersectingLines.forEach(({ line, index }) => {
                 if (index < info.startLine || index >= info.endLine) {
@@ -1789,6 +1874,7 @@ export function selectionToRects(
               });
 
               blockTopCursor += info.height;
+              prevBlockGlobalEndLine = info.globalBlockStart + info.endLine;
             });
           }
 

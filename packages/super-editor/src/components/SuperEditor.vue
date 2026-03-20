@@ -1305,6 +1305,9 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+  z-index: var(--sd-ui-ruler-z-index, 10);
+  background: var(--sd-ui-ruler-bg, var(--sd-ui-bg, #ffffff));
 }
 
 .ruler {

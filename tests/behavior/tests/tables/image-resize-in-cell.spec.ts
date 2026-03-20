@@ -75,10 +75,10 @@ async function placeCursorInFirstTableCell(superdoc: SuperDocFixture): Promise<v
 
 /**
  * Dispatch a synthetic drag-drop carrying a canvas-generated PNG of the given
- * pixel dimensions at the viewport's centre.  Returns the number of files the
- * drop handler saw, mirroring the pattern in drag-drop-image-insertion.spec.ts.
+ * pixel dimensions inside the first table cell.  Returns the number of files
+ * the drop handler saw, mirroring the pattern in drag-drop-image-insertion.spec.ts.
  */
-async function dropOversizedImageAtViewportCentre(
+async function dropOversizedImageInFirstCell(
   superdoc: SuperDocFixture,
   imageWidthPx: number,
   imageHeightPx: number,
@@ -107,8 +107,11 @@ async function dropOversizedImageAtViewportCentre(
       dt.items.add(file);
       dt.effectAllowed = 'copy';
 
-      // Drop at the viewport centre.
-      const rect = host.getBoundingClientRect();
+      // Drop inside the rendered table fragment rather than the viewport
+      // centre, which may land in the trailing separator paragraph.
+      const tableFragment = host.querySelector('.superdoc-table-fragment');
+      const targetEl = tableFragment ?? host;
+      const rect = targetEl.getBoundingClientRect();
       const dropX = Math.round(rect.left + rect.width / 2);
       const dropY = Math.round(rect.top + rect.height / 2);
 
@@ -179,7 +182,7 @@ test('image dropped into a narrow table cell is constrained to the cell width', 
   const IMAGE_WIDTH_PX = 1200;
   const IMAGE_HEIGHT_PX = 900;
 
-  const { droppedFileCount } = await dropOversizedImageAtViewportCentre(superdoc, IMAGE_WIDTH_PX, IMAGE_HEIGHT_PX);
+  const { droppedFileCount } = await dropOversizedImageInFirstCell(superdoc, IMAGE_WIDTH_PX, IMAGE_HEIGHT_PX);
 
   // If the drop handler did not receive any files the test environment does not
   // support synthetic drops; skip rather than fail.

@@ -1,3 +1,4 @@
+import { describe, expect, it, mock } from 'bun:test';
 import {
   executeCreateParagraph,
   executeCreateSectionBreak,
@@ -144,7 +145,7 @@ describe('executeCreateSectionBreak', () => {
       paragraph: () => ({ success: true }),
       heading: () => ({ success: true }),
       table: () => ({ success: true }),
-      sectionBreak: vi.fn(() => ({
+      sectionBreak: mock(() => ({
         success: true,
         section: { kind: 'section', sectionId: 'section-1' },
       })),
@@ -166,7 +167,7 @@ describe('executeCreateSectionBreak', () => {
       paragraph: () => ({ success: true }),
       heading: () => ({ success: true }),
       table: () => ({ success: true }),
-      sectionBreak: vi.fn(() => ({ success: true })),
+      sectionBreak: mock(() => ({ success: true })),
     } as any;
 
     expect(() =>
@@ -181,7 +182,7 @@ describe('executeCreateSectionBreak', () => {
       paragraph: () => ({ success: true }),
       heading: () => ({ success: true }),
       table: () => ({ success: true }),
-      sectionBreak: vi.fn(() => ({ success: true })),
+      sectionBreak: mock(() => ({ success: true })),
     } as any;
 
     expect(() =>

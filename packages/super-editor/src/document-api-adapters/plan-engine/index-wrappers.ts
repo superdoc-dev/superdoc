@@ -29,6 +29,7 @@ import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllIndexNodes,
   resolveIndexTarget,
+  resolvePostMutationIndexId,
   extractIndexInfo,
   buildIndexDiscoveryItem,
   findAllIndexEntries,
@@ -92,7 +93,7 @@ export function indexListWrapper(editor: Editor, query?: IndexListInput) {
 
 export function indexGetWrapper(editor: Editor, input: IndexGetInput): IndexInfo {
   const resolved = resolveIndexTarget(editor.state.doc, input.target);
-  return extractIndexInfo(resolved.node);
+  return extractIndexInfo(resolved);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,8 +137,7 @@ export function indexInsertWrapper(
   );
 
   if (!receiptApplied(receipt)) return indexFailure('NO_OP', 'Insert produced no change.');
-  const insertedNode = editor.state.doc.nodeAt(pos);
-  const resolvedNodeId = (insertedNode?.attrs?.sdBlockId as string) ?? `index-${pos}`;
+  const resolvedNodeId = resolvePostMutationIndexId(editor.state.doc, requestedNodeId);
   return indexSuccess({ kind: 'block', nodeType: 'index', nodeId: resolvedNodeId });
 }
 

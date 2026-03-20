@@ -1,5 +1,5 @@
 import type { SectionBreakBlock } from '@superdoc/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { scheduleSectionBreak, applyPendingToActive, type SectionState } from './section-breaks';
 

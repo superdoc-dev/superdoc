@@ -6,8 +6,6 @@ description: Configure the bibliography style.
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-> Alpha: Document API is currently alpha and subject to breaking changes.
-
 ## Summary
 
 Configure the bibliography style.
@@ -17,7 +15,7 @@ Configure the bibliography style.
 - Mutates document: `yes`
 - Idempotency: `idempotent`
 - Supports tracked mode: `no`
-- Supports dry run: `no`
+- Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
@@ -29,12 +27,21 @@ Returns a BibliographyMutationResult indicating success or a failure.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `style` | string | yes |  |
+| `target` | object(kind="block") | yes |  |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"bibliography"` | yes | Constant: `"bibliography"` |
 
 ### Example request
 
 ```json
 {
-  "style": "example"
+  "style": "example",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "bibliography"
+  }
 }
 ```
 
@@ -93,9 +100,30 @@ Returns a BibliographyMutationResult indicating success or a failure.
   "properties": {
     "style": {
       "type": "string"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "bibliography"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
     }
   },
   "required": [
+    "target",
     "style"
   ],
   "type": "object"

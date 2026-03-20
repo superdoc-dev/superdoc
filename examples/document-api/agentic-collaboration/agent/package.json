@@ -1,0 +1,20 @@
+{
+  "name": "agentic-collaboration-agent",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch agent.ts",
+    "start": "tsx agent.ts"
+  },
+  "dependencies": {
+    "@superdoc-dev/sdk": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "openai": "^4.78.0",
+    "ws": "^8.18.0",
+    "yjs": "13.6.19"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}

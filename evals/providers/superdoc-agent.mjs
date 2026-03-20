@@ -40,13 +40,13 @@ async function openDocument(sdk, docPath, stateDir) {
     env: { SUPERDOC_CLI_STATE_DIR: stateDir },
   });
   await client.connect();
-  await client.doc.open({ doc: docPath });
-  return client;
+  const doc = await client.open({ doc: docPath });
+  return { client, doc };
 }
 
-async function closeDocument(client, { save = false } = {}) {
-  if (save) await client.doc.save().catch(() => {});
-  await client.doc.close().catch(() => {});
+async function closeDocument({ client, doc }, { save = false } = {}) {
+  if (save) await doc.save().catch(() => {});
+  await doc.close().catch(() => {});
   await client.dispose().catch(() => {});
 }
 
@@ -64,7 +64,7 @@ async function loadTools(sdk) {
 
 // --- Agent loop ---
 
-async function runAgentLoop(sdk, client, activeToolMap, task, model) {
+async function runAgentLoop(sdk, doc, activeToolMap, task, model) {
   const openai = new OpenAI();
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -92,7 +92,7 @@ async function runAgentLoop(sdk, client, activeToolMap, task, model) {
 
       let result;
       try {
-        result = await sdk.dispatchSuperDocTool(client, toolName, cleanArgs(toolArgs));
+        result = await sdk.dispatchSuperDocTool(doc, toolName, cleanArgs(toolArgs));
       } catch (err) {
         result = { ok: false, error: err.message };
       }
@@ -138,9 +138,9 @@ export default class SuperDocAgentProvider {
     const outputPath = keepFile ? resolveOutputPath(evalId, fixture, task) : null;
 
     // Open document
-    let client;
+    let handle;
     try {
-      client = await openDocument(sdk, docPath, stateDir);
+      handle = await openDocument(sdk, docPath, stateDir);
     } catch (err) {
       cleanupTemp(docPath, stateDir);
       return { error: `Failed to open document: ${err.message}` };
@@ -151,17 +151,17 @@ export default class SuperDocAgentProvider {
     try {
       activeToolMap = await loadTools(sdk);
     } catch (err) {
-      await closeDocument(client);
+      await closeDocument(handle);
       cleanupTemp(docPath, stateDir);
       return { error: `Failed to load tools: ${err.message}` };
     }
 
     // Run agent loop
     try {
-      const toolLog = await runAgentLoop(sdk, client, activeToolMap, task, model);
-      const documentText = await client.doc.getText();
+      const toolLog = await runAgentLoop(sdk, handle.doc, activeToolMap, task, model);
+      const documentText = await handle.doc.getText();
 
-      await closeDocument(client, { save: keepFile });
+      await closeDocument(handle, { save: keepFile });
 
       if (keepFile && outputPath) copyFileSync(docPath, outputPath);
       cleanupTemp(docPath, stateDir);
@@ -177,7 +177,7 @@ export default class SuperDocAgentProvider {
       writeCache(key, result);
       return result;
     } catch (err) {
-      await closeDocument(client);
+      await closeDocument(handle);
       cleanupTemp(docPath, stateDir);
       return { error: `Agent loop failed: ${err.message}` };
     }

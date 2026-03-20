@@ -92,10 +92,22 @@ export type IntentGroupMeta = { toolName: string; description: string };
 
 export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   search: { toolName: 'superdoc_search', description: 'Find text or nodes in the document' },
-  get_content: { toolName: 'superdoc_get_content', description: 'Read document content in various formats' },
+  get_content: {
+    toolName: 'superdoc_get_content',
+    description:
+      'Read document content. Use action "info" for structure and styles, "blocks" for all block IDs and types, "text" or "markdown" for content. Call info or blocks before editing.',
+  },
   edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
-  create: { toolName: 'superdoc_create', description: 'Create structural block elements' },
-  format: { toolName: 'superdoc_format', description: 'Change text and paragraph formatting' },
+  create: {
+    toolName: 'superdoc_create',
+    description:
+      'Create one paragraph or heading per call. After creating, search for it and apply formatting (fontFamily, fontSize) from neighboring blocks. For multiple paragraphs, use superdoc_mutations with text.insert steps instead of calling create repeatedly.',
+  },
+  format: {
+    toolName: 'superdoc_format',
+    description:
+      'Change text and paragraph formatting. Use action "inline" with a search ref for bold/italic/etc. Use action "set_style" with a styleId from superdoc_get_content info to apply a named paragraph style.',
+  },
   table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
   list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },
   comment: { toolName: 'superdoc_comment', description: 'Comment threads — create, edit, delete' },
@@ -236,6 +248,15 @@ const T_HEADER_FOOTER_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 
+// Story-scoped throw-code arrays
+const T_STORY = [
+  'STORY_NOT_FOUND',
+  'STORY_MISMATCH',
+  'STORY_NOT_SUPPORTED',
+  'CROSS_STORY_PLAN',
+  'MATERIALIZATION_FAILED',
+] as const;
+
 // Reference-namespace throw-code shorthand arrays
 const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
 const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
@@ -276,7 +297,7 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
           supportsDryRun: true,
           supportsTrackedMode: entry.tracked,
           possibleFailureCodes: ['INVALID_TARGET'],
-          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
         }),
         referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
         referenceGroup: 'format',
@@ -311,7 +332,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE'],
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE', ...T_STORY],
       deterministicTargetResolution: false,
     }),
     referenceDocPath: 'find.mdx',
@@ -347,7 +368,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the plain-text content of the document.',
     expectedResult: 'Returns the full plain-text content of the document as a string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
 
@@ -359,7 +382,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the document content as a Markdown string.',
     expectedResult: 'Returns the full document content as a Markdown-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-markdown.mdx',
     referenceGroup: 'core',
     intentGroup: 'get_content',
@@ -370,7 +395,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the document content as an HTML string.',
     expectedResult: 'Returns the full document content as an HTML-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-html.mdx',
     referenceGroup: 'core',
     intentGroup: 'get_content',
@@ -419,13 +446,13 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'insert',
     description:
       'Insert content into the document. Two input shapes: ' +
-      'legacy string-based (value + type) inserts inline content at a text position within an existing block; ' +
+      'text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; ' +
       'structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. ' +
-      'When target is omitted, content appends at the end of the document. ' +
-      'Legacy mode supports text (default), markdown, and html content types via the `type` field. ' +
+      'When target/ref is omitted, content appends at the end of the document. ' +
+      'Text mode supports text (default), markdown, and html content types via the `type` field. ' +
       'Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.',
     expectedResult:
-      'Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
+      'Returns an SDMutationReceipt with applied status; resolution reports the inserted TextAddress for text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -456,6 +483,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'insert.mdx',
@@ -499,6 +527,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'replace.mdx',
@@ -518,7 +547,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
@@ -538,6 +567,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'blocks/list.mdx',
     referenceGroup: 'blocks',
+    intentGroup: 'get_content',
+    intentAction: 'blocks',
   },
 
   'blocks.delete': {
@@ -599,7 +630,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
@@ -636,7 +667,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
@@ -653,7 +684,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
@@ -2008,7 +2039,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_QUERY_MATCH,
+      throws: [...T_QUERY_MATCH, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'query/match.mdx',
@@ -2041,7 +2072,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_PLAN_ENGINE,
+      throws: [...T_PLAN_ENGINE, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'mutations/preview.mdx',
@@ -2066,6 +2097,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
       deterministicTargetResolution: true,
     }),
@@ -3058,7 +3090,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
-      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'create/image.mdx',
     referenceGroup: 'create',
@@ -4574,7 +4606,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4590,7 +4622,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4605,7 +4637,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4648,7 +4680,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4664,7 +4696,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4679,7 +4711,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4694,7 +4726,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4739,7 +4771,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4754,7 +4786,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4769,7 +4801,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4812,7 +4844,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4827,7 +4859,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4842,7 +4874,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4857,7 +4889,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4900,7 +4932,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4915,7 +4947,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -4930,7 +4962,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -4973,7 +5005,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -4988,7 +5020,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5003,7 +5035,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5018,7 +5050,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5061,7 +5093,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5076,7 +5108,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5091,7 +5123,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5134,7 +5166,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5149,7 +5181,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5164,7 +5196,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5207,7 +5239,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5222,7 +5254,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5237,7 +5269,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5269,7 +5301,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5284,7 +5316,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5299,7 +5331,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5314,7 +5346,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5357,7 +5389,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5372,7 +5404,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5387,7 +5419,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5402,7 +5434,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,
@@ -5445,7 +5477,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -5460,7 +5492,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -5475,7 +5507,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: false,
+      supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,

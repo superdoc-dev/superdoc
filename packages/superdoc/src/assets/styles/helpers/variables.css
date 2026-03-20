@@ -99,10 +99,13 @@
   --sd-ui-toolbar-padding-y: 4px;
   --sd-ui-toolbar-item-gap: 2px;
   --sd-ui-toolbar-item-padding: 5px;
-  --sd-ui-toolbar-bg: transparent;
+  --sd-ui-toolbar-bg: var(--sd-ui-bg);
   --sd-ui-toolbar-button-text: var(--sd-ui-text);
   --sd-ui-toolbar-button-hover-bg: var(--sd-ui-hover-bg);
   --sd-ui-toolbar-button-active-bg: var(--sd-ui-active-bg);
+  --sd-ui-toolbar-z-index: 10;
+  --sd-ui-ruler-bg: var(--sd-ui-bg);
+  --sd-ui-ruler-z-index: 10;
 
   /* UI: context menu — cascades from semantic tier */
   --sd-ui-menu-bg: var(--sd-ui-bg);

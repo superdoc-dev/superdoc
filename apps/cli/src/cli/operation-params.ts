@@ -95,7 +95,7 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'in']);
 
 type ObjectSchemaVariant = {
   properties: Record<string, JsonSchema>;
@@ -478,10 +478,12 @@ const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'end', kind: 'flag', type: 'number', description: 'End offset within the block (character index).' },
 ];
 
-const INSERT_FLAT_PARAMS: CliOperationParamSpec[] = [
-  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
-  { name: 'offset', kind: 'flag', type: 'number', description: 'Character offset within the block for insertion.' },
-];
+// Same params but hidden from LLM tool schemas. Used for operations where
+// LLMs should use `target` or `ref` instead (comments, format).
+const TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN: CliOperationParamSpec[] = TEXT_TARGET_FLAT_PARAMS.map((p) => ({
+  ...p,
+  agentVisible: false as const,
+}));
 
 const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string', description: 'Node ID of the target list item.' },
@@ -536,7 +538,15 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     },
   ],
   // Text-range operations: flat flags (--block-id, --start, --end) as shortcuts for --target-json
-  'doc.insert': [...INSERT_FLAT_PARAMS],
+  'doc.insert': [
+    ...TEXT_TARGET_FLAT_PARAMS,
+    {
+      name: 'offset',
+      kind: 'flag',
+      type: 'number',
+      description: 'Character offset for insertion (alias for --start/--end with same value).',
+    },
+  ],
   'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.styles.apply': [
@@ -555,8 +565,8 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
       description: 'Style patch object with run and/or paragraph properties to apply.',
     },
   ],
-  'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN],
+  'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN],
   // List operations: flat flag (--node-id) as shortcut for --target-json, plus --input-json
   'doc.lists.insert': [
     {
@@ -854,7 +864,7 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
 };
 
 for (const operationId of FORMAT_OPERATION_IDS) {
-  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS];
+  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS_AGENT_HIDDEN];
 }
 
 // ---------------------------------------------------------------------------
@@ -1029,6 +1039,7 @@ function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata
       }
       for (const param of extraParams) {
         if (seenNames.has(param.name)) continue;
+        if (exclusions?.has(param.name)) continue;
         seenNames.add(param.name);
         mergedParams.push(param);
       }

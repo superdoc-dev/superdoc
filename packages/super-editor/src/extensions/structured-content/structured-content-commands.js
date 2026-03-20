@@ -1,12 +1,12 @@
 import { DOMParser as PMDOMParser } from 'prosemirror-model';
-import { Extension } from '@core/index';
-import { htmlHandler } from '@core/InputRule';
-import { findParentNode } from '@helpers/findParentNode';
+import { Extension } from '@core/Extension.js';
+import { htmlHandler } from '@core/InputRule.js';
+import { findParentNode } from '@helpers/findParentNode.js';
 import { generateRandomSigned32BitIntStrId } from '@core/helpers/generateDocxRandomId.js';
-import { getStructuredContentTagsById } from './structuredContentHelpers/getStructuredContentTagsById';
-import { getStructuredContentByGroup } from './structuredContentHelpers/getStructuredContentByGroup';
-import { createTagObject } from './structuredContentHelpers/tagUtils';
-import * as structuredContentHelpers from './structuredContentHelpers/index';
+import { getStructuredContentTagsById } from './structuredContentHelpers/getStructuredContentTagsById.js';
+import { getStructuredContentByGroup } from './structuredContentHelpers/getStructuredContentByGroup.js';
+import { createTagObject } from './structuredContentHelpers/tagUtils.js';
+import * as structuredContentHelpers from './structuredContentHelpers/index.js';
 
 const STRUCTURED_CONTENT_NAMES = ['structuredContent', 'structuredContentBlock'];
 

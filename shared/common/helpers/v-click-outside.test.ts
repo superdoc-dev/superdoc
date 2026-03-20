@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Mock } from 'vitest';
+import { describe, expect, it, mock, beforeEach, afterEach } from 'bun:test';
+
 import type { DirectiveBinding } from 'vue';
 import vClickOutside from './v-click-outside';
 
@@ -21,8 +21,8 @@ describe('v-click-outside directive', () => {
 
   beforeEach(() => {
     originalDocument = globalThis.document;
-    addEventListenerMock = vi.fn();
-    removeEventListenerMock = vi.fn();
+    addEventListenerMock = mock();
+    removeEventListenerMock = mock();
 
     (globalThis as unknown as { document: MockDocument }).document = {
       addEventListener: addEventListenerMock,
@@ -31,7 +31,6 @@ describe('v-click-outside directive', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     if (originalDocument === undefined) {
       delete (globalThis as unknown as { document?: MockDocument }).document;
     } else {
@@ -40,9 +39,9 @@ describe('v-click-outside directive', () => {
   });
 
   it('invokes binding when clicks originate outside the element and unregisters on unmount', () => {
-    const containsMock = vi.fn().mockReturnValue(false);
+    const containsMock = mock().mockReturnValue(false);
     const binding: DirectiveBinding<ClickOutsideHandler> = {
-      value: vi.fn(),
+      value: mock(),
       oldValue: undefined,
       arg: undefined,
       modifiers: {},

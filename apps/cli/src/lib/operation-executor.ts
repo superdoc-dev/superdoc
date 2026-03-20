@@ -1,4 +1,4 @@
-import { getActiveSessionId } from './context';
+import { resolveSessionId } from './context';
 import { CliError } from './errors';
 import { isRecord } from './guards';
 import { hasNonEmptyString } from './input-readers';
@@ -172,10 +172,9 @@ async function preflightCallContext(
     return;
   }
 
-  const activeSessionId = await getActiveSessionId();
-  if (!hasNonEmptyString(activeSessionId)) {
-    throw new CliError('NO_ACTIVE_DOCUMENT', `call: ${operationId} requires an active session or input.sessionId.`);
-  }
+  // Delegates to the centralized resolver: host mode hard-fails without an
+  // explicit session id; oneshot mode falls back to the active-session file.
+  await resolveSessionId(undefined, context.executionMode);
 }
 
 // ---------------------------------------------------------------------------

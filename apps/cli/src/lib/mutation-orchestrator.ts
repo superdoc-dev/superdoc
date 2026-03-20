@@ -284,5 +284,6 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
       }
     },
     context.sessionId,
+    context.executionMode,
   );
 }

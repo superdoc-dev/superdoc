@@ -32,6 +32,9 @@ export const containerStyles: Partial<CSSStyleDeclaration> = {
   padding: '0',
   // gap is set dynamically by renderer based on pageGap option (default: 24px)
   overflowY: 'auto',
+  // Contain child z-indices (SDT labels, hover states) so they cannot escape
+  // above sibling UI surfaces like the toolbar or ruler. (SD-2015)
+  isolation: 'isolate',
 };
 
 export const containerStylesHorizontal: Partial<CSSStyleDeclaration> = {
@@ -44,6 +47,7 @@ export const containerStylesHorizontal: Partial<CSSStyleDeclaration> = {
   // gap is set dynamically by renderer based on pageGap option (default: 20px for horizontal)
   overflowX: 'auto',
   minHeight: '100%',
+  isolation: 'isolate',
 };
 
 export const spreadStyles: Partial<CSSStyleDeclaration> = {

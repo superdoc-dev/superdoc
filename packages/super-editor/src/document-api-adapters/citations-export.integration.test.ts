@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
 import type { Editor } from '../core/Editor.js';
+import { resolvePublicReferenceBlockNodeId } from './helpers/reference-block-node-id.js';
 
 type LoadedDocData = Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -54,6 +55,25 @@ async function exportDocxFiles(editor: Editor): Promise<Record<string, string>> 
   const exportedBuffer = await editor.exportDocx();
   const exportedFiles = await zipper.getDocxData(exportedBuffer, true);
   return mapExportedFiles(exportedFiles);
+}
+
+function findBibliographyNode(editor: Editor, nodeId?: string) {
+  let found: { attrs: Record<string, unknown> } | null = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'bibliography') return true;
+    if (
+      nodeId !== undefined &&
+      node.attrs.sdBlockId !== nodeId &&
+      resolvePublicReferenceBlockNodeId(node, pos) !== nodeId
+    ) {
+      return true;
+    }
+    {
+      found = { attrs: node.attrs as Record<string, unknown> };
+      return false;
+    }
+  });
+  return found;
 }
 
 describe('citations export integration', () => {
@@ -155,5 +175,38 @@ describe('citations export integration', () => {
     const contentTypesXml = exportedFiles['[Content_Types].xml'];
     expect(contentTypesXml).toContain(`/customXml/itemProps${itemIndex}.xml`);
     expect(contentTypesXml).toContain('customXmlProperties+xml');
+  });
+
+  it('persists bibliography style through insert and configure', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    const insertResult = await Promise.resolve(
+      editor.doc.citations.bibliography.insert({
+        at: { kind: 'documentEnd' },
+        style: 'APA',
+      }),
+    );
+
+    expect(insertResult.success).toBe(true);
+    if (!insertResult.success) return;
+
+    const insertedNodeId = insertResult.bibliography.nodeId;
+    expect(findBibliographyNode(editor, insertedNodeId)?.attrs.style).toBe('APA');
+
+    const configureResult = await Promise.resolve(
+      editor.doc.citations.bibliography.configure({
+        target: insertResult.bibliography,
+        style: 'MLA',
+      }),
+    );
+
+    expect(configureResult.success).toBe(true);
+    expect(findBibliographyNode(editor)?.attrs.style).toBe('MLA');
   });
 });

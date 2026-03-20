@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { BoundDocApi } from './generated/client.js';
 import type { InvokeOptions } from './runtime/process.js';
 import { SuperDocCliError } from './runtime/errors.js';
 import { dispatchIntentTool } from './generated/intent-dispatch.generated.js';
@@ -131,11 +132,11 @@ export async function chooseTools(input: ToolChooserInput): Promise<{
 }
 
 function resolveDocApiMethod(
-  client: { doc: Record<string, unknown> },
+  documentHandle: BoundDocApi,
   operationId: string,
 ): (args: unknown, options?: InvokeOptions) => Promise<unknown> {
   const tokens = operationId.split('.').slice(1);
-  let cursor: unknown = client.doc;
+  let cursor: unknown = documentHandle;
 
   for (const token of tokens) {
     if (!isRecord(cursor) || !(token in cursor)) {
@@ -257,8 +258,14 @@ function validateOperationRequired(
   }
 }
 
+/**
+ * Dispatch a tool call against a bound document handle.
+ *
+ * The document handle injects session targeting automatically.
+ * Tool arguments should not contain `doc` or `sessionId`.
+ */
 export async function dispatchSuperDocTool(
-  client: { doc: Record<string, unknown> },
+  documentHandle: BoundDocApi,
   toolName: string,
   args: Record<string, unknown> = {},
   invokeOptions?: InvokeOptions,
@@ -281,11 +288,17 @@ export async function dispatchSuperDocTool(
   }
   validateToolArgs(toolName, args, tool);
 
-  // Strip doc/sessionId — the SDK client manages session targeting after doc.open().
-  const { doc: _doc, sessionId: _sid, ...cleanArgs } = args;
+  // Strip empty strings for known optional ID/enum params that LLMs fill with ""
+  // instead of omitting. Only target params where "" is never a valid value.
+  const STRIP_EMPTY = new Set(['parentId', 'parentCommentId', 'id', 'status']);
+  const cleanArgs: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (value === '' && STRIP_EMPTY.has(key)) continue;
+    cleanArgs[key] = value;
+  }
 
   return dispatchIntentTool(toolName, cleanArgs, (operationId, input) => {
-    const method = resolveDocApiMethod(client, operationId);
+    const method = resolveDocApiMethod(documentHandle, operationId);
     return method(input, invokeOptions);
   });
 }

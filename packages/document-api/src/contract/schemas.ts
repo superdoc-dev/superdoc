@@ -3050,10 +3050,18 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- styles.paragraph.* ---
   'styles.paragraph.setStyle': {
-    input: objectSchema({ target: paragraphTargetSchema, styleId: { type: 'string', minLength: 1 } }, [
-      'target',
-      'styleId',
-    ]),
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        styleId: {
+          type: 'string',
+          minLength: 1,
+          description:
+            "Named paragraph style ID (e.g. 'Normal', 'Heading1', 'BodyText'). Use superdoc_search to find a nearby paragraph, then inspect its style to determine the correct styleId.",
+        },
+      },
+      ['target', 'styleId'],
+    ),
     output: paragraphMutationResultSchemaFor('styles.paragraph.setStyle'),
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('styles.paragraph.setStyle'),

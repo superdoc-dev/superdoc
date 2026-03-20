@@ -3447,7 +3447,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       styleId: {
         type: 'string',
         description:
-          "Always pass a styleId to match the document formatting. Use the styleId from blocks data, or 'Normal' if blocks have no styleId. Common values: 'Normal', 'BodyText', 'ListParagraph'.",
+          'Pass the styleId shown in the blocks data for matching paragraphs. If no blocks have styleId values, OMIT this field — the engine copies fonts from nearby content automatically.',
       },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
@@ -3485,7 +3485,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         styleId: {
           type: 'string',
           description:
-            "Always pass a styleId to match the document formatting. Use 'Heading1' through 'Heading6' matching the level, or the heading styleId from blocks data.",
+            'Only pass styleId if the blocks data shows heading-styled blocks. If no blocks have styleId, OMIT this field — the engine copies fonts from nearby content automatically.',
         },
       },
       ['level'],

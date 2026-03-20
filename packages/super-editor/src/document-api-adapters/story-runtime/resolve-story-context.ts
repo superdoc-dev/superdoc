@@ -24,6 +24,8 @@
 import type { StoryLocator } from '@superdoc/document-api';
 import { storyLocatorToKey } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { decodeRef } from './story-ref-codec.js';
+import { parseStoryKey } from './story-key.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -103,4 +105,78 @@ export function resolveStoryFromInput(
 
   // Both agree — use the input locator (arbitrary, they are equivalent).
   return fromInput;
+}
+
+// ---------------------------------------------------------------------------
+// Ref → story extraction
+// ---------------------------------------------------------------------------
+
+/** Canonical body locator — avoids allocating a new object on every call. */
+const BODY_LOCATOR: StoryLocator = { kind: 'story', storyType: 'body' };
+
+/**
+ * Extracts a {@link StoryLocator} from an opaque ref string.
+ *
+ * - V4 refs carry an embedded story key that is decoded and parsed.
+ * - V3 refs are body-scoped by convention and return an explicit body
+ *   locator so that cross-story mismatch detection works correctly
+ *   (e.g., a body V3 ref paired with `in: footnote/...` is rejected).
+ * - Non-ref or unparseable strings return `undefined`.
+ *
+ * @param ref - An opaque text ref string, or `undefined`.
+ * @returns The decoded story locator, or `undefined` when `ref` is absent
+ *   or not a recognized ref format.
+ *
+ * @throws {DocumentApiAdapterError} `INVALID_TARGET` if the ref is V4
+ *   but carries a malformed story key.
+ */
+export function resolveStoryFromRef(ref: string | undefined): StoryLocator | undefined {
+  if (!ref) return undefined;
+
+  const decoded = decodeRef(ref);
+  if (!decoded) return undefined;
+
+  // V3 refs predate the multi-story system and are always body-scoped.
+  // Returning an explicit body locator (rather than undefined) ensures that
+  // pairing a V3 body ref with a non-body `in` or V4 ref is correctly
+  // detected as a cross-story mismatch.
+  if (decoded.v !== 4) return BODY_LOCATOR;
+
+  try {
+    return parseStoryKey(decoded.storyKey);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DocumentApiAdapterError('INVALID_TARGET', `Ref carries an invalid story key: ${message}`, {
+      ref,
+      storyKey: decoded.storyKey,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Composable mutation-context story resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the story locator from a mutation's full context.
+ *
+ * Composes three potential sources using the standard precedence rules:
+ * 1. `input.in` — explicit story targeting on the operation input
+ * 2. `target.story` — story threaded on a resolved target (from discovery APIs)
+ * 3. `ref` — V4 ref string whose embedded story key is decoded
+ *
+ * Sources 2 and 3 are merged (target takes precedence), then validated
+ * against source 1 via {@link resolveStoryFromInput}.
+ *
+ * @param context - The mutation context containing any combination of the three sources.
+ */
+export function resolveMutationStory(context: {
+  in?: StoryLocator;
+  target?: { story?: StoryLocator };
+  ref?: string;
+}): StoryLocator | undefined {
+  const storyFromRef = resolveStoryFromRef(context.ref);
+  const effectiveTargetStory = context.target?.story ?? storyFromRef;
+
+  return resolveStoryFromInput({ in: context.in }, effectiveTargetStory ? { story: effectiveTargetStory } : undefined);
 }

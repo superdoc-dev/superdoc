@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   encodeV3Ref: vi.fn(() => 'text:mock-encoded'),
   getRevision: vi.fn(() => '0'),
   checkRevision: vi.fn(),
+  resolveStoryRuntime: vi.fn(),
 }));
 
 vi.mock('./index-cache.js', () => ({
@@ -38,6 +39,13 @@ vi.mock('../plan-engine/revision-tracker.js', () => ({
 vi.mock('./node-address-resolver.js', () => ({
   isTextBlockCandidate: (candidate: { node: { inlineContent?: boolean; isTextblock?: boolean } }) =>
     Boolean(candidate.node?.inlineContent || candidate.node?.isTextblock),
+}));
+
+// Story runtime resolution: return a passthrough body runtime wrapping the
+// editor that was passed in. Tests that exercise non-body story targeting
+// should override this mock as needed.
+vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
+  resolveStoryRuntime: mocks.resolveStoryRuntime,
 }));
 
 // ---------------------------------------------------------------------------
@@ -170,6 +178,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getRevision.mockReturnValue('0');
   mocks.encodeV3Ref.mockReturnValue('text:mock-encoded');
+
+  // Default: resolveStoryRuntime returns a passthrough body runtime
+  // wrapping the editor that was passed in.
+  mocks.resolveStoryRuntime.mockImplementation((hostEditor: Editor) => ({
+    locator: { kind: 'story', storyType: 'body' },
+    storyKey: 'body',
+    editor: hostEditor,
+    kind: 'body',
+  }));
 });
 
 // ---------------------------------------------------------------------------

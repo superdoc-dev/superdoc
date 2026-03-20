@@ -32,7 +32,7 @@ export { StoryRuntimeCache } from './runtime-cache.js';
 
 // Resolution
 export { resolveStoryRuntime, getStoryRuntimeCache } from './resolve-story-runtime.js';
-export { resolveStoryFromInput } from './resolve-story-context.js';
+export { resolveStoryFromInput, resolveStoryFromRef, resolveMutationStory } from './resolve-story-context.js';
 
 // Story-specific resolvers
 export { resolveHeaderFooterSlotRuntime, resolveHeaderFooterPartRuntime } from './header-footer-story-runtime.js';

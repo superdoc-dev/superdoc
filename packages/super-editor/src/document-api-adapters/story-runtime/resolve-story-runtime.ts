@@ -36,6 +36,27 @@ import { getStoryRevisionStore, getStoryRevision, incrementStoryRevision } from 
 const cacheByHost = new WeakMap<Editor, StoryRuntimeCache>();
 
 /**
+ * Tracks which (editor, storyKey) pairs already have a host-store sync
+ * listener attached. Prevents duplicate listeners when the same live editor
+ * is re-resolved after cache eviction without destruction (e.g., live
+ * PresentationEditor sub-editors for header/footer slots).
+ */
+const hostStoreSyncedKeys = new WeakMap<Editor, Set<string>>();
+
+function hasHostStoreSyncListener(editor: Editor, storyKey: string): boolean {
+  return hostStoreSyncedKeys.get(editor)?.has(storyKey) ?? false;
+}
+
+function markHostStoreSyncListener(editor: Editor, storyKey: string): void {
+  let keys = hostStoreSyncedKeys.get(editor);
+  if (!keys) {
+    keys = new Set();
+    hostStoreSyncedKeys.set(editor, keys);
+  }
+  keys.add(storyKey);
+}
+
+/**
  * Returns the runtime cache for a host editor, creating it on first access.
  *
  * On first creation, subscribes to part-change events so that cached story
@@ -223,7 +244,13 @@ export function resolveStoryRuntime(
   // Keep the host-held store in sync with per-editor revision changes.
   // The per-editor counter is used by adapters via getRevision(runtime.editor).
   // The host-held store survives cache eviction of story runtimes.
-  if (store) {
+  //
+  // Guard: live sub-editors (e.g., PresentationEditor header/footer editors)
+  // survive cache eviction without destruction. Without this guard, each
+  // evict → re-resolve cycle would stack another listener on the same editor,
+  // causing a single edit to increment the store revision multiple times.
+  if (store && !hasHostStoreSyncListener(runtime.editor, storyKey)) {
+    markHostStoreSyncListener(runtime.editor, storyKey);
     runtime.editor.on('transaction', ({ transaction }: { transaction: { docChanged: boolean } }) => {
       if (transaction.docChanged) {
         incrementStoryRevision(store, storyKey);

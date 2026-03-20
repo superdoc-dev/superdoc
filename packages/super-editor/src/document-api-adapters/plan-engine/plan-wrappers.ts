@@ -78,10 +78,9 @@ import {
 } from '../helpers/node-address-resolver.js';
 import { getInlinePropertyCapabilityIssue, getTrackedInlinePropertySupportIssue } from './inline-property-guards.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
-import { resolveStoryFromInput } from '../story-runtime/resolve-story-context.js';
+import { resolveMutationStory } from '../story-runtime/resolve-story-context.js';
 import type { StoryRuntime } from '../story-runtime/story-types.js';
 import { decodeRef } from '../story-runtime/story-ref-codec.js';
-import { parseStoryKey } from '../story-runtime/story-key.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -146,31 +145,12 @@ export function disposeEphemeralWriteRuntime(runtime: StoryRuntime): void {
   }
 }
 
-function resolveStoryFromMutationRef(ref: string | undefined): StoryLocator | undefined {
-  if (!ref) return undefined;
-
-  const decodedRef = decodeRef(ref);
-  if (!decodedRef || decodedRef.v !== 4) {
-    return undefined;
-  }
-
-  try {
-    return parseStoryKey(decodedRef.storyKey);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new DocumentApiAdapterError('INVALID_TARGET', `Mutation ref carries an invalid story key: ${message}`, {
-      ref,
-      storyKey: decodedRef.storyKey,
-    });
-  }
-}
-
 function resolveSelectionMutationStory(request: SelectionMutationRequest): StoryLocator | undefined {
-  const targetWithStory = request.target as { story?: StoryLocator } | undefined;
-  const storyFromRef = resolveStoryFromMutationRef(request.ref);
-  const effectiveTargetStory = targetWithStory?.story ?? storyFromRef;
-
-  return resolveStoryFromInput({ in: request.in }, effectiveTargetStory ? { story: effectiveTargetStory } : undefined);
+  return resolveMutationStory({
+    in: request.in,
+    target: request.target as { story?: StoryLocator } | undefined,
+    ref: request.ref,
+  });
 }
 
 /**
@@ -1350,8 +1330,16 @@ export function replaceStructuredWrapper(
     );
   }
 
-  // Resolve story runtime from the input's `in` field.
-  const runtime = resolveWriteStoryRuntime(editor, (input as { in?: StoryLocator }).in);
+  // Resolve story from the full mutation context:
+  // - explicit input.in
+  // - target.story threaded by discovery APIs
+  // - V4 ref storyKey when the mutation is ref-only
+  const effectiveLocator = resolveMutationStory({
+    in: (input as { in?: StoryLocator }).in,
+    target: input.target as { story?: StoryLocator } | undefined,
+    ref: input.ref,
+  });
+  const runtime = resolveWriteStoryRuntime(editor, effectiveLocator);
 
   try {
     const storyEditor = runtime.editor;
@@ -1364,7 +1352,14 @@ export function replaceStructuredWrapper(
         : undefined;
 
     const textReceipt = executeStructuralReplaceWrapper(storyEditor, input, options);
-    if (runtime.commit) runtime.commit(editor);
+
+    // Only persist non-body story changes when the replace actually succeeded.
+    // Committing on failure would write unchanged content back to OOXML,
+    // potentially materializing inherited header/footer slots or emitting
+    // spurious partChanged events.
+    if (textReceipt.success && runtime.commit) {
+      runtime.commit(editor);
+    }
 
     if (!blockTarget) return textReceiptToSDReceipt(textReceipt);
 

@@ -2,15 +2,15 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
 import {
   assertDocumentApiReady,
+  collapseSelectionTargetToStart,
   deleteText,
-  findFirstTextRange,
   findFirstSelectionTarget,
   getDocumentText,
   insertText,
   listTrackChanges,
   replaceText,
 } from '../../helpers/document-api.js';
-import type { TextAddress, SelectionTarget, TextMutationReceipt } from '../../helpers/document-api.js';
+import type { SelectionTarget, TextMutationReceipt } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
 
@@ -25,13 +25,6 @@ async function assertTrackChangeTypeCount(
       return listed.total;
     })
     .toBeGreaterThanOrEqual(minimumCount);
-}
-
-function requireTextTarget(target: TextAddress | null, pattern: string): TextAddress {
-  if (target == null) {
-    throw new Error(`Could not find a text target for pattern "${pattern}".`);
-  }
-  return target;
 }
 
 function requireSelectionTarget(target: SelectionTarget | null, pattern: string): SelectionTarget {
@@ -96,16 +89,8 @@ test('direct insert via document-api', async ({ superdoc }) => {
   await superdoc.type('Hello World');
   await superdoc.waitForStable();
 
-  const target = requireTextTarget(await findFirstTextRange(superdoc.page, 'World'), 'World');
-
-  // insert requires a collapsed target range in the write adapter.
-  const insertionTarget: TextAddress = {
-    ...target,
-    range: {
-      start: target.range.start,
-      end: target.range.start,
-    },
-  };
+  const target = requireSelectionTarget(await findFirstSelectionTarget(superdoc.page, 'World'), 'World');
+  const insertionTarget = collapseSelectionTargetToStart(target);
 
   const receipt = await insertText(superdoc.page, { value: 'Beautiful ', target: insertionTarget });
   assertMutationSucceeded('insertText', receipt);

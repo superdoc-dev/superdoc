@@ -197,6 +197,13 @@ export async function findFirstSelectionTarget(
   return context?.target ?? null;
 }
 
+export function collapseSelectionTargetToStart(target: SelectionTarget): SelectionTarget {
+  return {
+    ...target,
+    end: target.start,
+  };
+}
+
 export async function addComment(page: Page, input: { target: TextAddress; text: string }): Promise<void> {
   await page.evaluate((payload) => (window as any).editor.doc.comments.create(payload), input);
 }
@@ -282,7 +289,7 @@ export async function listComments(
 
 export async function insertText(
   page: Page,
-  input: { value: string; target?: TextAddress; type?: 'text' | 'markdown' | 'html' },
+  input: { value: string; target?: SelectionTarget; ref?: string; type?: 'text' | 'markdown' | 'html' },
   options: { changeMode?: ChangeMode; dryRun?: boolean } = {},
 ): Promise<TextMutationReceipt> {
   return page.evaluate(({ payload, opts }) => (window as any).editor.doc.insert(payload, opts), {
@@ -293,7 +300,7 @@ export async function insertText(
 
 export async function replaceText(
   page: Page,
-  input: { target: TextAddress; text: string },
+  input: { target: SelectionTarget; text: string },
   options: { changeMode?: ChangeMode; dryRun?: boolean } = {},
 ): Promise<TextMutationReceipt> {
   return page.evaluate(({ payload, opts }) => (window as any).editor.doc.replace(payload, opts), {
@@ -304,7 +311,7 @@ export async function replaceText(
 
 export async function deleteText(
   page: Page,
-  input: { target: TextAddress },
+  input: { target: SelectionTarget },
   options: { changeMode?: ChangeMode; dryRun?: boolean } = {},
 ): Promise<TextMutationReceipt> {
   return page.evaluate(({ payload, opts }) => (window as any).editor.doc.delete(payload, opts), {

@@ -36,6 +36,7 @@ import type {
   TablesSetStyleInput,
   TablesClearStyleInput,
   TablesSetStyleOptionInput,
+  TableStyleOptionFlag,
   TablesSetBorderInput,
   TablesClearBorderInput,
   TablesApplyBorderPresetInput,
@@ -58,6 +59,16 @@ import type {
   TablesSetDefaultStyleInput,
   TablesClearDefaultStyleInput,
   DocumentMutationResult,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
+  TableBorderSpec,
+  TableBorderState,
+  TableMarginsState,
+  TableStyleOptionsPatch,
+  TableStyleOptionsState,
+  TableBorderPatch,
+  TableBorderApplyTo,
 } from '@superdoc/document-api';
 import type { Transaction } from 'prosemirror-state';
 import { TableMap } from 'prosemirror-tables';
@@ -68,6 +79,7 @@ import {
   resolveRowLocator,
   resolveColumnLocator,
   resolveCellLocator,
+  resolveTableScopedCellLocator,
   resolveMergeRangeLocator,
   resolvePostMutationTableAddress,
   getTableColumnCount,
@@ -1829,7 +1841,7 @@ export function tablesConvertFromTextAdapter(
 /**
  * tables.split — split a table into two tables at a given row index.
  *
- * All rows from `atRowIndex` onward are moved into a new table that is
+ * All rows from `rowIndex` onward are moved into a new table that is
  * inserted immediately after the original.
  */
 export function tablesSplitAdapter(
@@ -1842,7 +1854,7 @@ export function tablesSplitAdapter(
   const { candidate, address } = resolveTableLocator(editor, input, 'tables.split');
   const tableNode = candidate.node;
 
-  if (input.atRowIndex <= 0 || input.atRowIndex >= tableNode.childCount) {
+  if (input.rowIndex <= 0 || input.rowIndex >= tableNode.childCount) {
     return toTableFailure('INVALID_TARGET', 'Split row index must be between 1 and rowCount-1.');
   }
 
@@ -1857,7 +1869,7 @@ export function tablesSplitAdapter(
 
     // Collect rows for the new (second) table.
     const secondTableRows: import('prosemirror-model').Node[] = [];
-    for (let i = input.atRowIndex; i < tableNode.childCount; i++) {
+    for (let i = input.rowIndex; i < tableNode.childCount; i++) {
       secondTableRows.push(tableNode.child(i));
     }
 
@@ -1871,7 +1883,7 @@ export function tablesSplitAdapter(
     }
 
     const mapFrom = tr.mapping.maps.length;
-    for (let i = tableNode.childCount - 1; i >= input.atRowIndex; i--) {
+    for (let i = tableNode.childCount - 1; i >= input.rowIndex; i--) {
       const rp = tr.mapping.slice(mapFrom).map(rowPositions[i]);
       const rEnd = tr.mapping.slice(mapFrom).map(rowPositions[i] + tableNode.child(i).nodeSize);
       tr.delete(rp, rEnd);
@@ -2346,6 +2358,44 @@ export function tablesMergeCellsAdapter(
   }
 }
 
+function hasDefinedUnmergeCoordinates(
+  input: TablesUnmergeCellsInput,
+): input is Extract<TablesUnmergeCellsInput, { rowIndex: number; columnIndex: number }> {
+  const inputRecord = input as Record<string, unknown>;
+  return inputRecord.rowIndex != null && inputRecord.columnIndex != null;
+}
+
+function resolveUnmergeInput(editor: Editor, input: TablesUnmergeCellsInput) {
+  if (!hasDefinedUnmergeCoordinates(input)) {
+    return resolveCellLocator(editor, input, 'tables.unmergeCells');
+  }
+
+  const target = (input as { target?: unknown }).target;
+  if (target && typeof target === 'object' && !Array.isArray(target)) {
+    const blockTarget = target as { kind?: unknown; nodeType?: unknown };
+    if (blockTarget.kind === 'block' && blockTarget.nodeType === 'table') {
+      return resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells');
+    }
+    return resolveCellLocator(editor, { target: target as TableCellAddress }, 'tables.unmergeCells');
+  }
+
+  const nodeId = (input as { nodeId?: unknown }).nodeId;
+  if (typeof nodeId === 'string') {
+    const candidate = findBlockByNodeIdOnly(getBlockIndex(editor), nodeId);
+    if (!candidate) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'tables.unmergeCells: target was not found.', {
+        target: nodeId,
+      });
+    }
+
+    return candidate.nodeType === 'table'
+      ? resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells')
+      : resolveCellLocator(editor, { nodeId }, 'tables.unmergeCells');
+  }
+
+  return resolveCellLocator(editor, {}, 'tables.unmergeCells');
+}
+
 /**
  * tables.unmergeCells — unmerge a merged cell back into individual cells.
  *
@@ -2359,7 +2409,10 @@ export function tablesUnmergeCellsAdapter(
 ): TableMutationResult {
   rejectTrackedMode('tables.unmergeCells', options);
 
-  const resolved = resolveCellLocator(editor, input, 'tables.unmergeCells');
+  // Preserve read→write handoff from tables.getCells(): a TableCellInfo carries
+  // row/column metadata plus a cell nodeId. For nodeId-based inputs, resolve by
+  // actual node type instead of assuming coordinates always mean "table-scoped".
+  const resolved = resolveUnmergeInput(editor, input);
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
 
   const attrs = cellNode.attrs as Record<string, unknown>;
@@ -2798,10 +2851,58 @@ export function tablesClearStyleAdapter(
 }
 
 /**
+ * Word-effective defaults for `tblLook` when the element is absent (0x04A0).
+ * Defined locally to avoid a cross-layer dependency on the style-engine.
+ *
+ * @see ECMA-376 §17.4.56, Microsoft open specs for Word's tblLook defaults.
+ */
+const WORD_DEFAULT_TBL_LOOK: Readonly<Record<string, boolean>> = {
+  firstRow: true,
+  lastRow: false,
+  firstColumn: true,
+  lastColumn: false,
+  noHBand: false,
+  noVBand: true,
+};
+
+/** Maps every public `TableStyleOptionFlag` to its OOXML `tblLook` key. */
+type TblLookKey = 'firstRow' | 'lastRow' | 'firstColumn' | 'lastColumn' | 'noHBand' | 'noVBand';
+
+const FLAG_TO_OOXML_KEY: Record<Exclude<TableStyleOptionFlag, 'totalRow'>, TblLookKey> = {
+  headerRow: 'firstRow',
+  lastRow: 'lastRow',
+  firstColumn: 'firstColumn',
+  lastColumn: 'lastColumn',
+  bandedRows: 'noHBand',
+  bandedColumns: 'noVBand',
+};
+
+/** Flags whose OOXML semantics are inverted (enabled API → `false` on disk). */
+const INVERTED_FLAGS: ReadonlySet<TableStyleOptionFlag> = new Set<TableStyleOptionFlag>([
+  'bandedRows',
+  'bandedColumns',
+]);
+
+/**
+ * Resolves a public API flag to its OOXML tblLook key,
+ * normalizing the deprecated `totalRow` alias to `lastRow`.
+ */
+function resolveStyleOptionFlag(flag: TableStyleOptionFlag): TblLookKey {
+  const normalized: Exclude<TableStyleOptionFlag, 'totalRow'> = flag === 'totalRow' ? 'lastRow' : flag;
+  return FLAG_TO_OOXML_KEY[normalized];
+}
+
+/**
  * tables.setStyleOption — toggle a table style option flag.
  *
  * Maps API flags to OOXML `w:tblLook` attributes, inverting `bandedRows`
  * and `bandedColumns` to the `noHBand`/`noVBand` semantics.
+ *
+ * Behavioral notes:
+ * - Returns NO_OP when the explicit tblLook already holds the requested value.
+ * - On first write to a table with no explicit `tblLook`, seeds a full baseline
+ *   from Word's effective defaults (0x04A0) before applying the mutation.
+ * - Deletes stale `w:val` bitmask on any mutation (explicit attrs are canonical).
  */
 export function tablesSetStyleOptionAdapter(
   editor: Editor,
@@ -2817,31 +2918,29 @@ export function tablesSetStyleOptionAdapter(
   }
 
   try {
-    const tr = editor.state.tr;
+    const xmlKey = resolveStyleOptionFlag(input.flag);
+    const ooxmlValue = INVERTED_FLAGS.has(input.flag) ? !input.enabled : input.enabled;
+
     const currentAttrs = candidate.node.attrs as Record<string, unknown>;
     const currentTableProps = (currentAttrs.tableProperties ?? {}) as Record<string, unknown>;
-    const currentLook = {
-      ...((currentTableProps.tblLook ?? {}) as Record<string, unknown>),
-    };
+    const existingLook = currentTableProps.tblLook as Record<string, unknown> | undefined;
 
-    // Map API flag names to OOXML tblLook keys.
-    const flagMap: Record<string, string> = {
-      headerRow: 'firstRow',
-      totalRow: 'lastRow',
-      firstColumn: 'firstColumn',
-      lastColumn: 'lastColumn',
-      bandedRows: 'noHBand',
-      bandedColumns: 'noVBand',
-    };
-
-    const xmlKey = flagMap[input.flag];
-    if (xmlKey) {
-      // bandedRows/bandedColumns are inverted: enabled → noHBand = false.
-      const value = input.flag === 'bandedRows' || input.flag === 'bandedColumns' ? !input.enabled : input.enabled;
-      currentLook[xmlKey] = value;
+    // NO_OP: if tblLook already has an explicit value matching the request, skip.
+    if (existingLook != null && existingLook[xmlKey] === ooxmlValue) {
+      return toTableFailure('NO_OP', `Style option '${input.flag}' already has the requested value.`);
     }
 
-    const updatedTableProps = { ...currentTableProps, tblLook: currentLook };
+    // Seed from Word defaults on first materialization, then apply the mutation.
+    const updatedLook: Record<string, unknown> =
+      existingLook != null ? { ...existingLook } : { ...WORD_DEFAULT_TBL_LOOK };
+
+    updatedLook[xmlKey] = ooxmlValue;
+
+    // Delete stale w:val bitmask — explicit attrs are the canonical representation.
+    delete updatedLook.val;
+
+    const updatedTableProps = { ...currentTableProps, tblLook: updatedLook };
+    const tr = editor.state.tr;
     tr.setNodeMarkup(candidate.pos, null, {
       ...currentAttrs,
       tableProperties: updatedTableProps,
@@ -3403,6 +3502,441 @@ export function tablesClearCellSpacingAdapter(
 }
 
 // ---------------------------------------------------------------------------
+// Convenience operation helpers (SD-2129)
+// ---------------------------------------------------------------------------
+
+/** Reverse map from OOXML tblLook key to API style-option flag. */
+const XML_KEY_TO_STYLE_OPTION: Record<TblLookKey, keyof TableStyleOptionsState> = {
+  firstRow: 'headerRow',
+  lastRow: 'lastRow',
+  firstColumn: 'firstColumn',
+  lastColumn: 'lastColumn',
+  noHBand: 'bandedRows',
+  noVBand: 'bandedColumns',
+};
+
+/**
+ * Read `tblLook` flags as `TableStyleOptionsState`.
+ * Emits only explicitly stored flags — absent OOXML keys stay omitted.
+ */
+function readTableLookAsState(tblLook: Record<string, unknown> | undefined): TableStyleOptionsState | undefined {
+  if (!tblLook) return undefined;
+
+  const result: TableStyleOptionsState = {};
+  let hasAny = false;
+
+  for (const [xmlKey, apiFlag] of Object.entries(XML_KEY_TO_STYLE_OPTION)) {
+    if (xmlKey in tblLook && typeof tblLook[xmlKey] === 'boolean') {
+      const rawValue = tblLook[xmlKey] as boolean;
+      (result as Record<string, boolean>)[apiFlag] = INVERTED_FLAGS.has(apiFlag) ? !rawValue : rawValue;
+      hasAny = true;
+    }
+  }
+
+  return hasAny ? result : undefined;
+}
+
+/**
+ * Merge API style-option flags into an existing `tblLook` object.
+ * Returns the updated tblLook (new object, original not mutated).
+ */
+function writeTableLook(
+  currentLook: Record<string, unknown> | undefined,
+  patch: TableStyleOptionsPatch,
+): Record<string, unknown> {
+  // Match tables.setStyleOption behavior: once tblLook is materialized,
+  // omitted flags should preserve Word's effective default mask.
+  const result = currentLook ? { ...currentLook } : { ...WORD_DEFAULT_TBL_LOOK };
+  for (const [apiFlag, value] of Object.entries(patch) as Array<[keyof TableStyleOptionsPatch, boolean | undefined]>) {
+    if (value === undefined) continue;
+    const normalizedFlag = apiFlag as TableStyleOptionFlag;
+    const xmlKey = resolveStyleOptionFlag(normalizedFlag);
+    result[xmlKey] = INVERTED_FLAGS.has(normalizedFlag) ? !value : value;
+  }
+  delete result.val;
+  return result;
+}
+
+/** Convert API `TableBorderSpec` to OOXML border storage. pt → eighths-of-a-point. */
+function normalizeBorderSpecFromApi(spec: TableBorderSpec): Record<string, unknown> {
+  return {
+    val: spec.lineStyle,
+    size: Math.round(spec.lineWeightPt * 8),
+    color: spec.color,
+  };
+}
+
+/** Convert OOXML border storage to API `TableBorderSpec`. Eighths-of-a-point → pt. */
+function normalizeBorderSpecToApi(border: Record<string, unknown>): TableBorderSpec {
+  const rawColor = typeof border.color === 'string' ? border.color : 'auto';
+  // `auto` stays lowercase per the public contract; hex values are uppercased.
+  const color = rawColor === 'auto' ? 'auto' : rawColor.toUpperCase();
+  return {
+    lineStyle: String(border.val ?? 'single'),
+    lineWeightPt: typeof border.size === 'number' ? border.size / 8 : 0,
+    color,
+  };
+}
+
+/** The OOXML representation of "no border" — used when API sends `null`. */
+const CLEARED_BORDER_OOXML = { val: 'none', size: 0, color: 'auto' } as const;
+
+/** Returns true if an OOXML border value represents an explicit clear. */
+function isClearedBorder(border: Record<string, unknown>): boolean {
+  return border.val === 'none' || border.val === 'nil';
+}
+
+/** Convert OOXML border to the three-state API read model. */
+function readBorderEdge(border: unknown): TableBorderSpec | null | undefined {
+  if (!border || typeof border !== 'object') return undefined;
+  const b = border as Record<string, unknown>;
+  if (isClearedBorder(b)) return null;
+  return normalizeBorderSpecToApi(b);
+}
+
+/** Read OOXML borders as `TableBorderState`. Returns undefined if no direct formatting. */
+function readBordersAsState(borders: unknown): TableBorderState | undefined {
+  if (!borders || typeof borders !== 'object') return undefined;
+  const b = borders as Record<string, unknown>;
+
+  const result: TableBorderState = {};
+  let hasAny = false;
+  const edgeNames = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'] as const;
+
+  for (const edge of edgeNames) {
+    if (edge in b) {
+      const value = readBorderEdge(b[edge]);
+      if (value !== undefined) {
+        (result as Record<string, TableBorderSpec | null>)[edge] = value;
+        hasAny = true;
+      }
+    }
+  }
+
+  return hasAny ? result : undefined;
+}
+
+type TableCellMarginKey = 'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft' | 'marginStart' | 'marginEnd';
+
+const TABLE_MARGIN_KEY_GROUPS: ReadonlyArray<{
+  keys: readonly TableCellMarginKey[];
+  apiKey: keyof TableMarginsState;
+}> = [
+  { keys: ['marginTop'], apiKey: 'topPt' },
+  { keys: ['marginRight', 'marginEnd'], apiKey: 'rightPt' },
+  { keys: ['marginBottom'], apiKey: 'bottomPt' },
+  { keys: ['marginLeft', 'marginStart'], apiKey: 'leftPt' },
+] as const;
+
+function readCellMarginEntry(
+  cellMargins: Record<string, unknown>,
+  keys: readonly TableCellMarginKey[],
+): { value?: number } | undefined {
+  for (const key of keys) {
+    const entry = cellMargins[key] as { value?: number } | undefined;
+    if (entry && typeof entry.value === 'number') return entry;
+  }
+  return undefined;
+}
+
+/** Read OOXML cell margins as `TableMarginsState`. Returns undefined if no direct formatting. */
+function readCellMarginsAsState(cellMargins: unknown): TableMarginsState | undefined {
+  if (!cellMargins || typeof cellMargins !== 'object') return undefined;
+  const cm = cellMargins as Record<string, unknown>;
+
+  const result: TableMarginsState = {};
+  let hasAny = false;
+
+  for (const { keys, apiKey } of TABLE_MARGIN_KEY_GROUPS) {
+    const entry = readCellMarginEntry(cm, keys);
+    if (entry && typeof entry.value === 'number') {
+      result[apiKey] = entry.value / POINTS_TO_TWIPS;
+      hasAny = true;
+    }
+  }
+
+  return hasAny ? result : undefined;
+}
+
+/** Read OOXML cell spacing as API Pt. Returns undefined if absent. */
+function readCellSpacingPt(spacing: unknown): number | undefined {
+  if (!spacing || typeof spacing !== 'object') return undefined;
+  const s = spacing as { value?: number };
+  if (typeof s.value !== 'number') return undefined;
+  return s.value / POINTS_TO_TWIPS;
+}
+
+/**
+ * Expand `applyTo` target into the concrete edge patch.
+ */
+function expandApplyToEdges(
+  applyTo: TableBorderApplyTo,
+): Array<'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV'> {
+  switch (applyTo) {
+    case 'all':
+      return ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'];
+    case 'outside':
+      return ['top', 'bottom', 'left', 'right'];
+    case 'inside':
+      return ['insideH', 'insideV'];
+    default:
+      return [applyTo as 'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV'];
+  }
+}
+
+/**
+ * Build the OOXML border patch from the resolved edge map.
+ * Each edge is either a border spec (from API) or null (clear).
+ */
+function buildOoxmlBorderPatch(
+  currentBorders: Record<string, unknown>,
+  edgePatch: TableBorderPatch,
+): Record<string, unknown> {
+  const result = { ...currentBorders };
+  const edges = Object.entries(edgePatch) as Array<[string, TableBorderSpec | null | undefined]>;
+  for (const [edge, value] of edges) {
+    if (value === undefined) continue;
+    result[edge] = value === null ? { ...CLEARED_BORDER_OOXML } : normalizeBorderSpecFromApi(value);
+  }
+  return result;
+}
+
+/**
+ * Check if the requested style patch is already satisfied by current table properties.
+ * Compares against raw direct flag keys, not inferred defaults.
+ */
+function isStylePatchSatisfied(currentTableProps: Record<string, unknown>, input: TablesApplyStyleInput): boolean {
+  if (input.styleId !== undefined) {
+    if (currentTableProps.tableStyleId !== input.styleId) return false;
+  }
+
+  if (input.styleOptions) {
+    const currentLook = (currentTableProps.tblLook ?? {}) as Record<string, unknown>;
+    for (const [apiFlag, value] of Object.entries(input.styleOptions)) {
+      if (value === undefined) continue;
+      const normalizedFlag = apiFlag as TableStyleOptionFlag;
+      const xmlKey = resolveStyleOptionFlag(normalizedFlag);
+      const expectedXmlValue = INVERTED_FLAGS.has(normalizedFlag) ? !value : value;
+      if (!(xmlKey in currentLook) || currentLook[xmlKey] !== expectedXmlValue) return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Check if the requested table-options patch is already satisfied by current table properties.
+ */
+function isTableOptionsSatisfied(
+  currentTableProps: Record<string, unknown>,
+  input: TablesSetTableOptionsInput,
+): boolean {
+  if (input.defaultCellMargins !== undefined) {
+    const cm = currentTableProps.cellMargins as Record<string, unknown> | undefined;
+    if (!cm) return false;
+    const m = input.defaultCellMargins;
+    const pairs: Array<[readonly TableCellMarginKey[], number]> = [
+      [['marginTop'], m.topPt],
+      [['marginRight', 'marginEnd'], m.rightPt],
+      [['marginBottom'], m.bottomPt],
+      [['marginLeft', 'marginStart'], m.leftPt],
+    ];
+    for (const [ooxmlKeys, ptValue] of pairs) {
+      const entry = readCellMarginEntry(cm, ooxmlKeys);
+      if (!entry || entry.value !== Math.round(ptValue * POINTS_TO_TWIPS)) return false;
+    }
+  }
+
+  if (input.cellSpacingPt !== undefined) {
+    const spacing = currentTableProps.tableCellSpacing as { value?: number } | undefined;
+    if (input.cellSpacingPt === null) {
+      if (spacing !== undefined && spacing !== null) return false;
+    } else {
+      if (!spacing || spacing.value !== Math.round(input.cellSpacingPt * POINTS_TO_TWIPS)) return false;
+    }
+  }
+
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Convenience adapters (SD-2129)
+// ---------------------------------------------------------------------------
+
+/**
+ * tables.applyStyle — apply a table style and/or style options in one call.
+ */
+export function tablesApplyStyleAdapter(
+  editor: Editor,
+  input: TablesApplyStyleInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  rejectTrackedMode('tables.applyStyle', options);
+
+  const { candidate, address } = resolveTableLocator(editor, input, 'tables.applyStyle');
+
+  if (options?.dryRun) {
+    return buildTableSuccess(address);
+  }
+
+  try {
+    const currentAttrs = candidate.node.attrs as Record<string, unknown>;
+    const currentTableProps = (currentAttrs.tableProperties ?? {}) as Record<string, unknown>;
+
+    if (isStylePatchSatisfied(currentTableProps, input)) {
+      return toTableFailure('NO_OP', 'tables.applyStyle did not produce a change.');
+    }
+
+    const updatedTableProps = { ...currentTableProps };
+
+    if (input.styleId !== undefined) {
+      updatedTableProps.tableStyleId = input.styleId;
+    }
+
+    if (input.styleOptions) {
+      const currentLook = asRecord(updatedTableProps.tblLook);
+      updatedTableProps.tblLook = writeTableLook(currentLook, input.styleOptions as Record<string, boolean>);
+    }
+
+    const tr = editor.state.tr;
+    tr.setNodeMarkup(candidate.pos, null, {
+      ...currentAttrs,
+      tableProperties: updatedTableProps,
+      ...syncExtractedTableAttrs(updatedTableProps),
+    });
+    applyDirectMutationMeta(tr);
+    editor.dispatch(tr);
+    clearIndexCache(editor);
+    return buildTableSuccess(resolvePostMutationTableAddress(editor, candidate.pos, address.nodeId, tr));
+  } catch {
+    return toTableFailure('INVALID_TARGET', 'Table style application could not be applied.');
+  }
+}
+
+/**
+ * tables.setBorders — set borders on a table using a target set or per-edge patch.
+ */
+export function tablesSetBordersAdapter(
+  editor: Editor,
+  input: TablesSetBordersInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  rejectTrackedMode('tables.setBorders', options);
+
+  const { candidate, address } = resolveTableLocator(editor, input, 'tables.setBorders');
+
+  if (options?.dryRun) {
+    return buildTableSuccess(address);
+  }
+
+  try {
+    // Resolve the edge patch from the input mode
+    let edgePatch: TableBorderPatch;
+    if (input.mode === 'applyTo') {
+      const edges = expandApplyToEdges(input.applyTo);
+      edgePatch = {};
+      for (const edge of edges) {
+        (edgePatch as Record<string, TableBorderSpec | null>)[edge] = input.border;
+      }
+    } else {
+      edgePatch = input.edges;
+    }
+
+    const tr = editor.state.tr;
+    const currentAttrs = candidate.node.attrs as Record<string, unknown>;
+    const currentTableProps = { ...((currentAttrs.tableProperties ?? {}) as Record<string, unknown>) };
+    const currentBorders = (currentTableProps.borders ?? {}) as Record<string, unknown>;
+
+    currentTableProps.borders = buildOoxmlBorderPatch(currentBorders, edgePatch);
+
+    tr.setNodeMarkup(candidate.pos, null, {
+      ...currentAttrs,
+      tableProperties: currentTableProps,
+      ...syncExtractedTableAttrs(currentTableProps),
+    });
+
+    // Propagate to cell borders for each edge in the patch
+    const patchEntries = Object.entries(edgePatch) as Array<[string, TableBorderSpec | null | undefined]>;
+    for (const [edge, value] of patchEntries) {
+      if (value === undefined) continue;
+      if (!isBoundaryEdge(edge)) continue;
+      const ooxmlSpec = value === null ? { ...CLEARED_BORDER_OOXML } : normalizeBorderSpecFromApi(value);
+      applyTableEdgeToCellBorders(tr, candidate.pos, candidate.node, edge as TableBorderEdgeForCells, ooxmlSpec);
+    }
+
+    applyDirectMutationMeta(tr);
+    editor.dispatch(tr);
+    clearIndexCache(editor);
+    return buildTableSuccess(resolvePostMutationTableAddress(editor, candidate.pos, address.nodeId, tr));
+  } catch {
+    return toTableFailure('INVALID_TARGET', 'Table border update could not be applied.');
+  }
+}
+
+/**
+ * tables.setTableOptions — set table-level default cell margins and/or cell spacing.
+ */
+export function tablesSetTableOptionsAdapter(
+  editor: Editor,
+  input: TablesSetTableOptionsInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  rejectTrackedMode('tables.setTableOptions', options);
+
+  const { candidate, address } = resolveTableLocator(editor, input, 'tables.setTableOptions');
+
+  if (options?.dryRun) {
+    return buildTableSuccess(address);
+  }
+
+  try {
+    const currentAttrs = candidate.node.attrs as Record<string, unknown>;
+    const currentTableProps = (currentAttrs.tableProperties ?? {}) as Record<string, unknown>;
+
+    if (isTableOptionsSatisfied(currentTableProps, input)) {
+      return toTableFailure('NO_OP', 'tables.setTableOptions did not produce a change.');
+    }
+
+    const updatedTableProps = { ...currentTableProps };
+
+    if (input.defaultCellMargins !== undefined) {
+      const m = input.defaultCellMargins;
+      updatedTableProps.cellMargins = {
+        marginTop: { value: Math.round(m.topPt * POINTS_TO_TWIPS), type: 'dxa' },
+        marginRight: { value: Math.round(m.rightPt * POINTS_TO_TWIPS), type: 'dxa' },
+        marginBottom: { value: Math.round(m.bottomPt * POINTS_TO_TWIPS), type: 'dxa' },
+        marginLeft: { value: Math.round(m.leftPt * POINTS_TO_TWIPS), type: 'dxa' },
+      };
+    }
+
+    if (input.cellSpacingPt !== undefined) {
+      if (input.cellSpacingPt === null) {
+        delete updatedTableProps.tableCellSpacing;
+        delete updatedTableProps.tblCellSpacing;
+      } else {
+        updatedTableProps.tableCellSpacing = {
+          value: Math.round(input.cellSpacingPt * POINTS_TO_TWIPS),
+          type: 'dxa',
+        };
+      }
+    }
+
+    const tr = editor.state.tr;
+    tr.setNodeMarkup(candidate.pos, null, {
+      ...currentAttrs,
+      tableProperties: updatedTableProps,
+      ...syncExtractedTableAttrs(updatedTableProps),
+    });
+    applyDirectMutationMeta(tr);
+    editor.dispatch(tr);
+    clearIndexCache(editor);
+    return buildTableSuccess(resolvePostMutationTableAddress(editor, candidate.pos, address.nodeId, tr));
+  } catch {
+    return toTableFailure('INVALID_TARGET', 'Table options could not be applied.');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // create.table
 // ---------------------------------------------------------------------------
 
@@ -3632,8 +4166,10 @@ export function tablesGetCellsAdapter(editor: Editor, input: TablesGetCellsInput
     if (input.columnIndex != null && col !== input.columnIndex) continue;
 
     const attrs = candidate.node.attrs as Record<string, unknown>;
+    const cellNodeId = candidate.nodeId || resolveCellNodeId(attrs);
     cells.push({
-      nodeId: candidate.nodeId || resolveCellNodeId(attrs),
+      nodeId: cellNodeId,
+      address: { kind: 'block', nodeType: 'tableCell', nodeId: cellNodeId },
       rowIndex: row,
       columnIndex: col,
       colspan: typeof attrs.colspan === 'number' ? attrs.colspan : 1,
@@ -3680,17 +4216,17 @@ export function tablesGetPropertiesAdapter(editor: Editor, input: TablesGetPrope
     if (preferredWidth != null) result.preferredWidth = preferredWidth;
   }
 
-  const look = resolveTableLook(tp);
-  if (look) {
-    result.styleOptions = {
-      headerRow: look.firstRow === true,
-      totalRow: look.lastRow === true,
-      firstColumn: look.firstColumn === true,
-      lastColumn: look.lastColumn === true,
-      bandedRows: look.noHBand !== true,
-      bandedColumns: look.noVBand !== true,
-    };
-  }
+  const styleOptions = readTableLookAsState(resolveTableLook(tp));
+  if (styleOptions) result.styleOptions = styleOptions;
+
+  const borders = readBordersAsState(tp.borders);
+  if (borders) result.borders = borders;
+
+  const defaultCellMargins = readCellMarginsAsState(tp.cellMargins);
+  if (defaultCellMargins) result.defaultCellMargins = defaultCellMargins;
+
+  const cellSpacingPt = readCellSpacingPt(tp.tableCellSpacing);
+  if (cellSpacingPt !== undefined) result.cellSpacingPt = cellSpacingPt;
 
   return result;
 }

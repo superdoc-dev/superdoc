@@ -55,6 +55,8 @@ import { IndexEntry } from './index-entry/index.js';
 import { TableOfContentsEntry } from './table-of-contents-entry/index.js';
 import { CrossReference } from './cross-reference/index.js';
 import { SequenceField } from './sequence-field/index.js';
+import { DocumentStatField } from './document-stat-field/index.js';
+import { FieldUpdate } from './field-update/index.js';
 import { Citation } from './citation/index.js';
 import { Bibliography } from './bibliography/index.js';
 import { AuthorityEntry } from './authority-entry/index.js';
@@ -198,6 +200,8 @@ const getStarterExtensions = () => {
     TableOfContentsEntry,
     CrossReference,
     SequenceField,
+    DocumentStatField,
+    FieldUpdate,
     Citation,
     Bibliography,
     AuthorityEntry,
@@ -307,6 +311,8 @@ export {
   PermissionRanges,
   CrossReference,
   SequenceField,
+  DocumentStatField,
+  FieldUpdate,
   Citation,
   Bibliography,
   AuthorityEntry,

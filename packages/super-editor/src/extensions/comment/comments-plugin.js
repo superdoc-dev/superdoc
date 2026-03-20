@@ -8,6 +8,7 @@ import {
   resolveCommentById,
   translateFormatChangesToEnglish,
 } from './comments-helpers.js';
+import { resolveTrackedFormatDisplay } from './tracked-change-display.js';
 
 // Example tracked-change keys, if needed
 import { comments_module_events } from '@superdoc/common';
@@ -990,6 +991,7 @@ const normalizeFormatAttrsForCommentText = (attrs = {}, nodes) => {
 const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsertion }) => {
   let trackedChangeText = '';
   let deletionText = '';
+  let trackedChangeDisplayType = null;
 
   // Extract deletion text first
   if (trackedChangeType === TrackDeleteMarkName || isDeletionInsertion) {
@@ -1014,12 +1016,24 @@ const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsert
 
   // If this is a format change, let's get the string of what changes were made
   if (trackedChangeType === TrackFormatMarkName) {
-    trackedChangeText = translateFormatChangesToEnglish(normalizeFormatAttrsForCommentText(mark.attrs, nodes));
+    const normalizedFormatAttrs = normalizeFormatAttrsForCommentText(mark.attrs, nodes);
+    const trackedFormatDisplay = resolveTrackedFormatDisplay({
+      attrs: normalizedFormatAttrs,
+      nodes,
+    });
+
+    if (trackedFormatDisplay) {
+      trackedChangeText = trackedFormatDisplay.trackedChangeText;
+      trackedChangeDisplayType = trackedFormatDisplay.trackedChangeDisplayType;
+    } else {
+      trackedChangeText = translateFormatChangesToEnglish(normalizedFormatAttrs);
+    }
   }
 
   return {
     deletionText,
     trackedChangeText,
+    trackedChangeDisplayType,
   };
 };
 
@@ -1032,17 +1046,23 @@ const createOrUpdateTrackedChangeComment = ({
   documentId,
   trackedChangesForId,
 }) => {
-  const trackedMark = marks.insertedMark || marks.deletionMark || marks.formatMark;
+  const node = nodes[0];
+  // Use pre-computed tracked changes when available (batch import path),
+  // otherwise scan the document (real-time edit path).
+  const fallbackTrackedMark = marks.insertedMark || marks.deletionMark || marks.formatMark;
+  if (!fallbackTrackedMark) {
+    return;
+  }
+
+  const fallbackTrackedMarkId = fallbackTrackedMark.attrs?.id;
+  const trackedChangesWithId = trackedChangesForId || getTrackChanges(newEditorState, fallbackTrackedMarkId);
+  const liveFormatMark = trackedChangesWithId.find(({ mark }) => mark.type.name === TrackFormatMarkName)?.mark ?? null;
+  const trackedMark = marks.insertedMark || marks.deletionMark || liveFormatMark || marks.formatMark;
   const { type, attrs } = trackedMark;
 
   const { name: trackedChangeType } = type;
   const { author, authorEmail, authorImage, date, importedAuthor } = attrs;
   const id = attrs.id;
-
-  const node = nodes[0];
-  // Use pre-computed tracked changes when available (batch import path),
-  // otherwise scan the document (real-time edit path).
-  const trackedChangesWithId = trackedChangesForId || getTrackChanges(newEditorState, id);
 
   // Check metadata first - this should be set correctly by groupChanges() in createCommentForTrackChanges
   // for both newly created and imported tracked changes
@@ -1059,7 +1079,7 @@ const createOrUpdateTrackedChangeComment = ({
 
   // Collect nodes from the tracked changes found
   // We need to get the actual nodes at those positions
-  let nodesWithMark = [];
+  const nodesWithMark = [];
   trackedChangesWithId.forEach(({ from, to }) => {
     newEditorState.doc.nodesBetween(from, to, (node) => {
       // Only collect inline text nodes
@@ -1094,8 +1114,6 @@ const createOrUpdateTrackedChangeComment = ({
       ...(!hasInsertNode && nodes?.length ? nodes : []),
       ...(!hasDeleteNode && deletionNodes?.length ? deletionNodes : []),
     ];
-    // safety net for identity dedupe
-    // work is done above
     nodesToUse = Array.from(new Set([...nodesWithMark, ...fallbackNodes]));
   } else {
     // For non-replacements, use nodes found in document or fall back to step nodes
@@ -1106,8 +1124,7 @@ const createOrUpdateTrackedChangeComment = ({
     return;
   }
 
-  const { deletionText, trackedChangeText } = getTrackedChangeText({
-    state: newEditorState,
+  const { deletionText, trackedChangeText, trackedChangeDisplayType } = getTrackedChangeText({
     nodes: nodesToUse,
     mark: trackedMark,
     trackedChangeType,
@@ -1126,6 +1143,7 @@ const createOrUpdateTrackedChangeComment = ({
     changeId: id,
     trackedChangeType: isDeletionInsertion ? 'both' : trackedChangeType,
     trackedChangeText,
+    trackedChangeDisplayType,
     deletedText: marks.deletionMark ? deletionText : null,
     author,
     authorEmail,

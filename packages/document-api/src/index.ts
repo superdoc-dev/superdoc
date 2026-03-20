@@ -11,7 +11,11 @@ export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
 export type { DiffAdapter, DiffApi } from './diff/diff.js';
 export * from './diff/diff.types.js';
-export type { SelectionMutationAdapter, SelectionMutationRequest } from './selection-mutation.js';
+export type {
+  SelectionMutationAdapter,
+  SelectionMutationRequest,
+  SelectionInsertRequest,
+} from './selection-mutation.js';
 export type {
   RangeAnchor,
   DocumentEdgeAnchor,
@@ -265,6 +269,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
   TablesGetInput,
   TablesGetOutput,
   TablesGetCellsInput,
@@ -311,7 +318,16 @@ import type {
   DiffApplyInput,
   DiffApplyOptions,
 } from './diff/diff.types.js';
-import { executeTableLocatorOp, executeRowLocatorOp, executeDocumentLevelTableOp } from './tables/tables.js';
+import {
+  executeTableLocatorOp,
+  executeRowLocatorOp,
+  executeCellOrTableScopedCellLocatorOp,
+  executeDocumentLevelTableOp,
+  normalizeTablesSplitInput,
+  executeTablesApplyStyle,
+  executeTablesSetBorders,
+  executeTablesSetTableOptions,
+} from './tables/tables.js';
 import type {
   ParagraphsAdapter,
   ParagraphFormatApi,
@@ -335,6 +351,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
   ParagraphMutationResult,
 } from './paragraphs/paragraphs.js';
 import {
@@ -357,6 +375,8 @@ import {
   executeParagraphsClearBorder,
   executeParagraphsSetShading,
   executeParagraphsClearShading,
+  executeParagraphsSetDirection,
+  executeParagraphsClearDirection,
 } from './paragraphs/paragraphs.js';
 import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
 import type {
@@ -1161,6 +1181,10 @@ export type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
+  ParagraphDirection,
+  AlignmentPolicy,
 } from './paragraphs/paragraphs.js';
 export {
   PARAGRAPH_ALIGNMENTS,
@@ -1169,6 +1193,8 @@ export {
   BORDER_SIDES,
   CLEAR_BORDER_SIDES,
   LINE_RULES,
+  PARAGRAPH_DIRECTIONS,
+  ALIGNMENT_POLICIES,
 } from './paragraphs/paragraphs.js';
 export type {
   BlockAddress,
@@ -1318,7 +1344,7 @@ export { DocumentApiValidationError } from './errors.js';
 export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
 export type { StructuralReceiptParams } from './receipt-bridge.js';
 export { isBlockNodeAddress } from './validation-primitives.js';
-export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
+export type { InsertInput, InsertContentType, TextInsertInput, LegacyInsertInput } from './insert/insert.js';
 export { isStructuralInsertInput } from './insert/insert.js';
 export type { ReplaceInput, TextReplaceInput } from './replace/replace.js';
 export { isStructuralReplaceInput } from './replace/replace.js';
@@ -1362,6 +1388,9 @@ export interface TablesApi {
   setCellPadding(input: TablesSetCellPaddingInput, options?: MutationOptions): TableMutationResult;
   setCellSpacing(input: TablesSetCellSpacingInput, options?: MutationOptions): TableMutationResult;
   clearCellSpacing(input: TablesClearCellSpacingInput, options?: MutationOptions): TableMutationResult;
+  applyStyle(input: TablesApplyStyleInput, options?: MutationOptions): TableMutationResult;
+  setBorders(input: TablesSetBordersInput, options?: MutationOptions): TableMutationResult;
+  setTableOptions(input: TablesSetTableOptionsInput, options?: MutationOptions): TableMutationResult;
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
@@ -1793,7 +1822,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
     },
     insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt {
-      return executeInsert(adapters.write, input, options);
+      return executeInsert(adapters.selectionMutation, adapters.write, input, options);
     },
     replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
       return executeReplace(adapters.selectionMutation, adapters.write, input, options);
@@ -1863,6 +1892,12 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         },
         clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult {
           return executeParagraphsClearShading(adapters.paragraphs, input, options);
+        },
+        setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetDirection(adapters.paragraphs, input, options);
+        },
+        clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearDirection(adapters.paragraphs, input, options);
         },
       },
     },
@@ -2216,7 +2251,8 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTableLocatorOp('tables.move', adapters.tables.move.bind(adapters.tables), input, options);
       },
       split(input, options?) {
-        return executeTableLocatorOp('tables.split', adapters.tables.split.bind(adapters.tables), input, options);
+        const normalized = normalizeTablesSplitInput(input);
+        return executeRowLocatorOp('tables.split', adapters.tables.split.bind(adapters.tables), normalized, options);
       },
       convertToText(input, options?) {
         return executeTableLocatorOp(
@@ -2321,7 +2357,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       unmergeCells(input, options?) {
-        return executeTableLocatorOp(
+        return executeCellOrTableScopedCellLocatorOp(
           'tables.unmergeCells',
           adapters.tables.unmergeCells.bind(adapters.tables),
           input,
@@ -2442,6 +2478,30 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTableLocatorOp(
           'tables.clearCellSpacing',
           adapters.tables.clearCellSpacing.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      applyStyle(input, options?) {
+        return executeTablesApplyStyle(
+          'tables.applyStyle',
+          adapters.tables.applyStyle.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setBorders(input, options?) {
+        return executeTablesSetBorders(
+          'tables.setBorders',
+          adapters.tables.setBorders.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setTableOptions(input, options?) {
+        return executeTablesSetTableOptions(
+          'tables.setTableOptions',
+          adapters.tables.setTableOptions.bind(adapters.tables),
           input,
           options,
         );

@@ -177,6 +177,7 @@
     "apps/docs/document-api/reference/format/paragraph/clear-alignment.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-all-tab-stops.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-border.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-direction.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-indentation.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-shading.mdx",
     "apps/docs/document-api/reference/format/paragraph/clear-spacing.mdx",
@@ -185,6 +186,7 @@
     "apps/docs/document-api/reference/format/paragraph/reset-direct-formatting.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-alignment.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-border.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-direction.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-flow-options.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-indentation.mdx",
     "apps/docs/document-api/reference/format/paragraph/set-keep-options.mdx",
@@ -348,6 +350,7 @@
     "apps/docs/document-api/reference/styles/paragraph/index.mdx",
     "apps/docs/document-api/reference/styles/paragraph/set-style.mdx",
     "apps/docs/document-api/reference/tables/apply-border-preset.mdx",
+    "apps/docs/document-api/reference/tables/apply-style.mdx",
     "apps/docs/document-api/reference/tables/clear-border.mdx",
     "apps/docs/document-api/reference/tables/clear-cell-spacing.mdx",
     "apps/docs/document-api/reference/tables/clear-contents.mdx",
@@ -374,6 +377,7 @@
     "apps/docs/document-api/reference/tables/move.mdx",
     "apps/docs/document-api/reference/tables/set-alt-text.mdx",
     "apps/docs/document-api/reference/tables/set-border.mdx",
+    "apps/docs/document-api/reference/tables/set-borders.mdx",
     "apps/docs/document-api/reference/tables/set-cell-padding.mdx",
     "apps/docs/document-api/reference/tables/set-cell-properties.mdx",
     "apps/docs/document-api/reference/tables/set-cell-spacing.mdx",
@@ -385,6 +389,7 @@
     "apps/docs/document-api/reference/tables/set-shading.mdx",
     "apps/docs/document-api/reference/tables/set-style-option.mdx",
     "apps/docs/document-api/reference/tables/set-style.mdx",
+    "apps/docs/document-api/reference/tables/set-table-options.mdx",
     "apps/docs/document-api/reference/tables/set-table-padding.mdx",
     "apps/docs/document-api/reference/tables/sort.mdx",
     "apps/docs/document-api/reference/tables/split-cell.mdx",
@@ -634,7 +639,9 @@
         "format.paragraph.setBorder",
         "format.paragraph.clearBorder",
         "format.paragraph.setShading",
-        "format.paragraph.clearShading"
+        "format.paragraph.clearShading",
+        "format.paragraph.setDirection",
+        "format.paragraph.clearDirection"
       ],
       "pagePath": "apps/docs/document-api/reference/format/paragraph/index.mdx",
       "title": "Paragraph Formatting"
@@ -686,6 +693,9 @@
         "tables.setCellPadding",
         "tables.setCellSpacing",
         "tables.clearCellSpacing",
+        "tables.applyStyle",
+        "tables.setBorders",
+        "tables.setTableOptions",
         "tables.get",
         "tables.getCells",
         "tables.getProperties",
@@ -976,5 +986,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "3bca09dc183fa828d25a2349a4f780e5ef7bfcad2e9ddf21e552a88c97b9fa97"
+  "sourceHash": "52013243a974232110399da20b569ed98bfa7ab25ab0c09f314168b748ebc7a8"
 }

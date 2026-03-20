@@ -237,67 +237,48 @@ export function insertParagraphAtEnd(
 }
 
 /**
- * Resolves the write target for a mutation request.
+ * Resolves the write target for a target-less insert request.
  *
- * When the request is a target-less insert, falls back to the document-end
- * insertion point via {@link resolveDefaultInsertTarget}. Otherwise resolves
- * the explicit target address.
+ * Falls back to the document-end insertion point via {@link resolveDefaultInsertTarget}.
+ * Targeted inserts now route through SelectionMutationAdapter, not WriteAdapter.
  *
  * For structural-end resolutions (doc ends in non-text blocks), the returned
  * `ResolvedWrite` has `structuralEnd: true` and the caller is responsible for
  * creating a writable host before insertion.
  */
 export function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWrite | null {
-  const requestedTarget = request.target;
+  const fallback = resolveDefaultInsertTarget(editor);
+  if (!fallback) return null;
 
-  if (request.kind === 'insert' && !request.target) {
-    const fallback = resolveDefaultInsertTarget(editor);
-    if (!fallback) return null;
-
-    if (fallback.kind === 'structural-end') {
-      const pos = fallback.insertPos;
-      const syntheticRange: ResolvedTextTarget = { from: pos, to: pos };
-      const syntheticTarget: TextAddress = { kind: 'text', blockId: '', range: { start: 0, end: 0 } };
-      return {
-        requestedTarget,
-        effectiveTarget: syntheticTarget,
-        range: syntheticRange,
-        resolution: buildTextMutationResolution({
-          requestedTarget,
-          target: syntheticTarget,
-          range: syntheticRange,
-          text: '',
-        }),
-        structuralEnd: true,
-      };
-    }
-
-    const text = readTextAtResolvedRange(editor, fallback.range);
+  if (fallback.kind === 'structural-end') {
+    const pos = fallback.insertPos;
+    const syntheticRange: ResolvedTextTarget = { from: pos, to: pos };
+    const syntheticTarget: TextAddress = { kind: 'text', blockId: '', range: { start: 0, end: 0 } };
     return {
-      requestedTarget,
-      effectiveTarget: fallback.target,
-      range: fallback.range,
+      requestedTarget: undefined,
+      effectiveTarget: syntheticTarget,
+      range: syntheticRange,
       resolution: buildTextMutationResolution({
-        requestedTarget,
-        target: fallback.target,
-        range: fallback.range,
-        text,
+        requestedTarget: undefined,
+        target: syntheticTarget,
+        range: syntheticRange,
+        text: '',
       }),
+      structuralEnd: true,
     };
   }
 
-  const target = request.target;
-  if (!target) return null;
-
-  const range = resolveTextTarget(editor, target);
-  if (!range) return null;
-
-  const text = readTextAtResolvedRange(editor, range);
+  const text = readTextAtResolvedRange(editor, fallback.range);
   return {
-    requestedTarget,
-    effectiveTarget: target,
-    range,
-    resolution: buildTextMutationResolution({ requestedTarget, target, range, text }),
+    requestedTarget: undefined,
+    effectiveTarget: fallback.target,
+    range: fallback.range,
+    resolution: buildTextMutationResolution({
+      requestedTarget: undefined,
+      target: fallback.target,
+      range: fallback.range,
+      text,
+    }),
   };
 }
 

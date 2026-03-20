@@ -101,12 +101,15 @@ Returns a TrackChangesListResult with an array of tracked change entries and tot
   "additionalProperties": false,
   "properties": {
     "limit": {
+      "description": "Maximum number of tracked changes to return.",
       "type": "integer"
     },
     "offset": {
+      "description": "Number of tracked changes to skip for pagination.",
       "type": "integer"
     },
     "type": {
+      "description": "Filter by change type: 'insert', 'delete', or 'format'.",
       "enum": [
         "insert",
         "delete",

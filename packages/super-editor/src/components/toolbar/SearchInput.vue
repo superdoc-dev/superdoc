@@ -37,23 +37,26 @@ const handleSubmit = () => {
 <style lang="postcss" scoped>
 .search-input-ctn {
   padding: 10px;
-  border-radius: 5px;
+  border-radius: var(--sd-ui-radius, 6px);
+
   .search-input {
     min-width: 200px;
-    font-size: 13px;
+    font-size: var(--sd-ui-font-size-300, 13px);
     flex-grow: 1;
     padding: 10px;
-    border-radius: 8px;
-    color: #666;
-    border: 1px solid #ddd;
+    border-radius: var(--sd-ui-radius, 6px);
+    color: var(--sd-ui-text-muted, #666666);
+    border: 1px solid var(--sd-ui-border, #dbdbdb);
     box-sizing: border-box;
-    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
+    box-shadow: var(--sd-ui-shadow, 0 4px 12px rgba(0, 0, 0, 0.12));
+
     &:active,
     &:focus {
       outline: none;
-      border: 1px solid #1355ff;
+      border: 1px solid var(--sd-ui-action, #1355ff);
     }
   }
+
   .row {
     display: flex;
     &.submit {
@@ -61,18 +64,19 @@ const handleSubmit = () => {
       flex-direction: row-reverse;
     }
   }
+
   .submit-btn {
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 10px 16px;
-    border-radius: 8px;
+    border-radius: var(--sd-ui-radius, 6px);
     outline: none;
     border: none;
-    background-color: #1355ff;
+    background-color: var(--sd-ui-action, #1355ff);
     color: white;
     font-weight: 400;
-    font-size: 13px;
+    font-size: var(--sd-ui-font-size-300, 13px);
     cursor: pointer;
     transition: all 0.2s ease;
     box-sizing: border-box;

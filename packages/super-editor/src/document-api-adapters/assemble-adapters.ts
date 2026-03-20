@@ -38,6 +38,8 @@ import {
   paragraphsClearBorderWrapper,
   paragraphsSetShadingWrapper,
   paragraphsClearShadingWrapper,
+  paragraphsSetDirectionWrapper,
+  paragraphsClearDirectionWrapper,
 } from './plan-engine/paragraphs-wrappers.js';
 import {
   trackChangesListWrapper,
@@ -95,6 +97,7 @@ import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { resolveRange } from './helpers/range-resolver.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
+import { initStoryRevisionStore } from './story-runtime/story-revision-store.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 import { registerPartDescriptor } from '../core/parts/registry/part-registry.js';
 import { stylesPartDescriptor } from '../core/parts/adapters/styles-part-descriptor.js';
@@ -160,6 +163,9 @@ import {
   tablesSetCellPaddingWrapper,
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
+  tablesApplyStyleWrapper,
+  tablesSetBordersWrapper,
+  tablesSetTableOptionsWrapper,
 } from './plan-engine/tables-wrappers.js';
 import {
   tablesGetAdapter,
@@ -328,6 +334,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
   registerBuiltInExecutors();
   initRevision(editor);
   trackRevisions(editor);
+  initStoryRevisionStore(editor);
   registerPartDescriptor(stylesPartDescriptor);
   registerPartDescriptor(settingsPartDescriptor);
   registerPartDescriptor(relsPartDescriptor);
@@ -402,6 +409,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
       setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
       clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
+      setDirection: (input, options) => paragraphsSetDirectionWrapper(editor, input, options),
+      clearDirection: (input, options) => paragraphsClearDirectionWrapper(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),
@@ -522,6 +531,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setCellPadding: (input, options) => tablesSetCellPaddingWrapper(editor, input, options),
       setCellSpacing: (input, options) => tablesSetCellSpacingWrapper(editor, input, options),
       clearCellSpacing: (input, options) => tablesClearCellSpacingWrapper(editor, input, options),
+      applyStyle: (input, options) => tablesApplyStyleWrapper(editor, input, options),
+      setBorders: (input, options) => tablesSetBordersWrapper(editor, input, options),
+      setTableOptions: (input, options) => tablesSetTableOptionsWrapper(editor, input, options),
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),

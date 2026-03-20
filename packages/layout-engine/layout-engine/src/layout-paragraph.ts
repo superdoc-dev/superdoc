@@ -19,6 +19,7 @@ import {
   sliceLines,
   extractBlockPmRange,
   isEmptyTextParagraph,
+  shouldSuppressOwnSpacing,
 } from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
 import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
@@ -529,6 +530,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     state.page.fragments.push(fragment);
     state.trailingSpacing = 0;
     state.lastParagraphStyleId = styleId;
+    state.lastParagraphContextualSpacing = contextualSpacing;
     return;
   }
 
@@ -595,26 +597,26 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     /**
      * Contextual Spacing Logic (OOXML w:contextualSpacing)
      *
-     * When contextualSpacing is enabled on a paragraph, spacing before and after is
-     * suppressed when the paragraph is adjacent to another paragraph with the same style.
+     * Each paragraph independently decides whether to suppress its own spacing.
+     * A paragraph suppresses its before/after spacing when it has contextualSpacing
+     * enabled and the adjacent paragraph shares the same style. The adjacent
+     * paragraph's contextualSpacing flag is NOT consulted.
      *
-     * This implements Microsoft Word's contextual spacing behavior:
-     * 1. Check if contextualSpacing is enabled on the current paragraph
-     * 2. Check if both paragraphs have style IDs (required for comparison)
-     * 3. Check if the style IDs match (same style = suppress spacing)
-     *
-     * When all conditions are met:
-     * - spacingBefore is zeroed (prevents adding space before this paragraph)
-     * - Previous paragraph's spacingAfter (trailingSpacing) is undone by subtracting
-     *   it from cursorY, effectively removing the space already added
+     * Two independent checks:
+     * 1. Current paragraph suppresses its own before-spacing (based on current's flag)
+     * 2. Previous paragraph suppresses its own after-spacing (based on previous's flag,
+     *    carried in state.lastParagraphContextualSpacing)
      *
      * Input Validation:
      * - trailingSpacing is validated to be a finite, non-negative number
      * - Invalid values (NaN, Infinity, negative, null, undefined) are treated as 0
-     * - This prevents layout corruption from malformed input data
      */
-    if (contextualSpacing && state.lastParagraphStyleId && styleId && state.lastParagraphStyleId === styleId) {
+    // Current paragraph suppresses its own before-spacing
+    if (shouldSuppressOwnSpacing(styleId, contextualSpacing, state.lastParagraphStyleId)) {
       spacingBefore = 0;
+    }
+    // Previous paragraph suppresses its own after-spacing (rewind trailing)
+    if (shouldSuppressOwnSpacing(state.lastParagraphStyleId, state.lastParagraphContextualSpacing, styleId)) {
       const prevTrailing = asSafeNumber(state.trailingSpacing);
       if (prevTrailing > 0) {
         state.cursorY -= prevTrailing;
@@ -876,5 +878,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       lastState.trailingSpacing = 0;
     }
     lastState.lastParagraphStyleId = styleId;
+    lastState.lastParagraphContextualSpacing = contextualSpacing;
   }
 }

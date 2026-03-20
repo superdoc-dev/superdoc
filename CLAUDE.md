@@ -67,6 +67,10 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 | Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
 | Document API contract | `packages/document-api/src/contract/operation-definitions.ts` |
 | Adding a doc-api operation | See `packages/document-api/README.md` § "Adding a new operation" |
+| Theming (`createTheme()`) | `packages/superdoc/src/core/theme/create-theme.js` |
+| CSS variable defaults | `packages/superdoc/src/assets/styles/helpers/variables.css` |
+| Preset themes | `packages/superdoc/src/assets/styles/helpers/themes.css` |
+| Consumer-facing agent guide | `packages/superdoc/AGENTS.md` (ships with npm package) |
 
 ## Style Resolution Boundary
 
@@ -193,12 +197,15 @@ Pixel-level before/after comparison for documents that failed layout comparison.
 
 ## Brand & Design System
 
-Brand guidelines, voice, and design tokens live in `brand/`. Token values are defined in `packages/superdoc/src/assets/styles/tokens.css`.
+Brand guidelines, voice, and design tokens live in `brand/`.
+Token contract source is `packages/superdoc/src/assets/styles/helpers/variables.css` (`:root` defaults).
+Preset theme overrides are defined in `packages/superdoc/src/assets/styles/helpers/themes.css`.
 
 **When creating or modifying UI components:**
-- Use `--sd-*` CSS custom properties — never hardcode hex values. See `tokens.css` for all available variables.
-- Tokens follow three tiers: primitive (`--sd-color-blue-500`) → semantic (`--sd-action-primary`) → component (`--sd-comment-bg`). Components reference semantic or component-level variables.
-- Expose component-specific variables as `--sd-{component}-*` so consumers can customize via CSS.
-- Document component CSS variables in `apps/docs/ui-components/` (Mintlify docs).
+- Use `--sd-*` CSS custom properties — never hardcode hex values.
+- Treat `variables.css` as the canonical token contract; add new tokens there.
+- Keep preset themes in `themes.css` (`.sd-theme-*`) and override only the tokens that need theme-specific values.
+- Tokens are organized by layers: primitive (`--sd-color-blue-500`) → UI/document tokens (`--sd-ui-*`, `--sd-comments-*`, etc.) → component usage.
+- Expose UI component-specific variables as `--sd-ui-{component}-*` so consumers can customize via CSS.
 
 **When writing copy or content:** see `brand/brand-guidelines.md` for voice, tone, and the dual-register pattern (developer vs. leader). Product name is always **SuperDoc** (capital S, capital D).

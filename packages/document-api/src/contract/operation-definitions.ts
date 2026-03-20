@@ -236,6 +236,15 @@ const T_HEADER_FOOTER_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 
+// Story-scoped throw-code arrays
+const T_STORY = [
+  'STORY_NOT_FOUND',
+  'STORY_MISMATCH',
+  'STORY_NOT_SUPPORTED',
+  'CROSS_STORY_PLAN',
+  'MATERIALIZATION_FAILED',
+] as const;
+
 // Reference-namespace throw-code shorthand arrays
 const T_REF_READ_LIST = ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'] as const;
 const T_REF_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
@@ -249,7 +258,17 @@ function camelToKebab(value: string): string {
 }
 
 function formatInlineAliasDescription(key: InlineRunPatchKey): string {
+  if (key === 'rtl') {
+    return 'Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL.';
+  }
   return `Set or clear the \`${key}\` inline run property on the target text range.`;
+}
+
+function formatInlineAliasExpectedResult(key: InlineRunPatchKey): string {
+  if (key === 'rtl') {
+    return 'Returns a TextMutationReceipt confirming only the inline run property patch was applied to the target range; paragraph direction is unchanged.';
+  }
+  return 'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.';
 }
 
 const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperationId, OperationDefinitionEntry> =
@@ -259,15 +278,14 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
       const definition: OperationDefinitionEntry = {
         memberPath: operationId,
         description: formatInlineAliasDescription(entry.key),
-        expectedResult:
-          'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.',
+        expectedResult: formatInlineAliasExpectedResult(entry.key),
         requiresDocumentContext: true,
         metadata: mutationOperation({
           idempotency: 'conditional',
           supportsDryRun: true,
           supportsTrackedMode: entry.tracked,
           possibleFailureCodes: ['INVALID_TARGET'],
-          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
         }),
         referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
         referenceGroup: 'format',
@@ -302,7 +320,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE'],
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE', ...T_STORY],
       deterministicTargetResolution: false,
     }),
     referenceDocPath: 'find.mdx',
@@ -338,7 +356,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the plain-text content of the document.',
     expectedResult: 'Returns the full plain-text content of the document as a string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
 
@@ -350,7 +370,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the document content as a Markdown string.',
     expectedResult: 'Returns the full document content as a Markdown-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-markdown.mdx',
     referenceGroup: 'core',
     intentGroup: 'get_content',
@@ -361,7 +383,9 @@ export const OPERATION_DEFINITIONS = {
     description: 'Extract the document content as an HTML string.',
     expectedResult: 'Returns the full document content as an HTML-formatted string.',
     requiresDocumentContext: true,
-    metadata: readOperation(),
+    metadata: readOperation({
+      throws: [...T_STORY],
+    }),
     referenceDocPath: 'get-html.mdx',
     referenceGroup: 'core',
     intentGroup: 'get_content',
@@ -410,13 +434,13 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'insert',
     description:
       'Insert content into the document. Two input shapes: ' +
-      'legacy string-based (value + type) inserts inline content at a text position within an existing block; ' +
+      'text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; ' +
       'structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. ' +
-      'When target is omitted, content appends at the end of the document. ' +
-      'Legacy mode supports text (default), markdown, and html content types via the `type` field. ' +
+      'When target/ref is omitted, content appends at the end of the document. ' +
+      'Text mode supports text (default), markdown, and html content types via the `type` field. ' +
       'Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.',
     expectedResult:
-      'Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
+      'Returns an SDMutationReceipt with applied status; resolution reports the inserted TextAddress for text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -447,6 +471,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'insert.mdx',
@@ -490,6 +515,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
     }),
     referenceDocPath: 'replace.mdx',
@@ -509,7 +535,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
@@ -590,7 +616,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
@@ -627,7 +653,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
@@ -644,7 +670,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET', ...T_STORY],
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
@@ -1258,6 +1284,38 @@ export const OPERATION_DEFINITIONS = {
       throws: T_PARAGRAPH_MUTATION,
     }),
     referenceDocPath: 'format/paragraph/clear-shading.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setDirection': {
+    memberPath: 'format.paragraph.setDirection',
+    description: 'Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the direction already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-direction.mdx',
+    referenceGroup: 'format.paragraph',
+    intentGroup: 'format',
+    intentAction: 'set_direction',
+  },
+  'format.paragraph.clearDirection': {
+    memberPath: 'format.paragraph.clearDirection',
+    description: 'Remove explicit paragraph direction, reverting to inherited or default (LTR).',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no direction is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-direction.mdx',
     referenceGroup: 'format.paragraph',
   },
 
@@ -1967,7 +2025,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_QUERY_MATCH,
+      throws: [...T_QUERY_MATCH, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'query/match.mdx',
@@ -2000,7 +2058,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_PLAN_ENGINE,
+      throws: [...T_PLAN_ENGINE, ...T_STORY],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'mutations/preview.mdx',
@@ -2025,6 +2083,7 @@ export const OPERATION_DEFINITIONS = {
         'RAW_MODE_REQUIRED',
         'PRESERVE_ONLY_VIOLATION',
         'CAPABILITY_UNSUPPORTED',
+        ...T_STORY,
       ],
       deterministicTargetResolution: true,
     }),
@@ -2646,6 +2705,58 @@ export const OPERATION_DEFINITIONS = {
   },
 
   // -------------------------------------------------------------------------
+  // Tables: convenience operations (SD-2129)
+  // -------------------------------------------------------------------------
+
+  'tables.applyStyle': {
+    memberPath: 'tables.applyStyle',
+    description: 'Apply a table style and/or style options in one call.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/apply-style.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setBorders': {
+    memberPath: 'tables.setBorders',
+    description: 'Set borders on a table using a target set or per-edge patch.',
+    expectedResult: 'Returns a TableMutationResult receipt. Does not perform NO_OP detection.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-borders.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setTableOptions': {
+    memberPath: 'tables.setTableOptions',
+    description: 'Set table-level default cell margins and/or cell spacing.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the provided values already match current direct formatting.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-table-options.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
   // Tables: read operations (B4 ref handoff)
   // -------------------------------------------------------------------------
 
@@ -2676,7 +2787,8 @@ export const OPERATION_DEFINITIONS = {
   'tables.getProperties': {
     memberPath: 'tables.getProperties',
     description: 'Retrieve layout and style properties of a table.',
-    expectedResult: 'Returns a TablesGetPropertiesOutput with the table layout, style, border, and shading properties.',
+    expectedResult:
+      'Returns a TablesGetPropertiesOutput with direct table layout and style state, including style options, borders, default cell margins, and cell spacing when explicitly set.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -2964,7 +3076,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
-      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT', ...T_STORY],
     }),
     referenceDocPath: 'create/image.mdx',
     referenceGroup: 'create',

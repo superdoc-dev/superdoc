@@ -20,4 +20,11 @@ test('@behavior undo tracked insertion removes suggestion bubble and sidebar ent
   await expect(sidebar.locator('.tracked-change-text')).toHaveCount(0);
   await expect(superdoc.page.locator('.tracked-change-text')).toHaveCount(0);
   await superdoc.screenshot('behavior-comments-tcs-undo-tracked-insert-after-undo');
+
+  await superdoc.redo();
+  await superdoc.waitForStable();
+
+  await expect.poll(async () => superdoc.page.locator('.tracked-change-text').count()).toBeGreaterThan(0);
+  await expect.poll(async () => sidebar.locator('.tracked-change-text').count()).toBeGreaterThan(0);
+  await superdoc.screenshot('behavior-comments-tcs-undo-tracked-insert-after-redo');
 });

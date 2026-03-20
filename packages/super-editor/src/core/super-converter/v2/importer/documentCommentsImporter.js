@@ -43,6 +43,8 @@ export function importCommentData({ docx, editor, converter }) {
     const trackedChangeType = attributes['custom:trackedChangeType'];
     const trackedChangeText =
       attributes['custom:trackedChangeText'] !== 'null' ? attributes['custom:trackedChangeText'] : null;
+    const trackedChangeDisplayType =
+      attributes['custom:trackedChangeDisplayType'] !== 'null' ? attributes['custom:trackedChangeDisplayType'] : null;
     const trackedDeletedText =
       attributes['custom:trackedDeletedText'] !== 'null' ? attributes['custom:trackedDeletedText'] : null;
 
@@ -79,6 +81,7 @@ export function importCommentData({ docx, editor, converter }) {
       trackedChange,
       trackedChangeText,
       trackedChangeType,
+      trackedChangeDisplayType,
       trackedDeletedText,
       isDone: false,
       origin: converter?.documentOrigin || 'word',

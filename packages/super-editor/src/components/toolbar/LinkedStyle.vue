@@ -85,10 +85,14 @@ onMounted(() => {
 <style scoped>
 .style-name {
   padding: 16px 10px;
+  color: var(--sd-ui-dropdown-text, #47484a);
 }
+
 .style-name:hover {
-  background-color: #c8d0d8;
+  background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
+  color: var(--sd-ui-dropdown-hover-text, #47484a);
 }
+
 .linked-style-buttons {
   display: flex;
   flex-direction: column;
@@ -99,27 +103,5 @@ onMounted(() => {
   padding: 0;
   margin: 0;
   overflow: auto;
-}
-.button-icon {
-  cursor: pointer;
-  padding: 5px;
-  font-size: 16px;
-  width: 25px;
-  height: 25px;
-  border-radius: 4px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  box-sizing: border-box;
-}
-.button-icon:hover {
-  background-color: #d8dee5;
-}
-
-.button-icon :deep(svg) {
-  width: 100%;
-  height: 100%;
-  display: block;
-  fill: currentColor;
 }
 </style>

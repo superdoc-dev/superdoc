@@ -36,7 +36,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 | `target.start` | SelectionPoint | yes | SelectionPoint |
 | `value` | boolean \\| null \\| object | no | One of: boolean, null, object |
 
-### Variant 2 (ref)
+### Variant 2 (required: ref)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -191,6 +191,11 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `INVALID_INPUT`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -206,7 +211,8 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
       "additionalProperties": false,
       "properties": {
         "target": {
-          "$ref": "#/$defs/SelectionTarget"
+          "$ref": "#/$defs/SelectionTarget",
+          "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}. Use 'ref' instead when you have a search result handle."
         },
         "value": {
           "oneOf": [
@@ -268,6 +274,7 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
       "additionalProperties": false,
       "properties": {
         "ref": {
+          "description": "Handle ref string from a superdoc_search result. Pass the handle.ref value directly (e.g. 'text:eyJ...'). Preferred over 'target' for inline formatting.",
           "type": "string"
         },
         "value": {

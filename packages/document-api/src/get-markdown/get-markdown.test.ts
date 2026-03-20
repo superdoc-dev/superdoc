@@ -1,10 +1,11 @@
+import { describe, expect, it, mock } from 'bun:test';
 import { executeGetMarkdown } from './get-markdown.js';
 import type { GetMarkdownAdapter } from './get-markdown.js';
 
 describe('executeGetMarkdown', () => {
   it('delegates to adapter.getMarkdown with the input', () => {
     const adapter: GetMarkdownAdapter = {
-      getMarkdown: vi.fn(() => '# Hello\n\nworld\n'),
+      getMarkdown: mock(() => '# Hello\n\nworld\n'),
     };
 
     const result = executeGetMarkdown(adapter, {});

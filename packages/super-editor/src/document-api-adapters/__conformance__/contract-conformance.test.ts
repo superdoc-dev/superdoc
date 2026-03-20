@@ -1,5 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
@@ -42,6 +42,8 @@ import {
   paragraphsClearBorderWrapper,
   paragraphsSetShadingWrapper,
   paragraphsClearShadingWrapper,
+  paragraphsSetDirectionWrapper,
+  paragraphsClearDirectionWrapper,
 } from '../plan-engine/paragraphs-wrappers.js';
 import { stylesApplyAdapter } from '../styles-adapter.js';
 import { createTableWrapper } from '../plan-engine/create-table-wrapper.js';
@@ -82,6 +84,9 @@ import {
   tablesSetCellPaddingWrapper,
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
+  tablesApplyStyleWrapper,
+  tablesSetBordersWrapper,
+  tablesSetTableOptionsWrapper,
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
@@ -1583,6 +1588,9 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.setCellPadding',
   'tables.setCellSpacing',
   'tables.clearCellSpacing',
+  'tables.applyStyle',
+  'tables.setBorders',
+  'tables.setTableOptions',
   'tables.getStyles',
   'tables.setDefaultStyle',
   'tables.clearDefaultStyle',
@@ -2052,6 +2060,34 @@ const paragraphMutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return paragraphsClearShadingWrapper(editor, { target: PARAGRAPH_TARGET });
     },
   },
+  'format.paragraph.setDirection': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetDirectionWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ rightToLeft: true });
+      return paragraphsSetDirectionWrapper(editor, { target: PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetDirectionWrapper(editor, { target: PARAGRAPH_TARGET, direction: 'rtl' });
+    },
+  },
+  'format.paragraph.clearDirection': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearDirectionWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearDirectionWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ rightToLeft: true });
+      return paragraphsClearDirectionWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
 };
 
 const paragraphDryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -2238,6 +2274,26 @@ const paragraphDryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   'format.paragraph.clearShading': () => {
     const { editor, dispatch } = makeParagraphEditor({ shading: { fill: 'FFFF00' } });
     const result = paragraphsClearShadingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setDirection': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetDirectionWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, direction: 'rtl' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearDirection': () => {
+    const { editor, dispatch } = makeParagraphEditor({ rightToLeft: true });
+    const result = paragraphsClearDirectionWrapper(
       editor,
       { target: PARAGRAPH_TARGET },
       { changeMode: 'direct', dryRun: true },
@@ -6193,16 +6249,16 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'tables.split': {
     throwCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'missing', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'missing', rowIndex: 1 }, { changeMode: 'direct' });
     },
     failureCase: () => {
-      // atRowIndex: 0 is invalid (must be >= 1).
+      // rowIndex: 0 is invalid (must be >= 1).
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 0 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 0 }, { changeMode: 'direct' });
     },
     applyCase: () => {
       const editor = makeTableEditor();
-      return tablesSplitWrapper(editor, { nodeId: 'table-1', atRowIndex: 1 }, { changeMode: 'direct' });
+      return tablesSplitWrapper(editor, { nodeId: 'table-1', rowIndex: 1 }, { changeMode: 'direct' });
     },
   },
   'tables.convertToText': {
@@ -6463,6 +6519,87 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     applyCase: () => {
       const editor = makeTableEditor();
       return tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.applyStyle': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyStyleWrapper(editor, { nodeId: 'missing', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesApplyStyleWrapper(editor, { nodeId: 'table-1', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyStyleWrapper(editor, { nodeId: 'table-1', styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.setBorders': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'missing',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'table-1',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetBordersWrapper(
+        editor,
+        {
+          nodeId: 'table-1',
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'tables.setTableOptions': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'missing', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetTableOptionsWrapper(
+        editor,
+        { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+        { changeMode: 'direct' },
+      );
     },
   },
   'tables.setDefaultStyle': {
@@ -9332,7 +9469,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesSplitWrapper(
       editor,
-      { nodeId: 'table-1', atRowIndex: 1 },
+      { nodeId: 'table-1', rowIndex: 1 },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -9476,6 +9613,44 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.applyStyle': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesApplyStyleWrapper(
+      editor,
+      { nodeId: 'table-1', styleId: 'TableGrid' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.setBorders': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetBordersWrapper(
+      editor,
+      {
+        nodeId: 'table-1',
+        mode: 'applyTo',
+        applyTo: 'all',
+        border: { lineStyle: 'single', lineWeightPt: 1, color: '000000' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.setTableOptions': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetTableOptionsWrapper(
+      editor,
+      { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+      { changeMode: 'direct', dryRun: true },
+    );
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
@@ -10220,11 +10395,19 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
 };
 
-beforeEach(() => {
+beforeAll(() => {
   registerBuiltInExecutors();
   registerPartDescriptor(numberingPartDescriptor);
   registerPartDescriptor(settingsPartDescriptor);
   registerPartDescriptor(stylesPartDescriptor);
+});
+
+afterAll(() => {
+  clearPartDescriptors();
+  clearInvalidationHandlers();
+});
+
+const resetMocks = () => {
   vi.restoreAllMocks();
   mockedDeps.resolveCommentAnchorsById.mockReset();
   mockedDeps.resolveCommentAnchorsById.mockImplementation(() => []);
@@ -10250,11 +10433,10 @@ beforeEach(() => {
   refResolverMocks.getSourcesFromConverter.mockImplementation(() => []);
   refResolverMocks.findAllAuthorities.mockImplementation(() => []);
   refResolverMocks.findAllAuthorityEntries.mockImplementation(() => []);
-});
+};
 
-afterEach(() => {
-  clearPartDescriptors();
-  clearInvalidationHandlers();
+beforeEach(() => {
+  resetMocks();
 });
 
 describe('document-api adapter conformance', () => {
@@ -10467,7 +10649,7 @@ describe('document-api adapter conformance', () => {
     ).toThrow(/rowIndex must not be provided when target is a row node/);
   });
 
-  it('returns stable cell ids from tables.getCells using table-map resolved absolute positions', () => {
+  it('returns stable cell ids and mutation-ready addresses from tables.getCells', () => {
     const editor = makeTableEditor();
     const result = tablesGetCellsAdapter(editor, { nodeId: 'table-1' });
 
@@ -10478,6 +10660,14 @@ describe('document-api adapter conformance', () => {
 
     const topLeft = result.cells.find((cell) => cell.rowIndex === 0 && cell.columnIndex === 0);
     expect(topLeft?.nodeId).toBe('cell-1');
+
+    // Each cell address mirrors nodeId and is ready for mutation handoff.
+    expect(topLeft?.address).toEqual({ kind: 'block', nodeType: 'tableCell', nodeId: 'cell-1' });
+
+    // All cells carry a well-formed address.
+    for (const cell of result.cells) {
+      expect(cell.address).toEqual({ kind: 'block', nodeType: 'tableCell', nodeId: cell.nodeId });
+    }
   });
 
   it('reads tables.getProperties from nested tableProperties', () => {
@@ -10511,7 +10701,7 @@ describe('document-api adapter conformance', () => {
       autoFitMode: 'fixedWidth',
       styleOptions: {
         headerRow: true,
-        totalRow: false,
+        lastRow: false,
         bandedRows: true,
         bandedColumns: false,
       },
@@ -10570,6 +10760,9 @@ describe('document-api adapter conformance', () => {
       'tables.setCellPadding',
       'tables.setCellSpacing',
       'tables.clearCellSpacing',
+      'tables.applyStyle',
+      'tables.setBorders',
+      'tables.setTableOptions',
       'tables.insertCell',
       'tables.deleteCell',
       'tables.setDefaultStyle',
@@ -10832,8 +11025,8 @@ describe('document-api adapter conformance', () => {
     {
       op: 'tables.split',
       ref: 'table-1',
-      args: { atRowIndex: 1 },
-      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', atRowIndex: 1 } as any),
+      args: { rowIndex: 1 },
+      wrapperFn: (e) => tablesSplitWrapper(e, { nodeId: 'table-1', rowIndex: 1 } as any),
     },
     {
       op: 'tables.convertToText',
@@ -10926,6 +11119,9 @@ describe('document-api adapter conformance', () => {
       args: {},
       wrapperFn: (e) => tablesClearCellSpacingWrapper(e, { nodeId: 'table-1' }),
     },
+    // Note: tables.applyStyle, tables.setBorders, tables.setTableOptions are
+    // intentionally excluded from parity tests — they are not yet in the
+    // step-op catalog and do not support mutations.apply (SD-2129 scope).
     // create.table (ref is a dummy target — executor ignores targets for create ops)
     {
       op: 'create.table',

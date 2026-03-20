@@ -211,6 +211,18 @@ function getParagraphRunContext($pos, editor) {
     }
   }
 
+  if (runProperties == null) {
+    const nodeBefore = $pos.nodeBefore;
+    if (nodeBefore?.type.name === 'run') {
+      runProperties = normalizeRunProperties(nodeBefore.attrs?.runProperties);
+    } else {
+      const nodeAfter = $pos.nodeAfter;
+      if (nodeAfter?.type.name === 'run') {
+        runProperties = normalizeRunProperties(nodeAfter.attrs?.runProperties);
+      }
+    }
+  }
+
   if (!paragraphNode) {
     return null;
   }

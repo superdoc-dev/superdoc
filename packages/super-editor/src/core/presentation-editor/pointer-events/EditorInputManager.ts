@@ -196,8 +196,6 @@ export type EditorInputCallbacks = {
   exitHeaderFooterMode?: () => void;
   /** Activate header/footer region */
   activateHeaderFooterRegion?: (region: HeaderFooterRegion) => void;
-  /** Create default header/footer */
-  createDefaultHeaderFooter?: (region: HeaderFooterRegion) => void;
   /** Emit header/footer edit blocked */
   emitHeaderFooterEditBlocked?: (reason: string) => void;
   /** Find region for page */
@@ -1313,14 +1311,9 @@ export class EditorInputManager {
       event.preventDefault();
       event.stopPropagation();
 
-      // Create default header/footer if none exists
-      const descriptor = this.#callbacks.resolveDescriptorForRegion?.(region);
-      const hfManager = this.#deps.getHeaderFooterSession()?.manager;
-      if (!descriptor && hfManager) {
-        this.#callbacks.createDefaultHeaderFooter?.(region);
-        hfManager.refresh();
-      }
-
+      // Materialization (if needed) now happens inside #enterMode via
+      // ensureExplicitHeaderFooterSlot. The pointer handler only triggers
+      // activation — it is not responsible for slot creation.
       this.#callbacks.activateHeaderFooterRegion?.(region);
     } else if ((this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body') !== 'body') {
       this.#callbacks.exitHeaderFooterMode?.();

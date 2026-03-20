@@ -26,21 +26,21 @@ Returns a ParagraphMutationResult; reports NO_OP if all flags already match.
 
 ## Input fields
 
-### Variant 1 (target, contextualSpacing)
+### Variant 1 (required: contextualSpacing)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `contextualSpacing` | boolean | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 2 (target, pageBreakBefore)
+### Variant 2 (required: pageBreakBefore)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `pageBreakBefore` | boolean | yes |  |
 | `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
 
-### Variant 3 (target, suppressAutoHyphens)
+### Variant 3 (required: suppressAutoHyphens)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |

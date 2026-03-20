@@ -57,6 +57,7 @@ export default function useComment(params) {
   const trackedChange = ref(params.trackedChange);
   const trackedChangeType = ref(params.trackedChangeType || null);
   const trackedChangeText = ref(params.trackedChangeText || null);
+  const trackedChangeDisplayType = ref(params.trackedChangeDisplayType || null);
   const deletedText = ref(params.deletedText || null);
 
   const resolvedTime = ref(params.resolvedTime || null);
@@ -251,6 +252,7 @@ export default function useComment(params) {
       trackedChange: trackedChange.value,
       trackedChangeText: trackedChangeText.value,
       trackedChangeType: trackedChangeType.value,
+      trackedChangeDisplayType: trackedChangeDisplayType.value,
       deletedText: deletedText.value,
       resolvedTime: resolvedTime.value,
       resolvedByEmail: resolvedByEmail.value,
@@ -286,6 +288,7 @@ export default function useComment(params) {
     deletedText,
     trackedChangeType,
     trackedChangeText,
+    trackedChangeDisplayType,
     resolvedTime,
     resolvedByEmail,
     resolvedByName,

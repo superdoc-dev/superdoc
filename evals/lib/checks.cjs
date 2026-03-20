@@ -367,6 +367,149 @@ module.exports.usesDeleteOp = (output) => {
   return { pass: false, score: 0, reason: 'No delete or rewrite operation found' };
 };
 
+// --- First-instinct checks (Group 2) ---
+// For multi-step tasks where single-turn can't validate the full sequence.
+// These give full credit for the ideal tool, partial credit for reading first,
+// and zero for calling the wrong category.
+
+/**
+ * Build a first-instinct checker.
+ * @param {string[]} idealTools - Tools that show the model KNOWS the right tool (score 1.0)
+ * @param {string[]} acceptableTools - Reading-first tools that are valid strategy (score 0.7)
+ * @param {string} taskLabel - For error messages
+ */
+function firstInstinct(idealTools, acceptableTools, taskLabel) {
+  return (output) => {
+    if (!Array.isArray(output) || output.length === 0) {
+      return { pass: false, score: 0, reason: 'No tool calls' };
+    }
+    const called = output.map((c) => c.function?.name).filter(Boolean);
+    // Check if any ideal tool was called
+    const idealHit = called.find((n) => idealTools.includes(n));
+    if (idealHit) return { pass: true, score: 1, reason: `Called ${idealHit} (ideal)` };
+    // Check if any acceptable tool was called
+    const acceptableHit = called.find((n) => acceptableTools.includes(n));
+    if (acceptableHit) return { pass: true, score: 0.7, reason: `Called ${acceptableHit} (reads first, acceptable)` };
+    // Wrong category
+    return { pass: false, score: 0, reason: `${taskLabel}: called ${called.join(', ')}, expected one of [${[...idealTools, ...acceptableTools].join(', ')}]` };
+  };
+}
+
+module.exports.instinctEdit = firstInstinct(
+  [EDIT, MUTATIONS, SEARCH],
+  [GET_CONTENT],
+  'edit task',
+);
+module.exports.instinctFormat = firstInstinct(
+  [FORMAT, MUTATIONS, SEARCH],
+  [GET_CONTENT],
+  'format task',
+);
+module.exports.instinctComment = firstInstinct(
+  [COMMENT, SEARCH],
+  [GET_CONTENT],
+  'comment task',
+);
+module.exports.instinctList = firstInstinct(
+  [LIST, SEARCH],
+  [GET_CONTENT],
+  'list task',
+);
+module.exports.instinctTrackChanges = firstInstinct(
+  [TRACK_CHANGES, SEARCH, EDIT, MUTATIONS],
+  [GET_CONTENT],
+  'tracked changes task',
+);
+
+// --- Execution trace helpers (Level 2) ---
+// These parse the full JSON output from superdoc-agent-gateway.mjs
+// which includes { documentText, trace: [{step, toolCalls, toolResults}] }
+
+function parseExecOutput(output) {
+  if (typeof output === 'string') {
+    try { return JSON.parse(output); } catch { return null; }
+  }
+  return typeof output === 'object' ? output : null;
+}
+
+/** Assert documentText contains a string. */
+module.exports.docContains = (output, context) => {
+  const expected = context?.vars?.assertContains;
+  if (!expected) return true;
+  const d = parseExecOutput(output);
+  if (!d?.documentText) return { pass: false, score: 0, reason: 'No documentText in output' };
+  if (d.documentText.includes(expected)) return { pass: true, score: 1, reason: `Contains "${expected}"` };
+  return { pass: false, score: 0, reason: `Missing "${expected}"` };
+};
+
+/** Assert documentText does NOT contain a string. */
+module.exports.docNotContains = (output, context) => {
+  const unexpected = context?.vars?.assertNotContains;
+  if (!unexpected) return true;
+  const d = parseExecOutput(output);
+  if (!d?.documentText) return { pass: false, score: 0, reason: 'No documentText in output' };
+  if (!d.documentText.includes(unexpected)) return { pass: true, score: 1, reason: `Does not contain "${unexpected}"` };
+  return { pass: false, score: 0, reason: `Still contains "${unexpected}"` };
+};
+
+/** Assert a tool was used at any point in the trace. */
+module.exports.traceUsesTool = (output, context) => {
+  const expected = context?.vars?.assertTool;
+  if (!expected) return true;
+  const d = parseExecOutput(output);
+  if (!d?.trace) return { pass: false, score: 0, reason: 'No trace data' };
+  const allTools = d.trace.flatMap((s) => s.toolCalls.map((tc) => tc.tool));
+  if (allTools.includes(expected)) return { pass: true, score: 1, reason: `Trace includes ${expected}` };
+  return { pass: false, score: 0, reason: `${expected} never called. Trace: ${allTools.join(' → ')}` };
+};
+
+/** Assert tool A was called before tool B in the trace. */
+module.exports.traceToolOrder = (output, context) => {
+  const first = context?.vars?.assertFirst;
+  const then = context?.vars?.assertThen;
+  if (!first || !then) return true;
+  const d = parseExecOutput(output);
+  if (!d?.trace) return { pass: false, score: 0, reason: 'No trace data' };
+  const allTools = d.trace.flatMap((s) => s.toolCalls.map((tc) => tc.tool));
+  const firstIdx = allTools.indexOf(first);
+  const thenIdx = allTools.indexOf(then);
+  if (firstIdx < 0) return { pass: false, score: 0, reason: `${first} never called` };
+  if (thenIdx < 0) return { pass: false, score: 0, reason: `${then} never called` };
+  if (firstIdx < thenIdx) return { pass: true, score: 1, reason: `${first} (step ${firstIdx}) → ${then} (step ${thenIdx})` };
+  return { pass: false, score: 0, reason: `${then} called before ${first}` };
+};
+
+/** Assert all tool calls succeeded (no errors in trace). */
+module.exports.traceAllOk = (output) => {
+  const d = parseExecOutput(output);
+  if (!d?.trace) return { pass: false, score: 0, reason: 'No trace data' };
+  if (!d.toolCalls?.length) return { pass: false, score: 0, reason: 'No tool calls were made' };
+  const failedTools = d.toolCalls.filter((tc) => !tc.ok);
+  if (failedTools.length > 0) {
+    const names = failedTools.map((tc) => `${tc.tool}: ${tc.error || 'failed'}`).join(', ');
+    return { pass: false, score: 0, reason: `Tool failures: ${names}` };
+  }
+  return { pass: true, score: 1, reason: `All ${d.toolCalls.length} tool calls succeeded` };
+};
+
+/** Assert the total number of steps is within a range. */
+module.exports.traceStepCount = (output, context) => {
+  const max = context?.vars?.assertMaxSteps || 10;
+  const d = parseExecOutput(output);
+  if (!d?.trace) return { pass: false, score: 0, reason: 'No trace data' };
+  const count = d.trace.length;
+  if (count <= max) return { pass: true, score: 1, reason: `${count} steps (max ${max})` };
+  return { pass: false, score: 0, reason: `${count} steps exceeds max ${max}` };
+};
+
+/** Log the full tool sequence for debugging (always passes). */
+module.exports.traceLog = (output) => {
+  const d = parseExecOutput(output);
+  if (!d?.trace) return { pass: true, score: 1, reason: 'No trace' };
+  const seq = d.trace.flatMap((s) => s.toolCalls.map((tc) => tc.tool));
+  return { pass: true, score: 1, reason: `Trace: ${seq.join(' → ')} (${d.stepCount || d.trace.length} steps)` };
+};
+
 module.exports.usesRewriteOp = (output) => {
   // Check superdoc_mutations steps
   if (findMutations(output)) {

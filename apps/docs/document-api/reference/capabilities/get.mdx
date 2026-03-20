@@ -1077,6 +1077,11 @@ _No fields._
 | `operations.format.paragraph.clearBorder.dryRun` | boolean | yes |  |
 | `operations.format.paragraph.clearBorder.reasons` | enum[] | no |  |
 | `operations.format.paragraph.clearBorder.tracked` | boolean | yes |  |
+| `operations.format.paragraph.clearDirection` | object | yes |  |
+| `operations.format.paragraph.clearDirection.available` | boolean | yes |  |
+| `operations.format.paragraph.clearDirection.dryRun` | boolean | yes |  |
+| `operations.format.paragraph.clearDirection.reasons` | enum[] | no |  |
+| `operations.format.paragraph.clearDirection.tracked` | boolean | yes |  |
 | `operations.format.paragraph.clearIndentation` | object | yes |  |
 | `operations.format.paragraph.clearIndentation.available` | boolean | yes |  |
 | `operations.format.paragraph.clearIndentation.dryRun` | boolean | yes |  |
@@ -1112,6 +1117,11 @@ _No fields._
 | `operations.format.paragraph.setBorder.dryRun` | boolean | yes |  |
 | `operations.format.paragraph.setBorder.reasons` | enum[] | no |  |
 | `operations.format.paragraph.setBorder.tracked` | boolean | yes |  |
+| `operations.format.paragraph.setDirection` | object | yes |  |
+| `operations.format.paragraph.setDirection.available` | boolean | yes |  |
+| `operations.format.paragraph.setDirection.dryRun` | boolean | yes |  |
+| `operations.format.paragraph.setDirection.reasons` | enum[] | no |  |
+| `operations.format.paragraph.setDirection.tracked` | boolean | yes |  |
 | `operations.format.paragraph.setFlowOptions` | object | yes |  |
 | `operations.format.paragraph.setFlowOptions.available` | boolean | yes |  |
 | `operations.format.paragraph.setFlowOptions.dryRun` | boolean | yes |  |
@@ -1862,6 +1872,11 @@ _No fields._
 | `operations.tables.applyBorderPreset.dryRun` | boolean | yes |  |
 | `operations.tables.applyBorderPreset.reasons` | enum[] | no |  |
 | `operations.tables.applyBorderPreset.tracked` | boolean | yes |  |
+| `operations.tables.applyStyle` | object | yes |  |
+| `operations.tables.applyStyle.available` | boolean | yes |  |
+| `operations.tables.applyStyle.dryRun` | boolean | yes |  |
+| `operations.tables.applyStyle.reasons` | enum[] | no |  |
+| `operations.tables.applyStyle.tracked` | boolean | yes |  |
 | `operations.tables.clearBorder` | object | yes |  |
 | `operations.tables.clearBorder.available` | boolean | yes |  |
 | `operations.tables.clearBorder.dryRun` | boolean | yes |  |
@@ -1987,6 +2002,11 @@ _No fields._
 | `operations.tables.setBorder.dryRun` | boolean | yes |  |
 | `operations.tables.setBorder.reasons` | enum[] | no |  |
 | `operations.tables.setBorder.tracked` | boolean | yes |  |
+| `operations.tables.setBorders` | object | yes |  |
+| `operations.tables.setBorders.available` | boolean | yes |  |
+| `operations.tables.setBorders.dryRun` | boolean | yes |  |
+| `operations.tables.setBorders.reasons` | enum[] | no |  |
+| `operations.tables.setBorders.tracked` | boolean | yes |  |
 | `operations.tables.setCellPadding` | object | yes |  |
 | `operations.tables.setCellPadding.available` | boolean | yes |  |
 | `operations.tables.setCellPadding.dryRun` | boolean | yes |  |
@@ -2042,6 +2062,11 @@ _No fields._
 | `operations.tables.setStyleOption.dryRun` | boolean | yes |  |
 | `operations.tables.setStyleOption.reasons` | enum[] | no |  |
 | `operations.tables.setStyleOption.tracked` | boolean | yes |  |
+| `operations.tables.setTableOptions` | object | yes |  |
+| `operations.tables.setTableOptions.available` | boolean | yes |  |
+| `operations.tables.setTableOptions.dryRun` | boolean | yes |  |
+| `operations.tables.setTableOptions.reasons` | enum[] | no |  |
+| `operations.tables.setTableOptions.tracked` | boolean | yes |  |
 | `operations.tables.setTablePadding` | object | yes |  |
 | `operations.tables.setTablePadding.available` | boolean | yes |  |
 | `operations.tables.setTablePadding.dryRun` | boolean | yes |  |
@@ -3228,6 +3253,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "format.paragraph.clearDirection": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "format.paragraph.clearIndentation": {
       "available": true,
       "dryRun": true,
@@ -3259,6 +3289,11 @@ _No fields._
       "tracked": false
     },
     "format.paragraph.setBorder": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "format.paragraph.setDirection": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -4013,6 +4048,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "tables.applyStyle": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "tables.clearBorder": {
       "available": true,
       "dryRun": true,
@@ -4138,6 +4178,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "tables.setBorders": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "tables.setCellPadding": {
       "available": true,
       "dryRun": true,
@@ -4189,6 +4234,11 @@ _No fields._
       "tracked": false
     },
     "tables.setStyleOption": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "tables.setTableOptions": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -11591,6 +11641,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "format.paragraph.clearDirection": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "format.paragraph.clearIndentation": {
           "additionalProperties": false,
           "properties": {
@@ -11802,6 +11887,41 @@ _No fields._
           "type": "object"
         },
         "format.paragraph.setBorder": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "format.paragraph.setDirection": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -17086,6 +17206,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "tables.applyStyle": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "tables.clearBorder": {
           "additionalProperties": false,
           "properties": {
@@ -17961,6 +18116,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "tables.setBorders": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "tables.setCellPadding": {
           "additionalProperties": false,
           "properties": {
@@ -18312,6 +18502,41 @@ _No fields._
           "type": "object"
         },
         "tables.setStyleOption": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "tables.setTableOptions": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -19079,6 +19304,8 @@ _No fields._
         "format.paragraph.clearBorder",
         "format.paragraph.setShading",
         "format.paragraph.clearShading",
+        "format.paragraph.setDirection",
+        "format.paragraph.clearDirection",
         "lists.list",
         "lists.get",
         "lists.insert",
@@ -19165,6 +19392,9 @@ _No fields._
         "tables.setCellPadding",
         "tables.setCellSpacing",
         "tables.clearCellSpacing",
+        "tables.applyStyle",
+        "tables.setBorders",
+        "tables.setTableOptions",
         "tables.get",
         "tables.getCells",
         "tables.getProperties",

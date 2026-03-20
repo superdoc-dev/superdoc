@@ -9,7 +9,12 @@
 import type { SelectionTarget, SelectionPoint, SelectionEdgeNodeAddress } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { getBlockIndex } from './index-cache.js';
-import { isTextBlockCandidate, type BlockCandidate, type BlockIndex } from './node-address-resolver.js';
+import {
+  isTextBlockCandidate,
+  findBlockByNodeIdOnly,
+  type BlockCandidate,
+  type BlockIndex,
+} from './node-address-resolver.js';
 import { resolveTextRangeInBlock } from './text-offset-resolver.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
@@ -165,12 +170,25 @@ function findTextBlockByNodeId(index: BlockIndex, nodeId: string): BlockCandidat
     );
   }
 
-  return matches[0];
+  if (matches.length === 1) return matches[0];
+
+  // Alias-aware fallback (same as findTextBlockCandidates in adapter-utils.ts).
+  // This ensures IDs returned by create operations remain resolvable in
+  // SelectionTarget lookups even if the canonical nodeId differs from the alias.
+  try {
+    const resolved = findBlockByNodeIdOnly(index, nodeId);
+    if (isTextBlockCandidate(resolved)) return resolved;
+  } catch (e) {
+    if (e instanceof DocumentApiAdapterError && e.code === 'AMBIGUOUS_TARGET') throw e;
+  }
+
+  return undefined;
 }
 
 /**
  * Finds a block candidate by nodeType and nodeId.
- * Uses the block index's byId map for O(1) lookup.
+ * Uses the block index's byId map for O(1) lookup, with alias-aware
+ * fallback via nodeId-only search for stale types or aliased IDs.
  */
 function findBlockByTypeAndId(index: BlockIndex, nodeType: string, nodeId: string): BlockCandidate | undefined {
   const key = `${nodeType}:${nodeId}`;
@@ -179,5 +197,17 @@ function findBlockByTypeAndId(index: BlockIndex, nodeType: string, nodeId: strin
     throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share key "${key}".`, { nodeType, nodeId });
   }
 
-  return index.byId.get(key);
+  const exact = index.byId.get(key);
+  if (exact) return exact;
+
+  // Alias-aware fallback: handles stale nodeType (e.g. paragraph re-typed to
+  // heading) and aliased IDs (e.g. volatile sdBlockId replaced by deterministic
+  // fallback). Same pattern as findTextBlockByNodeId.
+  try {
+    return findBlockByNodeIdOnly(index, nodeId);
+  } catch (e) {
+    if (e instanceof DocumentApiAdapterError && e.code === 'AMBIGUOUS_TARGET') throw e;
+  }
+
+  return undefined;
 }

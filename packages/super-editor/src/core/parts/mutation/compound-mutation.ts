@@ -17,6 +17,15 @@ import { getPart, hasPart, setPart, removePart, clonePart } from '../store/part-
 // Converter shape (minimal interface)
 // ---------------------------------------------------------------------------
 
+interface HeaderFooterVariantIds {
+  default?: string | null;
+  first?: string | null;
+  even?: string | null;
+  odd?: string | null;
+  ids?: string[];
+  [key: string]: unknown;
+}
+
 interface ConverterForSnapshot {
   convertedXml?: Record<string, unknown>;
   numbering?: unknown;
@@ -26,6 +35,11 @@ interface ConverterForSnapshot {
   footnoteProperties?: unknown;
   documentModified?: boolean;
   documentGuid?: string | null;
+  headers?: Record<string, unknown>;
+  footers?: Record<string, unknown>;
+  headerIds?: HeaderFooterVariantIds;
+  footerIds?: HeaderFooterVariantIds;
+  headerFooterModified?: boolean;
 }
 
 function getConverter(editor: Editor): ConverterForSnapshot | undefined {
@@ -46,6 +60,11 @@ interface CompoundSnapshot {
   revision: string;
   documentModified: boolean;
   documentGuid: string | null;
+  headers: Record<string, unknown> | undefined;
+  footers: Record<string, unknown> | undefined;
+  headerIds: HeaderFooterVariantIds | undefined;
+  footerIds: HeaderFooterVariantIds | undefined;
+  headerFooterModified: boolean;
 }
 
 /**
@@ -81,6 +100,11 @@ function takeSnapshot(editor: Editor, partIds: Set<string>): CompoundSnapshot {
     revision: getRevision(editor),
     documentModified: converter?.documentModified ?? false,
     documentGuid: converter?.documentGuid ?? null,
+    headers: converter?.headers ? { ...converter.headers } : undefined,
+    footers: converter?.footers ? { ...converter.footers } : undefined,
+    headerIds: converter?.headerIds ? { ...converter.headerIds, ids: [...(converter.headerIds.ids ?? [])] } : undefined,
+    footerIds: converter?.footerIds ? { ...converter.footerIds, ids: [...(converter.footerIds.ids ?? [])] } : undefined,
+    headerFooterModified: converter?.headerFooterModified ?? false,
   };
 }
 
@@ -110,6 +134,13 @@ function restoreFromSnapshot(editor: Editor, snapshot: CompoundSnapshot): void {
   converter.documentModified = snapshot.documentModified;
   converter.documentGuid = snapshot.documentGuid;
   restoreRevision(editor, snapshot.revision);
+
+  // Restore header/footer caches
+  if (snapshot.headers !== undefined) converter.headers = snapshot.headers;
+  if (snapshot.footers !== undefined) converter.footers = snapshot.footers;
+  if (snapshot.headerIds !== undefined) converter.headerIds = snapshot.headerIds;
+  if (snapshot.footerIds !== undefined) converter.footerIds = snapshot.footerIds;
+  converter.headerFooterModified = snapshot.headerFooterModified;
 }
 
 // ---------------------------------------------------------------------------

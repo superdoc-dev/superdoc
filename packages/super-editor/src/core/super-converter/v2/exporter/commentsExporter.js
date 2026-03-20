@@ -46,6 +46,7 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
     'custom:trackedChange': comment.trackedChange,
     'custom:trackedChangeText': comment.trackedChangeText || null,
     'custom:trackedChangeType': comment.trackedChangeType,
+    'custom:trackedChangeDisplayType': comment.trackedChangeDisplayType || null,
     'custom:trackedDeletedText': comment.deletedText || null,
   };
 
@@ -138,6 +139,7 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
       'custom:trackedChange': commentDef.attributes['custom:trackedChange'],
       'custom:trackedChangeText': commentDef.attributes['custom:trackedChangeText'],
       'custom:trackedChangeType': commentDef.attributes['custom:trackedChangeType'],
+      'custom:trackedChangeDisplayType': commentDef.attributes['custom:trackedChangeDisplayType'],
       'custom:trackedDeletedText': commentDef.attributes['custom:trackedDeletedText'],
       'xmlns:custom': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
     };

@@ -53,7 +53,7 @@ const handleSelect = (option) => {
 <style scoped>
 .options-grid-wrap {
   padding: 5px;
-  border-radius: 5px;
+  border-radius: var(--sd-ui-radius, 6px);
 }
 .none-option {
   display: flex;
@@ -70,12 +70,12 @@ const handleSelect = (option) => {
 .option-grid-ctn {
   display: flex;
   flex-direction: column;
-  background-color: #fff;
+  background-color: var(--sd-ui-dropdown-bg, #ffffff);
   z-index: 3;
   box-sizing: border-box;
   &__subtitle {
     padding: 3px;
-    font-size: 12px;
+    font-size: var(--sd-ui-font-size-200, 12px);
     font-weight: 600;
   }
 }

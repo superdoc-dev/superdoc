@@ -399,6 +399,26 @@ describe('trackChangesHelpers', () => {
     expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'highlight', attrs: { color: '#E4668C' } }]);
   });
 
+  it('addMarkStep tracks hyperlink marks so comment summaries can identify hyperlink changes', () => {
+    const state = createState(createDocWithText('website'));
+    const linkMark = schema.marks.link.create({ href: 'https://example.com', text: 'website' });
+    const step = new AddMarkStep(1, 8, linkMark);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'link', attrs: linkMark.attrs }]);
+  });
+
   it('addMarkStep does not include unrelated marks in before (SD-2077)', () => {
     const highlight = schema.marks.highlight.create({ color: '#FFFF00' });
     const doc = createDocWithText('Hello', [highlight]);

@@ -8,6 +8,7 @@
 
 import type { SelectionTarget, SelectionPoint } from '../types/address.js';
 import type { BlockNodeType } from '../types/base.js';
+import type { StoryLocator } from '../types/story.types.js';
 
 // ---------------------------------------------------------------------------
 // Anchor types
@@ -52,6 +53,8 @@ export interface ResolveRangeInput {
   end: RangeAnchor;
   /** Optional expected revision for consistency checking. */
   expectedRevision?: string;
+  /** Story to resolve the range against. Defaults to body when absent. */
+  in?: StoryLocator;
 }
 
 /** Per-block preview metadata within the resolved range. */

@@ -189,8 +189,10 @@ describe('HeaderFooterSessionManager', () => {
 
     const headerRegion = {
       kind: 'header' as const,
-      headerId: 'rId-header-default',
+      headerFooterRefId: 'rId-header-default',
       sectionType: 'default',
+      sectionId: 'section-0',
+      sectionIndex: 0,
       pageIndex: 1,
       pageNumber: 2,
       localX: 40,

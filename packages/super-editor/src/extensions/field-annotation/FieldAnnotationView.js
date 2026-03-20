@@ -1,4 +1,4 @@
-import { Attribute } from '@core/index.js';
+import { Attribute } from '@core/Attribute.js';
 import { NodeSelection } from 'prosemirror-state';
 
 export class FieldAnnotationView {

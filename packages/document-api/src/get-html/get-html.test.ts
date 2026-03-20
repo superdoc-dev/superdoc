@@ -1,10 +1,11 @@
+import { describe, expect, it, mock } from 'bun:test';
 import { executeGetHtml } from './get-html.js';
 import type { GetHtmlAdapter } from './get-html.js';
 
 describe('executeGetHtml', () => {
   it('delegates to adapter.getHtml with the input', () => {
     const adapter: GetHtmlAdapter = {
-      getHtml: vi.fn(() => '<p>Hello world</p>'),
+      getHtml: mock(() => '<p>Hello world</p>'),
     };
 
     const result = executeGetHtml(adapter, {});
@@ -15,7 +16,7 @@ describe('executeGetHtml', () => {
 
   it('passes unflattenLists option through to the adapter', () => {
     const adapter: GetHtmlAdapter = {
-      getHtml: vi.fn(() => '<ol><li>item</li></ol>'),
+      getHtml: mock(() => '<ol><li>item</li></ol>'),
     };
 
     const result = executeGetHtml(adapter, { unflattenLists: false });

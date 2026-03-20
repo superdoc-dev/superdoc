@@ -16,8 +16,19 @@ function run(command, commandArgs) {
 }
 
 const vitestExitCode = run(pnpmCommand, ['exec', 'vitest', 'run', ...args]);
+
+// Always run bun test for migrated packages
+const bunTestExitCode = run(pnpmCommand, ['-r', '--parallel', '--filter', '@superdoc/document-api',
+  '--filter', '@superdoc/layout-engine', '--filter', '@superdoc/style-engine',
+  '--filter', '@superdoc/geometry-utils', '--filter', '@superdoc/word-layout',
+  '--filter', '@superdoc/common', '--filter', '@font-utils',
+  '--filter', '@locale-utils', '--filter', '@url-validation', 'test']);
+
 if (vitestExitCode !== 0) {
   process.exit(vitestExitCode);
+}
+if (bunTestExitCode !== 0) {
+  process.exit(bunTestExitCode);
 }
 
 if (args.length === 0) {

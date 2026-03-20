@@ -12,7 +12,7 @@ import type { SchemaSummaryJSON } from './types/EditorSchema.js';
 import { EditorState as PmEditorState } from 'prosemirror-state';
 import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
-import { helpers } from '@core/index.js';
+import * as helpers from './helpers/index.js';
 import { EventEmitter } from './EventEmitter.js';
 import { ExtensionService } from './ExtensionService.js';
 import { CommandService } from './CommandService.js';
@@ -93,6 +93,19 @@ const CURRENT_APP_VERSION =
 const PIXELS_PER_INCH = 96;
 const MAX_HEIGHT_BUFFER_PX = 50;
 const MAX_WIDTH_BUFFER_PX = 20;
+
+/**
+ * Given a table cell node, returns the total cell content width in pixels.
+ * Sums all colwidth values and subtracts left/right cell margins (padding).
+ */
+function getCellContentWidthPx(cellNode: PmNode): number {
+  const colwidth: number[] = cellNode.attrs?.colwidth ?? [];
+  const totalWidth = colwidth.reduce((sum: number, w: number) => sum + (w || 0), 0);
+  const margins = cellNode.attrs?.cellMargins;
+  const leftMargin = margins?.left ?? 0;
+  const rightMargin = margins?.right ?? 0;
+  return Math.max(totalWidth - leftMargin - rightMargin, 0);
+}
 
 /**
  * Image storage structure used by the image extension
@@ -2246,8 +2259,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get the maximum content size based on page dimensions and margins
-   * @returns Size object with width and height in pixels, or empty object if no page size
+   * Get the maximum content size based on page dimensions and margins.
+   *
+   * When the cursor is inside a table cell, the max width is constrained to that
+   * cell's width (derived from `colwidth` minus cell margins) so that newly inserted
+   * images are never wider than their containing cell.
+   *
+   * @returns Size object with width and height in pixels, or empty object if no page size.
    * @note In web layout mode, returns empty object to skip content constraints.
    *       CSS max-width: 100% handles responsive display while preserving full resolution.
    */
@@ -2278,6 +2296,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
     // All sizes are in inches so we multiply by PIXELS_PER_INCH to get pixels
     const maxHeight = height * PIXELS_PER_INCH - topPx - bottomPx - MAX_HEIGHT_BUFFER_PX;
     const maxWidth = width * PIXELS_PER_INCH - leftPx - rightPx - MAX_WIDTH_BUFFER_PX;
+
+    // When the cursor is inside a table cell, constrain width to the cell's content
+    // width so images inserted into a cell are never wider than that cell.
+    const { $head } = this.state.selection;
+    for (let d = $head.depth; d > 0; d--) {
+      const node = $head.node(d);
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        const cellWidth = getCellContentWidthPx(node);
+        if (cellWidth > 0) {
+          return { width: cellWidth, height: maxHeight };
+        }
+        break;
+      }
+    }
+
     return {
       width: maxWidth,
       height: maxHeight,
@@ -2901,6 +2934,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
 
+      const appXmlData = this.converter.convertedXml['docProps/app.xml'];
+      const appXml = appXmlData?.elements?.[0] ? this.converter.schemaToXml(appXmlData.elements[0]) : null;
+
       // Export core.xml (contains dcterms:created timestamp)
       const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
       const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
@@ -2913,6 +2949,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'word/numbering.xml': String(numbering),
         'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
+        ...(appXml ? { 'docProps/app.xml': String(appXml) } : {}),
         ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 

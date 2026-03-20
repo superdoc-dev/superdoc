@@ -4,9 +4,10 @@
  *
  * Composes existing primitives:
  * - SelectionPoint resolution (selection-target-resolver.ts)
- * - V3 ref encoding (query-match-adapter.ts)
+ * - V3/V4 ref encoding (query-match-adapter.ts, story-ref-codec.ts)
  * - Revision tracking (revision-tracker.ts)
  * - Block index (index-cache.ts)
+ * - Story runtime resolution (resolve-story-runtime.ts)
  */
 
 import type {
@@ -17,8 +18,9 @@ import type {
   SelectionTarget,
   SelectionPoint,
   SelectionEdgeNodeType,
+  StoryLocator,
 } from '@superdoc/document-api';
-import { SELECTION_EDGE_NODE_TYPES } from '@superdoc/document-api';
+import { SELECTION_EDGE_NODE_TYPES, storyLocatorToKey } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { getBlockIndex } from './index-cache.js';
 import { isTextBlockCandidate, type BlockCandidate, type BlockIndex } from './node-address-resolver.js';
@@ -27,6 +29,10 @@ import { encodeV3Ref } from '../plan-engine/query-match-adapter.js';
 import { getRevision, checkRevision } from '../plan-engine/revision-tracker.js';
 import { PlanError } from '../plan-engine/errors.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { decodeRef, encodeV4Ref } from '../story-runtime/story-ref-codec.js';
+import { resolveStoryFromRef, resolveStoryFromInput } from '../story-runtime/resolve-story-context.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { BODY_STORY_KEY, buildStoryKey } from '../story-runtime/story-key.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -75,52 +81,40 @@ function resolveDocumentEnd(editor: Editor, index: BlockIndex): number {
 /**
  * Decodes a text ref and extracts the start or end boundary as an absolute position.
  *
- * Only accepts `text:` prefixed refs (V3 text refs from query.match or ranges.resolve).
+ * Accepts both V3 (`text:...`) and V4 (`text:v4:...`) refs from query.match or ranges.resolve.
  */
 function resolveRefAnchor(editor: Editor, ref: string, boundary: 'start' | 'end', revision: string): number {
-  if (!ref.startsWith('text:')) {
+  const decoded = decodeRef(ref);
+
+  if (!decoded) {
     throw new DocumentApiAdapterError(
       'INVALID_TARGET',
-      `Only text refs (from query.match or ranges.resolve) are valid range anchors. Got prefix: "${ref.split(':')[0]}".`,
+      `Only text refs (from query.match or ranges.resolve) are valid range anchors. Got: "${ref}".`,
       { ref, boundary },
     );
   }
 
-  const encoded = ref.slice('text:'.length);
-  let payload: unknown;
-  try {
-    payload = JSON.parse(atob(encoded));
-  } catch {
-    throw new DocumentApiAdapterError('INVALID_TARGET', 'Invalid text ref encoding.', { ref, boundary });
-  }
-
-  const data = payload as {
-    v?: number;
-    rev?: string;
-    segments?: Array<{ blockId: string; start: number; end: number }>;
-  };
-
-  if (!data.segments?.length) {
+  const segments = decoded.segments;
+  if (!segments?.length) {
     throw new DocumentApiAdapterError('INVALID_TARGET', 'Ref contains no segments.', { ref, boundary });
   }
 
-  if (data.rev !== revision) {
+  if (decoded.rev !== revision) {
     throw new PlanError(
       'REVISION_MISMATCH',
-      `REVISION_MISMATCH — ref was created at revision ${data.rev} but document is at revision ${revision}. Re-run the discovery operation to obtain a fresh ref.`,
+      `REVISION_MISMATCH — ref was created at revision ${decoded.rev} but document is at revision ${revision}. Re-run the discovery operation to obtain a fresh ref.`,
       undefined,
       {
         ref,
         boundary,
-        refRevision: data.rev,
+        refRevision: decoded.rev,
         currentRevision: revision,
         refStability: 'ephemeral',
         remediation: 'Re-run ranges.resolve or query.match to obtain a fresh ref valid for the current revision.',
       },
     );
   }
-
-  const seg = boundary === 'start' ? data.segments[0] : data.segments[data.segments.length - 1];
+  const seg = boundary === 'start' ? segments[0] : segments[segments.length - 1];
   const offset = boundary === 'start' ? seg.start : seg.end;
   const point: SelectionPoint = { kind: 'text', blockId: seg.blockId, offset };
 
@@ -247,11 +241,21 @@ function resolveGapPosition(index: BlockIndex, absPos: number): SelectionPoint {
 // SelectionTarget construction
 // ---------------------------------------------------------------------------
 
-function buildSelectionTarget(editor: Editor, index: BlockIndex, absFrom: number, absTo: number): SelectionTarget {
+function buildSelectionTarget(
+  editor: Editor,
+  index: BlockIndex,
+  absFrom: number,
+  absTo: number,
+  story?: StoryLocator,
+): SelectionTarget {
   return {
     kind: 'selection',
     start: absPositionToSelectionPoint(editor, index, absFrom),
     end: absPositionToSelectionPoint(editor, index, absTo),
+    // Attach story metadata for non-body stories so that callers can chain
+    // the target into mutations without repeating `in`. Body stories omit
+    // the field for backward compatibility (body is the default).
+    ...(story && { story }),
   };
 }
 
@@ -344,6 +348,7 @@ function encodeRangeRef(
   absFrom: number,
   absTo: number,
   revision: string,
+  storyKey?: string,
 ): string | null {
   const segments: Array<{ blockId: string; start: number; end: number }> = [];
 
@@ -379,6 +384,19 @@ function encodeRangeRef(
   // No text content exists in the document — cannot encode a valid ref.
   if (segments.length === 0) {
     return null;
+  }
+
+  // Non-body stories use V4 refs to preserve the storyKey for downstream
+  // mutations. Body stories keep V3 for backward compatibility.
+  if (storyKey && storyKey !== BODY_STORY_KEY) {
+    return encodeV4Ref({
+      v: 4,
+      rev: revision,
+      storyKey,
+      scope: 'match',
+      matchId: `range:${absFrom}-${absTo}`,
+      segments,
+    });
   }
 
   return encodeV3Ref({
@@ -430,7 +448,7 @@ function rangeContainsOnlyTextBlocks(index: BlockIndex, absFrom: number, absTo: 
  */
 export function resolveAbsoluteRange(
   editor: Editor,
-  input: { absFrom: number; absTo: number; expectedRevision?: string },
+  input: { absFrom: number; absTo: number; expectedRevision?: string; storyLocator?: StoryLocator },
 ): ResolveRangeOutput {
   const revision = getRevision(editor);
 
@@ -444,7 +462,14 @@ export function resolveAbsoluteRange(
   const absFrom = Math.min(input.absFrom, input.absTo);
   const absTo = Math.max(input.absFrom, input.absTo);
 
-  const target = buildSelectionTarget(editor, index, absFrom, absTo);
+  // Non-body stories attach metadata to the target and encode V4 refs.
+  // Body stories (undefined or explicit body locator) omit the field for
+  // backward compatibility.
+  const isNonBody = input.storyLocator !== undefined && input.storyLocator.storyType !== 'body';
+  const storyForTarget = isNonBody ? input.storyLocator : undefined;
+  const storyKey = isNonBody ? buildStoryKey(input.storyLocator!) : undefined;
+
+  const target = buildSelectionTarget(editor, index, absFrom, absTo, storyForTarget);
 
   // The V3 text ref can only encode text-block content segments. The ref is
   // lossy when the target uses nodeEdge endpoints (structural block boundaries)
@@ -456,7 +481,7 @@ export function resolveAbsoluteRange(
   return {
     evaluatedRevision: revision,
     handle: {
-      ref: encodeRangeRef(editor, index, absFrom, absTo, revision),
+      ref: encodeRangeRef(editor, index, absFrom, absTo, revision, storyKey),
       refStability: 'ephemeral',
       coversFullTarget,
     },
@@ -465,23 +490,95 @@ export function resolveAbsoluteRange(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Story resolution for range anchors
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the story locator embedded in a range anchor's ref, if any.
+ *
+ * Only `ref`-kind anchors can carry story information (via V4 refs).
+ * `document` and `point` anchors are story-agnostic.
+ */
+function extractStoryFromAnchor(anchor: RangeAnchor): StoryLocator | undefined {
+  if (anchor.kind !== 'ref') return undefined;
+  return resolveStoryFromRef(anchor.ref);
+}
+
+/**
+ * Reconciles stories extracted from the start and end anchors.
+ *
+ * Both anchors must target the same story — a range cannot span multiple stories.
+ * Returns `undefined` when neither anchor carries story information.
+ */
+function reconcileAnchorStories(
+  startStory: StoryLocator | undefined,
+  endStory: StoryLocator | undefined,
+): StoryLocator | undefined {
+  if (!startStory) return endStory;
+  if (!endStory) return startStory;
+
+  if (storyLocatorToKey(startStory) !== storyLocatorToKey(endStory)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_INPUT',
+      `Range anchor story mismatch: start ref targets "${storyLocatorToKey(startStory)}" ` +
+        `but end ref targets "${storyLocatorToKey(endStory)}". A range cannot span multiple stories.`,
+      { startStory: storyLocatorToKey(startStory), endStory: storyLocatorToKey(endStory) },
+    );
+  }
+
+  return startStory;
+}
+
+/**
+ * Resolves the effective story locator for a range operation.
+ *
+ * Merges three potential sources using the standard precedence rules:
+ * 1. `input.in` — explicit story targeting on the operation input
+ * 2. Ref anchors — V4 refs in `start` or `end` that embed a storyKey
+ *
+ * All sources must agree; mismatches produce a clear error.
+ */
+function resolveRangeStory(input: ResolveRangeInput): StoryLocator | undefined {
+  const startStory = extractStoryFromAnchor(input.start);
+  const endStory = extractStoryFromAnchor(input.end);
+  const anchorStory = reconcileAnchorStories(startStory, endStory);
+
+  return resolveStoryFromInput({ in: input.in }, anchorStory ? { story: anchorStory } : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
 /**
  * Resolves two explicit anchors into a contiguous document range.
  *
- * Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata.
+ * Story-aware: resolves the target story from `input.in` and/or V4 ref
+ * anchors, then evaluates all anchors against the correct story editor's
+ * document state and revision counter.
+ *
+ * @param hostEditor - The body (host) editor — used to resolve story runtimes.
+ * @param input      - The range resolution input with anchors and optional story locator.
+ * @returns A transparent SelectionTarget, a mutation-ready ref, and preview metadata.
  */
-export function resolveRange(editor: Editor, input: ResolveRangeInput): ResolveRangeOutput {
-  const revision = getRevision(editor);
+export function resolveRange(hostEditor: Editor, input: ResolveRangeInput): ResolveRangeOutput {
+  // Determine which story to resolve against (defaults to body).
+  const storyLocator = resolveRangeStory(input);
+  const runtime = resolveStoryRuntime(hostEditor, storyLocator);
+  const storyEditor = runtime.editor;
+
+  const revision = getRevision(storyEditor);
 
   if (input.expectedRevision !== undefined) {
-    checkRevision(editor, input.expectedRevision);
+    checkRevision(storyEditor, input.expectedRevision);
   }
 
-  const index = getBlockIndex(editor);
+  const index = getBlockIndex(storyEditor);
 
-  // Resolve both anchors to absolute PM positions
-  const rawFrom = resolveAnchor(editor, input.start, revision, index);
-  const rawTo = resolveAnchor(editor, input.end, revision, index);
+  // Resolve both anchors to absolute PM positions in the story's document
+  const rawFrom = resolveAnchor(storyEditor, input.start, revision, index);
+  const rawTo = resolveAnchor(storyEditor, input.end, revision, index);
 
-  return resolveAbsoluteRange(editor, { absFrom: rawFrom, absTo: rawTo });
+  return resolveAbsoluteRange(storyEditor, { absFrom: rawFrom, absTo: rawTo, storyLocator });
 }

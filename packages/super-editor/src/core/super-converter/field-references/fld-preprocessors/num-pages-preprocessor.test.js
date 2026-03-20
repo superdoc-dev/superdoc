@@ -9,12 +9,9 @@ describe('preProcessNumPagesInstruction', () => {
     const nodesToCombine = [];
     const instruction = 'NUMPAGES';
     const result = preProcessNumPagesInstruction(nodesToCombine, instruction, mockDocx);
-    expect(result).toEqual([
-      {
-        name: 'sd:totalPageNumber',
-        type: 'element',
-      },
-    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('sd:totalPageNumber');
+    expect(result[0].type).toBe('element');
   });
 
   it('should extract rPr from nodes', () => {
@@ -29,19 +26,11 @@ describe('preProcessNumPagesInstruction', () => {
     ];
     const instruction = 'NUMPAGES';
     const result = preProcessNumPagesInstruction(nodesToCombine, instruction, mockDocx);
-    expect(result).toEqual([
-      {
-        name: 'sd:totalPageNumber',
-        type: 'element',
-        elements: [{ name: 'w:rPr', elements: [{ name: 'w:b' }] }],
-      },
-    ]);
+    expect(result[0].elements).toEqual([{ name: 'w:rPr', elements: [{ name: 'w:b' }] }]);
   });
 
   it('should use fieldRunRPr when content nodes have no rPr', () => {
-    // This tests the case where NUMPAGES field has styling on begin/instrText/separate nodes
-    // but no <w:t> content between separate and end
-    const nodesToCombine = []; // Empty - no content between separate and end
+    const nodesToCombine = [];
     const instruction = 'NUMPAGES';
     const fieldRunRPr = {
       name: 'w:rPr',
@@ -52,17 +41,10 @@ describe('preProcessNumPagesInstruction', () => {
       ],
     };
     const result = preProcessNumPagesInstruction(nodesToCombine, instruction, fieldRunRPr);
-    expect(result).toEqual([
-      {
-        name: 'sd:totalPageNumber',
-        type: 'element',
-        elements: [fieldRunRPr],
-      },
-    ]);
+    expect(result[0].elements).toEqual([fieldRunRPr]);
   });
 
   it('should prefer content node rPr over fieldRunRPr', () => {
-    // Content between separate and end takes priority over field sequence styling
     const contentRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
     const nodesToCombine = [
       {
@@ -76,26 +58,34 @@ describe('preProcessNumPagesInstruction', () => {
       elements: [{ name: 'w:b' }],
     };
     const result = preProcessNumPagesInstruction(nodesToCombine, instruction, fieldRunRPr);
-    expect(result).toEqual([
-      {
-        name: 'sd:totalPageNumber',
-        type: 'element',
-        elements: [contentRPr],
-      },
-    ]);
+    expect(result[0].elements).toEqual([contentRPr]);
   });
 
   it('should ignore invalid fieldRunRPr (not a w:rPr node)', () => {
     const nodesToCombine = [];
     const instruction = 'NUMPAGES';
-    // Pass something that's not a w:rPr node
     const invalidRPr = { name: 'w:r', elements: [] };
     const result = preProcessNumPagesInstruction(nodesToCombine, instruction, invalidRPr);
-    expect(result).toEqual([
+    expect(result[0].elements).toBeUndefined();
+  });
+
+  it('should extract cached text from content nodes into importedCachedText', () => {
+    const nodesToCombine = [
       {
-        name: 'sd:totalPageNumber',
-        type: 'element',
+        name: 'w:r',
+        elements: [
+          { name: 'w:rPr', elements: [{ name: 'w:noProof' }] },
+          { name: 'w:t', elements: [{ type: 'text', text: '3' }] },
+        ],
       },
-    ]);
+    ];
+    const instruction = 'NUMPAGES';
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, null);
+    expect(result[0].attributes.importedCachedText).toBe('3');
+  });
+
+  it('should not set importedCachedText when no content text exists', () => {
+    const result = preProcessNumPagesInstruction([], 'NUMPAGES', null);
+    expect(result[0].attributes.importedCachedText).toBeUndefined();
   });
 });

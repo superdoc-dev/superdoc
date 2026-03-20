@@ -1,4 +1,4 @@
-import { Extension } from '@core/index.js';
+import { Extension } from '@core/Extension.js';
 import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
 import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from 'y-prosemirror';

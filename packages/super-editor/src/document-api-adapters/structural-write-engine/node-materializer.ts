@@ -970,7 +970,7 @@ function buildParagraphProperties(styleRef?: string, props?: any): Record<string
   if (props.tabs) result.tabs = props.tabs;
   if (props.borders) result.borders = props.borders;
   if (props.shading) result.shading = props.shading;
-  if (props.bidi !== undefined) result.bidi = props.bidi;
+  if (props.bidi !== undefined) result.rightToLeft = props.bidi;
   if (props.outlineLevel !== undefined) result.outlineLevel = props.outlineLevel;
   if (props.markRunProps) result.markRunProps = props.markRunProps;
   if (props.textDirection) result.textDirection = props.textDirection;

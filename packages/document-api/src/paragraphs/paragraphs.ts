@@ -2,7 +2,7 @@
  * Engine-agnostic paragraphs domain module.
  *
  * Defines the adapter interface, validation, and execute* functions
- * for all 19 `format.paragraph.*` / `styles.paragraph.*` operations.
+ * for all `format.paragraph.*` / `styles.paragraph.*` operations.
  */
 
 import { normalizeMutationOptions, type MutationOptions } from '../write/write.js';
@@ -30,6 +30,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
 } from './paragraphs.types.js';
 import {
   PARAGRAPH_ALIGNMENTS,
@@ -38,6 +40,8 @@ import {
   BORDER_SIDES,
   CLEAR_BORDER_SIDES,
   LINE_RULES,
+  PARAGRAPH_DIRECTIONS,
+  ALIGNMENT_POLICIES,
 } from './paragraphs.types.js';
 
 // Re-export types
@@ -73,6 +77,10 @@ export type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
+  ParagraphDirection,
+  AlignmentPolicy,
 } from './paragraphs.types.js';
 export {
   PARAGRAPH_ALIGNMENTS,
@@ -81,6 +89,8 @@ export {
   BORDER_SIDES,
   CLEAR_BORDER_SIDES,
   LINE_RULES,
+  PARAGRAPH_DIRECTIONS,
+  ALIGNMENT_POLICIES,
 } from './paragraphs.types.js';
 
 // ---------------------------------------------------------------------------
@@ -110,6 +120,8 @@ export interface ParagraphsAdapter {
   clearBorder(input: ParagraphsClearBorderInput, options?: MutationOptions): ParagraphMutationResult;
   setShading(input: ParagraphsSetShadingInput, options?: MutationOptions): ParagraphMutationResult;
   clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult;
+  setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult;
+  clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
 /** Public API surface for `format.paragraph.*` — direct paragraph formatting. */
@@ -134,6 +146,8 @@ export interface ParagraphFormatApi {
   clearBorder(input: ParagraphsClearBorderInput, options?: MutationOptions): ParagraphMutationResult;
   setShading(input: ParagraphsSetShadingInput, options?: MutationOptions): ParagraphMutationResult;
   clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult;
+  setDirection(input: ParagraphsSetDirectionInput, options?: MutationOptions): ParagraphMutationResult;
+  clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
 /** Public API surface for `styles.paragraph.*` — Word-like paragraph style application operations. */
@@ -271,6 +285,8 @@ const SET_BORDER_KEYS = new Set(['target', 'side', 'style', 'color', 'size', 'sp
 const CLEAR_BORDER_KEYS = new Set(['target', 'side']);
 const SET_SHADING_KEYS = new Set(['target', 'fill', 'color', 'pattern']);
 const CLEAR_SHADING_KEYS = new Set(['target']);
+const SET_DIRECTION_KEYS = new Set(['target', 'direction', 'alignmentPolicy']);
+const CLEAR_DIRECTION_KEYS = new Set(['target']);
 
 // ---------------------------------------------------------------------------
 // Per-operation validators
@@ -498,6 +514,25 @@ function validateClearShading(input: unknown): asserts input is ParagraphsClearS
   assertNoUnknownFields(input as Record<string, unknown>, CLEAR_SHADING_KEYS, 'format.paragraph.clearShading');
 }
 
+function validateSetDirection(input: unknown): asserts input is ParagraphsSetDirectionInput {
+  const op = 'format.paragraph.setDirection';
+  assertParagraphTarget(input, op);
+  assertNoUnknownFields(input as Record<string, unknown>, SET_DIRECTION_KEYS, op);
+  const rec = input as Record<string, unknown>;
+  if (rec.direction === undefined) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${op} requires a direction field.`);
+  }
+  assertOneOf(rec.direction, 'direction', PARAGRAPH_DIRECTIONS, op);
+  if (rec.alignmentPolicy !== undefined) {
+    assertOneOf(rec.alignmentPolicy, 'alignmentPolicy', ALIGNMENT_POLICIES, op);
+  }
+}
+
+function validateClearDirection(input: unknown): asserts input is ParagraphsClearDirectionInput {
+  assertParagraphTarget(input, 'format.paragraph.clearDirection');
+  assertNoUnknownFields(input as Record<string, unknown>, CLEAR_DIRECTION_KEYS, 'format.paragraph.clearDirection');
+}
+
 // ---------------------------------------------------------------------------
 // Execute functions — validate then delegate
 // ---------------------------------------------------------------------------
@@ -671,4 +706,22 @@ export function executeParagraphsClearShading(
 ): ParagraphMutationResult {
   validateClearShading(input);
   return adapter.clearShading(input, normalizeMutationOptions(options));
+}
+
+export function executeParagraphsSetDirection(
+  adapter: ParagraphsAdapter,
+  input: ParagraphsSetDirectionInput,
+  options?: MutationOptions,
+): ParagraphMutationResult {
+  validateSetDirection(input);
+  return adapter.setDirection(input, normalizeMutationOptions(options));
+}
+
+export function executeParagraphsClearDirection(
+  adapter: ParagraphsAdapter,
+  input: ParagraphsClearDirectionInput,
+  options?: MutationOptions,
+): ParagraphMutationResult {
+  validateClearDirection(input);
+  return adapter.clearDirection(input, normalizeMutationOptions(options));
 }

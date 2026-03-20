@@ -6,6 +6,7 @@ import { getBlockIndex, getInlineIndex } from './helpers/index-cache.js';
 import { findInlineByAnchor } from './helpers/inline-address-resolver.js';
 import { projectContentNode, projectInlineNode, projectMarkBasedInline } from './helpers/sd-projection.js';
 import { DocumentApiAdapterError } from './errors.js';
+import { resolveStoryRuntime } from './story-runtime/resolve-story-runtime.js';
 
 function findBlocksByTypeAndId(blockIndex: BlockIndex, nodeType: BlockNodeType, nodeId: string): BlockCandidate[] {
   // Fast path: check the byId map which includes alias entries (e.g., sdBlockId
@@ -30,9 +31,14 @@ function buildInlineAddress(address: NodeAddress & { kind: 'inline' }): NodeAddr
 /**
  * Resolves a {@link NodeAddress} to an {@link SDNodeResult} by looking up the
  * node in the editor's current document state and projecting it to SDM/1.
+ *
+ * When the address includes a `story` locator, the node is resolved in
+ * the corresponding story editor rather than the host (body) editor.
  */
 export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResult {
-  const blockIndex = getBlockIndex(editor);
+  const runtime = resolveStoryRuntime(editor, address.story);
+  const storyEditor = runtime.editor;
+  const blockIndex = getBlockIndex(storyEditor);
 
   if (address.kind === 'block') {
     const matches = findBlocksByTypeAndId(blockIndex, address.nodeType, address.nodeId);
@@ -65,11 +71,16 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResu
 
     return {
       node: projectContentNode(candidate.node),
-      address: { kind: 'block', nodeType: candidate.nodeType, nodeId: candidate.nodeId } as NodeAddress,
+      address: {
+        kind: 'block',
+        nodeType: candidate.nodeType,
+        nodeId: candidate.nodeId,
+        ...(address.story && { story: address.story }),
+      } as NodeAddress,
     };
   }
 
-  const inlineIndex = getInlineIndex(editor);
+  const inlineIndex = getInlineIndex(storyEditor);
   const candidate = findInlineByAnchor(inlineIndex, address);
   if (!candidate) {
     throw new DocumentApiAdapterError(
@@ -88,7 +99,7 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): SDNodeResu
 
   // Mark-based inlines (hyperlink, comment) have a mark but no node.
   // Project from the mark data and resolve text content from the document.
-  const projected = projectMarkBasedInline(editor, candidate);
+  const projected = projectMarkBasedInline(storyEditor, candidate);
   if (projected) {
     return { node: projected, address: buildInlineAddress(address) };
   }

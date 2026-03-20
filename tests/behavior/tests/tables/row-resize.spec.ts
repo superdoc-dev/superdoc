@@ -158,3 +158,43 @@ test('row boundary is not resizable at rowspan-merged rows', async ({ superdoc }
   expect(row1).toBeDefined();
   expect(row1!.resizable).toBe(1);
 });
+
+test('column handles are hidden during row resize drag (SD-2094)', async ({ superdoc }) => {
+  await superdoc.executeCommand('insertTable', { rows: 3, cols: 3, withHeaderRow: false });
+  await superdoc.waitForStable();
+
+  await superdoc.type('Hello');
+  await superdoc.waitForStable();
+
+  // Hover the first row boundary to show the resize overlay
+  await hoverRowBoundary(superdoc.page, 0);
+  await superdoc.waitForStable();
+
+  const handle = superdoc.page.locator('.resize-handle--row').first();
+  await expect(handle).toBeAttached({ timeout: 5000 });
+
+  // Start dragging — hold mouse down and move incrementally
+  const box = await handle.boundingBox();
+  if (!box) throw new Error('Row resize handle not visible');
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+
+  await superdoc.page.mouse.move(x, y);
+  await superdoc.page.mouse.down();
+  // Move a small amount to activate drag state
+  await superdoc.page.mouse.move(x, y + 10);
+  await superdoc.page.waitForTimeout(50);
+
+  await superdoc.snapshot('during row drag — column handles should be hidden');
+
+  // Column handles should be hidden (v-show) during row drag
+  const colHandles = superdoc.page.locator('.resize-handle[data-boundary-type]');
+  const colCount = await colHandles.count();
+  expect(colCount).toBeGreaterThan(0);
+  for (let i = 0; i < colCount; i++) {
+    await expect(colHandles.nth(i)).toBeHidden();
+  }
+
+  await superdoc.page.mouse.up();
+  await superdoc.waitForStable();
+});

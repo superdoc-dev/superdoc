@@ -363,6 +363,64 @@ export function resolveMergeRangeLocator(
   return { table, startRow, startCol, endRow, endCol };
 }
 
+/**
+ * Resolves a table-scoped cell locator (table target/nodeId + rowIndex + columnIndex)
+ * to a {@link ResolvedCell}.
+ *
+ * If the requested coordinates land inside a merged cell, the returned
+ * `rowIndex`/`columnIndex` are canonicalized to the merged cell's **anchor**
+ * (top-left) coordinates. This is critical for callers like `unmergeCells`
+ * that pass coordinates into `expandMergedCellIntoSingles`.
+ *
+ * @throws {DocumentApiAdapterError} Various target/validation errors.
+ */
+export function resolveTableScopedCellLocator(
+  editor: Editor,
+  input: {
+    target?: TableAddress;
+    nodeId?: string;
+    rowIndex: number;
+    columnIndex: number;
+  },
+  operationName: string,
+): ResolvedCell {
+  const table = resolveTableLocator(editor, input, operationName);
+  const map = TableMap.get(table.candidate.node);
+
+  if (input.rowIndex < 0 || input.rowIndex >= map.height || input.columnIndex < 0 || input.columnIndex >= map.width) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      `${operationName}: cell (${input.rowIndex}, ${input.columnIndex}) is out of bounds (table is ${map.height}×${map.width}).`,
+    );
+  }
+
+  // Look up the cell offset from the table map. For merged cells, multiple
+  // map indices share the same offset — the anchor is the first occurrence.
+  const requestedIndex = input.rowIndex * map.width + input.columnIndex;
+  const cellOffset = map.map[requestedIndex];
+  const anchorIndex = map.map.indexOf(cellOffset);
+  const anchorRow = Math.floor(anchorIndex / map.width);
+  const anchorCol = anchorIndex % map.width;
+
+  const cellPos = table.candidate.pos + 1 + cellOffset;
+  const cellNode = table.candidate.node.nodeAt(cellOffset);
+
+  if (!cellNode) {
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `${operationName}: cell at (${input.rowIndex}, ${input.columnIndex}) could not be resolved.`,
+    );
+  }
+
+  return {
+    table,
+    cellNode,
+    cellPos,
+    rowIndex: anchorRow,
+    columnIndex: anchorCol,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Column resolution
 // ---------------------------------------------------------------------------

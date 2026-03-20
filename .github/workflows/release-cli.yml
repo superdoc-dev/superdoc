@@ -9,6 +9,8 @@ on:
       - main
       - stable
     paths:
+      # Keep in sync with apps/cli/.releaserc.cjs includePaths (patch-commit-filter).
+      # Workflow paths trigger CI; includePaths control semantic-release commit analysis.
       - 'apps/cli/**'
       - 'packages/document-api/**'
       - 'packages/superdoc/**'

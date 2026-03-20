@@ -61,17 +61,14 @@ export const LinkedStyles = Extension.create({
        * @example
        * const style = editor.helpers.linkedStyles.getStyleById('Heading1');
        * editor.commands.toggleLinkedStyle(style)
-       * @note If selection is empty, returns false
+       * @note Works with both cursor position and text selection
        * @note Removes style if already applied, applies it if not
        */
       toggleLinkedStyle: (style) => (params) => {
         const { tr } = params;
-        if (tr.selection.empty) {
-          return false;
-        }
         let node = tr.doc.nodeAt(tr.selection.$from.pos);
 
-        if (node && node.type.name !== 'paragraph') {
+        if (!node || node.type.name !== 'paragraph') {
           node = findParentNodeClosestToPos(tr.selection.$from, (n) => {
             return n.type.name === 'paragraph';
           })?.node;

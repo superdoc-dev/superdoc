@@ -307,16 +307,19 @@ describe('buildBlockIndex', () => {
       expect(index.candidates[0].nodeId).toMatch(/^para-auto-[0-9a-f]{8}$/);
     });
 
-    it('assigns deterministic fallback id when sdBlockId is a volatile UUID', () => {
+    it('keeps volatile sdBlockId as primary id for session stability', () => {
+      // Volatile (UUID-like) sdBlockIds are preferred over deterministic
+      // fallback IDs because the fallback hashes nodeType + traversal path,
+      // which shifts when siblings are inserted/moved or a paragraph is
+      // restyled to heading/list-item. The UUID stays stable for the session.
+      const volatileUuid = '7701a615-4ad8-45b5-922c-2a32114df4c8';
       const index = indexFromNodes({
         typeName: 'paragraph',
-        attrs: { sdBlockId: '7701a615-4ad8-45b5-922c-2a32114df4c8' },
+        attrs: { sdBlockId: volatileUuid },
         offset: 7,
       });
       expect(index.candidates).toHaveLength(1);
-      expect(index.candidates[0].nodeId).toMatch(/^para-auto-[0-9a-f]{8}$/);
-      // Volatile sdBlockId registered as alias
-      expect(index.byId.get('paragraph:7701a615-4ad8-45b5-922c-2a32114df4c8')).toBeDefined();
+      expect(index.candidates[0].nodeId).toBe(volatileUuid);
     });
 
     it('keeps non-volatile sdBlockId as primary id for paragraphs', () => {

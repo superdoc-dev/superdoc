@@ -151,8 +151,8 @@ function validateTextInsertInput(input: Record<string, unknown>): void {
     });
   }
 
-  if (ref !== undefined && typeof ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `ref must be a string, got ${typeof ref}.`, {
+  if (ref !== undefined && (typeof ref !== 'string' || ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: ref,
     });

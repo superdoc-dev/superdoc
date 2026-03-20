@@ -827,6 +827,10 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
   let resolvedRange: ResolvedTextTarget;
   let effectiveTarget: TextAddress;
 
+  if (ref !== undefined && ref === '') {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'ref must be a non-empty string.', { ref });
+  }
+
   if (target) {
     const resolved = resolveSelectionTarget(editor, target);
     resolvedRange = { from: resolved.absFrom, to: resolved.absTo };

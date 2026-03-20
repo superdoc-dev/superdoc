@@ -117,7 +117,15 @@ function resolveLegacyTableIdentity(attrs: BlockIdAttrs): string | undefined {
   return toId(attrs.paraId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
 }
 
-function resolveRuntimeBlockIdentity(
+/**
+ * Resolves a runtime block identity for **table-like** nodes.
+ *
+ * Non-volatile sdBlockId is preferred; otherwise a deterministic fallback
+ * (hashed from nodeType + traversal path) is used. This is correct for tables
+ * because they keep a stable nodeType across mutations — their sdBlockId may
+ * change when ProseMirror replaces the node during property edits.
+ */
+function resolveTableRuntimeIdentity(
   nodeType: BlockNodeType,
   attrs: BlockIdAttrs,
   pos: number,
@@ -130,6 +138,25 @@ function resolveRuntimeBlockIdentity(
   return buildFallbackBlockNodeId(nodeType, pos, path);
 }
 
+/**
+ * Resolves a runtime block identity for **paragraph-like** nodes
+ * (paragraph, heading, listItem).
+ *
+ * Always prefers sdBlockId — even a volatile (UUID-like) one — because the
+ * deterministic fallback hashes nodeType + traversal path, both of which shift
+ * during ordinary edits: sibling inserts/moves change the path, and restyles
+ * (paragraph → heading/listItem) change the nodeType. The sdBlockId stays
+ * stable for the session lifetime.
+ */
+function resolveParagraphRuntimeIdentity(
+  nodeType: BlockNodeType,
+  attrs: BlockIdAttrs,
+  pos: number,
+  path?: TraversalPath,
+): string | undefined {
+  return toId(attrs.sdBlockId) ?? buildFallbackBlockNodeId(nodeType, pos, path);
+}
+
 export function resolveBlockNodeId(
   node: ProseMirrorNode,
   pos: number,
@@ -138,10 +165,9 @@ export function resolveBlockNodeId(
 ): string | undefined {
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
-    // paraId (imported from DOCX) is the primary identity for paragraphs. This
-    // preserves historical IDs across DOCX round-trips. Non-volatile sdBlockId
-    // is preferred over deterministic fallback for freshly created nodes.
-    return toId(attrs?.paraId) ?? resolveRuntimeBlockIdentity(nodeType, (attrs ?? {}) as BlockIdAttrs, pos, path);
+    // paraId (imported from DOCX) is the primary identity for paragraphs —
+    // preserves historical IDs across DOCX round-trips.
+    return toId(attrs?.paraId) ?? resolveParagraphRuntimeIdentity(nodeType, (attrs ?? {}) as BlockIdAttrs, pos, path);
   }
 
   if (nodeType === 'tableOfContents') {
@@ -162,7 +188,7 @@ export function resolveBlockNodeId(
   // UUID sdBlockId exists, expose a deterministic fallback instead so session
   // addresses remain reusable across fresh document opens.
   if (typeName === 'table' || typeName === 'tableCell' || typeName === 'tableHeader') {
-    return resolveLegacyTableIdentity(attrs) ?? resolveRuntimeBlockIdentity(nodeType, attrs, pos, path);
+    return resolveLegacyTableIdentity(attrs) ?? resolveTableRuntimeIdentity(nodeType, attrs, pos, path);
   }
 
   // NOTE: Migration surface for the stable-addresses plan.

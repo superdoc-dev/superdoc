@@ -17,24 +17,23 @@ function run(command, commandArgs) {
 
 const vitestExitCode = run(pnpmCommand, ['exec', 'vitest', 'run', ...args]);
 
-// Always run bun test for migrated packages
-const bunTestExitCode = run(pnpmCommand, ['-r', '--parallel', '--filter', '@superdoc/document-api',
-  '--filter', '@superdoc/layout-engine', '--filter', '@superdoc/style-engine',
-  '--filter', '@superdoc/geometry-utils', '--filter', '@superdoc/word-layout',
-  '--filter', '@superdoc/common', '--filter', '@font-utils',
-  '--filter', '@locale-utils', '--filter', '@url-validation', 'test']);
-
-// Run super-editor bun tests (migrated files excluded from vitest)
-const superEditorBunExitCode = run(pnpmCommand, ['--filter', '@superdoc/super-editor', 'run', 'test:bun']);
+// Run bun tests for all migrated packages (including super-editor)
+const bunExitCodes = [
+  run(pnpmCommand, ['-r', '--parallel',
+    '--filter', '@superdoc/document-api',
+    '--filter', '@superdoc/layout-engine', '--filter', '@superdoc/style-engine',
+    '--filter', '@superdoc/geometry-utils', '--filter', '@superdoc/word-layout',
+    '--filter', '@superdoc/common', '--filter', '@font-utils',
+    '--filter', '@locale-utils', '--filter', '@url-validation', 'test']),
+  run(pnpmCommand, ['--filter', '@superdoc/super-editor', 'run', 'test:bun']),
+];
 
 if (vitestExitCode !== 0) {
   process.exit(vitestExitCode);
 }
-if (bunTestExitCode !== 0) {
-  process.exit(bunTestExitCode);
-}
-if (superEditorBunExitCode !== 0) {
-  process.exit(superEditorBunExitCode);
+const bunFailed = bunExitCodes.find(code => code !== 0);
+if (bunFailed) {
+  process.exit(bunFailed);
 }
 
 if (args.length === 0) {

@@ -8,7 +8,7 @@
 import { releasePackage } from './release-local.mjs';
 
 try {
-  releasePackage({ packageCwd: 'apps/cli', tagPrefix: 'cli-v', extraArgs: process.argv.slice(2) });
+  releasePackage({ packageCwd: 'apps/cli', extraArgs: process.argv.slice(2) });
 } catch (error) {
   const message = error && typeof error.message === 'string' ? error.message : String(error);
   console.error(message);

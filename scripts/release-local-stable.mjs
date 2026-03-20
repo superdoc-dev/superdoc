@@ -15,7 +15,7 @@
 import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listTags, pruneLocalOnlyForeignTags, runSemanticRelease } from './release-local.mjs';
+import { listTags, pruneLocalOnlyReleaseTags, runSemanticRelease } from './release-local.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -53,6 +53,8 @@ if (currentBranch !== expectedBranch) {
   process.exit(1);
 }
 
+const isDryRun = forwardedArgs.includes('--dry-run') || forwardedArgs.includes('-d');
+
 // ---------------------------------------------------------------------------
 // Release pipeline
 // ---------------------------------------------------------------------------
@@ -64,7 +66,7 @@ const packages = [
 
 /**
  * @typedef {object} PackageResult
- * @property {'released' | 'no-op' | 'FAILED (partial)' | 'FAILED' | 'skipped'} status
+ * @property {'released' | 'would-release' | 'no-op' | 'FAILED (partial)' | 'FAILED' | 'skipped'} status
  * @property {string[]} newTags - Tags created during this release attempt.
  */
 
@@ -79,18 +81,25 @@ for (const pkg of packages) {
     continue;
   }
 
-  // Snapshot tags before release to detect new tags. semantic-release exits 0
-  // whether it publishes or finds nothing to release, and it creates+pushes
-  // the tag *before* publish plugins run — so a failure can still leave a tag.
+  // Remove stale local-only tags first, including tags in the current package
+  // namespace, before snapshotting. Otherwise a leftover local tag can skew
+  // semantic-release's lastRelease lookup or mask a newly created tag.
+  pruneLocalOnlyReleaseTags();
+
+  // Snapshot tags before release to detect new tags. On real releases
+  // semantic-release creates+pushes the tag before publish plugins run, so a
+  // publish-time failure can still leave behind a real release tag.
   const tagsBefore = new Set(listTags(`${pkg.tagPrefix}*`));
 
   try {
-    pruneLocalOnlyForeignTags(pkg.tagPrefix);
-    runSemanticRelease(pkg.packageCwd, forwardedArgs);
+    const runResult = runSemanticRelease(pkg.packageCwd, forwardedArgs);
 
     const tagsAfter = new Set(listTags(`${pkg.tagPrefix}*`));
     const newTags = [...tagsAfter].filter((t) => !tagsBefore.has(t));
-    results.set(pkg.name, { status: newTags.length > 0 ? 'released' : 'no-op', newTags });
+    const status = runResult.dryRun
+      ? (runResult.wouldRelease ? 'would-release' : 'no-op')
+      : (newTags.length > 0 ? 'released' : 'no-op');
+    results.set(pkg.name, { status, newTags });
   } catch (error) {
     const message = error && typeof error.message === 'string' ? error.message : String(error);
     console.error(`\n${pkg.name} release failed:\n${message}`);
@@ -128,7 +137,7 @@ if (hasFailed) {
 
 // Remind operator about @semantic-release/git behavior on stable
 const anyReleased = [...results.values()].some((r) => r.status === 'released');
-if (anyReleased && !forwardedArgs.includes('--dry-run')) {
+if (anyReleased && !isDryRun) {
   console.log(
     '\n@semantic-release/git automatically pushes version commits and tags on the stable branch.',
   );

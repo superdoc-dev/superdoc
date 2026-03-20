@@ -8,7 +8,7 @@
 import { releasePackage } from './release-local.mjs';
 
 try {
-  releasePackage({ packageCwd: 'packages/superdoc', tagPrefix: 'v', extraArgs: process.argv.slice(2) });
+  releasePackage({ packageCwd: 'packages/superdoc', extraArgs: process.argv.slice(2) });
 } catch (error) {
   const message = error && typeof error.message === 'string' ? error.message : String(error);
   console.error(message);

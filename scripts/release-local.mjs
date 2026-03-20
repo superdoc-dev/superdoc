@@ -31,8 +31,9 @@ function getCurrentBranch() {
 
 /**
  * Allowlist of every tag prefix used across the monorepo.
- * Used by pruneLocalOnlyForeignTags to avoid leaking local-only
- * tags from other packages into semantic-release's version detection.
+ * Used by pruneLocalOnlyReleaseTags to avoid leaking local-only
+ * tags from any package namespace, including the current one, into
+ * semantic-release's version detection.
  *
  * MAINTENANCE: when adding a new releasable package with its own
  * tagFormat in .releaserc.*, add its prefix here too. You can find
@@ -80,19 +81,17 @@ export function getRemoteTags() {
 }
 
 /**
- * Prune local-only tags that belong to *other* packages.
+ * Prune local-only tags across all known release namespaces.
  *
- * Uses an allowlist of known tag prefixes (ALL_TAG_PREFIXES) rather
- * than a static blocklist that rots as new packages are added.
- *
- * @param {string} ownTagPrefix - The tag prefix of the package being released (e.g. 'v', 'cli-v').
+ * This intentionally includes the package being released. A stale local-only
+ * tag in the current namespace can skew semantic-release's lastRelease lookup
+ * even if it was left behind by a failed or interrupted run.
  */
-export function pruneLocalOnlyForeignTags(ownTagPrefix) {
-  const foreignPrefixes = ALL_TAG_PREFIXES.filter((p) => p !== ownTagPrefix);
+export function pruneLocalOnlyReleaseTags() {
   const pruned = [];
   const remoteTags = getRemoteTags();
 
-  for (const prefix of foreignPrefixes) {
+  for (const prefix of ALL_TAG_PREFIXES) {
     const tags = listTags(`${prefix}*`);
     for (const tag of tags) {
       if (remoteTags.has(tag)) continue;
@@ -108,6 +107,35 @@ export function pruneLocalOnlyForeignTags(ownTagPrefix) {
   }
 }
 
+function isDryRunEnabled(extraArgs) {
+  return extraArgs.includes('--dry-run') || extraArgs.includes('-d');
+}
+
+function capture(command, args, env) {
+  try {
+    return {
+      stdout: execFileSync(command, args, {
+        cwd: REPO_ROOT,
+        env,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }),
+      stderr: '',
+      error: null,
+    };
+  } catch (error) {
+    return {
+      stdout: typeof error.stdout === 'string' ? error.stdout : String(error.stdout ?? ''),
+      stderr: typeof error.stderr === 'string' ? error.stderr : String(error.stderr ?? ''),
+      error,
+    };
+  }
+}
+
+export function inferDryRunWouldRelease(output) {
+  return output.includes('The next release version is ');
+}
+
 /**
  * Run semantic-release for a given package directory.
  *
@@ -116,19 +144,32 @@ export function pruneLocalOnlyForeignTags(ownTagPrefix) {
  */
 export function runSemanticRelease(packageCwd, extraArgs = []) {
   const branch = getCurrentBranch();
-  run(
-    'pnpm',
-    ['--prefix', packageCwd, 'exec', 'semantic-release', '--no-ci', ...extraArgs],
-    {
-      env: {
-        ...process.env,
-        LEFTHOOK: '0',
-        // Mirror CI: .releaserc.cjs files read GITHUB_REF_NAME to decide
-        // whether to include @semantic-release/git (stable-only plugin).
-        GITHUB_REF_NAME: process.env.GITHUB_REF_NAME || branch,
-      },
-    },
-  );
+  const env = {
+    ...process.env,
+    LEFTHOOK: '0',
+    // Mirror CI: .releaserc.cjs files read GITHUB_REF_NAME to decide
+    // whether to include @semantic-release/git (stable-only plugin).
+    GITHUB_REF_NAME: process.env.GITHUB_REF_NAME || branch,
+  };
+  const args = ['--prefix', packageCwd, 'exec', 'semantic-release', '--no-ci', ...extraArgs];
+
+  if (!isDryRunEnabled(extraArgs)) {
+    run('pnpm', args, { env });
+    return { dryRun: false, wouldRelease: false };
+  }
+
+  // In dry-run mode semantic-release skips prepare/publish/tag creation, so
+  // infer whether a release is pending from its preview output instead of tags.
+  const { stdout, stderr, error } = capture('pnpm', args, env);
+  if (stdout) process.stdout.write(stdout);
+  if (stderr) process.stderr.write(stderr);
+  if (error) throw error;
+
+  const combinedOutput = `${stdout}\n${stderr}`;
+  return {
+    dryRun: true,
+    wouldRelease: inferDryRunWouldRelease(combinedOutput),
+  };
 }
 
 /**
@@ -136,10 +177,9 @@ export function runSemanticRelease(packageCwd, extraArgs = []) {
  *
  * @param {object} options
  * @param {string} options.packageCwd - Relative path from repo root.
- * @param {string} options.tagPrefix - Tag prefix for this package (e.g. 'v', 'cli-v').
  * @param {string[]} [options.extraArgs] - Additional CLI flags forwarded to semantic-release.
  */
-export function releasePackage({ packageCwd, tagPrefix, extraArgs = [] }) {
-  pruneLocalOnlyForeignTags(tagPrefix);
-  runSemanticRelease(packageCwd, extraArgs);
+export function releasePackage({ packageCwd, extraArgs = [] }) {
+  pruneLocalOnlyReleaseTags();
+  return runSemanticRelease(packageCwd, extraArgs);
 }

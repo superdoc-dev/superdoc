@@ -32,9 +32,10 @@ import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRu
 
 /**
  * Scan the document for the most common non-heading paragraph styleId.
- * Returns undefined if no paragraphs have explicit styles.
+ * Falls back to 'Normal' (the OOXML default) when no explicit styles are
+ * found — most DOCX paragraphs omit `<w:pStyle>` and implicitly use Normal.
  */
-function resolveDefaultParagraphStyle(editor: Editor): string | undefined {
+function resolveDefaultParagraphStyle(editor: Editor): string {
   const counts = new Map<string, number>();
   const headingPattern = /^Heading\d$/;
 
@@ -46,7 +47,7 @@ function resolveDefaultParagraphStyle(editor: Editor): string | undefined {
     }
   });
 
-  if (counts.size === 0) return undefined;
+  if (counts.size === 0) return 'Normal';
 
   let best = '';
   let bestCount = 0;
@@ -56,7 +57,7 @@ function resolveDefaultParagraphStyle(editor: Editor): string | undefined {
       bestCount = count;
     }
   }
-  return best || undefined;
+  return best || 'Normal';
 }
 
 // ---------------------------------------------------------------------------

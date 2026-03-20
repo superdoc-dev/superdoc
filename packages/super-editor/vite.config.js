@@ -3,9 +3,15 @@ import { configDefaults } from 'vitest/config'
 import { fileURLToPath, URL } from 'node:url'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync } from 'node:fs'
 
 import { version as superdocVersion } from '../superdoc/package.json';
 import sourceResolve from '../../vite.sourceResolve'
+
+// Files migrated to bun:test — exclude from vitest
+const bunTestFiles = readFileSync(
+  new URL('./bun-test-files.txt', import.meta.url), 'utf8'
+).split('\n').filter(Boolean).map(f => `**/${f}`);
 
 const testPool = process.env.VITEST_POOL ?? 'threads';
 const minWorkers = process.env.VITEST_MIN_WORKERS ?? '50%';
@@ -77,6 +83,8 @@ export default defineConfig(({ mode }) => {
         '**/*.spec.js',
         // Slow test excluded by default, run with VITEST_SLOW=1 (test:slow script)
         ...(process.env.VITEST_SLOW ? [] : ['**/node-import-timing.test.js']),
+        // Files migrated to bun:test — run via `bun test` instead
+        ...bunTestFiles,
       ],
       coverage: {
         provider: 'v8',

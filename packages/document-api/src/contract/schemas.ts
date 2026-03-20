@@ -4451,7 +4451,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ...textAddressSchema,
           description: "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}.",
         },
-        parentCommentId: { type: 'string', description: 'Parent comment ID for creating a threaded reply.' },
+        parentCommentId: {
+          type: 'string',
+          minLength: 1,
+          description:
+            'Parent comment ID for replying to an existing thread. Omit entirely when creating a new comment thread.',
+        },
       },
       ['text'],
     ),

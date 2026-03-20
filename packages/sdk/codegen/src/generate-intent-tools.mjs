@@ -285,17 +285,41 @@ function buildIntentTools(contract) {
         }
       }
 
-      // Annotate descriptions: for params required by some (not all) actions,
-      // add "Required for action X, Y." so the LLM knows when to include them.
-      for (const [propName, { requiredCount, requiredBy }] of propPresence) {
-        if (requiredCount > 0 && requiredCount < opCount && allProperties[propName]) {
+      // Annotate descriptions so the LLM knows which params belong to which actions.
+      // Two cases:
+      //   1. Param is required by some actions → "Required for action X, Y."
+      //   2. Param only appears in a few actions (not all) → "Only for action X, Y."
+      //      This prevents the model from sending list/get params with create calls.
+      for (const [propName, { total, requiredCount, requiredBy }] of propPresence) {
+        if (!allProperties[propName]) continue;
+        const existing = allProperties[propName].description || '';
+
+        if (requiredCount > 0 && requiredCount < opCount) {
+          // Case 1: required by some actions
           const actions = requiredBy.map((a) => `'${a}'`).join(', ');
-          const existing = allProperties[propName].description || '';
           const suffix = `Required for ${requiredBy.length === 1 ? 'action' : 'actions'} ${actions}.`;
           allProperties[propName] = {
             ...allProperties[propName],
             description: existing ? `${existing} ${suffix}` : suffix,
           };
+        } else if (total > 0 && total < opCount && requiredCount === 0) {
+          // Case 2: appears in some actions but required by none — annotate scope
+          // Collect which actions have this param
+          const presentIn = [];
+          for (const { operation } of ops) {
+            const opSchema = buildInputSchemaFromParams(operation);
+            if (opSchema.properties && propName in opSchema.properties) {
+              presentIn.push(operation.intentAction);
+            }
+          }
+          if (presentIn.length < opCount) {
+            const actions = presentIn.map((a) => `'${a}'`).join(', ');
+            const suffix = `Only for ${presentIn.length === 1 ? 'action' : 'actions'} ${actions}. Omit for other actions.`;
+            allProperties[propName] = {
+              ...allProperties[propName],
+              description: existing ? `${existing} ${suffix}` : suffix,
+            };
+          }
         }
       }
 

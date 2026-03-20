@@ -102,9 +102,16 @@ The comment tool manages comment threads in the document.
 
 To add a comment on specific text:
 1. Search for the text: `superdoc_search({select: {type: "text", pattern: "target phrase"}, require: "first"})`
-2. Pass the `handle.ref` as `target`: `superdoc_comment({action: "create", text: "My comment", target: "<handle.ref string>"})`
+2. Use the `handle.ref` from the result and the `blocks[0]` info to build the target:
+   ```
+   superdoc_comment({
+     action: "create",
+     text: "My comment",
+     target: {kind: "text", blockId: "<blocks[0].blockId>", range: {start: <highlightRange.start>, end: <highlightRange.end>}}
+   })
+   ```
 
-**Do NOT construct a target object with `blockId`/`start`/`end` manually.** Always use a ref from search results.
+**Only pass `action`, `text`, and `target` for creating a new comment.** Do not pass `parentId`, `id`, `status`, `limit`, `offset`, or other params — they belong to different comment actions.
 
 ### Resolving and reopening comments
 
@@ -118,6 +125,7 @@ To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: 
 - **`within` scopes to a single block**, not a section. To find text in a section, search the full document for the text directly.
 - **Refs expire after any mutation.** When applying the same change to multiple matches (e.g., bold every occurrence), use `superdoc_mutations` with multiple `format.apply` steps referencing the search refs, instead of calling `superdoc_format` individually per match.
 - **Replace all occurrences** of the same text with a single mutation step using `require: "all"`, not multiple steps targeting the same pattern (which causes overlap conflicts).
+- **Table cells are separate blocks.** Search for individual cell values (e.g., `"28"`), not patterns spanning multiple cells. Cross-cell search patterns will fail.
 - For `superdoc_format` inline properties, use `null` inside the `inline` object to clear a property (e.g., `"inline": { "bold": null }` removes bold).
 - **Creating lists** requires two modes:
   - `mode: "fromParagraphs"` — converts existing paragraphs into list items. Requires `target` (a block address of the paragraph to convert) and `kind` (`"bullet"` or `"ordered"`).

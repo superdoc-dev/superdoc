@@ -35,6 +35,7 @@ type InsertParagraphAtCommandOptions = {
   text?: string;
   sdBlockId?: string;
   tracked?: boolean;
+  styleId?: string;
 };
 
 type InsertParagraphAtCommand = (options: InsertParagraphAtCommandOptions) => boolean;
@@ -45,6 +46,7 @@ type InsertHeadingAtCommandOptions = {
   text?: string;
   sdBlockId?: string;
   tracked?: boolean;
+  styleId?: string;
 };
 
 type InsertHeadingAtCommand = (options: InsertHeadingAtCommandOptions) => boolean;
@@ -212,6 +214,7 @@ export function createParagraphWrapper(
           text: input.text,
           sdBlockId: paragraphId,
           tracked: mode === 'tracked',
+          styleId: input.styleId,
         });
         if (didApply) {
           clearIndexCache(storyEditor);
@@ -322,6 +325,7 @@ export function createHeadingWrapper(
           text: input.text,
           sdBlockId: headingId,
           tracked: mode === 'tracked',
+          styleId: input.styleId,
         });
         if (didApply) {
           clearIndexCache(storyEditor);

@@ -38,6 +38,8 @@ import type {
   CreateParagraphInput,
   CreateParagraphResult,
   DocumentInfo,
+  DocumentStyles,
+  DocumentStyleInfo,
   MutationsApplyInput,
   MutationsPreviewInput,
   MutationsPreviewOutput,

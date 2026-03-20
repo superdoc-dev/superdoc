@@ -38,10 +38,26 @@ export interface DocumentInfoCapabilities {
   canReplace: boolean;
 }
 
+/** A paragraph style discovered in the document. */
+export interface DocumentStyleInfo {
+  /** Style identifier (e.g. 'Normal', 'Heading1', 'BodyText'). */
+  styleId: string;
+  /** Number of paragraphs using this style. */
+  count: number;
+}
+
+/** Style information collected from the document. */
+export interface DocumentStyles {
+  /** Paragraph styles currently in use, sorted by frequency (most common first). */
+  paragraphStyles: DocumentStyleInfo[];
+}
+
 export interface DocumentInfo {
   counts: DocumentInfoCounts;
   outline: DocumentInfoOutlineItem[];
   capabilities: DocumentInfoCapabilities;
   /** Monotonic decimal-string revision counter. Increments on every document change. */
   revision: string;
+  /** Styles currently in use in the document. */
+  styles?: DocumentStyles;
 }

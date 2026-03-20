@@ -1,4 +1,4 @@
-import type { DocumentInfo, FindOutput, InfoInput, NodeInfo } from '@superdoc/document-api';
+import type { DocumentInfo, DocumentStyles, FindOutput, InfoInput, NodeInfo } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { findLegacyAdapter } from './find-adapter.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
@@ -43,7 +43,29 @@ function buildOutline(result: FindOutput): DocumentInfo['outline'] {
 }
 
 /**
- * Build `doc.info` payload from live document counts and heading outline.
+ * Scan the document for unique paragraph styleIds and their frequency.
+ */
+function collectDocumentStyles(editor: Editor): DocumentStyles {
+  const styleCounts = new Map<string, number>();
+
+  editor.state.doc.descendants((node) => {
+    if (node.type.name !== 'paragraph') return;
+    const props = node.attrs.paragraphProperties;
+    if (props && typeof props === 'object' && typeof props.styleId === 'string' && props.styleId) {
+      styleCounts.set(props.styleId, (styleCounts.get(props.styleId) ?? 0) + 1);
+    }
+  });
+
+  const paragraphStyles = Array.from(styleCounts.entries())
+    .map(([styleId, count]) => ({ styleId, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return { paragraphStyles };
+}
+
+/**
+ * Build `doc.info` payload from live document counts, heading outline,
+ * and style inventory.
  *
  * Counts are derived from the centralized live-document-counts helper.
  * Outline generation still uses the heading find query (needs NodeInfo data
@@ -67,5 +89,6 @@ export function infoAdapter(editor: Editor, _input: InfoInput): DocumentInfo {
       canReplace: true,
     },
     revision: getRevision(editor),
+    styles: collectDocumentStyles(editor),
   };
 }

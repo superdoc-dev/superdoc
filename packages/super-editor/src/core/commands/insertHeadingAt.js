@@ -4,14 +4,15 @@
  * Internally, headings are paragraph nodes with a heading styleId
  * (`Heading1` through `Heading6`) set on `paragraphProperties`.
  *
- * Supports optional seed text, deterministic block id assignment, and
- * operation-scoped tracked-change conversion via transaction meta.
+ * Supports optional seed text, deterministic block id assignment,
+ * custom style override, and operation-scoped tracked-change
+ * conversion via transaction meta.
  *
- * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
+ * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean; styleId?: string }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertHeadingAt =
-  ({ pos, level, text = '', sdBlockId, paraId, tracked }) =>
+  ({ pos, level, text = '', sdBlockId, paraId, tracked, styleId }) =>
   ({ state, dispatch }) => {
     const paragraphType = state.schema.nodes.paragraph;
     if (!paragraphType) return false;
@@ -21,7 +22,7 @@ export const insertHeadingAt =
     const attrs = {
       ...(sdBlockId ? { sdBlockId } : undefined),
       ...(paraId ? { paraId } : undefined),
-      paragraphProperties: { styleId: `Heading${level}` },
+      paragraphProperties: { styleId: styleId || `Heading${level}` },
     };
     const normalizedText = typeof text === 'string' ? text : '';
     const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;

@@ -1,14 +1,15 @@
 /**
  * Insert a paragraph node at an absolute document position.
  *
- * Supports optional seed text, deterministic block id assignment, and
- * operation-scoped tracked-change conversion via transaction meta.
+ * Supports optional seed text, deterministic block id assignment,
+ * named paragraph style, and operation-scoped tracked-change
+ * conversion via transaction meta.
  *
- * @param {{ pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
+ * @param {{ pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean; styleId?: string }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertParagraphAt =
-  ({ pos, text = '', sdBlockId, paraId, tracked }) =>
+  ({ pos, text = '', sdBlockId, paraId, tracked, styleId }) =>
   ({ state, dispatch }) => {
     const paragraphType = state.schema.nodes.paragraph;
     if (!paragraphType) return false;
@@ -17,6 +18,7 @@ export const insertParagraphAt =
     const attrs = {
       ...(sdBlockId ? { sdBlockId } : undefined),
       ...(paraId ? { paraId } : undefined),
+      ...(styleId ? { paragraphProperties: { styleId } } : undefined),
     };
     const normalizedText = typeof text === 'string' ? text : '';
     const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;

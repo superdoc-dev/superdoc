@@ -1058,12 +1058,31 @@ const documentInfoCapabilitiesSchema = objectSchema(
   ['canFind', 'canGetNode', 'canComment', 'canReplace'],
 );
 
+const documentStyleInfoSchema = objectSchema(
+  {
+    styleId: { type: 'string', description: "Style identifier (e.g. 'Normal', 'Heading1', 'BodyText')." },
+    count: { type: 'integer', description: 'Number of paragraphs using this style.' },
+  },
+  ['styleId', 'count'],
+);
+
+const documentStylesSchema = objectSchema(
+  {
+    paragraphStyles: {
+      ...arraySchema(documentStyleInfoSchema),
+      description: 'Paragraph styles in use, sorted by frequency (most common first).',
+    },
+  },
+  ['paragraphStyles'],
+);
+
 const documentInfoSchema = objectSchema(
   {
     counts: documentInfoCountsSchema,
     outline: arraySchema(documentInfoOutlineItemSchema),
     capabilities: documentInfoCapabilitiesSchema,
     revision: { type: 'string' },
+    styles: { ...documentStylesSchema, description: 'Styles currently in use in the document.' },
   },
   ['counts', 'outline', 'capabilities', 'revision'],
 );
@@ -3399,6 +3418,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ],
       },
       text: { type: 'string', description: 'Paragraph text content.' },
+      styleId: {
+        type: 'string',
+        description:
+          "Named paragraph style (e.g. 'Normal', 'BodyText'). Omit for document default. Use superdoc_get_content info to discover available styles.",
+      },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
     success: createParagraphSuccessSchema,
@@ -3432,6 +3456,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ],
         },
         text: { type: 'string', description: 'Heading text content.' },
+        styleId: {
+          type: 'string',
+          description: "Named heading style (e.g. 'Heading1', 'Heading2'). Omit for default heading style.",
+        },
       },
       ['level'],
     ),

@@ -3,7 +3,7 @@
  */
 
 import type { BlockId, TableAttrs, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { layoutTableBlock } from './layout-table.js';
 
 /**

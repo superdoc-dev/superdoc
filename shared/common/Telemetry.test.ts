@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { Telemetry, TelemetryConfig, TelemetryPayload } from './Telemetry';
 
 describe('Telemetry', () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: ReturnType<typeof spyOn>;
   const testConfig: TelemetryConfig = {
     enabled: true,
     endpoint: 'https://test.example.com/collect',
@@ -10,7 +10,7 @@ describe('Telemetry', () => {
   };
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response());
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(new Response());
   });
 
   afterEach(() => {

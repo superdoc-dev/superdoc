@@ -5,7 +5,7 @@
  * page number formatting and section-aware display numbering.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { formatPageNumber, computeDisplayPageNumber } from './pageNumbering';
 import type { Page, SectionMetadata } from '@superdoc/contracts';
 

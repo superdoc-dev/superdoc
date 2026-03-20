@@ -1,5 +1,5 @@
 import type { FlowBlock } from '@superdoc/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { computeNextSectionPropsAtBreak } from './section-props';
 

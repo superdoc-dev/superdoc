@@ -22,7 +22,11 @@ if (vitestExitCode !== 0) {
 
 if (args.length === 0) {
   // Run bun test for migrated packages
-  const bunTestExitCode = run(pnpmCommand, ['--filter', '@superdoc/document-api', 'test']);
+  const bunTestExitCode = run(pnpmCommand, ['-r', '--parallel', '--filter', '@superdoc/document-api',
+    '--filter', '@superdoc/layout-engine', '--filter', '@superdoc/style-engine',
+    '--filter', '@superdoc/geometry-utils', '--filter', '@superdoc/word-layout',
+    '--filter', '@superdoc/common', '--filter', '@font-utils',
+    '--filter', '@locale-utils', '--filter', '@url-validation', 'test']);
   if (bunTestExitCode !== 0) {
     process.exit(bunTestExitCode);
   }

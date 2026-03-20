@@ -52,7 +52,6 @@
             "pages": [
               "getting-started/introduction",
               "getting-started/quickstart",
-              "getting-started/ai-agents",
               {
                 "group": "Frameworks",
                 "pages": [
@@ -321,6 +320,10 @@
     ]
   },
   "redirects": [
+    {
+      "source": "/getting-started/ai-agents",
+      "destination": "/document-engine/ai-agents/llm-tools"
+    },
     {
       "source": "/document-engine/mcp",
       "destination": "/document-engine/ai-agents/mcp-server"

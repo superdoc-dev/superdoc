@@ -83,7 +83,7 @@ Reach for `superdoc_mutations` only when you need:
 
 ```typescript
 try {
-  const result = await dispatchSuperDocTool(client, toolCall.function.name, JSON.parse(toolCall.function.arguments));
+  const result = await dispatchSuperDocTool(doc, toolCall.function.name, JSON.parse(toolCall.function.arguments));
   messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) });
 } catch (err: any) {
   // Return the error as a tool result — the model will see it and adjust

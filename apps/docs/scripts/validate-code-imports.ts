@@ -54,6 +54,7 @@ const EXACT_EXTERNAL_IMPORTS = new Set([
   'ioredis',
   'ai',
   'zod',
+  '@anthropic-ai/sdk',
 ]);
 
 const PREFIX_EXTERNAL_IMPORTS = [

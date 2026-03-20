@@ -1314,7 +1314,10 @@ export function layoutTableBlock({
 
   // 2. Count header rows
   const headerCount = countHeaderRows(block);
-  const headerHeight = headerCount > 0 ? sumRowHeights(measure.rows, 0, headerCount) : 0;
+  const headerPrefixHeights = [0];
+  for (let i = 0; i < headerCount; i += 1) {
+    headerPrefixHeights.push(headerPrefixHeights[i] + (measure.rows[i]?.height ?? 0));
+  }
 
   // 3. Initialize state
   let state = ensurePage();
@@ -1412,6 +1415,11 @@ export function layoutTableBlock({
   // Resolve border-collapse for fragment height (match measuring/render: only add borders when separate)
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
 
+  const getRepeatedHeaderHeight = (repeatCount: number): number => {
+    const clampedCount = Math.max(0, Math.min(repeatCount, headerCount));
+    return headerPrefixHeights[clampedCount] ?? 0;
+  };
+
   // Tracks whether the current iteration is a same-page continuation of a
   // partial row. Headers must not repeat mid-page: the painter always renders
   // repeated headers at the top of a fragment, which would insert headers
@@ -1445,14 +1453,18 @@ export function layoutTableBlock({
     } else if (samePagePartialContinuation) {
       // Same-page continuation of a partial row: never insert headers mid-page
       repeatHeaderCount = 0;
-    } else if (pendingPartialRow && pendingPartialRow.rowIndex < headerCount) {
-      // The partial row being continued IS a header row. Repeating headers
-      // would render that same row once as a repeated header and again as
-      // the body partial continuation, causing duplicate content.
-      repeatHeaderCount = 0;
-    } else if (headerCount > 0 && headerHeight < availableHeight) {
-      // New page with room for headers + body content
-      repeatHeaderCount = headerCount;
+    } else {
+      // When continuing a later header row on a new page, repeat only the
+      // completed header prefix. The current partial header row continues as
+      // body content, so including it in repeatHeaderCount would duplicate it.
+      const candidateRepeatHeaderCount =
+        pendingPartialRow && pendingPartialRow.rowIndex < headerCount ? pendingPartialRow.rowIndex : headerCount;
+      const candidateHeaderHeight = getRepeatedHeaderHeight(candidateRepeatHeaderCount);
+
+      if (candidateRepeatHeaderCount > 0 && candidateHeaderHeight < availableHeight) {
+        // New page with room for the repeated header prefix plus body content.
+        repeatHeaderCount = candidateRepeatHeaderCount;
+      }
     }
 
     // Reset for this iteration — set by same-page partial-row paths below.
@@ -1464,14 +1476,16 @@ export function layoutTableBlock({
       const bodyRow = block.rows[currentRow];
       const bodyRowHeight = measure.rows[currentRow]?.height || 0;
       const bodyCantSplit = bodyRow?.attrs?.tableRowProperties?.cantSplit === true;
-      const spaceWithHeaders = availableHeight - headerHeight;
+      const spaceWithHeaders = availableHeight - getRepeatedHeaderHeight(repeatHeaderCount);
       if (bodyCantSplit && bodyRowHeight > spaceWithHeaders && bodyRowHeight <= availableHeight) {
         repeatHeaderCount = 0;
       }
     }
 
+    const repeatedHeaderHeight = getRepeatedHeaderHeight(repeatHeaderCount);
+
     // Adjust available height for header repetition
-    const availableForBody = repeatHeaderCount > 0 ? availableHeight - headerHeight : availableHeight;
+    const availableForBody = availableHeight - repeatedHeaderHeight;
 
     // Calculate full page height (for detecting over-tall rows)
     // This is the actual usable content area height, accounting for top margin.
@@ -1480,10 +1494,10 @@ export function layoutTableBlock({
 
     // When headers are repeated on every page, the force-progress threshold
     // must account for the header budget. Otherwise a segment that's smaller
-    // than a full page but larger than (fullPage − headers) will livelock:
+    // than a full page but larger than (fullPage − repeated headers) will livelock:
     // computePartialRow makes no progress, the guard advances to a new page
-    // with the same header budget, and the same no-progress state recurs.
-    const fullPageHeightForBody = repeatHeaderCount > 0 ? fullPageHeight - headerHeight : fullPageHeight;
+    // with the same repeated-header budget, and the same no-progress state recurs.
+    const fullPageHeightForBody = fullPageHeight - repeatedHeaderHeight;
 
     // Handle pending partial row continuation
     if (pendingPartialRow !== null) {
@@ -1675,6 +1689,7 @@ export function layoutTableBlock({
       state.page.fragments.push(fragment);
       state.cursorY += fragmentHeight;
       pendingPartialRow = forcedPartialRow;
+      samePagePartialContinuation = true;
       isTableContinuation = true;
       continue;
     }

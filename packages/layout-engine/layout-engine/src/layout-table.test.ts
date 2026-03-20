@@ -1660,6 +1660,56 @@ describe('layoutTableBlock', () => {
       }
     });
 
+    it('repeats only the completed header prefix when a later header row continues on a new page', () => {
+      const block = createMockTableBlock(3, [{ repeatHeader: true }, { repeatHeader: true }, { repeatHeader: false }]);
+      const measure = createMockTableMeasure([100, 100], [10, 20, 10], [[10], [10, 10, 10], [10]], 2);
+
+      const firstPage = { fragments: [] as TableFragment[] };
+      const secondPage = { fragments: [] as TableFragment[] };
+      const thirdPage = { fragments: [] as TableFragment[] };
+      const pages = [firstPage, secondPage, thirdPage];
+      let currentPageIndex = 0;
+      let state = {
+        page: firstPage,
+        columnIndex: 0,
+        cursorY: 0,
+        contentBottom: 35,
+        topMargin: 0,
+      };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => state,
+        advanceColumn: () => {
+          currentPageIndex += 1;
+          state = {
+            ...state,
+            page: pages[currentPageIndex],
+            cursorY: 0,
+            contentBottom: 60,
+          };
+          return state;
+        },
+        columnX: () => 0,
+      });
+
+      expect(firstPage.fragments).toHaveLength(1);
+      expect(firstPage.fragments[0].partialRow?.rowIndex).toBe(1);
+
+      expect(secondPage.fragments).toHaveLength(1);
+      expect(secondPage.fragments[0].partialRow?.rowIndex).toBe(1);
+      expect(secondPage.fragments[0].repeatHeaderCount).toBe(1);
+
+      // Once the split header row is complete, later continuation fragments
+      // should repeat the full header block again.
+      expect(thirdPage.fragments).toHaveLength(1);
+      expect(thirdPage.fragments[0].fromRow).toBe(2);
+      expect(thirdPage.fragments[0].repeatHeaderCount).toBe(2);
+      expect(currentPageIndex).toBe(2);
+    });
+
     it('should skip header repetition when headers are taller than page', () => {
       const block = createMockTableBlock(5, [
         { repeatHeader: true },
@@ -1812,6 +1862,58 @@ describe('layoutTableBlock', () => {
       expect(secondPage.fragments[1].repeatHeaderCount).toBe(0);
       expect(secondPage.fragments[0].partialRow?.rowIndex).toBe(2);
       expect(secondPage.fragments[1].partialRow?.rowIndex).toBe(2);
+    });
+
+    it('suppresses repeated headers between same-page slices after a forced split on a continuation page', () => {
+      const block = createMockTableBlock(2, [{ repeatHeader: true }, { cantSplit: true }]);
+      for (const cell of block.rows[1].cells) {
+        cell.attrs = { padding: { top: 4, bottom: 4, left: 2, right: 2 } };
+      }
+
+      const measure = createMockTableMeasure([100, 100], [10, 50], [[10], [8, 12]], 4);
+
+      const pageHeights = [70, 55, 80];
+      const firstPage = { fragments: [] as TableFragment[] };
+      const secondPage = { fragments: [] as TableFragment[] };
+      const thirdPage = { fragments: [] as TableFragment[] };
+      const pages = [firstPage, secondPage, thirdPage];
+      let currentPageIndex = 0;
+      let state = {
+        page: firstPage,
+        columnIndex: 0,
+        cursorY: 0,
+        contentBottom: pageHeights[0],
+        topMargin: 0,
+      };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => state,
+        advanceColumn: () => {
+          currentPageIndex += 1;
+          state = {
+            ...state,
+            page: pages[currentPageIndex],
+            cursorY: 0,
+            contentBottom: pageHeights[currentPageIndex],
+          };
+          return state;
+        },
+        columnX: () => 0,
+      });
+
+      expect(firstPage.fragments).toHaveLength(1);
+      expect(secondPage.fragments).toHaveLength(2);
+      expect(secondPage.fragments[0].partialRow?.rowIndex).toBe(1);
+      expect(secondPage.fragments[1].partialRow?.rowIndex).toBe(1);
+      expect(secondPage.fragments[0].repeatHeaderCount).toBe(0);
+      expect(secondPage.fragments[1].repeatHeaderCount).toBe(0);
+      expect(secondPage.fragments.reduce((sum, fragment) => sum + fragment.height, 0)).toBeLessThanOrEqual(
+        pageHeights[1],
+      );
+      expect(thirdPage.fragments).toHaveLength(0);
     });
 
     it('should not split floating tables', () => {

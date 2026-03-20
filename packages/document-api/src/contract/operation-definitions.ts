@@ -92,17 +92,21 @@ export type IntentGroupMeta = { toolName: string; description: string };
 
 export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   search: { toolName: 'superdoc_search', description: 'Find text or nodes in the document' },
-  get_content: { toolName: 'superdoc_get_content', description: 'Read document content in various formats' },
+  get_content: {
+    toolName: 'superdoc_get_content',
+    description:
+      'Read document content. Use action "info" first to get document structure, available styles, and default formatting. Use "text" or "markdown" to read content.',
+  },
   edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create paragraphs and headings. New paragraphs automatically match the document style. Pass styleId to override with a specific style.',
+      'Create paragraphs and headings. Pass styleId to match document formatting (get available styles from superdoc_get_content info action). New content copies formatting from nearby text automatically.',
   },
   format: {
     toolName: 'superdoc_format',
     description:
-      'Change text and paragraph formatting. Use action "inline" with a search ref for bold/italic/etc. Use action "set_style" with a target block address and styleId to apply a named paragraph style.',
+      'Change text and paragraph formatting. Use action "inline" with a search ref for bold/italic/etc. Use action "set_style" with a styleId from superdoc_get_content info to apply a named paragraph style.',
   },
   table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
   list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },

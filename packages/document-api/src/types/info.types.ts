@@ -44,12 +44,26 @@ export interface DocumentStyleInfo {
   styleId: string;
   /** Number of paragraphs using this style. */
   count: number;
+  /** Font family used by text in this style (from actual text marks). */
+  fontFamily?: string;
+  /** Font size in half-points used by text in this style. */
+  fontSize?: number;
 }
 
 /** Style information collected from the document. */
 export interface DocumentStyles {
   /** Paragraph styles currently in use, sorted by frequency (most common first). */
   paragraphStyles: DocumentStyleInfo[];
+}
+
+/** Default formatting detected from the document's body text. */
+export interface DocumentDefaults {
+  /** Most common body text font family. */
+  fontFamily?: string;
+  /** Most common body text font size in half-points. */
+  fontSize?: number;
+  /** Most common body paragraph styleId. */
+  styleId?: string;
 }
 
 export interface DocumentInfo {
@@ -60,4 +74,6 @@ export interface DocumentInfo {
   revision: string;
   /** Styles currently in use in the document. */
   styles?: DocumentStyles;
+  /** Default formatting detected from the document's most common body text. */
+  defaults?: DocumentDefaults;
 }

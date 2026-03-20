@@ -1062,6 +1062,8 @@ const documentStyleInfoSchema = objectSchema(
   {
     styleId: { type: 'string', description: "Style identifier (e.g. 'Normal', 'Heading1', 'BodyText')." },
     count: { type: 'integer', description: 'Number of paragraphs using this style.' },
+    fontFamily: { type: 'string', description: 'Font family used by text in this style.' },
+    fontSize: { type: 'number', description: 'Font size in half-points used by text in this style.' },
   },
   ['styleId', 'count'],
 );
@@ -1076,6 +1078,15 @@ const documentStylesSchema = objectSchema(
   ['paragraphStyles'],
 );
 
+const documentDefaultsSchema = objectSchema(
+  {
+    fontFamily: { type: 'string', description: 'Most common body text font family.' },
+    fontSize: { type: 'number', description: 'Most common body text font size in half-points.' },
+    styleId: { type: 'string', description: 'Most common body paragraph style ID.' },
+  },
+  [],
+);
+
 const documentInfoSchema = objectSchema(
   {
     counts: documentInfoCountsSchema,
@@ -1083,6 +1094,11 @@ const documentInfoSchema = objectSchema(
     capabilities: documentInfoCapabilitiesSchema,
     revision: { type: 'string' },
     styles: { ...documentStylesSchema, description: 'Styles currently in use in the document.' },
+    defaults: {
+      ...documentDefaultsSchema,
+      description:
+        "Document's default body text formatting. Use these values when creating new content to match existing style.",
+    },
   },
   ['counts', 'outline', 'capabilities', 'revision'],
 );

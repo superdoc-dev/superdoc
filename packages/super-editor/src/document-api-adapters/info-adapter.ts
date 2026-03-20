@@ -58,20 +58,22 @@ function extractTextFormatting(node: import('prosemirror-model').Node): { fontFa
   let fontFamily: string | undefined;
   let fontSize: number | undefined;
 
+  // Extract from the first text node that has marks. Stop after one text node
+  // to get consistent "first run" formatting rather than mixed properties.
   node.descendants((child) => {
-    if (fontFamily !== undefined) return false; // already found
-    if (!child.isText) return;
+    if (fontFamily !== undefined || fontSize !== undefined) return false;
+    if (!child.isText || child.marks.length === 0) return;
     for (const mark of child.marks) {
       const attrs = mark.attrs as Record<string, unknown>;
-      if (!fontFamily && typeof attrs.fontFamily === 'string' && attrs.fontFamily) {
+      if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) {
         fontFamily = attrs.fontFamily;
       }
-      if (fontSize === undefined && attrs.fontSize != null) {
+      if (attrs.fontSize != null) {
         const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize) : attrs.fontSize;
         if (typeof raw === 'number' && Number.isFinite(raw)) fontSize = raw;
       }
     }
-    if (fontFamily) return false; // stop traversal
+    return false; // always stop after first text node with marks
   });
 
   return { fontFamily, fontSize };

@@ -92,10 +92,22 @@ export type IntentGroupMeta = { toolName: string; description: string };
 
 export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   search: { toolName: 'superdoc_search', description: 'Find text or nodes in the document' },
-  get_content: { toolName: 'superdoc_get_content', description: 'Read document content in various formats' },
+  get_content: {
+    toolName: 'superdoc_get_content',
+    description:
+      'Read document content. Use action "info" for structure and styles, "blocks" for all block IDs and types, "text" or "markdown" for content. Call info or blocks before editing.',
+  },
   edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
-  create: { toolName: 'superdoc_create', description: 'Create structural block elements' },
-  format: { toolName: 'superdoc_format', description: 'Change text and paragraph formatting' },
+  create: {
+    toolName: 'superdoc_create',
+    description:
+      'Create one paragraph or heading per call. After creating, search for it and apply formatting (fontFamily, fontSize) from neighboring blocks. For multiple paragraphs, use superdoc_mutations with text.insert steps instead of calling create repeatedly.',
+  },
+  format: {
+    toolName: 'superdoc_format',
+    description:
+      'Change text and paragraph formatting. Use action "inline" with a search ref for bold/italic/etc. Use action "set_style" with a styleId from superdoc_get_content info to apply a named paragraph style.',
+  },
   table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
   list: { toolName: 'superdoc_list', description: 'Create and manipulate lists' },
   comment: { toolName: 'superdoc_comment', description: 'Comment threads — create, edit, delete' },
@@ -434,13 +446,13 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'insert',
     description:
       'Insert content into the document. Two input shapes: ' +
-      'text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; ' +
+      'legacy string-based (value + type) inserts inline content at a text position within an existing block; ' +
       'structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. ' +
-      'When target/ref is omitted, content appends at the end of the document. ' +
-      'Text mode supports text (default), markdown, and html content types via the `type` field. ' +
+      'When target is omitted, content appends at the end of the document. ' +
+      'Legacy mode supports text (default), markdown, and html content types via the `type` field. ' +
       'Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.',
     expectedResult:
-      'Returns an SDMutationReceipt with applied status; resolution reports the inserted TextAddress for text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
+      'Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -555,6 +567,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'blocks/list.mdx',
     referenceGroup: 'blocks',
+    intentGroup: 'get_content',
+    intentAction: 'blocks',
   },
 
   'blocks.delete': {

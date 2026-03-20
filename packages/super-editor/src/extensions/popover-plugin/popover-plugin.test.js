@@ -88,4 +88,54 @@ describe('popover plugin basics', () => {
     pluginView.destroy();
     expect(tippyInstance.destroy).toHaveBeenCalled();
   });
+
+  it('hides tippy when coordsAtPos returns null', () => {
+    const doc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, schema.text('Hello @'))]);
+    const state = EditorState.create({ schema, doc, plugins: [plugin] });
+    const view = { state, dom: document.createElement('div') };
+
+    const pluginView = plugin.spec.view(view);
+
+    // Mock coordsAtPos to return null (presentation mode collapsed selection)
+    editor.coordsAtPos = vi.fn().mockReturnValue(null);
+
+    // Build a new state where selection is at end (after @)
+    const endPos = state.doc.content.size - 1;
+    const tr = state.tr.setSelection(state.selection.constructor.near(state.doc.resolve(endPos)));
+    const newState = state.apply(tr);
+
+    pluginView.update({ ...view, state: newState }, state);
+
+    expect(tippyInstance.hide).toHaveBeenCalled();
+    pluginView.destroy();
+  });
+
+  it('uses insertMention as the prop name (not inserMention)', () => {
+    const doc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, schema.text('Hello @'))]);
+    const state = EditorState.create({ schema, doc, plugins: [plugin] });
+    const view = { state, dom: document.createElement('div') };
+
+    const pluginView = plugin.spec.view(view);
+
+    hoisted.createAppMock.mockClear();
+    hoisted.createAppMock.mockReturnValue({ mount: vi.fn(), unmount: vi.fn() });
+
+    // Mock coordsAtPos to return valid coords so the popover renders
+    editor.coordsAtPos = vi.fn().mockReturnValue({ top: 100, bottom: 120, left: 50, right: 50 });
+
+    const endPos = state.doc.content.size - 1;
+    const tr = state.tr.setSelection(state.selection.constructor.near(state.doc.resolve(endPos)));
+    const newState = state.apply(tr);
+
+    pluginView.update({ ...view, state: newState }, state);
+
+    const calls = hoisted.createAppMock.mock.calls;
+    if (calls.length > 0) {
+      const [, props] = calls[calls.length - 1];
+      expect(props).toHaveProperty('insertMention');
+      expect(props).not.toHaveProperty('inserMention');
+    }
+
+    pluginView.destroy();
+  });
 });

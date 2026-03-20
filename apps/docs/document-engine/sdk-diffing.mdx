@@ -39,44 +39,35 @@ const client = new SuperDocClient({
   user: { name: 'Review Bot', email: 'bot@example.com' },
 });
 
-await client.doc.open({
+const base = await client.open({
   sessionId: 'base',
   doc: './Doc1.docx',
 });
 
-await client.doc.open({
+const target = await client.open({
   sessionId: 'target',
   doc: './Doc2.docx',
 });
 
-const targetSnapshot = await client.doc.diff.capture({
-  sessionId: 'target',
-});
+const targetSnapshot = await target.diff.capture({});
 
-await client.doc.close({
-  sessionId: 'target',
-});
+await target.close({});
 
-const diff = await client.doc.diff.compare({
-  sessionId: 'base',
+const diff = await base.diff.compare({
   targetSnapshot,
 });
 
-await client.doc.diff.apply({
-  sessionId: 'base',
+await base.diff.apply({
   diff,
   changeMode: 'tracked',
 });
 
-await client.doc.save({
-  sessionId: 'base',
+await base.save({
   out: './Doc3.docx',
   force: true,
 });
 
-await client.doc.close({
-  sessionId: 'base',
-});
+await base.close({});
 ```
 
 ## Python
@@ -91,44 +82,35 @@ async def main():
     async with AsyncSuperDocClient(
         user={"name": "Review Bot", "email": "bot@example.com"}
     ) as client:
-        await client.doc.open({
+        base = await client.open({
             "sessionId": "base",
             "doc": "./Doc1.docx",
         })
 
-        await client.doc.open({
+        target = await client.open({
             "sessionId": "target",
             "doc": "./Doc2.docx",
         })
 
-        target_snapshot = await client.doc.diff.capture({
-            "sessionId": "target",
-        })
+        target_snapshot = await target.diff.capture({})
 
-        await client.doc.close({
-            "sessionId": "target",
-        })
+        await target.close({})
 
-        diff = await client.doc.diff.compare({
-            "sessionId": "base",
+        diff = await base.diff.compare({
             "targetSnapshot": target_snapshot,
         })
 
-        await client.doc.diff.apply({
-            "sessionId": "base",
+        await base.diff.apply({
             "diff": diff,
             "changeMode": "tracked",
         })
 
-        await client.doc.save({
-            "sessionId": "base",
+        await base.save({
             "out": "./Doc3.docx",
             "force": True,
         })
 
-        await client.doc.close({
-            "sessionId": "base",
-        })
+        await base.close({})
 
 
 asyncio.run(main())

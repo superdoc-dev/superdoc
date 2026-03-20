@@ -50,17 +50,17 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
     });
 
     // Open a document
-    await client.doc.open({ doc: './contract.docx' });
+    const doc = await client.open({ doc: './contract.docx' });
 
     // Find and replace text with query + mutation plan
-    const match = await client.doc.query.match({
+    const match = await doc.query.match({
       select: { type: 'text', pattern: 'ACME Corp' },
       require: 'first',
     });
 
     const ref = match.items?.[0]?.handle?.ref;
     if (ref) {
-      await client.doc.mutations.apply({
+      await doc.mutations.apply({
         expectedRevision: match.evaluatedRevision,
         atomic: true,
         steps: [
@@ -75,8 +75,8 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
     }
 
     // Save and close
-    await client.doc.save();
-    await client.doc.close();
+    await doc.save();
+    await doc.close();
     ```
   </Tab>
   <Tab title="Node.js (CJS)">
@@ -89,17 +89,17 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
       });
 
       // Open a document
-      await client.doc.open({ doc: './contract.docx' });
+      const doc = await client.open({ doc: './contract.docx' });
 
       // Find and replace text with query + mutation plan
-      const match = await client.doc.query.match({
+      const match = await doc.query.match({
         select: { type: 'text', pattern: 'ACME Corp' },
         require: 'first',
       });
 
       const ref = match.items?.[0]?.handle?.ref;
       if (ref) {
-        await client.doc.mutations.apply({
+        await doc.mutations.apply({
           expectedRevision: match.evaluatedRevision,
           atomic: true,
           steps: [
@@ -114,8 +114,8 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
       }
 
       // Save and close
-      await client.doc.save();
-      await client.doc.close();
+      await doc.save();
+      await doc.close();
     }
 
     main();
@@ -131,10 +131,10 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
     async def main():
         async with AsyncSuperDocClient(default_change_mode="tracked") as client:
             # Open a document
-            await client.doc.open({"doc": "./contract.docx"})
+            doc = await client.open({"doc": "./contract.docx"})
 
             # Find and replace text with query + mutation plan
-            match = await client.doc.query.match(
+            match = await doc.query.match(
                 {
                     "select": {"type": "text", "pattern": "ACME Corp"},
                     "require": "first",
@@ -145,7 +145,7 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
             first_item = items[0] if items else {}
             ref = first_item.get("handle", {}).get("ref")
             if ref:
-                await client.doc.mutations.apply(
+                await doc.mutations.apply(
                     {
                         "expectedRevision": match["evaluatedRevision"],
                         "atomic": True,
@@ -161,8 +161,8 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
                 )
 
             # Save and close
-            await client.doc.save({"inPlace": True})
-            await client.doc.close({})
+            await doc.save({"inPlace": True})
+            await doc.close({})
 
 
     asyncio.run(main())
@@ -171,7 +171,7 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 </Tabs>
 
 Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
-The Python SDK also exposes synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
+The Python SDK also exposes synchronous `SuperDocClient` with the same document-handle methods when you prefer non-async code paths.
 
 ## Need file-to-file diffing?
 
@@ -216,12 +216,12 @@ Pass `collabUrl` and `collabDocumentId` to `doc.open`:
     const client = new SuperDocClient();
     await client.connect();
 
-    await client.doc.open({
+    const doc = await client.open({
       collabUrl: 'ws://localhost:4000',
       collabDocumentId: 'my-doc-room',
     });
 
-    await client.doc.insert({
+    await doc.insert({
       target: { type: 'end' },
       content: 'Added by the SDK',
     });
@@ -236,12 +236,12 @@ Pass `collabUrl` and `collabDocumentId` to `doc.open`:
 
     async def main():
         async with AsyncSuperDocClient() as client:
-            await client.doc.open({
+            doc = await client.open({
                 "collabUrl": "ws://localhost:4000",
                 "collabDocumentId": "my-doc-room",
             })
 
-            await client.doc.insert({
+            await doc.insert({
                 "target": {"type": "end"},
                 "content": "Added by the SDK",
             })
@@ -259,7 +259,7 @@ If the room is empty, pass `doc` together with collaboration params:
 <Tabs>
   <Tab title="Node.js">
     ```typescript
-    await client.doc.open({
+    const doc = await client.open({
       doc: './starting-template.docx',
       collabUrl: 'ws://localhost:4000',
       collabDocumentId: 'my-doc-room',
@@ -268,7 +268,7 @@ If the room is empty, pass `doc` together with collaboration params:
   </Tab>
   <Tab title="Python">
     ```python
-    await client.doc.open({
+    doc = await client.open({
         "doc": "./starting-template.docx",
         "collabUrl": "ws://localhost:4000",
         "collabDocumentId": "my-doc-room",
@@ -311,7 +311,7 @@ The three `onMissing` values:
   <Tab title="Node.js">
     ```typescript
     // Safe reopen — throws if the room is unexpectedly empty
-    await client.doc.open({
+    const doc = await client.open({
       collabUrl: 'ws://localhost:4000',
       collabDocumentId: 'my-doc-room',
       onMissing: 'error',
@@ -321,7 +321,7 @@ The three `onMissing` values:
   <Tab title="Python">
     ```python
     # Safe reopen — throws if the room is unexpectedly empty
-    await client.doc.open({
+    doc = await client.open({
         "collabUrl": "ws://localhost:4000",
         "collabDocumentId": "my-doc-room",
         "onMissing": "error",
@@ -332,30 +332,30 @@ The three `onMissing` values:
 
 ### Check if the SDK seeded or joined
 
-`doc.open` returns bootstrap details in collaboration mode:
+`client.open` returns a bound document handle. In collaboration mode, bootstrap details are available on the handle's initial open result:
 
 <Tabs>
   <Tab title="Node.js">
     ```typescript
-    const result = await client.doc.open({
+    const doc = await client.open({
       doc: './starting-template.docx',
       collabUrl: 'ws://localhost:4000',
       collabDocumentId: 'my-doc-room',
     });
 
-    console.log(result.bootstrap);
+    console.log(doc.openResult.bootstrap);
     // { roomState, bootstrapApplied, bootstrapSource }
     ```
   </Tab>
   <Tab title="Python">
     ```python
-    result = await client.doc.open({
+    doc = await client.open({
         "doc": "./starting-template.docx",
         "collabUrl": "ws://localhost:4000",
         "collabDocumentId": "my-doc-room",
     })
 
-    print(result.get("bootstrap"))
+    print(doc.open_result.get("bootstrap"))
     ```
   </Tab>
 </Tabs>

@@ -32,6 +32,22 @@ import { CLI_ONLY_OPERATION_DEFINITIONS } from '../src/cli/cli-only-operation-de
 import { HOST_PROTOCOL_VERSION, HOST_PROTOCOL_FEATURES, HOST_PROTOCOL_NOTIFICATIONS } from '../src/host/protocol';
 
 // ---------------------------------------------------------------------------
+// SDK surface classification
+// ---------------------------------------------------------------------------
+
+type SdkSurface = 'client' | 'document' | 'internal';
+
+const CLIENT_OPERATIONS = new Set(['doc.open', 'doc.describe', 'doc.describeCommand']);
+const INTERNAL_OPERATIONS = new Set(['doc.status']);
+
+function classifySdkSurface(operationId: string): SdkSurface {
+  if (CLIENT_OPERATIONS.has(operationId)) return 'client';
+  if (INTERNAL_OPERATIONS.has(operationId)) return 'internal';
+  if (operationId.startsWith('doc.session.')) return 'internal';
+  return 'document';
+}
+
+// ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
@@ -81,6 +97,7 @@ function buildSdkContract() {
     // Base fields shared by all operations
     const entry: Record<string, unknown> = {
       operationId: cliOpId,
+      sdkSurface: classifySdkSurface(cliOpId),
       command: metadata.command,
       commandTokens: [...cliCommandTokens(cliOpId)],
       category: cliCategory(cliOpId),

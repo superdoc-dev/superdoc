@@ -12,15 +12,16 @@
  *
  * const client = createSuperDocClient();
  * await client.connect();
+ * const doc = await client.open({ doc: './file.docx' });
  *
  * // Apply bold ON:
- * await formatBold(client.doc, { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } });
+ * await formatBold(doc.format.apply, { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } });
  *
  * // Apply explicit bold OFF (override style inheritance):
- * await unformatBold(client.doc, { blockId: 'p1', start: 0, end: 5 });
+ * await unformatBold(doc.format.apply, { blockId: 'p1', start: 0, end: 5 });
  *
  * // Clear direct bold formatting (inherit from style cascade):
- * await clearBold(client.doc, { blockId: 'p1', start: 0, end: 5 });
+ * await clearBold(doc.format.apply, { blockId: 'p1', start: 0, end: 5 });
  * ```
  */
 
@@ -30,16 +31,12 @@ import type { InvokeOptions, OperationSpec } from '../runtime/transport-common.j
  * Minimal operation spec for `format.apply`. Used to invoke the canonical
  * operation through the runtime without depending on generated code.
  *
- * Only canonical params are listed here. Flat-flag shortcuts (blockId,
- * start, end) are accepted via FormatHelperParams and normalized into
- * a `target` object before invoke.
+ * doc and sessionId are omitted — the bound document handle injects them.
  */
 const FORMAT_APPLY_SPEC: OperationSpec = {
   operationId: 'doc.format.apply',
   commandTokens: ['format', 'apply'],
   params: [
-    { name: 'doc', kind: 'doc', type: 'string' },
-    { name: 'sessionId', kind: 'doc', flag: 'session', type: 'string' },
     { name: 'target', kind: 'jsonFlag', type: 'json' },
     { name: 'inline', kind: 'jsonFlag', type: 'json' },
     { name: 'dryRun', kind: 'flag', type: 'boolean' },
@@ -49,8 +46,6 @@ const FORMAT_APPLY_SPEC: OperationSpec = {
 };
 
 export interface FormatHelperParams {
-  doc?: string;
-  sessionId?: string;
   target?: { kind: 'text'; blockId: string; range: { start: number; end: number } };
   /** Flat-flag shorthand for target.blockId (normalized before dispatch). */
   blockId?: string;
@@ -64,9 +59,8 @@ export interface FormatHelperParams {
 }
 
 /**
- * Generic invoke function that works with the SuperDocRuntime.
- * The doc API proxy created by `createDocApi(runtime)` exposes generated methods,
- * but helpers call the runtime directly for forward-compatibility.
+ * Generic invoke function that works with a bound document handle runtime.
+ * Accepts the same signature as SuperDocRuntime.invoke.
  */
 type RuntimeInvokeFn = <T = unknown>(
   operation: OperationSpec,

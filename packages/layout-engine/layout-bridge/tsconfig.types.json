@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "composite": true,
-    "outDir": "dist-types"
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "tsBuildInfoFile": "./dist/tsconfig.types.tsbuildinfo"
   },
   "references": [
     { "path": "../contracts/tsconfig.json" },

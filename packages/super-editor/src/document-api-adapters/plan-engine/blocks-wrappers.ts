@@ -86,10 +86,8 @@ function extractBlockFormatting(node: ProseMirrorNode): {
 
   node.descendants((child) => {
     if (fontFamily !== undefined) return false;
-    const marks = Array.isArray((child as { marks?: unknown[] }).marks)
-      ? ((child as { marks: Array<{ attrs?: Record<string, unknown> }> }).marks ?? [])
-      : [];
-    if (!child.isText || marks.length === 0) return;
+    if (!child.isText || child.marks.length === 0) return;
+    const marks = child.marks;
     for (const mark of marks) {
       const attrs = mark.attrs as Record<string, unknown>;
       if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) fontFamily = attrs.fontFamily;

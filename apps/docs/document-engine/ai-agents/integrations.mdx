@@ -1,25 +1,247 @@
 ---
-title: Integrations
-sidebarTitle: Integrations
+title: How to use
+sidebarTitle: How to use
 tag: NEW
-description: Connect SuperDoc tools to AWS Bedrock and other LLM providers
-keywords: "ai integrations, ai providers, aws bedrock, openai, anthropic, tool use, function calling, superdoc sdk"
+description: Build an AI agent that edits documents using SuperDoc LLM tools — complete, copy-pasteable examples
+keywords: "ai integrations, ai providers, openai, anthropic, vercel ai, tool use, function calling, superdoc sdk, document automation"
 ---
 
-SuperDoc tools work with any LLM provider or agent framework that supports tool use. The SDK provides tool definitions, schema formatting, and a dispatch function — you write the conversation loop.
+Wire up an LLM agent that reads and edits `.docx` files headlessly. Install the SDK, open a document, and run an agentic tool loop. Full working code below.
 
-<Info>
-LLM tools are in <strong>alpha</strong>. Tool names and schemas may change between releases.
-</Info>
+<Note>
+If you need real-time sync between the agent and a frontend editor, add [collaboration](/modules/collaboration/overview). The SDK client joins the same Yjs room as the frontend — edits appear live.
+</Note>
 
-## AWS Bedrock
+## Prerequisites
+
+- Node.js 18+
+- `@superdoc-dev/sdk`
+- An LLM provider API key (e.g., `OPENAI_API_KEY`)
+
+## Step 1: Install
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```bash
+    npm install @superdoc-dev/sdk openai
+    ```
+  </Tab>
+  <Tab title="Anthropic">
+    <Info>Anthropic example coming soon. The SDK supports `chooseTools({ provider: 'anthropic' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+  <Tab title="Vercel AI">
+    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+</Tabs>
+
+## Step 2: Open a document
+
+Create an SDK client and open a `.docx` file:
+
+```typescript
+import { createSuperDocClient } from '@superdoc-dev/sdk';
+
+const client = createSuperDocClient();
+await client.connect();
+
+await client.doc.open({ doc: './contract.docx' });
+```
+
+## Step 3: Load tools and system prompt
+
+Load the tool definitions for your provider and the default system prompt. Both can be cached — they don't change between requests.
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```typescript
+    import { chooseTools, getSystemPrompt } from '@superdoc-dev/sdk';
+
+    const { tools } = await chooseTools({ provider: 'openai' });
+    const systemPrompt = await getSystemPrompt();
+    ```
+  </Tab>
+  <Tab title="Anthropic">
+    <Info>Anthropic example coming soon. The SDK supports `chooseTools({ provider: 'anthropic' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+  <Tab title="Vercel AI">
+    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+</Tabs>
+
+## Step 4: Run the agent loop
+
+The agent loop sends messages to the LLM, dispatches tool calls, feeds results back, and repeats until the model is done.
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```typescript
+    import OpenAI from 'openai';
+    import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+    const openai = new OpenAI(); // uses OPENAI_API_KEY env var
+
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: 'Find the termination clause and rewrite it to allow 30-day notice.' },
+    ];
+
+    while (true) {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-5.4',
+        messages,
+        tools,
+      });
+
+      const choice = response.choices[0];
+      messages.push(choice.message);
+
+      // Stop when the model has no more tool calls
+      if (choice.finish_reason === 'stop' || !choice.message.tool_calls?.length) {
+        console.log(choice.message.content);
+        break;
+      }
+
+      // Execute each tool call and feed results back
+      for (const toolCall of choice.message.tool_calls) {
+        if (toolCall.type !== 'function') continue;
+
+        try {
+          const result = await dispatchSuperDocTool(
+            client,
+            toolCall.function.name,
+            JSON.parse(toolCall.function.arguments),
+          );
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+          });
+        } catch (err: any) {
+          // Return errors as tool results — the model will self-correct
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: err.message }),
+          });
+        }
+      }
+    }
+    ```
+
+    **What's happening:**
+
+    1. The system prompt teaches the model how to use SuperDoc tools.
+    2. The `while(true)` loop calls OpenAI, checks for tool calls, dispatches them via `dispatchSuperDocTool`, and feeds results back.
+    3. When the model returns `finish_reason: 'stop'` (no more tool calls), the loop ends.
+    4. Errors are caught and returned as tool results so the model can see what went wrong and retry.
+  </Tab>
+  <Tab title="Anthropic">
+    <Info>Anthropic example coming soon. The SDK supports `chooseTools({ provider: 'anthropic' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+  <Tab title="Vercel AI">
+    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+</Tabs>
+
+## Step 5: Save and clean up
+
+```typescript
+await client.doc.save({ inPlace: true });
+await client.dispose();
+```
+
+## Full example
+
+A complete, copy-pasteable script that opens a document, runs an agent, saves, and exits:
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```typescript
+    import OpenAI from 'openai';
+    import {
+      createSuperDocClient,
+      chooseTools,
+      dispatchSuperDocTool,
+      getSystemPrompt,
+    } from '@superdoc-dev/sdk';
+
+    // 1. Open the document
+    const client = createSuperDocClient();
+    await client.connect();
+    await client.doc.open({ doc: './contract.docx' });
+
+    // 2. Load tools and system prompt
+    const { tools } = await chooseTools({ provider: 'openai' });
+    const systemPrompt = await getSystemPrompt();
+
+    // 3. Build the conversation
+    const openai = new OpenAI();
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: 'Find the termination clause and rewrite it to allow 30-day notice.' },
+    ];
+
+    // 4. Agent loop
+    while (true) {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-5.4',
+        messages,
+        tools,
+      });
+
+      const choice = response.choices[0];
+      messages.push(choice.message);
+
+      if (choice.finish_reason === 'stop' || !choice.message.tool_calls?.length) {
+        console.log(choice.message.content);
+        break;
+      }
+
+      for (const toolCall of choice.message.tool_calls) {
+        if (toolCall.type !== 'function') continue;
+
+        try {
+          const result = await dispatchSuperDocTool(
+            client,
+            toolCall.function.name,
+            JSON.parse(toolCall.function.arguments),
+          );
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+          });
+        } catch (err: any) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: err.message }),
+          });
+        }
+      }
+    }
+
+    // 5. Save and clean up
+    await client.doc.save({ inPlace: true });
+    await client.dispose();
+    ```
+  </Tab>
+  <Tab title="Anthropic">
+    <Info>Anthropic example coming soon. The SDK supports `chooseTools({ provider: 'anthropic' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+  <Tab title="Vercel AI">
+    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+  </Tab>
+</Tabs>
+
+## Other providers
+
+### AWS Bedrock
+
+Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec` shape:
 
 <Tabs>
   <Tab title="Node.js">
-    ```bash
-    npm install @superdoc-dev/sdk @aws-sdk/client-bedrock-runtime
-    ```
-
     ```typescript
     import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
     import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
@@ -75,10 +297,6 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
     ```
   </Tab>
   <Tab title="Python">
-    ```bash
-    pip install superdoc-sdk boto3
-    ```
-
     ```python
     import boto3
     from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
@@ -138,19 +356,10 @@ LLM tools are in <strong>alpha</strong>. Tool names and schemas may change betwe
 
 **Auth**: AWS credentials via `aws configure`, env vars, or IAM role. No API key needed.
 
-## Best practices
-
-- **Feed errors back.** When a tool call fails, return the error as a tool result. Most models self-correct on the next turn.
-- **Pin your model version.** Use a specific model ID (e.g. `us.anthropic.claude-sonnet-4-6`) rather than an alias to avoid behavior changes between releases.
-- **Use tracked changes for review workflows.** Add "Use tracked changes for all edits" to the system prompt so a human can accept or reject each change.
-
-## Example repository
-
-Complete, runnable examples are available at [`examples/ai/`](https://github.com/superdoc-dev/superdoc/tree/main/examples/ai).
-
 ## Related
 
-- [LLM Tools](/document-engine/ai-agents/llm-tools) — tool selection, dispatch, and the full API
-- [Skills](/document-engine/ai-agents/skills) — reusable prompt templates
-- [MCP Server](/document-engine/ai-agents/mcp-server) — Model Context Protocol integration
+- [LLM tools](/document-engine/ai-agents/llm-tools) — tool catalog and SDK functions
+- [Best practices](/document-engine/ai-agents/best-practices) — prompting, workflow tips, and tested prompt examples
+- [Debugging](/document-engine/ai-agents/debugging) — troubleshoot tool call failures
+- [Collaboration](/modules/collaboration/overview) — add real-time sync between agent and frontend
 - [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers

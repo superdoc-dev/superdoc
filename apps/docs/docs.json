@@ -120,8 +120,8 @@
                 "pages": [
                   "document-engine/ai-agents/llm-tools",
                   "document-engine/ai-agents/integrations",
-                  "document-engine/ai-agents/skills",
-                  "document-engine/ai-agents/mcp-server"
+                  "document-engine/ai-agents/best-practices",
+                  "document-engine/ai-agents/debugging"
                 ]
               }
             ]

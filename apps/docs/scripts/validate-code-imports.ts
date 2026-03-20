@@ -70,6 +70,7 @@ const PREFIX_EXTERNAL_IMPORTS = [
   '@google-cloud/',
   '@langchain/',
   'next/',
+  'openai/',
 ];
 
 const IMPORT_REGEX = /import\s+(?:(?:[\s\S]*?)\s+from\s+)?['"]([^'"]+)['"]/g;

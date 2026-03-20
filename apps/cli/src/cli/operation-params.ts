@@ -95,7 +95,7 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'in']);
 
 type ObjectSchemaVariant = {
   properties: Record<string, JsonSchema>;
@@ -459,6 +459,10 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
   // CLI uses flat flags (--type, --pattern, --mode) or --query-json; `select`
   // is an internal document-api field that the invoker builds from flat flags.
   'doc.find': new Set(['select']),
+  // CLI shortcut params (blockId, start, end) conflict with the `target`/`ref`
+  // objects. LLMs should use `target` or `ref` from search results, not flat params.
+  'doc.comments.create': new Set(['blockId', 'start', 'end']),
+  'doc.comments.patch': new Set(['blockId', 'start', 'end']),
 };
 
 // ---------------------------------------------------------------------------
@@ -476,6 +480,11 @@ const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
   { name: 'start', kind: 'flag', type: 'number', description: 'Start offset within the block (character index).' },
   { name: 'end', kind: 'flag', type: 'number', description: 'End offset within the block (character index).' },
+];
+
+const INSERT_FLAT_PARAMS: CliOperationParamSpec[] = [
+  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
+  { name: 'offset', kind: 'flag', type: 'number', description: 'Character offset within the block for insertion.' },
 ];
 
 const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
@@ -531,15 +540,7 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     },
   ],
   // Text-range operations: flat flags (--block-id, --start, --end) as shortcuts for --target-json
-  'doc.insert': [
-    ...TEXT_TARGET_FLAT_PARAMS,
-    {
-      name: 'offset',
-      kind: 'flag',
-      type: 'number',
-      description: 'Character offset for insertion (alias for --start/--end with same value).',
-    },
-  ],
+  'doc.insert': [...INSERT_FLAT_PARAMS],
   'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.styles.apply': [
@@ -858,6 +859,8 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
 
 for (const operationId of FORMAT_OPERATION_IDS) {
   EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS];
+  // LLMs should use `target` or `ref` from search results, not flat params.
+  PARAM_EXCLUSIONS[`doc.${operationId}`] = new Set(['blockId', 'start', 'end']);
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,6 +1035,7 @@ function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata
       }
       for (const param of extraParams) {
         if (seenNames.has(param.name)) continue;
+        if (exclusions?.has(param.name)) continue;
         seenNames.add(param.name);
         mergedParams.push(param);
       }

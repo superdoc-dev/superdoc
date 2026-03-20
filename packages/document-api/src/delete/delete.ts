@@ -5,7 +5,7 @@
  * string from discovery APIs (`query.match`, `find`).
  */
 
-import type { SelectionTarget, DeleteBehavior } from '../types/address.js';
+import type { SelectionTarget, DeleteBehavior, TargetLocator } from '../types/address.js';
 import type { TextMutationReceipt } from '../types/receipt.js';
 import type { MutationOptions } from '../types/mutation-plan.types.js';
 import type { StoryLocator } from '../types/story.types.js';
@@ -20,7 +20,7 @@ import { validateStoryLocator } from '../validation/story-validator.js';
 // Public input type
 // ---------------------------------------------------------------------------
 
-export interface DeleteInput {
+export type DeleteInput = TargetLocator & {
   /** Explicit selection target. Exactly one of `target` or `ref` is required. */
   target?: SelectionTarget;
   /** Mutation-ready ref from `query.match` or `find`. */
@@ -33,7 +33,7 @@ export interface DeleteInput {
   behavior?: DeleteBehavior;
   /** Target a specific document story (body, header, footer, footnote, endnote). */
   in?: StoryLocator;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -77,8 +77,8 @@ function validateDeleteInput(input: unknown): asserts input is DeleteInput {
     });
   }
 
-  if (hasRef && typeof ref !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a string.', {
+  if (hasRef && (typeof ref !== 'string' || ref === '')) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'ref must be a non-empty string.', {
       field: 'ref',
       value: ref,
     });
@@ -103,15 +103,9 @@ export function executeDelete(
   options?: MutationOptions,
 ): TextMutationReceipt {
   validateDeleteInput(input);
+  const request = input.target
+    ? { kind: 'delete' as const, target: input.target, behavior: input.behavior ?? 'selection', in: input.in }
+    : { kind: 'delete' as const, ref: input.ref!, behavior: input.behavior ?? 'selection', in: input.in };
 
-  return adapter.execute(
-    {
-      kind: 'delete',
-      target: input.target,
-      ref: input.ref,
-      behavior: input.behavior ?? 'selection',
-      in: input.in,
-    },
-    normalizeMutationOptions(options),
-  );
+  return adapter.execute(request, normalizeMutationOptions(options));
 }

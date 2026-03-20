@@ -76,7 +76,7 @@ export interface MatchContext {
    * Text ranges matching the query, expressed as block-relative offsets.
    * For cross-paragraph matches, this will include one range per block.
    *
-   * These ranges can be passed as targets to mutation operations.
+   * Block-relative ranges for display/discovery. Use `context.target` (SelectionTarget) for mutations.
    */
   textRanges?: TextAddress[];
 }

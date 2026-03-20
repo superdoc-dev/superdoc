@@ -623,14 +623,13 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const insertTarget = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     const selectionTarget = {
       kind: 'selection' as const,
       start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
       end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
     };
     api.insert({ value: 'Hi' });
-    api.insert({ target: insertTarget, value: 'Yo' });
+    api.insert({ target: selectionTarget, value: 'Yo' });
     api.replace({ target: selectionTarget, text: 'Hello' }, { changeMode: 'tracked' });
     api.delete({ target: selectionTarget });
 
@@ -639,10 +638,10 @@ describe('createDocumentApi', () => {
       { kind: 'insert', text: 'Hi' },
       { changeMode: 'direct', dryRun: false },
     );
-    expect(writeAdpt.write).toHaveBeenNthCalledWith(
-      2,
-      { kind: 'insert', target: insertTarget, text: 'Yo' },
-      { changeMode: 'direct', dryRun: false },
+    // Targeted insert now routes through selectionMutation adapter
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'insert', target: selectionTarget, ref: undefined, text: 'Yo' },
+      { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
     );
     expect(selectionAdpt.execute).toHaveBeenCalledWith(
       { kind: 'replace', target: selectionTarget, ref: undefined, text: 'Hello' },
@@ -1181,9 +1180,13 @@ describe('createDocumentApi', () => {
       expect(result.success).toBe(true);
     });
 
-    it('accepts canonical target', () => {
+    it('accepts canonical SelectionTarget', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
       const result = api.insert({ target, value: 'hello' });
       expect(result.success).toBe(true);
     });
@@ -1194,7 +1197,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.insert({ target: null, value: 'hello' } as any),
-        'target must be a text address object',
+        'target must be a SelectionTarget object',
       );
     });
 
@@ -1202,7 +1205,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.insert({ target: { kind: 'text', blockId: 'p1' }, value: 'hello' } as any),
-        'target must be a text address object',
+        'target must be a SelectionTarget object',
       );
     });
 
@@ -1296,8 +1299,8 @@ describe('createDocumentApi', () => {
       );
     });
 
-    it('maps insert({ target, value }) to internal write request with text field', () => {
-      const writeAdpt = makeWriteAdapter();
+    it('maps insert({ target, value }) to selection mutation adapter', () => {
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1306,18 +1309,22 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
-        write: writeAdpt,
-        selectionMutation: makeSelectionMutationAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
       api.insert({ target, value: 'hello' });
-      expect(writeAdpt.write).toHaveBeenCalledWith(
-        { kind: 'insert', target, text: 'hello' },
-        { changeMode: 'direct', dryRun: false },
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'insert', target, ref: undefined, text: 'hello' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
 
@@ -1414,7 +1421,11 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      };
       api.insert({ target, value: '**bold**', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
         { target, value: '**bold**', type: 'markdown' },

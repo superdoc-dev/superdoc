@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Combined stable orchestrator — releases superdoc then CLI in sequence.
+ * Combined stable orchestrator — releases superdoc, CLI, then SDK in sequence.
  *
  * Usage:
  *   pnpm run release:local [-- --dry-run]
@@ -62,6 +62,7 @@ const isDryRun = forwardedArgs.includes('--dry-run') || forwardedArgs.includes('
 const packages = [
   { name: 'superdoc', packageCwd: 'packages/superdoc', tagPrefix: 'v' },
   { name: 'cli', packageCwd: 'apps/cli', tagPrefix: 'cli-v' },
+  { name: 'sdk', packageCwd: 'packages/sdk', tagPrefix: 'sdk-v' },
 ];
 
 /**

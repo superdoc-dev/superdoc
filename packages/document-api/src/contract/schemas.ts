@@ -102,6 +102,42 @@ function targetLocatorWithPayload(
   };
 }
 
+/**
+ * Like {@link targetLocatorWithPayload}, but also allows an untargeted branch
+ * where neither `target` nor `ref` is present.
+ */
+function optionalTargetLocatorWithPayload(
+  payloadProperties: Record<string, JsonSchema>,
+  payloadRequired: readonly string[] = [],
+): JsonSchema {
+  return {
+    oneOf: [
+      objectSchema(
+        {
+          target: {
+            ...ref('SelectionTarget'),
+            description:
+              "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}.",
+          },
+          ...payloadProperties,
+        },
+        ['target', ...payloadRequired],
+      ),
+      objectSchema(
+        {
+          ref: {
+            type: 'string',
+            description: 'Handle ref string returned by a prior search/query result.',
+          },
+          ...payloadProperties,
+        },
+        ['ref', ...payloadRequired],
+      ),
+      objectSchema({ ...payloadProperties }, [...payloadRequired]),
+    ],
+  };
+}
+
 /** Shared output/success/failure shape for ImagesMutationResult operations. */
 function imagesMutationSchemaSet(inputSchema: JsonSchema): OperationSchemaSet {
   return {
@@ -1554,13 +1590,9 @@ const nestingPolicySchema: JsonSchema = {
 
 const insertInputSchema: JsonSchema = {
   oneOf: [
-    objectSchema(
+    optionalTargetLocatorWithPayload(
       {
         in: storyLocatorSchema,
-        target: {
-          ...textAddressSchema,
-          description: "Insertion point: {kind:'text', blockId:'...', range:{start, end}}.",
-        },
         value: { type: 'string', description: 'Text content to insert.' },
         type: {
           type: 'string',

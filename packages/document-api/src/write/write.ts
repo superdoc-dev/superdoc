@@ -1,5 +1,4 @@
-import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
-import type { BlockRelativeLocator } from './locator.js';
+import type { TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { StoryLocator } from '../types/story.types.js';
@@ -32,20 +31,17 @@ export interface MutationOptions extends RevisionGuardOptions {
 }
 
 /**
- * Text insertion request — the only write-kind that still routes through
- * the WriteAdapter. Delete and replace now use SelectionMutationAdapter.
+ * Text insertion request — target-less insert at document end.
+ *
+ * Targeted inserts now route through `SelectionMutationAdapter`. This
+ * request type only handles the no-target fallback (append to document end).
  */
 export type InsertWriteRequest = {
   kind: 'insert';
-  /**
-   * Optional insertion target.
-   * When omitted, inserts at the end of the document.
-   */
-  target?: TextAddress;
   text: string;
   /** Target a specific document story (body, header, footer, footnote, endnote). */
   in?: StoryLocator;
-} & Partial<BlockRelativeLocator>;
+};
 
 /**
  * Alias for `InsertWriteRequest`. Retained because super-editor adapter-utils

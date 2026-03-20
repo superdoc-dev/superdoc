@@ -75,10 +75,16 @@ describe('document-api contract catalog', () => {
     }
   });
 
-  it('declares insert input as a legacy-text or structural-content union', () => {
+  it('declares insert input as a text or structural-content union', () => {
     const schemas = buildInternalContractSchemas();
     const insertInputSchema = schemas.operations.insert.input as {
       oneOf?: Array<{
+        oneOf?: Array<{
+          type?: string;
+          properties?: Record<string, unknown>;
+          required?: string[];
+          additionalProperties?: boolean;
+        }>;
         type?: string;
         properties?: Record<string, unknown>;
         required?: string[];
@@ -89,13 +95,29 @@ describe('document-api contract catalog', () => {
     expect(Array.isArray(insertInputSchema.oneOf)).toBe(true);
     expect(insertInputSchema.oneOf).toHaveLength(2);
 
-    const [legacyVariant, structuralVariant] = insertInputSchema.oneOf!;
+    const [textVariant, structuralVariant] = insertInputSchema.oneOf!;
 
-    expect(legacyVariant.type).toBe('object');
-    expect(Object.keys(legacyVariant.properties!).sort()).toEqual(['in', 'target', 'type', 'value']);
-    expect(legacyVariant.required).toEqual(['value']);
-    expect(legacyVariant.additionalProperties).toBe(false);
-    expect((legacyVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/TextAddress');
+    expect(Array.isArray(textVariant.oneOf)).toBe(true);
+    expect(textVariant.oneOf).toHaveLength(3);
+
+    const [textTargetVariant, textRefVariant, textUntargetedVariant] = textVariant.oneOf!;
+
+    expect(textTargetVariant.type).toBe('object');
+    expect(Object.keys(textTargetVariant.properties!).sort()).toEqual(['in', 'target', 'type', 'value']);
+    expect(textTargetVariant.required).toEqual(['target', 'value']);
+    expect(textTargetVariant.additionalProperties).toBe(false);
+    expect((textTargetVariant.properties!.target as { $ref?: string }).$ref).toBe('#/$defs/SelectionTarget');
+
+    expect(textRefVariant.type).toBe('object');
+    expect(Object.keys(textRefVariant.properties!).sort()).toEqual(['in', 'ref', 'type', 'value']);
+    expect(textRefVariant.required).toEqual(['ref', 'value']);
+    expect(textRefVariant.additionalProperties).toBe(false);
+    expect((textRefVariant.properties!.ref as { type?: string }).type).toBe('string');
+
+    expect(textUntargetedVariant.type).toBe('object');
+    expect(Object.keys(textUntargetedVariant.properties!).sort()).toEqual(['in', 'type', 'value']);
+    expect(textUntargetedVariant.required).toEqual(['value']);
+    expect(textUntargetedVariant.additionalProperties).toBe(false);
 
     expect(structuralVariant.type).toBe('object');
     expect(Object.keys(structuralVariant.properties!).sort()).toEqual([

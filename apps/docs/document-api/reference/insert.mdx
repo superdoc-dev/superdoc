@@ -1,7 +1,7 @@
 ---
 title: insert
 sidebarTitle: insert
-description: "Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block."
+description: "Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: "Insert content into the document. Two input shapes: legacy string-
 
 ## Summary
 
-Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.
+Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block.
 
 - Operation ID: `insert`
 - API member path: `editor.doc.insert(...)`
@@ -22,21 +22,36 @@ Insert content into the document. Two input shapes: legacy string-based (value +
 
 ## Expected result
 
-Returns an SDMutationReceipt with applied status; resolution reports a TextAddress for legacy text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.
+Returns an SDMutationReceipt with applied status; resolution reports the inserted TextAddress for text insertion or a BlockNodeAddress for structural insertion. Receipt reports NO_OP if the insertion point is invalid or content is empty.
 
 ## Input fields
 
-### Variant 1 (target.kind="text")
+### Variant 1.1 (target.kind="selection")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `in` | StoryLocator | no | StoryLocator |
-| `target` | TextAddress | no | TextAddress |
-| `target.blockId` | string | no |  |
-| `target.kind` | `"text"` | no | Constant: `"text"` |
-| `target.range` | Range | no | Range |
-| `target.range.end` | integer | no |  |
-| `target.range.start` | integer | no |  |
+| `target` | SelectionTarget | yes | SelectionTarget |
+| `target.end` | SelectionPoint | yes | SelectionPoint |
+| `target.kind` | `"selection"` | yes | Constant: `"selection"` |
+| `target.start` | SelectionPoint | yes | SelectionPoint |
+| `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
+| `value` | string | yes |  |
+
+### Variant 1.2 (required: ref, value)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
+| `ref` | string | yes |  |
+| `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
+| `value` | string | yes |  |
+
+### Variant 1.3 (required: value)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
 | `value` | string | yes |  |
 
@@ -182,33 +197,93 @@ Returns an SDMutationReceipt with applied status; resolution reports a TextAddre
 {
   "oneOf": [
     {
-      "additionalProperties": false,
-      "properties": {
-        "in": {
-          "$ref": "#/$defs/StoryLocator"
-        },
-        "target": {
-          "$ref": "#/$defs/TextAddress",
-          "description": "Insertion point: {kind:'text', blockId:'...', range:{start, end}}."
-        },
-        "type": {
-          "description": "Content format: 'text' (default), 'markdown', or 'html'.",
-          "enum": [
-            "text",
-            "markdown",
-            "html"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
+            "target": {
+              "$ref": "#/$defs/SelectionTarget",
+              "description": "Selection target: {kind:'selection', start:{kind:'text', blockId, offset}, end:{kind:'text', blockId, offset}}."
+            },
+            "type": {
+              "description": "Content format: 'text' (default), 'markdown', or 'html'.",
+              "enum": [
+                "text",
+                "markdown",
+                "html"
+              ],
+              "type": "string"
+            },
+            "value": {
+              "description": "Text content to insert.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "value"
           ],
-          "type": "string"
+          "type": "object"
         },
-        "value": {
-          "description": "Text content to insert.",
-          "type": "string"
+        {
+          "additionalProperties": false,
+          "properties": {
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
+            "ref": {
+              "description": "Handle ref string returned by a prior search/query result.",
+              "type": "string"
+            },
+            "type": {
+              "description": "Content format: 'text' (default), 'markdown', or 'html'.",
+              "enum": [
+                "text",
+                "markdown",
+                "html"
+              ],
+              "type": "string"
+            },
+            "value": {
+              "description": "Text content to insert.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ref",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "in": {
+              "$ref": "#/$defs/StoryLocator"
+            },
+            "type": {
+              "description": "Content format: 'text' (default), 'markdown', or 'html'.",
+              "enum": [
+                "text",
+                "markdown",
+                "html"
+              ],
+              "type": "string"
+            },
+            "value": {
+              "description": "Text content to insert.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "type": "object"
         }
-      },
-      "required": [
-        "value"
-      ],
-      "type": "object"
+      ]
     },
     {
       "additionalProperties": false,

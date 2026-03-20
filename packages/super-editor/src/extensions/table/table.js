@@ -216,6 +216,7 @@ import {
 } from 'prosemirror-tables';
 import { cellAround } from './tableHelpers/cellAround.js';
 import { cellWrapping } from './tableHelpers/cellWrapping.js';
+import { createTableBoundaryNavigationPlugin } from './tableHelpers/tableBoundaryNavigation.js';
 import { toggleHeaderRow as toggleHeaderRowCommand } from './tableHelpers/toggleHeaderRow.js';
 import {
   resolveTable,
@@ -231,20 +232,90 @@ import {
  *
  * @param {import('prosemirror-model').Node} doc
  * @param {number} pos - Absolute insertion position (between top-level blocks)
+ * @param {{ from?: number, to?: number }} [replaceRange]
  * @returns {{ before: boolean, after: boolean }}
  */
-function tableSeparatorNeeds(doc, pos) {
-  const $pos = doc.resolve(pos);
-  if ($pos.depth !== 0) return { before: false, after: false };
+function tableSeparatorNeeds(doc, pos, replaceRange = {}) {
+  const boundaryBefore = replaceRange.from ?? pos;
+  const boundaryAfter = replaceRange.to ?? pos;
 
-  const indexAfter = $pos.index(0);
-  const nodeAfter = indexAfter < doc.childCount ? doc.child(indexAfter) : null;
-  const nodeBefore = indexAfter > 0 ? doc.child(indexAfter - 1) : null;
+  const $before = doc.resolve(boundaryBefore);
+  const $after = doc.resolve(boundaryAfter);
+  if ($before.depth !== 0 || $after.depth !== 0) return { before: false, after: false };
+
+  const beforeIndex = $before.index(0);
+  const afterIndex = $after.index(0);
+  const nodeBefore = beforeIndex > 0 ? doc.child(beforeIndex - 1) : null;
+  const nodeAfter = afterIndex < doc.childCount ? doc.child(afterIndex) : null;
 
   return {
     before: nodeBefore?.type.name === 'table',
     after: !nodeAfter || nodeAfter.type.name === 'table',
   };
+}
+
+/**
+ * Creates the separator paragraph used to keep top-level tables from being
+ * adjacent to another table or the document boundary.
+ *
+ * @param {import('prosemirror-model').Schema} schema
+ * @returns {import('prosemirror-model').Node | null}
+ */
+function createTableSeparatorParagraph(schema) {
+  const attrs = { sdBlockId: uuidv4(), paraId: generateDocxHexId() };
+  return schema.nodes.paragraph.createAndFill(attrs);
+}
+
+/**
+ * Inserts a top-level table, adding separator paragraphs before/after when
+ * required by the surrounding document structure.
+ *
+ * @param {import('prosemirror-state').Transaction} tr
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} pos
+ * @param {import('prosemirror-model').Node} tableNode
+ * @param {{ from?: number, to?: number }} [replaceRange]
+ * @returns {{ inserted: boolean }}
+ */
+function insertTopLevelTableWithSeparators(tr, doc, pos, tableNode, replaceRange = {}) {
+  const replaceFrom = replaceRange.from ?? pos;
+  const replaceTo = replaceRange.to ?? pos;
+  const sep = tableSeparatorNeeds(doc, pos, replaceRange);
+  if (!sep.before && !sep.after) {
+    tr.replaceWith(replaceFrom, replaceTo, tableNode);
+    return { inserted: true };
+  }
+
+  const nodes = [];
+
+  if (sep.before) {
+    const before = createTableSeparatorParagraph(doc.type.schema);
+    if (!before) return { inserted: false };
+    nodes.push(before);
+  }
+
+  nodes.push(tableNode);
+
+  if (sep.after) {
+    const after = createTableSeparatorParagraph(doc.type.schema);
+    if (!after) return { inserted: false };
+    nodes.push(after);
+  }
+
+  tr.replaceWith(replaceFrom, replaceTo, Fragment.from(nodes));
+  return { inserted: true };
+}
+
+/**
+ * Returns a text position inside the first table cell.
+ *
+ * @param {number} tablePos
+ * @param {import('prosemirror-model').Node} tableNode
+ * @returns {number}
+ */
+function getFirstTableCellTextPos(tablePos, tableNode) {
+  const map = TableMap.get(tableNode);
+  return tablePos + 1 + map.map[0] + 2;
 }
 
 const IMPORT_CONTEXT_SELECTOR = '[data-superdoc-import="true"]';
@@ -648,7 +719,7 @@ export const Table = Node.create({
        */
       insertTable:
         ({ rows = 3, cols = 3, withHeaderRow = false, columnWidths = null } = {}) =>
-        ({ tr, dispatch, editor }) => {
+        ({ tr, dispatch, editor, state }) => {
           const widths = columnWidths ?? computeColumnWidths(editor, cols);
 
           const resolved = normalizeNewTableAttrs(editor);
@@ -661,14 +732,42 @@ export const Table = Node.create({
           const node = createTable(editor.schema, rows, cols, withHeaderRow, null, widths, tableAttrs);
 
           if (dispatch) {
-            let offset = tr.selection.$from.end() + 1;
-            if (tr.selection.$from.parent?.type?.name === 'run') {
-              // If in a run, we need to insert after the parent paragraph
-              offset = tr.selection.$from.after(tr.selection.$from.depth - 1);
+            let offset;
+            let replaceRange = undefined;
+
+            if (tr.selection.$from.depth === 0) {
+              // Selection is at the document root (e.g. AllSelection via Ctrl+A,
+              // or NodeSelection on a top-level block). Replace the selected
+              // range with the new table.
+              offset = tr.selection.from;
+              replaceRange = { from: tr.selection.from, to: tr.selection.to };
+            } else {
+              offset = tr.selection.$from.end() + 1;
+              const paragraphDepth =
+                tr.selection.$from.parent?.type?.name === 'run'
+                  ? tr.selection.$from.depth - 1
+                  : tr.selection.$from.depth;
+              const paragraph = tr.selection.$from.node(paragraphDepth);
+              const isTopLevelParagraph = paragraphDepth === 1;
+              const isEmptyParagraph = paragraph.type.name === 'paragraph' && paragraph.textContent === '';
+
+              if (isTopLevelParagraph && isEmptyParagraph) {
+                offset = tr.selection.$from.before(paragraphDepth);
+                replaceRange = {
+                  from: tr.selection.$from.before(paragraphDepth),
+                  to: tr.selection.$from.after(paragraphDepth),
+                };
+              } else if (tr.selection.$from.parent?.type?.name === 'run') {
+                // If in a run, insert after the parent paragraph.
+                offset = tr.selection.$from.after(paragraphDepth);
+              }
             }
-            tr.replaceSelectionWith(node)
-              .scrollIntoView()
-              .setSelection(TextSelection.near(tr.doc.resolve(offset)));
+
+            const { inserted } = insertTopLevelTableWithSeparators(tr, state.doc, offset, node, replaceRange);
+            if (!inserted) return false;
+
+            const selectionPos = getFirstTableCellTextPos(offset, node);
+            tr.scrollIntoView().setSelection(TextSelection.near(tr.doc.resolve(selectionPos)));
           }
 
           return true;
@@ -724,26 +823,8 @@ export const Table = Node.create({
             const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
             if (dispatch) {
-              const sep = tableSeparatorNeeds(state.doc, pos);
-              const makeSep = () => {
-                const attrs = { sdBlockId: uuidv4(), paraId: generateDocxHexId() };
-                return state.schema.nodes.paragraph.createAndFill(attrs);
-              };
-              if (sep.before || sep.after) {
-                const nodes = [];
-                if (sep.before) {
-                  const s = makeSep();
-                  if (s) nodes.push(s);
-                }
-                nodes.push(tableNode);
-                if (sep.after) {
-                  const s = makeSep();
-                  if (s) nodes.push(s);
-                }
-                tr.insert(pos, Fragment.from(nodes));
-              } else {
-                tr.insert(pos, tableNode);
-              }
+              const { inserted } = insertTopLevelTableWithSeparators(tr, state.doc, pos, tableNode);
+              if (!inserted) return false;
               tr.setMeta('inputType', 'programmatic');
               if (tracked === true) tr.setMeta('forceTrackChanges', true);
               else if (tracked === false) tr.setMeta('skipTrackChanges', true);
@@ -1363,6 +1444,8 @@ export const Table = Node.create({
         // @ts-expect-error - Options types will be fixed in TS migration
         allowTableNodeSelection: this.options.allowTableNodeSelection,
       }),
+
+      createTableBoundaryNavigationPlugin(),
 
       // Normalize table style on paste / setContent / insertContent.
       // Only tables explicitly marked with needsTableStyleNormalization

@@ -97,7 +97,9 @@ function acceptsLegacyTextAddressTarget(
 ): boolean {
   if (param.name !== 'target' || !isTextAddressLike(value)) return false;
   const docApiId = toDocApiId(operationId);
-  return docApiId === 'replace' || docApiId === 'delete' || docApiId?.startsWith('format.') === true;
+  return (
+    docApiId === 'insert' || docApiId === 'replace' || docApiId === 'delete' || docApiId?.startsWith('format.') === true
+  );
 }
 
 /**

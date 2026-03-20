@@ -41,12 +41,18 @@ const doc = await client.open({ doc: './contract.docx' });
 const info = await doc.info();
 console.log(info.counts);
 
-const results = await doc.find({ type: 'text', pattern: 'termination' });
-
-await doc.replace({
-  target: results.items[0].context.textRanges[0],
-  text: 'expiration',
+const match = await doc.query.match({
+  select: { type: 'text', pattern: 'termination' },
+  require: 'first',
 });
+
+const target = match.items?.[0]?.target;
+if (target) {
+  await doc.replace({
+    target,
+    text: 'expiration',
+  });
+}
 
 await doc.save({ inPlace: true });
 await doc.close();
@@ -79,7 +85,7 @@ await doc.close(params)
 
 | Category | Operations |
 |----------|-----------|
-| **Query** | `find`, `getNode`, `getNodeById`, `info` |
+| **Query** | `find`, `query.match`, `getNode`, `getNodeById`, `info` |
 | **Mutation** | `insert`, `replace`, `delete` |
 | **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
 | **Create** | `create.paragraph` |

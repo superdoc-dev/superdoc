@@ -478,11 +478,6 @@ const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'end', kind: 'flag', type: 'number', description: 'End offset within the block (character index).' },
 ];
 
-const INSERT_FLAT_PARAMS: CliOperationParamSpec[] = [
-  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string', description: 'Block ID of the target paragraph.' },
-  { name: 'offset', kind: 'flag', type: 'number', description: 'Character offset within the block for insertion.' },
-];
-
 const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string', description: 'Node ID of the target list item.' },
 ];
@@ -536,7 +531,15 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     },
   ],
   // Text-range operations: flat flags (--block-id, --start, --end) as shortcuts for --target-json
-  'doc.insert': [...INSERT_FLAT_PARAMS],
+  'doc.insert': [
+    ...TEXT_TARGET_FLAT_PARAMS,
+    {
+      name: 'offset',
+      kind: 'flag',
+      type: 'number',
+      description: 'Character offset for insertion (alias for --start/--end with same value).',
+    },
+  ],
   'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.styles.apply': [

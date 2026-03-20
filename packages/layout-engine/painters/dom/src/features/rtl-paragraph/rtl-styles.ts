@@ -44,7 +44,8 @@ export const resolveTextAlign = (alignment: ParagraphAttrs['alignment'], isRtl: 
 export const applyRtlStyles = (element: HTMLElement, attrs: ParagraphAttrs | undefined): boolean => {
   const rtl = isRtlParagraph(attrs);
   if (rtl) {
-    element.dir = 'rtl';
+    element.setAttribute('dir', 'rtl');
+    element.style.direction = 'rtl';
   }
   element.style.textAlign = resolveTextAlign(attrs?.alignment, rtl);
   return rtl;

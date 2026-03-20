@@ -320,7 +320,7 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    ...(isRtl ? { direction: 'rtl' as const, rtl: true } : {}),
+    ...(normalizedDirection ? { direction: normalizedDirection as 'rtl' | 'ltr', rtl: isRtl } : {}),
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {

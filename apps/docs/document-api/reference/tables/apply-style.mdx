@@ -1,0 +1,328 @@
+---
+title: tables.applyStyle
+sidebarTitle: tables.applyStyle
+description: Apply a table style and/or style options in one call.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Apply a table style and/or style options in one call.
+
+- Operation ID: `tables.applyStyle`
+- API member path: `editor.doc.tables.applyStyle(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.
+
+## Input fields
+
+### Variant 1 (target.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `styleId` | string | no |  |
+| `styleOptions` | object | no |  |
+| `styleOptions.bandedColumns` | boolean | no |  |
+| `styleOptions.bandedRows` | boolean | no |  |
+| `styleOptions.firstColumn` | boolean | no |  |
+| `styleOptions.headerRow` | boolean | no |  |
+| `styleOptions.lastColumn` | boolean | no |  |
+| `styleOptions.lastRow` | boolean | no |  |
+| `styleOptions.totalRow` | boolean | no |  |
+| `target` | BlockNodeAddress | yes | BlockNodeAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Variant 2 (required: nodeId)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | yes |  |
+| `styleId` | string | no |  |
+| `styleOptions` | object | no |  |
+| `styleOptions.bandedColumns` | boolean | no |  |
+| `styleOptions.bandedRows` | boolean | no |  |
+| `styleOptions.firstColumn` | boolean | no |  |
+| `styleOptions.headerRow` | boolean | no |  |
+| `styleOptions.lastColumn` | boolean | no |  |
+| `styleOptions.lastRow` | boolean | no |  |
+| `styleOptions.totalRow` | boolean | no |  |
+
+### Example request
+
+```json
+{
+  "styleId": "style-001",
+  "styleOptions": {
+    "headerRow": true,
+    "lastRow": true
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | TableAddress | no | TableAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
+### Example response
+
+```json
+{
+  "success": true,
+  "table": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "table"
+  },
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "nodeId": {
+      "type": "string"
+    },
+    "styleId": {
+      "type": "string"
+    },
+    "styleOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "bandedColumns": {
+          "type": "boolean"
+        },
+        "bandedRows": {
+          "type": "boolean"
+        },
+        "firstColumn": {
+          "type": "boolean"
+        },
+        "headerRow": {
+          "type": "boolean"
+        },
+        "lastColumn": {
+          "type": "boolean"
+        },
+        "lastRow": {
+          "type": "boolean"
+        },
+        "totalRow": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "table": {
+          "$ref": "#/$defs/TableAddress"
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/EntityAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "table": {
+      "$ref": "#/$defs/TableAddress"
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

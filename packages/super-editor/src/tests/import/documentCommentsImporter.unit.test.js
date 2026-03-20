@@ -40,6 +40,7 @@ const buildDocx = ({ comments = [], extended = [], documentRanges = [] } = {}) =
       'custom:trackedChange': comment.trackedChange,
       'custom:trackedChangeText': comment.trackedChangeText,
       'custom:trackedChangeType': comment.trackedChangeType,
+      'custom:trackedChangeDisplayType': comment.trackedChangeDisplayType,
       'custom:trackedDeletedText': comment.trackedDeletedText,
     },
     elements: comment.elements ?? [{ fakeParaId: comment.paraId ?? `para-${comment.id}` }],
@@ -204,6 +205,7 @@ describe('importCommentData metadata parsing', () => {
           trackedChange: 'true',
           trackedChangeText: 'Added text',
           trackedChangeType: 'insert',
+          trackedChangeDisplayType: 'hyperlinkAdded',
           trackedDeletedText: 'Removed text',
         },
       ],
@@ -216,6 +218,7 @@ describe('importCommentData metadata parsing', () => {
     expect(comment.trackedChange).toBe(true);
     expect(comment.trackedChangeText).toBe('Added text');
     expect(comment.trackedChangeType).toBe('insert');
+    expect(comment.trackedChangeDisplayType).toBe('hyperlinkAdded');
     expect(comment.trackedDeletedText).toBe('Removed text');
   });
 
@@ -227,6 +230,7 @@ describe('importCommentData metadata parsing', () => {
           trackedChange: 'false',
           trackedChangeText: 'null',
           trackedChangeType: undefined,
+          trackedChangeDisplayType: 'null',
           trackedDeletedText: 'null',
         },
       ],
@@ -236,6 +240,7 @@ describe('importCommentData metadata parsing', () => {
     expect(comment.trackedChange).toBe(false);
     expect(comment.trackedChangeText).toBeNull();
     expect(comment.trackedChangeType).toBeUndefined();
+    expect(comment.trackedChangeDisplayType).toBeNull();
     expect(comment.trackedDeletedText).toBeNull();
   });
 

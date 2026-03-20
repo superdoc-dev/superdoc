@@ -194,6 +194,7 @@ export async function layoutHeaderFooterWithCache(
   cache: HeaderFooterLayoutCache = sharedHeaderFooterCache,
   totalPages?: number,
   pageResolver?: PageResolver,
+  kind?: 'header' | 'footer',
 ): Promise<HeaderFooterBatchResult> {
   const result: HeaderFooterBatchResult = {};
 
@@ -211,7 +212,7 @@ export async function layoutHeaderFooterWithCache(
       resolveHeaderFooterTokens(clonedBlocks, 1, numPages);
 
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);
-      const layout = layoutHeaderFooter(clonedBlocks, measures, constraints);
+      const layout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind);
 
       result[type] = { blocks: clonedBlocks, measures, layout };
     }
@@ -231,7 +232,7 @@ export async function layoutHeaderFooterWithCache(
     const hasTokens = hasPageTokens(blocks);
     if (!hasTokens) {
       const measures = await cache.measureBlocks(blocks, constraints, measureBlock);
-      const layout = layoutHeaderFooter(blocks, measures, constraints);
+      const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
       result[type] = { blocks, measures, layout };
       continue;
     }
@@ -275,7 +276,7 @@ export async function layoutHeaderFooterWithCache(
 
       // Measure and layout
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);
-      const pageLayout = layoutHeaderFooter(clonedBlocks, measures, constraints);
+      const pageLayout = layoutHeaderFooter(clonedBlocks, measures, constraints, kind);
       const measuresById = new Map<string, Measure>();
       for (let i = 0; i < clonedBlocks.length; i += 1) {
         measuresById.set(clonedBlocks[i].id, measures[i]);
@@ -307,13 +308,14 @@ export async function layoutHeaderFooterWithCache(
     // Construct final HeaderFooterLayout with all pages
     // Use the first page's measurements for overall dimensions
     const firstPageLayout = pages[0]
-      ? layoutHeaderFooter(pages[0].blocks, pages[0].measures, constraints)
+      ? layoutHeaderFooter(pages[0].blocks, pages[0].measures, constraints, kind)
       : { height: 0, pages: [] };
 
     const finalLayout: HeaderFooterLayout = {
       height: firstPageLayout.height,
       minY: firstPageLayout.minY,
       maxY: firstPageLayout.maxY,
+      renderHeight: firstPageLayout.renderHeight,
       pages: pages.map((p) => ({
         number: p.number,
         fragments: p.fragments,

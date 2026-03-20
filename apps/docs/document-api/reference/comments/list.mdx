@@ -101,12 +101,15 @@ Returns a CommentsListResult with an array of comment threads and total count.
   "additionalProperties": false,
   "properties": {
     "includeResolved": {
+      "description": "When true, includes resolved comments in results. Default: false.",
       "type": "boolean"
     },
     "limit": {
+      "description": "Maximum number of comments to return.",
       "type": "integer"
     },
     "offset": {
+      "description": "Number of comments to skip for pagination.",
       "type": "integer"
     }
   },

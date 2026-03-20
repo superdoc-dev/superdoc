@@ -272,6 +272,10 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
 /**
  * Execute `comments.create` — routes to `adapter.add` or `adapter.reply`
  * depending on whether `parentCommentId` is provided.
+ *
+ * Accepts {@link RevisionGuardOptions} instead of `MutationOptions` because
+ * comments route to specialized adapter methods (add/edit/reply/move/resolve/remove)
+ * outside the plan engine, so changeMode and dryRun are not applicable.
  */
 export function executeCommentsCreate(
   adapter: CommentsAdapter,
@@ -290,6 +294,10 @@ export function executeCommentsCreate(
 /**
  * Execute `comments.patch` — routes to exactly one adapter method based on
  * the single mutation field provided. Validation enforces one-field-per-call.
+ *
+ * Accepts {@link RevisionGuardOptions} instead of `MutationOptions` because
+ * comments route to specialized adapter methods (add/edit/reply/move/resolve/remove)
+ * outside the plan engine, so changeMode and dryRun are not applicable.
  */
 export function executeCommentsPatch(
   adapter: CommentsAdapter,
@@ -311,8 +319,11 @@ export function executeCommentsPatch(
     return adapter.setInternal({ commentId: input.commentId, isInternal: input.isInternal }, options);
   }
 
-  // Unreachable after validation, but satisfies the return type.
-  return { success: true };
+  // Unreachable after validation — throw if we somehow get here.
+  throw new DocumentApiValidationError(
+    'INTERNAL_ERROR',
+    'comments.patch: no mutation field matched after validation. This is a bug.',
+  );
 }
 
 /**
@@ -324,19 +335,6 @@ export function executeCommentsDelete(
   options?: RevisionGuardOptions,
 ): Receipt {
   return adapter.remove({ commentId: input.commentId }, options);
-}
-
-// Internal-use execute wrappers (setActive, goTo remain for adapter consumers)
-export function executeSetCommentActive(
-  adapter: CommentsAdapter,
-  input: SetCommentActiveInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.setActive(input, options);
-}
-
-export function executeGoToComment(adapter: CommentsAdapter, input: GoToCommentInput): Receipt {
-  return adapter.goTo(input);
 }
 
 export function executeGetComment(adapter: CommentsAdapter, input: GetCommentInput): CommentInfo {

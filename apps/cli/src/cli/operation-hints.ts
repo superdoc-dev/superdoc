@@ -84,7 +84,9 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   insert: 'inserted text',
   replace: 'replaced text',
   delete: 'deleted text',
+  'blocks.list': 'listed blocks',
   'blocks.delete': 'deleted block',
+  'blocks.deleteRange': 'deleted block range',
   'format.apply': 'applied style',
   ...buildFormatInlineAliasRecord('applied style'),
   ...buildParagraphRecord('updated paragraph formatting'),
@@ -206,6 +208,11 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'images.setPosition': 'set position',
   'images.setAnchorOptions': 'set anchor options',
   'images.setZOrder': 'set z-order',
+
+  // Diff
+  'diff.capture': 'captured snapshot',
+  'diff.compare': 'compared documents',
+  'diff.apply': 'applied diff',
 };
 
 // ---------------------------------------------------------------------------
@@ -233,7 +240,10 @@ export type OutputFormat =
   | 'documentInfo'
   | 'receipt'
   | 'plain'
-  | 'void';
+  | 'void'
+  | 'diffSnapshot'
+  | 'diffPayload'
+  | 'diffApplyResult';
 
 export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   get: 'plain',
@@ -249,7 +259,9 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   insert: 'mutationReceipt',
   replace: 'mutationReceipt',
   delete: 'mutationReceipt',
+  'blocks.list': 'plain',
   'blocks.delete': 'plain',
+  'blocks.deleteRange': 'plain',
   'format.apply': 'mutationReceipt',
   ...buildFormatInlineAliasRecord('mutationReceipt'),
   ...buildParagraphRecord('plain'),
@@ -371,6 +383,11 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'images.setPosition': 'plain',
   'images.setAnchorOptions': 'plain',
   'images.setZOrder': 'plain',
+
+  // Diff
+  'diff.capture': 'diffSnapshot',
+  'diff.compare': 'diffPayload',
+  'diff.apply': 'diffApplyResult',
 };
 
 // ---------------------------------------------------------------------------
@@ -398,7 +415,9 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   insert: null,
   replace: null,
   delete: null,
+  'blocks.list': 'result',
   'blocks.delete': 'result',
+  'blocks.deleteRange': 'result',
   'format.apply': null,
   ...buildFormatInlineAliasRecord(null),
   ...buildParagraphRecord('result'),
@@ -531,6 +550,11 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'headerFooters.parts.list': 'result',
   'headerFooters.parts.create': 'result',
   'headerFooters.parts.delete': 'result',
+
+  // Diff
+  'diff.capture': 'snapshot',
+  'diff.compare': 'diff',
+  'diff.apply': 'result',
 };
 
 // ---------------------------------------------------------------------------
@@ -571,6 +595,7 @@ export type OperationFamily =
   | 'create'
   | 'blocks'
   | 'query'
+  | 'diff'
   | 'general';
 
 export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = {
@@ -587,7 +612,9 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   insert: 'textMutation',
   replace: 'textMutation',
   delete: 'textMutation',
+  'blocks.list': 'blocks',
   'blocks.delete': 'blocks',
+  'blocks.deleteRange': 'blocks',
   'format.apply': 'textMutation',
   ...buildFormatInlineAliasRecord('textMutation'),
   ...buildParagraphRecord('textMutation'),
@@ -709,4 +736,9 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'images.setPosition': 'images',
   'images.setAnchorOptions': 'images',
   'images.setZOrder': 'images',
+
+  // Diff
+  'diff.capture': 'diff',
+  'diff.compare': 'diff',
+  'diff.apply': 'diff',
 };

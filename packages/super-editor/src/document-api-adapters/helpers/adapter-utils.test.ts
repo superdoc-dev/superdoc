@@ -1,5 +1,13 @@
 import type { UnknownNodeDiagnostic } from '@superdoc/document-api';
-import { addDiagnostic, dedupeDiagnostics, findCandidateByPos, paginate, scopeByRange } from './adapter-utils.js';
+import {
+  addDiagnostic,
+  dedupeDiagnostics,
+  findCandidateByPos,
+  paginate,
+  resolveWithinScope,
+  scopeByRange,
+} from './adapter-utils.js';
+import type { BlockIndex } from './node-address-resolver.js';
 
 // ---------------------------------------------------------------------------
 // paginate
@@ -204,5 +212,95 @@ describe('findCandidateByPos', () => {
     expect(findCandidateByPos(single, 10)?.id).toBe('only');
     expect(findCandidateByPos(single, 4)).toBeUndefined();
     expect(findCandidateByPos(single, 15)).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveWithinScope
+// ---------------------------------------------------------------------------
+
+describe('resolveWithinScope', () => {
+  function makeBlockIndex(entries: Array<{ nodeType: string; nodeId: string; pos: number; end: number }>): BlockIndex {
+    const candidates = entries.map((e) => ({
+      node: {} as import('prosemirror-model').Node,
+      pos: e.pos,
+      end: e.end,
+      nodeType: e.nodeType as import('@superdoc/document-api').BlockNodeType,
+      nodeId: e.nodeId,
+    }));
+    const byId = new Map<string, (typeof candidates)[number]>();
+    const ambiguous = new Set<string>();
+    for (const c of candidates) {
+      const key = `${c.nodeType}:${c.nodeId}`;
+      if (byId.has(key)) {
+        ambiguous.add(key);
+        byId.delete(key);
+      } else if (!ambiguous.has(key)) {
+        byId.set(key, c);
+      }
+    }
+    return { candidates, byId, ambiguous };
+  }
+
+  it('returns range when within matches exactly', () => {
+    const index = makeBlockIndex([{ nodeType: 'table', nodeId: 't1', pos: 10, end: 50 }]);
+    const diagnostics: UnknownNodeDiagnostic[] = [];
+    const result = resolveWithinScope(
+      index,
+      { within: { kind: 'block', nodeType: 'table', nodeId: 't1' } },
+      diagnostics,
+    );
+
+    expect(result).toEqual({ ok: true, range: { start: 10, end: 50 } });
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('returns ok:true with undefined range when within is absent', () => {
+    const index = makeBlockIndex([]);
+    const diagnostics: UnknownNodeDiagnostic[] = [];
+    const result = resolveWithinScope(index, {}, diagnostics);
+
+    expect(result).toEqual({ ok: true, range: undefined });
+  });
+
+  it('falls back to nodeId when nodeType is stale after restyle (paragraph → heading)', () => {
+    // Block is now indexed as heading, but the saved address says paragraph
+    const index = makeBlockIndex([{ nodeType: 'heading', nodeId: 'p1', pos: 0, end: 20 }]);
+    const diagnostics: UnknownNodeDiagnostic[] = [];
+    const result = resolveWithinScope(
+      index,
+      { within: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
+      diagnostics,
+    );
+
+    expect(result).toEqual({ ok: true, range: { start: 0, end: 20 } });
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('falls back to nodeId when nodeType is stale after restyle (paragraph → listItem)', () => {
+    const index = makeBlockIndex([{ nodeType: 'listItem', nodeId: 'p2', pos: 5, end: 30 }]);
+    const diagnostics: UnknownNodeDiagnostic[] = [];
+    const result = resolveWithinScope(
+      index,
+      { within: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' } },
+      diagnostics,
+    );
+
+    expect(result).toEqual({ ok: true, range: { start: 5, end: 30 } });
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('returns ok:false with diagnostic when neither exact nor fallback match', () => {
+    const index = makeBlockIndex([{ nodeType: 'table', nodeId: 'other', pos: 0, end: 10 }]);
+    const diagnostics: UnknownNodeDiagnostic[] = [];
+    const result = resolveWithinScope(
+      index,
+      { within: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' } },
+      diagnostics,
+    );
+
+    expect(result).toEqual({ ok: false });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain('missing');
   });
 });

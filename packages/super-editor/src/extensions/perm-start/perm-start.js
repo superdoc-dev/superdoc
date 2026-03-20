@@ -1,4 +1,4 @@
-import { Node } from '@core/index.js';
+import { Node } from '@core/Node.js';
 import { createPermissionBlockMarkerNode } from '../shared/permission-block-marker-factory.js';
 
 /**

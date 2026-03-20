@@ -686,7 +686,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         data: json,
         editorContainer: container,
         editorHost: options?.editorHost,
-        sectionId: descriptor.id,
+        headerFooterRefId: descriptor.id,
         type: descriptor.kind,
         availableWidth: options?.availableWidth,
         availableHeight: options?.availableHeight ?? DEFAULT_HEADER_FOOTER_HEIGHT,

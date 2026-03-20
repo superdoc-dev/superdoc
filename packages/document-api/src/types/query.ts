@@ -1,7 +1,8 @@
-import type { NodeAddress, NodeKind, NodeType } from './base.js';
+import type { BlockNodeAddress, NodeAddress, NodeKind, NodeType } from './base.js';
 import type { NodeInfo } from './node.js';
-import type { Range, TextAddress } from './address.js';
+import type { Range, TextAddress, SelectionTarget } from './address.js';
 import type { DiscoveryOutput } from './discovery.js';
+import type { StoryLocator } from './story.types.js';
 
 export interface TextSelector {
   type: 'text';
@@ -38,7 +39,9 @@ export type Selector = { nodeType: NodeType } | NodeSelector | TextSelector;
 export interface Query {
   /** Selector that determines which nodes to match. */
   select: NodeSelector | TextSelector;
-  within?: NodeAddress;
+  within?: BlockNodeAddress;
+  /** Restrict the query to a specific story. Omit for body (backward compatible). */
+  in?: StoryLocator;
   limit?: number;
   offset?: number;
   /**
@@ -62,6 +65,13 @@ export interface MatchContext {
   address: NodeAddress;
   snippet: string;
   highlightRange: Range;
+  /**
+   * Canonical mutation-ready selection target for this text match.
+   *
+   * Built from the first and last text ranges. Can be passed directly to
+   * `doc.delete({ target })`, `doc.replace({ target, text })`, etc.
+   */
+  target?: SelectionTarget;
   /**
    * Text ranges matching the query, expressed as block-relative offsets.
    * For cross-paragraph matches, this will include one range per block.

@@ -105,17 +105,19 @@ onMounted(() => {
   .button-icon {
     cursor: pointer;
     padding: 5px;
-    font-size: 16px;
+    font-size: var(--sd-ui-font-size-600, 16px);
+    color: var(--sd-ui-dropdown-text, #47484a);
     width: 25px;
     height: 25px;
-    border-radius: 4px;
+    border-radius: var(--sd-ui-dropdown-option-radius, 3px);
     display: flex;
     justify-content: center;
     align-items: center;
     box-sizing: border-box;
 
     &:hover {
-      background-color: #d8dee5;
+      background-color: var(--sd-ui-dropdown-hover-bg, #d8dee5);
+      color: var(--sd-ui-dropdown-hover-text, #47484a);
     }
 
     :deep(svg) {

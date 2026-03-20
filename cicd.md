@@ -160,6 +160,40 @@ Version bumps are automatic based on commit messages:
 
 > ℹ️ The legacy scoped package `@harbour-enterprises/superdoc` is mirrored with the same version and dist-tag for every release channel above.
 
+## CLI Release
+
+The CLI (`apps/cli`) has its own semantic-release pipeline with tag format `cli-v${version}`.
+
+### Automated (CI)
+
+| Trigger | Channel | Tag example |
+|---------|---------|-------------|
+| Push to `main` | `@next` | `cli-v0.3.0-next.1` |
+| Push to `stable` | `@latest` | `cli-v0.3.0` |
+
+The workflow is `.github/workflows/release-cli.yml`. It analyzes commits across multiple packages (see `apps/cli/.releaserc.cjs` for the `includePaths` list).
+
+### Local Release
+
+| Command | What it does |
+|---------|-------------|
+| `pnpm run release:local` | Releases **superdoc then CLI** in sequence on `stable` |
+| `pnpm run release:local:superdoc` | Releases superdoc only |
+| `pnpm run release:local:cli` | Releases CLI only |
+
+All accept `-- --dry-run` to preview without publishing. The combined orchestrator (`release:local`) enforces a `stable` branch guard (override with `--branch=<name>`).
+
+`@semantic-release/git` automatically pushes version commits and tags when releasing on the `stable` branch. This is existing behavior for both superdoc and CLI.
+
+### Raw Platform Publish (bypass semantic-release)
+
+| Command | What it does |
+|---------|-------------|
+| `pnpm run cli:publish:raw` | Builds and publishes platform binaries directly |
+| `pnpm run cli:publish:raw:dry` | Dry-run of the above |
+
+These skip semantic-release entirely — useful for re-publishing a failed platform upload.
+
 ## Workflow Scenarios
 
 ### Scenario 1: Feature Development

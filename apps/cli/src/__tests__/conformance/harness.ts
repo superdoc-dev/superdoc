@@ -415,6 +415,36 @@ export class ConformanceHarness {
     return { docPath: outDoc, changeId, target: collapsedTarget };
   }
 
+  async firstTwoBlockAddresses(
+    docPath: string,
+    stateDir: string,
+  ): Promise<{ first: { nodeId: string; nodeType: string }; second: { nodeId: string; nodeType: string } }> {
+    const { result, envelope } = await this.runCli(['blocks', 'list', docPath, '--limit', '5'], stateDir);
+    if (result.code !== 0) {
+      throw new Error(`Unable to list blocks for ${docPath}`);
+    }
+
+    assertSuccessEnvelope(envelope);
+    const data = envelope.data as {
+      result?: {
+        blocks?: Array<{ nodeId?: string; nodeType?: string }>;
+      };
+    };
+    const blocks = data.result?.blocks ?? [];
+    if (blocks.length < 2) {
+      throw new Error(`Need at least 2 blocks in ${docPath}, found ${blocks.length}`);
+    }
+    const first = blocks[0]!;
+    const second = blocks[1]!;
+    if (!first.nodeId || !first.nodeType || !second.nodeId || !second.nodeType) {
+      throw new Error(`Block entries missing nodeId or nodeType in ${docPath}`);
+    }
+    return {
+      first: { nodeId: first.nodeId, nodeType: first.nodeType },
+      second: { nodeId: second.nodeId, nodeType: second.nodeType },
+    };
+  }
+
   async openSessionFixture(
     stateDir: string,
     label: string,

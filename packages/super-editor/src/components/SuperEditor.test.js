@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 
-const messageApi = vi.hoisted(() => ({
-  error: vi.fn(),
-  info: vi.fn(),
-  success: vi.fn(),
-}));
-
 const onMarginClickCursorChangeMock = vi.hoisted(() => vi.fn());
 const checkNodeSpecificClicksMock = vi.hoisted(() => vi.fn());
 const getFileObjectMock = vi.hoisted(() =>
@@ -31,11 +25,6 @@ const EditorConstructor = vi.hoisted(() => {
   return MockEditor;
 });
 
-vi.mock('naive-ui', () => ({
-  NSkeleton: { name: 'NSkeleton', render: () => null },
-  useMessage: () => messageApi,
-}));
-
 // pagination legacy removed; no pagination helpers
 
 vi.mock('./cursor-helpers.js', () => ({
@@ -57,6 +46,10 @@ vi.mock('./popovers/GenericPopover.vue', () => ({
 
 vi.mock('./toolbar/LinkInput.vue', () => ({
   default: { name: 'LinkInput', render: () => null },
+}));
+
+vi.mock('./TableResizeOverlay.vue', () => ({
+  default: { name: 'TableResizeOverlay', render: () => null },
 }));
 
 vi.mock('@superdoc/common', () => ({
@@ -85,16 +78,19 @@ import SuperEditor from './SuperEditor.vue';
 
 const getEditorInstance = () => EditorConstructor.mock.results.at(-1)?.value;
 let consoleDebugSpy;
+let consoleWarnSpy;
 
 describe('SuperEditor.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.useRealTimers();
     consoleDebugSpy?.mockRestore();
+    consoleWarnSpy?.mockRestore();
     vi.clearAllMocks();
   });
 
@@ -519,7 +515,7 @@ describe('SuperEditor.vue', () => {
     await flushPromises();
 
     expect(onException).toHaveBeenCalledWith({ error, editor: null });
-    expect(messageApi.error).toHaveBeenCalledWith(
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
       'Unable to load the file. Please verify the .docx is valid and not password protected.',
     );
     expect(getFileObjectMock).toHaveBeenCalledWith('blank-docx-url', 'blank.docx', DOCX_MIME);
@@ -1251,6 +1247,57 @@ describe('SuperEditor.vue', () => {
 
       wrapper.unmount();
       vi.useRealTimers();
+    });
+
+    describe('table overlay click guard', () => {
+      it('should suppress overlay updates when clicking in viewing mode', async () => {
+        vi.useFakeTimers();
+        EditorConstructor.loadXmlData.mockResolvedValueOnce(['<docx />', {}, {}, {}]);
+
+        const wrapper = mount(SuperEditor, {
+          props: {
+            documentId: 'doc-click-guard',
+            options: {},
+          },
+        });
+
+        await flushPromises();
+
+        await flushPromises();
+
+        const updateSpy = vi.spyOn(wrapper.vm, 'updateTableResizeOverlay');
+        // Force viewing mode
+        Object.defineProperty(wrapper.vm, 'activeEditor', {
+          value: {
+            value: {
+              options: { documentMode: 'viewing' },
+              isEditable: false,
+              view: { focus: vi.fn() },
+            },
+          },
+        });
+        wrapper.vm.getDocumentMode = () => 'viewing';
+        wrapper.vm.isViewingMode = () => true;
+
+        wrapper.vm.tableResizeState.visible = true;
+        wrapper.vm.tableResizeState.tableElement = { foo: 'bar' };
+        wrapper.vm.editorElem.value = {
+          querySelector: () => ({
+            contains: () => false,
+          }),
+        };
+
+        const event = new MouseEvent('click');
+        Object.defineProperty(event, 'stopPropagation', { value: vi.fn() });
+        Object.defineProperty(event, 'preventDefault', { value: vi.fn() });
+
+        wrapper.vm.handleSuperEditorClick(event);
+
+        expect(updateSpy).not.toHaveBeenCalled();
+
+        wrapper.unmount();
+        vi.useRealTimers();
+      });
     });
   });
 });

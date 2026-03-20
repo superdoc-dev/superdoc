@@ -1,5 +1,6 @@
 import { getMarkRange } from '../helpers/getMarkRange.js';
 import { getMarkType } from '../helpers/getMarkType.js';
+import { removeParagraphRunProperty } from '../helpers/syncParagraphRunProperties.js';
 
 /**
  * Remove all marks in the current selection.
@@ -17,6 +18,12 @@ export const unsetMark = (typeOrName, options = {}) => ({ tr, state, dispatch, e
   const { $from, empty, ranges } = selection;
 
   if (!dispatch) return true;
+
+  const markToRemove =
+    (tr.storedMarks ?? state.storedMarks ?? $from.marks()).find((mark) => mark.type === type) ?? {
+      type,
+      attrs: {},
+    };
 
   if (empty && extendEmptyMarkRange) {
     let { from, to } = selection;
@@ -36,6 +43,7 @@ export const unsetMark = (typeOrName, options = {}) => ({ tr, state, dispatch, e
   }
 
   tr.removeStoredMark(type);
+  removeParagraphRunProperty(tr, markToRemove);
 
   return true;
 };

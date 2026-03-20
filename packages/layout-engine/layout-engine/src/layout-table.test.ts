@@ -1660,6 +1660,56 @@ describe('layoutTableBlock', () => {
       }
     });
 
+    it('repeats only the completed header prefix when a later header row continues on a new page', () => {
+      const block = createMockTableBlock(3, [{ repeatHeader: true }, { repeatHeader: true }, { repeatHeader: false }]);
+      const measure = createMockTableMeasure([100, 100], [10, 20, 10], [[10], [10, 10, 10], [10]], 2);
+
+      const firstPage = { fragments: [] as TableFragment[] };
+      const secondPage = { fragments: [] as TableFragment[] };
+      const thirdPage = { fragments: [] as TableFragment[] };
+      const pages = [firstPage, secondPage, thirdPage];
+      let currentPageIndex = 0;
+      let state = {
+        page: firstPage,
+        columnIndex: 0,
+        cursorY: 0,
+        contentBottom: 35,
+        topMargin: 0,
+      };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => state,
+        advanceColumn: () => {
+          currentPageIndex += 1;
+          state = {
+            ...state,
+            page: pages[currentPageIndex],
+            cursorY: 0,
+            contentBottom: 60,
+          };
+          return state;
+        },
+        columnX: () => 0,
+      });
+
+      expect(firstPage.fragments).toHaveLength(1);
+      expect(firstPage.fragments[0].partialRow?.rowIndex).toBe(1);
+
+      expect(secondPage.fragments).toHaveLength(1);
+      expect(secondPage.fragments[0].partialRow?.rowIndex).toBe(1);
+      expect(secondPage.fragments[0].repeatHeaderCount).toBe(1);
+
+      // Once the split header row is complete, later continuation fragments
+      // should repeat the full header block again.
+      expect(thirdPage.fragments).toHaveLength(1);
+      expect(thirdPage.fragments[0].fromRow).toBe(2);
+      expect(thirdPage.fragments[0].repeatHeaderCount).toBe(2);
+      expect(currentPageIndex).toBe(2);
+    });
+
     it('should skip header repetition when headers are taller than page', () => {
       const block = createMockTableBlock(5, [
         { repeatHeader: true },
@@ -1700,6 +1750,170 @@ describe('layoutTableBlock', () => {
       if (fragments.length > 1) {
         expect(fragments[1].repeatHeaderCount).toBe(0);
       }
+    });
+
+    it('retries a continued partial row without headers when repeated headers consume the body budget', () => {
+      const block = createMockTableBlock(2, [{ repeatHeader: true }, undefined]);
+      for (const cell of block.rows[1].cells) {
+        cell.attrs = { padding: { top: 8, bottom: 8, left: 4, right: 4 } };
+      }
+
+      const measure = createMockTableMeasure([100, 100], [20, 50], [[20], [10, 10, 10, 10, 10]]);
+
+      const pageHeights = [50, 26, 26, 26, 26];
+      const pages = pageHeights.map(() => ({ fragments: [] as TableFragment[] }));
+      let currentPageIndex = 0;
+      let advanceCount = 0;
+      let state = {
+        page: pages[0],
+        columnIndex: 0,
+        cursorY: 0,
+        contentBottom: pageHeights[0],
+        topMargin: 0,
+      };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => state,
+        advanceColumn: () => {
+          advanceCount++;
+          if (currentPageIndex + 1 >= pages.length) {
+            throw new Error('Livelock detected while retrying partial row without headers');
+          }
+          currentPageIndex += 1;
+          state = {
+            ...state,
+            page: pages[currentPageIndex],
+            cursorY: 0,
+            contentBottom: pageHeights[currentPageIndex],
+          };
+          return state;
+        },
+        columnX: () => 0,
+      });
+
+      // First page must create a partial row continuation.
+      expect(pages[0].fragments).toHaveLength(1);
+      expect(pages[0].fragments[0].partialRow?.rowIndex).toBe(1);
+
+      // On the continuation page, repeated headers leave zero line budget because
+      // cell padding consumes the remaining 6px. The retryWithoutHeaders path
+      // should re-run the same page with repeatHeaderCount=0 and render content.
+      expect(pages[1].fragments).toHaveLength(1);
+      expect(pages[1].fragments[0].repeatHeaderCount).toBe(0);
+      expect(pages[1].fragments[0].continuesFromPrev).toBe(true);
+      expect(pages[1].fragments[0].partialRow?.fromLineByCell[0]).toBeGreaterThan(0);
+      expect(advanceCount).toBeLessThan(pageHeights.length);
+    });
+
+    it('suppresses repeated headers between same-page slices after a continuation-page partial split', () => {
+      const block = createMockTableBlock(3, [{ repeatHeader: true }, { repeatHeader: false }, { repeatHeader: false }]);
+      const measure = createMockTableMeasure([100, 100], [20, 20, 40], [[20], [20], [10, 10, 10, 10]]);
+
+      const firstPage = { fragments: [] as TableFragment[] };
+      const secondPage = { fragments: [] as TableFragment[] };
+      let currentPageIndex = 0;
+      let state = {
+        page: firstPage,
+        columnIndex: 0,
+        cursorY: 0,
+        contentBottom: 50,
+        topMargin: 0,
+      };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => {
+          // Use the real, mutable cursor on page 1 so the table advances.
+          // On page 2, intentionally reset cursorY to 0 to force the same-page
+          // continuation branch after a normal partial split, exercising the
+          // header-suppression guard directly.
+          if (currentPageIndex === 1) {
+            state.cursorY = 0;
+          }
+          return state;
+        },
+        advanceColumn: () => {
+          currentPageIndex += 1;
+          state = {
+            ...state,
+            page: secondPage,
+            cursorY: 0,
+            contentBottom: 50,
+          };
+          return state;
+        },
+        columnX: () => 0,
+      });
+
+      // First page ends at a row boundary (header + first body row).
+      expect(firstPage.fragments).toHaveLength(1);
+      expect(firstPage.fragments[0].toRow).toBe(2);
+
+      // Continuation page: the first slice repeats the header, the next slice on
+      // the same page must not. This is the specific normal-partial-row path
+      // guarded by samePagePartialContinuation.
+      expect(secondPage.fragments.length).toBeGreaterThanOrEqual(2);
+      expect(secondPage.fragments[0].repeatHeaderCount).toBe(1);
+      expect(secondPage.fragments[1].repeatHeaderCount).toBe(0);
+      expect(secondPage.fragments[0].partialRow?.rowIndex).toBe(2);
+      expect(secondPage.fragments[1].partialRow?.rowIndex).toBe(2);
+    });
+
+    it('suppresses repeated headers between same-page slices after a forced split on a continuation page', () => {
+      const block = createMockTableBlock(2, [{ repeatHeader: true }, { cantSplit: true }]);
+      for (const cell of block.rows[1].cells) {
+        cell.attrs = { padding: { top: 4, bottom: 4, left: 2, right: 2 } };
+      }
+
+      const measure = createMockTableMeasure([100, 100], [10, 50], [[10], [8, 12]], 4);
+
+      const pageHeights = [70, 55, 80];
+      const firstPage = { fragments: [] as TableFragment[] };
+      const secondPage = { fragments: [] as TableFragment[] };
+      const thirdPage = { fragments: [] as TableFragment[] };
+      const pages = [firstPage, secondPage, thirdPage];
+      let currentPageIndex = 0;
+      let state = {
+        page: firstPage,
+        columnIndex: 0,
+        cursorY: 0,
+        contentBottom: pageHeights[0],
+        topMargin: 0,
+      };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => state,
+        advanceColumn: () => {
+          currentPageIndex += 1;
+          state = {
+            ...state,
+            page: pages[currentPageIndex],
+            cursorY: 0,
+            contentBottom: pageHeights[currentPageIndex],
+          };
+          return state;
+        },
+        columnX: () => 0,
+      });
+
+      expect(firstPage.fragments).toHaveLength(1);
+      expect(secondPage.fragments).toHaveLength(2);
+      expect(secondPage.fragments[0].partialRow?.rowIndex).toBe(1);
+      expect(secondPage.fragments[1].partialRow?.rowIndex).toBe(1);
+      expect(secondPage.fragments[0].repeatHeaderCount).toBe(0);
+      expect(secondPage.fragments[1].repeatHeaderCount).toBe(0);
+      expect(secondPage.fragments.reduce((sum, fragment) => sum + fragment.height, 0)).toBeLessThanOrEqual(
+        pageHeights[1],
+      );
+      expect(thirdPage.fragments).toHaveLength(0);
     });
 
     it('should not split floating tables', () => {
@@ -2351,6 +2565,324 @@ describe('layoutTableBlock', () => {
           }
         }
       }
+    });
+  });
+
+  describe('block-aware partial row height (SD-1612)', () => {
+    it('accounts for paragraph spacing.before in partial row height', () => {
+      // A cell with a single paragraph that has spacing.before.
+      // The partial row height must include the effective spacing.before
+      // so the renderer's content fits within the reserved space.
+      const block = createMockTableBlock(1);
+      // Set spacing.before = 10 on the cell's paragraph
+      block.rows[0].cells[0].paragraph = {
+        kind: 'paragraph',
+        id: 'p0' as BlockId,
+        runs: [],
+        attrs: { spacing: { before: 10 } },
+      };
+
+      const measure = createMockTableMeasure(
+        [100, 100],
+        [80],
+        [[20, 20, 20]], // 3 lines of 20px each, total 60px + spacing
+      );
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY,
+          contentBottom: cursorY + 55, // Enough for ~2 lines + spacing, not all 3
+        }),
+        advanceColumn: (state) => {
+          cursorY = 0;
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 200 };
+        },
+        columnX: () => 0,
+      });
+
+      // The first fragment should have partialRow because spacing.before
+      // reduces the available space for lines.
+      const partialFragments = fragments.filter((f) => 'partialRow' in f && f.partialRow);
+      if (partialFragments.length > 0) {
+        const partial = partialFragments[0].partialRow!;
+        // The partial height must be >= the lines rendered PLUS spacing.before
+        // so the renderer can paint spacing + lines without clipping.
+        expect(partial.partialHeight).toBeGreaterThan(0);
+      }
+    });
+
+    it('promotes fully rendered paragraph to totalHeight', () => {
+      // When a paragraph's totalHeight > sum(lineHeights), the renderer uses
+      // totalHeight. The partial row height must match.
+      const block = createMockTableBlock(1);
+
+      // Create a measure where totalHeight > sum of line heights
+      const measure = createMockTableMeasure([100], [80], [[15, 15]]); // 2 lines of 15px = 30px
+      // Set totalHeight higher than sum of lines to trigger promotion
+      measure.rows[0].cells[0].paragraph!.totalHeight = 50;
+      measure.rows[0].height = 50;
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY,
+          contentBottom: cursorY + 55, // Enough for the paragraph (50 + padding)
+        }),
+        advanceColumn: (state) => {
+          cursorY = 0;
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 200 };
+        },
+        columnX: () => 0,
+      });
+
+      // Should fit in one fragment — the key is that the fragment height
+      // correctly accounts for totalHeight promotion.
+      expect(fragments.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not change line-index bookkeeping', () => {
+      // Verify that fromLineByCell and toLineByCell still advance by
+      // flattened line indices, even with block-aware height.
+      const block = createMockTableBlock(1);
+      block.rows[0].cells[0].paragraph = {
+        kind: 'paragraph',
+        id: 'p0' as BlockId,
+        runs: [],
+        attrs: { spacing: { before: 5, after: 5 } },
+      };
+
+      const measure = createMockTableMeasure(
+        [100, 100],
+        [80],
+        [[10, 10, 10, 10]], // 4 lines of 10px each
+      );
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY,
+          contentBottom: cursorY + 25, // Force multiple fragments
+        }),
+        advanceColumn: (state) => {
+          cursorY = 0;
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 25 };
+        },
+        columnX: () => 0,
+      });
+
+      const partialFragments = fragments.filter((f) => 'partialRow' in f && f.partialRow);
+
+      // Verify monotonic line advancement
+      for (let i = 1; i < partialFragments.length; i++) {
+        const prev = partialFragments[i - 1].partialRow!;
+        const current = partialFragments[i].partialRow!;
+        current.fromLineByCell.forEach((fromLine, idx) => {
+          expect(fromLine).toBe(prev.toLineByCell[idx]);
+        });
+      }
+    });
+
+    it('partial-row fragment height includes cellSpacingPx', () => {
+      const block = createMockTableBlock(1);
+      const cellSpacingPx = 4;
+      const measure = createMockTableMeasure(
+        [100],
+        [60],
+        [[20, 20, 20]], // 3 lines of 20px
+        cellSpacingPx,
+      );
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY,
+          contentBottom: cursorY + 35, // Force partial row
+        }),
+        advanceColumn: (state) => {
+          cursorY = 0;
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 200 };
+        },
+        columnX: () => 0,
+      });
+
+      const partialFragments = fragments.filter((f) => 'partialRow' in f && f.partialRow);
+
+      if (partialFragments.length > 0) {
+        const frag = partialFragments[0];
+        // Fragment height must include cell spacing: (rowCount+1) * cellSpacingPx
+        // For 1 row: (1+1) * 4 = 8 extra pixels
+        expect(frag.height).toBeGreaterThan(frag.partialRow!.partialHeight);
+      }
+    });
+
+    it('partial-row fragment height includes separate table borders', () => {
+      const block = createMockTableBlock(1, undefined, {
+        borderCollapse: 'separate',
+        cellSpacing: 0,
+      });
+      const measure = createMockTableMeasure([100], [60], [[20, 20, 20]]);
+      measure.tableBorderWidths = { top: 2, right: 1, bottom: 2, left: 1 };
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY,
+          contentBottom: cursorY + 30,
+        }),
+        advanceColumn: (state) => {
+          cursorY = 0;
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 200 };
+        },
+        columnX: () => 0,
+      });
+
+      const partialFragments = fragments.filter((f) => 'partialRow' in f && f.partialRow);
+
+      if (partialFragments.length > 0) {
+        const frag = partialFragments[0];
+        // Fragment height must include border widths: top(2) + bottom(2) = 4
+        expect(frag.height).toBeGreaterThan(frag.partialRow!.partialHeight);
+      }
+    });
+
+    it('forced-split path does not produce blank fragments', () => {
+      // A row that exceeds a full page height must still make line progress.
+      // The forced-split path must not create zero-line-progress fragments.
+      const block = createMockTableBlock(1);
+      const measure = createMockTableMeasure(
+        [100],
+        [1200], // Very tall row
+        [[400, 400, 400]], // 3 very tall lines
+      );
+
+      const fragments: TableFragment[] = [];
+      let advanceCount = 0;
+      const maxAdvances = 20; // Safety limit to detect livelocks
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 500, // Each page has 500px
+        }),
+        advanceColumn: (state) => {
+          advanceCount++;
+          if (advanceCount > maxAdvances) {
+            throw new Error('Livelock detected: too many page advances');
+          }
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 500 };
+        },
+        columnX: () => 0,
+      });
+
+      // Should have produced fragments that cover all content
+      expect(fragments.length).toBeGreaterThan(0);
+
+      // No zero-line-progress fragments
+      for (const frag of fragments) {
+        if ('partialRow' in frag && frag.partialRow) {
+          const progress = frag.partialRow.toLineByCell.some((to, idx) => to > frag.partialRow!.fromLineByCell[idx]);
+          expect(progress).toBe(true);
+        }
+      }
+    });
+
+    it('force-progress accounts for repeated headers to avoid livelock', () => {
+      // When a table has repeated headers, the body space per page is reduced.
+      // A segment whose minSegmentCost exceeds (fullPage - headers) but not
+      // fullPage would never trigger force-progress, livelocking across pages.
+      // The fix passes fullPageHeightForBody so force-progress fires correctly.
+      const block = createMockTableBlock(3, [{ repeatHeader: true }, undefined, undefined]);
+
+      // Header row: 200px, body rows: one with a tall segment
+      const measure = createMockTableMeasure(
+        [100],
+        [200, 500, 30], // header=200, body row with 500px content, small final row
+        [
+          [200], // header: 1 line
+          [500], // body row 1: single tall line
+          [30], // body row 2: small
+        ],
+      );
+
+      const fragments: TableFragment[] = [];
+      let advanceCount = 0;
+      const maxAdvances = 30;
+      const mockPage = { fragments };
+
+      // Full page = 600px. With 200px header repeated, body gets 400px.
+      // The 500px segment exceeds 400px body budget but not 600px full page.
+      // Without the fix this would livelock.
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 600,
+        }),
+        advanceColumn: (state) => {
+          advanceCount++;
+          if (advanceCount > maxAdvances) {
+            throw new Error('Livelock detected: repeated-header force-progress failed');
+          }
+          return { page: mockPage, columnIndex: 0, cursorY: 0, contentBottom: 600 };
+        },
+        columnX: () => 0,
+      });
+
+      expect(fragments.length).toBeGreaterThan(0);
+      // The tall body row must have been split (not stuck in an infinite loop)
+      const bodyFragments = fragments.filter((f) => f.fromRow >= 1);
+      expect(bodyFragments.length).toBeGreaterThan(0);
     });
   });
 

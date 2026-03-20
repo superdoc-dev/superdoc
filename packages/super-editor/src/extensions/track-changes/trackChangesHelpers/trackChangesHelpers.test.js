@@ -399,6 +399,26 @@ describe('trackChangesHelpers', () => {
     expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'highlight', attrs: { color: '#E4668C' } }]);
   });
 
+  it('addMarkStep tracks hyperlink marks so comment summaries can identify hyperlink changes', () => {
+    const state = createState(createDocWithText('website'));
+    const linkMark = schema.marks.link.create({ href: 'https://example.com', text: 'website' });
+    const step = new AddMarkStep(1, 8, linkMark);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'link', attrs: linkMark.attrs }]);
+  });
+
   it('addMarkStep does not include unrelated marks in before (SD-2077)', () => {
     const highlight = schema.marks.highlight.create({ color: '#FFFF00' });
     const doc = createDocWithText('Hello', [highlight]);
@@ -444,6 +464,96 @@ describe('trackChangesHelpers', () => {
     expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
     expect(meta?.formatMark?.attrs?.before).toEqual([{ type: 'textStyle', attrs: textStyle.attrs }]);
     expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'textStyle', attrs: changedTextStyle.attrs }]);
+  });
+
+  it('addMarkStep removes trackFormat when reverting to original state (SD-2181)', () => {
+    // Step 1: Plain text, apply superscript → creates trackFormat
+    const state = createState(createDocWithText('Hello'));
+    const superscriptMark = schema.marks.textStyle.create({ vertAlign: 'superscript' });
+    const step1 = new AddMarkStep(2, 6, superscriptMark);
+    const newTr1 = state.tr;
+
+    addMarkStep({
+      state,
+      step: step1,
+      newTr: newTr1,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta1 = newTr1.getMeta(TrackChangesBasePluginKey);
+    expect(meta1?.formatMark?.type.name).toBe(TrackFormatMarkName);
+
+    // Step 2: Apply baseline (revert) on the tracked state
+    const state2 = state.apply(newTr1);
+    const baselineMark = schema.marks.textStyle.create({ vertAlign: 'baseline' });
+    const step2 = new AddMarkStep(2, 6, baselineMark);
+    const newTr2 = state2.tr;
+
+    addMarkStep({
+      state: state2,
+      step: step2,
+      newTr: newTr2,
+      doc: state2.doc,
+      user,
+      date,
+    });
+
+    // The trackFormat mark should be removed (no-op), no metadata set
+    const meta2 = newTr2.getMeta(TrackChangesBasePluginKey);
+    expect(meta2).toBeUndefined();
+
+    // Verify no trackFormat mark remains in the document
+    const finalState = state2.apply(newTr2);
+    let hasTrackFormat = false;
+    finalState.doc.descendants((node) => {
+      if (node.marks?.some((m) => m.type.name === TrackFormatMarkName)) {
+        hasTrackFormat = true;
+      }
+    });
+    expect(hasTrackFormat).toBe(false);
+  });
+
+  it('addMarkStep preserves other tracked types when partially reverting (SD-2181)', () => {
+    // Step 1: Apply bold on plain text → creates trackFormat with after: [bold]
+    const state = createState(createDocWithText('Hello'));
+    const boldMark = schema.marks.bold.create();
+    const step1 = new AddMarkStep(2, 6, boldMark);
+    const newTr1 = state.tr;
+
+    addMarkStep({
+      state,
+      step: step1,
+      newTr: newTr1,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const state2 = state.apply(newTr1);
+
+    // Step 2: Also change textStyle color → trackFormat now has after: [bold, textStyle]
+    const colorMark = schema.marks.textStyle.create({ color: '#FF0000' });
+    const step2 = new AddMarkStep(2, 6, colorMark);
+    const newTr2 = state2.tr;
+
+    addMarkStep({
+      state: state2,
+      step: step2,
+      newTr: newTr2,
+      doc: state2.doc,
+      user,
+      date,
+    });
+
+    const meta2 = newTr2.getMeta(TrackChangesBasePluginKey);
+    expect(meta2?.formatMark?.attrs?.after).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'bold' }),
+        expect.objectContaining({ type: 'textStyle' }),
+      ]),
+    );
   });
 
   it('removeMarkStep records previous formatting when mark removed', () => {

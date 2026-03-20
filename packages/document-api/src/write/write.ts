@@ -1,10 +1,18 @@
 import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
-import type { BlockRelativeLocator, BlockRelativeRange } from './locator.js';
+import type { BlockRelativeLocator } from './locator.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
+import type { StoryLocator } from '../types/story.types.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
+/**
+ * Subset of MutationOptions that provides only revision guarding.
+ *
+ * Used by operations that don't participate in the plan engine (comments,
+ * clearContent, trackChanges.decide) where changeMode and dryRun are not
+ * applicable.
+ */
 export interface RevisionGuardOptions {
   /** When provided, the engine rejects with REVISION_MISMATCH if the document has advanced past this revision. */
   expectedRevision?: string;
@@ -23,8 +31,10 @@ export interface MutationOptions extends RevisionGuardOptions {
   dryRun?: boolean;
 }
 
-export type WriteKind = 'insert' | 'replace' | 'delete';
-
+/**
+ * Text insertion request — the only write-kind that still routes through
+ * the WriteAdapter. Delete and replace now use SelectionMutationAdapter.
+ */
 export type InsertWriteRequest = {
   kind: 'insert';
   /**
@@ -33,24 +43,23 @@ export type InsertWriteRequest = {
    */
   target?: TextAddress;
   text: string;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 } & Partial<BlockRelativeLocator>;
 
-export type ReplaceWriteRequest = {
-  kind: 'replace';
-  target?: TextAddress;
-  text: string;
-} & Partial<BlockRelativeRange>;
+/**
+ * Alias for `InsertWriteRequest`. Retained because super-editor adapter-utils
+ * and plan-wrappers still reference this name.
+ */
+export type WriteRequest = InsertWriteRequest;
 
-export type DeleteWriteRequest = {
-  kind: 'delete';
-  target?: TextAddress;
-  text?: '';
-} & Partial<BlockRelativeRange>;
-
-export type WriteRequest = InsertWriteRequest | ReplaceWriteRequest | DeleteWriteRequest;
-
+/**
+ * Adapter interface for write operations. After the selection-first delete
+ * cutover, only `insert` routes through `write()`. Delete and replace use
+ * `SelectionMutationAdapter` instead.
+ */
 export interface WriteAdapter {
-  write(request: WriteRequest, options?: MutationOptions): TextMutationReceipt;
+  write(request: InsertWriteRequest, options?: MutationOptions): TextMutationReceipt;
   /** Structured insert for SDFragment or markdown/html content. Returns SDMutationReceipt. */
   insertStructured(input: InsertInput, options?: MutationOptions): SDMutationReceipt;
   /** Structured replace for SDFragment content. Returns SDMutationReceipt. */
@@ -67,7 +76,7 @@ export function normalizeMutationOptions(options?: MutationOptions): MutationOpt
 
 export function executeWrite(
   adapter: WriteAdapter,
-  request: WriteRequest,
+  request: InsertWriteRequest,
   options?: MutationOptions,
 ): TextMutationReceipt {
   return adapter.write(request, normalizeMutationOptions(options));

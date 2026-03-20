@@ -57,9 +57,10 @@ describe('document-api story: ex1 clause change', () => {
     expect(clauseMatch.handle.refStability).toBeDefined();
     expect(clauseMatch.handle.targetKind).toBeDefined();
 
-    // Verify V3 ref encoding
-    const decodedRef = JSON.parse(atob(clauseMatch.handle.ref.slice(5)));
-    expect(decodedRef.v).toBe(3);
+    // Verify V4 ref encoding
+    expect(clauseMatch.handle.ref).toMatch(/^text:v4:/);
+    const decodedRef = JSON.parse(atob(clauseMatch.handle.ref.slice('text:v4:'.length)));
+    expect(decodedRef.v).toBe(4);
     expect(decodedRef.scope).toBe('match');
   });
 });

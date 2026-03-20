@@ -1,4 +1,5 @@
-import type { SectionBreakBlock } from '@superdoc/contracts';
+import type { ColumnLayout, SectionBreakBlock } from '@superdoc/contracts';
+import { cloneColumnLayout, widthsEqual } from './column-utils.js';
 
 export type SectionState = {
   activeTopMargin: number;
@@ -15,8 +16,8 @@ export type SectionState = {
   pendingFooterDistance: number | null;
   activePageSize: { w: number; h: number };
   pendingPageSize: { w: number; h: number } | null;
-  activeColumns: { count: number; gap: number };
-  pendingColumns: { count: number; gap: number } | null;
+  activeColumns: ColumnLayout;
+  pendingColumns: ColumnLayout | null;
   activeOrientation: 'portrait' | 'landscape' | null;
   pendingOrientation: 'portrait' | 'landscape' | null;
   hasAnyPages: boolean;
@@ -29,7 +30,7 @@ export type BreakDecision = {
 };
 
 /** Default single-column configuration per OOXML spec (absence of w:cols element) */
-const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number }> = { count: 1, gap: 0 };
+const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = { count: 1, gap: 0 };
 
 /**
  * Get the column configuration for a section break.
@@ -39,8 +40,8 @@ const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number }> = { count:
  * @param blockColumns - The columns property from the section break block (may be undefined)
  * @returns Column configuration with count and gap
  */
-function getColumnConfig(blockColumns: { count: number; gap: number } | undefined): { count: number; gap: number } {
-  return blockColumns ? { count: blockColumns.count, gap: blockColumns.gap } : { ...SINGLE_COLUMN_DEFAULT };
+function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
+  return blockColumns ? cloneColumnLayout(blockColumns) : { ...SINGLE_COLUMN_DEFAULT };
 }
 
 /**
@@ -53,13 +54,15 @@ function getColumnConfig(blockColumns: { count: number; gap: number } | undefine
  * @param activeColumns - The current active column configuration
  * @returns True if column layout is changing
  */
-function isColumnConfigChanging(
-  blockColumns: { count: number; gap: number } | undefined,
-  activeColumns: { count: number; gap: number },
-): boolean {
+function isColumnConfigChanging(blockColumns: ColumnLayout | undefined, activeColumns: ColumnLayout): boolean {
   if (blockColumns) {
     // Explicit column change
-    return blockColumns.count !== activeColumns.count || blockColumns.gap !== activeColumns.gap;
+    return (
+      blockColumns.count !== activeColumns.count ||
+      blockColumns.gap !== activeColumns.gap ||
+      blockColumns.equalWidth !== activeColumns.equalWidth ||
+      !widthsEqual(blockColumns.widths, activeColumns.widths)
+    );
   }
   // No columns specified = reset to single column (OOXML default)
   // This is a change only if currently in multi-column layout

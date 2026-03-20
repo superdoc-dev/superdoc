@@ -1,0 +1,615 @@
+---
+title: diff.apply
+sidebarTitle: diff.apply
+description: Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly.
+
+- Operation ID: `diff.apply`
+- API member path: `editor.doc.diff.apply(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `yes`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a DiffApplyResult with applied operation count and diagnostics.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `diff` | object(version="sd-diff-payload/v1") | yes |  |
+| `diff.baseFingerprint` | string | yes |  |
+| `diff.coverage` | object | yes |  |
+| `diff.coverage.body` | `true` | yes | Constant: `true` |
+| `diff.coverage.comments` | boolean | yes |  |
+| `diff.coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `diff.coverage.numbering` | boolean | yes |  |
+| `diff.coverage.styles` | boolean | yes |  |
+| `diff.engine` | enum | yes | `"super-editor"` |
+| `diff.payload` | object | yes |  |
+| `diff.summary` | object | yes |  |
+| `diff.summary.body` | object | yes |  |
+| `diff.summary.body.hasChanges` | boolean | yes |  |
+| `diff.summary.changedComponents` | enum[] | yes |  |
+| `diff.summary.comments` | object | yes |  |
+| `diff.summary.comments.hasChanges` | boolean | yes |  |
+| `diff.summary.hasChanges` | boolean | yes |  |
+| `diff.summary.numbering` | object | yes |  |
+| `diff.summary.numbering.hasChanges` | boolean | yes |  |
+| `diff.summary.styles` | object | yes |  |
+| `diff.summary.styles.hasChanges` | boolean | yes |  |
+| `diff.targetFingerprint` | string | yes |  |
+| `diff.version` | `"sd-diff-payload/v1"` | yes | Constant: `"sd-diff-payload/v1"` |
+
+### Example request
+
+```json
+{
+  "diff": {
+    "baseFingerprint": "example",
+    "coverage": {
+      "body": true,
+      "comments": true,
+      "headerFooters": false,
+      "numbering": true,
+      "styles": true
+    },
+    "engine": "super-editor",
+    "payload": {},
+    "summary": {
+      "body": {
+        "hasChanges": true
+      },
+      "changedComponents": [
+        "body"
+      ],
+      "comments": {
+        "hasChanges": true
+      },
+      "hasChanges": true,
+      "numbering": {
+        "hasChanges": true
+      },
+      "styles": {
+        "hasChanges": true
+      }
+    },
+    "targetFingerprint": "example",
+    "version": "sd-diff-payload/v1"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `appliedOperations` | integer | yes |  |
+| `baseFingerprint` | string | yes |  |
+| `coverage` | object | yes |  |
+| `coverage.body` | `true` | yes | Constant: `true` |
+| `coverage.comments` | boolean | yes |  |
+| `coverage.headerFooters` | `false` | yes | Constant: `false` |
+| `coverage.numbering` | boolean | yes |  |
+| `coverage.styles` | boolean | yes |  |
+| `diagnostics` | string[] | yes |  |
+| `summary` | object | yes |  |
+| `summary.body` | object | yes |  |
+| `summary.body.hasChanges` | boolean | yes |  |
+| `summary.changedComponents` | enum[] | yes |  |
+| `summary.comments` | object | yes |  |
+| `summary.comments.hasChanges` | boolean | yes |  |
+| `summary.hasChanges` | boolean | yes |  |
+| `summary.numbering` | object | yes |  |
+| `summary.numbering.hasChanges` | boolean | yes |  |
+| `summary.styles` | object | yes |  |
+| `summary.styles.hasChanges` | boolean | yes |  |
+| `targetFingerprint` | string | yes |  |
+
+### Example response
+
+```json
+{
+  "appliedOperations": 1,
+  "baseFingerprint": "example",
+  "coverage": {
+    "body": true,
+    "comments": true,
+    "headerFooters": false,
+    "numbering": true,
+    "styles": true
+  },
+  "diagnostics": [
+    "example"
+  ],
+  "summary": {
+    "body": {
+      "hasChanges": true
+    },
+    "changedComponents": [
+      "body"
+    ],
+    "comments": {
+      "hasChanges": true
+    },
+    "hasChanges": true,
+    "numbering": {
+      "hasChanges": true
+    },
+    "styles": {
+      "hasChanges": true
+    }
+  },
+  "targetFingerprint": "example"
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `CAPABILITY_UNSUPPORTED`
+- `PRECONDITION_FAILED`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "diff": {
+      "additionalProperties": false,
+      "properties": {
+        "baseFingerprint": {
+          "type": "string"
+        },
+        "coverage": {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "const": true,
+              "type": "boolean"
+            },
+            "comments": {
+              "type": "boolean"
+            },
+            "headerFooters": {
+              "const": false,
+              "type": "boolean"
+            },
+            "numbering": {
+              "type": "boolean"
+            },
+            "styles": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "body",
+            "comments",
+            "styles",
+            "numbering",
+            "headerFooters"
+          ],
+          "type": "object"
+        },
+        "engine": {
+          "enum": [
+            "super-editor"
+          ],
+          "type": "string"
+        },
+        "payload": {
+          "description": "Opaque engine-owned diff data.",
+          "type": "object"
+        },
+        "summary": {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "additionalProperties": false,
+              "properties": {
+                "hasChanges": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "hasChanges"
+              ],
+              "type": "object"
+            },
+            "changedComponents": {
+              "items": {
+                "enum": [
+                  "body",
+                  "comments",
+                  "styles",
+                  "numbering"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "comments": {
+              "additionalProperties": false,
+              "properties": {
+                "hasChanges": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "hasChanges"
+              ],
+              "type": "object"
+            },
+            "hasChanges": {
+              "type": "boolean"
+            },
+            "numbering": {
+              "additionalProperties": false,
+              "properties": {
+                "hasChanges": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "hasChanges"
+              ],
+              "type": "object"
+            },
+            "styles": {
+              "additionalProperties": false,
+              "properties": {
+                "hasChanges": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "hasChanges"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "hasChanges",
+            "changedComponents",
+            "body",
+            "comments",
+            "styles",
+            "numbering"
+          ],
+          "type": "object"
+        },
+        "targetFingerprint": {
+          "type": "string"
+        },
+        "version": {
+          "const": "sd-diff-payload/v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "engine",
+        "baseFingerprint",
+        "targetFingerprint",
+        "coverage",
+        "summary",
+        "payload"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "diff"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "appliedOperations": {
+      "type": "integer"
+    },
+    "baseFingerprint": {
+      "type": "string"
+    },
+    "coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "const": true,
+          "type": "boolean"
+        },
+        "comments": {
+          "type": "boolean"
+        },
+        "headerFooters": {
+          "const": false,
+          "type": "boolean"
+        },
+        "numbering": {
+          "type": "boolean"
+        },
+        "styles": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "body",
+        "comments",
+        "styles",
+        "numbering",
+        "headerFooters"
+      ],
+      "type": "object"
+    },
+    "diagnostics": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "changedComponents": {
+          "items": {
+            "enum": [
+              "body",
+              "comments",
+              "styles",
+              "numbering"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "comments": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "hasChanges": {
+          "type": "boolean"
+        },
+        "numbering": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "styles": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "hasChanges",
+        "changedComponents",
+        "body",
+        "comments",
+        "styles",
+        "numbering"
+      ],
+      "type": "object"
+    },
+    "targetFingerprint": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "appliedOperations",
+    "baseFingerprint",
+    "targetFingerprint",
+    "coverage",
+    "summary",
+    "diagnostics"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "appliedOperations": {
+      "type": "integer"
+    },
+    "baseFingerprint": {
+      "type": "string"
+    },
+    "coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "const": true,
+          "type": "boolean"
+        },
+        "comments": {
+          "type": "boolean"
+        },
+        "headerFooters": {
+          "const": false,
+          "type": "boolean"
+        },
+        "numbering": {
+          "type": "boolean"
+        },
+        "styles": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "body",
+        "comments",
+        "styles",
+        "numbering",
+        "headerFooters"
+      ],
+      "type": "object"
+    },
+    "diagnostics": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "changedComponents": {
+          "items": {
+            "enum": [
+              "body",
+              "comments",
+              "styles",
+              "numbering"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "comments": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "hasChanges": {
+          "type": "boolean"
+        },
+        "numbering": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        },
+        "styles": {
+          "additionalProperties": false,
+          "properties": {
+            "hasChanges": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasChanges"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "hasChanges",
+        "changedComponents",
+        "body",
+        "comments",
+        "styles",
+        "numbering"
+      ],
+      "type": "object"
+    },
+    "targetFingerprint": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "appliedOperations",
+    "baseFingerprint",
+    "targetFingerprint",
+    "coverage",
+    "summary",
+    "diagnostics"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "type": "object"
+}
+```
+</Accordion>

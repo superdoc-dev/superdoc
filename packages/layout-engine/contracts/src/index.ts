@@ -25,6 +25,8 @@ export {
 } from './clip-path-inset.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
+export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
+export type { NormalizedColumnLayout } from './column-layout.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -180,6 +182,10 @@ export type RunMarks = {
   highlight?: string;
   /** Text transformation (case modification). */
   textTransform?: 'uppercase' | 'lowercase' | 'capitalize' | 'none';
+  /** Vertical alignment for superscript/subscript text. */
+  vertAlign?: 'superscript' | 'subscript' | 'baseline';
+  /** Custom baseline shift in points (positive = raise, negative = lower). Takes precedence over vertAlign for positioning. */
+  baselineShift?: number;
 };
 
 export type TextRun = RunMarks & {
@@ -243,6 +249,13 @@ export type LineBreakRun = {
   };
   pmStart?: number;
   pmEnd?: number;
+};
+
+export type ImageLuminanceAdjustment = {
+  /** OOXML a:lum/@bright in raw units (-100000..100000). */
+  bright?: number;
+  /** OOXML a:lum/@contrast in raw units (-100000..100000). */
+  contrast?: number;
 };
 
 /**
@@ -318,6 +331,7 @@ export type ImageRun = {
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
+  lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
 };
 
 export type BreakRun = {
@@ -569,6 +583,7 @@ export type ImageBlock = {
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
   // OOXML image effects
   grayscale?: boolean; // Apply grayscale filter to image
+  lum?: ImageLuminanceAdjustment; // DrawingML luminance adjustment from a:lum
   // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
   rotation?: number; // Rotation angle in degrees
   flipH?: boolean; // Horizontal flip
@@ -919,6 +934,7 @@ export type SectionBreakBlock = {
   columns?: {
     count: number;
     gap: number;
+    widths?: number[];
     equalWidth?: boolean;
   };
   /**
@@ -1406,6 +1422,8 @@ export type FlowBlock =
 export type ColumnLayout = {
   count: number;
   gap: number;
+  widths?: number[];
+  equalWidth?: boolean;
 };
 
 /** A measured line within a block, output by the measurer. */
@@ -1792,9 +1810,14 @@ export type HeaderFooterPage = {
 };
 
 export type HeaderFooterLayout = {
+  /** Measurement height for pagination — excludes out-of-band fragments. */
   height: number;
+  /** Minimum y of all rendered fragments (including out-of-band). */
   minY?: number;
+  /** Maximum y + fragmentHeight of all rendered fragments. */
   maxY?: number;
+  /** Full visual extent of all rendered fragments (renderMaxY - renderMinY). */
+  renderHeight?: number;
   pages: HeaderFooterPage[];
 };
 

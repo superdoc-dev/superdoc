@@ -667,26 +667,6 @@ const getChangesByIdToResolve = (state, id) => {
   const matchingChange = trackedChanges[changeIndex];
   const matchingId = matchingChange.mark.attrs.id;
 
-  const getSegmentSize = ({ from, to }) => to - from;
-  const areDirectlyConnected = (left, right) => {
-    if (!left || !right) {
-      return false;
-    }
-
-    if (left.to !== right.from) {
-      return false;
-    }
-
-    const hasContentBetween =
-      state.doc.textBetween(left.from, right.to, '\n').length > getSegmentSize(left) + getSegmentSize(right);
-
-    return !hasContentBetween;
-  };
-
-  const isComplementaryPair = (firstType, secondType) =>
-    (firstType === TrackDeleteMarkName && secondType === TrackInsertMarkName) ||
-    (firstType === TrackInsertMarkName && secondType === TrackDeleteMarkName);
-
   const linkedBefore = [];
   const linkedAfter = [];
 
@@ -702,15 +682,8 @@ const getChangesByIdToResolve = (state, id) => {
         break;
       }
 
-      const [left, right] = direction < 0 ? [neighbor, currentChange] : [currentChange, neighbor];
       const sharesId = neighbor.mark.attrs.id === matchingId;
-      const complementary = isComplementaryPair(currentChange.mark.type.name, neighbor.mark.type.name);
-
-      if (!sharesId && !areDirectlyConnected(left, right)) {
-        break;
-      }
-
-      if (!sharesId && !complementary) {
+      if (!sharesId) {
         break;
       }
 
@@ -718,10 +691,6 @@ const getChangesByIdToResolve = (state, id) => {
 
       currentIndex = neighborIndex;
       currentChange = neighbor;
-
-      if (!sharesId) {
-        break;
-      }
     }
   };
 

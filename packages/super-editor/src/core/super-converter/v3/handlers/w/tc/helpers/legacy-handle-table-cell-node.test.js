@@ -136,6 +136,144 @@ describe('legacy-handle-table-cell-node', () => {
     expect(out.attrs.rowspan).toBe(3);
   });
 
+  it('resolves vertical merge continuations by logical grid column when rows use gridBefore', () => {
+    const cellNode = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [
+            { name: 'w:vMerge', attributes: { 'w:val': 'restart' } },
+            { name: 'w:shd', attributes: { 'w:fill': '006A72' } },
+          ],
+        },
+        { name: 'w:p' },
+      ],
+    };
+
+    const row1 = {
+      name: 'w:tr',
+      elements: [
+        {
+          name: 'w:trPr',
+          elements: [{ name: 'w:gridBefore', attributes: { 'w:val': '1' } }],
+        },
+        cellNode,
+        { name: 'w:tc', elements: [{ name: 'w:p' }] },
+      ],
+    };
+
+    const row2 = {
+      name: 'w:tr',
+      elements: [
+        {
+          name: 'w:trPr',
+          elements: [{ name: 'w:gridBefore', attributes: { 'w:val': '1' } }],
+        },
+        {
+          name: 'w:tc',
+          elements: [{ name: 'w:tcPr', elements: [{ name: 'w:vMerge' }] }, { name: 'w:p' }],
+        },
+        { name: 'w:tc', elements: [{ name: 'w:p' }] },
+      ],
+    };
+
+    const table = { name: 'w:tbl', elements: [row1, row2] };
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const out = handleTableCellNode({
+      params,
+      node: cellNode,
+      table,
+      row: row1,
+      columnIndex: 1,
+      columnWidth: null,
+      allColumnWidths: [90, 100, 110],
+      _referencedStyles: null,
+    });
+
+    expect(out.attrs.background).toEqual({ color: '006A72' });
+    expect(out.attrs.rowspan).toBe(2);
+    const row2Cells = row2.elements.filter((el) => el.name === 'w:tc');
+    expect(row2Cells).toHaveLength(2);
+    expect(row2Cells[0]._vMergeConsumed).toBe(true);
+  });
+
+  it('preserves later merge-column alignment after removing an earlier continuation cell', () => {
+    const firstRestart = {
+      name: 'w:tc',
+      elements: [
+        { name: 'w:tcPr', elements: [{ name: 'w:vMerge', attributes: { 'w:val': 'restart' } }] },
+        { name: 'w:p' },
+      ],
+    };
+    const secondRestart = {
+      name: 'w:tc',
+      elements: [
+        {
+          name: 'w:tcPr',
+          elements: [
+            { name: 'w:vMerge', attributes: { 'w:val': 'restart' } },
+            { name: 'w:shd', attributes: { 'w:fill': '006A72' } },
+          ],
+        },
+        { name: 'w:p' },
+      ],
+    };
+    const firstContinue = {
+      name: 'w:tc',
+      elements: [{ name: 'w:tcPr', elements: [{ name: 'w:vMerge' }] }, { name: 'w:p' }],
+    };
+    const secondContinue = {
+      name: 'w:tc',
+      elements: [{ name: 'w:tcPr', elements: [{ name: 'w:vMerge' }] }, { name: 'w:p' }],
+    };
+
+    const row1 = { name: 'w:tr', elements: [firstRestart, secondRestart] };
+    const row2 = { name: 'w:tr', elements: [firstContinue, secondContinue] };
+    const table = { name: 'w:tbl', elements: [row1, row2] };
+    const params = {
+      docx: {},
+      nodeListHandler: { handler: vi.fn(() => 'CONTENT') },
+      path: [],
+      editor: createEditorStub(),
+    };
+
+    const outFirst = handleTableCellNode({
+      params,
+      node: firstRestart,
+      table,
+      row: row1,
+      columnIndex: 0,
+      columnWidth: null,
+      allColumnWidths: [90, 100],
+      _referencedStyles: null,
+    });
+
+    const outSecond = handleTableCellNode({
+      params,
+      node: secondRestart,
+      table,
+      row: row1,
+      columnIndex: 1,
+      columnWidth: null,
+      allColumnWidths: [90, 100],
+      _referencedStyles: null,
+    });
+
+    expect(outFirst.attrs.rowspan).toBe(2);
+    expect(outSecond.attrs.rowspan).toBe(2);
+    expect(outSecond.attrs.background).toEqual({ color: '006A72' });
+    const row2Cells = row2.elements.filter((el) => el.name === 'w:tc');
+    expect(row2Cells).toHaveLength(2);
+    expect(row2Cells.every((tc) => tc._vMergeConsumed)).toBe(true);
+  });
+
   it('blends percentage table shading into a solid background color', () => {
     const cellNode = { name: 'w:tc', elements: [{ name: 'w:p' }] };
     const row = { name: 'w:tr', elements: [cellNode] };

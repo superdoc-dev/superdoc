@@ -13,6 +13,7 @@ import type {
   NodeSelector,
   SelectWhere,
   RefWhere,
+  TargetWhere,
   TextAddress,
 } from '@superdoc/document-api';
 import { MAX_PLAN_STEPS, MAX_PLAN_RESOLVED_TARGETS, isPublicMutationStepOp } from '@superdoc/document-api';
@@ -21,17 +22,21 @@ import type {
   CompiledTarget,
   CompiledRangeTarget,
   CompiledSpanTarget,
+  CompiledSelectionTarget,
   CompiledSegment,
 } from './executor-registry.types.js';
+import { decodeRef, type StoryRefV4 } from '../story-runtime/story-ref-codec.js';
 import { planError } from './errors.js';
 import { hasStepExecutor } from './executor-registry.js';
-import { captureRunsInRange } from './style-resolver.js';
+import { captureRunsInRange, checkUniformity, type CapturedStyle } from './style-resolver.js';
 import { getBlockIndex } from '../helpers/index-cache.js';
 import { getRevision } from './revision-tracker.js';
 import { executeTextSelector } from '../find/text-strategy.js';
 import { executeBlockSelector } from '../find/block-strategy.js';
 import { isTextBlockCandidate, type BlockCandidate, type BlockIndex } from '../helpers/node-address-resolver.js';
 import { resolveTextRangeInBlock } from '../helpers/text-offset-resolver.js';
+import { resolveSelectionTarget, resolveSelectionPointPosition } from '../helpers/selection-target-resolver.js';
+import { expandDeleteSelection } from '../helpers/expand-delete-selection.js';
 
 export interface CompiledStep {
   step: MutationStep;
@@ -62,6 +67,10 @@ function isSelectWhere(where: MutationStep['where']): where is SelectWhere {
 
 function isRefWhere(where: MutationStep['where']): where is RefWhere {
   return where.by === 'ref';
+}
+
+function isTargetWhere(where: MutationStep['where']): where is TargetWhere {
+  return where.by === 'target';
 }
 
 // ---------------------------------------------------------------------------
@@ -106,10 +115,18 @@ function resolveCreateAnchorFromTargets(
 
   if (target.kind === 'range') return target.blockId;
 
-  const segments = target.segments;
-  if (!segments.length) throw planError('INVALID_INPUT', 'span target has no segments', stepId);
+  if (target.kind === 'span') {
+    const segments = target.segments;
+    if (!segments.length) throw planError('INVALID_INPUT', 'span target has no segments', stepId);
+    return position === 'before' ? segments[0].blockId : segments[segments.length - 1].blockId;
+  }
 
-  return position === 'before' ? segments[0].blockId : segments[segments.length - 1].blockId;
+  // CompiledSelectionTarget — create ops should not typically receive these,
+  // but handle gracefully. Use segments if available.
+  if (target.segments && target.segments.length > 0) {
+    return position === 'before' ? target.segments[0].blockId : target.segments[target.segments.length - 1].blockId;
+  }
+  throw planError('INVALID_INPUT', 'selection target has no block identity for create anchor', stepId);
 }
 
 /**
@@ -487,14 +504,14 @@ function resolveTextSelector(
   editor: Editor,
   index: BlockIndex,
   selector: TextSelector | NodeSelector,
-  within: import('@superdoc/document-api').NodeAddress | undefined,
+  within: import('@superdoc/document-api').BlockNodeAddress | undefined,
   stepId: string,
   options?: { allBlockTypes?: boolean },
 ): { addresses: ResolvedAddress[] } {
   if (selector.type === 'text') {
     const query = {
       select: selector,
-      within: within as import('@superdoc/document-api').NodeAddress | undefined,
+      within: within as import('@superdoc/document-api').BlockNodeAddress | undefined,
       includeNodes: false,
     };
     const result = executeTextSelector(editor, index, query, []);
@@ -530,7 +547,7 @@ function resolveTextSelector(
   // Node selector — resolve to block positions
   const query = {
     select: selector,
-    within: within as import('@superdoc/document-api').NodeAddress | undefined,
+    within: within as import('@superdoc/document-api').BlockNodeAddress | undefined,
     includeNodes: false,
   };
   const result = executeBlockSelector(index, query, []);
@@ -581,14 +598,6 @@ function getBlockText(editor: Editor, candidate: { pos: number; end: number }): 
 // ---------------------------------------------------------------------------
 // Ref resolution
 // ---------------------------------------------------------------------------
-
-function decodeTextRefPayload(encoded: string, stepId: string): unknown {
-  try {
-    return JSON.parse(atob(encoded));
-  } catch {
-    throw planError('INVALID_INPUT', 'invalid text ref encoding', stepId);
-  }
-}
 
 /**
  * Resolves a V3 text ref into compiled targets.
@@ -647,15 +656,93 @@ function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep,
   return [buildSpanTarget(editor, index, step, segments, refData.matchId)];
 }
 
-function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
-  const encoded = ref.slice(5); // strip 'text:' prefix
-  const payload = decodeTextRefPayload(encoded, step.id);
-
-  if (!isV3Ref(payload)) {
-    throw planError('INVALID_INPUT', 'only V3 text refs are supported', step.id);
+/**
+ * Resolves a V4 text ref into compiled targets.
+ *
+ * V4 refs include a storyKey for multi-story support. The compiler
+ * accepts any storyKey — the caller is responsible for passing the
+ * correct story editor (via runtime resolution in the adapter layer).
+ *
+ * The only cross-story constraint enforced here is that ALL refs
+ * within a single plan must share the same storyKey (single-story-per-call).
+ * That check is performed at the plan level in {@link compilePlan},
+ * not per-ref.
+ */
+function resolveV4TextRef(
+  editor: Editor,
+  index: BlockIndex,
+  step: MutationStep,
+  refData: StoryRefV4,
+): CompiledTarget[] {
+  // Node-scope V4 refs (from non-body block matches) carry the block
+  // identity in the `node` field instead of text segments. These refs are
+  // stable (nodeId-based) and skip revision checking — same semantics as
+  // raw nodeId block refs.
+  if (refData.scope === 'node' && refData.node?.nodeId) {
+    return resolveBlockRef(editor, index, step, refData.node.nodeId);
   }
 
-  return resolveV3TextRef(editor, index, step, payload);
+  const currentRevision = getRevision(editor);
+  if (refData.rev !== currentRevision) {
+    throw planError(
+      'REVISION_MISMATCH',
+      `Text ref is ephemeral and revision-scoped. Re-run query.match to obtain a fresh handle.ref for revision ${currentRevision}.`,
+      step.id,
+      {
+        refRevision: refData.rev,
+        currentRevision,
+        refStability: 'ephemeral',
+        storyKey: refData.storyKey,
+        remediation: 'Re-run query.match() to obtain a fresh ref valid for the current revision.',
+      },
+    );
+  }
+
+  if (!refData.segments?.length) return [];
+
+  const segments = refData.segments.map((s) => ({ blockId: s.blockId, from: s.start, to: s.end }));
+
+  // Single-segment → range target
+  if (segments.length === 1) {
+    const seg = segments[0];
+    const candidate = index.candidates.find((c) => c.nodeId === seg.blockId);
+    if (!candidate) return [];
+
+    const blockText = getBlockText(editor, candidate);
+    const matchText = blockText.slice(seg.from, seg.to);
+
+    const addr: ResolvedAddress = {
+      blockId: seg.blockId,
+      from: seg.from,
+      to: seg.to,
+      text: matchText,
+      marks: [],
+      blockPos: candidate.pos,
+    };
+
+    const target = buildRangeTarget(editor, step, addr, candidate);
+    if (refData.matchId) target.matchId = refData.matchId;
+    return [target];
+  }
+
+  // Multi-segment → span target
+  return [buildSpanTarget(editor, index, step, segments, refData.matchId ?? `v4:${step.id}`)];
+}
+
+function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
+  // Use the shared codec to decode both V3 and V4 refs
+  const decoded = decodeRef(ref);
+
+  if (!decoded) {
+    throw planError('INVALID_INPUT', 'invalid text ref encoding', step.id);
+  }
+
+  if (decoded.v === 4) {
+    return resolveV4TextRef(editor, index, step, decoded as StoryRefV4);
+  }
+
+  // V3 fallback
+  return resolveV3TextRef(editor, index, step, decoded as TextRefV3);
 }
 
 function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
@@ -727,6 +814,102 @@ function resolveRefTargets(editor: Editor, index: BlockIndex, step: MutationStep
 }
 
 // ---------------------------------------------------------------------------
+// Target-where resolution (where.by: 'target')
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves a `where.by: 'target'` clause into a single CompiledSelectionTarget.
+ *
+ * Uses the selection-target-resolver to map the SelectionTarget to absolute
+ * PM positions. For `text.delete` with `behavior: 'selection'`, applies
+ * block-edge expansion so fully-covered boundary blocks are removed.
+ */
+function resolveTargetWhereClause(editor: Editor, step: MutationStep, where: TargetWhere): CompiledSelectionTarget {
+  const resolved = resolveSelectionTarget(editor, where.target);
+
+  let { absFrom, absTo } = resolved;
+
+  // Apply delete expansion for `behavior: 'selection'`.
+  // After position normalization, absFrom may correspond to target.end if
+  // the caller passed a reversed selection. Determine which original point
+  // maps to each physical boundary for correct per-endpoint expansion.
+  const args = step.args as Record<string, unknown> | undefined;
+  if (step.op === 'text.delete' && args?.behavior !== 'exact') {
+    const rawStartPos = resolveSelectionPointPosition(editor, where.target.start);
+    const fromPoint = rawStartPos === absFrom ? where.target.start : where.target.end;
+    const toPoint = rawStartPos === absFrom ? where.target.end : where.target.start;
+    const expanded = expandDeleteSelection(editor, absFrom, absTo, fromPoint, toPoint);
+    absFrom = expanded.absFrom;
+    absTo = expanded.absTo;
+  }
+
+  // Re-snapshot text after potential expansion.
+  const text =
+    absFrom !== resolved.absFrom || absTo !== resolved.absTo
+      ? editor.state.doc.textBetween(absFrom, absTo, '\n', '\ufffc')
+      : resolved.text;
+
+  // Capture inline style for style-preserving operations (mirrors buildRangeTarget logic).
+  const capturedStyle =
+    step.op === 'text.rewrite' || step.op === 'format.apply'
+      ? captureStyleAtAbsoluteRange(editor, absFrom, absTo)
+      : undefined;
+
+  return {
+    kind: 'selection',
+    stepId: step.id,
+    op: step.op,
+    absFrom,
+    absTo,
+    normalizedTarget: where.target,
+    text,
+    capturedStyle,
+  };
+}
+
+/**
+ * Captures inline style runs for an absolute PM position range.
+ *
+ * Walks all text blocks between `absFrom` and `absTo`, captures runs from
+ * each block's overlapping portion, and merges them into a single
+ * CapturedStyle with a continuous offset sequence. This ensures cross-block
+ * selections capture formatting from all blocks, not just the first.
+ */
+function captureStyleAtAbsoluteRange(editor: Editor, absFrom: number, absTo: number): CapturedStyle | undefined {
+  const doc = editor.state.doc;
+  const allRuns: CapturedStyle['runs'] = [];
+  let runOffset = 0;
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    if (!node.isTextblock) return true;
+
+    const blockEnd = pos + node.nodeSize;
+    const overlapFrom = Math.max(absFrom, pos + 1);
+    const overlapTo = Math.min(absTo, blockEnd - 1);
+    if (overlapFrom >= overlapTo) return false;
+
+    const relFrom = overlapFrom - pos - 1;
+    const relTo = overlapTo - pos - 1;
+    const captured = captureRunsInRange(editor, pos, relFrom, relTo);
+
+    for (const run of captured.runs) {
+      allRuns.push({
+        ...run,
+        from: runOffset + (run.from - relFrom),
+        to: runOffset + (run.to - relFrom),
+      });
+    }
+    runOffset += relTo - relFrom;
+
+    return false; // Don't descend into inline content (captureRunsInRange handles that)
+  });
+
+  if (allRuns.length === 0) return undefined;
+
+  return { runs: allRuns, isUniform: checkUniformity(allRuns) };
+}
+
+// ---------------------------------------------------------------------------
 // Step target resolution
 // ---------------------------------------------------------------------------
 
@@ -734,10 +917,14 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
   const where = step.where;
   const refWhere = isRefWhere(where) ? where : undefined;
   const selectWhere = isSelectWhere(where) ? where : undefined;
+  const targetWhere = isTargetWhere(where) ? where : undefined;
 
   let targets: CompiledTarget[];
 
-  if (refWhere) {
+  if (targetWhere) {
+    const selectionTarget = resolveTargetWhereClause(editor, step, targetWhere);
+    targets = [selectionTarget];
+  } else if (refWhere) {
     targets = resolveRefTargets(editor, index, step, refWhere);
   } else if (selectWhere) {
     const isStructuralOp = step.op === 'structural.insert' || step.op === 'structural.replace';
@@ -793,6 +980,11 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
     if (t.kind !== 'range' || prev.kind !== 'range') return true;
     return t.blockId !== prev.blockId || t.from !== prev.from || t.to !== prev.to;
   });
+
+  // Target-where always produces exactly one target — return immediately.
+  if (targetWhere) {
+    return targets;
+  }
 
   if (refWhere) {
     if (targets.length === 0) {
@@ -941,9 +1133,13 @@ function normalizeOpForMatrix(op: string): string {
  * Classify the overlap relationship between two steps' target ranges.
  * Returns undefined if the ranges are disjoint (different blocks, no overlap).
  */
-function classifyOverlap(stepA: CompiledStep, stepB: CompiledStep): OverlapClassification | undefined {
-  const rangesA = extractBlockRanges(stepA);
-  const rangesB = extractBlockRanges(stepB);
+function classifyOverlap(
+  stepA: CompiledStep,
+  stepB: CompiledStep,
+  index: BlockIndex,
+): OverlapClassification | undefined {
+  const rangesA = extractBlockRanges(stepA, index);
+  const rangesB = extractBlockRanges(stepB, index);
 
   const opA = normalizeOpForMatrix(stepA.step.op);
   const opB = normalizeOpForMatrix(stepB.step.op);
@@ -979,17 +1175,68 @@ function classifyOverlap(stepA: CompiledStep, stepB: CompiledStep): OverlapClass
   return undefined;
 }
 
-function extractBlockRanges(compiled: CompiledStep): Map<string, Array<{ from: number; to: number }>> {
+/**
+ * Extracts per-block absolute ranges for overlap detection.
+ *
+ * All target kinds are normalized to absolute positions keyed by blockId.
+ * CompiledSelectionTargets scan the block index to enumerate every block
+ * whose PM range intersects `[absFrom, absTo)`, ensuring middle blocks in
+ * cross-block selections are correctly registered for overlap checks.
+ */
+function extractBlockRanges(
+  compiled: CompiledStep,
+  index: BlockIndex,
+): Map<string, Array<{ from: number; to: number }>> {
   const result = new Map<string, Array<{ from: number; to: number }>>();
   for (const target of compiled.targets) {
     if (target.kind === 'range') {
-      pushBlockRange(result, target.blockId, target.from, target.to);
-    } else {
+      // Use absolute positions for consistent comparison across target kinds.
+      pushBlockRange(result, target.blockId, target.absFrom, target.absTo);
+    } else if (target.kind === 'span') {
       for (const seg of target.segments) {
-        pushBlockRange(result, seg.blockId, seg.from, seg.to);
+        pushBlockRange(result, seg.blockId, seg.absFrom, seg.absTo);
+      }
+    } else {
+      // CompiledSelectionTarget — scan the block index for every block
+      // whose range overlaps [absFrom, absTo). This correctly captures
+      // start, middle, and end blocks for cross-block selections, as well
+      // as nodeEdge-only selections.
+      const sel = target;
+      const coveredBlocks = findCoveredBlocks(index, sel.absFrom, sel.absTo);
+
+      if (coveredBlocks.length > 0) {
+        for (const blockId of coveredBlocks) {
+          pushBlockRange(result, blockId, sel.absFrom, sel.absTo);
+        }
+      } else {
+        // Degenerate case: no blocks found in range (shouldn't happen in
+        // practice). Register the full absolute range under a synthetic key
+        // so overlap detection still catches collisions.
+        pushBlockRange(result, `__unresolved_${sel.absFrom}_${sel.absTo}__`, sel.absFrom, sel.absTo);
       }
     }
   }
+  return result;
+}
+
+/**
+ * Finds all block candidate nodeIds whose PM range intersects `[absFrom, absTo)`.
+ * Returns a deduplicated list of nodeIds in document order.
+ */
+function findCoveredBlocks(index: BlockIndex, absFrom: number, absTo: number): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const candidate of index.candidates) {
+    // candidate.pos = start of the node, candidate.end = end of the node
+    // A block is covered if its range overlaps with [absFrom, absTo).
+    if (candidate.end <= absFrom || candidate.pos >= absTo) continue;
+    if (!seen.has(candidate.nodeId)) {
+      seen.add(candidate.nodeId);
+      result.push(candidate.nodeId);
+    }
+  }
+
   return result;
 }
 
@@ -1011,7 +1258,7 @@ function pushBlockRange(
  * Validates step interactions for all compiled step pairs using the interaction matrix.
  * Disjoint pairs are always allowed without consulting the matrix.
  */
-function validateStepInteractions(steps: CompiledStep[]): void {
+function validateStepInteractions(steps: CompiledStep[], index: BlockIndex): void {
   for (let i = 0; i < steps.length; i++) {
     for (let j = i + 1; j < steps.length; j++) {
       const stepA = steps[i];
@@ -1020,7 +1267,7 @@ function validateStepInteractions(steps: CompiledStep[]): void {
       // Exempt non-mutating ops
       if (MATRIX_EXEMPT_OPS.has(stepA.step.op) || MATRIX_EXEMPT_OPS.has(stepB.step.op)) continue;
 
-      const overlap = classifyOverlap(stepA, stepB);
+      const overlap = classifyOverlap(stepA, stepB, index);
       if (!overlap) continue; // Disjoint — always allowed
 
       const opA = normalizeOpForMatrix(stepA.step.op);
@@ -1086,6 +1333,45 @@ function assertNoDuplicateBlockIds(index: BlockIndex): void {
   }
 }
 
+/**
+ * Validates that all V4 refs in a plan share the same storyKey.
+ *
+ * Plans are single-story-per-call in the current model. If two steps
+ * carry V4 refs targeting different stories, this is a compile-time error.
+ */
+function assertSingleStoryKey(steps: MutationStep[]): void {
+  let seenStoryKey: string | undefined;
+  let seenStepId: string | undefined;
+
+  for (const step of steps) {
+    const where = step.where;
+    if (!isRefWhere(where)) continue;
+    const ref = where.ref;
+    if (!ref.startsWith('text:v4:')) continue;
+
+    const decoded = decodeRef(ref);
+    if (!decoded || decoded.v !== 4) continue;
+
+    const v4 = decoded as StoryRefV4;
+    if (seenStoryKey === undefined) {
+      seenStoryKey = v4.storyKey;
+      seenStepId = step.id;
+    } else if (v4.storyKey !== seenStoryKey) {
+      throw planError(
+        'CROSS_STORY_PLAN',
+        `Plan contains refs targeting different stories: step "${seenStepId}" targets "${seenStoryKey}" but step "${step.id}" targets "${v4.storyKey}". A single plan call must target one story.`,
+        step.id,
+        {
+          storyKeyA: seenStoryKey,
+          stepIdA: seenStepId,
+          storyKeyB: v4.storyKey,
+          stepIdB: step.id,
+        },
+      );
+    }
+  }
+}
+
 export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan {
   // D8: plan step limit
   if (steps.length > MAX_PLAN_STEPS) {
@@ -1113,6 +1399,10 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
     }
     seenIds.add(step.id);
   }
+
+  // Cross-story validation: all V4 refs in a plan must share the same storyKey.
+  // This enforces the single-story-per-call constraint at compile time.
+  assertSingleStoryKey(steps);
 
   // Separate assert steps from mutation steps
   let totalTargets = 0;
@@ -1162,7 +1452,7 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
     );
   }
 
-  validateStepInteractions(mutationSteps);
+  validateStepInteractions(mutationSteps, index);
 
   return { mutationSteps, assertSteps, compiledRevision };
 }

@@ -17,12 +17,29 @@ import { getPart, hasPart, setPart, removePart, clonePart } from '../store/part-
 // Converter shape (minimal interface)
 // ---------------------------------------------------------------------------
 
+interface HeaderFooterVariantIds {
+  default?: string | null;
+  first?: string | null;
+  even?: string | null;
+  odd?: string | null;
+  ids?: string[];
+  [key: string]: unknown;
+}
+
 interface ConverterForSnapshot {
   convertedXml?: Record<string, unknown>;
   numbering?: unknown;
   translatedNumbering?: unknown;
+  footnotes?: unknown;
+  endnotes?: unknown;
+  footnoteProperties?: unknown;
   documentModified?: boolean;
   documentGuid?: string | null;
+  headers?: Record<string, unknown>;
+  footers?: Record<string, unknown>;
+  headerIds?: HeaderFooterVariantIds;
+  footerIds?: HeaderFooterVariantIds;
+  headerFooterModified?: boolean;
 }
 
 function getConverter(editor: Editor): ConverterForSnapshot | undefined {
@@ -37,9 +54,17 @@ interface CompoundSnapshot {
   partEntries: Map<string, { existed: boolean; data: unknown }>;
   numbering: unknown;
   translatedNumbering: unknown;
+  footnotes: unknown;
+  endnotes: unknown;
+  footnoteProperties: unknown;
   revision: string;
   documentModified: boolean;
   documentGuid: string | null;
+  headers: Record<string, unknown> | undefined;
+  footers: Record<string, unknown> | undefined;
+  headerIds: HeaderFooterVariantIds | undefined;
+  footerIds: HeaderFooterVariantIds | undefined;
+  headerFooterModified: boolean;
 }
 
 /**
@@ -69,9 +94,17 @@ function takeSnapshot(editor: Editor, partIds: Set<string>): CompoundSnapshot {
     partEntries,
     numbering: converter?.numbering ? clonePart(converter.numbering) : undefined,
     translatedNumbering: converter?.translatedNumbering ? clonePart(converter.translatedNumbering) : undefined,
+    footnotes: converter?.footnotes ? clonePart(converter.footnotes) : undefined,
+    endnotes: converter?.endnotes ? clonePart(converter.endnotes) : undefined,
+    footnoteProperties: converter?.footnoteProperties ? clonePart(converter.footnoteProperties) : undefined,
     revision: getRevision(editor),
     documentModified: converter?.documentModified ?? false,
     documentGuid: converter?.documentGuid ?? null,
+    headers: converter?.headers ? { ...converter.headers } : undefined,
+    footers: converter?.footers ? { ...converter.footers } : undefined,
+    headerIds: converter?.headerIds ? { ...converter.headerIds, ids: [...(converter.headerIds.ids ?? [])] } : undefined,
+    footerIds: converter?.footerIds ? { ...converter.footerIds, ids: [...(converter.footerIds.ids ?? [])] } : undefined,
+    headerFooterModified: converter?.headerFooterModified ?? false,
   };
 }
 
@@ -95,9 +128,19 @@ function restoreFromSnapshot(editor: Editor, snapshot: CompoundSnapshot): void {
 
   if (snapshot.numbering !== undefined) converter.numbering = snapshot.numbering;
   if (snapshot.translatedNumbering !== undefined) converter.translatedNumbering = snapshot.translatedNumbering;
+  if (snapshot.footnotes !== undefined) converter.footnotes = snapshot.footnotes;
+  if (snapshot.endnotes !== undefined) converter.endnotes = snapshot.endnotes;
+  if (snapshot.footnoteProperties !== undefined) converter.footnoteProperties = snapshot.footnoteProperties;
   converter.documentModified = snapshot.documentModified;
   converter.documentGuid = snapshot.documentGuid;
   restoreRevision(editor, snapshot.revision);
+
+  // Restore header/footer caches
+  if (snapshot.headers !== undefined) converter.headers = snapshot.headers;
+  if (snapshot.footers !== undefined) converter.footers = snapshot.footers;
+  if (snapshot.headerIds !== undefined) converter.headerIds = snapshot.headerIds;
+  if (snapshot.footerIds !== undefined) converter.footerIds = snapshot.footerIds;
+  converter.headerFooterModified = snapshot.headerFooterModified;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { measureBlock } from './index.js';
 import type {
   FlowBlock,
@@ -2205,6 +2205,79 @@ describe('measureBlock', () => {
   });
 
   describe('overflow protection', () => {
+    it('does not character-break a borderline single word because of tiny measurement overflow', async () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      expect(ctx).not.toBeNull();
+      const contextPrototype = Object.getPrototypeOf(ctx) as CanvasRenderingContext2D;
+      const originalMeasureText = contextPrototype.measureText;
+      const widthMap = new Map<string, number>([
+        ['Terms', 48.9],
+        ['Term', 39.125],
+        ['Ter', 30],
+        ['Te', 20],
+        ['T', 10],
+        ['s', 8.8984375],
+        ['1.', 13.34375],
+      ]);
+      const measureTextSpy = vi.spyOn(contextPrototype, 'measureText').mockImplementation(function (text: string) {
+        const mappedWidth = widthMap.get(text);
+        if (mappedWidth != null) {
+          return {
+            width: mappedWidth,
+            actualBoundingBoxLeft: 0,
+            actualBoundingBoxRight: mappedWidth,
+            actualBoundingBoxAscent: 12,
+            actualBoundingBoxDescent: 4,
+          } as TextMetrics;
+        }
+        return originalMeasureText.call(this, text);
+      });
+
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'borderline-overflow-list-item',
+        runs: [
+          {
+            text: 'Terms',
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 16,
+            bold: true,
+            letterSpacing: -0.13333333333333333,
+          },
+        ],
+        attrs: {
+          styleId: 'ListParagraph',
+          indent: { left: 24, hanging: 23.933333333333334 },
+          wordLayout: {
+            indentLeftPx: 24,
+            hangingPx: 23.933333333333334,
+            textStartPx: 24,
+            marker: {
+              markerText: '1.',
+              markerBoxWidthPx: 23.933333333333334,
+              textStartX: 24,
+              gutterWidthPx: 8,
+              suffix: 'tab',
+              run: {
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 16,
+                bold: true,
+              },
+            },
+          },
+        },
+      };
+
+      try {
+        const measure = expectParagraphMeasure(await measureBlock(block, 72.26666666666667));
+        expect(measure.lines).toHaveLength(1);
+        expect(extractLineText(block, measure.lines[0])).toBe('Terms');
+      } finally {
+        measureTextSpy.mockRestore();
+      }
+    });
+
     it('keeps justified line packed by allowing small space flex (Word parity case)', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',
@@ -5281,6 +5354,245 @@ describe('measureBlock', () => {
       // Total width should match page width
       const totalWidth = tableMeasure.columnWidths.reduce((a: number, b: number) => a + b, 0);
       expect(totalWidth).toBe(625);
+    });
+  });
+
+  describe('AutoFit table layout (ECMA-376 §17.18.87)', () => {
+    it('expands columns to fit content when grid widths are smaller than content (IT-679)', async () => {
+      // Simulates the IT-679 customer file: placeholder grid widths (tiny values)
+      // with a small percentage table width. AutoFit should expand columns to fit content.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-expand',
+        attrs: {
+          tableWidth: { value: 100, type: 'pct' }, // 100/5000 = 2% → ~12px
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Role', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Name', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [7, 7], // Tiny placeholder grid widths (~100 twips converted to px)
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 624 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      // AutoFit should expand columns beyond the tiny grid widths to fit content
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(7);
+      expect(tableMeasure.columnWidths[1]).toBeGreaterThan(7);
+      // Total should be much larger than the original 14px
+      const total = tableMeasure.columnWidths.reduce((a: number, b: number) => a + b, 0);
+      expect(total).toBeGreaterThan(14);
+    });
+
+    it('caps table width at page width when content is very wide', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-cap',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'VeryLongContentThatExceedsAvailableWidth', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'AnotherVeryLongContentStringHere', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [5, 5], // Tiny grid widths
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 300 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      // Total should equal exactly maxWidth (normalization adjusts last column)
+      const total = tableMeasure.columnWidths.reduce((a: number, b: number) => a + b, 0);
+      expect(total).toBe(300);
+      // But columns should still be expanded beyond their original 5px
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(5);
+      expect(tableMeasure.columnWidths[1]).toBeGreaterThan(5);
+    });
+
+    it('does not apply AutoFit to fixed layout tables', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-no-autofit',
+        attrs: {
+          tableLayout: 'fixed',
+          tableWidth: { width: 200, type: 'px' },
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'WideContent', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'MoreWideContent', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [50, 50], // Small grid widths
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 600 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      // Fixed layout: columns preserve original grid widths, NOT scaled to content or explicit width
+      expect(tableMeasure.columnWidths[0]).toBe(50);
+      expect(tableMeasure.columnWidths[1]).toBe(50);
+    });
+
+    it('preserves proportional column widths when content exceeds page width', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-proportional',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'Short', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'AVeryMuchLongerPieceOfContent', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [3, 3], // Tiny grid widths
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 200 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      // The wider content column should get a proportionally larger share
+      expect(tableMeasure.columnWidths[1]).toBeGreaterThan(tableMeasure.columnWidths[0]);
+    });
+
+    it('skips AutoFit when grid widths are reasonable (not placeholder values)', async () => {
+      // Grid total = 400px, maxWidth = 600px → 66% of page width.
+      // This is well above the 10% placeholder threshold, so AutoFit should NOT run.
+      // Columns should keep their original grid widths even if content is wider.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-skip-reasonable',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'VeryWideContentThatExceedsColumnWidth', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Short', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200, 200], // Reasonable grid widths (400/600 = 66%)
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 600 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      // Grid widths should be preserved — AutoFit should not have run
+      expect(tableMeasure.columnWidths[0]).toBe(200);
+      expect(tableMeasure.columnWidths[1]).toBe(200);
     });
   });
 });

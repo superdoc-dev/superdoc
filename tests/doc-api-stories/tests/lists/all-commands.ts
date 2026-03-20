@@ -33,6 +33,15 @@ const ALL_LISTS_COMMAND_IDS = [
   'lists.setLevelTrailingCharacter',
   'lists.setLevelMarkerFont',
   'lists.clearLevelOverrides',
+  'lists.setType',
+  // SD-2025 user-facing operations
+  'lists.getStyle',
+  'lists.applyStyle',
+  'lists.restartAt',
+  'lists.setLevelNumberStyle',
+  'lists.setLevelText',
+  'lists.setLevelStart',
+  'lists.setLevelLayout',
 ] as const;
 
 type ListsCommandId = (typeof ALL_LISTS_COMMAND_IDS)[number];
@@ -68,6 +77,7 @@ describe('document-api story: all lists commands', () => {
     'lists.canJoin',
     'lists.canContinuePrevious',
     'lists.captureTemplate',
+    'lists.getStyle',
   ]);
 
   function slug(operationId: ListsCommandId): string {
@@ -132,6 +142,14 @@ describe('document-api story: all lists commands', () => {
       return;
     }
 
+    if (operationId === 'lists.getStyle') {
+      expect(result?.success).toBe(true);
+      expect(result?.style?.version).toBe(1);
+      expect(Array.isArray(result?.style?.levels)).toBe(true);
+      expect(result?.style?.levels?.length).toBeGreaterThan(0);
+      return;
+    }
+
     throw new Error(`Unexpected read assertion branch for ${operationId}.`);
   }
 
@@ -148,6 +166,24 @@ describe('document-api story: all lists commands', () => {
 
     const envelope = await runCli(['call', `doc.${operationId}`, '--input-json', JSON.stringify(normalizedInput)]);
     return unwrap<T>(unwrap<any>(envelope?.data));
+  }
+
+  async function getStyle(docPath: string, target: ListItemAddress): Promise<any> {
+    const result = await callDocOperation<any>('lists.getStyle', { doc: docPath, target });
+    expect(result?.success).toBe(true);
+    expect(result?.style?.version).toBe(1);
+    return result.style;
+  }
+
+  async function getListItem(docPath: string, address: ListItemAddress): Promise<any> {
+    const result = await callDocOperation<any>('lists.get', { doc: docPath, address });
+    return result?.item ?? result;
+  }
+
+  function requireStyleLevel(style: any, level: number): any {
+    const match = style?.levels?.find((entry: any) => entry?.level === level);
+    if (!match) throw new Error(`Style did not contain level ${level}.`);
+    return match;
   }
 
   // ---------------------------------------------------------------------------
@@ -497,6 +533,17 @@ describe('document-api story: all lists commands', () => {
       },
     },
     {
+      operationId: 'lists.getStyle',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, _resultDoc, fixture) => {
+        const f = requireFixture('lists.getStyle', fixture);
+        return callDocOperation<any>('lists.getStyle', {
+          doc: sourceDoc,
+          target: f.firstItem,
+        });
+      },
+    },
+    {
       operationId: 'lists.applyTemplate',
       prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
       run: async (sourceDoc, resultDoc, fixture) => {
@@ -520,6 +567,70 @@ describe('document-api story: all lists commands', () => {
       },
     },
     {
+      operationId: 'lists.applyStyle',
+      prepareSource: async (sourceDoc) => setupPreSeparatedFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.applyStyle', fixture);
+        const styleResult = await callDocOperation<any>('lists.getStyle', {
+          doc: sourceDoc,
+          target: f.firstItem,
+        });
+        const style = structuredClone(styleResult?.style);
+        const level0 = requireStyleLevel(style, 0);
+        level0.numFmt = 'upperRoman';
+        level0.lvlText = '(%1)';
+
+        const result = await callDocOperation<any>('lists.applyStyle', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.secondItem,
+          style,
+        });
+
+        const appliedStyle = await getStyle(resultDoc, f.secondItem);
+        const appliedLevel0 = requireStyleLevel(appliedStyle, 0);
+        expect(appliedLevel0.numFmt).toBe('upperRoman');
+        expect(appliedLevel0.lvlText).toBe('(%1)');
+
+        const sourceStyle = await getStyle(resultDoc, f.firstItem);
+        expect(requireStyleLevel(sourceStyle, 0).numFmt).not.toBe('upperRoman');
+
+        return result;
+      },
+    },
+    {
+      operationId: 'lists.restartAt',
+      prepareSource: async (sourceDoc) => {
+        const fixture = await setupPreSeparatedFixture(sourceDoc);
+        const presetResult = await callDocOperation<any>('lists.applyPreset', {
+          doc: sourceDoc,
+          out: sourceDoc,
+          target: fixture.secondItem,
+          preset: 'upperRoman',
+        });
+        assertMutationSuccess('lists.applyPreset (prep)', presetResult);
+        return fixture;
+      },
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.restartAt', fixture);
+        const result = await callDocOperation<any>('lists.restartAt', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.secondItem,
+          startAt: 7,
+        });
+
+        const item = await getListItem(resultDoc, f.secondItem);
+        if (typeof item?.ordinal === 'number') {
+          expect(item.ordinal).toBe(7);
+        } else {
+          expect(String(item?.marker ?? '')).toContain('7');
+        }
+
+        return result;
+      },
+    },
+    {
       operationId: 'lists.setLevelNumbering',
       prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
       run: async (sourceDoc, resultDoc, fixture) => {
@@ -532,6 +643,89 @@ describe('document-api story: all lists commands', () => {
           numFmt: 'upperRoman',
           lvlText: '%1.',
         });
+      },
+    },
+    {
+      operationId: 'lists.setLevelNumberStyle',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelNumberStyle', fixture);
+        const result = await callDocOperation<any>('lists.setLevelNumberStyle', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          numberStyle: 'upperRoman',
+        });
+
+        const level0 = requireStyleLevel(await getStyle(resultDoc, f.firstItem), 0);
+        expect(level0.numFmt).toBe('upperRoman');
+        return result;
+      },
+    },
+    {
+      operationId: 'lists.setLevelText',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelText', fixture);
+        const result = await callDocOperation<any>('lists.setLevelText', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          text: '(%1)',
+        });
+
+        const level0 = requireStyleLevel(await getStyle(resultDoc, f.firstItem), 0);
+        expect(level0.lvlText).toBe('(%1)');
+        return result;
+      },
+    },
+    {
+      operationId: 'lists.setLevelStart',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelStart', fixture);
+        const result = await callDocOperation<any>('lists.setLevelStart', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          startAt: 4,
+        });
+
+        const level0 = requireStyleLevel(await getStyle(resultDoc, f.firstItem), 0);
+        expect(level0.start).toBe(4);
+        return result;
+      },
+    },
+    {
+      operationId: 'lists.setLevelLayout',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelLayout', fixture);
+        const result = await callDocOperation<any>('lists.setLevelLayout', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          layout: {
+            alignment: 'center',
+            alignedAt: 360,
+            textIndentAt: 1440,
+            followCharacter: 'tab',
+            tabStopAt: 1440,
+          },
+        });
+
+        const level0 = requireStyleLevel(await getStyle(resultDoc, f.firstItem), 0);
+        expect(level0).toMatchObject({
+          alignment: 'center',
+          indents: { left: 1440, hanging: 1080 },
+          trailingCharacter: 'tab',
+          tabStopAt: 1440,
+        });
+        return result;
       },
     },
     {
@@ -603,6 +797,23 @@ describe('document-api story: all lists commands', () => {
           level: 0,
           trailingCharacter: 'space',
         });
+      },
+    },
+    {
+      operationId: 'lists.setType',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setType', fixture);
+        const result = await callDocOperation<any>('lists.setType', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          kind: 'ordered',
+        });
+
+        const item = await getListItem(resultDoc, f.firstItem);
+        expect(item?.kind).toBe('ordered');
+        return result;
       },
     },
     {

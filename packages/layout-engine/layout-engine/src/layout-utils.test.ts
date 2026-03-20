@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { ParagraphBlock, TextRun, ImageRun } from '@superdoc/contracts';
-import { isEmptyTextParagraph, shouldSuppressSpacingForEmpty } from './layout-utils.js';
+import { isEmptyTextParagraph, shouldSuppressSpacingForEmpty, shouldSuppressOwnSpacing } from './layout-utils.js';
 
 // ============================================================================
 // Empty Paragraph Detection Tests
@@ -149,5 +149,41 @@ describe('shouldSuppressSpacingForEmpty', () => {
     };
     expect(shouldSuppressSpacingForEmpty(block, 'before')).toBe(true);
     expect(shouldSuppressSpacingForEmpty(block, 'after')).toBe(true);
+  });
+});
+
+// ============================================================================
+// Per-Paragraph Contextual Spacing Tests
+// ============================================================================
+
+describe('shouldSuppressOwnSpacing', () => {
+  it('returns true when paragraph has contextualSpacing and adjacent has same styleId', () => {
+    expect(shouldSuppressOwnSpacing('Normal', true, 'Normal')).toBe(true);
+  });
+
+  it('returns false when paragraph does not have contextualSpacing', () => {
+    expect(shouldSuppressOwnSpacing('Normal', false, 'Normal')).toBe(false);
+  });
+
+  it('returns false when styles differ', () => {
+    expect(shouldSuppressOwnSpacing('Heading1', true, 'Normal')).toBe(false);
+  });
+
+  it('returns false when own styleId is undefined', () => {
+    expect(shouldSuppressOwnSpacing(undefined, true, 'Normal')).toBe(false);
+  });
+
+  it('returns false when adjacent styleId is undefined', () => {
+    expect(shouldSuppressOwnSpacing('Normal', true, undefined)).toBe(false);
+  });
+
+  it('returns false when both styleIds are undefined', () => {
+    expect(shouldSuppressOwnSpacing(undefined, true, undefined)).toBe(false);
+  });
+
+  it('does not consult the adjacent paragraph contextualSpacing flag', () => {
+    // The adjacent paragraph's contextualSpacing is irrelevant — each paragraph
+    // independently decides whether to suppress its own spacing.
+    expect(shouldSuppressOwnSpacing('Normal', true, 'Normal')).toBe(true);
   });
 });

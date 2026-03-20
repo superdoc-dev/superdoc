@@ -1,0 +1,583 @@
+---
+title: tables.setBorders
+sidebarTitle: tables.setBorders
+description: Set borders on a table using a target set or per-edge patch.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set borders on a table using a target set or per-edge patch.
+
+- Operation ID: `tables.setBorders`
+- API member path: `editor.doc.tables.setBorders(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt. Does not perform NO_OP detection.
+
+## Input fields
+
+### Variant 1.1 (target.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `applyTo` | enum | yes | `"all"`, `"outside"`, `"inside"`, `"top"`, `"bottom"`, `"left"`, `"right"`, `"insideH"`, `"insideV"` |
+| `border` | object \\| null | yes | One of: object, null |
+| `mode` | `"applyTo"` | yes | Constant: `"applyTo"` |
+| `target` | BlockNodeAddress | yes | BlockNodeAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Variant 1.2 (mode="applyTo")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `applyTo` | enum | yes | `"all"`, `"outside"`, `"inside"`, `"top"`, `"bottom"`, `"left"`, `"right"`, `"insideH"`, `"insideV"` |
+| `border` | object \\| null | yes | One of: object, null |
+| `mode` | `"applyTo"` | yes | Constant: `"applyTo"` |
+| `nodeId` | string | yes |  |
+
+### Variant 2.1 (target.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `edges` | object | yes |  |
+| `edges.bottom` | object \\| null | no | One of: object, null |
+| `edges.insideH` | object \\| null | no | One of: object, null |
+| `edges.insideV` | object \\| null | no | One of: object, null |
+| `edges.left` | object \\| null | no | One of: object, null |
+| `edges.right` | object \\| null | no | One of: object, null |
+| `edges.top` | object \\| null | no | One of: object, null |
+| `mode` | `"edges"` | yes | Constant: `"edges"` |
+| `target` | BlockNodeAddress | yes | BlockNodeAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Variant 2.2 (mode="edges")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `edges` | object | yes |  |
+| `edges.bottom` | object \\| null | no | One of: object, null |
+| `edges.insideH` | object \\| null | no | One of: object, null |
+| `edges.insideV` | object \\| null | no | One of: object, null |
+| `edges.left` | object \\| null | no | One of: object, null |
+| `edges.right` | object \\| null | no | One of: object, null |
+| `edges.top` | object \\| null | no | One of: object, null |
+| `mode` | `"edges"` | yes | Constant: `"edges"` |
+| `nodeId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "applyTo": "all",
+  "border": {
+    "color": "example",
+    "lineStyle": "example",
+    "lineWeightPt": 12.5
+  },
+  "mode": "applyTo",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | TableAddress | no | TableAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
+### Example response
+
+```json
+{
+  "success": true,
+  "table": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "table"
+  },
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "required": [
+            "nodeId"
+          ]
+        }
+      ],
+      "properties": {
+        "applyTo": {
+          "enum": [
+            "all",
+            "outside",
+            "inside",
+            "top",
+            "bottom",
+            "left",
+            "right",
+            "insideH",
+            "insideV"
+          ]
+        },
+        "border": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                  "type": "string"
+                },
+                "lineStyle": {
+                  "type": "string"
+                },
+                "lineWeightPt": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "lineStyle",
+                "lineWeightPt",
+                "color"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "const": "applyTo"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/BlockNodeAddress"
+        }
+      },
+      "required": [
+        "mode",
+        "applyTo",
+        "border"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "required": [
+            "nodeId"
+          ]
+        }
+      ],
+      "properties": {
+        "edges": {
+          "additionalProperties": false,
+          "properties": {
+            "bottom": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "color": {
+                      "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                      "type": "string"
+                    },
+                    "lineStyle": {
+                      "type": "string"
+                    },
+                    "lineWeightPt": {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lineStyle",
+                    "lineWeightPt",
+                    "color"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "insideH": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "color": {
+                      "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                      "type": "string"
+                    },
+                    "lineStyle": {
+                      "type": "string"
+                    },
+                    "lineWeightPt": {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lineStyle",
+                    "lineWeightPt",
+                    "color"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "insideV": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "color": {
+                      "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                      "type": "string"
+                    },
+                    "lineStyle": {
+                      "type": "string"
+                    },
+                    "lineWeightPt": {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lineStyle",
+                    "lineWeightPt",
+                    "color"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "left": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "color": {
+                      "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                      "type": "string"
+                    },
+                    "lineStyle": {
+                      "type": "string"
+                    },
+                    "lineWeightPt": {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lineStyle",
+                    "lineWeightPt",
+                    "color"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "right": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "color": {
+                      "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                      "type": "string"
+                    },
+                    "lineStyle": {
+                      "type": "string"
+                    },
+                    "lineWeightPt": {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lineStyle",
+                    "lineWeightPt",
+                    "color"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "top": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "color": {
+                      "pattern": "^([0-9A-Fa-f]{6}|auto)$",
+                      "type": "string"
+                    },
+                    "lineStyle": {
+                      "type": "string"
+                    },
+                    "lineWeightPt": {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lineStyle",
+                    "lineWeightPt",
+                    "color"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "mode": {
+          "const": "edges"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/BlockNodeAddress"
+        }
+      },
+      "required": [
+        "mode",
+        "edges"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "table": {
+          "$ref": "#/$defs/TableAddress"
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/EntityAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "table": {
+      "$ref": "#/$defs/TableAddress"
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

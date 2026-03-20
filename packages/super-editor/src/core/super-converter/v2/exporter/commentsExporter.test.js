@@ -1,4 +1,5 @@
 import {
+  getCommentDefinition,
   updateCommentsExtendedXml,
   updateCommentsIdsAndExtensible,
   updateCommentsXml,
@@ -379,6 +380,26 @@ describe('prepareCommentsXmlFilesForExport', () => {
       expect(result.relationships).toHaveLength(4);
       expect(result.removedTargets).toHaveLength(0);
     });
+  });
+});
+
+describe('getCommentDefinition', () => {
+  it('preserves tracked change display metadata for exported tracked-change comments', () => {
+    const definition = getCommentDefinition(
+      makeComment({
+        trackedChange: true,
+        trackedChangeType: 'trackFormat',
+        trackedChangeText: 'https://example.com',
+        trackedChangeDisplayType: 'hyperlinkAdded',
+      }),
+      '0',
+      [],
+      null,
+    );
+
+    expect(definition.attributes['custom:trackedChangeType']).toBe('trackFormat');
+    expect(definition.attributes['custom:trackedChangeText']).toBe('https://example.com');
+    expect(definition.attributes['custom:trackedChangeDisplayType']).toBe('hyperlinkAdded');
   });
 });
 

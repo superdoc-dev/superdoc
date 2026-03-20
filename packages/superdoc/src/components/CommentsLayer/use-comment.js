@@ -32,7 +32,7 @@ export default function useComment(params) {
   const creatorImage = params.creatorImage;
   const createdTime = params.createdTime || Date.now();
   const importedAuthor = ref(params.importedAuthor || null);
-  const docxCommentJSON = params.docxCommentJSON || null;
+  const docxCommentJSON = ref(params.docxCommentJSON || null);
   const origin = params.origin;
   const threadingMethod = params.threadingMethod;
   const threadingStyleOverride = params.threadingStyleOverride;
@@ -57,6 +57,7 @@ export default function useComment(params) {
   const trackedChange = ref(params.trackedChange);
   const trackedChangeType = ref(params.trackedChangeType || null);
   const trackedChangeText = ref(params.trackedChangeText || null);
+  const trackedChangeDisplayType = ref(params.trackedChangeDisplayType || null);
   const deletedText = ref(params.deletedText || null);
 
   const resolvedTime = ref(params.resolvedTime || null);
@@ -244,13 +245,14 @@ export default function useComment(params) {
       creatorImage,
       createdTime,
       importedAuthor: importedAuthor.value,
-      docxCommentJSON,
+      docxCommentJSON: docxCommentJSON.value,
       isInternal: isInternal.value,
       commentText: commentText.value,
       selection: selection ? selection.getValues() : null,
       trackedChange: trackedChange.value,
       trackedChangeText: trackedChangeText.value,
       trackedChangeType: trackedChangeType.value,
+      trackedChangeDisplayType: trackedChangeDisplayType.value,
       deletedText: deletedText.value,
       resolvedTime: resolvedTime.value,
       resolvedByEmail: resolvedByEmail.value,
@@ -286,6 +288,7 @@ export default function useComment(params) {
     deletedText,
     trackedChangeType,
     trackedChangeText,
+    trackedChangeDisplayType,
     resolvedTime,
     resolvedByEmail,
     resolvedByName,

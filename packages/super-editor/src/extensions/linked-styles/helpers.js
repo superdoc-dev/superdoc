@@ -1,10 +1,21 @@
 // @ts-check
-import { CustomSelectionPluginKey } from '../custom-selection/custom-selection.js';
+import { CustomSelectionPluginKey } from '@core/selection-state.js';
 import { getLineHeightValueString } from '@core/super-converter/helpers.js';
 import { findParentNode } from '../../core/helpers/findParentNode.js';
 import { kebabCase } from '@superdoc/common';
 import { getUnderlineCssString } from './index.js';
 import { twipsToLines, twipsToPixels, halfPointToPixels } from '@converter/helpers.js';
+
+const FORMATTING_MARK_NAMES = new Set([
+  'textStyle',
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  'subscript',
+  'superscript',
+  'highlight',
+]);
 
 /**
  * Get the (parsed) linked style from the styles.xml
@@ -344,25 +355,26 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
   const clearFormattingMarks = (startPos, endPos) => {
     tr.doc.nodesBetween(startPos, endPos, (node, pos) => {
       if (node.isText && node.marks.length > 0) {
-        const marksToRemove = [
-          'textStyle',
-          'bold',
-          'italic',
-          'underline',
-          'strike',
-          'subscript',
-          'superscript',
-          'highlight',
-        ];
-
         node.marks.forEach((mark) => {
-          if (marksToRemove.includes(mark.type.name)) {
+          if (FORMATTING_MARK_NAMES.has(mark.type.name)) {
             tr.removeMark(pos, pos + node.nodeSize, mark);
           }
         });
       }
       return true;
     });
+  };
+
+  const clearStoredFormattingMarks = () => {
+    const sourceMarks = tr.storedMarks ?? state.storedMarks ?? (selection.empty ? selection.$from.marks() : []);
+    if (!sourceMarks?.length) {
+      return;
+    }
+
+    const nextStoredMarks = sourceMarks.filter((mark) => !FORMATTING_MARK_NAMES.has(mark.type.name));
+    if (nextStoredMarks.length !== sourceMarks.length) {
+      tr.setStoredMarks(nextStoredMarks);
+    }
   };
 
   // Handle cursor position (no selection)
@@ -379,6 +391,7 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
 
     // Clear formatting marks within the paragraph
     clearFormattingMarks(pos + 1, pos + paragraphNode.nodeSize - 1);
+    clearStoredFormattingMarks();
 
     // Update paragraph attributes
     tr.setNodeMarkup(pos, undefined, getUpdatedParagraphAttrs(paragraphNode));
@@ -403,6 +416,8 @@ export const applyLinkedStyleToTransaction = (tr, editor, style) => {
     // Apply clean paragraph attributes
     tr.setNodeMarkup(pos, undefined, getUpdatedParagraphAttrs(node));
   });
+
+  clearStoredFormattingMarks();
 
   return true;
 };

@@ -106,6 +106,7 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
 | `atomic` | `true` | yes | Constant: `true` |
 | `changeMode` | enum | yes | `"direct"`, `"tracked"` |
 | `expectedRevision` | string | no |  |
+| `in` | StoryLocator | no | StoryLocator |
 | `steps` | object(op="text.rewrite") \\| object(op="text.insert") \\| object(op="text.delete") \\| object(op="format.apply") \\| object(op="assert")[] | yes |  |
 
 ### Example request
@@ -115,6 +116,10 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
   "atomic": true,
   "changeMode": "direct",
   "expectedRevision": "rev-001",
+  "in": {
+    "kind": "story",
+    "storyType": "body"
+  },
   "steps": [
     {
       "args": {
@@ -195,6 +200,11 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
 - `INVALID_INSERTION_CONTEXT`
 - `DOCUMENT_IDENTITY_CONFLICT`
 - `CAPABILITY_UNAVAILABLE`
+- `STORY_NOT_FOUND`
+- `STORY_MISMATCH`
+- `STORY_NOT_SUPPORTED`
+- `CROSS_STORY_PLAN`
+- `MATERIALIZATION_FAILED`
 
 ## Non-applied failure codes
 
@@ -209,18 +219,25 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
   "properties": {
     "atomic": {
       "const": true,
+      "description": "Must be true. All steps execute as one atomic transaction.",
       "type": "boolean"
     },
     "changeMode": {
+      "description": "Required. Use 'direct' for immediate edits or 'tracked' for suggestions. Must always be provided.",
       "enum": [
         "direct",
         "tracked"
       ]
     },
     "expectedRevision": {
+      "description": "Document revision for optimistic concurrency. Mutation fails if document was modified since this revision.",
       "type": "string"
     },
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "steps": {
+      "description": "Ordered array of mutation steps. Each step needs 'op' (text.rewrite, text.insert, text.delete, format.apply, or assert) and a 'where' targeting clause.",
       "items": {
         "oneOf": [
           {
@@ -393,19 +410,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             "additionalProperties": false,
                             "properties": {
                               "caseSensitive": {
+                                "description": "Case-sensitive matching. Default: false.",
                                 "type": "boolean"
                               },
                               "mode": {
+                                "description": "Match mode: 'contains' (substring) or 'regex'.",
                                 "enum": [
                                   "contains",
                                   "regex"
                                 ]
                               },
                               "pattern": {
+                                "description": "Text or regex pattern to match.",
                                 "type": "string"
                               },
                               "type": {
-                                "const": "text"
+                                "const": "text",
+                                "description": "Must be 'text' for text pattern search."
                               }
                             },
                             "required": [
@@ -418,12 +439,14 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             "additionalProperties": false,
                             "properties": {
                               "kind": {
+                                "description": "Filter: 'block' or 'inline'.",
                                 "enum": [
                                   "block",
                                   "inline"
                                 ]
                               },
                               "nodeType": {
+                                "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
                                 "enum": [
                                   "paragraph",
                                   "heading",
@@ -450,7 +473,8 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                 ]
                               },
                               "type": {
-                                "const": "node"
+                                "const": "node",
+                                "description": "Must be 'node' for node type search."
                               }
                             },
                             "required": [
@@ -461,7 +485,7 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         ]
                       },
                       "within": {
-                        "$ref": "#/$defs/NodeAddress"
+                        "$ref": "#/$defs/BlockNodeAddress"
                       }
                     },
                     "required": [
@@ -482,12 +506,29 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         "type": "string"
                       },
                       "within": {
-                        "$ref": "#/$defs/NodeAddress"
+                        "$ref": "#/$defs/BlockNodeAddress"
                       }
                     },
                     "required": [
                       "by",
                       "ref"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "target",
+                        "type": "string"
+                      },
+                      "target": {
+                        "$ref": "#/$defs/SelectionTarget"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "target"
                     ],
                     "type": "object"
                   }
@@ -619,19 +660,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         "additionalProperties": false,
                         "properties": {
                           "caseSensitive": {
+                            "description": "Case-sensitive matching. Default: false.",
                             "type": "boolean"
                           },
                           "mode": {
+                            "description": "Match mode: 'contains' (substring) or 'regex'.",
                             "enum": [
                               "contains",
                               "regex"
                             ]
                           },
                           "pattern": {
+                            "description": "Text or regex pattern to match.",
                             "type": "string"
                           },
                           "type": {
-                            "const": "text"
+                            "const": "text",
+                            "description": "Must be 'text' for text pattern search."
                           }
                         },
                         "required": [
@@ -644,12 +689,14 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         "additionalProperties": false,
                         "properties": {
                           "kind": {
+                            "description": "Filter: 'block' or 'inline'.",
                             "enum": [
                               "block",
                               "inline"
                             ]
                           },
                           "nodeType": {
+                            "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
                             "enum": [
                               "paragraph",
                               "heading",
@@ -676,7 +723,8 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             ]
                           },
                           "type": {
-                            "const": "node"
+                            "const": "node",
+                            "description": "Must be 'node' for node type search."
                           }
                         },
                         "required": [
@@ -687,7 +735,7 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                     ]
                   },
                   "within": {
-                    "$ref": "#/$defs/NodeAddress"
+                    "$ref": "#/$defs/BlockNodeAddress"
                   }
                 },
                 "required": [
@@ -711,7 +759,11 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
             "properties": {
               "args": {
                 "additionalProperties": false,
-                "properties": {},
+                "properties": {
+                  "behavior": {
+                    "$ref": "#/$defs/DeleteBehavior"
+                  }
+                },
                 "type": "object"
               },
               "id": {
@@ -743,19 +795,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             "additionalProperties": false,
                             "properties": {
                               "caseSensitive": {
+                                "description": "Case-sensitive matching. Default: false.",
                                 "type": "boolean"
                               },
                               "mode": {
+                                "description": "Match mode: 'contains' (substring) or 'regex'.",
                                 "enum": [
                                   "contains",
                                   "regex"
                                 ]
                               },
                               "pattern": {
+                                "description": "Text or regex pattern to match.",
                                 "type": "string"
                               },
                               "type": {
-                                "const": "text"
+                                "const": "text",
+                                "description": "Must be 'text' for text pattern search."
                               }
                             },
                             "required": [
@@ -768,12 +824,14 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             "additionalProperties": false,
                             "properties": {
                               "kind": {
+                                "description": "Filter: 'block' or 'inline'.",
                                 "enum": [
                                   "block",
                                   "inline"
                                 ]
                               },
                               "nodeType": {
+                                "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
                                 "enum": [
                                   "paragraph",
                                   "heading",
@@ -800,7 +858,8 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                 ]
                               },
                               "type": {
-                                "const": "node"
+                                "const": "node",
+                                "description": "Must be 'node' for node type search."
                               }
                             },
                             "required": [
@@ -811,7 +870,7 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         ]
                       },
                       "within": {
-                        "$ref": "#/$defs/NodeAddress"
+                        "$ref": "#/$defs/BlockNodeAddress"
                       }
                     },
                     "required": [
@@ -832,12 +891,29 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         "type": "string"
                       },
                       "within": {
-                        "$ref": "#/$defs/NodeAddress"
+                        "$ref": "#/$defs/BlockNodeAddress"
                       }
                     },
                     "required": [
                       "by",
                       "ref"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "target",
+                        "type": "string"
+                      },
+                      "target": {
+                        "$ref": "#/$defs/SelectionTarget"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "target"
                     ],
                     "type": "object"
                   }
@@ -1702,19 +1778,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             "additionalProperties": false,
                             "properties": {
                               "caseSensitive": {
+                                "description": "Case-sensitive matching. Default: false.",
                                 "type": "boolean"
                               },
                               "mode": {
+                                "description": "Match mode: 'contains' (substring) or 'regex'.",
                                 "enum": [
                                   "contains",
                                   "regex"
                                 ]
                               },
                               "pattern": {
+                                "description": "Text or regex pattern to match.",
                                 "type": "string"
                               },
                               "type": {
-                                "const": "text"
+                                "const": "text",
+                                "description": "Must be 'text' for text pattern search."
                               }
                             },
                             "required": [
@@ -1727,12 +1807,14 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             "additionalProperties": false,
                             "properties": {
                               "kind": {
+                                "description": "Filter: 'block' or 'inline'.",
                                 "enum": [
                                   "block",
                                   "inline"
                                 ]
                               },
                               "nodeType": {
+                                "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
                                 "enum": [
                                   "paragraph",
                                   "heading",
@@ -1759,7 +1841,8 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                                 ]
                               },
                               "type": {
-                                "const": "node"
+                                "const": "node",
+                                "description": "Must be 'node' for node type search."
                               }
                             },
                             "required": [
@@ -1770,7 +1853,7 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         ]
                       },
                       "within": {
-                        "$ref": "#/$defs/NodeAddress"
+                        "$ref": "#/$defs/BlockNodeAddress"
                       }
                     },
                     "required": [
@@ -1791,12 +1874,29 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         "type": "string"
                       },
                       "within": {
-                        "$ref": "#/$defs/NodeAddress"
+                        "$ref": "#/$defs/BlockNodeAddress"
                       }
                     },
                     "required": [
                       "by",
                       "ref"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "by": {
+                        "const": "target",
+                        "type": "string"
+                      },
+                      "target": {
+                        "$ref": "#/$defs/SelectionTarget"
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "target"
                     ],
                     "type": "object"
                   }
@@ -1846,19 +1946,23 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         "additionalProperties": false,
                         "properties": {
                           "caseSensitive": {
+                            "description": "Case-sensitive matching. Default: false.",
                             "type": "boolean"
                           },
                           "mode": {
+                            "description": "Match mode: 'contains' (substring) or 'regex'.",
                             "enum": [
                               "contains",
                               "regex"
                             ]
                           },
                           "pattern": {
+                            "description": "Text or regex pattern to match.",
                             "type": "string"
                           },
                           "type": {
-                            "const": "text"
+                            "const": "text",
+                            "description": "Must be 'text' for text pattern search."
                           }
                         },
                         "required": [
@@ -1871,12 +1975,14 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                         "additionalProperties": false,
                         "properties": {
                           "kind": {
+                            "description": "Filter: 'block' or 'inline'.",
                             "enum": [
                               "block",
                               "inline"
                             ]
                           },
                           "nodeType": {
+                            "description": "Block type to match (paragraph, heading, table, listItem, etc.).",
                             "enum": [
                               "paragraph",
                               "heading",
@@ -1903,7 +2009,8 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                             ]
                           },
                           "type": {
-                            "const": "node"
+                            "const": "node",
+                            "description": "Must be 'node' for node type search."
                           }
                         },
                         "required": [
@@ -1914,7 +2021,7 @@ The runtime capability snapshot also exposes this allowlist at `planEngine.suppo
                     ]
                   },
                   "within": {
-                    "$ref": "#/$defs/NodeAddress"
+                    "$ref": "#/$defs/BlockNodeAddress"
                   }
                 },
                 "required": [

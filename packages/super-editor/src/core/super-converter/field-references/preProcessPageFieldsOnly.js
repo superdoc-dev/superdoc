@@ -3,6 +3,7 @@
  */
 import { preProcessPageInstruction } from './fld-preprocessors/page-preprocessor.js';
 import { preProcessNumPagesInstruction } from './fld-preprocessors/num-pages-preprocessor.js';
+import { preProcessDocumentStatInstruction } from './fld-preprocessors/document-stat-preprocessor.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -48,9 +49,8 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
       const instrAttr = node.attributes?.['w:instr'] || '';
       const fieldType = instrAttr.trim().split(/\s+/)[0];
 
-      if (fieldType === 'PAGE' || fieldType === 'NUMPAGES') {
-        const preprocessor = fieldType === 'PAGE' ? preProcessPageInstruction : preProcessNumPagesInstruction;
-
+      const fldSimplePreprocessor = getHeaderFooterFieldPreprocessor(fieldType);
+      if (fldSimplePreprocessor) {
         // Extract rPr from child elements (content nodes inside fldSimple)
         const contentNodes = node.elements || [];
         let fieldRunRPr = null;
@@ -62,7 +62,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
           }
         }
 
-        const processedField = preprocessor(contentNodes, instrAttr.trim(), fieldRunRPr);
+        const processedField = fldSimplePreprocessor(contentNodes, instrAttr.trim(), fieldRunRPr);
         processedNodes.push(...processedField);
         i++;
         continue;
@@ -90,9 +90,9 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
       // Scan ahead to find the field type and end marker
       const fieldInfo = scanFieldSequence(nodes, i);
 
-      if (fieldInfo && (fieldInfo.fieldType === 'PAGE' || fieldInfo.fieldType === 'NUMPAGES')) {
-        // Process PAGE or NUMPAGES fields
-        const preprocessor = fieldInfo.fieldType === 'PAGE' ? preProcessPageInstruction : preProcessNumPagesInstruction;
+      const complexFieldPreprocessor = fieldInfo ? getHeaderFooterFieldPreprocessor(fieldInfo.fieldType) : null;
+      if (fieldInfo && complexFieldPreprocessor) {
+        const preprocessor = complexFieldPreprocessor;
 
         // Collect nodes between separate and end for the preprocessor
         // Also pass the captured rPr from field sequence nodes (begin, instrText, separate)
@@ -213,6 +213,27 @@ function scanFieldSequence(nodes, beginIndex) {
     fieldRunRPr,
     endIndex,
   };
+}
+
+/**
+ * Returns the appropriate preprocessor for fields recognized in headers/footers,
+ * or null for unrecognized field types.
+ *
+ * @param {string} fieldType - The uppercase field type keyword (e.g. "PAGE", "NUMWORDS").
+ * @returns {Function | null}
+ */
+function getHeaderFooterFieldPreprocessor(fieldType) {
+  switch (fieldType) {
+    case 'PAGE':
+      return preProcessPageInstruction;
+    case 'NUMPAGES':
+      return preProcessNumPagesInstruction;
+    case 'NUMWORDS':
+    case 'NUMCHARS':
+      return preProcessDocumentStatInstruction;
+    default:
+      return null;
+  }
 }
 
 /**

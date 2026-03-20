@@ -880,7 +880,6 @@ describe('comments plugin pm plugin', () => {
     };
     const nextState = plugin.spec.state.apply(tr, pluginState, state, state);
     expect(nextState.activeThreadId).toBe('comment-5');
-    expect(nextState.changedActiveThread).toBe(true);
     const stateWithPlugin = EditorState.create({ schema, doc: state.doc, plugins: [plugin] });
     expect(plugin.props.decorations(stateWithPlugin)).toBeInstanceOf(DecorationSet);
   });

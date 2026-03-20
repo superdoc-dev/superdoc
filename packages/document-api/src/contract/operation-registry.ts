@@ -20,7 +20,14 @@ import type {
   CreateHeadingInput,
   CreateHeadingResult,
 } from '../types/create.types.js';
-import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
+import type {
+  BlocksDeleteInput,
+  BlocksDeleteResult,
+  BlocksListInput,
+  BlocksListResult,
+  BlocksDeleteRangeInput,
+  BlocksDeleteRangeResult,
+} from '../types/blocks.types.js';
 
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
@@ -47,6 +54,14 @@ import type { TrackChangesListInput, TrackChangesGetInput, ReviewDecideInput } f
 import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-changes.types.js';
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
 import type { HistoryState, HistoryActionResult } from '../history/history.types.js';
+import type {
+  DiffSnapshot,
+  DiffPayload,
+  DiffApplyResult,
+  DiffCompareInput,
+  DiffApplyInput,
+  DiffApplyOptions,
+} from '../diff/diff.types.js';
 import type {
   ListsListQuery,
   ListsListResult,
@@ -88,6 +103,14 @@ import type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsGetStyleInput,
+  ListsGetStyleResult,
+  ListsApplyStyleInput,
+  ListsRestartAtInput,
+  ListsSetLevelNumberStyleInput,
+  ListsSetLevelTextInput,
+  ListsSetLevelStartInput,
+  ListsSetLevelLayoutInput,
 } from '../lists/lists.types.js';
 import type {
   ParagraphMutationResult,
@@ -110,6 +133,8 @@ import type {
   ParagraphsClearBorderInput,
   ParagraphsSetShadingInput,
   ParagraphsClearShadingInput,
+  ParagraphsSetDirectionInput,
+  ParagraphsClearDirectionInput,
 } from '../paragraphs/paragraphs.js';
 import type {
   CreateSectionBreakInput,
@@ -138,6 +163,7 @@ import type {
   SectionsSetVerticalAlignInput,
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
+import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -354,6 +380,9 @@ import type {
   TablesSetCellPaddingInput,
   TablesSetCellSpacingInput,
   TablesClearCellSpacingInput,
+  TablesApplyStyleInput,
+  TablesSetBordersInput,
+  TablesSetTableOptionsInput,
   TableMutationResult,
   TablesGetInput,
   TablesGetOutput,
@@ -488,7 +517,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- blocks.* ---
+  'blocks.list': { input: BlocksListInput | undefined; options: never; output: BlocksListResult };
   'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
+  'blocks.deleteRange': { input: BlocksDeleteRangeInput; options: MutationOptions; output: BlocksDeleteRangeResult };
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
@@ -590,6 +621,16 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: ParagraphMutationResult;
   };
+  'format.paragraph.setDirection': {
+    input: ParagraphsSetDirectionInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearDirection': {
+    input: ParagraphsClearDirectionInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
 
   // --- styles.* ---
   'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
@@ -672,6 +713,19 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: ListsMutateItemResult;
   };
 
+  // --- lists.* (SD-2025 user-facing) ---
+  'lists.getStyle': { input: ListsGetStyleInput; options: never; output: ListsGetStyleResult };
+  'lists.applyStyle': { input: ListsApplyStyleInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.restartAt': { input: ListsRestartAtInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelNumberStyle': {
+    input: ListsSetLevelNumberStyleInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelText': { input: ListsSetLevelTextInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelStart': { input: ListsSetLevelStartInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelLayout': { input: ListsSetLevelLayoutInput; options: MutationOptions; output: ListsMutateItemResult };
+
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };
   'sections.get': { input: SectionsGetInput; options: never; output: SectionInfo };
@@ -711,6 +765,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: SectionMutationResult;
   };
+  // Returns DocumentMutationResult (not SectionMutationResult) — document-level setting, not per-section.
   'sections.setOddEvenHeadersFooters': {
     input: SectionsSetOddEvenHeadersFootersInput;
     options: MutationOptions;
@@ -766,6 +821,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };
+
+  // --- ranges.* ---
+  'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
 
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };
@@ -840,6 +898,13 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'tables.setCellSpacing': { input: TablesSetCellSpacingInput; options: MutationOptions; output: TableMutationResult };
   'tables.clearCellSpacing': {
     input: TablesClearCellSpacingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.applyStyle': { input: TablesApplyStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setBorders': { input: TablesSetBordersInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setTableOptions': {
+    input: TablesSetTableOptionsInput;
     options: MutationOptions;
     output: TableMutationResult;
   };
@@ -1400,6 +1465,11 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: AuthorityEntryMutationResult;
   };
+
+  // --- diff.* ---
+  'diff.capture': { input: undefined; options: never; output: DiffSnapshot };
+  'diff.compare': { input: DiffCompareInput; options: never; output: DiffPayload };
+  'diff.apply': { input: DiffApplyInput; options: DiffApplyOptions; output: DiffApplyResult };
 }
 
 // --- Bidirectional completeness checks ---

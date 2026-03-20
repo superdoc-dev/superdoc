@@ -14,17 +14,19 @@ brand/
 
 ## Design tokens
 
-Token values live in `packages/superdoc/src/assets/styles/tokens.css` as CSS custom properties (`--sd-*`). That file is the single source of truth.
+Token defaults live in `packages/superdoc/src/assets/styles/helpers/variables.css` as CSS custom properties (`--sd-*`).
+Preset theme overrides live in `packages/superdoc/src/assets/styles/helpers/themes.css`.
+Together, these files are the design-token source of truth.
 
-Tokens follow three tiers:
-- **Primitive** (`--sd-color-blue-500`) — raw palette values
-- **Semantic** (`--sd-action-primary`, `--sd-surface-card`) — UI roles that reference primitives
-- **Component** (`--sd-comment-bg`) — component-specific overrides that reference semantic tokens
+Tokens are organized by layers:
+- **Primitive** (`--sd-color-blue-500`, `--sd-font-size-400`, `--sd-radius-100`) — raw design values
+- **UI/Document semantic** (`--sd-ui-*`, `--sd-comments-*`, `--sd-tracked-changes-*`, `--sd-layout-*`) — role-based tokens used by components and rendering layers
+- **Component-level (optional)** (`--sd-ui-{component}-*`) — local overrides for a specific UI component when cross-component tokens are not enough
 
-Consumers customize SuperDoc by overriding `--sd-*` variables in their own CSS. Component customization is documented at `apps/docs/ui-components/`.
+Consumers customize SuperDoc by overriding `--sd-*` variables in their own CSS.
 
 ## How to use
 
-**For development**: Use semantic or component tokens in CSS — never hardcode hex values. When adding a new UI component, expose its visual properties as `--sd-{component}-*` variables in `tokens.css`.
+**For development**: Use semantic or component tokens in CSS — never hardcode hex values. When adding a new UI component, expose its visual properties as `--sd-ui-{component}-*` variables in `variables.css`; add per-theme overrides in `themes.css` only when needed.
 
 **For marketing/content**: See `brand-guidelines.md` for voice, tone, and the dual-register pattern (developer vs. leader).

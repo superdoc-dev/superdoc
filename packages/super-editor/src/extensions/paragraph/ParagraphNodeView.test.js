@@ -5,13 +5,13 @@ import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
-import { Attribute } from '@core/index.js';
+import { Attribute } from '@core/Attribute.js';
 import { resolveParagraphProperties, encodeCSSFromPPr } from '@converter/styles.js';
 import { twipsToPixels } from '@converter/helpers.js';
 import { calculateTabStyle } from '../tab/helpers/tabDecorations.js';
 import { isList } from '@core/commands/list-helpers';
 
-vi.mock('@core/index.js', () => ({
+vi.mock('@core/Attribute.js', () => ({
   Attribute: {
     getAttributesToRender: vi.fn().mockReturnValue({ class: 'paragraph', style: 'color: red;' }),
   },

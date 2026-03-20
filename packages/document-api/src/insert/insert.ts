@@ -1,17 +1,19 @@
-import { executeWrite, type MutationOptions, type WriteAdapter } from '../write/write.js';
+import { executeWrite, normalizeMutationOptions, type MutationOptions, type WriteAdapter } from '../write/write.js';
 import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
 import type { SDInsertInput } from '../types/structural-input.js';
 import type { SDFragment } from '../types/fragment.js';
+import type { StoryLocator } from '../types/story.types.js';
 import { PLACEMENT_VALUES } from '../types/placement.js';
 import { DocumentApiValidationError } from '../errors.js';
 import {
   isRecord,
   isTextAddress,
-  isValidTarget,
+  isBlockNodeAddress,
   assertNoUnknownFields,
   validateNestingPolicyValue,
 } from '../validation-primitives.js';
 import { validateDocumentFragment } from '../validation/fragment-validator.js';
+import { validateStoryLocator } from '../validation/story-validator.js';
 import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +31,8 @@ export interface LegacyInsertInput {
   value: string;
   /** Content format. Defaults to `'text'` when omitted. */
   type?: InsertContentType;
+  /** Target a specific document story (body, header, footer, footnote, endnote). */
+  in?: StoryLocator;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,8 +51,8 @@ export type InsertInput = LegacyInsertInput | SDInsertInput;
 // Allowlists for strict field validation
 // ---------------------------------------------------------------------------
 
-const LEGACY_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target']);
-const STRUCTURAL_INSERT_ALLOWED_KEYS = new Set(['content', 'target', 'placement', 'nestingPolicy']);
+const LEGACY_INSERT_ALLOWED_KEYS = new Set(['value', 'type', 'target', 'in']);
+const STRUCTURAL_INSERT_ALLOWED_KEYS = new Set(['content', 'target', 'placement', 'nestingPolicy', 'in']);
 const VALID_INSERT_TYPES: ReadonlySet<string> = new Set(['text', 'markdown', 'html']);
 
 // ---------------------------------------------------------------------------
@@ -97,6 +101,8 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
       { fields: ['value', 'content'] },
     );
   }
+
+  validateStoryLocator(input.in, 'in');
 
   if (hasContent) {
     validateStructuralInsertInput(input);
@@ -165,11 +171,10 @@ function validateStructuralInsertInput(input: Record<string, unknown>): void {
 
   const { target, content, placement, nestingPolicy } = input;
 
-  // Structural path accepts both SDAddress and TextAddress
-  if (target !== undefined && !isValidTarget(target)) {
+  if (target !== undefined && !isBlockNodeAddress(target)) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      'target must be a valid address (SDAddress or TextAddress).',
+      'target must be a BlockNodeAddress ({ kind: "block", nodeType, nodeId }).',
       {
         field: 'target',
         value: target,
@@ -198,7 +203,7 @@ export function executeInsert(adapter: WriteAdapter, input: InsertInput, options
 
   // Structural content path — returns SDMutationReceipt directly
   if (isStructuralInsertInput(input)) {
-    return adapter.insertStructured(input as unknown as LegacyInsertInput, options);
+    return adapter.insertStructured(input, normalizeMutationOptions(options));
   }
 
   // Legacy string path
@@ -207,11 +212,14 @@ export function executeInsert(adapter: WriteAdapter, input: InsertInput, options
 
   // For non-text content types, delegate to the adapter's structured insert path.
   if (contentType !== 'text') {
-    return adapter.insertStructured(input, options);
+    return adapter.insertStructured(input, normalizeMutationOptions(options));
   }
 
   // Text path: use the existing write pipeline, wrap TextMutationReceipt → SDMutationReceipt
-  const request = target ? { kind: 'insert' as const, target, text: value } : { kind: 'insert' as const, text: value };
+  const storyIn = input.in;
+  const request = target
+    ? { kind: 'insert' as const, target, text: value, ...(storyIn ? { in: storyIn } : undefined) }
+    : { kind: 'insert' as const, text: value, ...(storyIn ? { in: storyIn } : undefined) };
   const textReceipt = executeWrite(adapter, request, options);
   return textReceiptToSDReceipt(textReceipt);
 }

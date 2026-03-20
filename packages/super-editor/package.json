@@ -76,6 +76,17 @@
     "pack": "rm *.tgz 2>/dev/null || true && pnpm run build && pnpm pack && mv harbour-enterprises-super-editor-0.0.1-alpha.0.tgz ./super-editor.tgz"
   },
   "dependencies": {
+    "@superdoc/common": "workspace:*",
+    "@superdoc/contracts": "workspace:*",
+    "@superdoc/document-api": "workspace:*",
+    "@superdoc/layout-bridge": "workspace:*",
+    "@superdoc/measuring-dom": "workspace:*",
+    "@superdoc/painter-dom": "workspace:*",
+    "@superdoc/pm-adapter": "workspace:*",
+    "@superdoc/preset-geometry": "workspace:*",
+    "@superdoc/style-engine": "workspace:*",
+    "@superdoc/url-validation": "workspace:*",
+    "@superdoc/word-layout": "workspace:*",
     "buffer-crc32": "catalog:",
     "color2k": "catalog:",
     "eventemitter3": "catalog:",
@@ -108,7 +119,6 @@
   },
   "peerDependencies": {
     "@floating-ui/dom": "^1.7.0",
-    "naive-ui": "^2.38.2",
     "tippy.js": "^6.3.7",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
@@ -116,17 +126,6 @@
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
     "@types/mdast": "catalog:",
-    "@superdoc/common": "workspace:*",
-    "@superdoc/document-api": "workspace:*",
-    "@superdoc/contracts": "workspace:*",
-    "@superdoc/layout-bridge": "workspace:*",
-    "@superdoc/measuring-dom": "workspace:*",
-    "@superdoc/painter-dom": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*",
-    "@superdoc/preset-geometry": "workspace:*",
-    "@superdoc/style-engine": "workspace:*",
-    "@superdoc/url-validation": "workspace:*",
-    "@superdoc/word-layout": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "canvas": "catalog:",

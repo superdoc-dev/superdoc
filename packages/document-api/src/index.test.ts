@@ -6,7 +6,7 @@ import type {
   CommentsDeleteInput,
   GetCommentInput,
 } from './comments/comments.js';
-import type { FormatAdapter } from './format/format.js';
+import type { SelectionMutationAdapter } from './selection-mutation.js';
 import type { FindAdapter } from './find/find.js';
 import type { GetNodeAdapter } from './get-node/get-node.js';
 import type { GetAdapter } from './get/get.js';
@@ -47,11 +47,15 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
   const defaultResult: DocumentInfo = {
     counts: {
       words: 0,
+      characters: 0,
       paragraphs: 0,
       headings: 0,
       tables: 0,
       images: 0,
       comments: 0,
+      trackedChanges: 0,
+      sdtFields: 0,
+      lists: 0,
     },
     outline: [],
     capabilities: {
@@ -60,6 +64,7 @@ function makeInfoAdapter(result?: Partial<DocumentInfo>) {
       canComment: true,
       canReplace: true,
     },
+    revision: '0',
   };
 
   return {
@@ -112,10 +117,9 @@ function makeWriteAdapter(): WriteAdapter {
     success: true as const,
     resolution: {
       target: {
-        kind: 'content' as const,
-        stability: 'stable' as const,
-        nodeId: 'p1',
-        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 0 } },
+        kind: 'text' as const,
+        blockId: 'p1',
+        range: { start: 0, end: 0 },
       },
     },
   };
@@ -126,20 +130,16 @@ function makeWriteAdapter(): WriteAdapter {
   };
 }
 
-function makeFormatReceipt() {
+function makeSelectionMutationAdapter(): SelectionMutationAdapter {
   return {
-    success: true as const,
-    resolution: {
-      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-      range: { from: 1, to: 3 },
-      text: 'Hi',
-    },
-  };
-}
-
-function makeFormatAdapter(): FormatAdapter {
-  return {
-    apply: vi.fn(() => makeFormatReceipt()),
+    execute: vi.fn(() => ({
+      success: true as const,
+      resolution: {
+        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
+        range: { from: 1, to: 3 },
+        text: 'Hi',
+      },
+    })),
   };
 }
 
@@ -308,11 +308,22 @@ function makeTablesAdapter(): TablesAdapter {
       columns: 3,
     })),
     getCells: vi.fn(() => ({
-      tableNodeId: 't1',
-      cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
+      nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+      cells: [
+        {
+          nodeId: 'c1',
+          address: { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' },
+          rowIndex: 0,
+          columnIndex: 0,
+          colspan: 1,
+          rowspan: 1,
+        },
+      ],
     })),
     getProperties: vi.fn(() => ({
       nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
       styleId: 'TableGrid',
       alignment: 'left' as const,
     })),
@@ -360,7 +371,7 @@ const PARAGRAPH_ADDRESS: NodeAddress = { kind: 'block', nodeType: 'paragraph', n
 
 const PARAGRAPH_NODE_RESULT: SDNodeResult = {
   node: { kind: 'paragraph', paragraph: { inlines: [] } },
-  address: { kind: 'content', stability: 'stable', nodeId: 'p1' },
+  address: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
 };
 
 const FIND_RESULT: SDFindResult = {
@@ -381,13 +392,13 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const input = { select: { type: 'node' as const, nodeKind: 'paragraph' } };
+    const input = { select: { type: 'node' as const, nodeType: 'paragraph' as const } };
     const result = api.find(input);
 
     expect(result).toEqual(FIND_RESULT);
@@ -404,7 +415,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -426,7 +437,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -448,7 +459,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -470,7 +481,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -495,7 +506,7 @@ describe('createDocumentApi', () => {
       info: infoAdpt,
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -518,7 +529,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: commentsAdpt,
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -544,7 +555,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: commentsAdpt,
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -567,7 +578,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: commentsAdpt,
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -596,6 +607,7 @@ describe('createDocumentApi', () => {
 
   it('delegates write operations through the shared write adapter', () => {
     const writeAdpt = makeWriteAdapter();
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -604,42 +616,45 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: writeAdpt,
-      format: makeFormatAdapter(),
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const insertTarget = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const selectionTarget = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.insert({ value: 'Hi' });
-    api.insert({ target, value: 'Yo' });
-    api.replace({ target, text: 'Hello' }, { changeMode: 'tracked' });
-    api.delete({ target });
+    api.insert({ target: insertTarget, value: 'Yo' });
+    api.replace({ target: selectionTarget, text: 'Hello' }, { changeMode: 'tracked' });
+    api.delete({ target: selectionTarget });
 
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       1,
-      { kind: 'insert', text: 'Hi' }, // write request keeps `text` (internal protocol)
+      { kind: 'insert', text: 'Hi' },
       { changeMode: 'direct', dryRun: false },
     );
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       2,
-      { kind: 'insert', target, text: 'Yo' }, // write request keeps `text` (internal protocol)
+      { kind: 'insert', target: insertTarget, text: 'Yo' },
       { changeMode: 'direct', dryRun: false },
     );
-    expect(writeAdpt.write).toHaveBeenNthCalledWith(
-      3,
-      { kind: 'replace', target, text: 'Hello' },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'replace', target: selectionTarget, ref: undefined, text: 'Hello' },
       { changeMode: 'tracked', dryRun: false },
     );
-    expect(writeAdpt.write).toHaveBeenNthCalledWith(
-      4,
-      { kind: 'delete', target, text: '' },
-      { changeMode: 'direct', dryRun: false },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'delete', target: selectionTarget, ref: undefined, behavior: 'selection' },
+      { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.bold to adapter.apply with inline.bold', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.bold to selectionMutation.execute with inline.bold', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -648,22 +663,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.bold({ target }, { changeMode: 'tracked' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { bold: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { bold: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
 
-  it('delegates format.italic to adapter.apply with inline.italic', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.italic to selectionMutation.execute with inline.italic', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -672,22 +691,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.italic({ target }, { changeMode: 'direct' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { italic: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { italic: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.underline to adapter.apply with inline.underline', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.underline to selectionMutation.execute with inline.underline', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -696,22 +719,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.underline({ target }, { changeMode: 'direct' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { underline: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { underline: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.strikethrough to adapter.apply with inline.strike', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.strikethrough to selectionMutation.execute with inline.strike', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -720,22 +747,26 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.strikethrough({ target }, { changeMode: 'tracked' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { strike: true } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { strike: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
 
-  it('delegates format.fontFamily to adapter.apply with inline.fontFamily', () => {
-    const formatAdpt = makeFormatAdapter();
+  it('delegates format.fontFamily to selectionMutation.execute with inline.fontFamily', () => {
+    const selectionAdpt = makeSelectionMutationAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(FIND_RESULT),
       get: makeGetAdapter(),
@@ -744,16 +775,20 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: formatAdpt,
+      selectionMutation: selectionAdpt,
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
     });
 
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    const target = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+    };
     api.format.fontFamily({ target, value: 'Arial' });
-    expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { fontFamily: 'Arial' } },
+    expect(selectionAdpt.execute).toHaveBeenCalledWith(
+      { kind: 'format', target, ref: undefined, inline: { fontFamily: 'Arial' } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -768,7 +803,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: trackAdpt,
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -793,7 +828,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: trackAdpt,
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -824,7 +859,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -853,7 +888,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -879,7 +914,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -964,7 +999,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: createAdpt,
       lists: makeListsAdapter(),
@@ -998,7 +1033,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: createAdpt,
       lists: makeListsAdapter(),
@@ -1034,7 +1069,7 @@ describe('createDocumentApi', () => {
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: listsAdpt,
@@ -1086,7 +1121,7 @@ describe('createDocumentApi', () => {
       capabilities: capAdpt,
       comments: makeCommentsAdapter(),
       write: makeWriteAdapter(),
-      format: makeFormatAdapter(),
+      selectionMutation: makeSelectionMutationAdapter(),
       trackChanges: makeTrackChangesAdapter(),
       create: makeCreateAdapter(),
       lists: makeListsAdapter(),
@@ -1110,21 +1145,23 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
     }
 
-    function expectValidationError(fn: () => void, messageMatch?: string | RegExp) {
+    function expectValidationError(fn: () => void, messageMatch?: string | RegExp, expectedCode?: string) {
       try {
         fn();
         expect.fail('Expected DocumentApiValidationError to be thrown');
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+        if (expectedCode) {
+          expect(e.code).toBe(expectedCode);
+        }
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1245,7 +1282,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1269,7 +1306,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1296,7 +1333,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1304,7 +1341,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '# Heading', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '# Heading', type: 'markdown' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '# Heading', type: 'markdown' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1319,7 +1359,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1327,7 +1367,10 @@ describe('createDocumentApi', () => {
 
       api.insert({ value: '<p>Hello</p>', type: 'html' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
-      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '<p>Hello</p>', type: 'html' }, undefined);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { value: '<p>Hello</p>', type: 'html' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
+      );
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
@@ -1342,7 +1385,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1364,7 +1407,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1374,7 +1417,7 @@ describe('createDocumentApi', () => {
       api.insert({ target, value: '**bold**', type: 'markdown' });
       expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
         { target, value: '**bold**', type: 'markdown' },
-        undefined,
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
 
@@ -1424,7 +1467,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1473,7 +1516,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1487,7 +1530,6 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1498,18 +1540,27 @@ describe('createDocumentApi', () => {
       }
     }
 
+    const SELECTION_TARGET = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+    };
+
     // -- Truth table: valid cases --
 
     it('accepts canonical target', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      const result = api.replace({ target, text: 'hello' });
+      const result = api.replace({ target: SELECTION_TARGET, text: 'hello' });
       expect(result.success).toBe(true);
     });
 
     it('allows collapsed range (start === end) through pre-apply', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 3, end: 3 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+      };
       const result = api.replace({ target, text: 'hello' });
       expect(result.success).toBe(true);
     });
@@ -1518,14 +1569,14 @@ describe('createDocumentApi', () => {
 
     it('rejects no target at all', () => {
       const api = makeApi();
-      expectValidationError(() => api.replace({ text: 'hello' } as any), 'Replace requires a target');
+      expectValidationError(() => api.replace({ text: 'hello' } as any), 'requires a target or ref');
     });
 
     it('rejects malformed target', () => {
       const api = makeApi();
       expectValidationError(
         () => api.replace({ target: { kind: 'text', blockId: 'p1' }, text: 'hello' } as any),
-        'target must be a text address object',
+        'SelectionTarget',
       );
     });
 
@@ -1533,8 +1584,7 @@ describe('createDocumentApi', () => {
 
     it('rejects non-string text', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expectValidationError(() => api.replace({ target, text: 42 } as any), 'text must be a string');
+      expectValidationError(() => api.replace({ target: SELECTION_TARGET, text: 42 } as any), 'text must be a string');
     });
 
     // -- Input shape --
@@ -1546,9 +1596,8 @@ describe('createDocumentApi', () => {
 
     it('rejects unknown fields', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
       expectValidationError(
-        () => api.replace({ target, text: 'hi', block_id: 'x' } as any),
+        () => api.replace({ target: SELECTION_TARGET, text: 'hi', block_id: 'x' } as any),
         'Unknown field "block_id"',
       );
     });
@@ -1570,14 +1619,13 @@ describe('createDocumentApi', () => {
         expect.fail('Expected error');
       } catch (err: unknown) {
         expect((err as Error).constructor.name).toBe('DocumentApiValidationError');
-        expect((err as { code: string }).code).toBe('INVALID_TARGET');
       }
     });
 
     // -- Canonical payload parity --
 
     it('sends same adapter request for replace({ target, text }) as before', () => {
-      const writeAdpt = makeWriteAdapter();
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1586,17 +1634,16 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
-        write: writeAdpt,
-        format: makeFormatAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      api.replace({ target, text: 'Hello' });
-      expect(writeAdpt.write).toHaveBeenCalledWith(
-        { kind: 'replace', target, text: 'Hello' },
+      api.replace({ target: SELECTION_TARGET, text: 'Hello' });
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'replace', target: SELECTION_TARGET, ref: undefined, text: 'Hello' },
         { changeMode: 'direct', dryRun: false },
       );
     });
@@ -1605,16 +1652,14 @@ describe('createDocumentApi', () => {
 
     it('rejects replace with both text and content', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expect(() => api.replace({ target, text: 'hi', content: { type: 'paragraph' } } as any)).toThrow(
-        /either "text".*or "content".*not both/,
-      );
+      expect(() =>
+        api.replace({ target: SELECTION_TARGET, text: 'hi', content: { type: 'paragraph' } } as any),
+      ).toThrow(/either "text".*or "content".*not both/);
     });
 
     it('rejects replace with neither text nor content', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expect(() => api.replace({ target } as any)).toThrow(/either "text".*or "content"/);
+      expect(() => api.replace({ target: SELECTION_TARGET } as any)).toThrow(/either "text".*or "content"/);
     });
 
     it('routes structural content replace to replaceStructured', () => {
@@ -1628,29 +1673,29 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: writeAdpt,
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      api.replace({ target, content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] } });
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
+      api.replace({ target: sdTarget, content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] } });
       expect(writeAdpt.replaceStructured).toHaveBeenCalledTimes(1);
       expect(writeAdpt.write).not.toHaveBeenCalled();
     });
 
     it('rejects structural replace with empty fragment', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expect(() => api.replace({ target, content: [] } as any)).toThrow(/at least one node/);
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
+      expect(() => api.replace({ target: sdTarget, content: [] } as any)).toThrow(/at least one node/);
     });
 
     it('rejects structural replace with invalid nestingPolicy.tables', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
+      const sdTarget = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
       expect(() =>
-        api.replace({ target, content: { type: 'paragraph' }, nestingPolicy: { tables: 'yes' } } as any),
+        api.replace({ target: sdTarget, content: { type: 'paragraph' }, nestingPolicy: { tables: 'yes' } } as any),
       ).toThrow(/nestingPolicy\.tables must be one of/);
     });
   });
@@ -1666,7 +1711,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1680,7 +1725,6 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1691,18 +1735,27 @@ describe('createDocumentApi', () => {
       }
     }
 
+    const SELECTION_TARGET = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+    };
+
     // -- Truth table: valid cases --
 
     it('accepts canonical target', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      const result = api.delete({ target });
+      const result = api.delete({ target: SELECTION_TARGET });
       expect(result.success).toBe(true);
     });
 
     it('allows collapsed range (start === end) through pre-apply', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 3, end: 3 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+      };
       const result = api.delete({ target });
       expect(result.success).toBe(true);
     });
@@ -1711,15 +1764,12 @@ describe('createDocumentApi', () => {
 
     it('rejects no target at all', () => {
       const api = makeApi();
-      expectValidationError(() => api.delete({} as any), 'Delete requires a target');
+      expectValidationError(() => api.delete({} as any), 'Delete input must provide either "target" or "ref"');
     });
 
     it('rejects malformed target', () => {
       const api = makeApi();
-      expectValidationError(
-        () => api.delete({ target: { kind: 'text', blockId: 'p1' } } as any),
-        'target must be a text address object',
-      );
+      expectValidationError(() => api.delete({ target: { kind: 'text', blockId: 'p1' } } as any), 'SelectionTarget');
     });
 
     // -- Input shape --
@@ -1731,8 +1781,7 @@ describe('createDocumentApi', () => {
 
     it('rejects unknown fields', () => {
       const api = makeApi();
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      expectValidationError(() => api.delete({ target, offset: 3 } as any), 'Unknown field "offset"');
+      expectValidationError(() => api.delete({ target: SELECTION_TARGET, offset: 3 } as any), 'Unknown field "offset"');
     });
 
     it('rejects flat blockId as unknown field', () => {
@@ -1743,7 +1792,7 @@ describe('createDocumentApi', () => {
     // -- Canonical payload parity --
 
     it('sends same adapter request for delete({ target }) as before', () => {
-      const writeAdpt = makeWriteAdapter();
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1752,18 +1801,17 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
-        write: writeAdpt,
-        format: makeFormatAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-      api.delete({ target });
-      expect(writeAdpt.write).toHaveBeenCalledWith(
-        { kind: 'delete', target, text: '' },
-        { changeMode: 'direct', dryRun: false },
+      api.delete({ target: SELECTION_TARGET });
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'delete', target: SELECTION_TARGET, ref: undefined, behavior: 'selection' },
+        { expectedRevision: undefined, changeMode: 'direct', dryRun: false },
       );
     });
   });
@@ -1779,7 +1827,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1793,7 +1841,6 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -1804,6 +1851,12 @@ describe('createDocumentApi', () => {
       }
     }
 
+    const SELECTION_TARGET = {
+      kind: 'selection' as const,
+      start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+      end: { kind: 'text' as const, blockId: 'p1', offset: 5 },
+    };
+
     const FORMAT_METHODS = ['bold', 'italic', 'underline', 'strikethrough'] as const;
 
     for (const method of FORMAT_METHODS) {
@@ -1812,14 +1865,17 @@ describe('createDocumentApi', () => {
 
         it('accepts canonical target', () => {
           const api = makeApi();
-          const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-          const result = api.format[method]({ target });
+          const result = api.format[method]({ target: SELECTION_TARGET });
           expect(result.success).toBe(true);
         });
 
         it('allows collapsed range (start === end) through pre-apply', () => {
           const api = makeApi();
-          const target = { kind: 'text', blockId: 'p1', range: { start: 3, end: 3 } } as const;
+          const target = {
+            kind: 'selection' as const,
+            start: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+            end: { kind: 'text' as const, blockId: 'p1', offset: 3 },
+          };
           const result = api.format[method]({ target });
           expect(result.success).toBe(true);
         });
@@ -1828,14 +1884,14 @@ describe('createDocumentApi', () => {
 
         it('rejects no target at all', () => {
           const api = makeApi();
-          expectValidationError(() => api.format[method]({} as any), 'requires a target');
+          expectValidationError(() => api.format[method]({} as any), 'either "target" or "ref"');
         });
 
         it('rejects malformed target', () => {
           const api = makeApi();
           expectValidationError(
             () => api.format[method]({ target: { kind: 'text', blockId: 'p1' } } as any),
-            'target must be a text address object',
+            'SelectionTarget',
           );
         });
 
@@ -1843,15 +1899,17 @@ describe('createDocumentApi', () => {
 
         it('rejects null input', () => {
           const api = makeApi();
-          // null spreads to {}, so the merged object { inline: {...} } passes shape
+          // null spreads to {}, so the merged object passes shape
           // checks but fails the locator requirement
-          expectValidationError(() => api.format[method](null as any), 'requires a target');
+          expectValidationError(() => api.format[method](null as any), 'either "target" or "ref"');
         });
 
         it('rejects unknown fields', () => {
           const api = makeApi();
-          const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
-          expectValidationError(() => api.format[method]({ target, offset: 3 } as any), 'Unknown field "offset"');
+          expectValidationError(
+            () => api.format[method]({ target: SELECTION_TARGET, offset: 3 } as any),
+            'Unknown field "offset"',
+          );
         });
 
         it('rejects flat blockId as unknown field', () => {
@@ -1866,8 +1924,8 @@ describe('createDocumentApi', () => {
 
     // -- Canonical payload parity --
 
-    it('passes canonical target through to adapter.apply with inline', () => {
-      const formatAdpt = makeFormatAdapter();
+    it('passes canonical target through to adapter.execute with inline', () => {
+      const selectionAdpt = makeSelectionMutationAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(FIND_RESULT),
         get: makeGetAdapter(),
@@ -1877,16 +1935,20 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: formatAdpt,
+        selectionMutation: selectionAdpt,
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
       });
 
-      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+      const target = {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+      };
       api.format.bold({ target });
-      expect(formatAdpt.apply).toHaveBeenCalledWith(
-        { target, inline: { bold: true } },
+      expect(selectionAdpt.execute).toHaveBeenCalledWith(
+        { kind: 'format', target, ref: undefined, inline: { bold: true } },
         { changeMode: 'direct', dryRun: false },
       );
     });
@@ -1903,7 +1965,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -1917,7 +1979,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2010,7 +2072,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: commentsAdpt,
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2033,7 +2095,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2047,7 +2109,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2141,7 +2203,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: commentsAdpt,
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2172,7 +2234,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: commentsAdpt,
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2201,7 +2263,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2215,7 +2277,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2284,7 +2346,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: createAdpt,
         lists: makeListsAdapter(),
@@ -2315,7 +2377,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2329,7 +2391,7 @@ describe('createDocumentApi', () => {
       } catch (err: unknown) {
         const e = err as { name: string; code: string; message: string };
         expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('INVALID_TARGET');
+
         if (messageMatch) {
           if (typeof messageMatch === 'string') {
             expect(e.message).toContain(messageMatch);
@@ -2407,7 +2469,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: listsAdpt,
@@ -2433,7 +2495,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2470,7 +2532,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2484,7 +2546,7 @@ describe('createDocumentApi', () => {
       expect(getResult.columns).toBe(3);
 
       const cellsResult = api.tables.getCells({ target });
-      expect(cellsResult.tableNodeId).toBe('t1');
+      expect(cellsResult.nodeId).toBe('t1');
       expect(cellsResult.cells).toHaveLength(1);
 
       const propsResult = api.tables.getProperties({ target });
@@ -2502,7 +2564,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: createAdpt,
         lists: makeListsAdapter(),
@@ -2527,7 +2589,7 @@ describe('createDocumentApi', () => {
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: createAdpt,
         lists: makeListsAdapter(),
@@ -2554,7 +2616,7 @@ describe('createDocumentApi', () => {
         capabilities: makeCapabilitiesAdapter(),
         comments: makeCommentsAdapter(),
         write: makeWriteAdapter(),
-        format: makeFormatAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
         trackChanges: makeTrackChangesAdapter(),
         create: makeCreateAdapter(),
         lists: makeListsAdapter(),
@@ -2602,49 +2664,170 @@ describe('createDocumentApi', () => {
 
     it('accepts table-scoped locator for row-locator operations', () => {
       const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertRow({ tableTarget, rowIndex: 0, position: 'after' })).not.toThrow();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteRow({ nodeId: 't1', rowIndex: 0 })).not.toThrow();
     });
 
-    it('rejects both direct + table-scoped for row-locator operations', () => {
+    it('rejects table-target row ops without rowIndex at the public API boundary', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      expect(() => api.tables.insertRow({ target, position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ target } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ target, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ target, repeatHeader: true } as any)).toThrow(/rowIndex is required/);
+    });
+
+    it('rejects bare nodeId row ops at the public API boundary', () => {
+      const api = makeApi();
+
+      expect(() => api.tables.insertRow({ nodeId: 't1', position: 'after' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.deleteRow({ nodeId: 't1' } as any)).toThrow(/rowIndex is required/);
+      expect(() => api.tables.setRowHeight({ nodeId: 't1', heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex is required/,
+      );
+      expect(() => api.tables.setRowOptions({ nodeId: 't1', repeatHeader: true } as any)).toThrow(
+        /rowIndex is required/,
+      );
+    });
+
+    it('rejects redundant rowIndex on direct row targets at the public API boundary', () => {
       const api = makeApi();
       const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertRow({ target, tableTarget, rowIndex: 0, position: 'after' } as any)).toThrow(
+
+      expect(() => api.tables.insertRow({ target, rowIndex: 0, position: 'after' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.deleteRow({ target, rowIndex: 0 } as any)).toThrow(/rowIndex must not be provided/);
+      expect(() => api.tables.setRowHeight({ target, rowIndex: 0, heightPt: 12, rule: 'atLeast' } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+      expect(() => api.tables.setRowOptions({ target, rowIndex: 0, repeatHeader: true } as any)).toThrow(
+        /rowIndex must not be provided/,
+      );
+    });
+
+    // -- column-locator operations (target/nodeId) --
+
+    it('accepts target for column-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ target, columnIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteColumn({ target, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts nodeId for column-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.insertColumn({ nodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both target + nodeId for column-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ target, nodeId: 't1', columnIndex: 0, position: 'after' } as any)).toThrow(
         /Cannot combine/,
       );
     });
 
-    // -- column-locator operations (tableTarget/tableNodeId) --
+    // -- merge range locator (target/nodeId) --
 
-    it('accepts tableTarget for column-locator operations', () => {
+    it('accepts target for merge range operations', () => {
       const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() => api.tables.insertColumn({ tableTarget, columnIndex: 0, position: 'after' })).not.toThrow();
-      expect(() => api.tables.deleteColumn({ tableTarget, columnIndex: 0 })).not.toThrow();
-    });
-
-    it('accepts tableNodeId for column-locator operations', () => {
-      const api = makeApi();
-      expect(() => api.tables.insertColumn({ tableNodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
-    });
-
-    it('rejects both tableTarget + tableNodeId for column-locator operations', () => {
-      const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
       expect(() =>
-        api.tables.insertColumn({ tableTarget, tableNodeId: 't1', columnIndex: 0, position: 'after' } as any),
-      ).toThrow(/Cannot combine/);
-    });
-
-    // -- merge range locator (tableTarget/tableNodeId) --
-
-    it('accepts tableTarget for merge range operations', () => {
-      const api = makeApi();
-      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
-      expect(() =>
-        api.tables.mergeCells({ tableTarget, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
+        api.tables.mergeCells({ target, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
       ).not.toThrow();
+    });
+
+    // -- unmergeCells mixed cell/table-scoped locator validation --
+
+    it('accepts direct cell nodeId for unmergeCells', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'cell-1' })).not.toThrow();
+    });
+
+    it('accepts direct cell target for unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target })).not.toThrow();
+    });
+
+    it('treats explicit null coordinates as absent for direct cell target on unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).not.toThrow();
+    });
+
+    it('accepts table-scoped locator (nodeId + rowIndex + columnIndex) for unmergeCells', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', rowIndex: 0, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts table-scoped locator (target + rowIndex + columnIndex) for unmergeCells', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('treats explicit undefined coordinates as a direct cell call for unmergeCells', () => {
+      const api = makeApi();
+      // { nodeId, rowIndex: undefined, columnIndex: undefined } must pass validation
+      // as a direct-cell call — the keys exist but the values are absent.
+      expect(() =>
+        api.tables.unmergeCells({ nodeId: 'cell-1', rowIndex: undefined, columnIndex: undefined } as any),
+      ).not.toThrow();
+    });
+
+    it('rejects unmergeCells with only rowIndex (missing columnIndex)', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', rowIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+    });
+
+    it('rejects unmergeCells with only columnIndex (missing rowIndex)', () => {
+      const api = makeApi();
+      expect(() => api.tables.unmergeCells({ nodeId: 'table-1', columnIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+    });
+
+    it('rejects unmergeCells with cell target plus coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableCell' as const, nodeId: 'c1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: 0 } as any)).toThrow(
+        /must not be provided when target is a cell node/,
+      );
+    });
+
+    it('rejects unmergeCells with table target without coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target } as any)).toThrow(
+        /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: null } as any)).toThrow(
+        /rowIndex and columnIndex are required when target is a table/,
+      );
+    });
+
+    it('rejects unmergeCells with table target and mixed null coordinates', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.unmergeCells({ target, rowIndex: null, columnIndex: 0 } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
+      expect(() => api.tables.unmergeCells({ target, rowIndex: 0, columnIndex: null } as any)).toThrow(
+        /both rowIndex and columnIndex/,
+      );
     });
 
     // -- create.table locator validation --

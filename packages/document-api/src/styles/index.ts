@@ -48,5 +48,6 @@ export type {
 } from './apply.js';
 export { executeStylesApply } from './apply.js';
 
-// Validation: exported for adapter use (excluded-key checking)
-export { validateValue } from './validation.js';
+// Validation: exported for adapter use (excluded-key checking, patch key classification)
+export type { PatchKeyClassification } from './validation.js';
+export { validateValue, classifyPatchKey } from './validation.js';

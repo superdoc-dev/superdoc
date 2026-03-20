@@ -15,7 +15,9 @@ test('demo loads without errors', async ({ page }) => {
   );
 
   await page.goto('/');
-  await expect(page.locator('body')).toBeVisible();
+  // SPA frameworks (e.g. Next.js) may hide the body during hydration;
+  // give them enough time to mount before checking visibility.
+  await expect(page.locator('body')).toBeVisible({ timeout: 30_000 });
 
   // Give the app a moment to initialize (SuperDoc is async)
   await page.waitForTimeout(2000);

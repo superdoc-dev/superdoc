@@ -9,9 +9,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   paragraphToFlowBlocks as baseParagraphToFlowBlocks,
+  handleParagraphNode,
   mergeAdjacentRuns,
   dataAttrsCompatible,
   commentsCompatible,
+  getLastParagraphFont,
 } from './paragraph.js';
 import { isInlineImage, imageNodeToRun } from './inline-converters/image.js';
 import type {
@@ -22,6 +24,7 @@ import type {
   HyperlinkConfig,
   ThemeColorPalette,
   NestedConverters,
+  NodeHandlerContext,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import type {
@@ -215,6 +218,141 @@ const paragraphToFlowBlocks = (
     enableComments: true,
   });
 };
+
+describe('getLastParagraphFont', () => {
+  it('returns undefined when blocks is empty', () => {
+    expect(getLastParagraphFont([])).toBeUndefined();
+  });
+
+  it('returns undefined when blocks has no paragraph', () => {
+    const blocks: FlowBlock[] = [
+      { kind: 'sectionBreak', id: '0-sectionBreak', attrs: { type: 'nextPage' } },
+      { kind: 'pageBreak', id: '1-pageBreak', attrs: { source: 'pageBreakBefore' } },
+    ];
+    expect(getLastParagraphFont(blocks)).toBeUndefined();
+  });
+
+  it('returns font from last paragraph block when first run has fontFamily and fontSize', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'Hello',
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 16,
+            pmStart: 0,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toEqual({ fontFamily: 'Arial, sans-serif', fontSize: 16 });
+  });
+
+  it('returns the last paragraph font when there are multiple paragraphs', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'First',
+            fontFamily: 'FirstFont',
+            fontSize: 12,
+            pmStart: 0,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+      {
+        kind: 'paragraph',
+        id: '1-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'Second',
+            fontFamily: 'SecondFont, sans-serif',
+            fontSize: 14,
+            pmStart: 0,
+            pmEnd: 6,
+          },
+        ],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toEqual({ fontFamily: 'SecondFont, sans-serif', fontSize: 14 });
+  });
+
+  it('skips last paragraph when its first run has no fontFamily and returns previous paragraph font', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'Valid',
+            fontFamily: 'ValidFont',
+            fontSize: 11,
+            pmStart: 0,
+            pmEnd: 5,
+          },
+        ],
+        attrs: {},
+      },
+      {
+        kind: 'paragraph',
+        id: '1-paragraph',
+        runs: [{ kind: 'text', text: '', fontSize: 16, pmStart: 0, pmEnd: 0 } as TextRun],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toEqual({ fontFamily: 'ValidFont', fontSize: 11 });
+  });
+
+  it('returns undefined when last paragraph has no runs', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [],
+        attrs: {},
+      },
+    ];
+    expect(getLastParagraphFont(blocks)).toBeUndefined();
+  });
+
+  it('returns undefined when last paragraph first run has invalid fontSize (not a number)', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: '0-paragraph',
+        runs: [
+          {
+            kind: 'text',
+            text: 'x',
+            fontFamily: 'SomeFont',
+            fontSize: 'large' as unknown as number,
+            pmStart: 0,
+            pmEnd: 1,
+          },
+        ],
+        attrs: {},
+      },
+    ];
+    const result = getLastParagraphFont(blocks);
+    expect(result).toBeUndefined();
+  });
+});
 
 describe('paragraph converters', () => {
   describe('mergeAdjacentRuns', () => {
@@ -795,6 +933,109 @@ describe('paragraph converters', () => {
       vi.mocked(annotateBlockWithTrackedChange).mockImplementation(() => undefined);
       vi.mocked(applyMarksToRun).mockImplementation(() => undefined);
     });
+
+    const mockParagraphMarkTrackedChanges = () => {
+      vi.mocked(collectTrackedChangeFromMarks).mockImplementation((marks) => {
+        const markType = marks[0]?.type;
+        const id = typeof marks[0]?.attrs?.id === 'string' ? marks[0].attrs.id : undefined;
+        if (markType === 'trackInsert') {
+          return {
+            kind: 'insert',
+            ...(id ? { id } : {}),
+          };
+        }
+        if (markType === 'trackDelete') {
+          return {
+            kind: 'delete',
+            ...(id ? { id } : {}),
+          };
+        }
+        return undefined;
+      });
+    };
+
+    const createTrackedListParagraph = ({
+      ordinal,
+      markerText,
+      numberingType,
+      paragraphMarkChange,
+      customFormat,
+    }: {
+      ordinal: number;
+      markerText: string;
+      numberingType: string;
+      paragraphMarkChange?: 'insert' | 'delete';
+      customFormat?: string;
+    }): PMNode => ({
+      type: 'paragraph',
+      content: [],
+      attrs: {
+        listRendering: {
+          numberingType,
+          path: [ordinal],
+          markerText,
+          ...(customFormat ? { customFormat } : {}),
+        },
+        ...(paragraphMarkChange
+          ? {
+              paragraphProperties: {
+                runProperties: {
+                  [paragraphMarkChange === 'insert' ? 'trackInsert' : 'trackDelete']: {
+                    id: `${paragraphMarkChange}-${ordinal}`,
+                    author: 'Test Author',
+                    date: '2026-03-01T12:00:00Z',
+                  },
+                },
+              },
+            }
+          : {}),
+        mockParagraphAttrs: {
+          numberingProperties: { ilvl: 0, numId: 42 },
+          wordLayout: {
+            marker: {
+              markerText,
+            },
+          },
+        },
+      },
+    });
+
+    const mockParagraphAttrsFromNode = () => {
+      vi.mocked(computeParagraphAttrs).mockImplementation((node) => ({
+        paragraphAttrs:
+          ((node.attrs ?? {}) as { mockParagraphAttrs?: Record<string, unknown> }).mockParagraphAttrs ?? {},
+        resolvedParagraphProperties: {},
+      }));
+    };
+
+    const createParagraphHandlerContext = (trackedChangesConfig: TrackedChangesConfig): NodeHandlerContext => ({
+      blocks: [],
+      recordBlockKind: vi.fn(),
+      nextBlockId,
+      positions,
+      defaultFont: 'Arial',
+      defaultSize: 16,
+      converterContext,
+      trackedChangesConfig,
+      hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+      enableComments: true,
+      bookmarks: new Map(),
+      sectionState: {
+        ranges: [],
+        currentSectionIndex: 0,
+        currentParagraphIndex: 0,
+      },
+      converters: {
+        paragraphToFlowBlocks: baseParagraphToFlowBlocks,
+      } as unknown as NestedConverters,
+      trackedListMarkerOffsets: new Map(),
+      trackedListLastOrdinals: new Map(),
+    });
+
+    const getMarkerText = (block: FlowBlock | undefined): string | undefined => {
+      const attrs = (block as { attrs?: { wordLayout?: { marker?: { markerText?: string } } } } | undefined)?.attrs;
+      return attrs?.wordLayout?.marker?.markerText;
+    };
 
     describe('Basic functionality', () => {
       it('should create empty paragraph for node with no content', () => {
@@ -2213,6 +2454,158 @@ describe('paragraph converters', () => {
         expect(blocks).toHaveLength(0);
       });
 
+      it('should skip tracked empty list paragraph artifacts from paragraph mark revisions', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                trackInsert: {
+                  id: 'ins-1',
+                  author: 'Test Author',
+                  date: '2026-03-01T12:00:00Z',
+                },
+              },
+            },
+          },
+        };
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+          },
+          resolvedParagraphProperties: {},
+        });
+        vi.mocked(collectTrackedChangeFromMarks).mockReturnValue({
+          kind: 'insert',
+          id: 'ins-1',
+        });
+        vi.mocked(applyTrackedChangesModeToRuns).mockImplementation((runs) => runs);
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+        expect(blocks).toHaveLength(0);
+      });
+
+      it('should preserve tracked empty list paragraph artifacts when tracked changes mode is off', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                trackInsert: {
+                  id: 'ins-1',
+                  author: 'Test Author',
+                  date: '2026-03-01T12:00:00Z',
+                },
+              },
+            },
+          },
+        };
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'off',
+          enabled: true,
+        };
+
+        const filteredRuns: Run[] = [
+          {
+            text: '',
+            fontFamily: 'Arial',
+            fontSize: 16,
+          },
+        ];
+
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+          },
+          resolvedParagraphProperties: {},
+        });
+        vi.mocked(collectTrackedChangeFromMarks).mockReturnValue({
+          kind: 'insert',
+          id: 'ins-1',
+        });
+        vi.mocked(applyTrackedChangesModeToRuns).mockReturnValue(filteredRuns);
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+          kind: 'paragraph',
+          attrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+            trackedChangesMode: 'off',
+            trackedChangesEnabled: true,
+          },
+        });
+      });
+
+      it.each([
+        {
+          mode: 'final' as const,
+          paragraphMarkChange: 'insert' as const,
+        },
+        {
+          mode: 'original' as const,
+          paragraphMarkChange: 'delete' as const,
+        },
+      ])(
+        'should keep empty tracked list paragraphs in $mode mode when the paragraph mark change survives',
+        ({ mode, paragraphMarkChange }) => {
+          mockParagraphMarkTrackedChanges();
+          mockParagraphAttrsFromNode();
+
+          const para = createTrackedListParagraph({
+            ordinal: 2,
+            markerText: '2.',
+            numberingType: 'decimal',
+            paragraphMarkChange,
+          });
+
+          const trackedChanges: TrackedChangesConfig = {
+            mode,
+            enabled: true,
+          };
+
+          // Simulate real final/original behavior: surviving runs have insert/delete
+          // metadata stripped (tracked-changes.ts:503-512), keeping only format changes.
+          vi.mocked(applyTrackedChangesModeToRuns).mockImplementation((runs) =>
+            runs.map((run) => {
+              if (!('trackedChange' in run)) return run;
+              const copy = { ...run };
+              delete (copy as Record<string, unknown>).trackedChange;
+              return copy;
+            }),
+          );
+
+          const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+          expect(blocks).toHaveLength(1);
+          expect(blocks[0]).toMatchObject({
+            kind: 'paragraph',
+            attrs: {
+              numberingProperties: { ilvl: 0, numId: 42 },
+              trackedChangesMode: mode,
+              trackedChangesEnabled: true,
+            },
+          });
+
+          const paragraphBlock = blocks[0] as ParagraphBlock;
+          expect(paragraphBlock.runs).toHaveLength(1);
+          expect(paragraphBlock.runs[0]).toMatchObject({ text: '' });
+          // insert/delete metadata is stripped by applyTrackedChangesModeToRuns in final/original mode
+          expect(paragraphBlock.runs[0]).not.toHaveProperty('trackedChange');
+        },
+      );
+
       it('should not apply tracked changes mode when config not provided', () => {
         const para: PMNode = {
           type: 'paragraph',
@@ -2241,6 +2634,72 @@ describe('paragraph converters', () => {
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
 
         expect(blocks.some((b) => b.kind === 'pageBreak')).toBe(true);
+      });
+
+      it('should preserve custom list marker formatting when renumbering after a suppressed ghost item', () => {
+        mockParagraphMarkTrackedChanges();
+        mockParagraphAttrsFromNode();
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 2,
+            markerText: '002.',
+            numberingType: 'custom',
+            paragraphMarkChange: 'insert',
+            customFormat: '001, 002, 003, ...',
+          }),
+          context,
+        );
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 3,
+            markerText: '003.',
+            numberingType: 'custom',
+            customFormat: '001, 002, 003, ...',
+          }),
+          context,
+        );
+
+        expect(context.blocks).toHaveLength(1);
+        expect(getMarkerText(context.blocks[0])).toBe('002.');
+      });
+
+      it('should renumber non-ASCII list markers after a suppressed ghost item', () => {
+        mockParagraphMarkTrackedChanges();
+        mockParagraphAttrsFromNode();
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 2,
+            markerText: '二.',
+            numberingType: 'japaneseCounting',
+            paragraphMarkChange: 'insert',
+          }),
+          context,
+        );
+        handleParagraphNode(
+          createTrackedListParagraph({
+            ordinal: 3,
+            markerText: '三.',
+            numberingType: 'japaneseCounting',
+          }),
+          context,
+        );
+
+        expect(context.blocks).toHaveLength(1);
+        expect(getMarkerText(context.blocks[0])).toBe('二.');
       });
     });
 
@@ -2450,7 +2909,152 @@ describe('paragraph converters', () => {
           converterContext,
         );
 
-        expect(vi.mocked(computeParagraphAttrs)).toHaveBeenCalledWith(para, converterContext);
+        expect(vi.mocked(computeParagraphAttrs)).toHaveBeenCalledWith(para, converterContext, undefined);
+      });
+
+      describe('previousParagraphFont', () => {
+        const emptyNumberedPara: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+            },
+          },
+        };
+
+        it('uses previousParagraphFont for default run when paragraph has numbering and no explicit run properties', () => {
+          const previousFont = { fontFamily: 'CustomFont, sans-serif', fontSize: 14 };
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: {},
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: emptyNumberedPara,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+            previousParagraphFont: previousFont,
+          });
+
+          expect(blocks).toHaveLength(1);
+          expect(blocks[0].kind).toBe('paragraph');
+          const paraBlock = blocks[0] as ParagraphBlock;
+          expect(paraBlock.runs).toHaveLength(1);
+          expect(paraBlock.runs[0].fontFamily).toBe(previousFont.fontFamily);
+          expect(paraBlock.runs[0].fontSize).toBe(previousFont.fontSize);
+        });
+
+        it('uses extracted default font when previousParagraphFont is not provided', () => {
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: {},
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: emptyNumberedPara,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+          });
+
+          expect(blocks).toHaveLength(1);
+          const paraBlock = blocks[0] as ParagraphBlock;
+          expect(paraBlock.runs[0].fontFamily).toBeDefined();
+          expect(paraBlock.runs[0].fontSize).toBeDefined();
+          // Should come from extractDefaultFontProperties (converterContext/docDefaults), not previous
+          expect(paraBlock.runs[0].fontFamily).not.toBe('CustomFont, sans-serif');
+        });
+
+        it('ignores previousParagraphFont when paragraph has explicit run properties', () => {
+          const previousFont = { fontFamily: 'PreviousFont', fontSize: 10 };
+          const paraWithExplicitRunProps: PMNode = {
+            ...emptyNumberedPara,
+            attrs: {
+              paragraphProperties: {
+                numberingProperties: { numId: 1, ilvl: 0 },
+                runProperties: { fontFamily: { ascii: 'ExplicitFont' }, fontSize: 24 },
+              },
+            },
+          };
+
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: { fontFamily: { ascii: 'ExplicitFont' }, fontSize: 24 },
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: paraWithExplicitRunProps,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+            previousParagraphFont: previousFont,
+          });
+
+          expect(blocks).toHaveLength(1);
+          const paraBlock = blocks[0] as ParagraphBlock;
+          // Should use resolved run properties, not previousParagraphFont
+          expect(paraBlock.runs[0].fontFamily).toContain('ExplicitFont');
+          expect(paraBlock.runs[0].fontSize).not.toBe(10);
+        });
+
+        it('uses previousParagraphFont when run properties are only inherited from styles', () => {
+          const previousFont = { fontFamily: 'PreviousFont', fontSize: 10 };
+          vi.mocked(computeParagraphAttrs).mockReturnValue({
+            paragraphAttrs: {},
+            resolvedParagraphProperties: {
+              numberingProperties: { numId: 1, ilvl: 0 },
+              runProperties: { fontFamily: { ascii: 'StyledFont' }, fontSize: 24 },
+            },
+          });
+
+          const blocks = baseParagraphToFlowBlocks({
+            para: emptyNumberedPara,
+            nextBlockId,
+            positions,
+            trackedChangesConfig: undefined,
+            bookmarks: new Map(),
+            hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+            themeColors: undefined,
+            converters: {} as NestedConverters,
+            converterContext: defaultConverterContext,
+            enableComments: true,
+            previousParagraphFont: previousFont,
+          });
+
+          expect(blocks).toHaveLength(1);
+          const paraBlock = blocks[0] as ParagraphBlock;
+          expect(paraBlock.runs[0].fontFamily).toBe(previousFont.fontFamily);
+          expect(paraBlock.runs[0].fontSize).toBe(previousFont.fontSize);
+        });
       });
 
       it('should clone paragraph attrs for each paragraph block', () => {

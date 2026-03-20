@@ -245,6 +245,130 @@ function dispatchTransaction(editor: Editor, tr: Editor['state']['tr']): void {
   );
 }
 
+function buildEmptyBlockContent(editor: Editor, sdtNode: ProseMirrorNode): ProseMirrorNode | null {
+  const firstChild = sdtNode.childCount > 0 ? sdtNode.child(0) : null;
+  if (firstChild?.type?.name === 'paragraph') {
+    return firstChild.type.create(firstChild.attrs ?? null, null, firstChild.marks);
+  }
+
+  const paragraphType = editor.schema.nodes.paragraph;
+  if (!paragraphType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'Content-control text mutation requires the paragraph node type in the schema.',
+    );
+  }
+
+  return paragraphType.createAndFill?.() ?? paragraphType.create();
+}
+
+function getOnlyChild(node: ProseMirrorNode): ProseMirrorNode | null {
+  return node.childCount === 1 ? node.child(0) : null;
+}
+
+function hasMeaningfulAttributeValue(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(hasMeaningfulAttributeValue);
+  }
+
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some(hasMeaningfulAttributeValue);
+  }
+
+  return value !== '';
+}
+
+function hasSubstantiveNodeAttrs(node: ProseMirrorNode): boolean {
+  return hasMeaningfulAttributeValue(node.attrs ?? null);
+}
+
+function isPlainTextNode(node: ProseMirrorNode | null, expectedText: string): boolean {
+  return node?.type.name === 'text' && node.text === expectedText && (node.marks?.length ?? 0) === 0;
+}
+
+function isPlainRunNode(node: ProseMirrorNode | null, expectedText: string): boolean {
+  if (node?.type.name !== 'run') {
+    return false;
+  }
+
+  if (hasSubstantiveNodeAttrs(node)) {
+    return false;
+  }
+
+  return isPlainTextNode(getOnlyChild(node), expectedText);
+}
+
+function isCanonicalPlainTextInlineContent(node: ProseMirrorNode, expectedText: string): boolean {
+  const onlyChild = getOnlyChild(node);
+
+  if (expectedText.length === 0) {
+    return node.childCount === 0 || isPlainTextNode(onlyChild, '') || isPlainRunNode(onlyChild, '');
+  }
+
+  return isPlainTextNode(onlyChild, expectedText) || isPlainRunNode(onlyChild, expectedText);
+}
+
+function isCanonicalPlainTextParagraph(node: ProseMirrorNode | null, expectedText: string): boolean {
+  if (node?.type.name !== 'paragraph') {
+    return false;
+  }
+
+  const onlyChild = getOnlyChild(node);
+
+  if (expectedText.length === 0) {
+    return node.childCount === 0 || isPlainTextNode(onlyChild, '') || isPlainRunNode(onlyChild, '');
+  }
+
+  return isPlainTextNode(onlyChild, expectedText) || isPlainRunNode(onlyChild, expectedText);
+}
+
+/**
+ * Plain-text replacement normalizes SDT content to a narrow canonical shape:
+ * inline controls become a single plain-text node (optionally run-wrapped by
+ * normalization plugins), and block controls become a single paragraph holding
+ * that plain text. Only that shape qualifies as a no-op.
+ */
+function alreadyMatchesPlainTextReplacement(
+  sdt: { kind: 'block' | 'inline'; node: ProseMirrorNode },
+  expectedText: string,
+): boolean {
+  if (sdt.kind === 'inline') {
+    return isCanonicalPlainTextInlineContent(sdt.node, expectedText);
+  }
+
+  return isCanonicalPlainTextParagraph(getOnlyChild(sdt.node), expectedText);
+}
+
+function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, text: string): boolean {
+  const resolved = resolveSdtByTarget(editor.state.doc, target);
+
+  if (resolved.kind === 'inline') {
+    const updateCmd = editor.commands?.updateStructuredContentById;
+    if (text.length > 0) {
+      return Boolean(updateCmd?.(target.nodeId, { text }));
+    }
+
+    const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, null, resolved.node.marks);
+    const { tr } = editor.state;
+    tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
+    dispatchTransaction(editor, tr);
+    return true;
+  }
+
+  const paragraph = buildEmptyBlockContent(editor, resolved.node);
+  const paragraphText = text.length > 0 ? editor.schema.text(text) : null;
+  const updatedParagraph = paragraph?.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks) ?? null;
+  const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, updatedParagraph, resolved.node.marks);
+  const { tr } = editor.state;
+  tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
+  dispatchTransaction(editor, tr);
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // A. Core CRUD + Discovery — Read operations
 // ---------------------------------------------------------------------------
@@ -769,10 +893,13 @@ function replaceContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'replaceContent');
+  if ((input.format ?? 'text') === 'text' && alreadyMatchesPlainTextReplacement(sdt, input.content)) {
+    return buildMutationFailure('NO_OP', 'Content control already contains the requested text.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: input.content }));
+    return replaceSdtTextContent(editor, input.target, input.content);
   });
 }
 
@@ -783,10 +910,13 @@ function clearContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'clearContent');
+  if (alreadyMatchesPlainTextReplacement(sdt, '')) {
+    return buildMutationFailure('NO_OP', 'Content control is already empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: '' }));
+    return replaceSdtTextContent(editor, input.target, '');
   });
 }
 
@@ -797,14 +927,15 @@ function appendContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'appendContent');
+  if (input.content.length === 0) {
+    return buildMutationFailure('NO_OP', 'Appended content is empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const currentText = resolved.node.textContent;
-    return Boolean(
-      editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: currentText + input.content }),
-    );
+    return replaceSdtTextContent(editor, input.target, currentText + input.content);
   });
 }
 
@@ -815,14 +946,15 @@ function prependContentWrapper(
 ): ContentControlMutationResult {
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertNotContentLocked(sdt, 'prependContent');
+  if (input.content.length === 0) {
+    return buildMutationFailure('NO_OP', 'Prepended content is empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
     const resolved = resolveSdtByTarget(editor.state.doc, input.target);
     const currentText = resolved.node.textContent;
-    return Boolean(
-      editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: input.content + currentText }),
-    );
+    return replaceSdtTextContent(editor, input.target, input.content + currentText);
   });
 }
 
@@ -1104,10 +1236,13 @@ function textSetValueWrapper(
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.setValue');
   assertNotContentLocked(sdt, 'text.setValue');
+  if (alreadyMatchesPlainTextReplacement(sdt, input.value)) {
+    return buildMutationFailure('NO_OP', 'Content control text already matches the requested value.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: input.value }));
+    return replaceSdtTextContent(editor, input.target, input.value);
   });
 }
 
@@ -1119,10 +1254,13 @@ function textClearValueWrapper(
   const sdt = resolveSdtByTarget(editor.state.doc, input.target);
   assertControlType(sdt, 'text', 'text.clearValue');
   assertNotContentLocked(sdt, 'text.clearValue');
+  if (alreadyMatchesPlainTextReplacement(sdt, '')) {
+    return buildMutationFailure('NO_OP', 'Content control text is already empty.');
+  }
   const target = buildTarget(sdt);
 
   return executeSdtMutation(editor, target, options, () => {
-    return Boolean(editor.commands?.updateStructuredContentById?.(input.target.nodeId, { text: '' }));
+    return replaceSdtTextContent(editor, input.target, '');
   });
 }
 

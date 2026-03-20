@@ -102,6 +102,12 @@ const encode = (params, encodedAttrs) => {
     skipOccupiedColumns();
 
     const startColumn = currentColumnIndex;
+
+    // Cell was consumed by a vertical merge (rowspan) above.
+    // At this point skipOccupiedColumns() has already advanced past the spanned columns
+    // using pendingRowSpans, so we just skip encoding without touching currentColumnIndex.
+    if (node._vMergeConsumed) return;
+
     const columnWidth = gridColumnWidths?.[startColumn] || null;
 
     const result = tcTranslator.encode({

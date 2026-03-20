@@ -459,7 +459,9 @@ onUnmounted(() => {
           :class="['ruler-tick', `ruler-tick--${tick.size}`]"
           :style="getTickStyle(tick)"
         >
-          <span v-if="tick.label !== undefined" class="numbering">{{ tick.label }}</span>
+          <span v-if="tick.label !== undefined" :class="['numbering', { 'numbering--edge-start': tick.x === 0 }]">
+            {{ tick.label }}
+          </span>
         </div>
       </template>
     </div>
@@ -527,8 +529,12 @@ onUnmounted(() => {
   position: absolute;
   top: -16px;
   left: -2px;
-  font-size: 10px;
+  font-size: var(--sd-ui-font-size-50, 10px);
   pointer-events: none;
   user-select: none;
+}
+
+.numbering--edge-start {
+  left: 0;
 }
 </style>

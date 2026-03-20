@@ -75,7 +75,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     delete: (input, options) => api.delete(input, options),
 
     // --- blocks.* ---
+    'blocks.list': (input) => api.blocks.list(input),
     'blocks.delete': (input, options) => api.blocks.delete(input, options),
+    'blocks.deleteRange': (input, options) => api.blocks.deleteRange(input, options),
 
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),
@@ -103,6 +105,8 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'format.paragraph.clearBorder': (input, options) => api.format.paragraph.clearBorder(input, options),
     'format.paragraph.setShading': (input, options) => api.format.paragraph.setShading(input, options),
     'format.paragraph.clearShading': (input, options) => api.format.paragraph.clearShading(input, options),
+    'format.paragraph.setDirection': (input, options) => api.format.paragraph.setDirection(input, options),
+    'format.paragraph.clearDirection': (input, options) => api.format.paragraph.clearDirection(input, options),
 
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),
@@ -145,6 +149,15 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.setLevelMarkerFont': (input, options) => api.lists.setLevelMarkerFont(input, options),
     'lists.clearLevelOverrides': (input, options) => api.lists.clearLevelOverrides(input, options),
 
+    // --- lists.* (SD-2025 user-facing) ---
+    'lists.getStyle': (input) => api.lists.getStyle(input),
+    'lists.applyStyle': (input, options) => api.lists.applyStyle(input, options),
+    'lists.restartAt': (input, options) => api.lists.restartAt(input, options),
+    'lists.setLevelNumberStyle': (input, options) => api.lists.setLevelNumberStyle(input, options),
+    'lists.setLevelText': (input, options) => api.lists.setLevelText(input, options),
+    'lists.setLevelStart': (input, options) => api.lists.setLevelStart(input, options),
+    'lists.setLevelLayout': (input, options) => api.lists.setLevelLayout(input, options),
+
     // --- sections.* ---
     'sections.list': (input) => api.sections.list(input),
     'sections.get': (input) => api.sections.get(input),
@@ -179,6 +192,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- query.* ---
     'query.match': (input) => api.query.match(input),
+
+    // --- ranges.* ---
+    'ranges.resolve': (input) => api.ranges.resolve(input),
 
     // --- mutations.* ---
     'mutations.preview': (input) => api.mutations.preview(input),
@@ -232,6 +248,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.setCellPadding': (input, options) => api.tables.setCellPadding(input, options),
     'tables.setCellSpacing': (input, options) => api.tables.setCellSpacing(input, options),
     'tables.clearCellSpacing': (input, options) => api.tables.clearCellSpacing(input, options),
+    'tables.applyStyle': (input, options) => api.tables.applyStyle(input, options),
+    'tables.setBorders': (input, options) => api.tables.setBorders(input, options),
+    'tables.setTableOptions': (input, options) => api.tables.setTableOptions(input, options),
 
     // --- tables.* reads ---
     'tables.get': (input) => api.tables.get(input),
@@ -262,7 +281,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'create.image': (input, options) => api.create.image(input, options),
 
     // --- images.* ---
-    'images.list': (input) => api.images.list(input ?? {}),
+    'images.list': (input) => api.images.list(input),
     'images.get': (input) => api.images.get(input),
     'images.delete': (input, options) => api.images.delete(input, options),
     'images.move': (input, options) => api.images.move(input, options),
@@ -485,5 +504,10 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'authorities.entries.insert': (input, options) => api.authorities.entries.insert(input, options),
     'authorities.entries.update': (input, options) => api.authorities.entries.update(input, options),
     'authorities.entries.remove': (input, options) => api.authorities.entries.remove(input, options),
+
+    // --- diff.* ---
+    'diff.capture': () => api.diff.capture(),
+    'diff.compare': (input) => api.diff.compare(input),
+    'diff.apply': (input, options) => api.diff.apply(input, options),
   };
 }

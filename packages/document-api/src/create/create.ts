@@ -92,11 +92,24 @@ function validateTargetOrNodeIdCreateLocation(at: TableCreateLocation, operation
   }
 }
 
-const SECTION_BREAK_TYPES: readonly SectionBreakType[] = ['continuous', 'nextPage', 'evenPage', 'oddPage'] as const;
+/**
+ * All create-location union types share `{ kind: 'documentEnd' }` as a member,
+ * so we use that as the common base constraint. The generic preserves the
+ * concrete location type at each call site.
+ */
+type CreateLocation = { kind: string };
 
-function normalizeSectionBreakCreateLocation(location?: SectionBreakCreateLocation): SectionBreakCreateLocation {
-  return location ?? { kind: 'documentEnd' };
+/**
+ * Normalises an optional create-location to a concrete value (defaulting to
+ * `{ kind: 'documentEnd' }`) and runs the caller-supplied validation against it.
+ */
+function normalizeCreateLocation<T extends CreateLocation>(location: T | undefined, validate: (loc: T) => void): T {
+  const normalized = (location ?? { kind: 'documentEnd' }) as T;
+  validate(normalized);
+  return normalized;
 }
+
+const SECTION_BREAK_TYPES: readonly SectionBreakType[] = ['continuous', 'nextPage', 'evenPage', 'oddPage'] as const;
 
 function validateMarginValue(field: string, value: unknown): void {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
@@ -132,13 +145,9 @@ function validateCreateSectionBreakInput(input: CreateSectionBreakInput): void {
   }
 }
 
-function normalizeParagraphCreateLocation(location?: ParagraphCreateLocation): ParagraphCreateLocation {
-  return location ?? { kind: 'documentEnd' };
-}
-
 export function normalizeCreateParagraphInput(input: CreateParagraphInput): CreateParagraphInput {
   return {
-    at: normalizeParagraphCreateLocation(input.at),
+    at: normalizeCreateLocation<ParagraphCreateLocation>(input.at, () => {}),
     text: input.text ?? '',
   };
 }
@@ -148,19 +157,17 @@ export function executeCreateParagraph(
   input: CreateParagraphInput,
   options?: MutationOptions,
 ): CreateParagraphResult {
-  const normalized = normalizeCreateParagraphInput(input);
-  validateTargetOnlyCreateLocation(normalized.at!, 'create.paragraph');
+  const at = normalizeCreateLocation<ParagraphCreateLocation>(input.at, (loc) =>
+    validateTargetOnlyCreateLocation(loc, 'create.paragraph'),
+  );
+  const normalized: CreateParagraphInput = { at, text: input.text ?? '' };
   return adapter.paragraph(normalized, normalizeMutationOptions(options));
-}
-
-function normalizeHeadingCreateLocation(location?: HeadingCreateLocation): HeadingCreateLocation {
-  return location ?? { kind: 'documentEnd' };
 }
 
 export function normalizeCreateHeadingInput(input: CreateHeadingInput): CreateHeadingInput {
   return {
     level: input.level,
-    at: normalizeHeadingCreateLocation(input.at),
+    at: normalizeCreateLocation<HeadingCreateLocation>(input.at, () => {}),
     text: input.text ?? '',
   };
 }
@@ -170,20 +177,18 @@ export function executeCreateHeading(
   input: CreateHeadingInput,
   options?: MutationOptions,
 ): CreateHeadingResult {
-  const normalized = normalizeCreateHeadingInput(input);
-  validateTargetOnlyCreateLocation(normalized.at!, 'create.heading');
+  const at = normalizeCreateLocation<HeadingCreateLocation>(input.at, (loc) =>
+    validateTargetOnlyCreateLocation(loc, 'create.heading'),
+  );
+  const normalized: CreateHeadingInput = { level: input.level, at, text: input.text ?? '' };
   return adapter.heading(normalized, normalizeMutationOptions(options));
-}
-
-function normalizeTableCreateLocation(location?: TableCreateLocation): TableCreateLocation {
-  return location ?? { kind: 'documentEnd' };
 }
 
 export function normalizeCreateTableInput(input: CreateTableInput): CreateTableInput {
   return {
     rows: input.rows,
     columns: input.columns,
-    at: normalizeTableCreateLocation(input.at),
+    at: normalizeCreateLocation<TableCreateLocation>(input.at, () => {}),
   };
 }
 
@@ -192,14 +197,16 @@ export function executeCreateTable(
   input: CreateTableInput,
   options?: MutationOptions,
 ): CreateTableResult {
-  const normalized = normalizeCreateTableInput(input);
-  validateTargetOrNodeIdCreateLocation(normalized.at!, 'create.table');
+  const at = normalizeCreateLocation<TableCreateLocation>(input.at, (loc) =>
+    validateTargetOrNodeIdCreateLocation(loc, 'create.table'),
+  );
+  const normalized: CreateTableInput = { rows: input.rows, columns: input.columns, at };
   return adapter.table(normalized, normalizeMutationOptions(options));
 }
 
 export function normalizeCreateSectionBreakInput(input: CreateSectionBreakInput): CreateSectionBreakInput {
   return {
-    at: normalizeSectionBreakCreateLocation(input.at),
+    at: normalizeCreateLocation<SectionBreakCreateLocation>(input.at, () => {}),
     breakType: input.breakType,
     pageMargins: input.pageMargins,
     headerFooterMargins: input.headerFooterMargins,
@@ -211,19 +218,22 @@ export function executeCreateSectionBreak(
   input: CreateSectionBreakInput,
   options?: MutationOptions,
 ): CreateSectionBreakResult {
-  const normalized = normalizeCreateSectionBreakInput(input);
-  validateTargetOnlyCreateLocation(normalized.at!, 'create.sectionBreak');
+  const at = normalizeCreateLocation<SectionBreakCreateLocation>(input.at, (loc) =>
+    validateTargetOnlyCreateLocation(loc, 'create.sectionBreak'),
+  );
+  const normalized: CreateSectionBreakInput = {
+    at,
+    breakType: input.breakType,
+    pageMargins: input.pageMargins,
+    headerFooterMargins: input.headerFooterMargins,
+  };
   validateCreateSectionBreakInput(normalized);
   return adapter.sectionBreak(normalized, normalizeMutationOptions(options));
 }
 
-function normalizeTocCreateLocation(location?: TocCreateLocation): TocCreateLocation {
-  return location ?? { kind: 'documentEnd' };
-}
-
 export function normalizeCreateTableOfContentsInput(input: CreateTableOfContentsInput): CreateTableOfContentsInput {
   return {
-    at: normalizeTocCreateLocation(input.at),
+    at: normalizeCreateLocation<TocCreateLocation>(input.at, () => {}),
     config: input.config,
   };
 }
@@ -233,19 +243,18 @@ export function executeCreateTableOfContents(
   input: CreateTableOfContentsInput,
   options?: MutationOptions,
 ): CreateTableOfContentsResult {
-  const normalized = normalizeCreateTableOfContentsInput(input);
-  const at = normalized.at!;
-
-  // TocCreateLocation only supports the `target` form, not the legacy `nodeId` form.
-  // Reject `nodeId` explicitly when callers send untyped payloads.
-  if ((at.kind === 'before' || at.kind === 'after') && 'nodeId' in at) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'create.tableOfContents requires at.target for before/after positioning. The nodeId form is not supported.',
-      { fields: ['at.nodeId'] },
-    );
-  }
-
-  validateTargetOnlyCreateLocation(at, 'create.tableOfContents');
+  const at = normalizeCreateLocation<TocCreateLocation>(input.at, (loc) => {
+    // TocCreateLocation only supports the `target` form, not the legacy `nodeId` form.
+    // Reject `nodeId` explicitly when callers send untyped payloads.
+    if ((loc.kind === 'before' || loc.kind === 'after') && 'nodeId' in loc) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        'create.tableOfContents requires at.target for before/after positioning. The nodeId form is not supported.',
+        { fields: ['at.nodeId'] },
+      );
+    }
+    validateTargetOnlyCreateLocation(loc, 'create.tableOfContents');
+  });
+  const normalized: CreateTableOfContentsInput = { at, config: input.config };
   return adapter.tableOfContents(normalized, normalizeMutationOptions(options));
 }

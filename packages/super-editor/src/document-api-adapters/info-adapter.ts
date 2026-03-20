@@ -1,16 +1,10 @@
-import type { DocumentInfo, FindOutput, InfoInput, NodeInfo, NodeType } from '@superdoc/document-api';
+import type { DocumentInfo, FindOutput, InfoInput, NodeInfo } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { findLegacyAdapter } from './find-adapter.js';
-import { getTextAdapter } from './get-text-adapter.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
+import { getLiveDocumentCounts } from './helpers/live-document-counts.js';
 
 type HeadingNodeInfo = Extract<NodeInfo, { nodeType: 'heading' }>;
-type CommentNodeInfo = Extract<NodeInfo, { nodeType: 'comment' }>;
-
-function countWords(text: string): number {
-  const matches = text.trim().match(/\S+/g);
-  return matches ? matches.length : 0;
-}
 
 function clampHeadingLevel(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 1;
@@ -22,10 +16,6 @@ function clampHeadingLevel(value: unknown): number {
 
 function isHeadingNodeInfo(node: NodeInfo | undefined): node is HeadingNodeInfo {
   return node?.kind === 'block' && node.nodeType === 'heading';
-}
-
-function isCommentNodeInfo(node: NodeInfo | undefined): node is CommentNodeInfo {
-  return node?.kind === 'inline' && node.nodeType === 'comment';
 }
 
 function getHeadingText(node: HeadingNodeInfo | undefined): string {
@@ -52,52 +42,23 @@ function buildOutline(result: FindOutput): DocumentInfo['outline'] {
   return outline;
 }
 
-function countDistinctCommentIds(result: FindOutput): number {
-  const commentIds = new Set<string>();
-  for (const item of result.items) {
-    if (!isCommentNodeInfo(item.node)) continue;
-    if (typeof item.node.properties.commentId !== 'string' || item.node.properties.commentId.length === 0) continue;
-    commentIds.add(item.node.properties.commentId);
-  }
-
-  // When node data is available, deduplicate by commentId. Otherwise fall
-  // back to the query total (e.g. when includeNodes was not requested).
-  if (commentIds.size > 0) {
-    return commentIds.size;
-  }
-  return result.total;
-}
-
-function findByNodeType(editor: Editor, nodeType: NodeType, includeNodes = false): FindOutput {
-  return findLegacyAdapter(editor, {
-    select: { type: 'node', nodeType },
-    includeNodes,
-  });
-}
-
 /**
- * Build `doc.info` payload from engine-backed find/getText adapters.
+ * Build `doc.info` payload from live document counts and heading outline.
  *
- * This keeps `document-api` engine-agnostic while centralizing composition
- * logic in the super-editor adapter layer.
+ * Counts are derived from the centralized live-document-counts helper.
+ * Outline generation still uses the heading find query (needs NodeInfo data
+ * for text and level that the block index does not provide).
  */
 export function infoAdapter(editor: Editor, _input: InfoInput): DocumentInfo {
-  const text = getTextAdapter(editor, {});
-  const paragraphResult = findByNodeType(editor, 'paragraph');
-  const headingResult = findByNodeType(editor, 'heading', true);
-  const tableResult = findByNodeType(editor, 'table');
-  const imageResult = findByNodeType(editor, 'image');
-  const commentResult = findByNodeType(editor, 'comment', true);
+  const counts = getLiveDocumentCounts(editor);
+
+  const headingResult = findLegacyAdapter(editor, {
+    select: { type: 'node', nodeType: 'heading' },
+    includeNodes: true,
+  });
 
   return {
-    counts: {
-      words: countWords(text),
-      paragraphs: paragraphResult.total,
-      headings: headingResult.total,
-      tables: tableResult.total,
-      images: imageResult.total,
-      comments: countDistinctCommentIds(commentResult),
-    },
+    counts,
     outline: buildOutline(headingResult),
     capabilities: {
       canFind: true,

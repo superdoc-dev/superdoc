@@ -1,4 +1,4 @@
-import { Mark } from '@core/index.js';
+import { Mark } from '@core/Mark.js';
 
 /**
  * Inline mark that tags page number text runs within TOC entry paragraphs.

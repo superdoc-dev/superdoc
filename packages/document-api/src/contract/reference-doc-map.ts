@@ -166,6 +166,16 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Table of authorities lifecycle and TA entry operations.',
     pagePath: 'authorities/index.mdx',
   },
+  ranges: {
+    title: 'Ranges',
+    description: 'Deterministic range construction from explicit document anchors.',
+    pagePath: 'ranges/index.mdx',
+  },
+  diff: {
+    title: 'Diff',
+    description: 'Snapshot-based document comparison and replay.',
+    pagePath: 'diff/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

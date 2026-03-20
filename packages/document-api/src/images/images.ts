@@ -49,7 +49,7 @@ const VALID_IMAGE_SIZE_UNITS = new Set(['px', 'pt', 'twip']);
 // ---------------------------------------------------------------------------
 
 export interface ImagesAdapter {
-  list(input: ImagesListInput): ImagesListResult;
+  list(input?: ImagesListInput): ImagesListResult;
   get(input: ImagesGetInput): ImageSummary;
   delete(input: ImagesDeleteInput, options?: MutationOptions): ImagesMutationResult;
   move(input: MoveImageInput, options?: MutationOptions): ImagesMutationResult;
@@ -126,7 +126,7 @@ function requireUnsignedInt32(value: unknown, field: string): asserts value is n
 // Execute functions
 // ---------------------------------------------------------------------------
 
-export function executeImagesList(adapter: ImagesAdapter, input: ImagesListInput): ImagesListResult {
+export function executeImagesList(adapter: ImagesAdapter, input?: ImagesListInput): ImagesListResult {
   return adapter.list(input ?? {});
 }
 

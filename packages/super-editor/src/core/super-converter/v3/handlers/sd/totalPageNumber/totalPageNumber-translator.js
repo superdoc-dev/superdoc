@@ -2,6 +2,7 @@
 import { NodeTranslator } from '@translator';
 import { processOutputMarks } from '../../../../exporter.js';
 import { parseMarks } from './../../../../v2/importer/markImporter.js';
+import { buildComplexFieldRuns } from '../build-complex-field-runs.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:totalPageNumber';
@@ -20,10 +21,16 @@ const encode = (params) => {
 
   const rPr = node.elements?.find((el) => el.name === 'w:rPr');
   const marks = parseMarks(rPr || { elements: [] });
+
+  // Preserve the imported cached text so the export fallback path can write
+  // a meaningful value when pagination is unavailable.
+  const importedCachedText = node.attributes?.importedCachedText || null;
+
   const processedNode = {
     type: 'total-page-number',
     attrs: {
       marksAsAttrs: marks,
+      importedCachedText,
     },
   };
 
@@ -39,75 +46,46 @@ const decode = (params) => {
   const { node } = params;
 
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
-  const translated = [
-    {
-      name: 'w:r',
-      elements: [
-        {
-          name: 'w:rPr',
-          elements: outputMarks,
-        },
-        {
-          name: 'w:fldChar',
-          attributes: {
-            'w:fldCharType': 'begin',
-          },
-        },
-      ],
-    },
-    {
-      name: 'w:r',
-      elements: [
-        {
-          name: 'w:rPr',
-          elements: outputMarks,
-        },
-        {
-          name: 'w:instrText',
-          attributes: { 'xml:space': 'preserve' },
-          elements: [
-            {
-              type: 'text',
-              text: ' NUMPAGES',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'w:r',
-      elements: [
-        {
-          name: 'w:rPr',
-          elements: outputMarks,
-        },
-        {
-          name: 'w:fldChar',
-          attributes: {
-            'w:fldCharType': 'separate',
-          },
-        },
-      ],
-    },
-    {
-      name: 'w:r',
-      elements: [
-        {
-          name: 'w:rPr',
-          elements: outputMarks,
-        },
-        {
-          name: 'w:fldChar',
-          attributes: {
-            'w:fldCharType': 'end',
-          },
-        },
-      ],
-    },
-  ];
+  const cachedText = resolveCachedPageCount(params, node);
 
-  return translated;
+  // Only mark dirty when the cache map does NOT contain a fresh page count.
+  // When pagination is active, the cache map has NUMPAGES and the value is
+  // trustworthy — Word should display it as-is without prompting.
+  const hasFreshPageCount = params.statFieldCacheMap?.has?.('NUMPAGES');
+  const dirty = !hasFreshPageCount;
+
+  return buildComplexFieldRuns({ instruction: 'NUMPAGES', cachedText, outputMarks, dirty });
 };
+
+/**
+ * Resolves the cached page count text for export.
+ *
+ * Priority chain:
+ *   1. Export-preparation cache map (freshest, computed at export time)
+ *   2. resolvedText attr (set by explicit F9 field update)
+ *   3. importedCachedText attr (preserved from import for headless scenarios)
+ *   4. Node text content (total-page-number stores value as text children)
+ */
+function resolveCachedPageCount(params, node) {
+  const cacheMap = params.statFieldCacheMap;
+  if (cacheMap?.has?.('NUMPAGES')) {
+    return String(cacheMap.get('NUMPAGES'));
+  }
+
+  if (node.attrs?.resolvedText) {
+    return String(node.attrs.resolvedText);
+  }
+
+  if (node.attrs?.importedCachedText) {
+    return String(node.attrs.importedCachedText);
+  }
+
+  const textContent = node.content
+    ?.filter((n) => n.type === 'text')
+    .map((n) => n.text || '')
+    .join('');
+  return textContent || '';
+}
 
 /** @type {import('@translator').NodeTranslatorConfig} */
 export const config = {

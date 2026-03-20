@@ -39,7 +39,7 @@ describe('MCP tools integration', () => {
     const result = api.invoke({
       operationId: 'find',
       input: {
-        query: { select: { type: 'node', nodeType: 'paragraph' } },
+        select: { type: 'node', nodeType: 'paragraph' },
       },
     });
 

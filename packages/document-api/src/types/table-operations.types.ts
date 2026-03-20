@@ -1,4 +1,11 @@
-import type { BlockNodeAddress } from './base.js';
+import type {
+  BlockNodeAddress,
+  TableAddress,
+  TableCellAddress,
+  TableOrCellAddress,
+  TableOrRowAddress,
+  TableRowAddress,
+} from './base.js';
 import type { ReceiptFailure, ReceiptInsert } from './receipt.js';
 
 // ---------------------------------------------------------------------------
@@ -10,7 +17,7 @@ import type { ReceiptFailure, ReceiptInsert } from './receipt.js';
  * Used as the base locator for table-scoped operations.
  */
 export interface TableLocator {
-  target?: BlockNodeAddress;
+  target?: TableAddress;
   nodeId?: string;
 }
 
@@ -18,48 +25,72 @@ export interface TableLocator {
  * Locates a table row. Identical shape to {@link TableLocator} when the
  * target/nodeId already points at a row node.
  */
-export type RowLocator = TableLocator;
+export interface RowLocator {
+  target?: TableRowAddress;
+  nodeId?: string;
+}
 
 /**
  * Locates a table cell. Identical shape to {@link TableLocator} when the
  * target/nodeId already points at a cell node.
  */
-export type CellLocator = TableLocator;
+export interface CellLocator {
+  target?: TableCellAddress;
+  nodeId?: string;
+}
+
+/**
+ * Locates either a table or one of its rows.
+ * Used by row operations that support both direct row targets and table+rowIndex mode.
+ */
+export interface TableOrRowLocator {
+  target?: TableOrRowAddress;
+  nodeId?: string;
+}
+
+/**
+ * Locates either a table or one of its cells.
+ * Used by operations that can target the whole table or a specific cell.
+ */
+export interface TableOrCellLocator {
+  target?: TableOrCellAddress;
+  nodeId?: string;
+}
 
 /**
  * Locates a row by its index within a specific table.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus a positional `rowIndex` to select the row within it.
  */
-export interface TableScopedRowLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TableScopedRowLocator extends TableLocator {
   rowIndex: number;
 }
 
 /**
  * Locates a column by its index within a specific table.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus a positional `columnIndex` to select the column within it.
  */
-export interface TableScopedColumnLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TableScopedColumnLocator extends TableLocator {
   columnIndex: number;
 }
 
 /**
  * Locates a cell by row and column index within a specific table.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus positional indices to select the cell within it.
  */
-export interface TableScopedCellLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface TableScopedCellLocator extends TableLocator {
   rowIndex: number;
   columnIndex: number;
 }
 
 /**
  * Defines a rectangular range of cells for merge/unmerge operations.
+ * Uses the standard {@link TableLocator} fields (target/nodeId) to identify
+ * the table, plus start/end coordinates defining the range.
  */
-export interface MergeRangeLocator {
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
+export interface MergeRangeLocator extends TableLocator {
   start: { rowIndex: number; columnIndex: number };
   end: { rowIndex: number; columnIndex: number };
 }
@@ -81,10 +112,17 @@ export type TableCreateLocation =
 
 /**
  * Generic success result for table mutation operations.
+ *
+ * For non-destructive table-targeted mutations, `table` is the canonical
+ * post-mutation table reference. Use `table.nodeId` to target the same table
+ * in subsequent operations — no intermediate `find()` needed.
+ *
+ * `table` is `undefined` for destructive operations (delete, convertToText)
+ * and in rare cases where post-mutation re-resolution fails.
  */
 export interface TableMutationSuccess {
   success: true;
-  table?: BlockNodeAddress;
+  table?: TableAddress;
   trackedChangeRefs?: ReceiptInsert[];
 }
 
@@ -113,7 +151,7 @@ export interface CreateTableInput {
 
 export interface CreateTableSuccessResult {
   success: true;
-  table: BlockNodeAddress;
+  table: TableAddress;
   trackedChangeRefs?: ReceiptInsert[];
 }
 
@@ -152,9 +190,7 @@ export interface TablesMoveInput extends TableLocator {
 // tables.split
 // ---------------------------------------------------------------------------
 
-export interface TablesSplitInput extends TableLocator {
-  atRowIndex: number;
-}
+export type TablesSplitInput = TableScopedRowLocator;
 
 // ---------------------------------------------------------------------------
 // tables.convertToText
@@ -190,40 +226,24 @@ export interface TablesSetLayoutInput extends TableLocator {
 
 export type RowInsertPosition = 'above' | 'below';
 
-export interface TablesInsertRowInput {
-  target?: BlockNodeAddress;
-  nodeId?: string;
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
-  rowIndex?: number;
-  position: RowInsertPosition;
-  count?: number;
-}
+type DirectRowTargetLocator = { target: TableRowAddress; nodeId?: never };
 
-export type TablesDeleteRowInput = RowLocator | TableScopedRowLocator;
+export type TablesInsertRowInput =
+  | (TableScopedRowLocator & { position: RowInsertPosition; count?: number })
+  | (DirectRowTargetLocator & { position: RowInsertPosition; count?: number });
 
-export interface TablesSetRowHeightInput {
-  target?: BlockNodeAddress;
-  nodeId?: string;
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
-  rowIndex?: number;
-  heightPt: number;
-  rule: 'atLeast' | 'exact' | 'auto';
-}
+export type TablesDeleteRowInput = DirectRowTargetLocator | TableScopedRowLocator;
+
+export type TablesSetRowHeightInput =
+  | (TableScopedRowLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' })
+  | (DirectRowTargetLocator & { heightPt: number; rule: 'atLeast' | 'exact' | 'auto' });
 
 /** Uses {@link TableLocator} directly as input. */
 export type TablesDistributeRowsInput = TableLocator;
 
-export interface TablesSetRowOptionsInput {
-  target?: BlockNodeAddress;
-  nodeId?: string;
-  tableTarget?: BlockNodeAddress;
-  tableNodeId?: string;
-  rowIndex?: number;
-  allowBreakAcrossPages?: boolean;
-  repeatHeader?: boolean;
-}
+export type TablesSetRowOptionsInput =
+  | (TableScopedRowLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean })
+  | (DirectRowTargetLocator & { allowBreakAcrossPages?: boolean; repeatHeader?: boolean });
 
 // ---------------------------------------------------------------------------
 // Column operations
@@ -263,7 +283,7 @@ export interface TablesDeleteCellInput extends CellLocator {
 
 export type TablesMergeCellsInput = MergeRangeLocator;
 
-export type TablesUnmergeCellsInput = CellLocator;
+export type TablesUnmergeCellsInput = CellLocator | TableScopedCellLocator;
 
 export interface TablesSplitCellInput extends CellLocator {
   rows: number;
@@ -311,7 +331,8 @@ export type TablesClearStyleInput = TableLocator;
 
 export type TableStyleOptionFlag =
   | 'headerRow'
-  | 'totalRow'
+  | 'lastRow'
+  | 'totalRow' // deprecated alias for 'lastRow' — will be removed in a future release
   | 'firstColumn'
   | 'lastColumn'
   | 'bandedRows'
@@ -323,13 +344,156 @@ export interface TablesSetStyleOptionInput extends TableLocator {
 }
 
 // ---------------------------------------------------------------------------
+// Shared table-formatting types (used by both reads and writes)
+// ---------------------------------------------------------------------------
+
+/** Border spec for a single edge. Values are raw OOXML (line style, color). */
+export interface TableBorderSpec {
+  /** Raw OOXML `ST_Border` value (e.g., `single`, `double`, `dotted`). */
+  lineStyle: string;
+  /** Border weight in points. Must be positive (0 is rejected). */
+  lineWeightPt: number;
+  /** Uppercase hex without `#` (e.g., `000000`), or `auto`. */
+  color: string;
+}
+
+// ---------------------------------------------------------------------------
+// Write-only patch types (used by mutation inputs)
+// ---------------------------------------------------------------------------
+
+/** All four sides required when present. */
+export interface TableMargins {
+  topPt: number;
+  rightPt: number;
+  bottomPt: number;
+  leftPt: number;
+}
+
+/** Omitted flag = leave unchanged. */
+export interface TableStyleOptionsPatch {
+  headerRow?: boolean;
+  lastRow?: boolean;
+  /** @deprecated Use `lastRow` instead. */
+  totalRow?: boolean;
+  firstColumn?: boolean;
+  lastColumn?: boolean;
+  bandedRows?: boolean;
+  bandedColumns?: boolean;
+}
+
+/**
+ * Per-edge border patch for writes.
+ * - `null` = clear this edge (write explicit "no border")
+ * - Omitted = leave this edge unchanged
+ */
+export interface TableBorderPatch {
+  top?: TableBorderSpec | null;
+  bottom?: TableBorderSpec | null;
+  left?: TableBorderSpec | null;
+  right?: TableBorderSpec | null;
+  insideH?: TableBorderSpec | null;
+  insideV?: TableBorderSpec | null;
+}
+
+// ---------------------------------------------------------------------------
+// Read-only state types (used by getProperties output)
+// ---------------------------------------------------------------------------
+
+/** Absent key = no direct formatting for this flag. */
+export interface TableStyleOptionsState {
+  headerRow?: boolean;
+  lastRow?: boolean;
+  firstColumn?: boolean;
+  lastColumn?: boolean;
+  bandedRows?: boolean;
+  bandedColumns?: boolean;
+}
+
+/**
+ * Three states per edge:
+ * - Absent key = no direct formatting on this edge
+ * - `null` = explicit direct clear (overrides style-inherited borders)
+ * - `TableBorderSpec` = explicit direct border spec
+ */
+export interface TableBorderState {
+  top?: TableBorderSpec | null;
+  bottom?: TableBorderSpec | null;
+  left?: TableBorderSpec | null;
+  right?: TableBorderSpec | null;
+  insideH?: TableBorderSpec | null;
+  insideV?: TableBorderSpec | null;
+}
+
+/** Absent key = no direct formatting for this side. */
+export interface TableMarginsState {
+  topPt?: number;
+  rightPt?: number;
+  bottomPt?: number;
+  leftPt?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Convenience operation inputs
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a table style and/or style options in one call.
+ * At least one of `styleId` or `styleOptions` is required.
+ */
+export interface TablesApplyStyleInput extends TableLocator {
+  /** Table style ID. Not validated against the style catalog. */
+  styleId?: string;
+  /** Style option flags to merge into `tblLook`. Omitted flags are left unchanged. */
+  styleOptions?: TableStyleOptionsPatch;
+}
+
+/** Target set for the `applyTo` mode of `setBorders`. */
+export type TableBorderApplyTo =
+  | 'all'
+  | 'outside'
+  | 'inside'
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'insideH'
+  | 'insideV';
+
+/**
+ * Set borders on a table. Two modes:
+ * - `applyTo`: apply one border spec (or `null` to clear) to a named target set
+ * - `edges`: apply a per-edge patch
+ */
+export type TablesSetBordersInput =
+  | (TableLocator & {
+      mode: 'applyTo';
+      applyTo: TableBorderApplyTo;
+      border: TableBorderSpec | null;
+    })
+  | (TableLocator & {
+      mode: 'edges';
+      edges: TableBorderPatch;
+    });
+
+/**
+ * Set table-level default cell margins and/or cell spacing.
+ * At least one of `defaultCellMargins` or `cellSpacingPt` is required.
+ */
+export interface TablesSetTableOptionsInput extends TableLocator {
+  /** All four sides required when present. */
+  defaultCellMargins?: TableMargins;
+  /** Non-negative number, or `null` to clear. */
+  cellSpacingPt?: number | null;
+}
+
+// ---------------------------------------------------------------------------
 // Styling: borders
 // ---------------------------------------------------------------------------
 
 export type BorderEdge = 'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV' | 'diagonalDown' | 'diagonalUp';
 
 export interface TablesSetBorderInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
   edge: BorderEdge;
   lineStyle: string;
@@ -338,7 +502,7 @@ export interface TablesSetBorderInput {
 }
 
 export interface TablesClearBorderInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
   edge: BorderEdge;
 }
@@ -354,13 +518,13 @@ export interface TablesApplyBorderPresetInput extends TableLocator {
 // ---------------------------------------------------------------------------
 
 export interface TablesSetShadingInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
   color: string;
 }
 
 export interface TablesClearShadingInput {
-  target?: BlockNodeAddress;
+  target?: TableOrCellAddress;
   nodeId?: string;
 }
 
@@ -434,7 +598,7 @@ export type TablesGetInput = TableLocator;
 /** Output for `tables.get` — table structure with stable refs. */
 export interface TablesGetOutput {
   nodeId: string;
-  address: BlockNodeAddress;
+  address: TableAddress;
   rows: number;
   columns: number;
 }
@@ -449,7 +613,10 @@ export interface TablesGetCellsInput extends TableLocator {
 
 /** Per-cell info with stable ref for write handoff. */
 export interface TableCellInfo {
+  /** Shorthand cell identifier — convenient for logging, Map keys, and display. */
   nodeId: string;
+  /** Mutation-ready address — pass directly as `target` in follow-up cell operations. */
+  address: TableCellAddress;
   rowIndex: number;
   columnIndex: number;
   colspan: number;
@@ -458,16 +625,24 @@ export interface TableCellInfo {
 
 /** Output for `tables.getCells`. */
 export interface TablesGetCellsOutput {
-  tableNodeId: string;
+  nodeId: string;
+  address: TableAddress;
   cells: TableCellInfo[];
 }
 
 /** Input for `tables.getProperties` — locates a single table. */
 export type TablesGetPropertiesInput = TableLocator;
 
-/** Output for `tables.getProperties` — table layout/style metadata. */
+/**
+ * Output for `tables.getProperties` — table layout/style metadata.
+ *
+ * All fields reflect **direct formatting only**. Properties inherited from
+ * the table style are not included — use `styleId` and `styleOptions` to
+ * determine which style is active.
+ */
 export interface TablesGetPropertiesOutput {
   nodeId: string;
+  address: TableAddress;
   styleId?: string;
   alignment?: TableAlignment;
   direction?: TableDirection;
@@ -477,12 +652,12 @@ export interface TablesGetPropertiesOutput {
    */
   preferredWidth?: number;
   autoFitMode?: TableAutoFitMode;
-  styleOptions?: {
-    headerRow?: boolean;
-    totalRow?: boolean;
-    firstColumn?: boolean;
-    lastColumn?: boolean;
-    bandedRows?: boolean;
-    bandedColumns?: boolean;
-  };
+  /** Absent when `tblLook` has no direct formatting. Only explicitly stored flags are emitted. */
+  styleOptions?: TableStyleOptionsState;
+  /** Absent when no direct border formatting exists. Three states per edge (see `TableBorderState`). */
+  borders?: TableBorderState;
+  /** Default cell margins in points. Only sides with explicit direct formatting are included. */
+  defaultCellMargins?: TableMarginsState;
+  /** Cell spacing in points. `0` is explicit; absent = no direct formatting. */
+  cellSpacingPt?: number;
 }

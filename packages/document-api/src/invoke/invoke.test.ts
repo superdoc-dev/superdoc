@@ -5,7 +5,7 @@ import { buildDispatchTable } from './invoke.js';
 import type { FindAdapter } from '../find/find.js';
 import type { GetNodeAdapter } from '../get-node/get-node.js';
 import type { WriteAdapter } from '../write/write.js';
-import type { FormatAdapter } from '../format/format.js';
+import type { SelectionMutationAdapter } from '../selection-mutation.js';
 import type { StylesAdapter } from '../styles/index.js';
 import type { TrackChangesAdapter } from '../track-changes/track-changes.js';
 import type { CreateAdapter } from '../create/create.js';
@@ -24,9 +24,21 @@ function makeAdapters() {
   const getTextAdapter = { getText: vi.fn(() => 'hello') };
   const infoAdapter = {
     info: vi.fn(() => ({
-      counts: { words: 1, paragraphs: 1, headings: 0, tables: 0, images: 0, comments: 0 },
+      counts: {
+        words: 1,
+        characters: 5,
+        paragraphs: 1,
+        headings: 0,
+        tables: 0,
+        images: 0,
+        comments: 0,
+        trackedChanges: 0,
+        sdtFields: 0,
+        lists: 1,
+      },
       outline: [],
       capabilities: { canFind: true, canGetNode: true, canComment: true, canReplace: true },
+      revision: '0',
     })),
   };
   const capabilitiesAdapter: CapabilitiesAdapter = {
@@ -84,16 +96,22 @@ function makeAdapters() {
       },
     })),
   };
-  const formatReceipt = () => ({
+  const selectionMutationReceipt = () => ({
     success: true as const,
     resolution: {
-      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-      range: { from: 1, to: 3 },
+      blockId: 'p1',
+      blockType: 'paragraph' as const,
       text: 'Hi',
+      target: {
+        kind: 'selection' as const,
+        start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+        end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+      },
+      range: { start: 0, end: 2 },
     },
   });
-  const formatAdapter: FormatAdapter = {
-    apply: vi.fn(formatReceipt),
+  const selectionMutationAdapter: SelectionMutationAdapter = {
+    execute: vi.fn(selectionMutationReceipt),
   };
   const stylesAdapter: StylesAdapter = {
     apply: vi.fn(() => ({
@@ -237,7 +255,7 @@ function makeAdapters() {
     capabilities: capabilitiesAdapter,
     comments: commentsAdapter,
     write: writeAdapter,
-    format: formatAdapter,
+    selectionMutation: selectionMutationAdapter,
     styles: stylesAdapter,
     trackChanges: trackChangesAdapter,
     create: createAdapter,
@@ -349,7 +367,11 @@ describe('invoke', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
       const input = {
-        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
+        target: {
+          kind: 'selection' as const,
+          start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+          end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+        },
         inline: { bold: true },
       };
       const direct = api.format.apply(input);
@@ -361,7 +383,11 @@ describe('invoke', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
       const input = {
-        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
+        target: {
+          kind: 'selection' as const,
+          start: { kind: 'text' as const, blockId: 'p1', offset: 0 },
+          end: { kind: 'text' as const, blockId: 'p1', offset: 2 },
+        },
         value: 'Arial',
       };
       const direct = api.format.fontFamily(input);

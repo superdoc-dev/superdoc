@@ -408,6 +408,8 @@ function sampleInlineAliasValue(key: InlineAliasKey): unknown {
     case 'fontSize':
     case 'fontSizeCs':
       return 14;
+    case 'fontFamily':
+      return 'Courier New';
     case 'letterSpacing':
       return 0.5;
     case 'position':
@@ -580,31 +582,6 @@ function cellMutationScenario(
         sessionId,
         '--node-id',
         cellNodeId,
-        ...extraArgs,
-        '--out',
-        harness.createOutputPath(`${label}-out`),
-      ],
-    };
-  };
-}
-
-/** Table-scoped mutation in a session: uses --table-node-id instead of --node-id. */
-function tableScopedMutationScenario(
-  op: string,
-  extraArgs: string[],
-): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
-  return async (harness) => {
-    const label = `table-${op.replace(/\./g, '-')}`;
-    const stateDir = await harness.createStateDir(`${label}-success`);
-    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
-    return {
-      stateDir,
-      args: [
-        ...commandTokens(`doc.${op}` as CliOperationId),
-        '--session',
-        sessionId,
-        '--table-node-id',
-        tableNodeId,
         ...extraArgs,
         '--out',
         harness.createOutputPath(`${label}-out`),
@@ -1549,6 +1526,14 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.blocks.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-list');
+    return {
+      stateDir,
+      args: ['blocks', 'list', docPath, '--limit', '10'],
+    };
+  },
   'doc.blocks.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-blocks-delete-success');
     const docPath = await harness.copyFixtureDoc('doc-blocks-delete');
@@ -1563,6 +1548,25 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ kind: 'block', nodeType: block.nodeType, nodeId: block.nodeId }),
         '--out',
         harness.createOutputPath('doc-blocks-delete-output'),
+      ],
+    };
+  },
+  'doc.blocks.deleteRange': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-delete-range-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-delete-range');
+    const { first, second } = await harness.firstTwoBlockAddresses(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'blocks',
+        'delete-range',
+        docPath,
+        '--start-json',
+        JSON.stringify({ kind: 'block', nodeType: first.nodeType, nodeId: first.nodeId }),
+        '--end-json',
+        JSON.stringify({ kind: 'block', nodeType: second.nodeType, nodeId: second.nodeId }),
+        '--out',
+        harness.createOutputPath('doc-blocks-delete-range-output'),
       ],
     };
   },
@@ -2951,12 +2955,12 @@ export const SUCCESS_SCENARIOS = {
     '--destination-json',
     JSON.stringify({ kind: 'documentEnd' }),
   ]),
-  'doc.tables.split': tableMutationScenario('tables.split', ['--at-row-index', '1']),
+  'doc.tables.split': tableMutationScenario('tables.split', ['--row-index', '1']),
   'doc.tables.convertToText': tableMutationScenario('tables.convertToText', ['--delimiter', 'tab']),
   'doc.tables.setLayout': tableMutationScenario('tables.setLayout', ['--alignment', 'center']),
-  'doc.tables.insertRow': tableScopedMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),
-  'doc.tables.deleteRow': tableScopedMutationScenario('tables.deleteRow', ['--row-index', '0']),
-  'doc.tables.setRowHeight': tableScopedMutationScenario('tables.setRowHeight', [
+  'doc.tables.insertRow': tableMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),
+  'doc.tables.deleteRow': tableMutationScenario('tables.deleteRow', ['--row-index', '0']),
+  'doc.tables.setRowHeight': tableMutationScenario('tables.setRowHeight', [
     '--row-index',
     '0',
     '--height-pt',
@@ -2965,19 +2969,19 @@ export const SUCCESS_SCENARIOS = {
     'atLeast',
   ]),
   'doc.tables.distributeRows': tableMutationScenario('tables.distributeRows', []),
-  'doc.tables.setRowOptions': tableScopedMutationScenario('tables.setRowOptions', [
+  'doc.tables.setRowOptions': tableMutationScenario('tables.setRowOptions', [
     '--row-index',
     '0',
     '--allow-break-across-pages',
   ]),
-  'doc.tables.insertColumn': tableScopedMutationScenario('tables.insertColumn', [
+  'doc.tables.insertColumn': tableMutationScenario('tables.insertColumn', [
     '--column-index',
     '0',
     '--position',
     'right',
   ]),
-  'doc.tables.deleteColumn': tableScopedMutationScenario('tables.deleteColumn', ['--column-index', '0']),
-  'doc.tables.setColumnWidth': tableScopedMutationScenario('tables.setColumnWidth', [
+  'doc.tables.deleteColumn': tableMutationScenario('tables.deleteColumn', ['--column-index', '0']),
+  'doc.tables.setColumnWidth': tableMutationScenario('tables.setColumnWidth', [
     '--column-index',
     '0',
     '--width-pt',
@@ -2986,7 +2990,7 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.distributeColumns': tableMutationScenario('tables.distributeColumns', []),
   'doc.tables.insertCell': cellMutationScenario('tables.insertCell', ['--mode', 'shiftRight']),
   'doc.tables.deleteCell': cellMutationScenario('tables.deleteCell', ['--mode', 'shiftLeft']),
-  'doc.tables.mergeCells': tableScopedMutationScenario('tables.mergeCells', [
+  'doc.tables.mergeCells': tableMutationScenario('tables.mergeCells', [
     '--start-json',
     JSON.stringify({ rowIndex: 0, columnIndex: 0 }),
     '--end-json',

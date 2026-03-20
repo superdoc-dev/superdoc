@@ -46,6 +46,7 @@ vi.mock('../helpers/list-sequence-helpers.js', () => ({
   resolveBlock: vi.fn(),
   resolveBlocksInRange: vi.fn(),
   getAbstractNumId: vi.fn(),
+  getAllListItemProjections: vi.fn(),
   getContiguousSequence: vi.fn(),
   getSequenceFromTarget: vi.fn(),
   isFirstInSequence: vi.fn(),
@@ -114,6 +115,7 @@ import {
   resolveBlock,
   resolveBlocksInRange,
   getAbstractNumId,
+  getAllListItemProjections,
   getContiguousSequence,
   getSequenceFromTarget,
   isFirstInSequence,
@@ -124,6 +126,7 @@ import {
   findPreviousCompatibleSequence,
 } from '../helpers/list-sequence-helpers.js';
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
+import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 
 // ---------------------------------------------------------------------------
@@ -324,6 +327,40 @@ describe('lists-wrappers', () => {
       });
       expect(result.success).toBe(false);
       expect((result as any).failure.code).toBe('LEVEL_OUT_OF_RANGE');
+    });
+
+    it('allows continuePrevious without an explicit kind', () => {
+      const block = makeBlockCandidate('p3', 'paragraph');
+      const previous = makeProjection({
+        numId: 7,
+        kind: 'ordered',
+        candidate: {
+          nodeType: 'listItem',
+          nodeId: 'prev-item',
+          node: { attrs: { paragraphProperties: { numberingProperties: { numId: 7, ilvl: 0 } } } },
+          pos: 5,
+          end: 9,
+        },
+        address: { kind: 'block', nodeType: 'listItem', nodeId: 'prev-item' },
+      });
+
+      vi.mocked(resolveBlock).mockReturnValueOnce(block as any);
+      vi.mocked(getAllListItemProjections).mockReturnValueOnce([previous] as any);
+
+      const result = listsCreateWrapper(editor, {
+        mode: 'empty',
+        at: { kind: 'block', nodeType: 'paragraph', nodeId: 'p3' },
+        sequence: { mode: 'continuePrevious' },
+      });
+
+      expect(result.success).toBe(true);
+      expect(updateNumberingProperties).toHaveBeenCalledWith(
+        { numId: 7, ilvl: 0 },
+        block.node,
+        block.pos,
+        editor,
+        expect.anything(),
+      );
     });
   });
 

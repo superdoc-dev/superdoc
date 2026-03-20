@@ -1,6 +1,6 @@
 ---
 title: SDKs
-sidebarTitle: SDKs
+sidebarTitle: Overview
 description: Node.js and Python SDKs for programmatic document editing
 keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
 ---
@@ -172,6 +172,12 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 
 Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 The Python SDK also exposes synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
+
+## Need file-to-file diffing?
+
+For workflows where you already have `Doc1` and need to compare an uploaded `Doc2`, see [SDK Diffing](/document-engine/sdk-diffing).
+
+That guide covers the recommended `diff.capture -> diff.compare -> diff.apply` flow and how to save the result as a third `.docx` with tracked changes.
 
 ## User identity
 
@@ -367,20 +373,23 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.get` | `get` | Read the full document as an SDDocument structure. |
-| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.getText` | `get-text` | Extract the plain-text content of the document. |
 | `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.replace` | `replace` | Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
+| `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
+| `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
+| `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -518,6 +527,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
 | `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
 | `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 
@@ -549,7 +561,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.vanish` | `format vanish` | Set or clear the `vanish` inline run property on the target text range. |
 | `doc.format.webHidden` | `format web-hidden` | Set or clear the `webHidden` inline run property on the target text range. |
 | `doc.format.specVanish` | `format spec-vanish` | Set or clear the `specVanish` inline run property on the target text range. |
-| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. |
+| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL. |
 | `doc.format.cs` | `format cs` | Set or clear the `cs` inline run property on the target text range. |
 | `doc.format.bCs` | `format b-cs` | Set or clear the `bCs` inline run property on the target text range. |
 | `doc.format.iCs` | `format i-cs` | Set or clear the `iCs` inline run property on the target text range. |
@@ -568,7 +580,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.stylisticSets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
 | `doc.format.contextualAlternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
 | `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
-| `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references. |
 | `doc.styles.paragraph.clearStyle` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.resetDirectFormatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.setAlignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
@@ -587,12 +599,14 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clearBorder` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
 | `doc.format.paragraph.setShading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
 | `doc.format.paragraph.clearShading` | `format paragraph clear-shading` | Remove all paragraph shading. |
+| `doc.format.paragraph.setDirection` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
+| `doc.format.paragraph.clearDirection` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
 
 #### Create
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.paragraph` | `create paragraph` | Create a standalone paragraph at the target position. To add a list item, use lists.insert instead. |
 | `doc.create.heading` | `create heading` | Create a new heading at the target position. |
 | `doc.create.sectionBreak` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
@@ -628,8 +642,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
-| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
-| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
+| `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -643,11 +657,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.canContinuePrevious` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
 | `doc.lists.setLevelRestart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
 | `doc.lists.convertToText` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
-| `doc.lists.applyTemplate` | `lists apply-template` | Apply a captured ListTemplate to the target list, optionally filtered to specific levels. |
+| `doc.lists.applyTemplate` | `lists apply-template` | Advanced alias for lists.applyStyle. Apply a captured ListTemplate to the target list (abstract-scoped, no clone-on-write). |
 | `doc.lists.applyPreset` | `lists apply-preset` | Apply a built-in list formatting preset to the target list. |
 | `doc.lists.setType` | `lists set-type` | Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering. |
-| `doc.lists.captureTemplate` | `lists capture-template` | Capture the formatting of a list as a reusable ListTemplate. |
-| `doc.lists.setLevelNumbering` | `lists set-level-numbering` | Set the numbering format, pattern, and optional start value for a specific list level. |
+| `doc.lists.captureTemplate` | `lists capture-template` | Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting). |
+| `doc.lists.setLevelNumbering` | `lists set-level-numbering` | Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write). |
 | `doc.lists.setLevelBullet` | `lists set-level-bullet` | Set the bullet marker text for a specific list level. |
 | `doc.lists.setLevelPictureBullet` | `lists set-level-picture-bullet` | Set a picture bullet for a specific list level by its OOXML lvlPicBulletId. |
 | `doc.lists.setLevelAlignment` | `lists set-level-alignment` | Set the marker alignment (left, center, right) for a specific list level. |
@@ -655,6 +669,13 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.setLevelTrailingCharacter` | `lists set-level-trailing-character` | Set the trailing character (tab, space, nothing) after the marker for a specific list level. |
 | `doc.lists.setLevelMarkerFont` | `lists set-level-marker-font` | Set the font family used for the marker character at a specific list level. |
 | `doc.lists.clearLevelOverrides` | `lists clear-level-overrides` | Remove instance-level overrides for a specific list level, restoring abstract definition values. |
+| `doc.lists.getStyle` | `lists get-style` | Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle. |
+| `doc.lists.applyStyle` | `lists apply-style` | Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them. |
+| `doc.lists.restartAt` | `lists restart-at` | Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first. |
+| `doc.lists.setLevelNumberStyle` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelText` | `lists set-level-text` | Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelStart` | `lists set-level-start` | Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelLayout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions. |
 
 #### Tables
 
@@ -696,6 +717,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.setCellPadding` | `tables set-cell-padding` | Set padding on a specific table cell or cell range. |
 | `doc.tables.setCellSpacing` | `tables set-cell-spacing` | Set the cell spacing for the target table. |
 | `doc.tables.clearCellSpacing` | `tables clear-cell-spacing` | Remove custom cell spacing from the target table. |
+| `doc.tables.applyStyle` | `tables apply-style` | Apply a table style and/or style options in one call. |
+| `doc.tables.setBorders` | `tables set-borders` | Set borders on a table using a target set or per-edge patch. |
+| `doc.tables.setTableOptions` | `tables set-table-options` | Set table-level default cell margins and/or cell spacing. |
 | `doc.tables.get` | `tables get` | Retrieve table structure and dimensions by locator. |
 | `doc.tables.getCells` | `tables get-cells` | Retrieve cell information for a table, optionally filtered by row or column. |
 | `doc.tables.getProperties` | `tables get-properties` | Retrieve layout and style properties of a table. |
@@ -799,20 +823,23 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.get` | `get` | Read the full document as an SDDocument structure. |
-| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
 | `doc.get_node` | `get-node` | Retrieve a single node by target position. |
 | `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
 | `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
-| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.replace` | `replace` | Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.). |
-| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.insert` | `insert` | Insert content into the document. Two input shapes: legacy string-based (value + type) inserts inline content at a text position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target is omitted, content appends at the end of the document. Legacy mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
+| `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
+| `doc.delete` | `delete` | Delete content at a contiguous document selection. Accepts a SelectionTarget or mutation-ready ref. Supports cross-block deletion and optional block-edge expansion via behavior mode. |
+| `doc.blocks.list` | `blocks list` | List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
+| `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
+| `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -950,6 +977,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.authorities.entries.insert` | `authorities entries insert` | Insert a new TA authority entry field at a target location. |
 | `doc.authorities.entries.update` | `authorities entries update` | Update the properties of an existing TA authority entry. |
 | `doc.authorities.entries.remove` | `authorities entries remove` | Remove a TA authority entry field from the document. |
+| `doc.diff.capture` | `diff capture` | Capture the current document's diffable state as a versioned snapshot. v1 covers body, comments, styles, and numbering. Header/footer content is not included. |
+| `doc.diff.compare` | `diff compare` | Compare the current document (base) against a previously captured target snapshot. Returns a versioned diff payload describing the changes from base to target. |
+| `doc.diff.apply` | `diff apply` | Apply a previously computed diff payload to the current document. The document fingerprint must match the diff base fingerprint. Tracked mode governs body content only; styles, numbering, and comments are always applied directly. |
 
 #### Format
 
@@ -981,7 +1011,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.vanish` | `format vanish` | Set or clear the `vanish` inline run property on the target text range. |
 | `doc.format.web_hidden` | `format web-hidden` | Set or clear the `webHidden` inline run property on the target text range. |
 | `doc.format.spec_vanish` | `format spec-vanish` | Set or clear the `specVanish` inline run property on the target text range. |
-| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. |
+| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. This does not change paragraph direction; use `format.paragraph.setDirection` for paragraph-level RTL. |
 | `doc.format.cs` | `format cs` | Set or clear the `cs` inline run property on the target text range. |
 | `doc.format.b_cs` | `format b-cs` | Set or clear the `bCs` inline run property on the target text range. |
 | `doc.format.i_cs` | `format i-cs` | Set or clear the `iCs` inline run property on the target text range. |
@@ -1000,7 +1030,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.stylistic_sets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
 | `doc.format.contextual_alternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
 | `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
-| `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Apply a paragraph style (w:pStyle) to a paragraph-like block, clearing direct run formatting while preserving character-style references. |
 | `doc.styles.paragraph.clear_style` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.reset_direct_formatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.set_alignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
@@ -1019,12 +1049,14 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clear_border` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
 | `doc.format.paragraph.set_shading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
 | `doc.format.paragraph.clear_shading` | `format paragraph clear-shading` | Remove all paragraph shading. |
+| `doc.format.paragraph.set_direction` | `format paragraph set-direction` | Set paragraph base direction (LTR or RTL via w:bidi). Optionally align text to match. |
+| `doc.format.paragraph.clear_direction` | `format paragraph clear-direction` | Remove explicit paragraph direction, reverting to inherited or default (LTR). |
 
 #### Create
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.paragraph` | `create paragraph` | Create a standalone paragraph at the target position. To add a list item, use lists.insert instead. |
 | `doc.create.heading` | `create heading` | Create a new heading at the target position. |
 | `doc.create.section_break` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
@@ -1060,8 +1092,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
-| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
-| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
+| `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -1075,11 +1107,11 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.can_continue_previous` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
 | `doc.lists.set_level_restart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
 | `doc.lists.convert_to_text` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
-| `doc.lists.apply_template` | `lists apply-template` | Apply a captured ListTemplate to the target list, optionally filtered to specific levels. |
+| `doc.lists.apply_template` | `lists apply-template` | Advanced alias for lists.applyStyle. Apply a captured ListTemplate to the target list (abstract-scoped, no clone-on-write). |
 | `doc.lists.apply_preset` | `lists apply-preset` | Apply a built-in list formatting preset to the target list. |
 | `doc.lists.set_type` | `lists set-type` | Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering. |
-| `doc.lists.capture_template` | `lists capture-template` | Capture the formatting of a list as a reusable ListTemplate. |
-| `doc.lists.set_level_numbering` | `lists set-level-numbering` | Set the numbering format, pattern, and optional start value for a specific list level. |
+| `doc.lists.capture_template` | `lists capture-template` | Advanced alias for lists.getStyle. Capture list formatting from the abstract definition only (does not merge lvlOverride formatting). |
+| `doc.lists.set_level_numbering` | `lists set-level-numbering` | Advanced alias for lists.setLevelNumberStyle/setLevelText/setLevelStart. Set format, pattern, and start in one call (abstract-scoped, no clone-on-write). |
 | `doc.lists.set_level_bullet` | `lists set-level-bullet` | Set the bullet marker text for a specific list level. |
 | `doc.lists.set_level_picture_bullet` | `lists set-level-picture-bullet` | Set a picture bullet for a specific list level by its OOXML lvlPicBulletId. |
 | `doc.lists.set_level_alignment` | `lists set-level-alignment` | Set the marker alignment (left, center, right) for a specific list level. |
@@ -1087,6 +1119,13 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.set_level_trailing_character` | `lists set-level-trailing-character` | Set the trailing character (tab, space, nothing) after the marker for a specific list level. |
 | `doc.lists.set_level_marker_font` | `lists set-level-marker-font` | Set the font family used for the marker character at a specific list level. |
 | `doc.lists.clear_level_overrides` | `lists clear-level-overrides` | Remove instance-level overrides for a specific list level, restoring abstract definition values. |
+| `doc.lists.get_style` | `lists get-style` | Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle. |
+| `doc.lists.apply_style` | `lists apply-style` | Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them. |
+| `doc.lists.restart_at` | `lists restart-at` | Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first. |
+| `doc.lists.set_level_number_style` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_text` | `lists set-level-text` | Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_start` | `lists set-level-start` | Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_layout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions. |
 
 #### Tables
 
@@ -1128,6 +1167,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.set_cell_padding` | `tables set-cell-padding` | Set padding on a specific table cell or cell range. |
 | `doc.tables.set_cell_spacing` | `tables set-cell-spacing` | Set the cell spacing for the target table. |
 | `doc.tables.clear_cell_spacing` | `tables clear-cell-spacing` | Remove custom cell spacing from the target table. |
+| `doc.tables.apply_style` | `tables apply-style` | Apply a table style and/or style options in one call. |
+| `doc.tables.set_borders` | `tables set-borders` | Set borders on a table using a target set or per-edge patch. |
+| `doc.tables.set_table_options` | `tables set-table-options` | Set table-level default cell margins and/or cell spacing. |
 | `doc.tables.get` | `tables get` | Retrieve table structure and dimensions by locator. |
 | `doc.tables.get_cells` | `tables get-cells` | Retrieve cell information for a table, optionally filtered by row or column. |
 | `doc.tables.get_properties` | `tables get-properties` | Retrieve layout and style properties of a table. |
@@ -1226,6 +1268,26 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
   </Tab>
 </Tabs>
 {/* SDK_OPERATIONS_END */}
+
+## SDK vs browser integration model
+
+The SDKs are request/response wrappers around the CLI. They do **not** expose browser event subscriptions like `editor.on('update', ...)` or `superdoc.on('editor-update', ...)`.
+
+- Call `doc.info()` at workflow boundaries — after opening, after edits, or before saving — not in a polling loop.
+- If you are building a browser live counter, use the [SuperEditor events](/core/supereditor/events) or [SuperDoc events](/core/superdoc/events) instead.
+
+```ts
+const doc = await client.open('./report.docx');
+const info = doc.info();
+console.log(
+  `${info.counts.words} words, ` +
+    `${info.counts.characters} characters, ` +
+    `${info.counts.trackedChanges} tracked changes, ` +
+    `${info.counts.sdtFields} SDT fields, ` +
+    `${info.counts.lists} lists`,
+);
+await doc.close();
+```
 
 ## Related
 

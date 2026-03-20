@@ -230,7 +230,54 @@ onFieldsDiscovered={(fields) => {
   // All fields found in document
   console.log('Document has fields:', fields);
 }}
+
+// Zoom changes
+onZoomChange={({ zoom }) => {
+  // zoom - New zoom level as percentage (100, 150, etc.)
+  console.log('Zoom:', zoom);
+}}
 ```
+
+## Zoom
+
+Control document zoom programmatically via the component ref:
+
+```tsx
+import { useRef, useState } from 'react';
+import type { SuperDocESignHandle } from '@superdoc-dev/esign';
+
+const ref = useRef<SuperDocESignHandle>(null);
+const [zoom, setZoom] = useState(100);
+
+// Set zoom
+ref.current?.setZoom(150);
+
+// Get current zoom
+const currentZoom = ref.current?.getZoom();
+
+// Listen for changes
+<SuperDocESign
+  ref={ref}
+  onZoomChange={({ zoom }) => setZoom(zoom)}
+  // ...
+/>
+```
+
+### Example: zoom controls
+
+```tsx
+const ZoomControls = ({ esignRef, zoom, setZoom }) => (
+  <div>
+    <button onClick={() => esignRef.current?.setZoom(Math.max(25, zoom - 25))}>-</button>
+    <span>{zoom}%</span>
+    <button onClick={() => esignRef.current?.setZoom(Math.min(400, zoom + 25))}>+</button>
+  </div>
+);
+```
+
+<Note>
+Zoom works with both `print` and `web` layout modes. In `print` mode, zoom is applied through the layout engine (ProseMirror). In `web` mode, zoom is applied via CSS transforms.
+</Note>
 
 ## PDF support
 

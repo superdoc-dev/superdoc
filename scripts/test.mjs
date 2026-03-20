@@ -23,8 +23,8 @@ const bunExitCodes = [
     '--filter', '@superdoc/document-api',
     '--filter', '@superdoc/layout-engine', '--filter', '@superdoc/style-engine',
     '--filter', '@superdoc/geometry-utils', '--filter', '@superdoc/word-layout',
-    '--filter', '@superdoc/common', '--filter', '@font-utils',
-    '--filter', '@locale-utils', '--filter', '@url-validation', 'test']),
+    '--filter', '@superdoc/common', '--filter', '@superdoc/font-utils',
+    '--filter', '@superdoc/locale-utils', '--filter', '@superdoc/url-validation', 'test']),
   run(pnpmCommand, ['--filter', '@superdoc/super-editor', 'run', 'test:bun']),
 ];
 

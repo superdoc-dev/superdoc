@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Thin wrapper — releases the superdoc package locally via semantic-release.
+ * Thin wrapper — releases the CLI package locally via semantic-release.
  * See release-local.mjs for the reusable runner logic.
  */
 
 import { releasePackage } from './release-local.mjs';
 
 try {
-  releasePackage({ packageCwd: 'packages/superdoc', tagPrefix: 'v', extraArgs: process.argv.slice(2) });
+  releasePackage({ packageCwd: 'apps/cli', tagPrefix: 'cli-v', extraArgs: process.argv.slice(2) });
 } catch (error) {
   const message = error && typeof error.message === 'string' ? error.message : String(error);
   console.error(message);

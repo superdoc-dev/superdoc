@@ -42,6 +42,16 @@ export default defineConfig(({ mode }) => {
       globals: true,
       // Use happy-dom for faster tests (set VITEST_DOM=jsdom to use jsdom)
       environment: process.env.VITEST_DOM || 'happy-dom',
+      // Override environment to 'node' for directories that don't need DOM.
+      // This avoids the cost of setting up happy-dom for pure logic tests.
+      environmentMatchGlobs: [
+        ['src/core/super-converter/**', 'node'],
+        ['src/core/commands/**', 'node'],
+        ['src/core/helpers/**', 'node'],
+        ['src/core/parts/**', 'node'],
+        ['src/document-api-adapters/**', 'node'],
+        ['src/utils/**', 'node'],
+      ],
       retry: 2,
       testTimeout: 20000,
       hookTimeout: 10000,

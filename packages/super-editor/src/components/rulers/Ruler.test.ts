@@ -1,22 +1,18 @@
-/**
- * Test suite for Ruler.vue section-awareness
- *
- * NOTE: The Ruler.vue component currently has a TypeScript syntax error in its
- * emit definition (line 6). The correct syntax should be:
- *
- * const emit = defineEmits(['margin-change']);
- *
- * instead of:
- *
- * const emit = defineEmits<{
- *   'margin-change': [payload: { side: 'left' | 'right'; value: number; sectionIndex: number }]
- * }>();
- *
- * Once the Ruler.vue file is fixed, these tests can be uncommented and run.
- * For now, we document the expected behaviors that should be tested:
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
+import Ruler from './Ruler.vue';
+
+const createMockEditor = (overrides = {}) => ({
+  options: { mode: 'docx' },
+  getPageStyles: vi.fn(() => ({
+    pageSize: { width: 8.5, height: 11 },
+    pageMargins: { left: 1, right: 1, top: 1, bottom: 1 },
+  })),
+  on: vi.fn(),
+  off: vi.fn(),
+  ...overrides,
+});
 
 /**
  * Helper to create a mock emitter for testing event handling
@@ -38,9 +34,30 @@ const createEmitter = () => {
   };
 };
 
-describe('Ruler.vue section-awareness (blocked by syntax error in Ruler.vue)', () => {
+describe('Ruler.vue rendering', () => {
+  it('renders the leading zero label and keeps it inside the ruler bounds', async () => {
+    const wrapper = mount(Ruler, {
+      props: {
+        editor: createMockEditor(),
+      },
+    });
+
+    await nextTick();
+
+    const labels = wrapper.findAll('.numbering');
+    expect(labels.length).toBeGreaterThan(1);
+    expect(labels[0].text()).toBe('0');
+    expect(labels[0].classes()).toContain('numbering--edge-start');
+    expect(labels[1].text()).toBe('1');
+    expect(labels[1].classes()).not.toContain('numbering--edge-start');
+
+    wrapper.unmount();
+  });
+});
+
+describe('Ruler.vue section-awareness coverage gaps', () => {
   /**
-   * Required test cases once Ruler.vue syntax is fixed:
+   * Remaining component test cases to add:
    *
    * 1. Updates ruler when section changes
    *    - On 'selectionUpdate' event, should call getCurrentSectionPageStyles()

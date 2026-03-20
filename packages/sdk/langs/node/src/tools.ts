@@ -282,7 +282,14 @@ export async function dispatchSuperDocTool(
   validateToolArgs(toolName, args, tool);
 
   // Strip doc/sessionId — the SDK client manages session targeting after doc.open().
-  const { doc: _doc, sessionId: _sid, ...cleanArgs } = args;
+  // Also strip empty-string values for optional params — LLMs often fill optional
+  // string fields with "" instead of omitting them, which the API rejects.
+  const cleanArgs: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (key === 'doc' || key === 'sessionId') continue;
+    if (value === '') continue;
+    cleanArgs[key] = value;
+  }
 
   return dispatchIntentTool(toolName, cleanArgs, (operationId, input) => {
     const method = resolveDocApiMethod(client, operationId);

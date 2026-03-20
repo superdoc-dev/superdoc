@@ -461,9 +461,7 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
   'doc.find': new Set(['select']),
   // CLI shortcut params (blockId, start, end) conflict with the `target` object
   // on comment operations. LLMs should use `target` or `ref`, not flat params.
-  // parentCommentId is excluded from create — if the model sees it, it fills it
-  // with "" which the API rejects. Replies are rare in agent workflows.
-  'doc.comments.create': new Set(['blockId', 'start', 'end', 'parentCommentId']),
+  'doc.comments.create': new Set(['blockId', 'start', 'end']),
   'doc.comments.patch': new Set(['blockId', 'start', 'end']),
 };
 

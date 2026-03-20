@@ -3447,7 +3447,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       styleId: {
         type: 'string',
         description:
-          "Named paragraph style (e.g. 'Normal', 'BodyText'). Omit for document default. Use superdoc_get_content info to discover available styles.",
+          "Always pass a styleId to match the document formatting. Use the styleId from blocks data, or 'Normal' if blocks have no styleId. Common values: 'Normal', 'BodyText', 'ListParagraph'.",
       },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
@@ -3484,7 +3484,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         text: { type: 'string', description: 'Heading text content.' },
         styleId: {
           type: 'string',
-          description: "Named heading style (e.g. 'Heading1', 'Heading2'). Omit for default heading style.",
+          description:
+            "Always pass a styleId to match the document formatting. Use 'Heading1' through 'Heading6' matching the level, or the heading styleId from blocks data.",
         },
       },
       ['level'],

@@ -3811,7 +3811,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         target: {
           ...ref('BlockAddressOrRange'),
           description:
-            "Required when mode is 'fromParagraphs'. The paragraph(s) to convert into list items. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
+            "Required when mode is 'fromParagraphs'. Each call converts ONE paragraph into a list item. To make a list with N items, create N separate paragraphs first, then call superdoc_list create for EACH one. Format: {kind:'block', nodeType:'paragraph', nodeId:'<id>'}.",
         },
         kind: {
           ...listKindSchema,

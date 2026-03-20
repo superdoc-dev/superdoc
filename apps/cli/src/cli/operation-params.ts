@@ -459,8 +459,8 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
   // CLI uses flat flags (--type, --pattern, --mode) or --query-json; `select`
   // is an internal document-api field that the invoker builds from flat flags.
   'doc.find': new Set(['select']),
-  // CLI shortcut params (blockId, start, end) conflict with the `target` object
-  // on comment operations. LLMs should use `target` or `ref`, not flat params.
+  // CLI shortcut params (blockId, start, end) conflict with the `target`/`ref`
+  // objects. LLMs should use `target` or `ref` from search results, not flat params.
   'doc.comments.create': new Set(['blockId', 'start', 'end']),
   'doc.comments.patch': new Set(['blockId', 'start', 'end']),
 };
@@ -859,6 +859,8 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
 
 for (const operationId of FORMAT_OPERATION_IDS) {
   EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS];
+  // LLMs should use `target` or `ref` from search results, not flat params.
+  PARAM_EXCLUSIONS[`doc.${operationId}`] = new Set(['blockId', 'start', 'end']);
 }
 
 // ---------------------------------------------------------------------------

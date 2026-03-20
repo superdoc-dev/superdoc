@@ -32,7 +32,9 @@ If you need real-time sync between the agent and a frontend editor, add [collabo
     ```
   </Tab>
   <Tab title="Vercel AI">
-    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+    ```bash
+    npm install @superdoc-dev/sdk ai @ai-sdk/openai
+    ```
   </Tab>
 </Tabs>
 
@@ -71,7 +73,12 @@ Load the tool definitions for your provider and the default system prompt. Both 
     ```
   </Tab>
   <Tab title="Vercel AI">
-    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+    ```typescript
+    import { chooseTools, getSystemPrompt } from '@superdoc-dev/sdk';
+
+    const { tools: sdkTools } = await chooseTools({ provider: 'vercel' });
+    const systemPrompt = await getSystemPrompt();
+    ```
   </Tab>
 </Tabs>
 
@@ -211,7 +218,48 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
     5. Errors use `is_error: true` so the model knows the call failed.
   </Tab>
   <Tab title="Vercel AI">
-    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+    ```typescript
+    import { generateText, jsonSchema, stepCountIs } from 'ai';
+    import { openai } from '@ai-sdk/openai';
+    import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+    // Convert SDK tool definitions into Vercel AI tool objects with execute functions
+    const tools: Record<string, any> = {};
+    for (const t of sdkTools as any[]) {
+      const fn = t.function;
+      tools[fn.name] = {
+        description: fn.description,
+        inputSchema: jsonSchema<Record<string, unknown>>(fn.parameters),
+        execute: async (args: Record<string, unknown>) => {
+          try {
+            return await dispatchSuperDocTool(doc, fn.name, args);
+          } catch (err: any) {
+            return { error: err.message };
+          }
+        },
+      };
+    }
+
+    // generateText handles the agent loop internally
+    const { text } = await generateText({
+      model: openai.chat('gpt-5.4'),
+      system: systemPrompt,
+      messages: [
+        { role: 'user', content: 'Find the termination clause and rewrite it to allow 30-day notice.' },
+      ],
+      tools,
+      stopWhen: stepCountIs(10),
+    });
+
+    console.log(text);
+    ```
+
+    **What's happening:**
+
+    1. SDK tool definitions are converted into Vercel AI tool objects — each with an `execute` function that calls `dispatchSuperDocTool`.
+    2. `generateText` handles the agent loop internally — it calls the model, executes tools, feeds results back, and repeats.
+    3. `stopWhen: stepCountIs(10)` sets a max iteration guard.
+    4. No manual `while(true)` loop needed — Vercel AI manages it for you.
   </Tab>
 </Tabs>
 
@@ -378,7 +426,60 @@ A complete, copy-pasteable script that opens a document, runs an agent, saves, a
     ```
   </Tab>
   <Tab title="Vercel AI">
-    <Info>Vercel AI example coming soon. The SDK supports `chooseTools({ provider: 'vercel' })` today — see [LLM tools](/document-engine/ai-agents/llm-tools#provider-formats) for the schema shape.</Info>
+    ```typescript
+    import { generateText, jsonSchema, stepCountIs } from 'ai';
+    import { openai } from '@ai-sdk/openai';
+    import {
+      createSuperDocClient,
+      chooseTools,
+      dispatchSuperDocTool,
+      getSystemPrompt,
+    } from '@superdoc-dev/sdk';
+
+    // 1. Open the document
+    const client = createSuperDocClient();
+    await client.connect();
+    const doc = await client.open({ doc: './contract.docx' });
+
+    // 2. Load tools and system prompt
+    const { tools: sdkTools } = await chooseTools({ provider: 'vercel' });
+    const systemPrompt = await getSystemPrompt();
+
+    // 3. Convert SDK tools into Vercel AI tool objects
+    const tools: Record<string, any> = {};
+    for (const t of sdkTools as any[]) {
+      const fn = t.function;
+      tools[fn.name] = {
+        description: fn.description,
+        inputSchema: jsonSchema<Record<string, unknown>>(fn.parameters),
+        execute: async (args: Record<string, unknown>) => {
+          try {
+            return await dispatchSuperDocTool(doc, fn.name, args);
+          } catch (err: any) {
+            return { error: err.message };
+          }
+        },
+      };
+    }
+
+    // 4. Run the agent (loop handled by generateText)
+    const { text } = await generateText({
+      model: openai.chat('gpt-5.4'),
+      system: systemPrompt,
+      messages: [
+        { role: 'user', content: 'Find the termination clause and rewrite it to allow 30-day notice.' },
+      ],
+      tools,
+      stopWhen: stepCountIs(10),
+    });
+
+    console.log(text);
+
+    // 5. Save and clean up
+    await doc.save({ inPlace: true });
+    await doc.close();
+    await client.dispose();
+    ```
   </Tab>
 </Tabs>
 

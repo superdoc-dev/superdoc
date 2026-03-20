@@ -95,7 +95,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   get_content: {
     toolName: 'superdoc_get_content',
     description:
-      'Read document content. Use action "info" first to get document structure, available styles, and default formatting. Use "text" or "markdown" to read content.',
+      'Read document content. Use action "info" for structure and styles, "blocks" for all block IDs and types, "text" or "markdown" for content. Call info or blocks before editing.',
   },
   edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
   create: {
@@ -567,6 +567,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'blocks/list.mdx',
     referenceGroup: 'blocks',
+    intentGroup: 'get_content',
+    intentAction: 'blocks',
   },
 
   'blocks.delete': {

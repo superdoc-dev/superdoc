@@ -2975,9 +2975,13 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   ...formatInlineAliasOperationSchemas,
   'blocks.list': {
     input: objectSchema({
-      offset: { type: 'number', minimum: 0 },
-      limit: { type: 'number', minimum: 1 },
-      nodeTypes: { type: 'array', items: { enum: [...blockNodeTypeValues] } },
+      offset: { type: 'number', minimum: 0, description: 'Number of blocks to skip. Default: 0.' },
+      limit: { type: 'number', minimum: 1, description: 'Maximum blocks to return. Omit for all blocks.' },
+      nodeTypes: {
+        type: 'array',
+        items: { enum: [...blockNodeTypeValues] },
+        description: "Filter by block types (e.g. ['paragraph', 'heading']). Omit for all types.",
+      },
     }),
     output: objectSchema(
       {

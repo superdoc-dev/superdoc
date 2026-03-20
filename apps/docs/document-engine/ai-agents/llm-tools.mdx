@@ -352,7 +352,9 @@ const { tools: sdkTools } = await chooseTools({ provider: 'openai' });
 const allTools = [...sdkTools, hyperlinkTool];
 
 // In your agentic loop, use your dispatcher instead of dispatchSuperDocTool:
-const result = await dispatchToolCall(doc, toolCall.function.name, args);
+// OpenAI chat completions store the tool name on function.name.
+const toolName = toolCall.function.name;
+const result = await dispatchToolCall(doc, toolName, args);
 ```
 
 ### Extending the system prompt

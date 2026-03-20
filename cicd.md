@@ -177,13 +177,16 @@ The workflow is `.github/workflows/release-cli.yml`. It analyzes commits across 
 
 | Command | What it does |
 |---------|-------------|
-| `pnpm run release:local` | Releases **superdoc then CLI** in sequence on `stable` |
+| `pnpm run release:local` | Releases **superdoc → CLI → SDK** in sequence on `stable` |
 | `pnpm run release:local:superdoc` | Releases superdoc only |
 | `pnpm run release:local:cli` | Releases CLI only |
+| `pnpm run release:local:sdk` | Releases SDK only |
 
 All accept `-- --dry-run` to preview without publishing. The combined orchestrator (`release:local`) enforces a `stable` branch guard (override with `--branch=<name>`).
 
-`@semantic-release/git` automatically pushes version commits and tags when releasing on the `stable` branch. This is existing behavior for both superdoc and CLI.
+`@semantic-release/git` automatically pushes version commits and tags when releasing on the `stable` branch. This is existing behavior for superdoc, CLI, and SDK.
+
+SDK stable releases publish both npm (via `sdk-release-publish.mjs`) and PyPI (via `twine`). Prerequisites: `pip install twine` and `PYPI_PUBLISH_TOKEN` in your shell env.
 
 ### Raw Platform Publish (bypass semantic-release)
 

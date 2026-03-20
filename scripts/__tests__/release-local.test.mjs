@@ -57,3 +57,19 @@ test('stable orchestrator prunes before snapshot and reports would-release previ
     'scripts/release-local-stable.mjs: dry-run previews must be reported as would-release',
   );
 });
+
+test('stable orchestrator releases superdoc, cli, then sdk in order', async () => {
+  const content = await readRepoFile('scripts/release-local-stable.mjs');
+  assertOrder(
+    content,
+    "name: 'superdoc'",
+    "name: 'cli'",
+    'scripts/release-local-stable.mjs (superdoc before cli)',
+  );
+  assertOrder(
+    content,
+    "name: 'cli'",
+    "name: 'sdk'",
+    'scripts/release-local-stable.mjs (cli before sdk)',
+  );
+});

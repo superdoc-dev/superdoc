@@ -55,6 +55,7 @@
     "release:local": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-stable.mjs",
     "release:local:superdoc": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs",
     "release:local:cli": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-cli.mjs",
+    "release:local:sdk": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-sdk.mjs",
     "prepare": "if [ -z \"$CI\" ]; then lefthook install; fi",
     "test:layout": "bun scripts/test-layout.mjs",
     "test:visual": "bun scripts/test-visual.mjs",

@@ -20,6 +20,8 @@ const chatMessages = ref([]);
 const chatInput = ref('');
 const agentStatus = ref('offline');
 const chatContainer = ref(null);
+const messageRatings = ref({});  // { messageId: 'good' | 'bad' | 'ok' }
+const lastUserMessageTime = ref(null);  // Track when user sent message for duration calc
 
 const USER_COLORS = ['#a11134', '#2a7e34', '#b29d11', '#2f4597', '#ab5b22'];
 
@@ -59,6 +61,8 @@ const initChat = () => {
 
   ws.onopen = () => {
     console.log('[Client] Chat connected');
+    // Clear chat history on connect (fresh start each page load)
+    ws.send(JSON.stringify({ type: 'clear' }));
   };
 
   ws.onerror = (error) => {
@@ -73,12 +77,19 @@ const initChat = () => {
         agentStatus.value = data.agentStatus || 'offline';
         scrollToBottom();
       } else if (data.type === 'message') {
-        chatMessages.value.push(data.message);
+        const msg = data.message;
+        // Calculate duration for agent messages
+        if (msg.role === 'assistant' && lastUserMessageTime.value) {
+          msg.duration = Date.now() - lastUserMessageTime.value;
+          lastUserMessageTime.value = null;
+        }
+        chatMessages.value.push(msg);
         scrollToBottom();
       } else if (data.type === 'status') {
         agentStatus.value = data.status;
       } else if (data.type === 'clear') {
         chatMessages.value = [];
+        messageRatings.value = {};
       }
     } catch (e) {
       console.error('[Client] Failed to parse message:', e);
@@ -109,9 +120,30 @@ const sendMessage = () => {
     timestamp: Date.now(),
   };
 
+  // Track when user sent message for duration calculation
+  lastUserMessageTime.value = Date.now();
+
+  // Add user message to local chat immediately (no echo from server)
+  chatMessages.value.push(message);
+
   chatWs.value.send(JSON.stringify({ type: 'message', ...message }));
   chatInput.value = '';
   scrollToBottom();
+};
+
+const rateMessage = (messageId, rating) => {
+  // Toggle off if clicking same rating, otherwise set new rating
+  if (messageRatings.value[messageId] === rating) {
+    delete messageRatings.value[messageId];
+  } else {
+    messageRatings.value[messageId] = rating;
+  }
+};
+
+const formatDuration = (ms) => {
+  if (!ms) return '';
+  const seconds = (ms / 1000).toFixed(1);
+  return `${seconds}s`;
 };
 
 const handleKeydown = (event) => {
@@ -198,9 +230,27 @@ onBeforeUnmount(() => {
         >
           <div class="message-header">
             <span class="message-role">{{ msg.role === 'user' ? 'You' : 'Agent' }}</span>
-            <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
+            <span v-if="msg.role === 'assistant' && msg.duration" class="message-duration">{{ formatDuration(msg.duration) }}</span>
+            <span v-else class="message-time">{{ formatTime(msg.timestamp) }}</span>
           </div>
           <div class="message-content">{{ msg.content }}</div>
+          <div v-if="msg.role === 'assistant'" class="message-rating">
+            <button
+              class="rating-btn good"
+              :class="{ active: messageRatings[msg.id] === 'good' }"
+              @click="rateMessage(msg.id, 'good')"
+            >Good</button>
+            <button
+              class="rating-btn ok"
+              :class="{ active: messageRatings[msg.id] === 'ok' }"
+              @click="rateMessage(msg.id, 'ok')"
+            >OK</button>
+            <button
+              class="rating-btn bad"
+              :class="{ active: messageRatings[msg.id] === 'bad' }"
+              @click="rateMessage(msg.id, 'bad')"
+            >Bad</button>
+          </div>
         </div>
       </div>
 
@@ -376,11 +426,57 @@ body {
   color: #999;
 }
 
+.message-duration {
+  color: #666;
+  font-weight: 500;
+}
+
 .message-content {
   color: #444;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.message-rating {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+
+.rating-btn {
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #f5f5f5;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rating-btn:hover {
+  background: #eee;
+}
+
+.rating-btn.good.active {
+  background: #4caf50;
+  border-color: #4caf50;
+  color: white;
+}
+
+.rating-btn.ok.active {
+  background: #2196f3;
+  border-color: #2196f3;
+  color: white;
+}
+
+.rating-btn.bad.active {
+  background: #f44336;
+  border-color: #f44336;
+  color: white;
 }
 
 .chat-input-area {

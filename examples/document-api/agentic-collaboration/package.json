@@ -8,7 +8,7 @@
     "dev:client": "echo '[Client] Backend URL:' $(grep -v '^#' .env 2>/dev/null | grep VITE_BACKEND_URL | cut -d= -f2 || echo 'http://localhost:3050 (default)') && vite",
     "dev:client:remote": "echo 'Connecting to VITE_BACKEND_URL from .env' && vite",
     "dev:server": "tsx watch server.ts",
-    "dev:agent": "tsx watch agent.ts",
+    "dev:agent": "tsx watch agent/index.ts",
     "build": "vite build",
     "deploy:backend": "./deploy-backend.sh",
     "deploy:frontend": "./deploy-frontend.sh"

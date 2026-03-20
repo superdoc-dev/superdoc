@@ -129,8 +129,8 @@ async function main() {
             timestamp: msg.timestamp || Date.now()
           };
           room.messages.push(chatMsg);
-          console.log(`[Server] Broadcasting to ${room.clients.size} clients`);
-          broadcastToRoom(roomId, { type: 'message', message: chatMsg });
+          console.log(`[Server] Broadcasting to ${room.clients.size - 1} other clients`);
+          broadcastToRoom(roomId, { type: 'message', message: chatMsg }, socket);
         } else if (msg.type === 'status') {
           room.agentStatus = msg.status;
           broadcastToRoom(roomId, { type: 'status', status: msg.status }, socket);

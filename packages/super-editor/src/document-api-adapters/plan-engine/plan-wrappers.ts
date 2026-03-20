@@ -590,21 +590,23 @@ export function selectionMutationWrapper(
   // document state without mutating anything.
   const compiled = compilePlan(editor, [step]);
 
-  // Insert requires a collapsed (point) target inside a textblock.
-  // Reject spans, non-collapsed ranges, and positions that resolve to
-  // block boundaries (e.g., refs to images/tables) so executeTextInsert()
-  // never attempts tr.insert() outside a textblock.
+  // Insert validation: reject multi-segment spans and non-textblock targets.
+  // Single-block range refs (absFrom < absTo) are valid — executeTextInsert()
+  // inserts at position: 'before' (absFrom), so the range width is irrelevant.
   if (request.kind === 'insert') {
     const compiledStep = compiled.mutationSteps.find((s) => s.step.id === stepId);
     const target = compiledStep?.targets[0];
     if (target) {
-      const isInvalidInsertTarget = target.kind === 'span' || target.absFrom !== target.absTo;
-      if (isInvalidInsertTarget) {
+      // Multi-segment refs (span) are never valid for point inserts.
+      if (target.kind === 'span') {
         const resolution = buildSelectionResolutionFromCompiled(compiled, stepId);
         return {
           success: false,
           resolution,
-          failure: { code: 'INVALID_TARGET', message: 'Insert operations require a collapsed target range.' },
+          failure: {
+            code: 'INVALID_TARGET',
+            message: 'Insert operations require a single-block target, not a multi-segment span.',
+          },
         };
       }
 
@@ -893,7 +895,9 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
         { ref },
       );
     }
-    resolvedRange = { from: compiledTarget.absFrom, to: compiledTarget.absTo };
+    // Collapse to the start position — refs resolve to non-collapsed ranges
+    // but insert semantics is "insert before", not "replace range".
+    resolvedRange = { from: compiledTarget.absFrom, to: compiledTarget.absFrom };
     const resolution = buildSelectionResolutionFromCompiled(compiled, dummyStepId);
     effectiveTarget = resolution.target;
   } else {
@@ -923,8 +927,10 @@ function insertStructuredInner(editor: Editor, input: InsertInput, options?: Mut
 
   const { from, to } = resolvedRange;
 
-  // Insert semantics are point-only for doc.insert, regardless of content type.
-  if (from !== to) {
+  // Explicit targets with a non-collapsed range indicate a text selection —
+  // that's a replace operation, not an insert. Refs are already collapsed
+  // to their start position in the ref branch above.
+  if (target && from !== to) {
     return {
       success: false,
       resolution,

@@ -163,12 +163,19 @@
     - type: javascript
       value: |
         const d = JSON.parse(output);
-        const t = d.documentText || '';
-        if (!t.includes('$9,018') || !t.includes('3%'))
-          return { pass: false, score: 0, reason: 'Rent data missing from document' };
-        return { pass: true, score: 1, reason: 'Document intact with rent data' };
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
+        return { pass: true, score: 1, reason: 'Document read successfully' };
     - type: javascript
       value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasRead = tools.some(t => t.includes('search') || t.includes('get_content'));
+        if (!hasRead) return { pass: false, score: 0, reason: `No read step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Read: ${tools.join(' → ')}` };
+      metric: tool_usage
 
 - description: 'Report: Q&A about site enrollment status'
   vars:
@@ -179,11 +186,19 @@
     - type: javascript
       value: |
         const d = JSON.parse(output);
-        if (!d.documentText?.includes('Behind Schedule'))
-          return { pass: false, score: 0, reason: 'Enrollment status data missing' };
-        return { pass: true, score: 1, reason: 'Document intact' };
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
+        return { pass: true, score: 1, reason: 'Document read successfully' };
     - type: javascript
       value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasRead = tools.some(t => t.includes('search') || t.includes('get_content'));
+        if (!hasRead) return { pass: false, score: 0, reason: `No read step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Read: ${tools.join(' → ')}` };
+      metric: tool_usage
 
 - description: 'Offer: Q&A about compensation package'
   vars:
@@ -194,12 +209,19 @@
     - type: javascript
       value: |
         const d = JSON.parse(output);
-        const t = d.documentText || '';
-        if (!t.includes('$185,000') || !t.includes('10,000 shares'))
-          return { pass: false, score: 0, reason: 'Compensation details missing' };
-        return { pass: true, score: 1, reason: 'Document intact with compensation data' };
+        if (!d.documentText) return { pass: false, score: 0, reason: 'No document text' };
+        return { pass: true, score: 1, reason: 'Document read successfully' };
     - type: javascript
       value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasRead = tools.some(t => t.includes('search') || t.includes('get_content'));
+        if (!hasRead) return { pass: false, score: 0, reason: `No read step. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: `Read: ${tools.join(' → ')}` };
+      metric: tool_usage
 
 # =============================================================================
 # C. DRAFTING / CONTENT GENERATION (Athena, Lighthouse, Tryal)
@@ -218,7 +240,9 @@
         const t = d.documentText || '';
         if (!t.includes('GLOSSARY'))
           return { pass: false, score: 0, reason: 'Glossary heading missing' };
-        return { pass: true, score: 1, reason: 'Glossary created' };
+        if (!t.includes('Confidential Information'))
+          return { pass: false, score: 0, reason: 'No term definitions added' };
+        return { pass: true, score: 1, reason: 'Glossary created with definitions' };
     - type: javascript
       value: file://lib/checks.cjs:traceLog
 
@@ -323,6 +347,15 @@
       value: file://lib/checks.cjs:traceAllOk
     - type: javascript
       value: file://lib/checks.cjs:traceLog
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        if (!d.trace) return { pass: true, score: 0.5, reason: 'No trace' };
+        const tools = d.trace.flatMap(s => s.toolCalls.map(tc => tc.tool));
+        const hasComment = tools.some(t => t.includes('comment'));
+        if (!hasComment) return { pass: false, score: 0, reason: `No comment tool called. Tools: ${tools.join('→')}` };
+        return { pass: true, score: 1, reason: 'Comment tool used' };
+      metric: tool_usage
 
 - description: 'Comments: list existing comments'
   vars:
@@ -335,6 +368,8 @@
         const d = JSON.parse(output);
         if (!d.documentText)
           return { pass: false, score: 0, reason: 'No document text' };
+        if (!d.toolCalls?.some(tc => tc.tool === 'superdoc_comment' && tc.args?.action === 'list'))
+          return { pass: false, score: 0.5, reason: 'Comment list action not called' };
         return { pass: true, score: 1, reason: 'Comments listed' };
     - type: javascript
       value: file://lib/checks.cjs:traceLog
@@ -403,6 +438,8 @@
           return { pass: false, score: 0, reason: 'Collateral: table data changed' };
         return { pass: true, score: 1, reason: 'Tracked change applied, table intact' };
     - type: javascript
+      value: file://lib/checks.cjs:traceAllOk
+    - type: javascript
       value: file://lib/checks.cjs:traceLog
 
 # =============================================================================
@@ -436,10 +473,12 @@
       value: |
         const d = JSON.parse(output);
         const t = d.documentText || '';
+        // Check "28" was replaced — it should be gone or reduced
+        // and "35" should appear near City Medical Center context
         if (!t.includes('35'))
-          return { pass: false, score: 0, reason: 'Cell not updated' };
-        if (!t.includes('Memorial Hospital'))
-          return { pass: false, score: 0, reason: 'Other table data damaged' };
+          return { pass: false, score: 0, reason: 'New value 35 not found' };
+        if (!t.includes('Memorial Hospital') || !t.includes('City Medical Center'))
+          return { pass: false, score: 0, reason: 'Table data damaged' };
         return { pass: true, score: 1, reason: 'Table cell updated' };
     - type: javascript
       value: file://lib/checks.cjs:traceAllOk

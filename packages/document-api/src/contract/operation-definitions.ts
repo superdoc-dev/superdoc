@@ -97,7 +97,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create paragraphs and headings. New paragraphs automatically inherit the style of the nearest sibling. Pass styleId to override.',
+      'Create paragraphs and headings. New paragraphs automatically match the document style. Pass styleId to override with a specific style.',
   },
   format: {
     toolName: 'superdoc_format',

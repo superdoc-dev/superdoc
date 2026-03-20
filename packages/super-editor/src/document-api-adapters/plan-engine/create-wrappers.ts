@@ -27,6 +27,39 @@ import { requireEditorCommand, ensureTrackedCapability } from '../helpers/mutati
 import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
 
 // ---------------------------------------------------------------------------
+// Style resolution helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Scan the document for the most common non-heading paragraph styleId.
+ * Returns undefined if no paragraphs have explicit styles.
+ */
+function resolveDefaultParagraphStyle(editor: Editor): string | undefined {
+  const counts = new Map<string, number>();
+  const headingPattern = /^Heading\d$/;
+
+  editor.state.doc.descendants((node) => {
+    if (node.type.name !== 'paragraph') return;
+    const sid = (node.attrs as { paragraphProperties?: { styleId?: string } }).paragraphProperties?.styleId;
+    if (sid && !headingPattern.test(sid)) {
+      counts.set(sid, (counts.get(sid) ?? 0) + 1);
+    }
+  });
+
+  if (counts.size === 0) return undefined;
+
+  let best = '';
+  let bestCount = 0;
+  for (const [sid, count] of counts) {
+    if (count > bestCount) {
+      best = sid;
+      bestCount = count;
+    }
+  }
+  return best || undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Command types (internal to the wrapper)
 // ---------------------------------------------------------------------------
 
@@ -209,12 +242,17 @@ export function createParagraphWrapper(
     const receipt = executeDomainCommand(
       storyEditor,
       () => {
+        // Auto-resolve style: if the caller didn't provide a styleId,
+        // use the most common paragraph style in the document so new
+        // content matches existing formatting automatically.
+        const effectiveStyleId = input.styleId || resolveDefaultParagraphStyle(storyEditor);
+
         const didApply = insertParagraphAt({
           pos: insertAt,
           text: input.text,
           sdBlockId: paragraphId,
           tracked: mode === 'tracked',
-          styleId: input.styleId,
+          styleId: effectiveStyleId,
         });
         if (didApply) {
           clearIndexCache(storyEditor);

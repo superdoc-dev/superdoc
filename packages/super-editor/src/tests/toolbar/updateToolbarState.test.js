@@ -19,7 +19,7 @@ mock.module('@extensions/linked-styles/linked-styles.js', () => ({
   getQuickFormatList: mock(),
 }));
 
-mock.module(import('@helpers/index.js'), async (importOriginal) => {
+mock.module('@helpers/index.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

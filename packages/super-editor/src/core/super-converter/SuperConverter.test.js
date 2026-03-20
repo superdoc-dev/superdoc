@@ -452,7 +452,8 @@ describe('SuperConverter Document GUID', () => {
       await converter.getDocumentIdentifier();
       expect(converter.getDocumentGuid()).toBe('test-uuid-1234');
 
-      // Clear the mock to verify promoteToGuid doesn't generate a new one
+      // Clear call history to verify promoteToGuid doesn't generate a new one
+      uuidv4.mockClear();
       // promoteToGuid should return the existing GUID
       const guid = converter.promoteToGuid();
       expect(guid).toBe('test-uuid-1234');

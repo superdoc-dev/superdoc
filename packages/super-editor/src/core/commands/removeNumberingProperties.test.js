@@ -5,7 +5,7 @@ const { removeNumberingProperties } = await import('./removeNumberingProperties.
 import { decreaseListIndent } from './decreaseListIndent.js';
 import { updateNumberingProperties } from './changeListLevel.js';
 
-mock.module(import('../helpers/findParentNode.js'), async (importOriginal) => {
+mock.module('../helpers/findParentNode.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

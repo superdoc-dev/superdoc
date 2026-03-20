@@ -6,7 +6,7 @@ mock.module('@helpers/list-numbering-helpers.js', () => ({
   },
 }));
 
-mock.module(import('@helpers/index.js'), async (importOriginal) => {
+mock.module('@helpers/index.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

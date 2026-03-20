@@ -5,7 +5,7 @@ const { findParentNode } = await import('@helpers/index.js');
 import { isList } from '@core/commands/list-helpers';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 
-mock.module(import('@helpers/index.js'), async (importOriginal) => {
+mock.module('@helpers/index.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

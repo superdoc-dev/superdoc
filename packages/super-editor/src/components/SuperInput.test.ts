@@ -30,7 +30,9 @@ const Wrapper = defineComponent({
 });
 
 describe('SuperInput.vue', () => {
-  beforeEach(() => {});
+  beforeEach(() => {
+    EditorConstructor.mockClear();
+  });
 
   it('uses the local content element for each instance', async () => {
     mount(Wrapper);

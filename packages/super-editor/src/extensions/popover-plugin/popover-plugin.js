@@ -126,7 +126,7 @@ class Popover {
         props: {
           users: this.editor.users,
           mention: atMention,
-          inserMention: (user) => {
+          insertMention: (user) => {
             // Use fresh state from the view, not the stale captured state
             const currentState = this.editor.view.state;
             const { $from } = currentState.selection;
@@ -151,7 +151,10 @@ class Popover {
 
   showPopoverAtPosition(pos) {
     const coords = this.editor.coordsAtPos(pos);
-    if (!coords) return;
+    if (!coords) {
+      this.tippyInstance.hide();
+      return;
+    }
 
     this.popoverRect = {
       width: 0,

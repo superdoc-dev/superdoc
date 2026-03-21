@@ -330,6 +330,11 @@ async function main() {
     await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/codegen/src/__tests__/')]);
   });
 
+  // 16b. Run Node SDK helper tests (bun test)
+  await check('Node SDK helper tests pass (bun test)', async () => {
+    await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/langs/node/src/helpers/__tests__/')]);
+  });
+
   // 17. Node SDK platform package manifests exist and are well-formed
   const EXPECTED_NODE_PLATFORMS = [
     { name: '@superdoc-dev/sdk-darwin-arm64', dir: 'sdk-darwin-arm64', os: 'darwin', cpu: 'arm64' },

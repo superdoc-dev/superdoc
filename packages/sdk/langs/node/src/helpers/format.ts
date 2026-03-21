@@ -25,25 +25,7 @@
  * ```
  */
 
-import type { InvokeOptions, OperationSpec } from '../runtime/transport-common.js';
-
-/**
- * Minimal operation spec for `format.apply`. Used to invoke the canonical
- * operation through the runtime without depending on generated code.
- *
- * doc and sessionId are omitted — the bound document handle injects them.
- */
-const FORMAT_APPLY_SPEC: OperationSpec = {
-  operationId: 'doc.format.apply',
-  commandTokens: ['format', 'apply'],
-  params: [
-    { name: 'target', kind: 'jsonFlag', type: 'json' },
-    { name: 'inline', kind: 'jsonFlag', type: 'json' },
-    { name: 'dryRun', kind: 'flag', type: 'boolean' },
-    { name: 'changeMode', kind: 'flag', type: 'string' },
-    { name: 'expectedRevision', kind: 'flag', type: 'string' },
-  ],
-};
+import type { InvokeOptions } from '../runtime/transport-common.js';
 
 export interface FormatHelperParams {
   target?: { kind: 'text'; blockId: string; range: { start: number; end: number } };
@@ -59,14 +41,10 @@ export interface FormatHelperParams {
 }
 
 /**
- * Generic invoke function that works with a bound document handle runtime.
- * Accepts the same signature as SuperDocRuntime.invoke.
+ * Bound format.apply method from a document handle.
+ * Signature matches `doc.format.apply(params, options)`.
  */
-type RuntimeInvokeFn = <T = unknown>(
-  operation: OperationSpec,
-  params?: Record<string, unknown>,
-  options?: InvokeOptions,
-) => Promise<T>;
+type FormatApplyFn = (params?: Record<string, unknown>, options?: InvokeOptions) => Promise<unknown>;
 
 /**
  * Normalizes flat-flag shorthand params (blockId, start, end) into a
@@ -93,23 +71,23 @@ function mergeInlineStyles(params: FormatHelperParams, inline: Record<string, st
 // ---------------------------------------------------------------------------
 
 /** Apply bold ON. Equivalent to `format.apply` with `inline: { bold: 'on' }`. */
-export function formatBold(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { bold: 'on' }), options);
+export function formatBold(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { bold: 'on' }), options);
 }
 
 /** Apply italic ON. Equivalent to `format.apply` with `inline: { italic: 'on' }`. */
-export function formatItalic(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { italic: 'on' }), options);
+export function formatItalic(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { italic: 'on' }), options);
 }
 
 /** Apply underline ON. Equivalent to `format.apply` with `inline: { underline: 'on' }`. */
-export function formatUnderline(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { underline: 'on' }), options);
+export function formatUnderline(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { underline: 'on' }), options);
 }
 
 /** Apply strikethrough ON. Equivalent to `format.apply` with `inline: { strike: 'on' }`. */
-export function formatStrikethrough(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { strike: 'on' }), options);
+export function formatStrikethrough(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { strike: 'on' }), options);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,27 +95,23 @@ export function formatStrikethrough(invoke: RuntimeInvokeFn, params: FormatHelpe
 // ---------------------------------------------------------------------------
 
 /** Apply bold OFF. Equivalent to `format.apply` with `inline: { bold: 'off' }`. */
-export function unformatBold(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { bold: 'off' }), options);
+export function unformatBold(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { bold: 'off' }), options);
 }
 
 /** Apply italic OFF. Equivalent to `format.apply` with `inline: { italic: 'off' }`. */
-export function unformatItalic(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { italic: 'off' }), options);
+export function unformatItalic(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { italic: 'off' }), options);
 }
 
 /** Apply underline OFF. Equivalent to `format.apply` with `inline: { underline: 'off' }`. */
-export function unformatUnderline(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { underline: 'off' }), options);
+export function unformatUnderline(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { underline: 'off' }), options);
 }
 
 /** Apply strikethrough OFF. Equivalent to `format.apply` with `inline: { strike: 'off' }`. */
-export function unformatStrikethrough(
-  invoke: RuntimeInvokeFn,
-  params: FormatHelperParams = {},
-  options?: InvokeOptions,
-) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { strike: 'off' }), options);
+export function unformatStrikethrough(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { strike: 'off' }), options);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,21 +119,21 @@ export function unformatStrikethrough(
 // ---------------------------------------------------------------------------
 
 /** Clear bold formatting. Equivalent to `format.apply` with `inline: { bold: 'clear' }`. */
-export function clearBold(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { bold: 'clear' }), options);
+export function clearBold(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { bold: 'clear' }), options);
 }
 
 /** Clear italic formatting. Equivalent to `format.apply` with `inline: { italic: 'clear' }`. */
-export function clearItalic(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { italic: 'clear' }), options);
+export function clearItalic(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { italic: 'clear' }), options);
 }
 
 /** Clear underline formatting. Equivalent to `format.apply` with `inline: { underline: 'clear' }`. */
-export function clearUnderline(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { underline: 'clear' }), options);
+export function clearUnderline(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { underline: 'clear' }), options);
 }
 
 /** Clear strikethrough formatting. Equivalent to `format.apply` with `inline: { strike: 'clear' }`. */
-export function clearStrikethrough(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { strike: 'clear' }), options);
+export function clearStrikethrough(apply: FormatApplyFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
+  return apply(mergeInlineStyles(params, { strike: 'clear' }), options);
 }

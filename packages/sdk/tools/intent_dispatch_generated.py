@@ -21,6 +21,8 @@ def dispatch_intent_tool(
             return execute('doc.getHtml', rest)
         elif action == 'info':
             return execute('doc.info', rest)
+        elif action == 'blocks':
+            return execute('doc.blocks.list', rest)
         else:
             raise SuperDocError(f'Unknown action for superdoc_get_content: {action}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': 'superdoc_get_content', 'action': action})
     elif tool_name == 'superdoc_edit':

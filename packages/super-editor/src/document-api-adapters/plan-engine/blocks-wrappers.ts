@@ -76,7 +76,7 @@ function extractBlockFormatting(node: ProseMirrorNode): {
   headingLevel?: number;
 } {
   const pProps = (node.attrs as Record<string, unknown>).paragraphProperties as
-    | { styleId?: string; alignment?: string }
+    | { styleId?: string; justification?: string }
     | undefined;
   const styleId = pProps?.styleId ?? null;
 
@@ -111,7 +111,7 @@ function extractBlockFormatting(node: ProseMirrorNode): {
     ...(fontFamily ? { fontFamily } : {}),
     ...(fontSize !== undefined ? { fontSize } : {}),
     ...(bold ? { bold } : {}),
-    ...(pProps?.alignment ? { alignment: pProps.alignment } : {}),
+    ...(pProps?.justification ? { alignment: pProps.justification } : {}),
     ...(headingLevel ? { headingLevel } : {}),
   };
 }
@@ -223,7 +223,7 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
     ordinal: offset + i,
     nodeId: candidate.nodeId,
     nodeType: candidate.nodeType,
-    textPreview: candidate.node.isTextblock ? candidate.node.textContent || null : null,
+    textPreview: extractTextPreview(candidate.node),
     isEmpty: candidate.node.textContent.length === 0,
     ...extractBlockFormatting(candidate.node),
   }));

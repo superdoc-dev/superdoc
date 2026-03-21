@@ -62,6 +62,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
 | `insertionPoint.range` | Range | yes | Range |
 | `insertionPoint.range.end` | integer | yes |  |
 | `insertionPoint.range.start` | integer | yes |  |
+| `ref` | string | no |  |
 | `success` | `true` | yes | Constant: `true` |
 | `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
 
@@ -92,6 +93,7 @@ Returns a CreateHeadingResult with the new heading block ID and address.
       "start": 0
     }
   },
+  "ref": "handle:abc123",
   "success": true,
   "trackedChangeRefs": [
     {
@@ -222,6 +224,10 @@ Returns a CreateHeadingResult with the new heading block ID and address.
         "insertionPoint": {
           "$ref": "#/$defs/TextAddress"
         },
+        "ref": {
+          "description": "Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.",
+          "type": "string"
+        },
         "success": {
           "const": true
         },
@@ -286,6 +292,10 @@ Returns a CreateHeadingResult with the new heading block ID and address.
     },
     "insertionPoint": {
       "$ref": "#/$defs/TextAddress"
+    },
+    "ref": {
+      "description": "Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.",
+      "type": "string"
     },
     "success": {
       "const": true

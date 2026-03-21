@@ -1,0 +1,15 @@
+{
+  "name": "@superdoc-dev/sdk-browser",
+  "version": "1.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "@superdoc/document-api": "workspace:*"
+  }
+}

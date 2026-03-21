@@ -393,6 +393,23 @@ describe('StructuredContentLockPlugin', () => {
 
       expect(result.state.doc.textContent).toContain('Remote hello world');
     });
+
+    it('allows snapshot-exit replacements that span locked SDTs (no isChangeOrigin)', () => {
+      const doc = createDocWithSDT('sdtContentLocked', 'structuredContent');
+      const state = applyDocToEditor(doc);
+      const replacementParagraph = schema.nodes.paragraph.create(null, schema.text('Snapshot exit'));
+      const replacementDoc = schema.nodes.doc.create(null, [replacementParagraph]);
+
+      // y-prosemirror's unrenderSnapshot() sets { snapshot: null, prevSnapshot: null }
+      // with no isChangeOrigin flag.
+      const tr = state.tr
+        .replace(0, state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+        .setMeta(ySyncPluginKey, { snapshot: null, prevSnapshot: null });
+
+      const result = state.applyTransaction(tr);
+
+      expect(result.state.doc.textContent).toContain('Snapshot exit');
+    });
   });
 
   describe('lock mode attribute validation', () => {

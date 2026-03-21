@@ -182,6 +182,42 @@ describe('PermissionRanges extension', () => {
     expect(instance.state.doc.textContent).toContain('Remote replacement');
   });
 
+  it('does not reinsert stale permission tags on snapshot-exit replace (no isChangeOrigin)', () => {
+    const instance = createEditor(docWithPermissionRange);
+
+    // Verify the original doc has permStart and permEnd
+    let hasPermStart = false;
+    let hasPermEnd = false;
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permStart') hasPermStart = true;
+      if (node.type?.name === 'permEnd') hasPermEnd = true;
+    });
+    expect(hasPermStart).toBe(true);
+    expect(hasPermEnd).toBe(true);
+
+    // Simulate y-prosemirror's unrenderSnapshot() — full-doc replace with
+    // { snapshot: null, prevSnapshot: null } and NO isChangeOrigin flag.
+    const replacementDoc = instance.schema.nodes.doc.create(null, [
+      instance.schema.nodes.paragraph.create(null, [instance.schema.text('Snapshot exit content')]),
+    ]);
+    const tr = instance.state.tr
+      .replace(0, instance.state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { snapshot: null, prevSnapshot: null });
+
+    instance.view.dispatch(tr);
+
+    // The resulting doc must NOT contain stale permission markers
+    let permStartCount = 0;
+    let permEndCount = 0;
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permStart') permStartCount++;
+      if (node.type?.name === 'permEnd') permEndCount++;
+    });
+    expect(permStartCount).toBe(0);
+    expect(permEndCount).toBe(0);
+    expect(instance.state.doc.textContent).toBe('Snapshot exit content');
+  });
+
   it('does not reinsert stale permission tags when Yjs replaces content that had them', () => {
     const instance = createEditor(docWithPermissionRange);
 

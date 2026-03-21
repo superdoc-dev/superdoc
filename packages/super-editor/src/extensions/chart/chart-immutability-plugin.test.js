@@ -121,6 +121,22 @@ describe('chart immutability plugin', () => {
     expect(result.state.doc.textContent).toContain('remote');
   });
 
+  it('allows snapshot-exit replacements that span chart nodes (no isChangeOrigin)', () => {
+    const state = createStateWithChart();
+    const replacementDoc = schema.nodes.doc.create(null, [
+      schema.nodes.paragraph.create(null, schema.text('snapshot exit')),
+    ]);
+    // y-prosemirror's unrenderSnapshot() sets { snapshot: null, prevSnapshot: null }
+    // with no isChangeOrigin flag.
+    const tr = state.tr
+      .replace(0, state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { snapshot: null, prevSnapshot: null });
+
+    const result = state.applyTransaction(tr);
+
+    expect(result.state.doc.textContent).toContain('snapshot exit');
+  });
+
   it('rejects local chart deletion after Yjs sync inserts a chart', () => {
     // Start with no charts
     const state = createStateWithoutChart();

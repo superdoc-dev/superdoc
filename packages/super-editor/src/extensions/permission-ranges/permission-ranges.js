@@ -305,10 +305,11 @@ export const PermissionRanges = Extension.create({
         // Appends transactions to the document to ensure permission ranges are updated.
         appendTransaction(transactions, oldState, newState) {
           if (!transactions.some((tr) => tr.docChanged)) return null;
-          // Yjs-origin transactions carry authoritative remote state — do not
-          // attempt to repair permission tags against oldState or we will
-          // reinsert stale markers and corrupt the shared document.
-          if (transactions.some((tr) => tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin)) return null;
+          // Any y-prosemirror transaction (remote sync, snapshot enter/exit)
+          // carries authoritative state — do not attempt to repair permission
+          // tags against oldState or we will reinsert stale markers and
+          // corrupt the shared document.
+          if (transactions.some((tr) => tr.getMeta?.(ySyncPluginKey))) return null;
 
           const permTypes = getPermissionTypeInfo(newState.schema);
           if (!permTypes.startTypes.length || !permTypes.endTypes.length) return null;
@@ -375,7 +376,7 @@ export const PermissionRanges = Extension.create({
         // Filters transactions to ensure only allowed edits are applied.
         filterTransaction(tr, state) {
           if (!tr.docChanged) return true;
-          if (tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin) return true;
+          if (tr.getMeta?.(ySyncPluginKey)) return true;
           if (!editor || editor.options.documentMode !== 'viewing') return true;
           const pluginState = PERMISSION_PLUGIN_KEY.getState(state);
           if (!pluginState?.hasAllowedRanges) {

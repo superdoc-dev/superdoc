@@ -127,7 +127,7 @@ export function createChartImmutabilityPlugin() {
         // Yjs-origin transactions bypass filterTransaction, so the chart
         // count may have changed. Recount to keep the fast-path guard
         // (oldCount === 0) accurate after collaborative syncs.
-        if (tr.docChanged && tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin) {
+        if (tr.docChanged && tr.getMeta?.(ySyncPluginKey)) {
           // When the document had no charts, only do a full recount if the
           // incoming steps actually contain a chart node. This preserves
           // O(step slices) cost for text-only remote edits on chart-free docs.
@@ -142,7 +142,7 @@ export function createChartImmutabilityPlugin() {
 
     filterTransaction(tr, state) {
       if (!tr.docChanged) return true;
-      if (tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin) return true;
+      if (tr.getMeta?.(ySyncPluginKey)) return true;
 
       const oldCount = CHART_IMMUTABILITY_KEY.getState(state) ?? 0;
       if (oldCount === 0) {

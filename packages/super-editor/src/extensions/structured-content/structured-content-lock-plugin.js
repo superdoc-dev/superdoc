@@ -160,9 +160,10 @@ export function createStructuredContentLockPlugin() {
         return true;
       }
 
-      // Remote collaboration updates must always be applied locally to keep
-      // every client converged, even if the incoming step spans locked SDTs.
-      if (tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin) {
+      // Any y-prosemirror transaction (remote sync, snapshot enter/exit) must
+      // always be applied locally to keep every client converged, even if the
+      // incoming step spans locked SDTs.
+      if (tr.getMeta?.(ySyncPluginKey)) {
         return true;
       }
 

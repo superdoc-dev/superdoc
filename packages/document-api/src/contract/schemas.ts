@@ -767,6 +767,11 @@ const createParagraphSuccessSchema = objectSchema(
     paragraph: paragraphAddressSchema,
     insertionPoint: textAddressSchema,
     trackedChangeRefs: arraySchema(trackChangeRefSchema),
+    ref: {
+      type: 'string',
+      description:
+        'Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.',
+    },
   },
   ['success', 'paragraph', 'insertionPoint'],
 );
@@ -793,6 +798,11 @@ const createHeadingSuccessSchema = objectSchema(
     heading: headingAddressSchema,
     insertionPoint: textAddressSchema,
     trackedChangeRefs: arraySchema(trackChangeRefSchema),
+    ref: {
+      type: 'string',
+      description:
+        'Ref handle for the created block. Pass directly to superdoc_format or superdoc_edit ref param without searching.',
+    },
   },
   ['success', 'heading', 'insertionPoint'],
 );

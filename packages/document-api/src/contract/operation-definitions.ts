@@ -101,7 +101,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create one paragraph or heading per call. After creating, search for it and apply formatting (fontFamily, fontSize) from neighboring blocks. For multiple paragraphs, use superdoc_mutations with text.insert steps instead of calling create repeatedly.',
+      'Create one paragraph or heading per call. Returns a ref handle in the response — pass it directly to superdoc_format ref param to apply formatting (fontFamily, color) from neighboring blocks. No search step needed after create.',
   },
   format: {
     toolName: 'superdoc_format',

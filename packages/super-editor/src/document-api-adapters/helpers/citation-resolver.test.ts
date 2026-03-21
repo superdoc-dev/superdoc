@@ -7,7 +7,7 @@ import {
   resolvePostMutationBibliographyId,
 } from './citation-resolver.js';
 
-function makeBibliographyDoc(sdBlockId: string | undefined = 'bib-runtime', style = 'APA') {
+function makeBibliographyDoc(sdBlockId: string | number | undefined = 'bib-runtime', style = 'APA') {
   return {
     descendants: (cb: (node: unknown, pos: number) => boolean | void) => {
       cb(
@@ -47,6 +47,27 @@ describe('citation-resolver bibliography ids', () => {
     const [resolved] = findAllBibliographies(doc);
 
     expect(resolved.nodeId).toMatch(/^bibliography-auto-[0-9a-f]{8}$/);
+  });
+
+  it('coerces a numeric sdBlockId to string in commandNodeId', () => {
+    const doc = makeBibliographyDoc(42 as unknown as string);
+    const [resolved] = findAllBibliographies(doc);
+
+    expect(typeof resolved.commandNodeId).toBe('string');
+    expect(resolved.commandNodeId).toBe('42');
+  });
+
+  it('resolves bibliography target when sdBlockId is numeric', () => {
+    const doc = makeBibliographyDoc(42 as unknown as string);
+    const [resolved] = findAllBibliographies(doc);
+
+    // Should be findable via the stringified commandNodeId
+    const found = resolveBibliographyTarget(doc, {
+      kind: 'block',
+      nodeType: 'bibliography',
+      nodeId: '42',
+    });
+    expect(found.nodeId).toBe(resolved.nodeId);
   });
 
   it('extracts bibliography info with the public address and persisted style', () => {

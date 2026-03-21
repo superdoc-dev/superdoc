@@ -1029,4 +1029,249 @@ describe('upgradeToCollaboration', () => {
     // After upgrade: callback cleared
     expect(instance._upgradeVisualReadyCallback).toBeNull();
   });
+
+  // -----------------------------------------------------------------------
+  // Rollback regression: leaked runtime (Fix 1)
+  // -----------------------------------------------------------------------
+
+  it('stops the failed collaborative runtime before starting rollback (mount throws)', async () => {
+    const harness = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
+      modules: { comments: {} },
+      colors: [],
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+    instance.readyEditors = 1;
+
+    const collabUnmount = vi.fn();
+    let callCount = 0;
+
+    createVueAppMock.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // Collaborative runtime: app created but mount throws
+        return {
+          app: {
+            mount: vi.fn(() => {
+              throw new Error('Collaborative mount failed');
+            }),
+            unmount: collabUnmount,
+            config: { globalProperties: {} },
+          },
+          pinia: {},
+          superdocStore: harness.superdocStore,
+          commentsStore: harness.commentsStore,
+          highContrastModeStore: {},
+        };
+      }
+      // Rollback runtime: succeeds
+      return {
+        app: {
+          mount: vi.fn((wrapper) => {
+            const el = document.createElement('div');
+            el.className = 'superdoc';
+            wrapper.appendChild(el);
+            setTimeout(() => {
+              if (instance._upgradeVisualReadyCallback) {
+                instance._upgradeVisualReadyCallback();
+              }
+            }, 0);
+          }),
+          unmount: vi.fn(),
+          config: { globalProperties: {} },
+        },
+        pinia: {},
+        superdocStore: harness.superdocStore,
+        commentsStore: harness.commentsStore,
+        highContrastModeStore: {},
+      };
+    });
+
+    await expect(
+      instance.upgradeToCollaboration({
+        ydoc: createMockYDoc(),
+        provider: createMockProvider(),
+      }),
+    ).rejects.toThrow('Collaborative mount failed');
+
+    // The collaborative app must be unmounted via #stopRuntime() before rollback
+    expect(collabUnmount).toHaveBeenCalled();
+  });
+
+  it('stops a timed-out collaborative runtime before starting rollback', async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
+        modules: { comments: {} },
+        colors: [],
+        onException: vi.fn(),
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      instance.readyEditors = 1;
+
+      const collabUnmount = vi.fn();
+      let callCount = 0;
+
+      createVueAppMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // Collaborative runtime: mounts but never fires visual-ready
+          return {
+            app: {
+              mount: vi.fn((wrapper) => {
+                const el = document.createElement('div');
+                el.className = 'superdoc';
+                wrapper.appendChild(el);
+                // visual-ready callback deliberately NOT called
+              }),
+              unmount: collabUnmount,
+              config: { globalProperties: {} },
+            },
+            pinia: {},
+            superdocStore: harness.superdocStore,
+            commentsStore: harness.commentsStore,
+            highContrastModeStore: {},
+          };
+        }
+        // Rollback runtime: fires visual-ready immediately
+        return {
+          app: {
+            mount: vi.fn((wrapper) => {
+              const el = document.createElement('div');
+              el.className = 'superdoc';
+              wrapper.appendChild(el);
+              // Fire visual-ready synchronously to avoid timer complications
+              if (instance._upgradeVisualReadyCallback) {
+                instance._upgradeVisualReadyCallback();
+              }
+            }),
+            unmount: vi.fn(),
+            config: { globalProperties: {} },
+          },
+          pinia: {},
+          superdocStore: harness.superdocStore,
+          commentsStore: harness.commentsStore,
+          highContrastModeStore: {},
+        };
+      });
+
+      const upgradePromise = instance.upgradeToCollaboration({
+        ydoc: createMockYDoc(),
+        provider: createMockProvider(),
+      });
+
+      // Attach rejection handler BEFORE advancing timers to avoid unhandled rejection
+      const resultPromise = expect(upgradePromise).rejects.toThrow('visually ready within 30 s');
+
+      // Advance past the 30s collaborative timeout
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      await resultPromise;
+
+      // The timed-out collaborative app must be unmounted before rollback
+      expect(collabUnmount).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // Rollback regression: incomplete state restoration (Fix 2)
+  // -----------------------------------------------------------------------
+
+  it('restores convertedXml and mediaFiles on the rollback editor', async () => {
+    const harness = createAppHarness();
+
+    // Simulate pre-upgrade edits that modified parts and media
+    harness.mockEditor.converter.convertedXml = {
+      'word/styles.xml': { tag: 'w:styles', children: [{ tag: 'w:style', attrs: { id: 'custom' } }] },
+      'word/numbering.xml': { tag: 'w:numbering', children: [{ tag: 'w:abstractNum' }] },
+    };
+    harness.mockEditor.options.mediaFiles = {
+      'word/media/image1.png': 'base64-data-here',
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      documents: [{ id: 'doc-1', type: DOCX, data: new Blob() }],
+      modules: { comments: {} },
+      colors: [],
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+    instance.readyEditors = 1;
+
+    // The rollback editor starts with empty/reimported state
+    const rollbackEditor = {
+      converter: { convertedXml: {} },
+      options: { mediaFiles: {}, fonts: {} },
+      state: harness.mockEditor.state,
+      getJSON: harness.mockEditor.getJSON,
+    };
+
+    let callCount = 0;
+    createVueAppMock.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // Collaborative: fails during createSuperdocVueApp
+        throw new Error('Simulated collab failure');
+      }
+      // Rollback: succeeds, returns a store with the rollback editor
+      return {
+        app: {
+          mount: vi.fn((wrapper) => {
+            const el = document.createElement('div');
+            el.className = 'superdoc';
+            wrapper.appendChild(el);
+            setTimeout(() => {
+              if (instance._upgradeVisualReadyCallback) {
+                instance._upgradeVisualReadyCallback();
+              }
+            }, 0);
+          }),
+          unmount: vi.fn(),
+          config: { globalProperties: {} },
+        },
+        pinia: {},
+        superdocStore: {
+          documents: [
+            {
+              id: 'doc-1',
+              type: DOCX,
+              getEditor: () => rollbackEditor,
+              setEditor: vi.fn(),
+            },
+          ],
+          init: vi.fn(),
+          reset: vi.fn(),
+          setExceptionHandler: vi.fn(),
+          activeZoom: 100,
+        },
+        commentsStore: harness.commentsStore,
+        highContrastModeStore: {},
+      };
+    });
+
+    await expect(
+      instance.upgradeToCollaboration({
+        ydoc: createMockYDoc(),
+        provider: createMockProvider(),
+      }),
+    ).rejects.toThrow('Simulated collab failure');
+
+    // The rollback editor should have the pre-upgrade parts and media restored
+    expect(rollbackEditor.converter.convertedXml).toEqual({
+      'word/styles.xml': { tag: 'w:styles', children: [{ tag: 'w:style', attrs: { id: 'custom' } }] },
+      'word/numbering.xml': { tag: 'w:numbering', children: [{ tag: 'w:abstractNum' }] },
+    });
+    expect(rollbackEditor.options.mediaFiles).toEqual({
+      'word/media/image1.png': 'base64-data-here',
+    });
+  });
 });

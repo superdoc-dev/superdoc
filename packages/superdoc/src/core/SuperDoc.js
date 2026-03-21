@@ -749,6 +749,8 @@ export class SuperDoc extends EventEmitter {
 
       // Capture state for rollback and visual continuity
       const rollbackJson = sourceEditor.getJSON();
+      const rollbackConvertedXml = JSON.parse(JSON.stringify(sourceEditor.converter?.convertedXml ?? {}));
+      const rollbackMediaFiles = { ...(sourceEditor.options?.mediaFiles ?? {}) };
       const hadCommentsList = Boolean(this.commentsList);
 
       // --- Snapshot live DOM before the point of no return ---
@@ -770,7 +772,8 @@ export class SuperDoc extends EventEmitter {
           throw remountError;
         }
 
-        // --- Rollback: keep snapshot visible, rebuild local runtime hidden ---
+        // --- Rollback: stop the failed collaborative runtime, rebuild local ---
+        this.#stopRuntime();
         this.#detachCollaboration();
         this.config.jsonOverride = rollbackJson;
 
@@ -785,6 +788,7 @@ export class SuperDoc extends EventEmitter {
         }
 
         this.config.jsonOverride = null;
+        this.#restoreRollbackDocumentState(rollbackConvertedXml, rollbackMediaFiles);
         this.#revealNewRuntime(snapshot);
 
         if (hadCommentsList) this.addCommentsList();
@@ -848,6 +852,29 @@ export class SuperDoc extends EventEmitter {
   #assertNotDestroyed() {
     if (this.#destroyed) {
       throw new Error('SuperDoc: instance was destroyed during upgrade');
+    }
+  }
+
+  /**
+   * Restore non-PM document state (parts XML, media files) on the rollback
+   * editor. The PM JSON is restored via `jsonOverride`, but converter parts
+   * and media must be patched explicitly since they were lost during
+   * re-import from the original document source.
+   *
+   * @param {Record<string, unknown>} convertedXml
+   * @param {Record<string, unknown>} mediaFiles
+   */
+  #restoreRollbackDocumentState(convertedXml, mediaFiles) {
+    try {
+      const editor = this.#resolveSourceEditor();
+      if (editor.converter && convertedXml) {
+        editor.converter.convertedXml = convertedXml;
+      }
+      if (mediaFiles) {
+        editor.options.mediaFiles = mediaFiles;
+      }
+    } catch {
+      // Best-effort — editor may not be resolvable in edge cases
     }
   }
 

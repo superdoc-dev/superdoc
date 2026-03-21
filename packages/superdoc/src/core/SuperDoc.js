@@ -867,11 +867,17 @@ export class SuperDoc extends EventEmitter {
   #restoreRollbackDocumentState(convertedXml, mediaFiles) {
     try {
       const editor = this.#resolveSourceEditor();
+
       if (editor.converter && convertedXml) {
         editor.converter.convertedXml = convertedXml;
+        editor.converter.rebuildDerivedCaches();
       }
+
       if (mediaFiles) {
         editor.options.mediaFiles = mediaFiles;
+        if (editor.storage?.image) {
+          editor.storage.image.media = mediaFiles;
+        }
       }
     } catch {
       // Best-effort — editor may not be resolvable in edge cases

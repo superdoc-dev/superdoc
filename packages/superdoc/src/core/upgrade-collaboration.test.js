@@ -1209,8 +1209,9 @@ describe('upgradeToCollaboration', () => {
 
     // The rollback editor starts with empty/reimported state
     const rollbackEditor = {
-      converter: { convertedXml: {} },
+      converter: { convertedXml: {}, rebuildDerivedCaches: vi.fn() },
       options: { mediaFiles: {}, fonts: {} },
+      storage: { image: { media: {} } },
       state: harness.mockEditor.state,
       getJSON: harness.mockEditor.getJSON,
     };
@@ -1273,5 +1274,13 @@ describe('upgradeToCollaboration', () => {
     expect(rollbackEditor.options.mediaFiles).toEqual({
       'word/media/image1.png': 'base64-data-here',
     });
+
+    // Bug fix: storage.image.media must be synced so PresentationEditor renders correctly
+    expect(rollbackEditor.storage.image.media).toEqual({
+      'word/media/image1.png': 'base64-data-here',
+    });
+
+    // Bug fix: derived converter caches must be rebuilt after convertedXml restore
+    expect(rollbackEditor.converter.rebuildDerivedCaches).toHaveBeenCalled();
   });
 });

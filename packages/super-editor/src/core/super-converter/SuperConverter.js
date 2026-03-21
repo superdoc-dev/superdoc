@@ -7,7 +7,13 @@ import {
   addDefaultStylesIfMissing,
   defaultNodeListHandler,
   filterOutRootInlineNodes,
+  translateStyleDefinitions,
+  getThemeColorPalette,
 } from './v2/importer/docxImporter.js';
+import {
+  rebuildNumberingIndexFromPart,
+  rebuildTranslatedNumbering,
+} from '../parts/adapters/numbering-part-descriptor.js';
 import { normalizeDuplicateBlockIdentitiesInContent } from './v2/importer/normalizeDuplicateBlockIdentitiesInContent.js';
 import { preProcessPageFieldsOnly } from './field-references/preProcessPageFieldsOnly.js';
 import { carbonCopy } from '../utilities/carbonCopy.js';
@@ -1113,6 +1119,25 @@ class SuperConverter {
     } else {
       return null;
     }
+  }
+
+  /**
+   * Rebuild derived caches (translatedLinkedStyles, translatedNumbering,
+   * themeColors) from the current convertedXml.
+   *
+   * Use this after replacing convertedXml out-of-band (e.g. rollback restore)
+   * so the layout pipeline sees consistent data.
+   */
+  rebuildDerivedCaches() {
+    this.translatedLinkedStyles = translateStyleDefinitions(this.convertedXml);
+
+    const numberingPart = this.convertedXml['word/numbering.xml'];
+    if (numberingPart) {
+      rebuildNumberingIndexFromPart(this, numberingPart);
+      this.translatedNumbering = rebuildTranslatedNumbering(this.numbering);
+    }
+
+    this.themeColors = getThemeColorPalette(this.convertedXml) ?? null;
   }
 
   schemaToXml(data, debug = false) {

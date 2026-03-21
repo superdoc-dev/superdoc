@@ -1171,7 +1171,7 @@ function findNeighborText(sequence, startIndex, direction) {
  * Extracts the document theme color palette from a parsed theme XML part.
  * Returns a map like { accent1: '#4F81BD', hyperlink: '#0000FF', ... }.
  */
-function getThemeColorPalette(docx) {
+export function getThemeColorPalette(docx) {
   const themePart = docx?.['word/theme/theme1.xml'];
   if (!themePart || !Array.isArray(themePart.elements)) return undefined;
   const themeNode = themePart.elements.find((el) => el.name === 'a:theme');

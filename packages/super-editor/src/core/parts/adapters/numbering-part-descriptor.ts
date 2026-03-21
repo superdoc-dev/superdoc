@@ -91,7 +91,7 @@ export function syncNumberingToXmlTree(part: unknown, numbering: NumberingIndex)
 // Translated cache rebuild
 // ---------------------------------------------------------------------------
 
-function rebuildTranslatedNumbering(numbering: NumberingIndex): TranslatedNumbering {
+export function rebuildTranslatedNumbering(numbering: NumberingIndex): TranslatedNumbering {
   const translated: TranslatedNumbering = { abstracts: {}, definitions: {} };
 
   for (const [id, abstract] of Object.entries(numbering.abstracts)) {
@@ -122,7 +122,7 @@ interface NumberingElement {
  * Called after a remote full-replace so that the numbering index references the
  * new XML elements instead of stale pre-replace references.
  */
-function rebuildNumberingIndexFromPart(converter: ConverterForNumbering, part: unknown): void {
+export function rebuildNumberingIndexFromPart(converter: ConverterForNumbering, part: unknown): void {
   const root = part as { elements?: Array<{ elements?: NumberingElement[] }> };
   const numberingEl = root?.elements?.[0];
   if (!numberingEl?.elements) return;

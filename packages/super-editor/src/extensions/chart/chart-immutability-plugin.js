@@ -128,6 +128,12 @@ export function createChartImmutabilityPlugin() {
         // count may have changed. Recount to keep the fast-path guard
         // (oldCount === 0) accurate after collaborative syncs.
         if (tr.docChanged && tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin) {
+          // When the document had no charts, only do a full recount if the
+          // incoming steps actually contain a chart node. This preserves
+          // O(step slices) cost for text-only remote edits on chart-free docs.
+          if (oldCount === 0 && !transactionInsertsChart(tr)) {
+            return 0;
+          }
           return countChartNodes(newState.doc);
         }
         return oldCount;

@@ -182,6 +182,41 @@ describe('PermissionRanges extension', () => {
     expect(instance.state.doc.textContent).toContain('Remote replacement');
   });
 
+  it('does not reinsert stale permission tags when Yjs replaces content that had them', () => {
+    const instance = createEditor(docWithPermissionRange);
+
+    // Verify the original doc has permStart and permEnd
+    let hasPermStart = false;
+    let hasPermEnd = false;
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permStart') hasPermStart = true;
+      if (node.type?.name === 'permEnd') hasPermEnd = true;
+    });
+    expect(hasPermStart).toBe(true);
+    expect(hasPermEnd).toBe(true);
+
+    // Simulate a Yjs sync that replaces the whole doc with content lacking perm tags
+    const replacementDoc = instance.schema.nodes.doc.create(null, [
+      instance.schema.nodes.paragraph.create(null, [instance.schema.text('Clean remote content')]),
+    ]);
+    const tr = instance.state.tr
+      .replace(0, instance.state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+
+    instance.view.dispatch(tr);
+
+    // The resulting doc must NOT contain stale permission markers
+    let permStartCount = 0;
+    let permEndCount = 0;
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permStart') permStartCount++;
+      if (node.type?.name === 'permEnd') permEndCount++;
+    });
+    expect(permStartCount).toBe(0);
+    expect(permEndCount).toBe(0);
+    expect(instance.state.doc.textContent).toBe('Clean remote content');
+  });
+
   it('blocks edits outside the block permission range but allows edits inside it', () => {
     const instance = createEditor(docWithBlockPermissionRange);
     const initialJson = instance.state.doc.toJSON();

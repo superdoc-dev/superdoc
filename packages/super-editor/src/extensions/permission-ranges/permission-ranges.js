@@ -305,6 +305,10 @@ export const PermissionRanges = Extension.create({
         // Appends transactions to the document to ensure permission ranges are updated.
         appendTransaction(transactions, oldState, newState) {
           if (!transactions.some((tr) => tr.docChanged)) return null;
+          // Yjs-origin transactions carry authoritative remote state — do not
+          // attempt to repair permission tags against oldState or we will
+          // reinsert stale markers and corrupt the shared document.
+          if (transactions.some((tr) => tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin)) return null;
 
           const permTypes = getPermissionTypeInfo(newState.schema);
           if (!permTypes.startTypes.length || !permTypes.endTypes.length) return null;

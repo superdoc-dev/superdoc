@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Schema, Slice } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
-import { createChartImmutabilityPlugin } from './chart-immutability-plugin.js';
+import { createChartImmutabilityPlugin, CHART_IMMUTABILITY_KEY } from './chart-immutability-plugin.js';
 
 const schema = new Schema({
   nodes: {
@@ -179,5 +179,36 @@ describe('chart immutability plugin', () => {
     const textTr = synced.tr.insertText('hello', 1);
     const result = synced.applyTransaction(textTr);
     expect(result.state.doc.textContent).toContain('hello');
+  });
+
+  it('keeps chart count at 0 for Yjs text-only edits on chart-free docs (fast path)', () => {
+    const state = createStateWithoutChart();
+    expect(CHART_IMMUTABILITY_KEY.getState(state)).toBe(0);
+
+    // Simulate multiple Yjs text-only remote edits — chart count must stay 0
+    // without walking the full document each time.
+    let current = state;
+    for (let i = 0; i < 5; i++) {
+      const syncTr = current.tr.insertText(`k${i}`, 1).setMeta(ySyncPluginKey, { isChangeOrigin: true });
+      current = current.applyTransaction(syncTr).state;
+      expect(CHART_IMMUTABILITY_KEY.getState(current)).toBe(0);
+    }
+  });
+
+  it('recounts charts when Yjs sync introduces a chart into a chart-free doc', () => {
+    const state = createStateWithoutChart();
+    expect(CHART_IMMUTABILITY_KEY.getState(state)).toBe(0);
+
+    // Yjs sync introduces a chart
+    const chart = schema.nodes.chart.create({ chartData: { chartType: 'barChart', series: [] } });
+    const paraWithChart = schema.nodes.paragraph.create(null, [schema.text('text '), chart]);
+    const syncDoc = schema.nodes.doc.create(null, [paraWithChart]);
+    const syncTr = state.tr
+      .replace(0, state.doc.content.size, new Slice(syncDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+    const synced = state.applyTransaction(syncTr).state;
+
+    // Chart count must update to 1
+    expect(CHART_IMMUTABILITY_KEY.getState(synced)).toBe(1);
   });
 });

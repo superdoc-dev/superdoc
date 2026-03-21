@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
+import { Slice } from 'prosemirror-model';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 import { Editor } from '@core/index.js';
 import { SuperConverter } from '@core/super-converter/SuperConverter.js';
@@ -164,6 +166,20 @@ describe('PermissionRanges extension', () => {
     const allowedTr = instance.state.tr.insertText('Y', editablePos, editablePos);
     instance.view.dispatch(allowedTr);
     expect(instance.state.doc.textBetween(editablePos, editablePos + 2)).toContain('Y');
+  });
+
+  it('allows remote collaboration replacements that span permission ranges', () => {
+    const instance = createEditor(docWithPermissionRange);
+    const replacementDoc = instance.schema.nodes.doc.create(null, [
+      instance.schema.nodes.paragraph.create(null, [instance.schema.text('Remote replacement')]),
+    ]);
+    const tr = instance.state.tr
+      .replace(0, instance.state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+
+    instance.view.dispatch(tr);
+
+    expect(instance.state.doc.textContent).toContain('Remote replacement');
   });
 
   it('blocks edits outside the block permission range but allows edits inside it', () => {

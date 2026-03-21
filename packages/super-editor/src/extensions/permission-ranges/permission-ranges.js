@@ -1,5 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Mapping } from 'prosemirror-transform';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { Extension } from '@core/Extension.js';
 
 const PERMISSION_PLUGIN_KEY = new PluginKey('permissionRanges');
@@ -370,6 +371,7 @@ export const PermissionRanges = Extension.create({
         // Filters transactions to ensure only allowed edits are applied.
         filterTransaction(tr, state) {
           if (!tr.docChanged) return true;
+          if (tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin) return true;
           if (!editor || editor.options.documentMode !== 'viewing') return true;
           const pluginState = PERMISSION_PLUGIN_KEY.getState(state);
           if (!pluginState?.hasAllowedRanges) {

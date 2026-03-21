@@ -1,4 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
 
@@ -156,6 +157,12 @@ export function createStructuredContentLockPlugin() {
      */
     filterTransaction(tr, state) {
       if (!tr.docChanged) {
+        return true;
+      }
+
+      // Remote collaboration updates must always be applied locally to keep
+      // every client converged, even if the incoming step spans locked SDTs.
+      if (tr.getMeta?.(ySyncPluginKey)?.isChangeOrigin) {
         return true;
       }
 

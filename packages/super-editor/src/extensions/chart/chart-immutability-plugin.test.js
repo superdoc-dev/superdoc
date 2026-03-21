@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { Schema } from 'prosemirror-model';
+import { Schema, Slice } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { createChartImmutabilityPlugin } from './chart-immutability-plugin.js';
 
 const schema = new Schema({
@@ -106,5 +107,77 @@ describe('chart immutability plugin', () => {
     const tr = state.tr.insertText('typing', 1);
     const result = state.applyTransaction(tr);
     expect(result.state.doc.textContent).toContain('typing');
+  });
+
+  it('allows remote collaboration replacements that span chart nodes', () => {
+    const state = createStateWithChart();
+    const replacementDoc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, schema.text('remote'))]);
+    const tr = state.tr
+      .replace(0, state.doc.content.size, new Slice(replacementDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+
+    const result = state.applyTransaction(tr);
+
+    expect(result.state.doc.textContent).toContain('remote');
+  });
+
+  it('rejects local chart deletion after Yjs sync inserts a chart', () => {
+    // Start with no charts
+    const state = createStateWithoutChart();
+
+    // Simulate Yjs sync that introduces a chart
+    const chart = schema.nodes.chart.create({ chartData: { chartType: 'barChart', series: [] } });
+    const paraWithChart = schema.nodes.paragraph.create(null, [schema.text('synced '), chart]);
+    const syncDoc = schema.nodes.doc.create(null, [paraWithChart]);
+    const syncTr = state.tr
+      .replace(0, state.doc.content.size, new Slice(syncDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+    const synced = state.applyTransaction(syncTr).state;
+
+    // Local attempt to delete the chart must be rejected
+    const chartPos = findChartPos(synced);
+    expect(chartPos).toBeGreaterThan(-1);
+    const deleteTr = synced.tr.delete(chartPos, chartPos + 1);
+    const result = synced.applyTransaction(deleteTr);
+    expect(result.state.doc.toString()).toBe(synced.doc.toString());
+  });
+
+  it('rejects local attr change on chart after Yjs sync inserts it', () => {
+    const state = createStateWithoutChart();
+
+    // Yjs sync introduces a chart
+    const chart = schema.nodes.chart.create({ chartData: { chartType: 'barChart', series: [] } });
+    const paraWithChart = schema.nodes.paragraph.create(null, [chart]);
+    const syncDoc = schema.nodes.doc.create(null, [paraWithChart]);
+    const syncTr = state.tr
+      .replace(0, state.doc.content.size, new Slice(syncDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+    const synced = state.applyTransaction(syncTr).state;
+
+    // Local setNodeMarkup must be rejected
+    const chartPos = findChartPos(synced);
+    const attrTr = synced.tr.setNodeMarkup(chartPos, undefined, {
+      chartData: { chartType: 'lineChart', series: [] },
+      width: 999,
+      height: 999,
+    });
+    const result = synced.applyTransaction(attrTr);
+    expect(result.state.doc.toString()).toBe(synced.doc.toString());
+  });
+
+  it('uses fast path after Yjs sync removes all charts', () => {
+    const state = createStateWithChart();
+
+    // Yjs sync replaces doc with chart-free content
+    const plainDoc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, schema.text('no charts'))]);
+    const syncTr = state.tr
+      .replace(0, state.doc.content.size, new Slice(plainDoc.content, 0, 0))
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true });
+    const synced = state.applyTransaction(syncTr).state;
+
+    // Local text edits should still work
+    const textTr = synced.tr.insertText('hello', 1);
+    const result = synced.applyTransaction(textTr);
+    expect(result.state.doc.textContent).toContain('hello');
   });
 });

@@ -206,6 +206,14 @@ describe('citations export integration', () => {
     );
 
     expect(configureResult.success).toBe(true);
+    if (!configureResult.success) return;
+
+    const bibliographyInfo = editor.doc.citations.bibliography.get({
+      target: configureResult.bibliography,
+    });
+
+    expect(bibliographyInfo.style).toBe('MLA');
+    expect(bibliographyInfo.address.nodeId).toBe(configureResult.bibliography.nodeId);
     expect(findBibliographyNode(editor)?.attrs.style).toBe('MLA');
   });
 });

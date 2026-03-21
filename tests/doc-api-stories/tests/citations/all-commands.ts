@@ -486,17 +486,24 @@ describe('document-api story: all citations commands', () => {
           throw new Error('citations.bibliography.configure requires a bibliography target fixture.');
         }
 
-        const configureResult = await callDocOperation<any>('citations.bibliography.configure', {
+        const beforeInfo = await callDocOperation<any>('citations.bibliography.get', {
           sessionId,
           target: f.bibliographyTarget,
+        });
+        const configureTarget = (beforeInfo?.address as BibliographyAddress | undefined) ?? f.bibliographyTarget;
+
+        const configureResult = await callDocOperation<any>('citations.bibliography.configure', {
+          sessionId,
+          target: configureTarget,
           style: 'APA',
         });
+        const configuredTarget = (configureResult?.bibliography as BibliographyAddress | undefined) ?? configureTarget;
 
         const info = await callDocOperation<any>('citations.bibliography.get', {
           sessionId,
-          target: f.bibliographyTarget,
+          target: configuredTarget,
         });
-        expect(typeof info?.style).toBe('string');
+        expect(info?.style).toBe('APA');
 
         return configureResult;
       },

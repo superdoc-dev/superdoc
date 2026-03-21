@@ -134,7 +134,7 @@ Multi-action tools use an `action` field to select the underlying operation. Sin
 
 ## Part of SuperDoc
 
-This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — an open source document editor bringing Microsoft Word to the web.
+This SDK is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — the open-source document engine for DOCX files. Renders, edits, and automates .docx in the browser and on the server.
 
 ## License
 

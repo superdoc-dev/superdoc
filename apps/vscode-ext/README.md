@@ -16,7 +16,7 @@ Once installed, any `.docx` file you open will automatically use SuperDoc. Just 
 
 ## **Install**
 
-**Coming soon to the VS Code Marketplace.** Star this repository to get notified.
+Not yet on the VS Code Marketplace. Install from VSIX or run from source.
 
 ### Install from VSIX
 
@@ -41,6 +41,10 @@ npm run compile
 
 Then press `F5` in VS Code to launch a development window.
 
+## Part of SuperDoc
+
+This extension is part of [SuperDoc](https://github.com/superdoc-dev/superdoc) — the open-source document engine for DOCX files. Renders, edits, and automates .docx in the browser and on the server.
+
 ## **License**
 
-This project is licensed under the GNU Affero General Public License version 3.0 (AGPLv3). See the full license at [gnu.org/licenses/agpl-3.0](https://www.gnu.org/licenses/agpl-3.0.en.html).
+AGPL-3.0 · [Enterprise license available](https://superdoc.dev)

@@ -17,8 +17,8 @@
 </div>
 
 <p align="center">
-  <strong>A JavaScript library that renders and edits DOCX files in the browser, headless on the server, and within agentic workflows.</strong><br>
-  Tracked changes, complex tables, headers/footers, real-time collaboration — the features your users actually need.<br>
+  <strong>The document engine for DOCX files.</strong><br>
+  Renders, edits, and automates .docx files in the browser, headless on the server, and within AI agent workflows.<br>
   Self-hosted. Open source. Works with React, Vue, and vanilla JS.
 </p>
 

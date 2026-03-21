@@ -24,6 +24,8 @@ export interface BlockListEntry {
   alignment?: string;
   /** Heading level (1-6). Only for headings. */
   headingLevel?: number;
+  /** Ref handle targeting the block's full text. Pass to superdoc_format or superdoc_edit. */
+  ref?: string;
 }
 
 export interface BlocksListInput {

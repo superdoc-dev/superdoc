@@ -24,6 +24,9 @@ const SUPPORTED_SCHEMA_KEYWORDS = new Set([
   'anyOf',
   '$ref',
   '$defs',
+  'description',
+  'minimum',
+  'maximum',
 ]);
 
 export interface SchemaValidationResult {

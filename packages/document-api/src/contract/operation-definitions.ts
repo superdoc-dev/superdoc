@@ -95,13 +95,17 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   get_content: {
     toolName: 'superdoc_get_content',
     description:
-      'Read document content. Use action "info" for structure and styles, "blocks" for all block IDs and types, "text" or "markdown" for content. Call info or blocks before editing.',
+      'Read document content. Use action "blocks" to get all blocks with nodeId, formatting, and ref handles for immediate use with superdoc_format or superdoc_edit. Use "text" or "markdown" for full content. Use "info" for document metadata.',
   },
-  edit: { toolName: 'superdoc_edit', description: 'Insert, replace, delete text, or undo/redo' },
+  edit: {
+    toolName: 'superdoc_edit',
+    description:
+      'Insert, replace, delete text, or undo/redo. For replace/delete: use ref param. A search handle.ref only covers the matched text. To replace an entire block (rewrite/shorten), use the block ref from superdoc_get_content blocks instead — it covers the full text.',
+  },
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create one paragraph or heading. Response includes a ref — use it with superdoc_format (DO NOT search). Apply fontFamily and color from neighboring blocks. Do NOT change fontSize on headings.',
+      'Create one paragraph or heading. Response includes a ref and nodeId. After creating, call superdoc_format with the ref to match the document style: copy fontFamily and color from nearby blocks. For headings: only set fontFamily and color (NOT fontSize). For paragraphs: set fontFamily, fontSize, and color. Use superdoc_get_content blocks to read existing formatting. When creating multiple items, use the previous nodeId as the next at target.',
   },
   format: {
     toolName: 'superdoc_format',
@@ -494,9 +498,9 @@ export const OPERATION_DEFINITIONS = {
   replace: {
     memberPath: 'replace',
     description:
-      'Replace content at a contiguous document selection. ' +
-      'Text path accepts a SelectionTarget or ref plus replacement text. ' +
-      'Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content.',
+      'Replace text using a ref. To replace an entire block, use its ref from superdoc_get_content blocks. ' +
+      'To replace a text match, use handle.ref from superdoc_search. ' +
+      'Do NOT use {kind:"block"} as target — it only works with structural content, not text.',
     expectedResult:
       'Returns an SDMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,

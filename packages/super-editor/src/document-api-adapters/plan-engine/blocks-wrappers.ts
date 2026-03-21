@@ -33,6 +33,7 @@ import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { getRevision } from './revision-tracker.js';
+import { encodeV4Ref } from '../story-runtime/story-ref-codec.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -226,16 +227,35 @@ export function blocksListWrapper(editor: Editor, input?: BlocksListInput): Bloc
   const limit = input?.limit ?? total;
   const paged = filtered.slice(offset, offset + limit);
 
-  const blocks: BlockListEntry[] = paged.map((candidate, i) => ({
-    ordinal: offset + i,
-    nodeId: candidate.nodeId,
-    nodeType: candidate.nodeType,
-    textPreview: extractTextPreview(candidate.node),
-    isEmpty: candidate.node.textContent.length === 0,
-    ...extractBlockFormatting(candidate.node),
-  }));
+  const rev = getRevision(editor);
 
-  return { total, blocks, revision: getRevision(editor) };
+  const blocks: BlockListEntry[] = paged.map((candidate, i) => {
+    const textLength = candidate.node.textContent.length;
+    const ref =
+      textLength > 0
+        ? encodeV4Ref({
+            v: 4,
+            rev,
+            storyKey: 'body',
+            scope: 'block',
+            matchId: candidate.nodeId,
+            segments: [{ blockId: candidate.nodeId, start: 0, end: textLength }],
+            blockIndex: offset + i,
+          })
+        : undefined;
+
+    return {
+      ordinal: offset + i,
+      nodeId: candidate.nodeId,
+      nodeType: candidate.nodeType,
+      textPreview: extractTextPreview(candidate.node),
+      isEmpty: textLength === 0,
+      ...extractBlockFormatting(candidate.node),
+      ...(ref ? { ref } : {}),
+    };
+  });
+
+  return { total, blocks, revision: rev };
 }
 
 // ---------------------------------------------------------------------------

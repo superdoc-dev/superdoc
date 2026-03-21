@@ -52,6 +52,7 @@ function extractMeaningfulMarks(paragraphNode) {
  * @returns {readonly import('prosemirror-model').Mark[]}
  */
 export function findNearbyMarks(doc, pos, { prefer } = {}) {
+  if (typeof doc.resolve !== 'function') return [];
   const resolvedPos = doc.resolve(Math.min(pos, doc.content.size));
   let fallback = /** @type {readonly import('prosemirror-model').Mark[]} */ ([]);
 

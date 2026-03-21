@@ -22,19 +22,19 @@ Every editing tool needs a **target** — an address telling the API *where* to 
 
 ### Getting targets
 
-- **From `superdoc_search`**: Returns `handle.ref` — pass as `ref` param to `superdoc_format` or `superdoc_edit`.
+- **From blocks data**: Each block has a `ref` — pass it directly to `superdoc_format` or `superdoc_edit`. Also has `nodeId` for building `at` positions with `superdoc_create`.
+- **From `superdoc_search`**: Returns `handle.ref` — pass as `ref` param to `superdoc_format` or `superdoc_edit`. Use search when you need to find text patterns, not when you already know which block to target.
 - **From `superdoc_create`**: Returns `ref` in the response — pass directly to `superdoc_format`. No search needed.
-- **From blocks data**: Each block has a `nodeId` — use it to build block addresses for `superdoc_create` `at` positioning.
 
 ## Workflow
 
-**ALWAYS start by calling `superdoc_get_content({action: "blocks"})` before any other tool.** This returns every block with its nodeId, type, text, fontFamily, fontSize, bold, color, and alignment.
+For complex edits that need document context (formatting, positioning relative to blocks), call `superdoc_get_content({action: "blocks"})` first. This returns every block with its nodeId, type, text, fontFamily, fontSize, bold, color, alignment, and a **ref** handle. Use the ref directly with `superdoc_format` or `superdoc_edit` — no search needed. For simple tasks (search, create at document end, get plain text, undo), call the appropriate tool directly.
 
-After getting blocks:
-1. **Edit existing content**: Use `superdoc_search` to get refs, then `superdoc_edit` or `superdoc_format`.
+1. **Edit existing content**: Use `superdoc_search` to get a ref, then pass `ref` to `superdoc_edit` or `superdoc_format`. Do not build `target` objects manually.
 2. **Create new content**: Use `superdoc_create`, then use the `ref` from the response to apply formatting. DO NOT search after create.
 3. **Re-search after each mutation**: Refs expire after any edit. Always search again before the next operation.
 4. **Batch when possible**: For multi-step edits, prefer `superdoc_mutations`.
+5. **Multiple sequential creates**: Each `superdoc_create` response includes a `nodeId`. When inserting multiple items in order, use the previous item's nodeId as the next `at` target to maintain correct ordering.
 
 ### Formatting after create
 
@@ -109,4 +109,4 @@ To resolve a comment, use `action: "update"` with `{ commentId: "<id>", status: 
 - **Table cells are separate blocks.** Search for individual cell values, not patterns spanning multiple cells.
 - **superdoc_search `select.type`** must be `"text"` or `"node"`. To find headings, use `{type: "node", nodeType: "heading"}`, NOT `{type: "heading"}`.
 - **Do NOT combine `limit`/`offset` with `require: "first"` or `require: "exactlyOne"`**. Use `require: "any"` with `limit` for paginated results.
-- **Creating lists**: Create one paragraph per item first, then call `superdoc_list` action `"create"` with `mode: "fromParagraphs"` for each paragraph.
+- **Creating lists**: Create one paragraph per item first, then call `superdoc_list` action `"create"` with `mode: "fromParagraphs"` and `preset: "disc"` (bullet) or `preset: "decimal"` (numbered) for each paragraph.

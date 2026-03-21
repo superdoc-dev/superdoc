@@ -127,7 +127,8 @@ function optionalTargetLocatorWithPayload(
         {
           ref: {
             type: 'string',
-            description: 'Handle ref string returned by a prior search/query result.',
+            description:
+              'Handle ref from superdoc_search result (pass handle.ref value directly). Preferred over building a target object.',
           },
           ...payloadProperties,
         },
@@ -3044,6 +3045,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
               color: { type: 'string', description: "Text color (e.g. '#000000'). Defaults to black when not set." },
               alignment: { type: 'string', description: 'Paragraph alignment.' },
               headingLevel: { type: 'number', description: 'Heading level (1-6).' },
+              ref: {
+                type: 'string',
+                description:
+                  'Ref handle for this block. Pass directly to superdoc_format or superdoc_edit ref param. Only present for non-empty blocks.',
+              },
             },
             ['ordinal', 'nodeId', 'nodeType'],
           ),

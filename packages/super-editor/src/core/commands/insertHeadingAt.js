@@ -26,8 +26,20 @@ export const insertHeadingAt =
 
     let textNode = null;
     if (normalizedText.length > 0) {
-      const marks = findNearbyMarks(state.doc, pos, { prefer: 'heading' });
-      textNode = marks.length > 0 ? state.schema.text(normalizedText, marks) : state.schema.text(normalizedText);
+      const rawMarks = findNearbyMarks(state.doc, pos, { prefer: 'heading' });
+      // Strip fontSize from copied marks — headings should keep their style-level size.
+      const marks = rawMarks.map((mark) => {
+        if (mark.type.name === 'textStyle' && mark.attrs.fontSize != null) {
+          const { fontSize: _, ...rest } = mark.attrs;
+          return mark.type.create(rest);
+        }
+        return mark;
+      });
+      const meaningful = marks.filter(
+        (m) => m.type.name !== 'textStyle' || Object.values(m.attrs).some((v) => v != null),
+      );
+      textNode =
+        meaningful.length > 0 ? state.schema.text(normalizedText, meaningful) : state.schema.text(normalizedText);
     }
 
     let paragraphNode;

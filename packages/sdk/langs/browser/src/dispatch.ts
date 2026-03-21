@@ -42,6 +42,18 @@ export function dispatchSuperDocTool(
     // Intent dispatch produces "doc.insert", "doc.format.apply", etc.
     // DocumentApi.invoke() expects the id without "doc." prefix: "insert", "format.apply"
     const stripped = operationId.startsWith('doc.') ? operationId.slice(4) : operationId;
-    return documentApi.invoke({ operationId: stripped, input });
+
+    // Extract envelope params — these go into options, not input
+    const { changeMode, dryRun, force, ...operationInput } = input;
+    const options: Record<string, unknown> = {};
+    if (changeMode !== undefined) options.changeMode = changeMode;
+    if (dryRun !== undefined) options.dryRun = dryRun;
+    if (force !== undefined) options.force = force;
+
+    return documentApi.invoke({
+      operationId: stripped,
+      input: operationInput,
+      ...(Object.keys(options).length > 0 ? { options } : {}),
+    });
   });
 }

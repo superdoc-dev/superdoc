@@ -47,6 +47,100 @@ function mintBlockRef(editor: Editor, storyKey: string, nodeId: string, textLeng
 }
 
 // ---------------------------------------------------------------------------
+// Auto-formatting: apply fontFamily + color from nearby blocks so new
+// headings/paragraphs match the document's visual style without extra LLM steps.
+// ---------------------------------------------------------------------------
+
+function findNearbyFormatting(
+  editor: Editor,
+  _pos: number,
+  skipHeadings: boolean,
+): { fontFamily?: string; fontSize?: number; color?: string } | null {
+  const doc = editor.state.doc;
+  const result: { fontFamily?: string; fontSize?: number; color?: string } = {};
+
+  // Walk top-level children near the insertion point
+  let offset = 0;
+  for (let i = 0; i < doc.childCount; i++) {
+    const child = doc.child(i);
+    const childEnd = offset + child.nodeSize;
+
+    if (child.type.name === 'paragraph') {
+      const pProps = (child.attrs as Record<string, unknown>).paragraphProperties as { styleId?: string } | undefined;
+      const isHeading = pProps?.styleId && /^Heading\d$/.test(pProps.styleId);
+
+      if (skipHeadings && isHeading) {
+        offset = childEnd;
+        continue;
+      }
+
+      // Read formatting from text marks
+      child.descendants((textNode) => {
+        if (result.fontFamily) return false;
+        const marks = textNode.marks ?? [];
+        if (!textNode.isText || marks.length === 0) return;
+        for (const mark of marks) {
+          const attrs = mark.attrs as Record<string, unknown>;
+          if (typeof attrs.fontFamily === 'string' && attrs.fontFamily) {
+            result.fontFamily = attrs.fontFamily;
+          }
+          if (typeof attrs.color === 'string' && attrs.color) {
+            result.color = attrs.color;
+          }
+          if (attrs.fontSize != null) {
+            const raw = typeof attrs.fontSize === 'string' ? parseFloat(attrs.fontSize as string) : attrs.fontSize;
+            if (typeof raw === 'number' && Number.isFinite(raw)) result.fontSize = raw as number;
+          }
+        }
+        return false;
+      });
+
+      if (result.fontFamily) return result;
+    }
+
+    offset = childEnd;
+  }
+
+  return result.fontFamily ? result : null;
+}
+
+function applyFormattingToCreatedBlock(
+  editor: Editor,
+  nodeId: string,
+  formatting: { fontFamily?: string; fontSize?: number; color?: string },
+): void {
+  const textStyleType = editor.state.schema.marks.textStyle;
+  if (!textStyleType) return;
+
+  // Find the created block by walking the document
+  const doc = editor.state.doc;
+  let blockPos = -1;
+  let blockEnd = -1;
+
+  doc.descendants((node, pos) => {
+    if (blockPos >= 0) return false;
+    const attrs = node.attrs as Record<string, unknown>;
+    if (node.type.name === 'paragraph' && (attrs.sdBlockId === nodeId || attrs.paraId === nodeId)) {
+      blockPos = pos + 1; // inside the paragraph
+      blockEnd = pos + node.nodeSize - 1;
+      return false;
+    }
+  });
+
+  if (blockPos < 0 || blockEnd <= blockPos) return;
+
+  const mark = textStyleType.create({
+    fontFamily: formatting.fontFamily ?? null,
+    fontSize: formatting.fontSize ?? null,
+    color: formatting.color ?? null,
+  });
+
+  const tr = editor.state.tr.addMark(blockPos, blockEnd, mark);
+  tr.setMeta('inputType', 'programmatic');
+  editor.view?.dispatch(tr);
+}
+
+// ---------------------------------------------------------------------------
 // Command types (internal to the wrapper)
 // ---------------------------------------------------------------------------
 
@@ -268,6 +362,20 @@ export function createParagraphWrapper(
     }
 
     if (runtime.commit) runtime.commit(editor);
+
+    // Auto-apply fontFamily + fontSize + color from nearby blocks so the
+    // paragraph matches the document's visual style without extra LLM steps.
+    try {
+      if (input.text) {
+        const formatting = findNearbyFormatting(storyEditor, insertAt, false);
+        if (formatting) {
+          applyFormattingToCreatedBlock(storyEditor, paragraphId, formatting);
+        }
+      }
+    } catch {
+      /* best-effort — formatting failure should not break creation */
+    }
+
     const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
     const textLen = input.text?.length ?? 0;
     const ref = textLen > 0 ? mintBlockRef(storyEditor, runtime.storyKey, canonicalId, textLen) : undefined;
@@ -377,6 +485,22 @@ export function createHeadingWrapper(
     }
 
     if (runtime.commit) runtime.commit(editor);
+
+    // Auto-apply fontFamily + color from nearby blocks so the heading
+    // matches the document's visual style without extra LLM format steps.
+    // Skip fontSize — headings should keep their style-level size.
+    try {
+      if (input.text) {
+        const formatting = findNearbyFormatting(storyEditor, insertAt, true);
+        if (formatting) {
+          const { fontSize: _skipSize, ...headingFormatting } = formatting;
+          applyFormattingToCreatedBlock(storyEditor, headingId, headingFormatting);
+        }
+      }
+    } catch {
+      /* best-effort — formatting failure should not break creation */
+    }
+
     const nonBodyStory = runtime.kind !== 'body' ? runtime.locator : undefined;
     const textLen = input.text?.length ?? 0;
     const ref = textLen > 0 ? mintBlockRef(storyEditor, runtime.storyKey, canonicalId, textLen) : undefined;

@@ -135,6 +135,7 @@
                 "pages": [
                   "modules/collaboration/overview",
                   "modules/collaboration/quickstart",
+                  "modules/collaboration/upgrade-to-collaboration",
                   "modules/collaboration/configuration"
                 ]
               },

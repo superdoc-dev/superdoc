@@ -70,4 +70,19 @@ provider.on("sync", (synced) => {
 
 See the [full quickstart guide](/modules/collaboration/quickstart) for framework-specific examples (React, Vue, Vanilla JS).
 
+## Start collaborative immediately or later
+
+<CardGroup cols={2}>
+  <Card title="Start in collaboration mode" href="/modules/collaboration/quickstart">
+    Create your Yjs provider first, then pass `{ ydoc, provider }` in
+    `modules.collaboration` when you construct `SuperDoc`.
+  </Card>
+
+  <Card title="Upgrade later" href="/modules/collaboration/upgrade-to-collaboration">
+    Mount a local `SuperDoc` first, then call
+    `superdoc.upgradeToCollaboration({ ydoc, provider })` when the user creates
+    a shared room.
+  </Card>
+</CardGroup>
+
 If you are also using the SDK for backend automation, see [SDK collaboration sessions](/document-engine/sdks#collaboration-sessions).

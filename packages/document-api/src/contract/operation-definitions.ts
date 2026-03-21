@@ -101,7 +101,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'Create one paragraph or heading per call. Returns a ref handle in the response — pass it directly to superdoc_format ref param to apply formatting (fontFamily, color) from neighboring blocks. No search step needed after create.',
+      'Create one paragraph or heading. Response includes a ref — use it directly with superdoc_format (DO NOT search again). Apply only fontFamily from neighbors. For headings, do NOT change fontSize or color — the default heading style is correct.',
   },
   format: {
     toolName: 'superdoc_format',

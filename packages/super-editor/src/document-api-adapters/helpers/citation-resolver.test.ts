@@ -24,11 +24,11 @@ function makeBibliographyDoc(sdBlockId: string | undefined = 'bib-runtime', styl
 }
 
 describe('citation-resolver bibliography ids', () => {
-  it('uses sdBlockId as the public id when present', () => {
+  it('uses a deterministic public id while still accepting the session-local sdBlockId', () => {
     const doc = makeBibliographyDoc('bib-runtime');
     const [resolved] = findAllBibliographies(doc);
 
-    expect(resolved.nodeId).toBe('bib-runtime');
+    expect(resolved.nodeId).toMatch(/^bibliography-auto-[0-9a-f]{8}$/);
     expect(
       resolveBibliographyTarget(doc, { kind: 'block', nodeType: 'bibliography', nodeId: resolved.nodeId }).nodeId,
     ).toBe(resolved.nodeId);
@@ -39,7 +39,7 @@ describe('citation-resolver bibliography ids', () => {
 
   it('re-resolves the current public id from an sdBlockId after mutation', () => {
     const doc = makeBibliographyDoc('bib-runtime');
-    expect(resolvePostMutationBibliographyId(doc, 'bib-runtime')).toBe('bib-runtime');
+    expect(resolvePostMutationBibliographyId(doc, 'bib-runtime')).toMatch(/^bibliography-auto-[0-9a-f]{8}$/);
   });
 
   it('falls back to a deterministic id when sdBlockId is missing', () => {

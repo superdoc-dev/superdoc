@@ -488,6 +488,7 @@ describe('document-api story: all citations commands', () => {
 
         const configureResult = await callDocOperation<any>('citations.bibliography.configure', {
           sessionId,
+          target: f.bibliographyTarget,
           style: 'APA',
         });
 

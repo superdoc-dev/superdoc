@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import {
   executeCreateParagraph,
+  executeCreateHeading,
   executeCreateSectionBreak,
   executeCreateTable,
   normalizeCreateParagraphInput,
@@ -110,6 +111,125 @@ describe('executeCreateTable', () => {
       }),
     ).toThrow(/Cannot combine/i);
     expect(tableCalled).toBe(false);
+  });
+});
+
+describe('create.paragraph input validation', () => {
+  const adapter = {
+    paragraph: mock(() => ({
+      success: true,
+      paragraph: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+      insertionPoint: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+    })),
+    heading: () => ({ success: true }),
+    table: () => ({ success: true }),
+  } as any;
+
+  it('rejects null input', () => {
+    expect(() => executeCreateParagraph(adapter, null as any)).toThrow(/non-null object/);
+  });
+
+  it('rejects invalid story locator', () => {
+    expect(() => executeCreateParagraph(adapter, { in: { kind: 'bogus' } } as any)).toThrow(/StoryLocator/);
+  });
+});
+
+describe('create.heading input validation', () => {
+  const adapter = {
+    paragraph: () => ({ success: true }),
+    heading: mock(() => ({
+      success: true,
+      heading: { kind: 'block', nodeType: 'heading', nodeId: 'h1' },
+      insertionPoint: { kind: 'text', blockId: 'h1', range: { start: 0, end: 0 } },
+    })),
+    table: () => ({ success: true }),
+  } as any;
+
+  it('rejects null input', () => {
+    expect(() => executeCreateHeading(adapter, null as any)).toThrow(/non-null object/);
+  });
+
+  it('rejects undefined input', () => {
+    expect(() => executeCreateHeading(adapter, undefined as any)).toThrow(/non-null object/);
+  });
+
+  it('rejects missing level', () => {
+    expect(() => executeCreateHeading(adapter, {} as any)).toThrow(/level must be an integer 1–6/);
+  });
+
+  it('rejects level 0', () => {
+    expect(() => executeCreateHeading(adapter, { level: 0 } as any)).toThrow(/level must be an integer 1–6/);
+  });
+
+  it('rejects level 7', () => {
+    expect(() => executeCreateHeading(adapter, { level: 7 } as any)).toThrow(/level must be an integer 1–6/);
+  });
+
+  it('rejects level 99', () => {
+    expect(() => executeCreateHeading(adapter, { level: 99 } as any)).toThrow(/level must be an integer 1–6/);
+  });
+
+  it('rejects string level', () => {
+    expect(() => executeCreateHeading(adapter, { level: '2' } as any)).toThrow(/level must be an integer 1–6/);
+  });
+
+  it('accepts valid levels 1-6', () => {
+    for (let level = 1; level <= 6; level++) {
+      expect(() => executeCreateHeading(adapter, { level: level as any })).not.toThrow();
+    }
+  });
+
+  it('rejects invalid story locator', () => {
+    expect(() => executeCreateHeading(adapter, { level: 1, in: { kind: 'bogus' } } as any)).toThrow(/StoryLocator/);
+  });
+});
+
+describe('create.table input validation', () => {
+  const adapter = {
+    paragraph: () => ({ success: true }),
+    heading: () => ({ success: true }),
+    table: mock(() => ({
+      success: true,
+      table: { kind: 'block', nodeType: 'table', nodeId: 'new-table' },
+    })),
+  } as any;
+
+  it('rejects null input', () => {
+    expect(() => executeCreateTable(adapter, null as any)).toThrow(/non-null object/);
+  });
+
+  it('rejects undefined input', () => {
+    expect(() => executeCreateTable(adapter, undefined as any)).toThrow(/non-null object/);
+  });
+
+  it('rejects missing rows', () => {
+    expect(() => executeCreateTable(adapter, { columns: 2 } as any)).toThrow(/rows must be a positive integer/);
+  });
+
+  it('rejects zero rows', () => {
+    expect(() => executeCreateTable(adapter, { rows: 0, columns: 2 })).toThrow(/rows must be a positive integer/);
+  });
+
+  it('rejects negative rows', () => {
+    expect(() => executeCreateTable(adapter, { rows: -1, columns: 2 })).toThrow(/rows must be a positive integer/);
+  });
+
+  it('rejects string rows', () => {
+    expect(() => executeCreateTable(adapter, { rows: '2', columns: 2 } as any)).toThrow(
+      /rows must be a positive integer/,
+    );
+  });
+
+  it('rejects zero columns', () => {
+    expect(() => executeCreateTable(adapter, { rows: 2, columns: 0 })).toThrow(/columns must be a positive integer/);
+  });
+
+  it('rejects float columns', () => {
+    expect(() => executeCreateTable(adapter, { rows: 2, columns: 2.5 })).toThrow(/columns must be a positive integer/);
+  });
+
+  it('accepts valid rows and columns', () => {
+    expect(() => executeCreateTable(adapter, { rows: 3, columns: 4 })).not.toThrow();
   });
 });
 

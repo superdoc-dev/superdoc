@@ -118,10 +118,12 @@ export function buildCitationDiscoveryItem(
 
 export function findAllBibliographies(doc: ProseMirrorNode): ResolvedBibliography[] {
   const results: ResolvedBibliography[] = [];
+  let occurrenceIndex = 0;
   doc.descendants((node, pos) => {
     if (node.type.name === 'bibliography') {
       const commandNodeId = node.attrs?.sdBlockId as string | undefined;
-      const nodeId = resolvePublicReferenceBlockNodeId(node, pos);
+      const nodeId = resolvePublicReferenceBlockNodeId(node, occurrenceIndex);
+      occurrenceIndex += 1;
       results.push({ node, pos, nodeId, commandNodeId });
       return false;
     }

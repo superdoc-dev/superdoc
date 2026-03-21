@@ -1,5 +1,4 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { toId } from './value-utils.js';
 
 type ReferenceBlockType = 'index' | 'bibliography' | 'tableOfAuthorities';
 
@@ -36,20 +35,18 @@ function toReferenceBlockType(node: ProseMirrorNode): ReferenceBlockType | undef
 /**
  * Public id used for reference blocks.
  *
- * Prefer `sdBlockId` when present so handles returned from `*.list()` remain
- * usable across ordinary document edits that shift the block's position.
- * Fall back to a deterministic hash only for legacy/malformed nodes that do
- * not currently carry an `sdBlockId`.
+ * Must stay stable across stateless re-opens of the same document. Runtime
+ * `sdBlockId` values are not persisted through DOCX export/reopen for these
+ * field-backed blocks, so public ids must be derived from deterministic
+ * document order instead. Callers that still hold a session-local `sdBlockId`
+ * can resolve it through each resolver's `commandNodeId` fallback.
  */
-export function resolvePublicReferenceBlockNodeId(node: ProseMirrorNode, pos: number): string {
-  const sdBlockId = toId(node.attrs?.sdBlockId);
-  if (sdBlockId) return sdBlockId;
-
+export function resolvePublicReferenceBlockNodeId(node: ProseMirrorNode, occurrenceIndex: number): string {
   const blockType = toReferenceBlockType(node);
   if (!blockType) {
     throw new Error(`Unsupported reference block node type: ${node.type.name}`);
   }
 
   const prefix = REFERENCE_BLOCK_PREFIX[blockType];
-  return `${prefix}-${stableHash(`${blockType}:${pos}`)}`;
+  return `${prefix}-${stableHash(`${blockType}:${occurrenceIndex}`)}`;
 }

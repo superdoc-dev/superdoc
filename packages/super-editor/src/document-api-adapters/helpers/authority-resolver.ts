@@ -45,10 +45,12 @@ export interface ResolvedAuthorityEntry {
 
 export function findAllAuthorities(doc: ProseMirrorNode): ResolvedAuthority[] {
   const results: ResolvedAuthority[] = [];
+  let occurrenceIndex = 0;
   doc.descendants((node, pos) => {
     if (node.type.name === 'tableOfAuthorities') {
       const commandNodeId = node.attrs?.sdBlockId as string | undefined;
-      const nodeId = resolvePublicReferenceBlockNodeId(node, pos);
+      const nodeId = resolvePublicReferenceBlockNodeId(node, occurrenceIndex);
+      occurrenceIndex += 1;
       results.push({ node, pos, nodeId, commandNodeId });
       return false;
     }

@@ -15,7 +15,7 @@ SuperDoc renders and edits DOCX files in the browser. Built on OOXML — not bol
 - **Self-hosted** — Runs entirely in the browser. Your documents never leave your servers.
 - **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
 - **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
-- **Part of a programmable ecosystem** — SuperDoc also powers a [headless Node.js SDK](https://www.npmjs.com/package/@superdoc-dev/sdk), [CLI](https://www.npmjs.com/package/@superdoc-dev/cli), and [MCP server](https://www.npmjs.com/package/@superdoc-dev/mcp) for AI agent workflows.
+- **Also available headless** — Separate packages for server-side automation: [Node.js SDK](https://www.npmjs.com/package/@superdoc-dev/sdk), [CLI](https://www.npmjs.com/package/@superdoc-dev/cli), and [MCP server](https://www.npmjs.com/package/@superdoc-dev/mcp).
 - **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
 ## Quick start

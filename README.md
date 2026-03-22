@@ -87,7 +87,6 @@ For all available options and events, see the [documentation](https://docs.super
 - **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
 - **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
 - **Agentic tooling** — Runs headless in Node.js. Bring your own LLM for document automation, redlining, and template workflows.
-- **Extensible** — 60+ built-in extensions. Write custom plugins with full ProseMirror access.
 - **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
 ## Examples

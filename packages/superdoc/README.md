@@ -16,7 +16,6 @@ SuperDoc renders and edits DOCX files in the browser. Built on OOXML — not bol
 - **Any framework** — React, Vue, Angular, Svelte, vanilla JS. One component, zero lock-in.
 - **Real-time collaboration** — Yjs-based CRDT. Multiplayer editing with comments, tracked changes, and automatic conflict resolution.
 - **Programmable** — API, SDK, CLI, MCP server. Run headless in Node.js. The same engine — visual or headless.
-- **Extensible** — 60+ built-in extensions. Write custom plugins with full ProseMirror access.
 - **Dual licensed** — AGPLv3 for community use. [Commercial license](https://www.superdocportal.dev/get-in-touch) for proprietary deployments.
 
 ## Quick start

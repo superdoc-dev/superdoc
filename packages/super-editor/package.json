@@ -111,6 +111,7 @@
     "remark-gfm": "catalog:",
     "remark-parse": "catalog:",
     "remark-stringify": "catalog:",
+    "sax": "^1.6.0",
     "unified": "catalog:",
     "utif2": "catalog:",
     "uuid": "catalog:",

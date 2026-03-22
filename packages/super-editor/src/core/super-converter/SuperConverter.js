@@ -1,5 +1,5 @@
 /* global TextEncoder */
-import * as xmljs from 'xml-js';
+import { xmlToJson } from './xml-parser.js';
 import { v4 as uuidv4 } from 'uuid';
 import { DocxExporter, exportSchemaToJson } from './exporter';
 import {
@@ -355,14 +355,14 @@ class SuperConverter {
    * // Preserves whitespace in deleted text
    */
   parseXmlToJson(xml) {
-    // Preserve whitespace-only text runs so xml-js doesn't drop them during parsing.
+    // Preserve whitespace-only text runs so the parser doesn't drop them.
     // This handles both <w:t> and <w:delText> elements, with or without attributes.
     // Documents may rely on document-level xml:space="preserve" rather than per-element attributes.
     const newXml = xml.replace(
       /(<w:(?:t|delText)(?:\s[^>]*)?>)(\s+)(<\/w:(?:t|delText)>)/g,
       '$1[[sdspace]]$2[[sdspace]]$3',
     );
-    return JSON.parse(xmljs.xml2json(newXml, null, 2));
+    return xmlToJson(newXml);
   }
 
   /**

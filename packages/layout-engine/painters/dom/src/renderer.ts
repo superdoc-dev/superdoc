@@ -108,11 +108,7 @@ import {
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
-import {
-  isRtlParagraph,
-  applyRtlStyles,
-  shouldUseSegmentPositioning,
-} from './features/rtl-paragraph/index.js';
+import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.

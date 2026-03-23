@@ -2,6 +2,7 @@ import type { Node as PMNode, Schema } from 'prosemirror-model';
 import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import { diffComments, type CommentInput, type CommentDiff } from './algorithm/comment-diffing';
 import { diffHeaderFooters, type HeaderFooterState, type HeaderFootersDiff } from './algorithm/header-footer-diffing';
+import { diffParts, type PartsDiff } from './algorithm/parts-diffing';
 import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing';
 import { diffStyles, type StylesDiff } from './algorithm/styles-diffing';
 import { diffNumbering, type NumberingDiff } from './algorithm/numbering-diffing';
@@ -20,6 +21,8 @@ export interface DiffResult {
   numberingDiff: NumberingDiff | null;
   /** Diffs computed from header/footer parts and section slot refs. */
   headerFootersDiff: HeaderFootersDiff | null;
+  /** Diffs computed from OOXML parts and media assets. */
+  partsDiff: PartsDiff | null;
 }
 
 /**
@@ -64,5 +67,6 @@ export function computeDiff(
     stylesDiff: diffStyles(oldStyles, newStyles),
     numberingDiff: diffNumbering(oldNumbering, newNumbering),
     headerFootersDiff: diffHeaderFooters(oldHeaderFooters, newHeaderFooters, schema),
+    partsDiff: diffParts(),
   };
 }

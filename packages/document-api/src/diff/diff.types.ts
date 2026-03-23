@@ -47,12 +47,13 @@ export interface DiffSnapshot {
 /** Coarse change summary for a diff payload. */
 export interface DiffSummary {
   hasChanges: boolean;
-  changedComponents: Array<'body' | 'comments' | 'styles' | 'numbering' | 'headerFooters'>;
+  changedComponents: Array<'body' | 'comments' | 'styles' | 'numbering' | 'headerFooters' | 'parts'>;
   body: { hasChanges: boolean };
   comments: { hasChanges: boolean };
   styles: { hasChanges: boolean };
   numbering: { hasChanges: boolean };
   headerFooters: { hasChanges: boolean };
+  parts: { hasChanges: boolean };
 }
 
 /** Versioned diff payload describing changes from a base to a target document. */

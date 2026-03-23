@@ -16,6 +16,7 @@ export function buildDiffSummary(diff: DiffResult): DiffSummary {
   const stylesHasChanges = diff.stylesDiff !== null;
   const numberingHasChanges = diff.numberingDiff !== null;
   const headerFootersHasChanges = diff.headerFootersDiff !== null;
+  const partsHasChanges = diff.partsDiff !== null;
 
   const changedComponents: DiffSummary['changedComponents'] = [];
   if (bodyHasChanges) changedComponents.push('body');
@@ -23,6 +24,7 @@ export function buildDiffSummary(diff: DiffResult): DiffSummary {
   if (stylesHasChanges) changedComponents.push('styles');
   if (numberingHasChanges) changedComponents.push('numbering');
   if (headerFootersHasChanges) changedComponents.push('headerFooters');
+  if (partsHasChanges) changedComponents.push('parts');
 
   return {
     hasChanges: changedComponents.length > 0,
@@ -32,5 +34,6 @@ export function buildDiffSummary(diff: DiffResult): DiffSummary {
     styles: { hasChanges: stylesHasChanges },
     numbering: { hasChanges: numberingHasChanges },
     headerFooters: { hasChanges: headerFootersHasChanges },
+    parts: { hasChanges: partsHasChanges },
   };
 }

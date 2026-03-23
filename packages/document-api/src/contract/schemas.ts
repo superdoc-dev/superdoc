@@ -2787,15 +2787,16 @@ const diffSummarySchema: JsonSchema = objectSchema(
     hasChanges: { type: 'boolean' },
     changedComponents: {
       type: 'array',
-      items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering', 'headerFooters'] },
+      items: { type: 'string', enum: ['body', 'comments', 'styles', 'numbering', 'headerFooters', 'parts'] },
     },
     body: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     comments: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     styles: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     numbering: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
     headerFooters: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
+    parts: objectSchema({ hasChanges: { type: 'boolean' } }, ['hasChanges']),
   },
-  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering', 'headerFooters'],
+  ['hasChanges', 'changedComponents', 'body', 'comments', 'styles', 'numbering', 'headerFooters', 'parts'],
 );
 
 const diffSnapshotSchema: JsonSchema = objectSchema(

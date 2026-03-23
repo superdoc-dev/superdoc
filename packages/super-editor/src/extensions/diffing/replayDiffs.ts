@@ -18,6 +18,7 @@ import { replayComments } from './replay/replay-comments';
 import { replayStyles } from './replay/replay-styles';
 import { replayNumbering } from './replay/replay-numbering';
 import { replayHeaderFooters } from './replay/replay-header-footers';
+import { replayPartsDiff } from './replay/replay-parts';
 
 type ReplayDiffsParams = {
   tr: import('prosemirror-state').Transaction;
@@ -96,6 +97,10 @@ export function replayDiffs({
     editor,
     trackedChangesRequested,
   });
+  const partsReplay = replayPartsDiff({
+    partsDiff: diff.partsDiff,
+    editor,
+  });
 
   return {
     tr,
@@ -104,19 +109,22 @@ export function replayDiffs({
       commentsReplay.applied +
       stylesReplay.applied +
       numberingReplay.applied +
-      headerFootersReplay.applied,
+      headerFootersReplay.applied +
+      partsReplay.applied,
     skippedDiffs:
       docReplay.skipped +
       commentsReplay.skipped +
       stylesReplay.skipped +
       numberingReplay.skipped +
-      headerFootersReplay.skipped,
+      headerFootersReplay.skipped +
+      partsReplay.skipped,
     warnings: [
       ...docReplay.warnings,
       ...commentsReplay.warnings,
       ...stylesReplay.warnings,
       ...numberingReplay.warnings,
       ...headerFootersReplay.warnings,
+      ...partsReplay.warnings,
     ],
   };
 }

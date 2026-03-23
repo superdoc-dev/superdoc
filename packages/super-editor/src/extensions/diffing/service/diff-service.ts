@@ -13,6 +13,7 @@ import type { NumberingProperties, StylesDocumentProperties } from '@superdoc/st
 import type { DiffSnapshot, DiffPayload, DiffApplyResult, DiffCoverage } from '@superdoc/document-api';
 import type { CommentInput } from '../algorithm/comment-diffing';
 import type { HeaderFooterState } from '../algorithm/header-footer-diffing';
+import type { PartsDiff } from '../algorithm/parts-diffing';
 import { captureHeaderFooterState } from '../algorithm/header-footer-diffing';
 import type { DiffResult } from '../computeDiff';
 import { computeDiff } from '../computeDiff';
@@ -65,6 +66,12 @@ export interface DiffServiceEditor {
   options?: {
     documentId?: string | null;
     user?: unknown;
+    mediaFiles?: Record<string, unknown>;
+  };
+  storage?: {
+    image?: {
+      media?: Record<string, unknown>;
+    };
   };
 }
 
@@ -152,6 +159,7 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
       styles: styles as unknown as Record<string, unknown> | null,
       numbering: numbering as unknown as Record<string, unknown> | null,
       headerFooters: headerFooters as unknown as Record<string, unknown>,
+      partsState: null,
     }),
   };
 }
@@ -260,6 +268,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     stylesDiff: rawDiff.stylesDiff as unknown as Record<string, unknown> | null,
     numberingDiff: rawDiff.numberingDiff as unknown as Record<string, unknown> | null,
     headerFootersDiff: rawDiff.headerFootersDiff as unknown as Record<string, unknown> | null,
+    partsDiff: rawDiff.partsDiff as unknown as Record<string, unknown> | null,
   }) as Record<string, unknown>;
 
   return {
@@ -455,6 +464,25 @@ function createStagingEditor(
 ): { staging: DiffServiceEditor; stagedComments: CommentInput[]; commit: () => void } {
   const pendingEvents: Array<[string, unknown]> = [];
   const stagedComments = comments.map((c) => ({ ...c }));
+  const stagedOptions: DiffServiceEditor['options'] = editor.options
+    ? {
+        ...editor.options,
+        mediaFiles: editor.options.mediaFiles ? structuredClone(editor.options.mediaFiles) : editor.options.mediaFiles,
+      }
+    : editor.options;
+  const stagedStorage: DiffServiceEditor['storage'] = editor.storage
+    ? {
+        ...editor.storage,
+        image: editor.storage.image
+          ? {
+              ...editor.storage.image,
+              media: editor.storage.image.media
+                ? structuredClone(editor.storage.image.media)
+                : editor.storage.image.media,
+            }
+          : editor.storage.image,
+      }
+    : editor.storage;
 
   // Build a staging converter that inherits non-mutable properties from
   // the real converter via Object.create, then deep-clones only the
@@ -485,7 +513,8 @@ function createStagingEditor(
     emit: (event: string, payload: unknown) => {
       pendingEvents.push([event, payload]);
     },
-    options: editor.options,
+    options: stagedOptions,
+    storage: stagedStorage,
     converter: stagedConverter,
   };
 
@@ -500,6 +529,13 @@ function createStagingEditor(
       }
       realRaw.headerFooterModified = stagedRaw.headerFooterModified;
       realRaw.documentModified = stagedRaw.documentModified;
+    }
+
+    if (editor.options && stagedOptions && 'mediaFiles' in stagedOptions) {
+      editor.options.mediaFiles = stagedOptions.mediaFiles;
+    }
+    if (editor.storage?.image && stagedStorage?.image) {
+      editor.storage.image.media = stagedStorage.image.media;
     }
 
     // Apply comment mutations to the real array.  Deep-clone each entry
@@ -562,6 +598,7 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
   const stylesDiff = payload.stylesDiff;
   const numberingDiff = payload.numberingDiff;
   const headerFootersDiff = payload.headerFootersDiff;
+  const partsDiff = payload.partsDiff;
 
   if (!Array.isArray(docDiffs)) {
     throw new DiffServiceError('INVALID_INPUT', 'Diff payload.docDiffs must be an array.');
@@ -593,6 +630,9 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
   ) {
     throw new DiffServiceError('INVALID_INPUT', 'Diff payload.headerFootersDiff must be a plain object or null.');
   }
+  if (partsDiff !== null && partsDiff !== undefined && (typeof partsDiff !== 'object' || Array.isArray(partsDiff))) {
+    throw new DiffServiceError('INVALID_INPUT', 'Diff payload.partsDiff must be a plain object or null.');
+  }
 
   // Deep-clone commentDiffs so replay never holds references to caller-owned
   // objects.  Without this, commentJSON/newCommentJSON pushed into
@@ -604,6 +644,7 @@ function parseDiffPayloadContents(payload: Record<string, unknown>): DiffResult 
     stylesDiff: (stylesDiff ?? null) as DiffResult['stylesDiff'],
     numberingDiff: (numberingDiff ?? null) as DiffResult['numberingDiff'],
     headerFootersDiff: (headerFootersDiff ?? null) as DiffResult['headerFootersDiff'],
+    partsDiff: (partsDiff ?? null) as PartsDiff | null,
   };
 }
 
@@ -714,6 +755,13 @@ function validateSnapshotPayload(payload: Record<string, unknown>): void {
     (typeof payload.headerFooters !== 'object' || Array.isArray(payload.headerFooters))
   ) {
     throw new DiffServiceError('INVALID_INPUT', 'Snapshot payload.headerFooters must be a plain object or null.');
+  }
+  if (
+    payload.partsState !== null &&
+    payload.partsState !== undefined &&
+    (typeof payload.partsState !== 'object' || Array.isArray(payload.partsState))
+  ) {
+    throw new DiffServiceError('INVALID_INPUT', 'Snapshot payload.partsState must be a plain object or null.');
   }
 }
 

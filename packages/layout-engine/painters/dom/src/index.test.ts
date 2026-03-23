@@ -6164,9 +6164,7 @@ describe('DomPainter', () => {
 
     const rtlMeasure: Measure = {
       kind: 'paragraph',
-      lines: [
-        { fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 80, ascent: 12, descent: 4, lineHeight: 20 },
-      ],
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 5, width: 80, ascent: 12, descent: 4, lineHeight: 20 }],
       totalHeight: 20,
     };
 
@@ -6175,9 +6173,7 @@ describe('DomPainter', () => {
       pages: [
         {
           number: 1,
-          fragments: [
-            { kind: 'para', blockId: 'rtl-block', fromLine: 0, toLine: 1, x: 0, y: 0, width: 200 },
-          ],
+          fragments: [{ kind: 'para', blockId: 'rtl-block', fromLine: 0, toLine: 1, x: 0, y: 0, width: 200 }],
         },
       ],
     };
@@ -6225,8 +6221,14 @@ describe('DomPainter', () => {
         kind: 'paragraph',
         lines: [
           {
-            fromRun: 0, fromChar: 0, toRun: 2, toChar: 4,
-            width: 160, ascent: 12, descent: 4, lineHeight: 20,
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 4,
+            width: 160,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
             segments: [
               { runIndex: 0, fromChar: 0, toChar: 5, width: 60 },
               { runIndex: 1, fromChar: 0, toChar: 0, width: 40, x: 60 },
@@ -6481,10 +6483,10 @@ describe('URL sanitization security', () => {
     expect(sanitizeUrl('#top')).toBe('#top');
   });
 
-  it('blocks relative URLs', () => {
-    expect(sanitizeUrl('/path/to/page')).toBeNull();
-    expect(sanitizeUrl('./relative/path')).toBeNull();
-    expect(sanitizeUrl('../parent/path')).toBeNull();
+  it('resolves relative URLs against page origin', () => {
+    expect(sanitizeUrl('/path/to/page')).toBe(`${window.location.origin}/path/to/page`);
+    expect(sanitizeUrl('./relative/path')).toBe(`${window.location.origin}/relative/path`);
+    expect(sanitizeUrl('../parent/path')).toBe(`${window.location.origin}/parent/path`);
   });
 
   it('handles empty and whitespace-only URLs', () => {

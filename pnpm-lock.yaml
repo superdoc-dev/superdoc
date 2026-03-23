@@ -2743,6 +2743,9 @@ importers:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.58.1
+      jszip:
+        specifier: 'catalog:'
+        version: 3.10.1
       vite:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)

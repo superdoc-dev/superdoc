@@ -112,6 +112,7 @@ function getCellContentWidthPx(cellNode: PmNode): number {
  */
 interface ImageStorage {
   media: Record<string, unknown>;
+  pendingRelativeRegistrations: Set<string>;
 }
 
 /**

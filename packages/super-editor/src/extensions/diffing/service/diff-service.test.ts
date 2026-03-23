@@ -483,7 +483,6 @@ describe('diff-service tracked apply', () => {
       const diff = compareToSnapshot(baseEditor, snapshot);
       const baseSnapshot = captureSnapshot(baseEditor);
       expect(baseSnapshot.fingerprint).toBe(diff.baseFingerprint);
-      expect(baseSnapshot.partsFingerprint).toBe(diff.basePartsFingerprint);
 
       const relsPart = baseEditor.converter?.convertedXml?.['word/_rels/document.xml.rels'] as
         | {
@@ -508,12 +507,9 @@ describe('diff-service tracked apply', () => {
       baseEditor.storage.image.media['word/media/unexpected-image.png'] = 'base64-unexpected';
 
       const mutatedSnapshot = captureSnapshot(baseEditor);
-      expect(mutatedSnapshot.fingerprint).toBe(baseSnapshot.fingerprint);
-      expect(mutatedSnapshot.partsFingerprint).not.toBe(baseSnapshot.partsFingerprint);
+      expect(mutatedSnapshot.fingerprint).not.toBe(baseSnapshot.fingerprint);
 
-      expect(() => applyDiffPayload(baseEditor, diff, { changeMode: 'direct' })).toThrowError(
-        /parts fingerprint mismatch/i,
-      );
+      expect(() => applyDiffPayload(baseEditor, diff, { changeMode: 'direct' })).toThrowError(/fingerprint mismatch/i);
     } finally {
       baseEditor.destroy?.();
       targetEditor.destroy?.();

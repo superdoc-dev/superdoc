@@ -156,8 +156,7 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
   const headerFooters = getEditorHeaderFooters(editor);
   const partsState = getEditorPartsState(editor, headerFooters);
 
-  const canonical = buildCanonicalStateForCoverage(doc, comments, styles, numbering, headerFooters, null, V2_COVERAGE);
-  const partsCanonical = buildCanonicalStateForCoverage(
+  const canonical = buildCanonicalStateForCoverage(
     doc,
     comments,
     styles,
@@ -167,13 +166,11 @@ export function captureSnapshot(editor: DiffServiceEditor): DiffSnapshot {
     V2_COVERAGE,
   );
   const fingerprint = computeFingerprint(canonical);
-  const partsFingerprint = computeFingerprint(partsCanonical);
 
   return {
     version: SNAPSHOT_VERSION_V2,
     engine: ENGINE_ID,
     fingerprint,
-    partsFingerprint,
     coverage: { ...V2_COVERAGE },
     // Deep-clone every slot so the snapshot is immutable.  doc.toJSON()
     // already returns a fresh tree; the rest are live references that would
@@ -229,7 +226,7 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
       targetStyles,
       targetNumbering,
       targetHeaderFooters,
-      null,
+      targetSnapshot.version === SNAPSHOT_VERSION_V2 ? targetPartsState : null,
       targetCoverage,
     );
     reDerivedFingerprint = computeFingerprint(targetCanonical);
@@ -246,26 +243,6 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
       `Target snapshot fingerprint does not match re-derived value. The snapshot may have been tampered with.`,
     );
   }
-  if (targetSnapshot.version === SNAPSHOT_VERSION_V2) {
-    const reDerivedPartsFingerprint = computeFingerprint(
-      buildCanonicalStateForCoverage(
-        targetDoc,
-        targetComments,
-        targetStyles,
-        targetNumbering,
-        targetHeaderFooters,
-        targetPartsState,
-        targetCoverage,
-      ),
-    );
-    if (reDerivedPartsFingerprint !== targetSnapshot.partsFingerprint) {
-      throw new DiffServiceError(
-        'INVALID_INPUT',
-        `Target snapshot parts fingerprint does not match re-derived value. The snapshot may have been tampered with.`,
-      );
-    }
-  }
-
   // Compute base fingerprint
   const baseDoc = editor.state.doc;
   const baseComments = getEditorComments(editor);
@@ -279,24 +256,10 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     baseStyles,
     baseNumbering,
     baseHeaderFooters,
-    null,
+    targetSnapshot.version === SNAPSHOT_VERSION_V2 ? basePartsState : null,
     targetCoverage,
   );
   const baseFingerprint = computeFingerprint(baseCanonical);
-  const basePartsFingerprint =
-    targetSnapshot.version === SNAPSHOT_VERSION_V2
-      ? computeFingerprint(
-          buildCanonicalStateForCoverage(
-            baseDoc,
-            baseComments,
-            baseStyles,
-            baseNumbering,
-            baseHeaderFooters,
-            basePartsState,
-            targetCoverage,
-          ),
-        )
-      : null;
 
   // Compute raw diff.  Wrap in try-catch so malformed nested comment bodies
   // (e.g. textJson that passes structural validation but fails inside
@@ -341,14 +304,12 @@ export function compareToSnapshot(editor: DiffServiceEditor, targetSnapshot: Dif
     engine: ENGINE_ID,
     baseFingerprint,
     targetFingerprint: targetSnapshot.fingerprint,
-    basePartsFingerprint: basePartsFingerprint ?? undefined,
-    targetPartsFingerprint: targetSnapshot.partsFingerprint,
     coverage: { ...targetCoverage },
     summary,
     // Detach the payload from editor-owned objects before returning it across
     // the API boundary. Comment diffs can otherwise retain live comment refs.
     payload,
-  };
+  } as DiffPayload;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +354,7 @@ export function applyDiffPayload(
     baseStyles,
     baseNumbering,
     baseHeaderFooters,
-    null,
+    diffPayload.version === PAYLOAD_VERSION_V2 ? basePartsState : null,
     diffPayload.coverage,
   );
   const currentFingerprint = computeFingerprint(baseCanonical);
@@ -405,27 +366,6 @@ export function applyDiffPayload(
         `The document may have changed since the diff was computed. Re-run diff.compare against the current state.`,
     );
   }
-  if (diffPayload.version === PAYLOAD_VERSION_V2) {
-    const currentPartsFingerprint = computeFingerprint(
-      buildCanonicalStateForCoverage(
-        baseDoc,
-        baseComments,
-        baseStyles,
-        baseNumbering,
-        baseHeaderFooters,
-        basePartsState,
-        diffPayload.coverage,
-      ),
-    );
-    if (currentPartsFingerprint !== diffPayload.basePartsFingerprint) {
-      throw new DiffServiceError(
-        'PRECONDITION_FAILED',
-        `Document parts fingerprint mismatch. Expected "${diffPayload.basePartsFingerprint}", got "${currentPartsFingerprint}". ` +
-          `The document's part/media state may have changed since the diff was computed. Re-run diff.compare against the current state.`,
-      );
-    }
-  }
-
   // Reconstruct internal DiffResult from opaque payload with structural validation
   const rawDiff = parseDiffPayloadContents(diffPayload.payload);
 
@@ -498,12 +438,10 @@ export function applyDiffPayload(
       appliedOperations: replayResult.appliedDiffs,
       baseFingerprint: diffPayload.baseFingerprint,
       targetFingerprint: diffPayload.targetFingerprint,
-      basePartsFingerprint: diffPayload.basePartsFingerprint,
-      targetPartsFingerprint: diffPayload.targetPartsFingerprint,
       coverage: { ...diffPayload.coverage },
       summary: verifiedSummary,
       diagnostics: replayResult.warnings,
-    },
+    } as DiffApplyResult,
     tr,
   };
 }
@@ -819,23 +757,11 @@ function validateSnapshotFingerprints(snapshot: DiffSnapshot): void {
   if (typeof snapshot.fingerprint !== 'string') {
     throw new DiffServiceError('INVALID_INPUT', 'Snapshot fingerprint must be a string.');
   }
-  if (snapshot.version === SNAPSHOT_VERSION_V2 && typeof snapshot.partsFingerprint !== 'string') {
-    throw new DiffServiceError('INVALID_INPUT', 'Snapshot partsFingerprint must be a string for v2 snapshots.');
-  }
 }
 
 function validatePayloadFingerprints(payload: DiffPayload): void {
   if (typeof payload.baseFingerprint !== 'string' || typeof payload.targetFingerprint !== 'string') {
     throw new DiffServiceError('INVALID_INPUT', 'Diff payload fingerprints must be strings.');
-  }
-  if (
-    payload.version === PAYLOAD_VERSION_V2 &&
-    (typeof payload.basePartsFingerprint !== 'string' || typeof payload.targetPartsFingerprint !== 'string')
-  ) {
-    throw new DiffServiceError(
-      'INVALID_INPUT',
-      'Diff payload basePartsFingerprint and targetPartsFingerprint must be strings for v2 payloads.',
-    );
   }
 }
 

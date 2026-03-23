@@ -474,7 +474,9 @@ describe('Header/footer diffing', () => {
             }
           | undefined
       )?.elements?.find((entry) => entry.name === 'Relationships');
-      const relationship = relsRoot?.elements?.find((entry) => entry.name === 'Relationship');
+      const relationship = relsRoot?.elements?.find(
+        (entry) => entry.name === 'Relationship' && entry.attributes?.Id === 'rIdHeader1',
+      );
       expect(relationship?.attributes?.Target).toBe('header2.xml');
     } finally {
       beforeEditor.destroy?.();

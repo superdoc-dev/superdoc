@@ -238,7 +238,7 @@ function readHeaderFooterPartPaths(editor: HeaderFooterEditor): Map<string, stri
  * @param target Raw relationship target string.
  * @returns Normalized OOXML part path.
  */
-function normalizePartPath(target: string): string {
+export function normalizePartPath(target: string): string {
   let normalized = target.replace(/^\.\//, '');
   if (normalized.startsWith('../')) {
     normalized = normalized.slice(3);

@@ -2,12 +2,13 @@ import { EditorState, type Transaction } from 'prosemirror-state';
 import type { Schema } from 'prosemirror-model';
 import { replayDocDiffs } from './replay-doc';
 import { ReplayResult } from './replay-types';
-import type {
-  HeaderFootersDiff,
-  HeaderFooterKind,
-  HeaderFooterPartState,
-  HeaderFooterSlotState,
-  HeaderFooterVariant,
+import {
+  normalizePartPath,
+  type HeaderFootersDiff,
+  type HeaderFooterKind,
+  type HeaderFooterPartState,
+  type HeaderFooterSlotState,
+  type HeaderFooterVariant,
 } from '../algorithm/header-footer-diffing';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import { readTargetSectPr } from '../../../document-api-adapters/helpers/section-projection-access.js';
@@ -623,7 +624,7 @@ function findPartPathByRefId(convertedXml: Record<string, unknown>, refId: strin
   if (!target) {
     return null;
   }
-  return target.startsWith('word/') ? target : `word/${target}`;
+  return normalizePartPath(target);
 }
 
 /**

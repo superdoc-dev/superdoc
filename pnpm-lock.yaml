@@ -32981,7 +32981,11 @@ snapshots:
     optionalDependencies:
       ajv: 8.18.0
 
+<<<<<<< HEAD
   ajv-errors@3.0.0(ajv@8.18.0):
+=======
+  ajv-errors@3.0.0(ajv@8.17.1):
+>>>>>>> origin/stable
     dependencies:
       ajv: 8.18.0
 
@@ -46638,7 +46642,11 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
       postcss: 8.5.8
+<<<<<<< HEAD
       rollup: 4.59.1
+=======
+      rollup: 4.59.0
+>>>>>>> origin/stable
       tinyglobby: 0.2.15
     optionalDependencies:
       '@types/node': 22.19.2
@@ -46657,7 +46665,11 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
       postcss: 8.5.8
+<<<<<<< HEAD
       rollup: 4.59.1
+=======
+      rollup: 4.59.0
+>>>>>>> origin/stable
       tinyglobby: 0.2.15
     optionalDependencies:
       '@types/node': 22.19.8

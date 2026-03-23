@@ -92,6 +92,7 @@ export function diffParts(
 ): PartsDiff | null {
   const upserts: Record<string, PartSnapshot> = {};
   const deletes = new Set<string>();
+  const nextReachablePartPaths = collectReachablePartPaths(nextPartsState);
 
   if (docDiffs.length > 0) {
     for (const [partPath, snapshot] of Object.entries(nextPartsState?.bodyClosure ?? {})) {
@@ -122,16 +123,18 @@ export function diffParts(
       const closure = previousPartsState?.headerFooterClosures?.[part.refId];
       if (closure) {
         for (const partPath of Object.keys(closure.parts)) {
-          if (!(partPath in upserts)) {
+          if (!(partPath in upserts) && !nextReachablePartPaths.has(partPath)) {
             deletes.add(partPath);
           }
         }
         continue;
       }
 
-      deletes.add(part.partPath);
+      if (!nextReachablePartPaths.has(part.partPath)) {
+        deletes.add(part.partPath);
+      }
       const relsPath = toRelsPathForPart(part.partPath);
-      if (relsPath) {
+      if (relsPath && !nextReachablePartPaths.has(relsPath)) {
         deletes.add(relsPath);
       }
     }
@@ -145,6 +148,22 @@ export function diffParts(
     upserts,
     deletes: [...deletes].sort(),
   };
+}
+
+function collectReachablePartPaths(partsState: PartsState | null | undefined): Set<string> {
+  const reachable = new Set<string>();
+
+  for (const partPath of Object.keys(partsState?.bodyClosure ?? {})) {
+    reachable.add(partPath);
+  }
+
+  for (const closure of Object.values(partsState?.headerFooterClosures ?? {})) {
+    for (const partPath of Object.keys(closure.parts)) {
+      reachable.add(partPath);
+    }
+  }
+
+  return reachable;
 }
 
 function getMediaStore(editor: PartsStateEditor): Record<string, unknown> {

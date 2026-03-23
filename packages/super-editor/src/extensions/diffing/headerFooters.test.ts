@@ -186,7 +186,9 @@ function setBodySection(
   params: {
     titlePg?: boolean;
     headerDefault?: string | null;
+    headerFirst?: string | null;
     footerDefault?: string | null;
+    footerFirst?: string | null;
   },
 ): void {
   const elements: Array<Record<string, unknown>> = [
@@ -221,11 +223,27 @@ function setBodySection(
       elements: [],
     });
   }
+  if (params.headerFirst) {
+    elements.push({
+      type: 'element',
+      name: 'w:headerReference',
+      attributes: { 'w:type': 'first', 'r:id': params.headerFirst },
+      elements: [],
+    });
+  }
   if (params.footerDefault) {
     elements.push({
       type: 'element',
       name: 'w:footerReference',
       attributes: { 'w:type': 'default', 'r:id': params.footerDefault },
+      elements: [],
+    });
+  }
+  if (params.footerFirst) {
+    elements.push({
+      type: 'element',
+      name: 'w:footerReference',
+      attributes: { 'w:type': 'first', 'r:id': params.footerFirst },
       elements: [],
     });
   }
@@ -427,6 +445,78 @@ describe('Header/footer diffing', () => {
 
       expect(beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false })).toBe(true);
       expect(captureHeaderFooterState(beforeEditor)).toEqual(captureHeaderFooterState(afterEditor));
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+
+  it('preserves shared header dependencies when removing one header', async () => {
+    const beforeEditor = await createEditor();
+    const afterEditor = await createEditor();
+
+    try {
+      seedPart(beforeEditor, {
+        kind: 'header',
+        refId: 'rIdHeaderDefault',
+        partPath: 'word/header1.xml',
+        text: 'Default header',
+      });
+      seedPart(beforeEditor, {
+        kind: 'header',
+        refId: 'rIdHeaderFirst',
+        partPath: 'word/header2.xml',
+        text: 'First header',
+      });
+      seedPartDependency(beforeEditor, {
+        partPath: 'word/header1.xml',
+        relationshipId: 'rIdImage1',
+        target: 'media/shared-logo.png',
+        targetPath: 'word/media/shared-logo.png',
+        mediaContent: 'data:image/png;base64,c2hhcmVk',
+      });
+      seedPartDependency(beforeEditor, {
+        partPath: 'word/header2.xml',
+        relationshipId: 'rIdImage2',
+        target: 'media/shared-logo.png',
+        targetPath: 'word/media/shared-logo.png',
+        mediaContent: 'data:image/png;base64,c2hhcmVk',
+      });
+      setBodySection(beforeEditor, {
+        titlePg: true,
+        headerDefault: 'rIdHeaderDefault',
+        headerFirst: 'rIdHeaderFirst',
+      });
+
+      seedPart(afterEditor, {
+        kind: 'header',
+        refId: 'rIdHeaderDefault',
+        partPath: 'word/header1.xml',
+        text: 'Default header',
+      });
+      seedPartDependency(afterEditor, {
+        partPath: 'word/header1.xml',
+        relationshipId: 'rIdImage1',
+        target: 'media/shared-logo.png',
+        targetPath: 'word/media/shared-logo.png',
+        mediaContent: 'data:image/png;base64,c2hhcmVk',
+      });
+      setBodySection(afterEditor, {
+        headerDefault: 'rIdHeaderDefault',
+      });
+
+      const diff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+        afterEditor.converter?.translatedLinkedStyles,
+        afterEditor.converter?.translatedNumbering,
+        afterEditor,
+      );
+
+      expect(diff.headerFootersDiff?.removedParts).toHaveLength(1);
+      expect(diff.partsDiff?.deletes).not.toContain('word/media/shared-logo.png');
+      expect(diff.partsDiff?.deletes).toContain('word/header2.xml');
+      expect(diff.partsDiff?.deletes).toContain('word/_rels/header2.xml.rels');
     } finally {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();

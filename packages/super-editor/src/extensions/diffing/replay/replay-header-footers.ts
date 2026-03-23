@@ -18,6 +18,7 @@ import {
   cloneXmlElement,
   clearSectPrHeaderFooterRef,
   setSectPrHeaderFooterRef,
+  readSectPrMargins,
   writeSectPrTitlePage,
 } from '../../../document-api-adapters/helpers/sections-xml.js';
 import { DEFAULT_DOCX_DEFS } from '../../../core/super-converter/exporter-docx-defs.js';
@@ -285,7 +286,7 @@ function applyHeaderFooterSlotChange(
         sectPr: nextSectPr,
       },
       pageBreakSource: 'sectPr',
-      sectionMargins: buildSectionMarginsForAttrs(nextSectPr),
+      sectionMargins: readSectPrMargins(nextSectPr),
     };
     tr.setNodeMarkup(projection.target.pos, undefined, nextAttrs, paragraph.marks);
     return true;
@@ -314,38 +315,6 @@ function applySlotRefs(
       setSectPrHeaderFooterRef(sectPr, kind, variant, refs[variant]!);
     }
   }
-}
-
-/**
- * Builds the paragraph `sectionMargins` attribute value from a sectPr node.
- *
- * @param sectPr Section property node whose page margins should be read.
- * @returns Paragraph attribute payload used by the editor today.
- */
-function buildSectionMarginsForAttrs(sectPr: ReturnType<typeof ensureSectPrElement>): Record<string, number | null> {
-  const pgMar = sectPr.elements?.find((entry) => entry.name === 'w:pgMar');
-  return {
-    top: toInches(pgMar?.attributes?.['w:top']),
-    right: toInches(pgMar?.attributes?.['w:right']),
-    bottom: toInches(pgMar?.attributes?.['w:bottom']),
-    left: toInches(pgMar?.attributes?.['w:left']),
-    header: toInches(pgMar?.attributes?.['w:header']),
-    footer: toInches(pgMar?.attributes?.['w:footer']),
-  };
-}
-
-/**
- * Converts a twips value to inches for section margin attributes.
- *
- * @param value Raw XML attribute value.
- * @returns Inches value, or `null` when the attribute is absent.
- */
-function toInches(value: unknown): number | null {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return null;
-  }
-  return numeric / 1440;
 }
 
 /**

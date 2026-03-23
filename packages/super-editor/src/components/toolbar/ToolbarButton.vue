@@ -309,3 +309,38 @@ const caretIcon = computed(() => {
   }
 }
 </style>
+
+<style>
+.dark-mode .superdoc-toolbar {
+  background-color: #1e1e1e;
+  color: #e8e8e8;
+}
+
+.dark-mode .toolbar-button {
+  color: #e8e8e8;
+}
+
+.dark-mode .toolbar-button:hover {
+  background-color: #3a3a3a;
+}
+
+.dark-mode .toolbar-button:active,
+.dark-mode .active {
+  background-color: #4a4a4a;
+}
+
+.dark-mode .button-text-input {
+  color: #e8e8e8;
+  border-color: #555;
+  background-color: transparent;
+}
+
+.dark-mode .button-text-input::placeholder {
+  color: #888;
+}
+
+.dark-mode .left,
+.dark-mode .right {
+  background-color: #3a3a3a;
+}
+</style>

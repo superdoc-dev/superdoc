@@ -1,5 +1,6 @@
 <script setup>
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
+import { useDarkMode } from '../../composables/use-dark-mode';
 const emit = defineEmits(['command']);
 const props = defineProps({
   active: {
@@ -9,11 +10,11 @@ const props = defineProps({
 });
 
 const { isHighContrastMode } = useHighContrastMode();
+const { isDarkMode } = useDarkMode();
 
 const getSeparatorColor = () => {
-  if (isHighContrastMode.value) {
-    return '#000';
-  }
+  if (isHighContrastMode.value) return '#000';
+  if (isDarkMode.value) return '#555';
   return '#dbdbdb';
 };
 </script>

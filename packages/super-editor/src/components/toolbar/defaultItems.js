@@ -868,6 +868,20 @@ export const makeDefaultItems = ({
     else return 'Viewing';
   };
 
+  const darkModeButton = useToolbarItem({
+    type: 'button',
+    name: 'darkMode',
+    command: 'toggleDarkMode',
+    allowWithoutEditor: true,
+    group: 'right',
+    icon: toolbarIcons.darkMode,
+    active: false,
+    tooltip: toolbarTexts.darkMode,
+    attributes: {
+      ariaLabel: 'Toggle dark mode',
+    },
+  });
+
   const documentMode = useToolbarItem({
     type: 'dropdown',
     name: 'documentMode',
@@ -1097,6 +1111,7 @@ export const makeDefaultItems = ({
     clearFormatting,
     aiButton,
     overflow,
+    darkModeButton,
     documentMode,
   ];
 
@@ -1128,7 +1143,7 @@ export const makeDefaultItems = ({
   }
 
   // always visible items
-  const toolbarItemsSticky = [search, undo, overflow, documentMode].map((item) => item.name);
+  const toolbarItemsSticky = [search, undo, overflow, documentMode, darkModeButton].map((item) => item.name);
   const isStickyItem = (item) => toolbarItemsSticky.includes(item.name);
 
   const overflowItems = [];

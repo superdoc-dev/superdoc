@@ -49,6 +49,7 @@ import scissorsIconSvg from '@superdoc/common/icons/scissors-solid.svg?raw';
 import copyIconSvg from '@superdoc/common/icons/copy-solid.svg?raw';
 import pasteIconSvg from '@superdoc/common/icons/paste-solid.svg?raw';
 import strikethroughSvg from '@superdoc/common/icons/strikethrough.svg?raw';
+import moonSvg from '@superdoc/common/icons/moon-solid.svg?raw';
 
 export const toolbarIcons = {
   undo: rotateLeftIconSvg,
@@ -110,4 +111,5 @@ export const toolbarIcons = {
   copy: copyIconSvg,
   paste: pasteIconSvg,
   strikethrough: strikethroughSvg,
+  darkMode: moonSvg,
 };

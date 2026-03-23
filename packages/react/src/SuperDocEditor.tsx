@@ -134,8 +134,7 @@ function SuperDocEditorInner(props: SuperDocEditorProps, ref: ForwardedRef<Super
     const initSuperDoc = async () => {
       try {
         // Dynamic import for SSR safety
-        const modulePath = 'superdoc';
-        const superdocModule = await import(/* @vite-ignore */ modulePath);
+        const superdocModule = await import('superdoc');
         const SuperDoc = superdocModule.SuperDoc as new (config: Record<string, unknown>) => SuperDocInstance;
 
         // Check if we were destroyed while loading

@@ -50,4 +50,5 @@ export const toolbarTexts = {
   documentSuggestingModeDescription: 'Edits become suggestions',
   documentViewingModeDescription: 'View clean version of document only',
   linkedStyles: 'Linked styles',
+  darkMode: 'Toggle dark mode',
 };

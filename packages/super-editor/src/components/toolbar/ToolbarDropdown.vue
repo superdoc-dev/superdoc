@@ -474,3 +474,19 @@ onBeforeUnmount(() => {
   transform: scale(1);
 }
 </style>
+
+<style>
+.dark-mode .sd-editor-toolbar-dropdown {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #e8e8e8;
+}
+
+.dark-mode .sd-editor-toolbar-dropdown .dropdown-option:hover {
+  background: #3a3a3a;
+}
+
+.dark-mode .sd-editor-toolbar-dropdown .dropdown-option.selected {
+  background: #3a3a3a;
+}
+</style>

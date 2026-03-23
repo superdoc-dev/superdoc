@@ -136,3 +136,10 @@ const restoreSelection = () => {
   }
 }
 </style>
+
+<style>
+.dark-mode .superdoc-toolbar {
+  background-color: #1e1e1e;
+  color: #e8e8e8;
+}
+</style>

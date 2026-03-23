@@ -355,6 +355,10 @@ export class SuperToolbar extends EventEmitter {
       this.emit('superdoc-command', { item, argument });
     },
 
+    toggleDarkMode: ({ item }) => {
+      this.emit('superdoc-command', { item });
+    },
+
     /**
      * Sets the font size for text
      * @param {Object} params - Command parameters

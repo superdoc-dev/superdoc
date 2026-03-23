@@ -84,12 +84,12 @@ Done. Ask your agent to open a `.docx` file and make an edit.
     from superdoc import SuperDocClient
 
     client = SuperDocClient(default_change_mode="tracked")
-    doc = await client.open(doc="./contract.docx")
+    doc = client.open({"doc": "./contract.docx"})
 
     # query, edit, format, comment, track changes...
 
-    await doc.save()
-    await doc.close()
+    doc.save()
+    doc.close()
     ```
   </Tab>
   <Tab title="CLI">
@@ -212,7 +212,7 @@ Install with `npm install @superdoc-dev/react`. [Full React guide →](/getting-
 ## What's next
 
 <CardGroup cols={2}>
-  <Card title="Document Engine" icon="gear" href="/document-engine/overview">
+  <Card title="Document Engine" icon="screwdriver-wrench" href="/document-engine/overview">
     Architecture and how to choose a surface
   </Card>
   <Card title="LLM tools" icon="sparkles" href="/document-engine/ai-agents/llm-tools">
@@ -221,7 +221,7 @@ Install with `npm install @superdoc-dev/react`. [Full React guide →](/getting-
   <Card title="Framework guides" icon="code" href="/getting-started/frameworks/react">
     React, Vue, Angular, Vanilla JS
   </Card>
-  <Card title="Examples" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples">
+  <Card title="Examples" icon="arrow-up-right-from-square" href="https://github.com/superdoc-dev/superdoc/tree/main/examples">
     Working demos on GitHub
   </Card>
 </CardGroup>

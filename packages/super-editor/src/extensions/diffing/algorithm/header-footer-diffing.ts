@@ -70,7 +70,7 @@ type HeaderFooterEditor = {
   } | null;
 };
 
-const SLOT_VARIANTS: HeaderFooterVariant[] = ['default', 'first', 'even'];
+export const SLOT_VARIANTS: HeaderFooterVariant[] = ['default', 'first', 'even'];
 const PART_KINDS: HeaderFooterKind[] = ['header', 'footer'];
 
 /**

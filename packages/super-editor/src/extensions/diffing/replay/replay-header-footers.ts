@@ -4,6 +4,7 @@ import { replayDocDiffs } from './replay-doc';
 import { ReplayResult } from './replay-types';
 import {
   normalizePartPath,
+  SLOT_VARIANTS,
   type HeaderFootersDiff,
   type HeaderFooterKind,
   type HeaderFooterPartState,
@@ -48,7 +49,6 @@ type ReplayHeaderFooterEditor = {
   } | null;
 };
 
-const SLOT_VARIANTS: HeaderFooterVariant[] = ['default', 'first', 'even'];
 const HEADER_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
 const FOOTER_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
 
